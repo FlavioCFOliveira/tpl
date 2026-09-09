@@ -2,7 +2,7 @@
 title: Glossary
 status: draft
 last-reviewed: 2026-09-09
-related: [README.md, cli-contract.md, configuration-model.md]
+related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md]
 ---
 
 # Glossary
@@ -22,6 +22,13 @@ One of the three read-only capabilities `tpl` provides: exploring the database
 (`tpl schema …`), exploring the templates (`tpl template …`), and rendering
 (`tpl render …`). Command groups that are not arms — `tpl cfg …`, `tpl cache …`,
 `tpl init`, `tpl help`, `tpl version` — are auxiliary.
+
+## budget
+
+A named performance measurement with a recorded baseline, listed in
+`NFR-PERF-014`. A budget states what is measured and over which reference
+workload; the figure itself lives in `BENCHMARKS.md` and in the project's
+architecture decision records, never in this specification.
 
 ## cache
 
@@ -51,12 +58,44 @@ scope of this edition.
 The complete set of commands, subcommands, aliases, arguments, and flags `tpl`
 accepts. It is closed: see `FR-CLI-002`.
 
+## complete read / incomplete read
+
+A read is complete when it returns, for every object it presents, every property
+[catalogue-coverage.md](catalogue-coverage.md) defines for that object;
+otherwise it is incomplete. Completeness is a property of a read, not of a
+server: the same database read by two users can be complete for one and
+incomplete for the other. See `FR-PRIV-001`.
+
 ## context
 
 The set of top-level variables available to a template during a render:
 `database`, one of `table` / `view` / `routine`, `vars`, `tpl`, `now`. The
 command line decides which object variable is bound; the content of each
 variable is outside the scope of this edition.
+
+## context document
+
+The single JSON document that carries the model: emitted by `tpl schema dump`,
+consumed by `tpl render --context`, and seen by a template as the `database`
+context variable. Its structure is fixed by
+[context-document.md](context-document.md) and it is plumbing contract. Not to
+be confused with *context*, above, which is the set of variables a template
+sees, three of which never come from a database.
+
+## contract group
+
+One of the three tiers of the template surface defined by `FR-ENV-001`: what
+`tpl` registers, which is full contract; an enumerated list of filters inherited
+from the engine, guaranteed against a pinned engine minor version; and
+everything else the engine offers, which works and is guaranteed by nobody.
+
+## coverage
+
+Which object kinds and which of their properties enter the model, fixed by
+[catalogue-coverage.md](catalogue-coverage.md). Coverage is applied before
+`--pattern`, per `FR-CAT-028`, so that any difference between what a listing
+shows and what the server holds is attributable to one or the other and never to
+both.
 
 ## database entry
 
@@ -97,10 +136,23 @@ A command rejects any flag it does not declare. Contrast global flag.
 One of the seven flags accepted by every node of the tree. See
 [global-flags.md](global-flags.md).
 
+## model
+
+Everything `tpl` knows about a database: the covered object kinds and their
+covered properties. The model is the same whatever the source — a live read, a
+cached read, or a `--context` document — and is defined by
+[catalogue-coverage.md](catalogue-coverage.md).
+
 ## nearest match
 
 A suggestion offered when a supplied name does not exist, computed by edit
 distance over the names that do exist. See `FR-ERR-015`.
+
+## normative budget
+
+The single budget whose target is stated in the text of its requirement and can
+therefore fail a change on its own, as opposed to the budgets that carry only
+the no-regression rule. There is exactly one, fixed by `NFR-PERF-015`.
 
 ## object
 
@@ -128,16 +180,46 @@ determines whether errors are emitted as text or as JSON. See `FR-ERR-013`.
 Any directory containing a `.tpl` folder. The `.tpl` folder is the project root
 and the only source of configuration and templates.
 
+## qualified routine name
+
+A routine named in the form `procedure:<name>` or `function:<name>`. Procedures
+and functions occupy distinct namespaces on the server, so one bare name can
+denote two objects; the qualified form says which is meant. Accepted wherever a
+command names one routine, per `FR-SCH-008`. A bare name matching both is `64`,
+per `FR-SCH-010`.
+
 ## read-through cache
 
 A cache consulted before the server on every read, and populated immediately
 whenever the read misses. See `FR-CACHE-002`.
+
+## reference workload
+
+One of the three databases against which a performance budget is measured:
+`WL-001`, the large workload; `WL-002`, a verification scalar over it; and
+`WL-003`, the small workload that is the common path. Defined in
+[performance-requirements.md](performance-requirements.md).
 
 ## render
 
 One execution of one template against one context, producing one result on
 stdout. Exactly one render happens per `tpl render` invocation. See
 `FR-RND-002`.
+
+## requirement of form
+
+A performance requirement stated as an observable, permanent property rather
+than as a figure — that the catalogue-query count does not grow with the number
+of objects, that a cache hit opens no connection. It is verified from outside
+the process and needs no stopwatch. The six are `NFR-PERF-001` through
+`NFR-PERF-006`.
+
+## restricted
+
+The field by which a listing or a dump marks an object the reader could not read
+in full. An object requested by name never carries it, because that case fails
+with `77` instead. A document carrying it is refused as a `--context`. See
+`FR-PRIV-005` and `FR-PRIV-008`.
 
 ## routine
 
@@ -153,6 +235,14 @@ term "routine" and states the kind per object.
 
 Help text disambiguates the two wherever both could be meant. See `FR-CFG-019`.
 
+## source
+
+The field by which every read states where its bytes came from: `cache` or
+`server`. It is an enumerated string rather than a boolean so that a value may
+be added without breaking the contract, per `FR-CDOC-010`. It is also the signal
+that a document promises neither referential integrity nor a snapshot, per
+`FR-CDOC-016`.
+
 ## template
 
 A file under `.tpl/templates/` whose name ends in `.jinja`. Nothing else in that
@@ -163,6 +253,13 @@ directory is a template. See `FR-TMPL-011`.
 The path of a template relative to `.tpl/templates/`, with the `.jinja`
 extension optional on the command line and mandatory inside a template. See
 `FR-TMPL-010` and `FR-TMPL-012`.
+
+## volatile field
+
+A catalogue field the server changes without any change to the structure — a row
+estimate, a data length, a modification timestamp, an index cardinality.
+Thirteen are excluded from the model as a closed list by `FR-CAT-024`, because
+carrying one would put `NFR-DET-001` in permanent conflict with the server.
 
 ## entry label
 

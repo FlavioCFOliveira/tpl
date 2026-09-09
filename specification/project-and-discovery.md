@@ -37,7 +37,9 @@ maintain it.
     ├── .cache/           read catalogue, one folder per entry; not versioned
     ├── .gitignore        excludes .cfg and .cache/
     └── templates/        the project's templates; versioned
-        └── example.jinja
+        ├── example.jinja
+        └── rust/
+            └── _types.jinja
 ```
 
 - **FR-PROJ-001**: A project SHALL be any directory containing a `.tpl` folder.
@@ -128,7 +130,7 @@ tpl init [<path>]
   *Known weakness, accepted.* A caller checking only the exit code will not see
   the warning.
 
-- **FR-PROJ-017**: `tpl init` SHALL create exactly four artefacts:
+- **FR-PROJ-017**: `tpl init` SHALL create exactly five artefacts:
 
   | Artefact | Contents |
   |---|---|
@@ -136,6 +138,13 @@ tpl init [<path>]
   | `.tpl/.gitignore` | Two lines: `.cfg` and `.cache/` |
   | `.tpl/templates/` | The project's template directory |
   | `.tpl/templates/example.jinja` | A working example template |
+  | `.tpl/templates/rust/_types.jinja` | A macro file mapping a column to a Rust type |
+
+  *Amended in the second edition.* The fifth artefact is new. `FR-ENV-009`
+  removes the `rust_type` filter from the binary, and `FR-ENV-011` delivers the
+  mapping it performed as a template macro instead, so that the opinion it
+  encodes — whether `DECIMAL` becomes a third-party decimal type, an `f64`, or a
+  `String` — belongs to the project and can be edited there.
 
 - **FR-PROJ-018**: The generated `.cfg` SHALL contain no active database entry.
   A fresh project knows about no database until one is added.
@@ -161,7 +170,7 @@ tpl init [<path>]
 
   | Writer | What it writes |
   |---|---|
-  | `tpl init` | The four artefacts of `FR-PROJ-017` |
+  | `tpl init` | The five artefacts of `FR-PROJ-017` |
   | `tpl cfg …` | `.tpl/.cfg` |
   | `tpl cache load` | `.tpl/.cache/` |
   | any cached read command, on a miss | `.tpl/.cache/` |

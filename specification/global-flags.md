@@ -110,8 +110,18 @@ which belongs to that command's module.
   any way.
 
 - **FR-GLOB-017**: At `INFO` the system SHALL report which phases ran and how
-  long each took. At `DEBUG` it SHALL additionally report the catalogue queries
-  issued and each cache hit and miss. At `TRACE` it MAY report internal detail.
+  long each took, and SHALL write exactly one line per catalogue query it
+  issues, in a form distinguishable from every other diagnostic line. At `DEBUG`
+  it SHALL additionally report each cache hit and miss. At `TRACE` it MAY report
+  internal detail.
+
+  *Amended in the second edition.* The one-line-per-query rule was raised from
+  `DEBUG` to `INFO` and made distinguishable so that the catalogue-query count
+  is observable from outside the process. Without it, `NFR-PERF-001` and
+  `NFR-PERF-002` — the requirements that forbid a query count growing with the
+  number of objects — could not be checked at all. The rule constrains the
+  existence and the distinguishability of the line, not its wording; the
+  diagnostic stream remains outside the contract, per `NFR-DET-001`.
 
 - **FR-GLOB-018**: The system SHALL NOT write any of the following to any
   diagnostic stream, at any verbosity level: the argument vector, the resolved

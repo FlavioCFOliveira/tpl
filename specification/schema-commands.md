@@ -73,8 +73,24 @@ tpl schema dump                        The whole database as one JSON document
   column in `text` output and as a field in `json` output.
 
 - **FR-SCH-008**: The system SHALL NOT provide a `--type` flag on
-  `tpl schema routines`. Selecting one kind is done downstream, from
-  `--format json`.
+  `tpl schema routines`. Selecting one kind from a listing is done downstream,
+  from `--format json`. Wherever a command names one routine — `tpl schema
+  routine`, `tpl render --routine`, `tpl cache load --routine`, and
+  `tpl cache clean --routine` — the system SHALL accept the qualified forms
+  `procedure:<name>` and `function:<name>` as well as the bare name.
+
+  *Amended in the second edition.* The prohibition was written for the listing
+  and is unchanged by the amendment. The addition is the disambiguator the
+  singular forms lacked: procedures and functions occupy distinct namespaces on
+  the server, so `calc_vat` can legally name two objects, and every command that
+  names one routine was ambiguous. The cached form of the same rule is
+  `FR-CDOC-014`.
+
+  *Rejected.* A `--kind` flag to be supplied only when a name is ambiguous,
+  which is easy to forget until the day an ambiguity appears; and resolving a
+  bare ambiguous name in favour of the function with a warning on stderr, which
+  exits `0` — so a caller checking the code never sees it — and leaves the
+  procedure unreachable.
 
 - **FR-SCH-009**: `tpl schema table <name>` SHALL be exhaustive over what the
   catalogue holds for that table: its columns with position, type, nullability,
@@ -84,7 +100,16 @@ tpl schema dump                        The whole database as one JSON document
 
 - **FR-SCH-010**: IF a named table, view, or routine does not exist in the
   selected database, THEN the system SHALL exit `66` (`EX_NOINPUT`) with a
-  nearest-match suggestion over the objects of that kind that do exist.
+  nearest-match suggestion over the objects of that kind that do exist. IF a
+  bare routine name matches both a procedure and a function, THEN the system
+  SHALL exit `64` (`EX_USAGE`), naming both candidates in the qualified form of
+  `FR-SCH-008`.
+
+  *Amended in the second edition.* The ambiguity case is new. The system SHALL
+  NOT resolve it in favour of either kind under any circumstance: a first-wins
+  rule would make one of the two objects permanently unreachable through a bare
+  name, and which one it was would depend on the order the catalogue returned
+  them.
 
 ## The `--pattern` filter
 
@@ -171,11 +196,18 @@ tpl schema dump                        The whole database as one JSON document
   ```
   tpl -d shop schema tables
 
-  NAME          ENGINE  ROWS   COMMENT
-  customers     InnoDB  1842   Registered buyers
-  order_items   InnoDB  38211
-  orders        InnoDB  9043   One row per order
+  NAME          ENGINE  COLUMNS  COMMENT
+  customers     InnoDB        14  Registered buyers
+  order_items   InnoDB         7
+  orders        InnoDB        21  One row per order
   ```
+
+  *Amended in the second edition.* The listing previously carried a `ROWS`
+  column, which is the server's row estimate. The storage engine revises that
+  estimate without any change to the structure, so two reads of an unchanged
+  database differ — which contradicts `NFR-DET-001` and the argument
+  `FR-SCH-018` used to keep `now` out of the dump. `COLUMNS` is a structural
+  count and is stable. The general rule is `FR-CAT-024`.
 
 - **FR-SCH-027**: The `text` output of any `schema` subcommand is not a
   contract, per `FR-OUT-004`. Anything parsing a listing must use

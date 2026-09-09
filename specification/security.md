@@ -133,8 +133,10 @@ is because the rule is genuinely cross-cutting and has no single owning module.
   command injection with the caller as the interpreter.
 
 - **FR-SEC-020**: C0 control characters, tab excepted, SHALL be escaped in every
-  value the system prints or interpolates, whatever its source. See
-  `FR-OUT-018`, `FR-OUT-019`, and `FR-ERR-024`.
+  value the system prints or interpolates in the output of a read command or in
+  a diagnostic message, whatever its source. The result of `tpl render` is
+  excluded and is emitted byte for byte. See `FR-OUT-018`, `FR-OUT-019`, and
+  `FR-ERR-024`.
 
   *Threat closed.* An escape sequence in a column comment cannot rewrite what
   the user sees, and a newline in a catalogue value cannot forge a whole

@@ -234,7 +234,14 @@ tpl
 ## Determinism
 
 - **NFR-DET-001**: The same invocation against the same project state and the
-  same database state SHALL produce byte-identical output.
+  same database state SHALL produce byte-identical **stdout**. The diagnostic
+  output written to stderr is neither deterministic nor contract.
+
+  *Amended in the second edition.* The first edition said "output" without
+  qualification, which contradicted `FR-GLOB-017`: a phase timing differs on
+  every run by construction. Naming stdout resolves the contradiction in the
+  direction that was always intended — stdout is the result a caller parses and
+  compares between runs, and stderr is diagnosis.
 
 - **NFR-DET-002**: Orderings SHALL be explicit and stable — tables by name,
   columns by ordinal position, indexes by name — and SHALL NOT depend on the

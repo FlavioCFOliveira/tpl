@@ -111,14 +111,33 @@ module that owns the command producing it.
   rather than the original byte — which was not representable anyway.
 
 - **FR-OUT-018**: The system SHALL escape C0 control characters, tab excepted,
-  in both `text` and `json` output.
+  in the `text` and `json` output of the read commands — `schema`, `template`,
+  `cfg`, and `cache` — and in every diagnostic message.
 
   *Rationale.* No catalogue byte may reach the terminal uninterpreted. An escape
-  character in a column comment must not be able to rewrite what the user sees.
+  character in a column comment must not be able to rewrite what the user sees,
+  and a newline in a catalogue value must not be able to forge a whole line of
+  the line-oriented `error:` / `cause:` / `hint:` / `exit:` format.
 
 - **FR-OUT-019**: The escaping of `FR-OUT-018` SHALL apply to every value
-  interpolated into output or into a diagnostic message, whatever its source:
-  the catalogue, a `--context` document, or the argument vector.
+  interpolated into that output or into a diagnostic message, whatever its
+  source: the catalogue, a `--context` document, or the argument vector. It
+  SHALL NOT apply to the result of `tpl render`, which SHALL be emitted byte for
+  byte.
+
+  *Amended in the second edition.* The first edition applied the escaping to all
+  output, which made `tpl render` unable to emit a view definition: a newline is
+  a C0 control and was not excepted, so `{{ view.definition }}` would have
+  produced literal escape sequences instead of line breaks — and the same for a
+  routine body and for any multi-line comment. The rule was written for read
+  output and for diagnostics, where the line-forgery threat is real; the render
+  result is by definition text destined for a source file, and the rule was
+  never meant to reach it.
+
+  *Rejected.* Excepting newline and carriage return alongside tab everywhere,
+  which reopens the forged `hint:` line; and a `raw` filter the author applies
+  to opt out, which every multi-line comment, every routine body, and every
+  expression default would need.
 
 ## Streams
 

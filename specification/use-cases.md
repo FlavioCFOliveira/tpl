@@ -21,8 +21,9 @@ here introduces behaviour of its own.
 - **Preconditions**: the destination directory is writable
 - **Main flow**:
   1. Run `tpl init`.
-  2. `tpl` creates `.tpl/.cfg` at mode `0600`, `.tpl/.gitignore`,
-     `.tpl/templates/`, and `.tpl/templates/example.jinja`.
+  2. `tpl` creates the five artefacts of `FR-PROJ-017`: `.tpl/.cfg` at mode
+     `0600`, `.tpl/.gitignore`, `.tpl/templates/`,
+     `.tpl/templates/example.jinja`, and `.tpl/templates/rust/_types.jinja`.
   3. `tpl` writes nothing to stdout and exits `0`.
 - **Alternate flows**:
   - A `.tpl` already exists at the destination: exit `73`, nothing changed.

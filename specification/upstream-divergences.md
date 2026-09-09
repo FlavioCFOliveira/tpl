@@ -2,7 +2,7 @@
 title: Upstream Divergences
 status: draft
 last-reviewed: 2026-09-09
-related: [README.md, cli-contract.md, render-command.md, cfg-commands.md]
+related: [README.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
 # Upstream Divergences
@@ -54,6 +54,20 @@ Two kinds of entry appear:
 | [DIV-023](#div-023) | both | Migration | Global flag tables are wrong in three ways |
 | [DIV-024](#div-024) | `CLAUDE.md` | Migration | Project discovery lacks its boundary and checks |
 | [DIV-025](#div-025) | `CLAUDE.md` | Migration | The "specification does not exist yet" note |
+| [DIV-026](#div-026) | both | Contradiction | The `rust_type` and `go_type` filters |
+| [DIV-027](#div-027) | both | Contradiction | The `plural` and `singular` filters |
+| [DIV-028](#div-028) | both | Contradiction | Auto-escaping keyed on the file extension |
+| [DIV-029](#div-029) | both | Contradiction | `tpl init` creates four artefacts |
+| [DIV-030](#div-030) | `CLAUDE.md` | Contradiction | The read-only session presented as prevention |
+| [DIV-031](#div-031) | `CLAUDE.md` | Contradiction | `SHOW` as a permitted way to read the catalogue |
+| [DIV-032](#div-032) | `CLAUDE.md` | Contradiction | `model/` as the documented public surface |
+| [DIV-033](#div-033) | `CLAUDE.md` | Contradiction | The whole `Environment` surface as contract |
+| [DIV-034](#div-034) | both | Contradiction | The `table` and `column` field lists |
+| [DIV-035](#div-035) | `CLAUDE.md` | Migration | The performance budget table |
+| [DIV-036](#div-036) | `CLAUDE.md` | Migration | `scripts/mariadb/` lacks the benchmark fixture |
+| [DIV-037](#div-037) | both | Contradiction | No minimum server version, and no refusal of MySQL |
+| [DIV-038](#div-038) | both | Migration | Routine naming has no disambiguator |
+| [DIV-039](#div-039) | both | Contradiction | Determinism stated over all output |
 
 ## DIV-001
 
@@ -326,3 +340,217 @@ pointer to [project-and-discovery.md](project-and-discovery.md).
 instruction to remove the subsection once the bootstrap is done.
 *Specification*: the folder now exists, and this file is part of it.
 *Correction*: remove the subsection, as that text itself instructs.
+
+## DIV-026
+
+**Target**: both. **Kind**: contradiction.
+
+*Says*: `CLAUDE.md` lists `rust_type` among the SQL and code filters;
+`README.md` lists `rust_type` and `go_type` in its filter table and uses
+`rust_type` in two template examples.
+*Specification*: `FR-ENV-009` and `FR-ENV-010` — neither filter exists. The
+mapping is delivered as a template macro at `.tpl/templates/rust/_types.jinja`,
+written by `tpl init` per the amended `FR-PROJ-017`, so that the opinion it
+encodes belongs to the project.
+*Correction*: remove both filters from both tables, and rewrite the two
+`README.md` examples to call the macro instead of the filter.
+
+## DIV-027
+
+**Target**: both. **Kind**: contradiction.
+
+*Says*: both files list `plural` and `singular` as naming filters.
+*Specification*: `FR-ENV-012` and `FR-ENV-013` — neither exists. Correct English
+inflection is a project in itself, and a wrong plural on a table name that is
+not English is guaranteed noise in generated code.
+*Correction*: remove the row from both tables.
+
+## DIV-028
+
+**Target**: both. **Kind**: contradiction.
+
+*Says*: `CLAUDE.md` requires auto-escaping to be enabled by extension for
+`.html`, `.xml`, and `.htm`; `README.md` states that auto-escaping is off "for
+every extension except `.html`, `.htm`, and `.xml`".
+*Specification*: `FR-ENV-026` through `FR-ENV-028` — auto-escaping is off
+always, no rule is keyed on any extension, and `escape` is an explicit filter.
+*Correction*: remove the extension rule from both files. In `README.md` the
+surrounding sentence, "Two behaviours differ from stock Jinja2 defaults", must
+also be corrected: after this change the two are strict undefined variables and
+the preserved trailing newline of `FR-SEM-003`, not auto-escaping.
+
+## DIV-029
+
+**Target**: both. **Kind**: contradiction.
+
+*Says*: both files present `tpl init` as creating four artefacts, and list them.
+*Specification*: `FR-PROJ-017`, as amended — five artefacts. The fifth is
+`.tpl/templates/rust/_types.jinja`.
+*Correction*: add the row to both tables, and add the file to the `.tpl` tree
+shown in each. `README.md` additionally states that `.tpl/.gitignore` holds one
+line, which `DIV-020` already corrects to two.
+
+## DIV-030
+
+**Target**: `CLAUDE.md`, project invariant 1. **Kind**: contradiction.
+
+*Says*: "O `tpl` **nunca** emite DDL, DML ou qualquer statement de escrita",
+followed immediately by the read-only session statement, presenting the session
+setting as the mechanism that delivers the promise.
+*Specification*: `FR-SRV-006` through `FR-SRV-011` and `BR-SRV-002` — the
+promise has two parts and only one of them prevents. The guarantee is the closed
+list of statements `tpl` will issue. The session setting is defence in depth: it
+makes a write fail, it does not stop the connection attempting one, and it
+constrains the transaction rather than the session. The specification adds a
+read-back of the setting, and a limit of at most one connection per invocation.
+*Correction*: state the closed list as the guarantee, keep the session setting as
+defence in depth, and add the read-back and the connection limit. The `78` on
+failure, and the absence of a flag to disable any of it, are unchanged.
+
+## DIV-031
+
+**Target**: `CLAUDE.md`, project invariant 1. **Kind**: contradiction.
+
+*Says*: the catalogue is read exclusively through `INFORMATION_SCHEMA` "e,
+quando estritamente necessário, `SHOW`".
+*Specification*: `FR-SRV-006` and `FR-SRV-007` — the closed list has three
+entries and `SHOW` is not one of them. A statement outside the list is not
+permitted however necessary it seems.
+*Correction*: remove the `SHOW` clause. The prohibition on `mysqldump` and on
+any external process is unchanged and is restated by `FR-SRV-007`.
+
+## DIV-032
+
+**Target**: `CLAUDE.md`, project structure. **Kind**: contradiction.
+
+*Says*: "as suas structs são a superfície pública documentada", of the `model/`
+module.
+*Specification*: only the JSON document and the command line are contract. The
+library carries no compatibility guarantee, and the document contract lives in
+[context-document.md](context-document.md) rather than in a set of Rust types.
+*Correction*: state that the contract is the document, not the types that
+produce it. Five questions this edition would otherwise have had to settle —
+owned versus borrowed types, public fields versus accessors, newtypes for names,
+whether the serialisation crate is a public dependency, and `#[non_exhaustive]`
+— are architecture decisions rather than functional requirements, and belong in
+an architecture decision record.
+
+## DIV-033
+
+**Target**: `CLAUDE.md`, render context. **Kind**: contradiction.
+
+*Says*: "Filtros, testes e funções registados no `Environment` são superfície
+pública: acrescentar é permitido, renomear ou remover é uma quebra de
+compatibilidade."
+*Specification*: `FR-ENV-001` through `FR-ENV-004` — the surface has three
+groups and only the first carries that guarantee unqualified. The named
+inherited filters of `FR-ENV-018` are guaranteed only against a pinned engine
+minor version, and everything else the engine offers works but is guaranteed by
+nobody.
+*Correction*: replace the sentence with the three groups, or with a pointer to
+[template-environment.md](template-environment.md).
+
+## DIV-034
+
+**Target**: both. **Kind**: contradiction.
+
+*Says*: `README.md` states that a `table` carries `name`, `comment`, `engine`,
+`charset`, `collation`, `columns`, `primary_key`, `indexes`, and
+`foreign_keys`, and that a `column` carries `name`, `position`, `data_type`,
+`nullable`, `default`, `comment`, "and the raw catalogue attributes MariaDB
+reports for it". `CLAUDE.md` names the same set of model types.
+*Specification*: the list is incomplete and, in two places, wrong in shape. A
+table also carries `table_type` per `FR-CAT-002`, `referenced_by` per
+`FR-CAT-013`, its triggers per `FR-CAT-014`, and its `CHECK` constraints per
+`FR-CAT-015`. A column's `default` is a discriminated structure per
+`FR-CTX-012`, not a value; its type is `column_type` plus eight decomposed parts
+per `FR-CTX-015`, not "the raw catalogue attributes"; and it carries
+`table_name` per `FR-CTX-019`. Thirteen volatile catalogue fields are excluded
+outright by `FR-CAT-024`.
+*Correction*: replace both descriptions with a pointer to
+[catalogue-coverage.md](catalogue-coverage.md) and
+[context-document.md](context-document.md).
+
+## DIV-035
+
+**Target**: `CLAUDE.md`, non-functional requirements. **Kind**: migration.
+
+*Says*: a table of four performance budgets with figures in milliseconds, a
+peak-memory figure in MiB, and a set of rules derived from them.
+*Specification*: [performance-requirements.md](performance-requirements.md) —
+the corpus keeps six requirements of form, the three reference workloads, and
+the measurement protocol; the figures stay outside it. The budget set itself
+changed: `--version` and `--help` are separate lines, the
+`render --all-tables` line is replaced by the 200-invocation loop because
+`FR-RND-007` removed the flag it measured, and four budgets are added — the
+cache-served read per object, which is the one normative target, the failure
+path, `tpl help --format json`, and the loop.
+*Correction*: replace the four-row table with the set of `NFR-PERF-014`, keep
+the figures in `CLAUDE.md` or move them to `BENCHMARKS.md` as that file's
+authors prefer, and point the derived rules at
+[performance-requirements.md](performance-requirements.md). Note that every
+figure in the current table is unmeasured; `OQ-051` through `OQ-060` record
+them.
+
+## DIV-036
+
+**Target**: `CLAUDE.md`, project structure and the MariaDB testing section.
+**Kind**: migration.
+
+*Says*: `scripts/mariadb/` holds a `Dockerfile`, `setup.sql`, and `seed.sql`,
+and the two SQL scripts must cover the read surface exhaustively.
+*Specification*: `WL-001` requires a fourth file, `seed-bench.sql`, and
+`BR-PERF-002` keeps it separate from `seed.sql` on purpose: `seed.sql` is
+exhaustive variety at minimal volume, for correctness, and `seed-bench.sql` is
+volume at minimal variety, for measurement. One fixture serving both would hide
+an N+1, which is invisible at ten tables.
+*Correction*: add `seed-bench.sql` to the tree and to the testing section.
+Separately, and more urgently than any correction listed in this file, none of
+the four exists in the repository today. `OQ-009`, `OQ-010`, `OQ-024`, and
+`OQ-025` through `OQ-042` are all blocked by that absence.
+
+## DIV-037
+
+**Target**: both. **Kind**: contradiction.
+
+*Says*: neither file states a minimum server version. `README.md` states that
+the generated example template "renders without error against any table of any
+MariaDB database", and `CLAUDE.md` observes that MariaDB and MySQL diverge in
+the catalogue without saying what `tpl` does about it.
+*Specification*: `FR-SRV-001` — the floor is MariaDB 10.6. `FR-SRV-003` — a
+server that is not MariaDB is refused with `78` and `kind: server_not_mariadb`,
+because three verified divergences would make the model silently wrong rather
+than empty.
+*Correction*: state the floor wherever requirements are stated, qualify the
+`README.md` sentence to a supported server, and state that MySQL is refused
+rather than attempted.
+
+## DIV-038
+
+**Target**: both. **Kind**: migration.
+
+*Says*: `README.md` documents `tpl schema routine <name>` and the repeatable
+`--routine <name>` flag with a bare name; `CLAUDE.md` does the same in its
+command list.
+*Specification*: `FR-SCH-008`, as amended — wherever a command names one
+routine, the qualified forms `procedure:<name>` and `function:<name>` are
+accepted; and `FR-SCH-010`, as amended — a bare name matching both a procedure
+and a function is `64`, never resolved in favour of either.
+*Correction*: document the qualified form on `tpl schema routine`,
+`tpl render --routine`, and both `tpl cache` subcommands that name an object,
+and add the ambiguity case to the exit-code discussion. `DIV-014`, which
+corrects the aliases of the same commands, applies to the same rows.
+
+## DIV-039
+
+**Target**: both. **Kind**: contradiction.
+
+*Says*: "The same invocation against the same database produces byte-identical
+output", without qualification, in `README.md`; `CLAUDE.md` states the same rule
+in its determinism section.
+*Specification*: `NFR-DET-001`, as amended — byte-identical **stdout**. The
+diagnostic output written to stderr is neither deterministic nor contract, and
+cannot be: `FR-GLOB-017` requires phase timings at `INFO`, which differ on every
+run by construction.
+*Correction*: add the word stdout, and state that stderr is excluded. The `now`
+exception stated in both files is unaffected and remains correct.
