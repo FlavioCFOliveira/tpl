@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -20,9 +20,10 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in two editions. Both are in force; the
-second adds to the first and amends it in six places, each marked in the text
-with an *Amended in the second edition* note.
+The specification has been written in three editions. All are in force; each
+adds to the ones before it and amends them in place, and every amendment
+carries an *Amended in the nth edition* note beside the requirement it
+changes.
 
 ### First edition — the command-line surface
 
@@ -54,6 +55,36 @@ Everything the first edition named and stopped at, except the implementation:
 - The performance properties that are observable and permanent, and the
   workloads against which the rest is measured —
   [performance-requirements.md](performance-requirements.md).
+
+### Third edition — the JSON documents and fourteen decisions
+
+The audit of 2026-09-10 read the corpus end to end and put its findings to the
+user. Fourteen decisions came back and are written into the owning modules.
+The largest is the one the audit named as the blocker:
+
+- **One envelope for every JSON document** —
+  [output-formats.md](output-formats.md). `--format json` was declared the
+  plumbing contract while only two of the seventeen documents `tpl` can emit
+  had a specified shape. `FR-OUT-024` fixes the envelope all seventeen share,
+  and each owning module fixes its own `data`, per `BR-OUT-002`.
+
+The other thirteen close a contradiction or a gap: the behaviour of all
+seventeen registered filters and tests (`FR-ENV-030` through `FR-ENV-043`);
+`--timeout` as an overall budget that composes with the per-phase deadlines
+rather than killing them (`FR-GLOB-011`); which commands require a project
+(`FR-PROJ-025`); a default ordering rule for every collection
+(`NFR-DET-002`); the outcome of an empty result set (`FR-OUT-033`); the
+content of `vars`, `tpl`, and `now` (`FR-CTX-026` through `FR-CTX-030`); the
+durability of a `.tpl/.cfg` rewrite (`FR-CFG-041`); the producing condition for
+`70` (`FR-ERR-030`); the three password-key combinations (`FR-CONF-007`); the
+one exception to "nothing is written outside `.tpl`" (`FR-PROJ-024`); the tab
+in a diagnostic message (`FR-ERR-024`); `tpl template show` as byte-for-byte
+output (`FR-OUT-019`); and a mandated test for the dump round-trip
+(`BR-SCH-004`).
+
+One finding was left open deliberately: `FR-PRIV-015` now states *why* the
+privilege cross-check covers views alone, and records that the choice to
+generalise it is blocked on observing `OQ-041`.
 
 ### Still out of scope
 
@@ -103,7 +134,11 @@ Where the specification touches one of these boundaries, it names it and stops.
 
 Identifiers are stable once assigned. They are never renumbered to tidy a file,
 never reused after a requirement is withdrawn, and are the reference used in
-commit messages, task descriptions, and test names.
+commit messages, task descriptions, and test names. A gap in a sequence is
+therefore expected, not a defect: thirteen open questions are closed and their
+numbers are not reused. The *Closed* table of
+[open-questions.md](open-questions.md#closed) records each and what answered
+it.
 
 | Form | Meaning |
 |---|---|
@@ -159,15 +194,17 @@ because they constrain the whole module rather than one interaction.
 
 ## Provenance
 
-Every requirement in this edition derives from one of three sources:
+Every requirement in this specification derives from one of three sources:
 
-1. Two interview decision logs. The first settled 53 points about the CLI
+1. Three decision logs. The first interview settled 53 points about the CLI
    surface; the second settled 28 points about the model, the document, the
    template surface, the server contract, and performance, and recorded four
-   defects found in the first edition. Each decision carries its own reasoning
-   and the alternatives it rejected; where the reasoning explains why a
-   requirement reads as it does, it is preserved in the `Rationale`, the
-   `Rejected`, or the `Accepted cost` note under that requirement.
+   defects found in the first edition; the third is the audit of 2026-09-10,
+   whose fifteen findings the user answered with fourteen decisions and one
+   deliberate deferral. Each decision carries its own reasoning and the
+   alternatives it rejected; where the reasoning explains why a requirement
+   reads as it does, it is preserved in the `Rationale`, the `Rejected`, or the
+   `Accepted cost` note under that requirement.
 2. The root `README.md` and `CLAUDE.md`, used only where no decision contradicts
    them. Such requirements carry a provenance note.
 3. Nothing else. Where information is missing, this specification records an
@@ -175,21 +212,29 @@ Every requirement in this edition derives from one of three sources:
 
 ## Maintenance debt
 
-Three items are known, deliberately deferred, and owed to a maintenance pass
-that follows the second edition. They are recorded here so that they are not
-rediscovered as defects.
+One item is known, deliberately deferred, and owed to a maintenance pass that
+follows the third edition. It is recorded here so that it is not rediscovered
+as a defect.
 
-1. **Fourteen leftover open questions of the first edition.** They are in
-   [open-questions.md](open-questions.md) and were not touched by the second
-   edition, which settled a different set of subjects.
-2. **Nine internal cross-references that point at the wrong requirement.** Each
-   resolves to an identifier that exists, so the mechanical check passes; the
-   identifier is not the intended one. The offsets are small and consistent,
-   which points at a late renumbering rather than nine independent mistakes.
-   The lesson is recorded in the validation rule below.
-3. **`FR-ERR-006`, the validation order**, which does not settle whether
-   `--version` and `--help` run before project discovery. `NFR-PERF-005` settles
-   it for the version forms only.
+1. **The first edition's open questions.** `OQ-002` through `OQ-024`, less
+   `OQ-008`, `OQ-020`, and `OQ-022`, remain in
+   [open-questions.md](open-questions.md). The second edition settled a
+   different set of subjects and did not touch them; the third closed three of
+   them and narrowed `OQ-024`, and the rest are the residue.
+
+Three items previously recorded here have been discharged.
+
+- **The wrong cross-reference targets.** Twenty-seven references, across
+  twenty-four passages, resolved to an identifier that exists but was not the
+  intended one; the offsets were small and consistent, which pointed at a late
+  renumbering rather than at independent mistakes. All have been corrected.
+  The lesson is recorded in the validation rule below.
+- **The validation order and `--help`.** Settled by the third edition:
+  `FR-PROJ-025` names the four commands that require no project, and
+  `NFR-PERF-005` states the observable consequence.
+- **The specified surface without specified documents.** `--format json` was
+  contract in name only. Settled by the third edition: `FR-OUT-024` fixes one
+  envelope for all seventeen documents.
 
 A reference check must verify the **target** of a cross-reference, not merely
 that the identifier exists. The first edition was validated as having no dead

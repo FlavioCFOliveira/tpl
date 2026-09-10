@@ -1,7 +1,7 @@
 ---
 title: Privileges and Completeness
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [catalogue-coverage.md, server-contract.md, context-document.md, errors-and-exit-codes.md]
 ---
 
@@ -108,6 +108,24 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
 
 - **FR-PRIV-012**: The cross-check of `FR-PRIV-011` SHALL be performed on every
   read that presents the view collection, including a dump.
+
+- **FR-PRIV-015**: The cross-check of `FR-PRIV-011` SHALL be performed for
+  views and for no other object kind.
+
+  *Rationale.* Views are the only kind for which the catalogue offers two
+  independent counts to compare: the rows of table type `VIEW` among the tables,
+  and the members of the view collection. A cross-check needs two observations
+  that can disagree, and neither tables nor routines offer a second one — a
+  reader who cannot see a table does not see it counted somewhere else either.
+  The general principle remains `FR-PRIV-010`; this is the one place the
+  catalogue makes it enforceable.
+
+  *Known gap.* Whether the check should instead be generalised — to any object
+  kind for which the catalogue offers two views of the same population — cannot
+  be settled until [OQ-041](open-questions.md#oq-041) is observed against the
+  container, because it depends on what a reader without the privilege actually
+  receives. The audit of 2026-09-10 left the choice open deliberately and wrote
+  the reason for the present asymmetry rather than the decision.
 
 ## Reporting
 

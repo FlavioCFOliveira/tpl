@@ -1,7 +1,7 @@
 ---
 title: CLI Contract
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
 
@@ -53,8 +53,8 @@ tpl [global flags] <command> [<subcommand> …] [<arguments>] [local flags]
   working invocation would begin to fail in a minor version, silently.
 
 - **FR-CLI-003**: IF the first non-flag token is not a command of the tree, THEN
-  the system SHALL exit `64` (`EX_USAGE`) and SHALL offer a nearest-match hint
-  as defined in `FR-ERR-015`.
+  the system SHALL exit `64` (`EX_USAGE`) and SHALL offer a nearest-match
+  suggestion as defined in `FR-ERR-019`.
 
 - **FR-CLI-004**: The system SHALL NOT infer a command from a prefix of its
   name. `tpl sch tables` is `64`.
@@ -155,7 +155,7 @@ tpl
 
 - **BR-CLI-001**: Aliases are never ambiguous. `tbl` and `tbls` differ by one
   character, so a mistyped alias SHALL be resolved through the nearest-match
-  rule of `FR-ERR-015` rather than by inference.
+  rule of `FR-ERR-019` rather than by inference.
 
 ## Parsing rules
 
@@ -196,11 +196,12 @@ tpl
   determine its behaviour, its defaults, or the location of the project.
 
 - **FR-CLI-022**: The system SHALL resolve every setting through exactly two
-  layers, strongest first: the command line, then `.tpl/.cfg`, then the built-in
-  default declared in this specification.
+  configuration layers above the built-in default, strongest first: the command
+  line, then `.tpl/.cfg`, then the built-in default declared in this
+  specification. `FR-CONF-029` owns this rule.
 
 - **FR-CLI-023**: WHERE a value is written as `${VAR}` inside `.tpl/.cfg`, the
-  system SHALL read the environment to expand it, as defined in `FR-CONF-013`.
+  system SHALL read the environment to expand it, as defined in `FR-CONF-015`.
   This is the only circumstance in which `tpl` reads the environment.
 
   *Rationale.* The ban is on flags and defaults, not on the substitution
@@ -243,9 +244,41 @@ tpl
   direction that was always intended — stdout is the result a caller parses and
   compares between runs, and stderr is diagnosis.
 
-- **NFR-DET-002**: Orderings SHALL be explicit and stable — tables by name,
-  columns by ordinal position, indexes by name — and SHALL NOT depend on the
-  order in which the server or the filesystem returns rows or entries.
+- **NFR-DET-002**: Orderings SHALL be explicit and stable, and SHALL NOT depend
+  on the order in which the server or the filesystem returns rows or entries.
+  Every collection the system presents SHALL be ordered by name, ascending,
+  compared byte by byte, except where this specification names another order:
+
+  | Collection | Order | Fixed by |
+  |---|---|---|
+  | A table's columns | Ordinal position | This requirement |
+  | An index's columns | The order the catalogue states | `FR-CAT-010` |
+  | A routine's parameters | Declaration order | `FR-CAT-018` |
+  | Every other collection | Name, ascending, byte-wise | This requirement |
+
+  *Amended in the third edition.* The default rule and the table of exceptions
+  are new. The first edition named three orders — tables by name, columns by
+  ordinal, indexes by name — and the model carries seven further collections:
+  views, routines, outgoing foreign keys, `referenced_by`, triggers, `CHECK`
+  constraints, and routine parameters. Two of the seven were fixed elsewhere by
+  accident rather than by rule, and five had no stated order at all, so five
+  collections could not satisfy `NFR-DET-001` and `FR-CTX-005` had nothing
+  observable to point at.
+
+  *Rationale.* One default plus three exceptions is checkable in a single test
+  and holds for a collection this specification has not thought of yet. An
+  enumeration of every collection would be incomplete again the next time the
+  model grows.
+
+  *Rejected.* Enumerating an order for each of the ten collections, for the
+  reason above; and ordering by the catalogue's own ordinal wherever one exists,
+  which would make the order of a listing depend on a field the caller cannot
+  see and which `FR-CAT-024` may exclude from the model.
+
+  *Accepted cost.* Byte-wise comparison, chosen for the same reason
+  `FR-SCH-014` folds case over ASCII only, puts `Orders` before `customers`
+  and `_internal` after `Zebra`. The order is the same on every machine and in
+  every locale, which is what a caller comparing two runs needs.
 
 - **NFR-DET-003**: The system SHALL NOT consult `isatty()` or any other terminal
   detection to decide output format, colour, pagination, or content.
@@ -260,7 +293,7 @@ tpl
 
 - **NFR-DET-005**: The `now` render variable is the single documented source of
   non-reproducibility. A template that uses it produces output that differs
-  between runs by design.
+  between runs by design. Its form is fixed by `FR-CTX-028`.
 
 ## Dependencies
 

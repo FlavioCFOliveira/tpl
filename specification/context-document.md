@@ -1,7 +1,7 @@
 ---
 title: The Context Document
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md]
 ---
 
@@ -22,12 +22,15 @@ every rule of [output-formats.md](output-formats.md) applies to it.
 
 In scope: the structural rules of the document — array shape, reference depth,
 the default discriminant, the decomposition of a column type, the treatment of
-absence, and the consistency the document promises.
+absence, and the consistency the document promises; and the content of the
+three context variables that do not come from a server.
 
 Out of scope: which objects and fields the document carries, which is
 [catalogue-coverage.md](catalogue-coverage.md); the transport rules of JSON,
-which are [output-formats.md](output-formats.md); and the cache-specific fields,
-which are [cache-documents.md](cache-documents.md).
+which are [output-formats.md](output-formats.md); the cache-specific fields,
+which are [cache-documents.md](cache-documents.md); and how each context
+variable is bound to a source, which is
+[render-command.md](render-command.md).
 
 ## Actors
 
@@ -173,7 +176,7 @@ which are [cache-documents.md](cache-documents.md).
 
 - **FR-CTX-022**: The facts of `FR-CTX-021` SHALL be reachable through the tests
   `primary_key` and `unique`, which resolve `table_name` against the render
-  context, per `FR-ENV-011`.
+  context, per `FR-ENV-015`.
 
 - **BR-CTX-003**: Calculating rather than materialising keeps one statement of
   each fact. A column that says it is not part of the primary key while the
@@ -184,6 +187,70 @@ which are [cache-documents.md](cache-documents.md).
   `col is primary_key(table)`, which is pure and needs no context lookup, but
   which would leave `tpl` with two grammatical classes of test and a template
   author guessing which class a given test belongs to.
+
+## The non-server variables
+
+`FR-RND-023` names five top-level context variables and `FR-RND-024` requires
+three of them always to be injected. The two that come from a server are
+everything above; these are the other three. They are in this file because a
+template reads all five through one context and needs one place that says what
+each holds, and not because they appear in the document `tpl schema dump`
+emits — `FR-SCH-018` keeps them out of it.
+
+- **FR-CTX-026**: `vars` SHALL be a JSON object whose keys are the `--set` keys
+  of the invocation, per `FR-RND-008`, and whose values are strings, per
+  `FR-RND-015`. WHEN no `--set` is supplied, `vars` SHALL be `{}`.
+
+- **FR-CTX-027**: `tpl` SHALL be a JSON object carrying exactly one key,
+  `version`, whose value is the version string `FR-HELP-005` prints:
+
+  ```json
+  {"version":"0.1.0"}
+  ```
+
+  *Rationale.* An object rather than the bare string, so that the variable can
+  gain a field without breaking a template, which `FR-OUT-014` makes the only
+  non-breaking way to grow. `{{ tpl.version }}` in a generated file header is
+  the case it exists for.
+
+- **FR-CTX-028**: `now` SHALL be a string carrying the render time as an
+  RFC 3339 timestamp in UTC, with a `Z` offset and second precision:
+
+  ```
+  2026-09-10T08:14:22Z
+  ```
+
+  *Rationale.* A string in a fixed format is the only form a template can use
+  today. `FR-ENV-018` guarantees no date filter, and `FR-ENV-025` forbids a
+  function that reads a clock, so a structured `now` would give a template
+  parts it has no way to format and no way to reassemble. UTC with a fixed
+  precision also means the one documented source of non-reproducibility varies
+  in exactly one way — the instant — rather than also with the machine's zone
+  and locale.
+
+  *Rejected.* A structured value carrying named parts, which needs a formatting
+  filter this specification does not provide; and the engine's own datetime
+  type with a date filter added to `FR-ENV-018`, which would put a filter into
+  group 2 for the sake of one variable and tie its behaviour to the pinned
+  engine version of `OQ-049`.
+
+- **FR-CTX-029**: `now` SHALL be evaluated once per invocation, at render time,
+  and every reference to it in one render SHALL yield the same value.
+
+  *Rationale.* A template that interpolates `now` twice must not produce two
+  timestamps, and `FR-RND-002` gives one render per invocation, so there is one
+  instant to record.
+
+- **FR-CTX-030**: `now` SHALL be the single documented source of
+  non-reproducibility, per `NFR-DET-005`. A template that does not reference it
+  SHALL produce byte-identical output between runs against unchanged inputs.
+
+- **BR-CTX-005**: These three are not part of the document this file otherwise
+  fixes, and a `--context` document that carries any of them has its value
+  ignored, per `FR-RND-024`. They are specified here because a template author
+  reading the context needs one file that answers "what is in each of the five
+  variables", and splitting three of the five into `render-command.md` would
+  have answered where each *comes from* without ever saying what it *holds*.
 
 ## Consistency
 
@@ -200,7 +267,7 @@ which are [cache-documents.md](cache-documents.md).
 
 - **FR-CTX-025**: WHEN the document is served wholly or partly from the cache,
   it SHALL promise neither the referential integrity of `FR-CTX-023` nor a
-  snapshot. The `source` field of `FR-CDOC-005` is the signal, and
+  snapshot. The `source` field of `FR-CDOC-009` is the signal, and
   [cache-documents.md](cache-documents.md) governs.
 
 - **BR-CTX-004**: The three levels are distinct and are stated separately

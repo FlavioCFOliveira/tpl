@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -25,6 +25,13 @@ Out of scope: the commands that read and write the file, which belong to
 [cfg-commands.md](cfg-commands.md); and the ownership and permission checks
 applied before the file is trusted, which belong to
 [project-and-discovery.md](project-and-discovery.md).
+
+## Actors
+
+- **Project**, whose `.tpl/.cfg` is the only configuration `tpl` reads.
+- **Environment**, read only through `${VAR}` and treated as untrusted.
+- **`password_command` child process**, which supplies a password without it
+  being written to disk.
 
 ## The file
 
@@ -64,7 +71,7 @@ tls      = "verify-identity"
   | `database.<name>.password` | password | none |
   | `database.<name>.password_command` | argument array | none |
   | `database.<name>.database` | server-side database name | none |
-  | `database.<name>.tls` | TLS mode, see `FR-CONF-011` | `verify-identity` |
+  | `database.<name>.tls` | TLS mode, see `FR-CONF-013` | `verify-identity` |
   | `database.<name>.ca_file` | path to a certificate file | none |
   | `database.<name>.ca_path` | path to a certificate directory | none |
 
@@ -75,9 +82,16 @@ tls      = "verify-identity"
   read configuration from the home directory, from an XDG location, or from
   `/etc`.
 
-- **FR-CONF-004**: The system SHALL resolve every phase deadline strongest
-  first: the `--timeout` flag, then the `[core]` key for that phase, then the
-  built-in default of `FR-CONF-002`.
+- **FR-CONF-004**: The system SHALL resolve each phase deadline from the
+  `[core]` key for that phase, or from the built-in default declared for that
+  key in `FR-CONF-002` where the key is absent. `--timeout` SHALL NOT
+  participate in this resolution; it is an overall bound that composes with the
+  result, per `FR-GLOB-011` and `FR-GLOB-012`.
+
+  *Amended in the third edition.* The first edition put `--timeout` at the head
+  of this precedence, which made the four `[core]` timeout keys unreachable
+  because `FR-GLOB-001` gave the flag a default. The flag now has no default
+  and is not a layer of this rule.
 
 - **FR-CONF-005**: The system SHALL apply a deadline to every blocking phase:
   DNS resolution, TCP connect, TLS handshake, catalogue query,
@@ -86,10 +100,40 @@ tls      = "verify-identity"
 ## Database entries
 
 - **FR-CONF-006**: A `[database.<name>]` block SHALL be defined either by `dsn`
-  or by the discrete fields, never by both.
+  or by the discrete connection fields, never by both. The discrete connection
+  fields are `host`, `port`, `user`, `password`, and `database`.
+  `password_command` SHALL NOT be one of them.
 
-- **FR-CONF-007**: IF one entry carries both `dsn` and any discrete connection
-  field, THEN the system SHALL exit `78` (`EX_CONFIG`).
+  *Amended in the third edition.* The list of discrete connection fields, and
+  the exclusion of `password_command` from it, are new. The first edition said
+  "the discrete fields" without enumerating them, which left it unstated
+  whether `dsn` beside `password_command` was legal — the natural way to keep a
+  secret out of a connection URL.
+
+- **FR-CONF-007**: The system SHALL admit or refuse the combinations of
+  connection and password keys in one entry as follows, and SHALL exit `78`
+  (`EX_CONFIG`) for each refusal:
+
+  | Combination in one entry | Outcome |
+  |---|---|
+  | `dsn` and any discrete connection field | `78` |
+  | `dsn` carrying no password, and `password_command` | Admitted; the command supplies the password |
+  | `dsn` carrying a password, and `password_command` | `78` |
+  | Discrete fields and `password_command` | Admitted; the command supplies the password |
+  | `password` and `password_command` | `78` |
+
+  *Rationale.* `password_command` composes with either way of describing a
+  connection, because its whole purpose is to keep the password out of the file
+  and both forms otherwise write it there. Two password sources in one entry
+  is a different matter: it is two answers to one question, and a precedence
+  rule between them would be invisible on the command line, which is what
+  `BR-CLI-002` exists to prevent.
+
+  *Rejected.* Treating `password_command` as a discrete field, which would make
+  the safest configuration there is — a DSN with no secret in it and a keychain
+  lookup beside it — a configuration error. Also rejected: resolving
+  `password` against `password_command` by a stated precedence, which leaves
+  the losing key in the file looking as though it were in force.
 
 - **FR-CONF-008**: The entry name SHALL be a label local to the project. It need
   not match the name of any database on the server.
@@ -221,14 +265,16 @@ tls      = "verify-identity"
 ## Precedence
 
 - **FR-CONF-029**: The system SHALL resolve every setting through exactly two
-  layers, strongest first:
+  configuration layers above the built-in default, strongest first:
 
   ```
   flag  >  .tpl/.cfg  >  built-in default
   ```
 
 - **FR-CONF-030**: There SHALL be no environment layer in that precedence. No
-  `TPL_DIR`, no `TPL_DATABASE`, and no per-flag environment variable.
+  `TPL_DIR`, no `TPL_DATABASE`, and no per-flag environment variable, per
+  `FR-CLI-021`. `${VAR}` expansion, per `FR-CONF-015`, is not a layer: it
+  supplies the value of a key that is already in the file.
 
   *Rationale.* An invocation is fully described by what you can see of it. Seven
   invisible values would each need their own truthiness rule, and the behaviour
@@ -252,8 +298,6 @@ tls      = "verify-identity"
 - [OQ-006](open-questions.md#oq-006) — the handling of the child's stderr.
 - [OQ-007](open-questions.md#oq-007) — the handling of a non-zero exit from
   `password_command`.
-- [OQ-008](open-questions.md#oq-008) — how `--timeout` composes with the
-  per-phase keys.
 - [OQ-018](open-questions.md#oq-018) — the treatment of an unknown key found in
   a hand-written `.cfg`.
 - [OQ-019](open-questions.md#oq-019) — whether a `password_command` written as a

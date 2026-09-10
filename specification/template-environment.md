@@ -1,7 +1,7 @@
 ---
 title: The Template Environment
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md]
 ---
 
@@ -21,14 +21,14 @@ left to be discovered.
 
 ## Scope
 
-In scope: the three contract groups, the filters and tests `tpl` registers, the
-global functions, the removals and their reasons, auto-escaping, and how the
-surface is published.
+In scope: the three contract groups, the filters and tests `tpl` registers and
+what each of them does, the global functions, the removals and their reasons,
+auto-escaping, and how the surface is published.
 
-Out of scope: evaluation semantics — what a filter does when its operand is
-wrong, what an interpolated `null` produces, and how whitespace is handled —
-which belong to [render-semantics.md](render-semantics.md); and the content of
-the context variables, which belongs to
+Out of scope: evaluation semantics — the general rule for an operand of the
+wrong type, what an interpolated `null` produces, and how whitespace is handled
+— which belong to [render-semantics.md](render-semantics.md); and the content
+of the context variables, which belongs to
 [context-document.md](context-document.md).
 
 ## Actors
@@ -147,6 +147,200 @@ the context variables, which belongs to
   that is not there. Answering `false` would report "this column is not a
   primary key" when the truth is that the question could not be asked.
 
+## Behaviour of the registered surface
+
+`FR-ENV-002` makes every name of group 1 full contract, and `NFR-DET-001`
+requires its output to be byte-identical between runs. This section fixes what
+each one does. The tables are a specification and a test vector at once: each
+row is a case the implementation SHALL satisfy.
+
+### The word list
+
+- **FR-ENV-030**: The five naming filters SHALL act on a word list derived from
+  the operand by exactly the following rule, applied once, left to right:
+
+  1. An underscore, a hyphen, or a space SHALL end the current word and SHALL
+     NOT appear in the output.
+  2. A transition from a lower-case ASCII letter to an upper-case ASCII letter
+     SHALL end the current word before the upper-case letter.
+  3. A transition from an upper-case ASCII letter to a lower-case ASCII letter
+     SHALL end the current word before the upper-case letter, WHERE the
+     upper-case letter is preceded by another upper-case letter.
+  4. A digit SHALL belong to the word it follows and SHALL NOT begin a word.
+  5. An empty word SHALL be discarded.
+
+- **FR-ENV-031**: Each word of the list SHALL be case-folded over ASCII `A-Z`
+  and `a-z` only, independently of the server, the database collation, and the
+  locale. A character outside that range SHALL pass through unchanged.
+
+  *Rationale.* The same rule `FR-SCH-014` applies to `--pattern`, for the same
+  reason: a case transformation that depended on the locale would produce
+  different generated code on two machines and break `NFR-DET-001`.
+
+- **FR-ENV-032**: The word list SHALL be these values for these operands:
+
+  | Operand | Word list |
+  |---|---|
+  | `order_items` | `order`, `items` |
+  | `orderItems` | `order`, `Items` |
+  | `HTTP_server` | `HTTP`, `server` |
+  | `HTTPServer` | `HTTP`, `Server` |
+  | `order_2_items` | `order`, `2`, `items` |
+  | `utf8mb4` | `utf8mb4` |
+  | `__orders__` | `orders` |
+  | `` (empty) | (empty list) |
+
+### The naming filters
+
+- **FR-ENV-033**: The five naming filters SHALL join the case-folded word list
+  as follows, and SHALL produce exactly these outputs:
+
+  | Operand | `pascal` | `camel` | `snake` | `upper_snake` | `kebab` |
+  |---|---|---|---|---|---|
+  | `order_items` | `OrderItems` | `orderItems` | `order_items` | `ORDER_ITEMS` | `order-items` |
+  | `orderItems` | `OrderItems` | `orderItems` | `order_items` | `ORDER_ITEMS` | `order-items` |
+  | `HTTP_server` | `HttpServer` | `httpServer` | `http_server` | `HTTP_SERVER` | `http-server` |
+  | `HTTPServer` | `HttpServer` | `httpServer` | `http_server` | `HTTP_SERVER` | `http-server` |
+  | `order_2_items` | `Order2Items` | `order2Items` | `order_2_items` | `ORDER_2_ITEMS` | `order-2-items` |
+  | `utf8mb4` | `Utf8mb4` | `utf8mb4` | `utf8mb4` | `UTF8MB4` | `utf8mb4` |
+  | `orders` | `Orders` | `orders` | `orders` | `ORDERS` | `orders` |
+  | `` (empty) | `` | `` | `` | `` | `` |
+
+  The joining rules the table realises: `pascal` upper-cases the first
+  character of every word, lower-cases the rest, and joins with nothing;
+  `camel` does the same but lower-cases the whole of the first word; `snake`
+  lower-cases every word and joins with `_`; `upper_snake` upper-cases every
+  word and joins with `_`; `kebab` lower-cases every word and joins with `-`.
+
+  *Rationale.* Every filter is a pure function of the word list, so a template
+  author who has learned `FR-ENV-030` can predict all five, and
+  `snake(pascal(x))` returns `snake(x)` for every `x`.
+
+  *Accepted cost.* An acronym loses its case: `HTTP_server` becomes
+  `HttpServer` and not `HTTPServer`. That is the Rust convention for an
+  acronym in `UpperCamelCase`, and preserving the acronym would need a list of
+  acronyms — which is the same objection `BR-ENV-003` raised against `plural`
+  and `singular`, and it is refused here for the same reason.
+
+- **FR-ENV-034**: IF a naming filter is applied to a value that is not a
+  string, THEN the render SHALL fail with `65`, per `FR-SEM-008`. There is no
+  coercion, per `FR-SEM-009`.
+
+### The code filters
+
+- **FR-ENV-035**: `quote` SHALL return its operand as a quoted MariaDB
+  identifier, using backticks. For every string that is a legal MariaDB
+  identifier — including one that contains a backtick — the output SHALL be a
+  single quoted identifier that MariaDB parses back to exactly that string.
+
+  *Known gap.* The exact escaping mechanism for a backtick inside an
+  identifier is [OQ-070](open-questions.md#oq-070). It is a fact about MariaDB
+  and this specification does not state one that has not been observed: there
+  is no `scripts/mariadb/` in the repository, so there is no container to
+  observe against. The requirement above is a product requirement and needs no
+  observation; the mechanism that satisfies it does.
+
+- **FR-ENV-036**: `json` SHALL serialise its operand as a JSON value in the
+  compact form of `FR-OUT-007`: one line, no superfluous whitespace, and no
+  trailing newline. It SHALL accept an operand of any type the context can
+  hold.
+
+  | Operand | Output |
+  |---|---|
+  | `"a\"b"` | `"a\"b"` |
+  | `null` | `null` |
+  | a list of two strings | `["a","b"]` |
+  | an object of one key | `{"k":"v"}` |
+
+- **FR-ENV-037**: `indent(n)` SHALL prefix every line of its operand after the
+  first with `n` space characters. It SHALL NOT indent the first line, SHALL
+  NOT indent an empty line, and SHALL NOT add trailing whitespace. `n` SHALL be
+  a required argument with no default.
+
+  *Rationale.* A required argument rather than an invisible default, for the
+  reason `FR-OUT-002` gives for the `--format` default and `BR-CLI-002` for the
+  command line: a value nobody can see in the template is a value that changes
+  the generated bytes without appearing in the source. Empty lines are left
+  alone because trailing whitespace fails a formatter, which is the argument
+  `BR-SEM-001` already used to keep the final newline.
+
+- **FR-ENV-038**: `comment(prefix)` SHALL prefix every line of its operand with
+  `prefix` followed by a single space. `prefix` SHALL be a required argument
+  with no default, and the filter SHALL NOT choose a comment syntax of its own.
+
+  ```
+  {{ table.comment | comment("//") }}
+  {{ table.comment | comment("--") }}
+  ```
+
+  *Rationale.* A comment syntax is an opinion about a target language, and
+  `BR-ENV-002` already settled where such an opinion lives: with the project,
+  not in the binary. A `comment` that emitted `//` would privilege one target
+  language exactly as `rust_type` did.
+
+- **FR-ENV-039**: `sql_type` SHALL be registered in group 1 and SHALL be
+  enumerated by `FR-ENV-005` among the names `tpl help --format json`
+  publishes. The specification states no output for it, and the help SHALL say
+  so rather than describe behaviour it does not fix.
+
+  *Known gap.* What `sql_type` produces is
+  [OQ-071](open-questions.md#oq-071). `FR-CTX-014` already carries
+  `column_type`, the type exactly as the server writes it, so a filter
+  returning the same string would be redundant with a field every column
+  already has. What it would add — a full DDL type clause, a normalised form,
+  something else — was never decided, and this specification will not invent
+  it. The name is reserved so that answering `OQ-071` adds a name's behaviour
+  rather than a name, which `FR-ENV-002` makes the non-breaking direction.
+
+### The tests
+
+- **FR-ENV-040**: Every test of `FR-ENV-014` SHALL accept an operand that is a
+  column object and nothing else. IF a test is applied to an operand of any
+  other type — a table, a view, a routine, a string, a number, `null` — THEN
+  the render SHALL fail with `65`, per `FR-SEM-005`, naming the test, the type
+  received, and the location, per `FR-SEM-006`. A test SHALL NOT answer `false`
+  for an operand it does not accept, per `FR-SEM-007`.
+
+- **FR-ENV-041**: The seven tests SHALL answer as follows:
+
+  | Test | True when | Answers from |
+  |---|---|---|
+  | `nullable` | The column's nullability, as the model states it, says the column admits `NULL` | The column alone |
+  | `auto_increment` | The column carries the auto-increment attribute of `FR-CAT-027` | The column alone |
+  | `primary_key` | The column is named in its table's primary key | `table_name`, resolved against the render context, per `FR-ENV-015` |
+  | `unique` | The column is named in an index of its table that the model reports as unique | `table_name`, resolved against the render context, per `FR-ENV-015` |
+  | `numeric` | The column's `data_type` belongs to the numeric family | The column alone |
+  | `temporal` | The column's `data_type` belongs to the date-and-time family | The column alone |
+  | `textual` | The column's `data_type` belongs to the character-string family | The column alone |
+
+- **FR-ENV-042**: The three families of `FR-ENV-041` SHALL be disjoint. A
+  column SHALL satisfy at most one of `numeric`, `temporal`, and `textual`, and
+  a column of a type in none of the three SHALL satisfy none of them rather
+  than fail.
+
+  *Rationale.* Disjointness is testable today and is the property a template
+  actually depends on: `{% if col is numeric %}…{% elif col is textual %}` must
+  not take two branches, and a spatial or JSON column must be able to fall
+  through to neither without failing the render.
+
+  *Known gap.* Which `data_type` values fall in each family is
+  [OQ-072](open-questions.md#oq-072). It is a fact about what MariaDB writes in
+  the catalogue, the textual form of `data_type` is itself
+  [OQ-028](open-questions.md#oq-028), and neither may be carried over from
+  MySQL knowledge — there is no container to observe against. The three tests
+  are fixed here as disjoint predicates over a family; the memberships are
+  not.
+
+- **FR-ENV-043**: `primary_key` and `unique` SHALL fail the render with `65`
+  WHEN the table named by the operand's `table_name` is absent from the render
+  context, per `FR-ENV-017` and `FR-SEM-017`. The other five tests SHALL NOT
+  consult the render context and SHALL NOT fail for that reason.
+
+- **BR-ENV-007**: The tables of this section are the test vector. A change to
+  any cell is a change to the contract of `FR-ENV-002` and is breaking, and a
+  row added for a case the tables do not cover must be consistent with the
+  rules stated beside them rather than settle a new one.
+
 ## Inherited filters
 
 - **FR-ENV-018**: The system SHALL guarantee the following inherited filters,
@@ -245,3 +439,9 @@ the context variables, which belongs to
   pinned to.
 - [OQ-050](open-questions.md#oq-050) — which contract group `escape` belongs to,
   and exactly what it escapes.
+- [OQ-070](open-questions.md#oq-070) — how a backtick inside an identifier is
+  escaped, so that `FR-ENV-035` can be satisfied.
+- [OQ-071](open-questions.md#oq-071) — what `sql_type` does that `column_type`
+  does not.
+- [OQ-072](open-questions.md#oq-072) — the membership of the numeric,
+  temporal, and textual type families.

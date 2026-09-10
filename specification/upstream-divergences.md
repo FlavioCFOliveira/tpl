@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [README.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
@@ -68,6 +68,7 @@ Two kinds of entry appear:
 | [DIV-037](#div-037) | both | Contradiction | No minimum server version, and no refusal of MySQL |
 | [DIV-038](#div-038) | both | Migration | Routine naming has no disambiguator |
 | [DIV-039](#div-039) | both | Contradiction | Determinism stated over all output |
+| [DIV-040](#div-040) | `CLAUDE.md` | Contradiction | `tpl cache` is absent, and the auxiliary set is closed |
 
 ## DIV-001
 
@@ -202,13 +203,19 @@ current directory.
 
 ## DIV-013
 
-**Target**: `README.md`, `password_command`. **Kind**: contradiction.
+**Target**: both. **Kind**: contradiction.
 
-*Says*: "Shell command whose trimmed stdout is used as the password."
+*Says*: `README.md` describes `password_command` as a "shell command whose
+trimmed stdout is used as the password"; the `.cfg` example in `CLAUDE.md`
+writes it as a TOML string, `password_command = "security …"`.
 *Specification*: `FR-CONF-024` — executed directly, without a shell, from an
-array; shell metacharacters are literal arguments.
-*Correction*: remove the word "shell" and state the array form. The example
-given in the file still works exactly as written.
+array; shell metacharacters are literal arguments. `FR-CONF-023` — stored in
+`.cfg` as an array. `FR-CONF-025` splits a string supplied to a command, not
+one found in the file; whether a string in a hand-edited file is accepted at
+all is `OQ-019`.
+*Correction*: in `README.md`, remove the word "shell" and state the array form;
+the example given there still works exactly as written. In `CLAUDE.md`, rewrite
+the example value as an array.
 
 ## DIV-014
 
@@ -257,11 +264,13 @@ files.
 contradiction.
 
 *Says*: `--tls <mode>` is one of `disabled`, `preferred`, `required`, defaulting
-to `preferred`.
+to `preferred`. `CLAUDE.md` carries the same three-mode enumeration, as the
+illustration of an enumerated flag value in its help-text rules.
 *Specification*: `FR-CONF-013` — five modes, defaulting to `verify-identity`,
 with `ca_file` and `ca_path` as new keys.
 *Correction*: replace the enumeration and the default, and add the two keys to
-the example.
+the example. Correct the `CLAUDE.md` illustration to the five modes, or choose
+a flag whose value set this specification does not fix.
 
 ## DIV-019
 
@@ -554,3 +563,23 @@ cannot be: `FR-GLOB-017` requires phase timings at `INFO`, which differ on every
 run by construction.
 *Correction*: add the word stdout, and state that stderr is excluded. The `now`
 exception stated in both files is unaffected and remains correct.
+
+## DIV-040
+
+**Target**: `CLAUDE.md`, the three arms and the porcelain command list.
+**Kind**: contradiction.
+
+*Says*: "Fora dos três braços existe apenas a gestão do projecto (`tpl init`,
+`tpl database …`, `tpl config …`)" — and the porcelain command list names no
+other group.
+*Specification*: `FR-CLI-010` — the top-level commands are `schema`,
+`template`, `render`, `cache`, `cfg`, `init`, `help`, and `version`.
+`FR-CLI-008` makes `tpl cache` a group node, and
+[cache-commands.md](cache-commands.md) gives it three subcommands. The
+auxiliary set is therefore four groups and not three, and `tpl cache` is absent
+from `CLAUDE.md` altogether — including from the sentence that closes the set
+with "apenas".
+*Correction*: add `tpl cache load|clean|status` to the porcelain command list,
+and open the auxiliary sentence to include it. `DIV-015`, which replaces
+`tpl database …` and `tpl config …` with `tpl cfg …`, applies to the same
+sentence.

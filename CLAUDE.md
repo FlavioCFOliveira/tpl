@@ -167,6 +167,36 @@ Para trabalho de optimização, usar o agente `rust-perf-engineer`; para investi
 
 Qualquer alteração a esta tabela é uma decisão de arquitectura e deve ser registada antes de ser implementada.
 
+## Plataformas Suportadas
+
+O `tpl` é uma ferramenta **Unix**. É essa a família de sistemas para que se escreve, e é a fronteira que delimita o que o código pode assumir.
+
+Os sistemas suportados e verificados são o **Linux** e o **macOS**. Outros Unix — os BSD, por exemplo — devem funcionar, porque nada no `tpl` depende de um sistema em concreto para além do que a `std` já abstrai, mas **não são testados nem garantidos**: não entram na matriz, não correm em validação, e um problema que só neles se manifeste não reprova uma alteração.
+
+**O Windows está fora do âmbito.** Não é alvo, não se escreve código para o acomodar, e não se aceita uma dependência por causa dele.
+
+As arquitecturas de CPU são **arm64** (`aarch64`, incluindo Apple Silicon) e **amd64** (`x86_64`).
+
+### Matriz de alvos
+
+| Sistema | Arquitectura | Target triple |
+|---|---|---|
+| Linux | amd64 | `x86_64-unknown-linux-gnu` |
+| Linux | arm64 | `aarch64-unknown-linux-gnu` |
+| macOS | amd64 | `x86_64-apple-darwin` |
+| macOS | arm64 (Apple Silicon) | `aarch64-apple-darwin` |
+
+### Regras que decorrem disto
+
+- **Nenhum alvo é de segunda classe.** O que passa no pipeline de validação obrigatório definido em **Desenvolvimento** tem de passar nos quatro alvos; uma falha num deles reprova a alteração, seja qual for o alvo.
+- **Código específico de plataforma é a excepção**, e fica isolado atrás de `#[cfg(unix)]`. `#[cfg(windows)]` não tem lugar no crate. A permissão `0600` do `.tpl/.cfg` (ver **Segredos e versionamento**) depende de `std::os::unix::fs::PermissionsExt` e é, por si só, razão bastante para a fronteira ser o Unix.
+- **Caminhos sempre por `Path` e `PathBuf`**, nunca por concatenação de strings com o separador escrito à mão.
+- **Sem assumir características do CPU.** Nada de `target-cpu=native` no perfil de release: quebraria a portabilidade e a reprodutibilidade do binário distribuído.
+- **Dependências têm de compilar e passar testes nos quatro alvos.** Um crate que não suporte `aarch64` não entra — critério que acresce ao orçamento de dependências dos Requisitos Não-Funcionais, e não o substitui.
+- **Os orçamentos de desempenho e de memória valem em todos os alvos.** A baseline registada em `BENCHMARKS.md` tem de identificar o alvo em que foi medida; números medidos em alvos diferentes não se comparam entre si.
+
+> **Decisão em aberto — libc e distribuição.** A escolha entre `gnu` e `musl` no Linux, a linkagem estática ou dinâmica, e a forma de empacotar o binário para cada alvo continuam por resolver.
+
 ## Estrutura do Projecto
 
 ```
@@ -194,6 +224,49 @@ tpl/
 ```
 
 O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o **contexto de render**. Tudo o que um template pode ver está definido aí, e as suas structs são a superfície pública documentada.
+
+## Convenções de Código Rust
+
+O código deste projecto — e a forma como está organizado — segue as **boas práticas e as convenções idiomáticas da linguagem Rust**. Não é uma preferência de estilo: é regra do projecto, e vale tanto para o que se escreve de novo como para o que se refactoriza.
+
+### Organização
+
+- **Módulos.** Nomes em `snake_case`, sem abreviaturas obscuras e sem repetir o nome do pai (`mariadb::reader`, nunca `mariadb::mariadb_reader`). Um módulo por conceito, alinhado com a árvore da secção anterior.
+- **Um só estilo de ficheiro-módulo.** Usar sempre a forma `foo.rs` acompanhada da directoria `foo/`; **não** usar `mod.rs`. Misturar os dois estilos na mesma árvore é proibido.
+- **Visibilidade mínima.** Por omissão tudo é privado. `pub(crate)` para o que atravessa módulos, `pub(super)` para o que só o pai precisa, e `pub` reservado ao que é genuinamente superfície pública — no essencial o `model/` e o tipo de erro.
+- **Re-exports deliberados.** O `lib.rs` re-exporta uma API coerente com `pub use`; não se re-exporta um módulo inteiro só para poupar um caminho de `use`.
+- **Biblioteca e binário separados.** A lógica vive na biblioteca e é testável sem lançar processo; o `main.rs` limita-se a fazer parse, despachar e mapear o erro para exit code.
+
+### Nomenclatura
+
+Conformidade com as [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) e a RFC 430:
+
+- `snake_case` para funções, variáveis, campos e módulos; `UpperCamelCase` para tipos, traits e variantes; `SCREAMING_SNAKE_CASE` para constantes e estáticos.
+- Convenções de conversão, escolhidas pelo custo: `as_` (empréstimo barato), `to_` (custa, aloca), `into_` (consome o receptor).
+- Getters sem prefixo `get_`: `table.name()`, nunca `table.get_name()`.
+- Iteradores pelo trio convencional: `iter`, `iter_mut`, `into_iter`.
+
+### Tipos e erros
+
+- **`Result` e `Option` com o operador `?`.** `unwrap`/`expect` fora de testes só com a invariante documentada na própria mensagem. O tipo de erro segue a tabela da Stack: `thiserror` na biblioteca, `anyhow` no binário.
+- **Newtypes para invariantes** — um nome de tabela já validado não é uma `String` qualquer.
+- **Genéricos ou `impl Trait`** em vez de indirecção desnecessária; `Box<dyn Trait>` só quando a heterogeneidade for real.
+- **Conversões por `From`/`TryFrom`**, e não por funções avulsas quando o trait serve.
+- **Traits da `std` implementados quando fazem sentido**: `Debug` sempre, e `Display`, `Default`, `FromStr`, `AsRef` onde o tipo o justifique.
+- **Assinaturas em tipos emprestados** — `&str`, `&[T]`, `&Path` em parâmetros, nunca `String`, `Vec<T>` ou `PathBuf`. É também o que a regra de alocação mínima dos Requisitos Não-Funcionais exige.
+
+### Expressão
+
+- **Iteradores e combinadores** em vez de loops indexados com acumulador mutável, quando não custem clareza nem desempenho.
+- **Pattern matching exaustivo**, sem um `_ =>` que engula silenciosamente variantes futuras de um `enum` do próprio crate.
+- **`#[non_exhaustive]`** nos tipos públicos que se prevê virem a crescer — tipicamente o `enum` de erro e as structs do `model/`.
+- **Derives em vez de implementações manuais** sempre que sejam equivalentes.
+
+### Ferramentas como árbitro
+
+O `rustfmt` com a configuração por defeito é a autoridade de formatação, e o `clippy` com `-D warnings` é a autoridade de idiomática. Ambos correm no pipeline de validação obrigatório definido em **Desenvolvimento**, e a sua decisão não se discute caso a caso.
+
+Na dúvida, a referência é a convenção da linguagem e as Rust API Guidelines — nunca o hábito trazido de outra linguagem.
 
 ## O Projecto `.tpl`
 
@@ -460,11 +533,50 @@ Os scripts `scripts/mariadb/setup.sql` e `seed.sql` devem cobrir exaustivamente 
 
 ## Especificação Funcional
 
-Usar sempre o agente `specification-manager` para qualquer trabalho sobre a pasta `/specification`: criação, actualização, revisão ou auditoria. É o responsável exclusivo por essa pasta e pelos identificadores estáveis de requisito.
+**Todo o trabalho assenta numa especificação.** Nenhuma funcionalidade é implementada, alterada ou removida sem estar primeiro descrita na especificação funcional do projecto, em `/specification`.
+
+A especificação é a **única fonte de verdade funcional** do `tpl`: o que lá não está não é requisito, e não se implementa por iniciativa própria, por analogia com outro projecto, por parecer óbvio ou por estar mencionado de passagem numa conversa.
+
+### Coordenação
+
+A coordenação da especificação é responsabilidade **exclusiva** do subagente `specification-manager`. É o único que escreve em `/specification`, e todo o trabalho sobre essa pasta passa por ele:
+
+- bootstrap da estrutura e manutenção do `README.md` de navegação;
+- criação e alteração de módulos funcionais, regras de negócio, actores, casos de uso e glossário;
+- atribuição e manutenção dos identificadores estáveis de requisito (`FR-*`, `NFR-*`, `BR-*`, `UC-*`);
+- detecção de inconsistências, ambiguidades, contradições e lacunas entre ficheiros;
+- manutenção das referências cruzadas;
+- depreciação e arquivo de conteúdo obsoleto;
+- auditorias estruturadas.
+
+**Nenhum outro agente edita `/specification`** — nem sequer para corrigir uma gralha.
+
+### A especificação precede a implementação
+
+Sem excepção:
+
+1. Chega o pedido. Verificar se está **coberto pela especificação**.
+2. Se não estiver — ou se estiver de forma ambígua, incompleta ou contraditória — a **primeira** tarefa é levar o `specification-manager` a formalizá-lo. Só depois se implementa.
+3. Implementar exactamente o que a especificação define: nem menos, nem mais.
+4. Se durante a implementação se descobrir que a especificação está errada ou incompleta, **parar**. Corrigi-la através do `specification-manager` e só então retomar. Nunca implementar contra a especificação, e nunca deixar código e especificação a divergir.
+
+Esta é a etapa 1 do Fluxo de Trabalho, e a razão de ser a primeira.
+
+### Articulação com as outras fontes de verdade
+
+O projecto tem três fontes de verdade, com âmbitos que não se sobrepõem. Confundi-las é o erro previsível:
+
+| Fonte | Responde a | Dono |
+|---|---|---|
+| `/specification` | **O que** o `tpl` faz — requisitos, regras, casos de uso | `specification-manager` |
+| `rmp` | **Quando e por quem** — sprints, tarefas, estado, decisões | skill `roadmap-manager` |
+| Knowledge Graph | **Onde e como** — que código existe e como se articula | skill `knowledge-authority` |
+
+Uma tarefa no `rmp` implementa um requisito da especificação; não o substitui. Um facto no grafo descreve o código que existe; não legitima código que a especificação não pediu.
 
 ## Fluxo de Trabalho
 
-1. **Especificar** — formalizar o requisito na especificação funcional.
+1. **Especificar** — formalizar o requisito na especificação funcional, através do `specification-manager`. Nenhuma etapa seguinte começa sem esta.
 2. **Implementar** — escrever o código que o satisfaz.
 3. **Testar** — validar contra MariaDB real quando o requisito toque no catálogo.
 4. **Documentar** — actualizar README, doc comments e CHANGELOG.

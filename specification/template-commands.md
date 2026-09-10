@@ -1,7 +1,7 @@
 ---
 title: Template Commands (Second Arm)
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [cli-contract.md, render-command.md, project-and-discovery.md, security.md]
 ---
 
@@ -76,8 +76,9 @@ tpl template path  [<name>]             Print the template root, or one template
   is `_header.jinja` — THEN the system SHALL fail the render with `65`
   (`EX_DATAERR`), naming the template, the line, and the column.
 
-  *Known cost.* A name copied from `tpl template list` into an `{% include %}`
-  fails, because the listing omits the extension the include requires.
+  *Accepted cost.* A name copied from `tpl template list` into an
+  `{% include %}` fails, because the listing omits the extension the include
+  requires.
 
 - **FR-TMPL-010**: The help of `tpl template list` SHALL state that listed names
   omit the `.jinja` extension and that an `{% include %}` requires it.
@@ -113,7 +114,14 @@ tpl template path  [<name>]             Print the template root, or one template
 ## `tpl template show`
 
 - **FR-TMPL-015**: `tpl template show <name>` SHALL print the source of the
-  named template, unaltered, to stdout.
+  named template, unaltered, to stdout. The escaping of `FR-OUT-018` SHALL NOT
+  apply to it, per `FR-OUT-019`.
+
+  *Amended in the third edition.* The exemption from `FR-OUT-018` is new. As
+  first written, this requirement and `FR-OUT-018` contradicted each other:
+  `template` was named among the read commands whose output is escaped, and a
+  template containing a tab, a form feed, or an escape sequence in a literal
+  could not be both escaped and unaltered.
 
 - **FR-TMPL-016**: `tpl template show` SHALL take exactly one positional
   argument.
@@ -151,6 +159,34 @@ tpl template path  [<name>]             Print the template root, or one template
   tpl template path                    /proj/.tpl/templates
   tpl template path rust/struct        /proj/.tpl/templates/rust/struct.jinja
   ```
+
+## `json` output
+
+- **FR-TMPL-028**: `tpl template list` SHALL emit its `json` output in the
+  envelope of `FR-OUT-024`, with a `data` of one key, `templates`, per
+  `FR-OUT-030`, whose value is an array of objects each carrying `name`:
+
+  ```json
+  {"schema_version":1,"source":"project","data":{"templates":[{"name":"rust/struct"}]}}
+  ```
+
+  *Rationale.* An array of objects rather than an array of bare strings,
+  because a string cannot gain a field and `FR-OUT-014` makes adding one the
+  only non-breaking way for a listing to grow. It is the same argument
+  `FR-CDOC-010` made for `source`.
+
+- **FR-TMPL-029**: `tpl template path` SHALL emit its `json` output in the
+  envelope of `FR-OUT-024`, with a `data` of one key, `path`, whose value is
+  the absolute path `FR-TMPL-021` or `FR-TMPL-022` would print.
+
+- **FR-TMPL-030**: `source` on a `template` document SHALL be `project`, per
+  `FR-OUT-026`, because no `template` subcommand reads a catalogue, per
+  `FR-TMPL-003`.
+
+- **FR-TMPL-031**: WHEN a project has no template, `tpl template list` SHALL
+  exit `0` with an empty `templates` array, per `FR-OUT-033` through
+  `FR-OUT-035`, and `tpl template check` with no positional argument SHALL
+  check nothing and exit `0`.
 
 ## Containment
 

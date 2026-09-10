@@ -1,7 +1,7 @@
 ---
 title: Use Cases
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [schema-commands.md, render-command.md, cache-commands.md, cfg-commands.md]
 ---
 
@@ -29,8 +29,10 @@ here introduces behaviour of its own.
   - A `.tpl` already exists at the destination: exit `73`, nothing changed.
   - A `.tpl` exists in an ancestor: the nested project is created, a warning
     goes to stderr, exit `0`.
-- **Postconditions**: the project is usable; no database is known to it
-- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`
+- **Postconditions**: the project is usable; no database is known to it, so
+  `tpl cfg database list` answers with an empty listing and exit `0`, per
+  `FR-CFG-040`
+- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`, `FR-PROJ-025`
 
 ## UC-002 — Register a database entry
 
@@ -85,12 +87,15 @@ here introduces behaviour of its own.
 - **Main flow**:
   1. Run `tpl help --format json`.
   2. `tpl` emits the complete command tree — commands, subcommands, aliases,
-     arguments, options, examples, and exit codes — as one compact document with
-     the global flags listed once.
+     arguments, options, examples, and exit codes — as one compact document in
+     the envelope of `FR-OUT-024`, with `tpl_version` and the global flags
+     listed once under `data`.
+  3. The invocation needs no project: `FR-PROJ-025` exempts every form of
+     `help` from discovery, so this works in a directory that has no `.tpl`.
 - **Alternate flows**:
   - `tpl help schema --format json` for one subtree.
   - `tpl help --format json --pretty` for a readable form.
-- **Requirements**: `FR-HELP-016` … `FR-HELP-024`
+- **Requirements**: `FR-HELP-016` … `FR-HELP-024`, `FR-OUT-024`, `FR-PROJ-025`
 
 ## UC-006 — Inspect the database structure
 
@@ -147,9 +152,12 @@ here introduces behaviour of its own.
   - Pipeline form: `tpl -d shop schema dump | tpl render rust/struct --context - --table orders`.
   - `--context` together with an explicit `-d` on the command line: exit `64`.
   - The document is malformed: exit `65`.
-- **Notes**: the dump carries only the server-derived part; `vars`, `tpl`, and
-  `now` are always injected by the render
-- **Requirements**: `FR-SCH-016` … `FR-SCH-022`, `FR-RND-016` … `FR-RND-024`
+- **Notes**: the dump carries only the server-derived part, inside the `data`
+  of the envelope; `vars`, `tpl`, and `now` are always injected by the render,
+  in the forms `FR-CTX-026` through `FR-CTX-028` fix. `BR-SCH-004` mandates the
+  test that keeps this round-trip working
+- **Requirements**: `FR-SCH-016` … `FR-SCH-022`, `FR-SCH-036`, `BR-SCH-004`,
+  `FR-RND-016` … `FR-RND-024`
 
 ## UC-010 — Work offline from a warm cache
 
@@ -204,3 +212,8 @@ here introduces behaviour of its own.
 
 Every use case above is a composition of requirements owned by the module files
 listed in the specification [README](README.md#file-index).
+
+## Open questions
+
+None specific to this module. Each use case inherits the open questions of the
+requirements it composes.

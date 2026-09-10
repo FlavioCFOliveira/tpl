@@ -1,7 +1,7 @@
 ---
 title: Server Contract
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [catalogue-coverage.md, privileges-and-completeness.md, security.md, performance-requirements.md]
 ---
 
@@ -80,13 +80,13 @@ settings and TLS, which belong to
 
   | Statement | Purpose |
   |---|---|
-  | `SELECT` against `information_schema.*` | Reading the catalogue |
+  | `SELECT` against `INFORMATION_SCHEMA.*` | Reading the catalogue |
   | The server version probe | `FR-SRV-002` |
   | The read-only session statement issued at connection start | `FR-SRV-008` |
 
 - **FR-SRV-007**: The system SHALL NOT issue any other statement. It SHALL issue
   no DDL, no DML, no `SHOW`, no statement against any schema other than
-  `information_schema`, and SHALL NOT invoke an external process such as a dump
+  `INFORMATION_SCHEMA`, and SHALL NOT invoke an external process such as a dump
   utility to read structure.
 
 - **BR-SRV-001**: The closed list is the read-only guarantee. It is a property of

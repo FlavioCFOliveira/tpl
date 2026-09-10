@@ -1,7 +1,7 @@
 ---
 title: Global Flags
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md]
 ---
 
@@ -22,6 +22,11 @@ rule, and the list of flags that are deliberately not global.
 Out of scope: the behaviour each flag triggers inside a particular command,
 which belongs to that command's module.
 
+## Actors
+
+- **Calling agent** or **operator**, supplying the flags on the command line.
+- **Project**, whose `.tpl/.cfg` supplies the layer beneath them.
+
 ## The seven global flags
 
 - **FR-GLOB-001**: The system SHALL declare exactly seven global flags, and no
@@ -31,7 +36,7 @@ which belongs to that command's module.
   |---|---|---|---|
   | `--database <name>` | `-d` | database entry name | none; see `FR-GLOB-004` |
   | `--tpl-dir <path>` | | filesystem path | none; discovery applies |
-  | `--timeout <seconds>` | | positive integer | `30` |
+  | `--timeout <seconds>` | | positive integer | none; see `FR-GLOB-011` |
   | `--verbose` | `-v` | none, repeatable | off |
   | `--quiet` | `-q` | none | off |
   | `--help` | `-h` | none | — |
@@ -70,7 +75,7 @@ which belongs to that command's module.
 
 - **FR-GLOB-008**: The system SHALL distinguish an entry selected by
   `-d/--database` on the command line from one resolved through `core.database`,
-  because `FR-RND-011` depends on that distinction.
+  because `FR-RND-018` and `FR-RND-019` depend on that distinction.
 
 ### `--tpl-dir`
 
@@ -78,20 +83,49 @@ which belongs to that command's module.
   SHALL suppress discovery.
 
 - **FR-GLOB-010**: A `.tpl` folder named by `--tpl-dir` SHALL be subject to
-  every check defined in `FR-PROJ-007` through `FR-PROJ-009`, without exemption.
+  every trust check defined in `FR-PROJ-009` through `FR-PROJ-011`, without
+  exemption.
 
 ### `--timeout`
 
-- **FR-GLOB-011**: `--timeout <seconds>` SHALL set the overall budget for the
-  invocation. Its default is `30`.
+- **FR-GLOB-011**: `--timeout <seconds>` SHALL set the overall wall-clock
+  budget for the invocation, measured from process start. It SHALL have no
+  default: WHEN it is absent, the invocation carries no overall budget and is
+  bounded only by the per-phase deadlines of `FR-CONF-005`.
 
-- **FR-GLOB-012**: The system SHALL resolve each phase deadline strongest first:
-  the `--timeout` flag, then the corresponding `[core]` key in `.tpl/.cfg`, then
-  the built-in default declared in `FR-CONF-004`.
+  *Amended in the third edition.* The first edition gave the flag the default
+  `30` while `FR-CONF-004` made a flag stronger than a `[core]` key. A flag
+  that always has a value always wins, so `core.connect_timeout`,
+  `core.query_timeout`, `core.password_timeout`, and `core.render_timeout` were
+  dead keys that could never take effect. Removing the default makes the flag
+  absent unless supplied, and `FR-GLOB-012` composes it with the per-phase
+  deadlines rather than overriding them.
+
+  *Rejected.* A precedence rule distinguishing a supplied flag from a defaulted
+  one, which would have to be explained in every help text that mentions a
+  timeout; and dropping the four `[core]` keys for a single timeout, which
+  would give a slow catalogue query no more time than a DNS lookup.
+
+- **FR-GLOB-012**: `--timeout` SHALL compose with the per-phase deadlines of
+  `FR-CONF-005` rather than replace them. A phase SHALL end when the first of
+  the two expires: its own deadline, resolved by `FR-CONF-004`, or what remains
+  of the overall budget.
+
+  *Amended in the third edition.* The first edition made `--timeout` the
+  strongest layer of a per-phase precedence, which is not what a flag
+  documented as "the overall budget for the invocation" can be. The two are now
+  bounds of different kinds and both apply.
+
+  *Accepted cost.* `tpl --timeout 1 …` can fail inside a phase whose own
+  deadline is larger, and the exit code will name that phase rather than the
+  flag. `FR-GLOB-013` fixes which code, and the `cause` line of `FR-ERR-010`
+  states which of the two bounds expired.
 
 - **FR-GLOB-013**: WHEN a deadline is exceeded, the system SHALL exit with the
   code of the phase that timed out: `69` (`EX_UNAVAILABLE`) for a network phase,
-  `78` for `password_command`, `65` (`EX_DATAERR`) for render.
+  `78` for `password_command`, `65` (`EX_DATAERR`) for render. WHEN the overall
+  budget of `FR-GLOB-011` expires, the system SHALL exit with the code of the
+  phase that was in progress, by the same table.
 
   *Rationale.* "Never interactive" exists because a blocked process hangs the
   caller with no diagnosis. A connect to a silent address, a `password_command`
@@ -183,7 +217,5 @@ which belongs to that command's module.
 
 ## Open questions
 
-- [OQ-008](open-questions.md#oq-008) — how `--timeout` composes with the
-  per-phase keys.
 - [OQ-015](open-questions.md#oq-015) — the permitted position of a global flag
   on the command line.

@@ -1,7 +1,7 @@
 ---
 title: Glossary
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md]
 ---
 
@@ -20,8 +20,8 @@ short form is accepted. See `FR-CLI-011`.
 
 One of the three read-only capabilities `tpl` provides: exploring the database
 (`tpl schema …`), exploring the templates (`tpl template …`), and rendering
-(`tpl render …`). Command groups that are not arms — `tpl cfg …`, `tpl cache …`,
-`tpl init`, `tpl help`, `tpl version` — are auxiliary.
+(`tpl render …`). Command groups that are not arms — `tpl cache …`,
+`tpl cfg …`, `tpl init`, `tpl help`, and `tpl version` — are auxiliary.
 
 ## budget
 
@@ -70,14 +70,17 @@ incomplete for the other. See `FR-PRIV-001`.
 
 The set of top-level variables available to a template during a render:
 `database`, one of `table` / `view` / `routine`, `vars`, `tpl`, `now`. The
-command line decides which object variable is bound; the content of each
-variable is outside the scope of this edition.
+command line decides which object variable is bound, per `FR-RND-023`. The
+content of the two that come from a server is fixed by
+[context-document.md](context-document.md); so is the content of the other
+three, by `FR-CTX-026` through `FR-CTX-028`.
 
 ## context document
 
 The single JSON document that carries the model: emitted by `tpl schema dump`,
 consumed by `tpl render --context`, and seen by a template as the `database`
-context variable. Its structure is fixed by
+context variable. It travels as the `data` payload of a document envelope, per
+`FR-SCH-017`. Its structure is fixed by
 [context-document.md](context-document.md) and it is plumbing contract. Not to
 be confused with *context*, above, which is the set of variables a template
 sees, three of which never come from a database.
@@ -88,6 +91,13 @@ One of the three tiers of the template surface defined by `FR-ENV-001`: what
 `tpl` registers, which is full contract; an enumerated list of filters inherited
 from the engine, guaranteed against a pinned engine minor version; and
 everything else the engine offers, which works and is guaranteed by nobody.
+
+## document envelope
+
+The three-key outer shape every JSON document `tpl` writes to stdout carries:
+`schema_version`, `source`, and `data`. Only `data` differs between commands,
+and the module that owns a command owns the shape of its `data`. Fixed by
+`FR-OUT-024`; the seventeen documents are indexed by `BR-OUT-002`.
 
 ## coverage
 
@@ -107,19 +117,21 @@ project; it need not match the database name on the server. Selected with
 ## discovery
 
 Locating the project by walking up from the current directory until a `.tpl`
-folder is found, within the boundary defined by `FR-PROJ-004`.
+folder is found, within the boundary defined by `FR-PROJ-005`. See
+`FR-PROJ-004`.
 
 ## DSN
 
 A single-string connection descriptor stored in the `dsn` key of a database
 entry, in the form
-`scheme://[user[:password]@]host[:port]/database[?params]`. See `FR-CONF-008`.
+`scheme://[user[:password]@]host[:port]/database[?params]`. See `FR-CONF-009`.
 
 ## group node
 
 A node of the command tree that has children and no action of its own — `tpl`,
-`tpl schema`, `tpl template`, `tpl cfg`, `tpl cfg database`, `tpl cache`.
-Invoked without a child, a group node prints its own help. See `FR-CLI-007`.
+`tpl schema`, `tpl template`, `tpl cache`, `tpl cfg`, and `tpl cfg database`.
+Invoked without a child, a group node prints its own help. See `FR-CLI-007`
+and `FR-CLI-008`.
 
 ## leaf
 
@@ -136,6 +148,13 @@ A command rejects any flag it does not declare. Contrast global flag.
 One of the seven flags accepted by every node of the tree. See
 [global-flags.md](global-flags.md).
 
+## word list
+
+The sequence of words a naming filter derives from its operand before rejoining
+them, by the tokenisation rule of `FR-ENV-030`. Every one of the five naming
+filters is a pure function of it, which is what makes all five predictable from
+one rule.
+
 ## model
 
 Everything `tpl` knows about a database: the covered object kinds and their
@@ -146,7 +165,7 @@ cached read, or a `--context` document — and is defined by
 ## nearest match
 
 A suggestion offered when a supplied name does not exist, computed by edit
-distance over the names that do exist. See `FR-ERR-015`.
+distance over the names that do exist. See `FR-ERR-019`.
 
 ## normative budget
 
@@ -162,8 +181,9 @@ spellings wherever a command names one: `--table`, `--view`, `--routine`.
 ## plumbing
 
 Output intended to be consumed by another program. In `tpl`, `--format json`
-and the JSON-only output of `tpl schema dump` and `tpl help --format json`. The
-plumbing contract is versioned by `schema_version`.
+and the JSON-only output of `tpl schema dump` and `tpl help --format json`.
+Every plumbing document shares the envelope of `FR-OUT-024` and is versioned by
+`schema_version`.
 
 ## porcelain
 
@@ -173,7 +193,7 @@ explicitly not a contract. See `FR-OUT-004`.
 ## pre-scan
 
 A scan of the raw argument vector, performed before the parser runs, that
-determines whether errors are emitted as text or as JSON. See `FR-ERR-013`.
+determines whether errors are emitted as text or as JSON. See `FR-ERR-017`.
 
 ## project
 
@@ -191,7 +211,7 @@ per `FR-SCH-010`.
 ## read-through cache
 
 A cache consulted before the server on every read, and populated immediately
-whenever the read misses. See `FR-CACHE-002`.
+whenever the read misses. See `FR-CACHE-006` and `FR-CACHE-007`.
 
 ## reference workload
 
@@ -233,26 +253,28 @@ term "routine" and states the kind per object.
 2. The `--schema` flag of `tpl cfg database add|update`, which names the
    database on the server.
 
-Help text disambiguates the two wherever both could be meant. See `FR-CFG-019`.
+Help text disambiguates the two wherever both could be meant. See `FR-CFG-028`.
 
 ## source
 
-The field by which every read states where its bytes came from: `cache` or
-`server`. It is an enumerated string rather than a boolean so that a value may
-be added without breaking the contract, per `FR-CDOC-010`. It is also the signal
-that a document promises neither referential integrity nor a snapshot, per
-`FR-CDOC-016`.
+The second key of the document envelope, by which every JSON document states
+where its bytes came from: `server`, `cache`, `project`, or `binary`. It is an
+enumerated string rather than a boolean so that a value may be added without
+breaking the contract, per `FR-CDOC-010` — two were added by the third edition.
+`"source":"cache"` is also the signal that a document promises neither
+referential integrity nor a snapshot, per `FR-CDOC-016`. The value set is fixed
+by `FR-OUT-026`.
 
 ## template
 
 A file under `.tpl/templates/` whose name ends in `.jinja`. Nothing else in that
-directory is a template. See `FR-TMPL-011`.
+directory is a template. See `FR-TMPL-004` and `FR-TMPL-005`.
 
 ## template name
 
 The path of a template relative to `.tpl/templates/`, with the `.jinja`
 extension optional on the command line and mandatory inside a template. See
-`FR-TMPL-010` and `FR-TMPL-012`.
+`FR-TMPL-006`, `FR-TMPL-007`, and `FR-TMPL-008`.
 
 ## volatile field
 

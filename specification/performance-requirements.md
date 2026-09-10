@@ -1,7 +1,7 @@
 ---
 title: Performance Requirements
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [server-contract.md, cache-documents.md, global-flags.md, catalogue-coverage.md]
 ---
 
@@ -65,12 +65,17 @@ to measure; and the implementation choices that would satisfy a budget.
 
 - **NFR-PERF-004**: One invocation SHALL open at most one connection.
 
-- **NFR-PERF-005**: `tpl --version` and `tpl version` SHALL perform no project
-  discovery, SHALL read no configuration file, and SHALL open no connection.
+- **NFR-PERF-005**: Every command named by `FR-PROJ-025` SHALL perform no
+  project discovery, SHALL read no configuration file, and SHALL open no
+  connection. Those commands are `tpl init`, every form of `help`, and every
+  form of `version`.
 
-  *Note.* This settles the question only for the version forms. Whether `--help`
-  runs before or after project discovery is a consequence of the validation
-  order of `FR-ERR-006` and is not settled here.
+  *Amended in the third edition.* The first edition covered the two version
+  forms only and left the help forms and `tpl init` unsettled, which was
+  recorded as an open question. `FR-PROJ-025` now names the set functionally,
+  and this requirement states the observable consequence, verified from outside
+  the process per `NFR-PERF-007`: no `stat` of an ancestor directory, no open
+  of `.tpl/.cfg`, no socket.
 
 - **NFR-PERF-006**: A command that requires no catalogue data SHALL open no
   connection. This covers every `template` subcommand, every `cfg` subcommand

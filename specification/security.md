@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md]
 ---
 
@@ -14,6 +14,14 @@ in more than one place. This file collects them, states the threat each closes,
 and points at the module that owns the requirement. It adds no requirement that
 is not stated elsewhere; where a rule appears here with its own identifier, it
 is because the rule is genuinely cross-cutting and has no single owning module.
+
+## Scope
+
+In scope: the threat each cross-cutting rule closes, and the module that owns
+the requirement enforcing it.
+
+Out of scope: every rule's normative statement, which lives in its owning
+module. This file adds no requirement that is not stated elsewhere.
 
 ## Trust boundaries
 
@@ -132,15 +140,28 @@ is because the rule is genuinely cross-cutting and has no single owning module.
   semicolons, quotes, and newlines; formatting one into a suggested command is
   command injection with the caller as the interpreter.
 
-- **FR-SEC-020**: C0 control characters, tab excepted, SHALL be escaped in every
-  value the system prints or interpolates in the output of a read command or in
-  a diagnostic message, whatever its source. The result of `tpl render` is
-  excluded and is emitted byte for byte. See `FR-OUT-018`, `FR-OUT-019`, and
-  `FR-ERR-024`.
+- **FR-SEC-020**: C0 control characters SHALL be escaped in every value the
+  system prints or interpolates, whatever its source, under two rules that
+  differ in one character:
+
+  | Where | Rule | Owner |
+  |---|---|---|
+  | The `text` and `json` output of a read command | C0 escaped, tab excepted | `FR-OUT-018` |
+  | Any diagnostic message | C0 escaped, tab included | `FR-ERR-024` |
+
+  Two outputs are excluded and are emitted byte for byte: the result of
+  `tpl render`, and the template source printed by `tpl template show`. See
+  `FR-OUT-019`.
 
   *Threat closed.* An escape sequence in a column comment cannot rewrite what
   the user sees, and a newline in a catalogue value cannot forge a whole
   diagnostic line in the line-oriented error format.
+
+  *Amended in the third edition.* The tab exception is now stated per rule
+  rather than across both, because the first edition's single statement
+  contradicted `FR-ERR-024`. `tpl template show` joins `tpl render` in the
+  exclusion, per the amendment to `FR-OUT-019`; the credential-dump path that
+  motivated escaping it is closed by `FR-SEC-017` instead.
 
 ## Transport
 
@@ -172,11 +193,14 @@ is because the rule is genuinely cross-cutting and has no single owning module.
   source of truth; where it and an owning module differ, the owning module
   governs and the difference is a defect to be corrected here.
 
-- **BR-SEC-002**: `tpl` never issues a write statement against a database, and
-  enforces a read-only session at the engine level on every connection it opens.
-  Failure to establish that session refuses the connection with `78`. There is
-  no flag that disables this. The mechanism is outside the scope of this
-  edition.
+- **BR-SEC-002**: `tpl` never issues a write statement against a database. The
+  promise has two parts and only one of them prevents: the closed statement
+  list of `FR-SRV-006`, which is what `tpl` is built to send, and the read-only
+  session of `FR-SRV-008`, read back and confirmed under `FR-SRV-009`, which
+  makes a write fail rather than stopping it from being attempted. Failure to
+  establish or confirm the session refuses the connection with `78`, per
+  `FR-SRV-010`. There is no flag that disables either part, per `FR-SRV-011`.
+  See [server-contract.md](server-contract.md), which owns both.
 
 ## Dependencies
 

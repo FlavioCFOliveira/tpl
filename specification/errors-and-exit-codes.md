@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md]
 ---
 
@@ -21,6 +21,12 @@ In scope: the exit code table, validation order, message format in text and in
 JSON, nearest-match suggestions, hint construction, and `EPIPE`.
 
 Out of scope: the wording of any individual message.
+
+## Actors
+
+- **Calling agent**, which branches on the exit code and self-corrects from the
+  `hint` line. This is the primary consumer.
+- **Operator**, reading the four-line message at a shell prompt.
 
 ## Exit codes
 
@@ -49,9 +55,33 @@ Out of scope: the wording of any individual message.
   *Rationale.* With no output flags, `tpl` creates no destination other than
   `.tpl`.
 
+- **FR-ERR-030**: `70` (`EX_SOFTWARE`) SHALL be produced by exactly two
+  conditions, and by no other: a panic caught at the top level of the process,
+  and a violated internal invariant the system detects and declines to
+  continue past.
+
+  *Rationale.* It was the only code in the table of `FR-ERR-001` for which no
+  requirement stated a producing condition, so nothing could confirm that the
+  binary is able to return it at all.
+
+- **FR-ERR-031**: The system SHALL provide a deliberate trigger for `70`, so
+  that the test `BR-ERR-001` mandates for it can exist. The trigger SHALL NOT
+  appear in any help text, in the JSON command tree of `FR-HELP-016`, or in the
+  command tree of `FR-CLI-002`.
+
+  *Rationale.* A code with no test is a code nobody has confirmed the binary
+  can return, and `70` cannot be reached from a correct invocation by
+  definition. Keeping the trigger out of the published surface keeps the tree
+  closed, per `FR-CLI-002`, and keeps it out of the caller's context window.
+
+- **FR-ERR-032**: A `70` SHALL follow the message format of `FR-ERR-008`, and
+  its `hint` SHALL say that the condition is a defect in `tpl` and is not
+  correctable by the caller.
+
 - **BR-ERR-001**: Exit codes are contract. Each code SHALL have at least one
   integration test that exercises it, and that test is part of the definition of
-  done for the feature that can produce it.
+  done for the feature that can produce it. `70` is exercised through the
+  trigger of `FR-ERR-031`.
 
 ## No database entry versus a missing entry
 
@@ -81,6 +111,14 @@ Out of scope: the wording of any individual message.
   7. template resolution                       66
   8. render                                    65
   ```
+
+  Steps 2 and 3 SHALL be skipped for the commands `FR-PROJ-025` names, which
+  require no project. Step 1 runs for every command without exception, so an
+  unknown flag on `tpl --help` is still `64`.
+
+  *Amended in the third edition.* The sentence about steps 2 and 3 is new. The
+  order alone did not say whether `--help` reached discovery; `FR-PROJ-025` now
+  names the commands that skip them.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
@@ -174,11 +212,22 @@ Out of scope: the wording of any individual message.
 
 - **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, and every C0 control
   character in every value it interpolates into a message — catalogue names,
-  comments, defaults, `--context` values, and the argument vector.
+  comments, defaults, `--context` values, and the argument vector. This
+  requirement owns escaping in a diagnostic message; `FR-OUT-018` owns
+  escaping in the output of a read command, where tab is excepted.
 
   *Rationale.* Escaping newlines separately protects the line-oriented
   `error:` / `cause:` / `hint:` / `exit:` format from having a whole diagnostic
-  line forged.
+  line forged. Tab is escaped here and excepted there because a `text` listing
+  is laid out in aligned columns, per `FR-OUT-006`, and this format has no
+  columns: a tab inside an interpolated catalogue name can only misalign the
+  labels a caller reads on.
+
+  *Amended in the third edition.* The ownership statement is new. The first
+  edition had `FR-OUT-018` extend its own rule to "every diagnostic message"
+  while excepting tab, which contradicted this requirement outright. The
+  contradiction is resolved in favour of escaping tab in messages; `FR-OUT-018`
+  no longer reaches them.
 
 ## `EPIPE`
 

@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md]
 ---
 
@@ -57,9 +57,11 @@ read from the server on a miss.
   `tpl init`. It appears on the first read that populates it.
 
 - **FR-CACHE-004**: The `.tpl/.gitignore` written by `tpl init` SHALL exclude
-  `.cache/`, per `FR-PROJ-016`.
+  `.cache/`, per `FR-PROJ-017`.
 
-- **FR-CACHE-005**: Each cached document SHALL carry a format version.
+- **FR-CACHE-005**: Each cached document SHALL carry a format version. The two
+  versions the cache keeps, and where each is written, are fixed by
+  `FR-CDOC-001` through `FR-CDOC-005`.
 
 - **BR-CACHE-001**: The on-disk layout of `.tpl/.cache/` is not part of the
   plumbing contract. `tpl cache status` is the supported way to learn the state
@@ -96,6 +98,8 @@ read from the server on a miss.
 
 - **FR-CACHE-012**: WHEN a read is served from the cache and the output format
   is `json`, the document SHALL state that the read was cached rather than live.
+  The field that carries it is the `source` field of `FR-CDOC-009`, which
+  [cache-documents.md](cache-documents.md) owns.
 
 - **BR-CACHE-002**: A read command is no longer read-only with respect to the
   filesystem, while remaining absolutely read-only with respect to the database.
@@ -135,7 +139,8 @@ read from the server on a miss.
   command declares and what the command does.
 
 - **FR-CACHE-020**: `tpl cache clean` and `tpl cache status` SHALL NOT declare
-  `--direct` or `--no-cache`; supplying either is an unknown-flag error, `64`.
+  `--direct` or `--no-cache`; supplying either is an unknown-flag error under
+  `FR-CLI-019`, exit `64`.
 
 ## `tpl cache`
 
@@ -161,7 +166,9 @@ tpl -d shop cache status
 
 - **FR-CACHE-024**: `tpl cache load` and `tpl cache clean` SHALL name an
   individual object with `--table <name>`, `--view <name>`, or
-  `--routine <name>` — the same flag spellings `tpl render` uses.
+  `--routine <name>` — the same flag spellings `tpl render` uses. `--routine`
+  SHALL accept the qualified forms of `FR-SCH-008`, and a bare name matching
+  both a procedure and a function SHALL be `64`, per `FR-SCH-010`.
 
   *Accepted cost.* The cache names an object by flag while `schema` names it
   positionally: two grammars for the same thing in one tree.
@@ -170,11 +177,43 @@ tpl -d shop cache status
   cache was loaded, and the object counts it holds.
 
 - **FR-CACHE-026**: WHEN the cache for the selected entry is empty,
-  `tpl cache status` SHALL exit `0`.
+  `tpl cache status` SHALL exit `0`, per `FR-OUT-033`.
 
-  *Rationale.* Empty is a state, not a failure.
+  *Rationale.* Empty is a state, not a failure. This was the first case the
+  specification settled that way, and `FR-OUT-033` generalises it to every
+  command that returns a collection.
 
 - **FR-CACHE-027**: `tpl cache status` SHALL declare `--format` and `--pretty`.
+
+- **FR-CACHE-034**: `tpl cache status` SHALL emit its `json` output in the
+  envelope of `FR-OUT-024`, with `source` set to `project` per `FR-OUT-026`,
+  and a `data` carrying exactly the following keys:
+
+  | Key | Value |
+  |---|---|
+  | `entry` | The name of the selected database entry |
+  | `loaded_at` | The load time from `meta.json`, per `FR-CDOC-013`, or `null` when the cache is empty |
+  | `collections` | An array of objects, one per collection, each carrying `name`, the count of objects held, and whether the collection was loaded whole, per `FR-CDOC-006` |
+
+  ```json
+  {"schema_version":1,"source":"project","data":{"entry":"shop","loaded_at":"2026-09-10T08:14:22Z","collections":[{"name":"tables","count":14,"whole":true}]}}
+  ```
+
+  *Rationale.* `source` is `project` and not `cache`, because the command
+  reports *on* the cache rather than being served *from* it. `loaded_at`
+  appears here and in `meta.json` and nowhere else, per `FR-CDOC-012` and
+  `FR-CDOC-013`, and this is the one document in which the age of the cache is
+  the answer rather than an incidental detail.
+
+  *Known cost, accepted.* One `loaded_at` for the whole entry understates what
+  `BR-CDOC-004` describes: a cache can legitimately hold one table read on
+  Monday beside another read on Friday. Carrying a load time per object would
+  answer more precisely and is not carried, because `FR-CDOC-013` fixes the
+  field at the entry level.
+
+- **FR-CACHE-035**: WHEN the cache for the selected entry is empty, the `data`
+  of `tpl cache status` SHALL carry `loaded_at` `null` and `collections` an
+  empty array. The exit code is `0`, per `FR-CACHE-026`.
 
 ## Invalidation
 
@@ -228,8 +267,6 @@ tpl -d shop cache status
 
 ## Open questions
 
-- [OQ-020](open-questions.md#oq-020) — the cached-document format version, and
-  the field that reports cached versus live in `json` output.
 - [OQ-021](open-questions.md#oq-021) — the exit code for a failed cache write.
-- [OQ-022](open-questions.md#oq-022) — the `text` and `json` shape of
-  `tpl cache status`.
+- [OQ-048](open-questions.md#oq-048) — whether an incomplete object may be
+  written to the cache.

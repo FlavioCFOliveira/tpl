@@ -1,7 +1,7 @@
 ---
 title: Open Questions
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [README.md, catalogue-coverage.md, context-document.md, performance-requirements.md]
 ---
 
@@ -34,23 +34,27 @@ They are recorded here rather than guessed at in
 [performance-requirements.md](performance-requirements.md), which states what is
 observable now and cites these entries for what is not.
 
-Third, `OQ-020` and `OQ-022` are narrowed rather than closed by the second
-edition. What remains of each is stated in place, and both are retired in the
-maintenance pass that also takes the fourteen leftover questions of the first
-edition.
+Third, thirteen entries have been closed and are listed under *Closed* below
+rather than removed without trace. `OQ-020` was answered by the second edition;
+the other twelve were answered by the third, which put the audit's findings to
+the user and wrote the decisions into the owning modules. Their identifiers are
+not reused, per the identifier scheme of the [README](README.md#identifier-scheme).
+
+Fourth, `OQ-070` through `OQ-072` are what remained of `OQ-068` after the third
+edition specified the behaviour of the registered filters and tests. Two are
+facts about MariaDB that must be observed and one is a design decision the
+specification declined to invent.
 
 ## Index
 
 | Id | Question | Owner module | Blocks |
 |---|---|---|---|
-| [OQ-001](#oq-001) | Output of `tpl cfg database test` | `cfg-commands.md` | Implementation of `test` |
 | [OQ-002](#oq-002) | Whether `test` reports effective privileges | `cfg-commands.md` | Implementation of `test` |
 | [OQ-003](#oq-003) | TLS mode to driver mapping | `configuration-model.md` | Freezing TLS semantics |
 | [OQ-004](#oq-004) | Enumerated DSN query parameters | `configuration-model.md` | DSN validation |
 | [OQ-005](#oq-005) | Cap on `password_command` output | `configuration-model.md` | `password_command` execution |
 | [OQ-006](#oq-006) | Handling of the child's stderr | `configuration-model.md` | `password_command` execution |
 | [OQ-007](#oq-007) | Handling of a non-zero child exit | `configuration-model.md` | `password_command` execution |
-| [OQ-008](#oq-008) | `--timeout` versus per-phase keys | `global-flags.md` | Deadline resolution |
 | [OQ-009](#oq-009) | Catalogue return types and collation | `schema-commands.md` | Freezing catalogue value types |
 | [OQ-010](#oq-010) | Field lists for routines, triggers, generated columns, FK rules | `schema-commands.md` | `schema table` and `schema routine` |
 | [OQ-011](#oq-011) | Pre-scan on ambiguous `--format` forms | `errors-and-exit-codes.md` | Error formatting |
@@ -62,9 +66,7 @@ edition.
 | [OQ-017](#oq-017) | Flags for `password_command`, `ca_file`, `ca_path` | `cfg-commands.md` | `cfg database add` and `update` |
 | [OQ-018](#oq-018) | Unknown key in a hand-written `.cfg` | `configuration-model.md` | `.cfg` validation |
 | [OQ-019](#oq-019) | `password_command` written as a string in the file | `configuration-model.md` | `.cfg` validation |
-| [OQ-020](#oq-020) | Cache format version, and the cached-versus-live field | `cache-commands.md` | Cache documents |
 | [OQ-021](#oq-021) | Exit code for a failed cache write | `cache-commands.md` | Cache write path |
-| [OQ-022](#oq-022) | Shape of `tpl cache status` output | `cache-commands.md` | `cache status` |
 | [OQ-023](#oq-023) | Pre-scan on a command without `--format` | `errors-and-exit-codes.md` | Error formatting for `render` |
 | [OQ-024](#oq-024) | Field list of `tpl schema info` | `schema-commands.md` | `schema info` |
 | [OQ-025](#oq-025) | Table types reported, and temporary tables | `catalogue-coverage.md` | `FR-CAT-001`, `FR-CAT-006` |
@@ -103,16 +105,31 @@ edition.
 | [OQ-058](#oq-058) | Budget: the 200-invocation loop | `performance-requirements.md` | `NFR-PERF-014` |
 | [OQ-059](#oq-059) | Budget: peak resident memory over `WL-001` | `performance-requirements.md` | `NFR-PERF-014` |
 | [OQ-060](#oq-060) | The byte scalar N of `WL-002` | `performance-requirements.md` | `WL-002` |
+| [OQ-070](#oq-070) | The escaping of a backtick inside an identifier | `template-environment.md` | `FR-ENV-035` |
+| [OQ-071](#oq-071) | What `sql_type` does, beyond `column_type` | `template-environment.md` | `FR-ENV-039` |
+| [OQ-072](#oq-072) | The membership of the three type families | `template-environment.md` | `FR-ENV-041`, `FR-ENV-042` |
 
-## OQ-001
+## Closed
 
-**What does `tpl cfg database test` print, in `text` and in `json`?**
+An entry is closed when the requirement it produced is written into the owning
+module. The identifier is retired and never reused, so a gap in the sequence
+above is expected rather than a defect.
 
-*Origin*: left open when `test` was kept inside the entry group.
-*Why it is open*: the command reports on a connection, and no decision fixed the
-fields of that report.
-*Blocks*: `FR-CFG-024`, which states that `test` reports the result without
-saying what the result contains.
+| Id | Question | Answered by | Closed in |
+|---|---|---|---|
+| OQ-001 | Output of `tpl cfg database test` | `FR-CFG-035`, `FR-CFG-039` | Third edition |
+| OQ-008 | `--timeout` versus the per-phase keys | `FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-CONF-004` | Third edition |
+| OQ-020 | Cache format version, and the cached-versus-live field | `FR-CDOC-001` through `FR-CDOC-005`, `FR-CDOC-009` through `FR-CDOC-011` | Second edition |
+| OQ-022 | Shape of `tpl cache status` output | `FR-CACHE-034`, `FR-CACHE-035` | Third edition |
+| OQ-061 | Whether `--help` runs before project discovery | `FR-PROJ-025`, `NFR-PERF-005`, `FR-ERR-006` | Third edition |
+| OQ-062 | The `json` document shape of every read command | `FR-OUT-024` through `FR-OUT-032`, and the `data` shapes of `BR-OUT-002` | Third edition |
+| OQ-063 | The order of the collections `NFR-DET-002` did not name | `NFR-DET-002` | Third edition |
+| OQ-064 | The outcome of a read whose result set is empty | `FR-OUT-033` through `FR-OUT-037` | Third edition |
+| OQ-065 | The durability of a `.tpl/.cfg` rewrite | `FR-CFG-041`, `FR-CFG-042` | Third edition |
+| OQ-066 | `password` beside `password_command`, and either beside `dsn` | `FR-CONF-006`, `FR-CONF-007` | Third edition |
+| OQ-067 | How `70` is produced, and how it is exercised | `FR-ERR-030` through `FR-ERR-032`, `BR-ERR-001` | Third edition |
+| OQ-068 | What each registered filter and test does | `FR-ENV-030` through `FR-ENV-043`; residue in `OQ-070` through `OQ-072` | Third edition |
+| OQ-069 | The shape of the `vars`, `tpl`, and `now` context variables | `FR-CTX-026` through `FR-CTX-030` | Third edition |
 
 ## OQ-002
 
@@ -168,16 +185,6 @@ discarded, inherited, or captured for a diagnostic was not decided.
 *Why it is open*: the deadline case is `78`, but the non-zero exit case has no
 code assigned.
 *Blocks*: `FR-CONF-027` and the exit code table.
-
-## OQ-008
-
-**How does `--timeout` compose with the per-phase keys?**
-
-*Origin*: the decision states both that `--timeout` is an overall budget and
-that the per-phase keys exist, with precedence flag, then `.cfg`, then default.
-*Why it is open*: it is not stated whether `--timeout 5` caps each phase
-individually, caps their sum, or replaces every per-phase value.
-*Blocks*: `FR-GLOB-012` and `FR-CONF-004`.
 
 ## OQ-009
 
@@ -294,21 +301,6 @@ splitting rule for a string supplied to a command, but says nothing about a
 string found in the file.
 *Blocks*: `FR-CONF-023` and `FR-CONF-025`.
 
-## OQ-020
-
-**What is the format version of a cached document, and which field reports that
-a read was served from the cache?**
-
-*Origin*: the decisions require both a format version and a way for `json`
-output to expose cached versus live, without fixing either.
-*Why it is open*: both are contract surface and must be named explicitly.
-*Blocks*: `FR-CACHE-005` and `FR-CACHE-012`.
-*Narrowed by the second edition*: `FR-CDOC-001` through `FR-CDOC-005` fix the
-two version fields, and `FR-CDOC-009` through `FR-CDOC-011` fix the field that
-reports where a read came from. Nothing of the original question remains open.
-The entry, and the pointer to it in
-[cache-commands.md](cache-commands.md), are retired in the maintenance pass.
-
 ## OQ-021
 
 **What exit code does a failed cache write produce?**
@@ -318,19 +310,6 @@ The entry, and the pointer to it in
 write `.tpl/.cache/` has no stated outcome. Failing the read and succeeding with
 a warning are both defensible.
 *Blocks*: `FR-CACHE-007`.
-
-## OQ-022
-
-**What is the `text` and `json` shape of `tpl cache status`?**
-
-*Origin*: a gap found while writing this edition.
-*Why it is open*: the fields are named — entry, load time, object counts — but
-their layout, names, and types are not.
-*Blocks*: `FR-CACHE-025`.
-*Narrowed by the second edition*: `FR-CDOC-006` and `FR-CDOC-013` fix two of the
-things `cache status` must report — per-collection completeness, and the load
-time that `FR-CDOC-012` keeps out of every read. The layout, the field names,
-and the types remain open.
 
 ## OQ-023
 
@@ -352,7 +331,14 @@ confusing, and no decision covers it.
 "name, version, charset, collation"; no decision confirms the list.
 *Why it is open*: the field list is contract surface in `json`, and it must be
 verified against the container like every other catalogue field list.
-*Blocks*: `FR-SCH-003`.
+*Blocks*: `FR-SCH-003` and the `database` object of `FR-SCH-031`.
+*Narrowed by the third edition*: `FR-SCH-030` and `FR-SCH-031` fix the
+envelope of the document and its single `data` key, `database`. What that
+object carries remains open, and unlike `OQ-001` and `OQ-022` — which the
+third edition closed against the envelope — it cannot be closed by a decision:
+it is a catalogue field list, and `scripts/mariadb/` does not exist, so there
+is no container to observe against. It is blocked by the same absence as
+`OQ-009`, `OQ-010`, and `OQ-025` through `OQ-042`.
 
 ## OQ-025
 
@@ -661,10 +647,12 @@ reference the failure-path budget of `OQ-056` is stated against.
 
 *Origin*: `NFR-PERF-014`. The line was split from `tpl --version` because the
 two do not measure the same thing: one prints a constant, the other assembles a
-help text and may or may not run project discovery first.
+help text from a typed table, per `FR-HELP-022`.
 *Why it is open*: there is no code.
-*Blocks*: the corresponding baseline in `BENCHMARKS.md`, and it interacts with
-the validation order of `FR-ERR-006`.
+*Blocks*: the corresponding baseline in `BENCHMARKS.md`.
+*Narrowed by the third edition*: neither form runs project discovery, per
+`FR-PROJ-025` and `NFR-PERF-005`, so the budget no longer has to absorb a
+discovery walk. Only the figure remains open.
 
 ## OQ-053
 
@@ -746,3 +734,55 @@ compact `tpl schema dump` of `WL-001`?**
 every decision about the document shape, including `OQ-043`.
 *Blocks*: `WL-002`, and the use of that scalar to tell a shape regression from a
 speed regression.
+
+## OQ-070
+
+**How is a backtick inside a MariaDB identifier escaped, so that `quote`
+returns a single identifier MariaDB parses back to the original string?**
+
+*Origin*: `FR-ENV-035`, which fixes the product requirement — the output is a
+valid quoted MariaDB identifier for every legal MariaDB identifier, including
+one containing a backtick — without stating the mechanism.
+*Why it is open*: the mechanism is a fact about how MariaDB parses a quoted
+identifier, and the project forbids documenting engine behaviour that has not
+been observed. `scripts/mariadb/` does not exist in this repository, so there
+is no container to observe against. It must not be carried over from MySQL
+knowledge or from a documentation reading alone; it is blocked by the same
+absence as `OQ-009`.
+*Blocks*: `FR-ENV-035`, and the correctness of every generated identifier. A
+`quote` that gets this wrong emits invalid SQL from a legal table name, which
+is the class of failure `BR-SEM-004` works hardest to prevent — except that
+here the wrong output compiles as far as `tpl` is concerned and fails at the
+server.
+
+## OQ-071
+
+**What does `sql_type` do that `column_type` does not?**
+
+*Origin*: `FR-ENV-039`, which keeps the name registered and states no
+behaviour.
+*Why it is open*: `FR-CTX-014` already carries `column_type`, the type exactly
+as the server writes it, on every column. A `sql_type` filter that returned the
+same string would be redundant with a field the template already has. What it
+would add — a full DDL type clause including nullability and default, a
+normalised form, a form adjusted for a target dialect — was never decided, and
+the third edition declined to invent it. This is a design decision, not a
+measurement.
+*Blocks*: `FR-ENV-039`, and the closure of `FR-ENV-007`, which registers the
+name. Until it is answered the name is reserved and no template may rely on it.
+
+## OQ-072
+
+**Which `data_type` values belong to the numeric, the date-and-time, and the
+character-string families?**
+
+*Origin*: `FR-ENV-041` and `FR-ENV-042`, which fix `numeric`, `temporal`, and
+`textual` as predicates over a family without stating the membership of any
+family.
+*Why it is open*: the membership is a set of strings MariaDB writes in the
+catalogue, and the textual form of `data_type` is itself `OQ-028`. Neither may
+be carried over from MySQL, and there is no container to observe against. A
+wrong membership silently misclassifies a column, which is exactly the failure
+`FR-CTX-018` keeps `column_type` as a safety net against.
+*Blocks*: `FR-ENV-041` and `FR-ENV-042`, and it is blocked in turn by
+`OQ-028`.

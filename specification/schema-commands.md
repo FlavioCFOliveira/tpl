@@ -1,7 +1,7 @@
 ---
 title: Schema Commands (First Arm)
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [cli-contract.md, cache-commands.md, output-formats.md, render-command.md]
 ---
 
@@ -148,8 +148,20 @@ tpl schema dump                        The whole database as one JSON document
 - **FR-SCH-016**: `tpl schema dump` SHALL emit the whole selected database as a
   single JSON document.
 
-- **FR-SCH-017**: The document SHALL have the shape
-  `{"schema_version":1,"database":{…}}`.
+- **FR-SCH-017**: The document SHALL be the envelope of `FR-OUT-024` carrying
+  a `data` of one key, `database`:
+
+  ```json
+  {"schema_version":1,"source":"server","data":{"database":{…}}}
+  ```
+
+  *Amended in the third edition.* The first edition gave the dump the shape
+  `{"schema_version":1,"database":{…}}`, which was one of only two JSON
+  documents this specification ever fixed and which shared nothing with the
+  other fifteen. The envelope of `FR-OUT-024` now governs all seventeen, so the
+  dump gains `source` and its `database` key moves inside `data`. Nothing about
+  the `database` object itself changed; [context-document.md](context-document.md)
+  fixes it, per `FR-CTX-001`.
 
 - **FR-SCH-018**: The document SHALL contain only the server-derived part of the
   render context. It SHALL NOT contain `vars`, `tpl`, or `now`.
@@ -176,7 +188,25 @@ tpl schema dump                        The whole database as one JSON document
   must be able to say for itself that it is whole.
 
 - **FR-SCH-022**: The document emitted by `tpl schema dump` SHALL be accepted by
-  `tpl render --context`, per `FR-RND-009`.
+  `tpl render --context`, per `FR-RND-016`.
+
+- **BR-SCH-004**: The round-trip of `FR-SCH-022` is a contract and carries a
+  mandated test, as the other two contracts of this specification do. The test
+  SHALL dump the reference database, feed the dump back through
+  `tpl render --context`, and assert that the rendered result is byte-identical
+  to the result of the same render against a live read of the same database.
+
+  *Rationale.* This is the only property that makes rendering without a
+  database safe to rely on, and it is the one most likely to break silently
+  when the document shape changes. The precedents are `BR-ERR-001`, which
+  mandates a test per exit code, `BR-HELP-001` and `BR-HELP-003`, which mandate
+  four for the help forms and the command tree, and `FR-SRV-012` and
+  `FR-SRV-013`, which mandate two for the read-only promise. The round-trip was
+  the only contract with none.
+
+  *Accepted cost.* The test needs the container of
+  [performance-requirements.md](performance-requirements.md), and is therefore
+  blocked by the same absence as `OQ-009`.
 
 ## Flags and output
 
@@ -188,7 +218,7 @@ tpl schema dump                        The whole database as one JSON document
   [cache-commands.md](cache-commands.md).
 
 - **FR-SCH-025**: Every `schema` subcommand SHALL read through the catalogue
-  cache, per `FR-CACHE-002`.
+  cache, per `FR-CACHE-006`.
 
 - **FR-SCH-026**: In `text` output, a listing SHALL be presented as aligned
   columns under a header row:
@@ -213,8 +243,56 @@ tpl schema dump                        The whole database as one JSON document
   contract, per `FR-OUT-004`. Anything parsing a listing must use
   `--format json`.
 
+- **FR-SCH-030**: Every `schema` subcommand, `dump` included, SHALL emit its
+  `json` output in the envelope of `FR-OUT-024`.
+
+- **FR-SCH-031**: The `data` of `tpl schema info` SHALL be an object carrying
+  one key, `database`, whose value is the metadata of the selected database.
+
+  *Known gap.* Which fields that object carries is a catalogue field list and
+  is [OQ-024](open-questions.md#oq-024), which cannot be closed until the
+  container of `scripts/mariadb/` exists. The envelope and the `data` key are
+  fixed here; the field list is not.
+
+- **FR-SCH-032**: The `data` of `tpl schema tables`, `tpl schema views`, and
+  `tpl schema routines` SHALL follow `FR-OUT-030`, carrying one key named for
+  the collection — `tables`, `views`, or `routines` — whose value is the array
+  of its members:
+
+  ```json
+  {"schema_version":1,"source":"server","data":{"tables":[…]}}
+  ```
+
+  Each member is an object of the kind [catalogue-coverage.md](catalogue-coverage.md)
+  defines, shaped as [context-document.md](context-document.md) fixes it.
+
+- **FR-SCH-033**: The `data` of `tpl schema table`, `tpl schema view`, and
+  `tpl schema routine` SHALL follow `FR-OUT-031`, carrying one key named for
+  the kind — `table`, `view`, or `routine` — whose value is that object:
+
+  ```json
+  {"schema_version":1,"source":"cache","data":{"table":{…}}}
+  ```
+
+- **FR-SCH-034**: The `data` of `tpl schema dump` SHALL be the object fixed by
+  `FR-SCH-017`: one key, `database`, carrying the whole model of the selected
+  database.
+
+- **FR-SCH-035**: `source` on a `schema` document SHALL be `server` or `cache`,
+  per `FR-OUT-026`, according to which served the read.
+
+- **FR-SCH-036**: A document supplied to `tpl render --context` SHALL carry the
+  whole envelope of `FR-OUT-024`, and the system SHALL NOT accept a bare `data`
+  object in its place.
+
+  *Rationale.* Accepting both would give the round-trip of `FR-SCH-022` two
+  input forms, and a caller that had stripped the envelope would have discarded
+  the `source` field that `FR-CDOC-016` makes the signal of what the document
+  does not promise.
+
 - **FR-SCH-028**: The system SHALL order tables by name, columns by ordinal
-  position, and indexes by name, per `NFR-DET-002`.
+  position, and indexes by name, per `NFR-DET-002`, and every other collection
+  it presents by the default rule of that requirement.
 
 - **FR-SCH-029**: The `EXAMPLES` section of `tpl schema tables` SHALL show the
   canonical loop over every table, which uses `--format json`.
@@ -225,13 +303,15 @@ tpl schema dump                        The whole database as one JSON document
 ## Business rules
 
 - **BR-SCH-002**: The first arm is read-only with respect to the database under
-  every circumstance. It issues no DDL, no DML, and no write statement, and it
-  enforces a read-only session at the engine level on every connection it opens.
-  How that session is established, and the exact statement used, is outside the
-  scope of this edition; the failure to establish it is `78`, per `FR-ERR-001`.
+  every circumstance. The guarantee is the closed statement list of
+  `FR-SRV-006`, which is what prevents a write from being sent at all; the
+  read-only session of `FR-SRV-008`, read back and confirmed under
+  `FR-SRV-009`, is defence in depth. Failure to establish or confirm that
+  session refuses the connection with `78`, per `FR-SRV-010`. There is no flag
+  that disables either part, per `FR-SRV-011`.
 
 - **BR-SCH-003**: The first arm is not read-only with respect to the filesystem.
-  A cache miss writes to `.tpl/.cache/`, per `FR-CACHE-004`. Only
+  A cache miss writes to `.tpl/.cache/`, per `FR-CACHE-007`. Only
   `--direct --no-cache` guarantees that no file is touched.
 
 ## Dependencies

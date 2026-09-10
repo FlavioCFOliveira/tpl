@@ -1,7 +1,7 @@
 ---
 title: Cache Documents
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [cache-commands.md, context-document.md, output-formats.md, catalogue-coverage.md]
 ---
 
@@ -86,8 +86,18 @@ Out of scope: when the cache is consulted or written, which is
 
 ## Where a read came from
 
-- **FR-CDOC-009**: Every read SHALL carry `source`, whose value SHALL be
-  `cache` or `server`.
+- **FR-CDOC-009**: Every read SHALL carry `source`, and a read that reaches a
+  catalogue SHALL set it to `cache` or `server` according to which served the
+  read. `source` is a field of the envelope of `FR-OUT-024`, whose position and
+  full value set are fixed by `FR-OUT-026`; this file owns what the value
+  `cache` withdraws, per `FR-CDOC-015` and `FR-CDOC-016`.
+
+  *Amended in the third edition.* The first edition fixed the value set here as
+  `cache` or `server`, at a time when no JSON document had a specified shape.
+  `FR-OUT-026` now owns the set and has grown it to four: `project` for a read
+  served from `.tpl/` alone and `binary` for a document derived from the binary
+  itself. Both were foreseen by the rationale of `FR-CDOC-010` and neither is a
+  breaking change, per `FR-OUT-014`.
 
 - **FR-CDOC-010**: `source` SHALL be an enumerated string and SHALL NOT be a
   boolean.
@@ -95,7 +105,8 @@ Out of scope: when the cache is consulted or written, which is
   *Rationale.* `FR-OUT-014` lets an enumerated field gain a value without
   breaking the contract, and a boolean cannot gain one. A read that is partly
   served from the cache, or served from some third source, is foreseeable, and
-  a boolean would force a breaking change to say so.
+  a boolean would force a breaking change to say so. Two such values arrived
+  with the third edition, which is the argument holding.
 
 - **FR-CDOC-011**: `source` SHALL satisfy `FR-CACHE-012`, which requires a
   cached read to state that it was cached.
@@ -130,8 +141,9 @@ Out of scope: when the cache is consulted or written, which is
 - **FR-CDOC-016**: `"source":"cache"` SHALL be the signal by which a consumer
   recognises that neither promise applies.
 
-- **BR-CDOC-004**: The cache is written per object, per `FR-CACHE-007`, renamed
-  per file, per `FR-CACHE-030`, and takes no lock, per `FR-CACHE-031`. It can
+- **BR-CDOC-004**: The cache is written on a miss, per `FR-CACHE-007`, one file
+  per object renamed into place, per `FR-CACHE-030`, and takes no lock, per
+  `FR-CACHE-031`. It can
   therefore legitimately hold one table read on Monday beside another read on
   Friday, and a dump assembled from it is a document that never existed on any
   server at any instant. That is not a defect to be fixed; it is the direct

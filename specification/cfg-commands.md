@@ -1,7 +1,7 @@
 ---
 title: Configuration Commands
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md]
 ---
 
@@ -49,7 +49,7 @@ tpl cfg database test   <name>
 - **FR-CFG-002**: `tpl cfg database` SHALL carry the alias `db`.
 
 - **FR-CFG-003**: The system SHALL NOT provide a top-level `database` group.
-  `tpl database …` is `64` with a nearest-match hint.
+  `tpl database …` is `64` with a nearest-match suggestion, per `FR-ERR-019`.
 
   *Rationale.* A top-level group named `database`, whose verbs are `add`,
   `update`, and `remove`, reads as a tool that mutates a database — in a tool
@@ -228,9 +228,88 @@ tpl cfg database test   <name>
 - **FR-CFG-034**: WHEN a `cfg` command rewrites `.tpl/.cfg`, the file SHALL
   retain mode `0600`.
 
-  *Derivation.* `FR-PROJ-015` creates the file at `0600` and `FR-PROJ-008`
+- **FR-CFG-041**: WHEN a `cfg` command rewrites `.tpl/.cfg`, it SHALL write a
+  temporary file in `.tpl/` at mode `0600` and SHALL rename it over the target.
+  A failure part-way through SHALL leave the previous `.cfg` in place,
+  unchanged.
+
+  *Rationale.* This is the rule `FR-CACHE-030` already applies to the other
+  thing `tpl` writes, and it matters more here: a truncated `.cfg` is a `78` on
+  every subsequent invocation, and it holds the credentials without which the
+  project cannot reach a server. A cached object lost to a truncated write is
+  recovered by reading the server again; a lost `.cfg` is not recovered at all.
+
+- **FR-CFG-042**: The system SHALL NOT take a lock over `.tpl/.cfg`. Two
+  processes rewriting it yield one whole file or the other, never a half file,
+  and a killed process leaves nothing locked.
+
+  *Rationale.* The same argument `FR-CACHE-031` makes for the cache, and it
+  applies with more force here: a stale lock on `.cfg` would make every command
+  fail, including the `tpl cfg unset` that would clear it.
+
+  *Accepted cost.* Two concurrent `tpl cfg set` invocations on different keys
+  can lose one of the two writes. Both files are whole and valid; the later
+  rename wins.
+
+  *Rationale.* `FR-PROJ-019` creates the file at `0600` and `FR-PROJ-011`
   refuses to read it at any looser mode; a command that loosened it would break
   the next invocation.
+
+## `json` output
+
+- **FR-CFG-035**: Every `cfg` subcommand that declares `--format` SHALL emit
+  its `json` output in the envelope of `FR-OUT-024`, with `source` set to
+  `project` per `FR-OUT-026` — except `tpl cfg database test`, whose `source`
+  SHALL be `server`, because contacting the server is what the command does,
+  per `FR-CACHE-010`.
+
+- **FR-CFG-036**: The `data` of `tpl cfg get` SHALL carry `key` and `value`,
+  the value as written in the file, unexpanded and unredacted per `FR-CFG-006`:
+
+  ```json
+  {"schema_version":1,"source":"project","data":{"key":"database.shop.host","value":"db.example.com"}}
+  ```
+
+- **FR-CFG-037**: The `data` of `tpl cfg list` SHALL mirror the key space of
+  `FR-CONF-002` as nested objects — `core`, and `database` keyed by entry name
+  — with the redaction of `FR-CFG-021` applied and `${VAR}` left exactly as
+  written, per `FR-CFG-014`. A key absent from the file SHALL be absent from
+  the document rather than emitted as its default, because `FR-CFG-014`
+  forbids applying defaults.
+
+  *Rationale.* This is the one place `FR-OUT-012` does not apply. Emitting an
+  unset key as `null` would be indistinguishable from a key written with an
+  empty value, and `tpl cfg get` already answers `66` for the difference, per
+  `FR-CFG-007`.
+
+- **FR-CFG-038**: The `data` of `tpl cfg database list` SHALL carry one key,
+  `entries`, per `FR-OUT-030`, whose value is an array of objects each
+  carrying `name`. The `data` of `tpl cfg database show` SHALL carry one key,
+  `entry`, per `FR-OUT-031`, whose value is that entry with the redaction of
+  `FR-CFG-021` applied.
+
+- **FR-CFG-039**: The `data` of `tpl cfg database test` SHALL carry `entry`,
+  `connected`, and `read_only_session`, reporting the outcome of the two steps
+  `FR-CFG-024` requires the command to perform:
+
+  ```json
+  {"schema_version":1,"source":"server","data":{"entry":"shop","connected":true,"read_only_session":true}}
+  ```
+
+  *Rationale.* A `test` that reaches exit `0` reports that both steps
+  succeeded; a failure exits `69`, `77`, or `78` instead and emits the error
+  document of `FR-ERR-014`. The fields are named rather than implied so that a
+  caller can branch on them without inferring from the exit code alone.
+
+  *Known gap.* Whether `test` also reports the reader's effective privileges is
+  [OQ-002](open-questions.md#oq-002) and remains open. Answering it adds a
+  field, which `FR-OUT-014` makes a non-breaking change, so this document is
+  fixed now and grows later if that question is answered yes.
+
+- **FR-CFG-040**: WHEN a `cfg` listing is empty — `tpl cfg database list` in a
+  project with no entry, which `FR-PROJ-018` makes the ordinary first state —
+  the system SHALL exit `0` with an empty array, per `FR-OUT-033` through
+  `FR-OUT-035`.
 
 ## Dependencies
 
@@ -242,10 +321,11 @@ tpl cfg database test   <name>
 
 ## Open questions
 
-- [OQ-001](open-questions.md#oq-001) — what `tpl cfg database test` prints.
 - [OQ-002](open-questions.md#oq-002) — whether `test` reports effective
-  privileges or only that the read-only session was established.
+  privileges or only that the read-only session was established. Answering it
+  yes adds a field to `FR-CFG-039`, which `FR-OUT-014` makes non-breaking.
 - [OQ-016](open-questions.md#oq-016) — short forms for the `add` and `update`
   flags.
 - [OQ-017](open-questions.md#oq-017) — whether `password_command`, `ca_file`,
   and `ca_path` have flags of their own.
+
