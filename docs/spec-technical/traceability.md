@@ -43,7 +43,7 @@ identifier is the authority and the wording here is a summary.
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | The technical specification is a **fourth** document set beside `/specification`, `rmp` and the knowledge graph; its boundary against each must be stated | *Still out of scope* — "The Rust implementation: its crates, its module layout, its types, and its library API"; CLAUDE.md *Fontes de Verdade* | `overview`, `README` (`OD-26`) |
-| An **ADR register must exist**: two requirements cite it as the home of a fact this corpus refuses to hold | *Still out of scope* — "The pinned version of the template engine"; `FR-ENV-003`, `FR-CONF-038` | `decisions` (`OD-01`) |
+| An **ADR register must exist**: two requirements cite it as the home of a fact this corpus refuses to hold | *Still out of scope* — "The pinned version of the template engine"; `FR-ENV-003`, `FR-CONF-038` | [`docs/adr/`](../adr/README.md) (`ADR-001`, `ADR-002`) |
 | The library API carries **no compatibility guarantee**; only the JSON document and the command line are contract. The public surface is therefore an internal design choice, not a published one | *Still out of scope*; `DIV-032` | `overview`, `interfaces` |
 | Requirement ids are the citation unit in commit messages, task descriptions and **test names** — the test suite's naming scheme is bound to them | *Identifier scheme* | `verification` |
 | A requirement resting on the fourth provenance (direct observation) is falsifiable by a later observation: the technical spec must not re-derive catalogue facts, only cite them | *Provenance*, item 4 | `overview`, `data-model` |
@@ -204,7 +204,7 @@ identifier is the authority and the wording here is a summary.
 | Five admitted/refused combinations of connection and password keys, decided before any connection | `FR-CONF-007` | `interfaces` |
 | A DSN carries **no** query parameters; a `?` is `78` whatever follows it | `FR-CONF-011`, `FR-CONF-012` | `interfaces`, `security` |
 | Five TLS modes, set **explicitly on every connection**, never inherited from the driver's default — including `disabled` | `FR-CONF-013`, `FR-CONF-037` | `security` (`OD-16`) |
-| The five modes' observed behaviour against a TLS-offering and a TLS-less server is fixed; the **mapping onto the driver belongs in an ADR** and is cited, not restated | `FR-CONF-038` | `security`, `decisions` (`OD-01`, `OD-16`) |
+| The five modes' observed behaviour against a TLS-offering and a TLS-less server is fixed; the **mapping onto the driver belongs in an ADR** and is cited, not restated | `FR-CONF-038` | `security`; [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) |
 | Trust material is **additional** to the platform/bundled roots; exclusive trust is not deliverable and must not be claimed | `FR-CONF-039` | `security` (`OD-16`) |
 | `${VAR}` expands in six fields only; inside a DSN the URL is **parsed first**, expanded within the delimited field, then percent-encoded | `FR-CONF-015`, `FR-CONF-018` | `security`, `interfaces` |
 | Single-pass expansion, `$$` literal, unclosed brace `78`, undefined variable `78` | `FR-CONF-019` … `FR-CONF-022` | `interfaces` |
@@ -341,7 +341,7 @@ identifier is the authority and the wording here is a summary.
 
 | Technical concern | Drawn from | Doc |
 |---|---|---|
-| Three contract groups, with group 2 guaranteed against a **pinned engine minor version** recorded in an ADR and cited from there | `FR-ENV-001` … `FR-ENV-003` | `technology-stack`, `decisions` (`OD-01`, `OD-13`) |
+| Three contract groups, with group 2 guaranteed against a **pinned engine minor version** recorded in an ADR and cited from there | `FR-ENV-001` … `FR-ENV-003` | `technology-stack`; [`ADR-001`](../adr/adr-001-template-engine-pin.md) |
 | All three groups are published through `tpl help --format json` | `FR-ENV-005` | `interfaces` |
 | Eleven names are registered by `tpl`: five naming filters, six code filters | `FR-ENV-006`, `FR-ENV-007` | `interfaces` |
 | Two registered names — `indent` and `escape` — **collide with engine built-ins of different signatures**, so the registration must deliberately shadow them | `FR-ENV-007`, `FR-ENV-037`, `FR-ENV-044`; minijinja built-ins (verified) | `technology-stack`, `interfaces` (`OD-13`) |

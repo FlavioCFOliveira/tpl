@@ -10,13 +10,15 @@ related: [README.md, traceability.md]
 ## What this is
 
 Twenty-seven entries, each a decision the repository could not settle on its
-own. Sixteen were settled by the product owner in the interview of 2026-09-10,
-three are **conflicts** owed to the functional owner, and eight are open under
-`technical-writer`. One further entry is open under `adr-guardian`.
+own. Sixteen are settled — by the product owner in the interview of
+2026-09-10, and by the establishment of the decision register — three are
+**conflicts** owed to the functional owner, and eight are open under
+`technical-writer`. None is open under `adr-guardian`. Sixteen, three and
+eight are the whole of the twenty-seven.
 
 Each settled entry records the decision, its rationale, and **the options
-rejected** — the rejection is the part a later reader needs, because a decision
-without its alternatives reads as the only thing anybody thought of.
+rejected**, for the reason [`docs/adr/README.md`](../adr/README.md) gives for
+the same section in a record.
 
 Where an architecture decision record register exists (`OD-01`), a settled
 entry's rationale belongs there and this file cites it. Until then the rationale
@@ -34,7 +36,7 @@ is carried here.
 
 | Entry | Subject | Status | Owner |
 |---|---|---|---|
-| [OD-01](#od-01--where-the-architecture-decision-records-live) | Where the architecture decision records live | Open | `adr-guardian` |
+| [OD-01](#od-01--where-the-architecture-decision-records-live) | Where the architecture decision records live | Settled | — |
 | [OD-02](#od-02--the-msrv) | The MSRV | Settled | — |
 | [OD-03](#od-03--versioning-the-binary-the-document-the-cache-the-changelog) | Versioning: binary, document, cache, changelog | Settled | — |
 | [OD-04](#od-04--one-package-or-a-workspace) | One package, or a workspace | Settled, with a residual | `technical-writer` |
@@ -76,31 +78,12 @@ recollection.
 
 ## OD-01 — Where the architecture decision records live
 
-**Status: open. Owner: `adr-guardian`.**
+**Status: settled.**
 
-**Question.** Two requirements in force cite "the project's architecture
-decision records" as the home of a fact the functional corpus refuses to hold.
-No such register exists in the repository.
-
-**Visible from the repository.**
-
-- `FR-ENV-003`: the template-engine pin "SHALL be recorded in the project's architecture decision records, and SHALL be cited from there by this requirement".
-- `FR-CONF-038`: the TLS mode mapping "SHALL be recorded in the project's architecture decision records and cited from there … and SHALL NOT be restated in this corpus".
-- No `adr/` directory and no decision record of any form exists; `CLAUDE.md` names no such register.
-
-**Decision.** The `adr-guardian` agent **proposes the convention** — location,
-numbering, and record format — and brings it back for approval **before the
-first record is written**. Nothing is written under a convention nobody has
-approved.
-
-**Why it is delegated rather than chosen here.** The convention outlives every
-record kept under it, and renumbering or relocating a register after two
-requirements already cite it would break the citation those requirements
-depend on. The agent that owns the register proposes its shape.
-
-**Blocks.** `decisions`; the engine pin in `technology-stack`; the TLS mapping
-in `security`. Two requirements in force are unsatisfiable until it lands,
-which makes this the first entry to close.
+**Decision.** The register lives at `docs/adr/` and is cited by `ADR-NNN`. The
+convention and the authoritative index are documented in
+[`docs/adr/README.md`](../adr/README.md), and are **not restated here**, per
+rule R3 of that document.
 
 ---
 
@@ -438,37 +421,17 @@ check inside a registered filter, or a stated limit.
 
 ## OD-13 — The engine pin, and `minijinja-contrib`
 
-**Status: settled.**
+**Status: settled. Recorded in [`ADR-001`](../adr/adr-001-template-engine-pin.md).**
 
-**Decision.** Pin the **2.24 stable line** of `minijinja`.
-**`minijinja-contrib` stays.** Its filters are therefore **group 3** of
+**Decision.** Pin the stable line of `minijinja` named by `ADR-001`, and retain
+`minijinja-contrib` on the same line. Its filters are therefore **group 3** of
 `FR-ENV-019` — available, and guaranteed by nobody.
 
-**Rationale.** `FR-ENV-018` closes the guaranteed inherited list at fourteen
-filters — `default`, `join`, `length`, `map`, `select`, `reject`, `first`,
-`last`, `reverse`, `sort`, `trim`, `upper`, `lower`, `replace` — and all
-fourteen are core built-ins gated by the `builtins` feature, which is in
-minijinja's default set (docs.rs `minijinja::filters`; minijinja `Cargo.toml`,
-default = `builtins`, `debug`, `macros`, `multi_template`,
-`adjacent_loop_items`, `std_collections`; verified 2026-09-10). No contrib
-filter is in that list, so `FR-ENV-019` already classifies every one of them as
-group 3, and keeping the crate changes no guarantee. `FR-ENV-003` requires the
-pin to exist, to be recorded in an architecture decision record and to be cited
-from there; the number does not enter `/specification` and is recorded here
-until `OD-01` gives it its home.
-
-**Rejected.**
-
-- **Dropping `minijinja-contrib`.** It alters the stack table of `CLAUDE.md` for no functional gain, and the crate costs nothing in guarantee terms because `FR-ENV-019` already withholds one from everything it offers.
-- **The 3.0 pre-release.** `minijinja` 3.0.0-alpha.0 and `minijinja-contrib` 3.0.0-alpha.0 are published (crates.io, 2026-08-12, verified 2026-09-10). A pre-release under a release profile, behind a determinism contract, is a dependency whose behaviour may change without a version signal — and `FR-ENV-003` makes changing the pin a deliberate decision requiring a re-check that all fourteen names still exist and still behave as before.
-
-**Consequence to record in `technology-stack`.** Two `tpl` registrations
-deliberately **shadow** engine built-ins of a different signature: minijinja
-has its own `indent` and its own `escape`, while `FR-ENV-037` requires
-`indent(n)` with a required argument that indents neither the first line nor an
-empty one, and `FR-ENV-044` requires `escape(target)` with a required target and
-a five-row character table in which `'` differs between `html` and `xml`. The
-shadowing is intended and must be stated, not discovered.
+The version number, the rationale, the options rejected, and the two deliberate
+shadowings of engine built-ins are recorded in `ADR-001` and are **not restated
+here**, per rule R3 of [`docs/adr/README.md`](../adr/README.md). `FR-ENV-003`
+requires the pin to live in an architecture decision record and to be cited from
+there; `ADR-001` is that record.
 
 ---
 
@@ -533,36 +496,17 @@ the engine.
 
 ## OD-16 — The TLS backend and the root store
 
-**Status: settled.**
+**Status: settled. Recorded in [`ADR-002`](../adr/adr-002-tls-mode-mapping.md).**
 
-**Decision.** **`webpki-roots`, bundled.** `verify-ca` and `verify-identity`
-therefore behave identically on every host and on all four targets.
+**Decision.** Bundled `webpki-roots` trust anchors, and the mapping of the five
+modes of `FR-CONF-013` onto the driver's five named variants.
 
-**Rationale.** `FR-CONF-038` fixes the observable behaviour of all five modes
-cell by cell, and `NFR-DET-001` makes stdout byte-identical for one invocation
-against one state. A trust store that follows the host makes the outcome of a
-connection a property of the machine rather than of the invocation, which is
-what `BR-CLI-002` exists to prevent — "Two identical command lines run in two
-different shells, against the same project state, cannot read different
-databases." A bundled root set is also what was measured: `BENCHMARKS.md`
-records `rustls` 0.23.44, `ring` 0.17.14 and `webpki-roots` 1.0.9 in the driver
-spike of 2026-09-10, so the decision keeps the configuration the evidence was
-gathered under.
-
-**Rejected.**
-
-- **The platform trust store.** The same command could accept a certificate on one host and refuse it on another, with nothing in the invocation to say why.
-- **A configurable choice** between the two. It needs a configuration key, and `FR-CONF-002` closes the key space; adding one would be a functional change, and `FR-CONF-034` makes an unrecognised key fatal, so the key cannot be introduced from this side.
-
-**Composition.** `FR-CONF-039` is unchanged and its limit still holds: trust
-material supplied by `ca_file` or `ca_path` is **added** to the bundled roots
-rather than substituted for them, so pinning a private authority widens the set
-of certificates that pass `verify-ca` instead of narrowing it. `FR-CONF-037`
-requires the mode to be set explicitly on every connection, which matters
-because `MySqlSslMode` defaults to `Preferred` (docs.rs
-`sqlx::mysql::MySqlSslMode`, verified 2026-09-10). The exact version pin of the
-TLS crates is not fixed by this entry, and the mapping of the five modes onto
-the driver belongs in the record `OD-01` will site.
+The mapping table, the trust-anchor rationale, the options rejected, and the
+composition with `FR-CONF-037` and `FR-CONF-039` are recorded in `ADR-002` and
+are **not restated here**, per rule R3 of
+[`docs/adr/README.md`](../adr/README.md). `FR-CONF-038` requires the mapping to
+live in an architecture decision record and to be cited from there; `ADR-002` is
+that record.
 
 ---
 

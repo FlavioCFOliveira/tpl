@@ -78,11 +78,11 @@ requirements.
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | waiting on `OD-17`, `OD-24`, `OD-25` |
 | `interfaces.md` | The contracts crossing a component boundary, and how each external contract is realised | waiting on `OD-05`, `OD-06`, `OD-08`, `OD-12`, `OD-18`, and the residual of `OD-20` |
 | `data-model.md` | The model in memory and everything persisted: `.tpl/.cfg`, `.tpl/.cache/`, `meta.json`, versions, migration | waiting on `OD-18` |
-| `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | waiting on `OD-01`, `OD-15`, `OD-24` |
+| `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | waiting on `OD-15`, `OD-24` |
 | `operations.md` | Build, target matrix, packaging, release gates, observability | waiting on `OD-17`, `OD-21`, and the residual of `OD-04` |
 | `quality-attributes.md` | Performance and reliability targets, and how each is measured | waiting on `OD-12` |
 | `verification.md` | Test strategy, harness, fixture, the mandated-test register, the test seams | waiting on `OD-21`, `OD-22` |
-| `decisions.md` | The index of architecture decision records | waiting on `OD-01` |
+| `decisions.md` | Retired. The register and its index live at [`docs/adr/`](../adr/README.md) | n/a |
 
 `glossary.md` is **not** proposed. `specification/glossary.md` fixes the
 vocabulary and states that a term used without being defined there is a defect;
@@ -221,12 +221,15 @@ the build pipeline, which is `operations.md`.
 
 ### `decisions.md`
 
-**Answers.** The index of the project's architecture decision records: what
-each decides, when, and what it superseded.
+**Retired, and not written.** The architecture decision register lives at
+[`docs/adr/`](../adr/README.md), and `docs/adr/README.md` carries both the
+convention and the authoritative index. A `decisions.md` here could hold nothing
+that is not already in a record or in [traceability.md](traceability.md), and a
+third carrier of one mapping is the duplication rule R3 of the register exists to
+prevent.
 
-**Must not contain.** Anything restated from a record it indexes. Where an ADR
-register exists, a settled decision's rationale lives there and this folder
-cites it; until then the rationale is carried in
+A settled decision's rationale lives in its record and this folder cites it by
+`ADR-NNN`. Where no record exists yet, the rationale is carried in
 [open-decisions.md](open-decisions.md), which is why that file records the
 rejected options as well as the choice.
 
@@ -234,8 +237,9 @@ rejected options as well as the choice.
 
 - English. Requirement identifiers are the citation unit, as
   `specification/README.md` fixes them, including in test names.
-- Every factual claim about a technology names the source consulted and the
-  date, or is marked as unverified. Recollection is not a source.
+- The rule on sourcing a factual claim about a technology is the register's,
+  recorded in [`docs/adr/README.md`](../adr/README.md). It governs this folder
+  unchanged, and is cited here rather than copied.
 - Each fact lives in one place and is cross-referenced elsewhere. A second copy
   is the copy that stops being true without saying so.
 - A contradiction between this folder and the code, or between this folder and
