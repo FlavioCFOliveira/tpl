@@ -64,7 +64,7 @@ Two kinds of entry appear:
 | [DIV-033](#div-033) | `CLAUDE.md` | Contradiction | The whole `Environment` surface as contract |
 | [DIV-034](#div-034) | both | Contradiction | The `table` and `column` field lists |
 | [DIV-035](#div-035) | `CLAUDE.md` | Migration | The performance budget table |
-| [DIV-036](#div-036) | `CLAUDE.md` | Migration | `scripts/mariadb/` lacks the benchmark fixture, and is described in the singular |
+| [DIV-036](#div-036) | `CLAUDE.md` | Migration | `scripts/mariadb/` lacks the benchmark fixture `seed-bench.sql` |
 | [DIV-037](#div-037) | both | Contradiction | A withdrawn MariaDB floor, no ceiling, and no refusal of MySQL |
 | [DIV-038](#div-038) | both | Migration | Routine naming has no disambiguator |
 | [DIV-039](#div-039) | both | Contradiction | Determinism stated over all output |
@@ -72,6 +72,7 @@ Two kinds of entry appear:
 | [DIV-041](#div-041) | `CLAUDE.md` | Migration | The target matrix is deferred; this specification now fixes it, and Linux is `musl` |
 | [DIV-042](#div-042) | `README.md` | Contradiction | The JSON error envelope, the `kind` field, and `did_you_mean` |
 | [DIV-043](#div-043) | `README.md` | Contradiction | The `.cfg` is now read strictly; an unrecognised key is fatal |
+| [DIV-044](#div-044) | `README.md` | Contradiction | The four fields of `tpl schema info` |
 
 ## DIV-001
 
@@ -506,6 +507,20 @@ outright by `FR-CAT-024`.
 [catalogue-coverage.md](catalogue-coverage.md) and
 [context-document.md](context-document.md).
 
+*Amended in the seventh edition, and the correction is now cheap to make.*
+When this entry was written the specification could not offer a complete
+replacement, because the field lists themselves were unobserved. They are
+observed and written: `FR-CAT-039` through `FR-CAT-051` fix the catalogue
+field list of every object kind and what the model takes from each, and
+`BR-CAT-005` states the rule by which one becomes the other. Three further
+corrections join the ones above and each is a fact the root document states
+wrongly rather than incompletely: a table carries **no character set**, only
+a collation, per `FR-SCH-009` as amended; a column's `default` has **three**
+`kind` values and not four, per `FR-CTX-013`; and a table's comment for a
+**view** is the literal string `VIEW`, which `FR-CAT-040` keeps out of the
+model. Sixteen volatile fields are now excluded by `FR-CAT-024`, not
+thirteen.
+
 ## DIV-035
 
 **Target**: `CLAUDE.md`, non-functional requirements. **Kind**: migration.
@@ -548,18 +563,29 @@ and the two SQL scripts must cover the read surface exhaustively.
 exhaustive variety at minimal volume, for correctness, and `seed-bench.sql` is
 volume at minimal variety, for measurement. One fixture serving both would hide
 an N+1, which is invisible at ten tables.
-*Correction*: add `seed-bench.sql` to the tree and to the testing section, and
-state that the container must be buildable at **each** supported server series
-rather than at one, per `FR-SRV-029`. `CLAUDE.md` describes the container in the
-singular throughout; the version window of `FR-SRV-001` makes four the number,
-and the DDL of `setup.sql` and `seed.sql` must be DDL that all four accept.
-Separately, and more urgently than any correction listed in this file, none of
-the four files exists in the repository today. **All twenty-four open
-questions that remain in this specification are blocked by that absence** —
-`OQ-009`, `OQ-010`, `OQ-024`, `OQ-025` through `OQ-042`, `OQ-045`, `OQ-070`,
-and `OQ-072` — and so are the mandated tests of `BR-SCH-004`, `FR-SRV-029`,
-and `BR-SEC-003`, and five of the nine budgets of `NFR-PERF-014`. It is the
-single largest blocker this specification records.
+*Correction*: add `seed-bench.sql` to the tree and to the testing section.
+*Amended in the sixth edition, and largely discharged.* Three of the four
+files now exist and the container is buildable at each of the four series of
+`FR-SRV-015`, so the two larger parts of this entry are settled: `CLAUDE.md`
+no longer describes the container in the singular, and the DDL of `setup.sql`
+and `seed.sql` is DDL all four accept. What is still owed is one line of the
+project-structure tree and one of the testing section, both naming
+`seed-bench.sql`, and the file itself.
+
+This entry previously recorded that none of the four files existed and that
+**all twenty-four remaining open questions were blocked by that absence**.
+Neither half survives. The fixture exists; a first pass against it closed five
+entries; a second pass recorded the field lists themselves and closed twenty
+more; and the last entry, `OQ-042`, closed on a stated limit in `FR-SRV-041`
+rather than on evidence, because the server it wanted is not one a fixture of
+MariaDB servers can hold. **No open question is blocked by this entry, and
+none is open at all.** The mandated tests of `BR-SCH-004`, `FR-SRV-029` and
+`BR-SEC-003` are blocked only by `tpl` not existing, and of the five budgets
+that needed a fixture, those over `WL-001` still need `seed-bench.sql`.
+
+*Amended in the seventh edition.* What this entry still owes is unchanged and
+is now the whole of it: one line of the project-structure tree, one line of
+the testing section, and the `seed-bench.sql` file itself.
 
 ## DIV-037
 
@@ -575,10 +601,15 @@ left community maintenance on 2026-07-06, and `or later` states no ceiling.
 that belong to one of the three most recent major families **and** are under
 community maintenance, which on 2026-09-10 is `12.3`, `11.8`, `11.4` and
 `10.11`, per `FR-SRV-015`. `FR-SRV-020` — a MariaDB below that window is
-refused with `78` and `kind: server_version_unsupported`. `FR-SRV-003` — a
-server that is not MariaDB is refused with `78` and `kind: server_not_mariadb`,
-because three verified divergences would make the model silently wrong rather
-than empty.
+refused with `78`, carrying the message of `FR-SRV-030`. `FR-SRV-003` — a
+server that is not MariaDB is refused with `78`, its `cause` naming the product
+the server reported, because three verified divergences would make the model
+silently wrong rather than empty.
+
+*Amended in the sixth edition*: this entry cited `kind: server_version_unsupported`
+and `kind: server_not_mariadb` as the specification's position. `FR-ERR-015`
+withdrew the `kind` field in the fifth edition and the two owning requirements
+were amended with it; this entry was missed.
 *Correction*: qualify the `README.md` sentence to a supported server, state that
 MySQL is refused rather than attempted, and — wherever either file needs to name
 the supported versions — cite `FR-SRV-001` rather than copy the table of
@@ -737,3 +768,26 @@ did not understand would be guessing at those three.
 
 `DIV-013` corrects the one line of that example this specification refuses
 outright — `password_command` as a string — and applies to the same block.
+
+## DIV-044
+
+**Target**: `README.md`, the command-surface listing. **Kind**:
+contradiction.
+
+*Says*: `tpl schema info` reports "Database metadata: name, version, charset,
+collation".
+
+*Specification*: three of the four are confirmed and the fourth does not
+exist. `FR-CTX-036` fixes the metadata fields of the `database` object as
+`name`, `charset` and `collation`, observed against the schema catalogue on
+all four series of `FR-SRV-015`. There is **no `version` field**: the server
+version reaches the document as the `server` **object** of `FR-CTX-031`,
+carrying three keys — `version`, `series`, and `standing` — of which the last
+two have no counterpart in the root document at all. A caller that reads
+`data.database.version` finds nothing there, and `FR-SEM-012` fails a render
+that reads it.
+
+*Correction*: change the line to name `name`, `charset` and `collation`, and
+either drop `version` or replace it with a pointer to the `server` object of
+[context-document.md](context-document.md). The listing is the first place a
+caller looks for the shape of that document.

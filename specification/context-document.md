@@ -164,25 +164,130 @@ variable is bound to a source, which is
 - **FR-CTX-011**: A column default SHALL be a structure carrying a `kind`
   discriminant, or `null`.
 
-- **FR-CTX-012**: The system SHALL emit exactly the following four forms, and no
-  others:
+- **FR-CTX-012**: `kind` SHALL be a **three-way** discriminant, and the system
+  SHALL emit exactly the following forms, and no others:
 
   | Case | Emitted |
   |---|---|
-  | The column has no default | `null` |
+  | The column is `NOT NULL` and declares no `DEFAULT` | `null` |
   | The default is a literal | `{"kind":"literal","value":"0"}` |
   | The default is an expression | `{"kind":"expression","value":"current_timestamp()"}` |
-  | The default is an explicit `DEFAULT NULL` | `{"kind":"null"}` |
+  | The column declares `DEFAULT NULL`, **or** is nullable and declares no `DEFAULT` | `{"kind":"null"}` |
 
-- **FR-CTX-013**: `kind` SHALL be an enumerated field. Adding a value to it is
-  not a breaking change, per `FR-OUT-014`.
+  Which catalogue value produces which of the four rows is fixed by
+  `FR-CTX-037`.
+
+  *Amended in the seventh edition, because the requirement could not be
+  implemented as written.* It required four distinguishable cases and the
+  catalogue draws three. Observed on all four series of `FR-SRV-015`: a column
+  declaring `DEFAULT NULL` and a nullable column declaring no `DEFAULT` return
+  **identical bytes** — the four-character string `NULL`, hex `4E554C4C` — and
+  the fixture's `hs_code_override` and `broker_reference` are the two columns
+  that prove it. The only value that returns SQL `NULL` is a `NOT NULL` column
+  with no default. The case the requirement called *the column has no default*
+  in fact split on nullability, with one branch colliding with `DEFAULT NULL`
+  and the other alone producing SQL `NULL`.
+
+  *The catalogue is right and the requirement was wrong.* In MariaDB a
+  nullable column with no `DEFAULT` clause **is** defaulted to `NULL`; the two
+  are one state, and the four-way split drew a distinction the engine does not
+  make. The document's bare `null` is now reserved for the one case that
+  genuinely has no default at all.
+
+  *Rejected.* Reconstructing the fourth case by combining the default field
+  with the nullability field. The information is not in the catalogue under
+  any combination of fields, so the reconstruction would be an invention.
+  Also rejected: keeping four cases and documenting the collision, which
+  leaves in force a requirement no implementation can satisfy.
+
+- **FR-CTX-013**: `kind` SHALL be an enumerated field taking exactly the three
+  values `literal`, `expression`, and `null`. Adding a value to it is not a
+  breaking change, per `FR-OUT-014`.
+
+  *Amended in the seventh edition, and this is a **narrowing of contract
+  surface**.* `kind` was enumerated without its values being stated, and
+  `FR-CTX-012` published four forms of which two are indistinguishable in the
+  catalogue. The three values above are the whole enumeration. A caller that
+  branched on a fourth form was branching on a case no read can produce; a
+  caller that treats `{"kind":"null"}` as covering both `DEFAULT NULL` and a
+  nullable column with no default is correct.
+
+- **FR-CTX-037**: The system SHALL classify the value of the column-default
+  catalogue field by its observed shape, as follows, and SHALL derive the
+  `kind` and the `value` of `FR-CTX-012` from that classification alone:
+
+  | Shape of the catalogue value | Example | `kind` | `value` carries |
+  |---|---|---|---|
+  | SQL `NULL` | — | the default is `null`, per `FR-CTX-012` | — |
+  | Exactly the four characters `NULL` | `NULL` | `null` | — |
+  | Begins and ends with a single quote | `'EUR'`, `''`, `'8''6"'` | `literal` | the text between the outer quotes, with each **doubled apostrophe collapsed to one** |
+  | A decimal number, unquoted and unwrapped | `0`, `0.0000`, `18.5`, `1.000000` | `literal` | the value unchanged |
+  | Begins with `b'` and ends with a single quote | `b'0'`, `b'101'` | `literal` | the value unchanged |
+  | Begins with `(` and ends with `)` | `(curdate() + interval 30 day)` | `expression` | the text between the outer parentheses |
+  | Ends with `)` and does not begin with `(` | `current_timestamp()`, `current_timestamp(3)` | `expression` | the value unchanged |
+  | Anything else | — | `expression` | the value unchanged |
+
+  The rows SHALL be applied in the order written, and the **first row that
+  matches** is the one that applies.
+
+  *Observed.* The fixture produced **43 distinct values** of this field over
+  301 columns, byte-identical on all four series of `FR-SRV-015`: SQL `NULL`
+  on 132 columns, the four-character string `NULL` on 87, and 41 further
+  distinct strings falling into the five shapes above. The provenance of each
+  shape is known from the DDL that produced it, which is what allows the
+  shapes to be classified rather than guessed: `DEFAULT 'EUR'` returns
+  `'EUR'`, `DEFAULT 0` returns `0`, `DEFAULT b'101'` returns `b'101'`,
+  `DEFAULT CURRENT_TIMESTAMP` returns `current_timestamp()`, and
+  `DEFAULT (CURRENT_DATE + INTERVAL 30 DAY)` returns
+  `(curdate() + interval 30 day)` — parenthesised, unquoted, and **rewritten
+  by the server**, which lower-cases the function names and replaces
+  `CURRENT_DATE` with `curdate()`.
+
+  *An apostrophe inside a literal is doubled, and there is no backslash.*
+  `container_type.height_ft_in`, whose default is the four characters
+  `8'6"`, returns
+  `'8''6"'`; the double quote in the same value is left alone. This is the
+  same convention the `ENUM` member list uses, per `FR-CTX-039`, and the same
+  one `FR-ENV-045` fixes for a backtick inside an identifier.
+
+  *Closes* `OQ-027`, now listed under
+  [Closed](open-questions.md#closed).
+
+  *Rationale for the final row.* Every literal shape the catalogue was
+  observed to produce is matched positively above, so a value matching none of
+  them is one the server wrote as something other than a literal. Classifying
+  it as an expression also fails in the safer direction for the one consumer
+  that matters: a template that quotes an expression produces SQL that fails
+  loudly, where a template that emits a literal unquoted can produce SQL that
+  parses and means something else.
+
+  *Residual risk, stated because the document offers no way to recover from
+  it.* The rule is derived from 43 observed values, and a value outside that
+  population would be classified by the final row. `FR-CTX-012` rejected a
+  `default_raw` field carried alongside the structure, so a template has no
+  second view of the field to fall back on — unlike an unrecognised **type**,
+  where `FR-CTX-018` keeps `column_type` as exactly that safety net. A
+  misclassification is therefore a defect to be reported with the DDL that
+  produced it, and is the case this requirement is most likely to be amended
+  for.
 
 - **BR-CTX-002**: The server distinguishes a string literal from an expression
-  by quoting the literal, and that distinction is the whole content of the
-  field. Emitting the raw string would make every template reimplement the same
-  unquoting heuristic, and each one would get a different case wrong — an empty
-  string, a quote inside a literal, a function call whose name looks like a
-  word.
+  by quoting the literal, and the distinction is carried in the shape of the
+  field and nowhere else. Emitting the raw string would make every template
+  reimplement the same unquoting heuristic, and each one would get a different
+  case wrong — an empty string, a quote inside a literal, a function call whose
+  name looks like a word.
+
+  *Amended in the seventh edition, because the rule as written was too
+  simple.* It read "by quoting the literal, and that distinction is the whole
+  content of the field", which is true of a **string** literal and false of
+  the field as a whole: a numeric literal is returned unquoted, a bit literal
+  in a `b'…'` form, and an unparenthesised function call is an **expression**
+  that carries no quotes at all. Quoting separates a string literal from
+  everything else; it does not separate literal from expression. The
+  argument the rule makes is unaffected and is strengthened by the
+  correction — the heuristic a template would have to reimplement is larger
+  than one quote test, which is `FR-CTX-037`.
 
   *Rejected.* The raw server string alone; and the structure with a `default_raw`
   field carried alongside it, which would offer two answers to one question and
@@ -195,13 +300,101 @@ variable is bound to a source, which is
 
 - **FR-CTX-015**: A column SHALL additionally carry the decomposed parts of its
   type: `data_type`, `precision`, `scale`, `length`, `unsigned`, `charset`,
-  `collation`, and `values`.
+  `collation`, and `values`. Each part SHALL be read from the catalogue field
+  `FR-CTX-040` names for it, and from no other.
+
+- **FR-CTX-038**: `column_type` SHALL be the raw type string exactly as the
+  catalogue returns it, and the system SHALL take its grammar to be the
+  following, as observed over the fixture's 301 columns and 105 distinct type
+  strings, byte-identical on all four series of `FR-SRV-015`:
+
+  | Observed | Example |
+  |---|---|
+  | Every integer type carries a **display width in parentheses**, including where the DDL declared none | `int(10)`, `mediumint(9)`, `smallint(6)`, `tinyint(1)` |
+  | `unsigned` appears **inside this string only**, after the display width, separated by a single space, in lower case | `bigint(20) unsigned` |
+  | `data_type` never carries the unsigned attribute: it reads the same for the signed and the unsigned form | `bigint`, `smallint`, `tinyint` |
+  | A decimal carries precision and scale | `decimal(12,3)` |
+  | Fractional-second precision appears as a parenthesised digit; the zero-precision form carries **no parentheses at all** | `datetime(6)`, `time(3)`, `timestamp(3)`, against `datetime`, `time`, `timestamp` |
+  | A bit type carries its width | `bit(1)`, `bit(8)` |
+  | The eight geometry types, `inet4`, `inet6` and `uuid` return a string **equal to `data_type`**, with no parentheses and no width | `point`, `multipolygon`, `uuid` |
+  | `enum` and `set` carry the whole member list, per `FR-CTX-039` | `enum('EXW','FCA',…)` |
+  | A column declared `NUMERIC` is reported as `decimal`, one declared `JSON` as `longtext` per `FR-CAT-038`, and one declared `YEAR` as `year(4)` | — |
+
+  `unsigned` SHALL therefore be derived from `column_type` and SHALL NOT be
+  derived from `data_type`, which does not carry it.
+
+  *Closes* `OQ-028`, with `FR-CAT-038`, now listed
+  under [Closed](open-questions.md#closed).
+
+  *Rationale for deriving `unsigned` here rather than from a field of its
+  own.* The catalogue has no unsigned field. The attribute exists in exactly
+  one place, as a suffix of this string, and `FR-CTX-018` already makes the
+  raw string the part a reader falls back to — so the one part that can only
+  be read from it is read from it, and the requirement says so rather than
+  leaving an implementer to discover that no other field carries it.
 
 - **FR-CTX-016**: `values` SHALL carry the member list of an `ENUM` or `SET`
-  column, and SHALL be `null` for every other type.
+  column, in the order the catalogue states, and SHALL be `null` for every
+  other type.
+
+  *Observed, and it makes the two types unlike each other.* A `SET` member can
+  never contain a comma — the server rejects the declaration on all four
+  series of `FR-SRV-015` — while an `ENUM` member can contain a comma and an
+  apostrophe, per `FR-CAT-034`. Splitting the member list of a `SET` on the
+  comma is therefore safe, and doing the same to an `ENUM` corrupts it. How
+  the catalogue delimits and escapes the members is `FR-CTX-039`.
+
+  *Amended in the seventh edition: the order is now stated.* The member order
+  of an `ENUM` is its declaration order and carries the ordinal each member
+  is stored as, so it is meaning rather than presentation. Without the clause
+  the default rule of `NFR-DET-002` would have sorted the list by name and
+  destroyed it. `NFR-DET-002` now names this collection among its exceptions.
+
+- **FR-CTX-039**: The member list of an `ENUM` or `SET` SHALL be read from the
+  raw type string under the following rules, and SHALL NOT be obtained by
+  splitting that string on the comma:
+
+  | Rule | Observed |
+  |---|---|
+  | The list begins after `enum(` or `set(` and ends at the final `)` | `enum('INSERT','UPDATE','DELETE')` |
+  | Each member is delimited by a **single quote** on each side | — |
+  | Members are separated by a comma **between** a closing and an opening quote | — |
+  | An apostrophe inside a member is **doubled**, and is never backslash-escaped | `enum('Lloyd''s Register','DNV',…)` |
+  | A comma inside a member is a **bare comma**, byte-identical to the separator | `enum('Not regulated','Class 3, Flammable liquids',…)` |
+  | Every other byte is passed through unchanged, including multi-byte UTF-8 | `enum('Method 1 — weighbridge',…)` carries the em dash intact |
+
+  The value each member takes in `values` is the text between its delimiting
+  quotes with each doubled apostrophe collapsed to one.
+
+  *Observed.* The fixture's 19 `ENUM` columns and one `SET` column were read
+  as bytes on all four series and the four series returned byte-identical
+  output. `vessel.class_society` begins `656E756D28` (`enum(`), `27` (`'`),
+  `4C6C6F7964` (`Lloyd`), then **`2727`** — two apostrophe bytes — then `73`
+  (`s`); there is no backslash byte, `5C`, anywhere in the value.
+  `cargo_item.imdg_class` contains `'Class 3, Flammable liquids'`, in which
+  the comma is the byte `2C`, identical to the `2C` that separates one member
+  from the next, and only the surrounding quotes tell them apart. The `SET`
+  shows the same doubling.
+
+  *Rationale, and it is the failure this requirement exists to prevent.* The
+  separator and a member's own content are the same byte, so nothing but the
+  quote state distinguishes them. A reader that splits on the comma turns the
+  fixture's four-member `imdg_class` into seven members, three of which are
+  fragments, and reports it at exit `0`. `FR-CAT-034` establishes that a
+  `SET` cannot reach this state and an `ENUM` can, which is exactly why one
+  rule must be written for both: a reader that learns the safe rule from the
+  `SET` and applies it to the `ENUM` corrupts the `ENUM` silently.
+
+  *Closes* `OQ-029`, with `FR-CAT-034`, now listed
+  under [Closed](open-questions.md#closed).
 
 - **FR-CTX-017**: A part that does not apply to a type SHALL be `null`, per
   `FR-CTX-005`.
+
+  *What "does not apply" means is fixed by `FR-CTX-040`*, which records which
+  parts the catalogue populates for each type. A part is `null` in the
+  document exactly WHEN the catalogue returns SQL `NULL` for the field behind
+  it; the system SHALL NOT decide applicability on its own account.
 
 - **FR-CTX-018**: IF the system does not recognise a type, THEN it SHALL emit
   `column_type` unchanged and SHALL emit every decomposed part as `null`.
@@ -214,6 +407,96 @@ variable is bound to a source, which is
   [template-environment.md](template-environment.md) to classify a column by
   parsing a string; and the decomposition alone, which would erase an
   unrecognised type entirely.
+
+- **FR-CTX-040**: The parts of `FR-CTX-015` SHALL be read from the following
+  catalogue fields, and a part SHALL be `null` exactly WHEN the field behind
+  it returns SQL `NULL`:
+
+  | Part | Catalogue field |
+  |---|---|
+  | `data_type` | the data-type field |
+  | `precision` | the numeric-precision field, or the datetime-precision field where that is the one the catalogue populates |
+  | `scale` | the numeric-scale field |
+  | `length` | the character-maximum-length field |
+  | `unsigned` | derived from `column_type`, per `FR-CTX-038` |
+  | `charset`, `collation` | the character-set and collation fields, per `FR-CTX-041` |
+  | `values` | derived from `column_type`, per `FR-CTX-039` |
+
+  The two precision fields SHALL be read into one part because **no type
+  populates both**: over the fixture's 39 distinct data types, every type that
+  returns a numeric precision returns SQL `NULL` for the datetime precision
+  and every type that returns a datetime precision returns SQL `NULL` for the
+  numeric one. The merge is therefore lossless, and it is what keeps
+  `datetime(6)`'s `6` reachable through a part list that names `precision`
+  once.
+
+  Which parts each type family populates, as observed on all four series:
+
+  | Type family, as `data_type` | `length` | `precision` | `scale` |
+  |---|---|---|---|
+  | `bigint` `int` `mediumint` `smallint` `tinyint` | `null` | set | `0` |
+  | `decimal` | `null` | set | set |
+  | `float` | `null` | `12` | `null` |
+  | `double` | `null` | `22` | `null` |
+  | `bit` | `null` | set — the bit width | `null` |
+  | `datetime` `time` `timestamp` | `null` | set, and **`0` where the type has no fractional part** | `null` |
+  | `date` `year` | `null` | `null` | `null` |
+  | `char` `varchar` `text` `tinytext` `mediumtext` `longtext` `enum` `set` | set | `null` | `null` |
+  | `binary` `varbinary` `blob` `tinyblob` `mediumblob` `longblob` | set | `null` | `null` |
+  | the eight geometry types, `inet4`, `inet6`, `uuid` | `null` | `null` | `null` |
+
+  *Closes* `OQ-030`, now listed under
+  [Closed](open-questions.md#closed).
+
+  *Three values in that table were written by the server and not by any
+  author, and a template will read them as though they were declared.* A
+  `FLOAT` reports a precision of `12` and a `DOUBLE` a precision of `22`,
+  neither of which appears in the DDL; and a `DATETIME` declared with no
+  fractional part reports a precision of `0` rather than `null`, so a template
+  testing `precision` for absence must test the `date` row's `null` and not a
+  falsy zero. `FR-CTX-017` is satisfied in every case, because the part is
+  `null` exactly where the catalogue is.
+
+  *The character octet length is not a part.* `FR-CTX-015` names eight parts
+  and the catalogue offers a ninth size field, the octet length, which for a
+  textual column is the character maximum length multiplied by the maximum
+  bytes per character of that column's own character set — `varchar(255)`
+  reads `255 / 765` under `utf8mb3` and `255 / 1020` under `utf8mb4`, and an
+  `ascii` column reads the two equal. It is derivable from `length` and
+  `charset` and is not carried.
+
+  *For `enum` and `set`, `length` is the length of the longest member*, not
+  the length of the type string: the fixture's four-member `imdg_class` reads
+  `38`.
+
+- **FR-CTX-041**: `charset` and `collation` SHALL be read from the catalogue's
+  character-set and collation fields for the column, and SHALL be `null`
+  together WHERE those fields return SQL `NULL`.
+
+  *Observed, over all 301 columns on all four series.* The two fields are set
+  together or SQL `NULL` together and are **never split**; **neither is ever
+  the empty string**. They are set for exactly eight data types — `char`,
+  `varchar`, `text`, `tinytext`, `mediumtext`, `longtext`, `enum` and `set` —
+  and SQL `NULL` for every other type in the fixture, the binary and blob
+  types included.
+
+  *An inherited value is indistinguishable from a declared one.* A column
+  that declares no character set of its own reports the table's default
+  **explicitly** — `customer.legal_name` reads `utf8mb4` /
+  `utf8mb4_unicode_520_ci`, which is exactly what the table declares — rather
+  than `null` or the empty string. The model therefore cannot say whether a
+  column's collation was written on the column or inherited from the table,
+  and does not claim to.
+
+  *Closes* `OQ-031`, now listed under
+  [Closed](open-questions.md#closed).
+
+  *These two values are passed through verbatim, per `FR-SRV-039`*, like every
+  other character-set and collation value the model carries. They were
+  observed to be byte-identical on all four series, because they follow the
+  declared collation of the column or of its table rather than the server's
+  own default — unlike the session collation recorded against a view, a
+  routine or a trigger, which does differ.
 
 ## Column identity and derived facts
 
@@ -254,9 +537,18 @@ variable is bound to a source, which is
   {"server":{"version":"11.4.5-MariaDB","series":"11.4","standing":"supported"}}
   ```
 
-  `version` SHALL be the string the probe of `FR-SRV-002` returns, unaltered.
-  `series` SHALL be the series identifier — the major family and the series
-  number joined by a dot. `standing` SHALL be as `FR-CTX-034` fixes it.
+  `version` SHALL be the string the probe of `FR-SRV-002` returns, unaltered,
+  whose observed form is fixed by `FR-SRV-040`. `series` SHALL be the series
+  identifier — the major family and the series number joined by a dot —
+  derived from `version` as `FR-SRV-040` requires. `standing` SHALL be as
+  `FR-CTX-034` fixes it.
+
+  *Amended in the seventh edition.* The example above shows
+  `11.4.5-MariaDB`, which is the form the fourth edition assumed. The four
+  fixture servers were observed to return a **further suffix** —
+  `11.4.13-MariaDB-ubu2404` — and `FR-SRV-040` records that the suffix is a
+  property of the build rather than of the series. `version` carries it
+  unaltered and `series` ignores it.
 
 - **FR-CTX-032**: `series` SHALL be a field of its own. A template SHALL NOT be
   required to derive it by parsing `version`.
@@ -325,8 +617,8 @@ variable is bound to a source, which is
   `NFR-DET-002`, and each emitted as `[]` when empty per `FR-CTX-004`. They
   stand alongside `server`, per `FR-CTX-031`.
 
-  *Rationale.* These are not catalogue fields and are not blocked by the
-  absence of `scripts/mariadb/`. They are the three collections
+  *Rationale.* These are not catalogue fields and were never blocked by the
+  absence of an observation. They are the three collections
   [catalogue-coverage.md](catalogue-coverage.md) covers — `FR-CAT-001`,
   `FR-CAT-007`, and `FR-CAT-008` — and every command of the first arm already
   presents one of them: `FR-SCH-032` names `tables`, `views`, and `routines` as
@@ -338,18 +630,56 @@ variable is bound to a source, which is
   [catalogue-coverage.md](catalogue-coverage.md) and the open questions it
   carries.
 
-  *Narrows* `OQ-024`, which now covers only the **metadata fields** of the
-  `database` object — the fields describing the database itself rather than the
-  objects in it. `name` is among them and remains open: the root `README.md`
-  names it, no decision confirms it, and it is a catalogue field like the
-  charset and the collation beside it.
+  *Narrowed* `OQ-024` to the **metadata fields** of the `database` object,
+  which `FR-CTX-036` now fixes.
 
-- **BR-CTX-006**: `server` is fixed while [OQ-024](open-questions.md#oq-024)
-  leaves the metadata fields of the `database` object open, and it can be fixed
-  for a reason particular to it: it does not come from the catalogue. It comes from the version probe of `FR-SRV-002`,
+- **FR-CTX-036**: The `database` object SHALL carry exactly three metadata
+  fields beside the `server` object of `FR-CTX-031` and the three collections
+  of `FR-CTX-035`:
+
+  | Field | Read from | Observed for the fixture |
+  |---|---|---|
+  | `name` | the schema-name field | `freight` |
+  | `charset` | the schema's default character-set field | `utf8mb4` |
+  | `collation` | the schema's default collation field | `utf8mb4_unicode_520_ci` |
+
+  ```json
+  {"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{…},"tables":[…],"views":[…],"routines":[…]}}
+  ```
+
+  *Observed.* The schema catalogue table returns **six columns and no more**,
+  identically on all four series of `FR-SRV-015`. Three of them become the
+  fields above. Of the other three: the catalogue-name field reads `def` for
+  every schema on every series and locates the row rather than describing the
+  database, per `BR-CAT-005`; the SQL-path field is SQL `NULL` for every
+  schema on every series, so nothing has been observed for the model to
+  carry; and the schema-comment field is the empty string for every schema on
+  every series, and the fixture declares no schema comment, so whether an
+  authored one reaches it has **not been observed** and admitting the field
+  would need an observation rather than a decision.
+
+  *Closes* `OQ-024`, now listed under
+  [Closed](open-questions.md#closed). The root `README.md` named four fields,
+  `name, version, charset, collation`; three are confirmed and `version` is
+  superseded by the `server` object of `FR-CTX-031`, which carries three keys
+  where the root document expected one string. The correction owed to that
+  document is `DIV-044`.
+
+  *These two values are passed through verbatim, per `FR-SRV-039`.* The
+  `freight` row of the fixture reads identically on all four series because
+  the fixture declares its collation explicitly; the `mysql` schema of the
+  same servers, which declares none, reads `utf8mb4_general_ci` on `10.11`
+  and `utf8mb4_uca1400_ai_ci` on the other three. A database created without
+  an explicit collation therefore yields a different `collation` from two
+  supported servers, and `FR-SRV-026` excepts it for that reason. Recorded as
+  difference 11 of `FR-SRV-038`.
+
+- **BR-CTX-006**: `server` was fixed two editions before the metadata fields
+  of the `database` object beside it, and it could be fixed early for a reason
+  particular to it: it does not come from the catalogue. It comes from the version probe of `FR-SRV-002`,
   which is a statement of its own in the closed list of `FR-SRV-006`, so fixing
-  its shape asserts nothing about what a catalogue table returns and is not
-  blocked by the absence of `scripts/mariadb/`.
+  its shape asserts nothing about what a catalogue table returns and was never
+  blocked by the absence of an observation.
 
   The same is true, for a different reason, of the three collections
   `FR-CTX-035` fixes: a collection is a structural rule of this file, and its
@@ -475,23 +805,27 @@ emits — `FR-SCH-018` keeps them out of it.
 
 ## Open questions
 
-- [OQ-027](open-questions.md#oq-027) — how the catalogue distinguishes a literal
-  default from an expression, and how an explicit `DEFAULT NULL` is reported.
-- [OQ-028](open-questions.md#oq-028) — the textual form of `column_type` per
-  type family, and how the unsigned attribute appears in it.
-- [OQ-029](open-questions.md#oq-029) — how `ENUM` and `SET` members are
-  delimited and escaped.
-- [OQ-030](open-questions.md#oq-030) — which of `precision`, `scale`, and
-  `length` the catalogue populates for each type.
-- [OQ-031](open-questions.md#oq-031) — how the character set and the collation
-  of a column are reported, and what they hold for a non-textual type.
-- [OQ-042](open-questions.md#oq-042) — what the version probe returns, which
-  fixes the exact string `FR-CTX-031` puts in `version` and the form `series` is
-  derived from.
-- [OQ-024](open-questions.md#oq-024) — the metadata fields of the `database`
-  object, as narrowed by `FR-CTX-035`. Its three collections and its `server`
-  object are fixed; the fields describing the database itself, `name` among
-  them, are not.
+**None.** The six entries this file carried are closed, five of them by
+requirements written here and one by the observation recorded in
+[server-contract.md](server-contract.md):
 
-`OQ-043` is answered by `FR-CTX-010` and is listed under
-[Closed](open-questions.md#closed).
+| Entry | Closed by |
+|---|---|
+| [OQ-024](open-questions.md#closed) | `FR-CTX-036`, with `FR-CTX-031` and `FR-CTX-035` |
+| [OQ-027](open-questions.md#closed) | `FR-CTX-037`, with `FR-CTX-012` and `FR-CTX-013` as amended |
+| [OQ-028](open-questions.md#closed) | `FR-CTX-038`, with `FR-CAT-038` |
+| [OQ-029](open-questions.md#closed) | `FR-CTX-039`, with `FR-CAT-034` |
+| [OQ-030](open-questions.md#closed) | `FR-CTX-040` |
+| [OQ-031](open-questions.md#closed) | `FR-CTX-041` |
+
+[OQ-042](open-questions.md#closed) reached this file through one field and is
+closed too. `FR-SRV-040` fixes the form of the version string and the
+derivation of `series`, which is what `FR-CTX-031` needed. Its second half —
+how a server reporting a MariaDB-compatible version string is separated from
+a real one — closed on a **stated limit** in `FR-SRV-041`: a server
+determined to pass as MariaDB will pass. That limit belongs to `FR-SRV-003`
+and not to this document, and it does not qualify any field here; `version`
+and `series` carry what the server reported, which is what `FR-CTX-031` says
+they carry.
+
+`OQ-043` is answered by `FR-CTX-010` and was closed in the fifth edition.

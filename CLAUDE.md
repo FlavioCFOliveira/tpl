@@ -293,13 +293,13 @@ Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tab
 | Linguagem | Rust (edition 2024, MSRV a fixar no `Cargo.toml`) | |
 | CLI | `clap` v4 (derive) | Árvore de comandos, aliases, `--help` por subcomando |
 | Templates | `minijinja` + `minijinja-contrib` | Runtime, sempre |
-| Acesso MariaDB | **Decisão em aberto** | Por resolver por medição |
+| Acesso MariaDB | `sqlx` 0.9 + `tokio` 1, runtime *current-thread* | `mysql` rejeitado; ver `BENCHMARKS.md` |
 | Serialização | `serde` + `serde_json` | O contexto de render é `serde`-serializável |
 | Configuração | `toml` + `serde` | |
 | Erros | `thiserror` na biblioteca, `anyhow` no binário | |
 | Logging | `tracing` + `tracing-subscriber` | Controlado pela flag de verbosidade |
 
-> **Decisão em aberto — driver MariaDB.** Um driver assíncrono arrasta um runtime que penaliza arranque, tamanho de binário e memória residual num processo efémero que faz um punhado de queries; um driver síncrono é provavelmente a escolha certa. Resolver **por medição** — arranque, RSS e tamanho de binário, lado a lado — antes de escrever o leitor de catálogo, e actualizar esta tabela com o resultado.
+> **Decisão fechada — driver MariaDB.** A escolha recaiu sobre o `sqlx` com o `tokio` num runtime *current-thread*; o `mysql` foi rejeitado. Quem decidiu foi `FR-CONF-036`, em `specification/configuration-model.md`: o candidato síncrono não exprime os cinco modos de TLS de forma distinta, e reduzir o conjunto de modos para o acomodar está vedado. A medição concordou — e desmentiu a suspeita que aqui estava escrita: o runtime assíncrono não penalizou arranque, tamanho de binário nem memória residente, ficou à frente nos três. Os números, o protocolo e as ressalvas estão em `BENCHMARKS.md`.
 
 ## Plataformas Suportadas
 

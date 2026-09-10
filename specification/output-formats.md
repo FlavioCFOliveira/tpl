@@ -335,5 +335,6 @@ owns the shape of its `data`.
 ## Open questions
 
 None specific to this module. The `data` shape of an individual document may
-carry an open question of its own; each is listed by the module that owns the
-command, per `BR-OUT-002`.
+carry an open question of its own, listed by the module that owns the command
+per `BR-OUT-002`; none does, and the index of
+[open-questions.md](open-questions.md) is empty.

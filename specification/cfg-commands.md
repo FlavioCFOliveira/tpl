@@ -243,12 +243,14 @@ tpl cfg database test   <name>
   `BR-PRIV-003`, and only a read establishes it.
 
   *Rationale.* The probe is a boolean and not a privilege listing because
-  anything finer is a field list, and a field list about a catalogue nobody has
-  observed cannot be written: `scripts/mariadb/` does not exist in this
-  repository, and `OQ-009`, `OQ-010` and `OQ-024` are blocked by that absence.
-  A probe whose answer depended on the container would have dragged this
-  question behind the same block that holds those three, which is exactly what
-  answering `OQ-002` was meant to avoid. One statement also keeps the command
+  anything finer is a field list, and when this requirement was written no
+  field list had been recorded: `OQ-009`, `OQ-010` and `OQ-024` were open for
+  exactly that reason. A probe whose answer depended on such a list would
+  have dragged this question behind the same block that held those three,
+  which is exactly what answering `OQ-002` was meant to avoid. The seventh
+  edition closed all three, and the argument still holds: a privilege listing
+  would couple this command's output to a field list that can grow, where a
+  boolean cannot. One statement also keeps the command
   inside `NFR-PERF-002`: the probe's cost does not grow with the number of
   objects.
 
@@ -473,9 +475,8 @@ tpl cfg database test   <name>
   wrong with an entry, and "the credentials work but this reader cannot see the
   catalogue" was the one outcome it could reach and not report. It is a single
   boolean rather than a privilege listing for the reason `FR-CFG-044` gives:
-  anything finer would be a field list, and a field list cannot be written until
-  the container of `scripts/mariadb/` exists. Adding a field is non-breaking,
-  per `FR-OUT-014`.
+  anything finer would be a field list, and no field list has been recorded
+  against the four series. Adding a field is non-breaking, per `FR-OUT-014`.
 
   *Accepted cost.* `can_read_catalogue: true` does not promise that a
   subsequent read is complete. It promises exactly what `FR-CFG-044` says the

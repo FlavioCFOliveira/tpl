@@ -121,8 +121,11 @@ both.
 The table in [server-contract.md](server-contract.md) that records every
 difference between the supported series which the model accommodates: the
 field, the treatment applied, and what each series was observed to return. Its
-form is fixed by `FR-SRV-036` and its content is required by `FR-SRV-027`. It is
-empty, because nothing has been observed.
+form is fixed by `FR-SRV-036` and its content is required by `FR-SRV-027`. It
+holds two rows, both fields whose value differs because the servers' own
+default collations differ and which are therefore passed through verbatim
+under `FR-SRV-039`. Every difference observed between the series, whether or
+not the model accommodates it, is recorded separately under `FR-SRV-038`.
 
 ## database entry
 
@@ -331,8 +334,11 @@ extension optional on the command line and mandatory inside a template. See
 
 A catalogue field the server changes without any change to the structure — a row
 estimate, a data length, a modification timestamp, an index cardinality.
-Thirteen are excluded from the model as a closed list by `FR-CAT-024`, because
+Sixteen are excluded from the model as a closed list by `FR-CAT-024`, because
 carrying one would put `NFR-DET-001` in permanent conflict with the server.
+Three of the sixteen are the creation and alteration timestamps of a routine
+and of a trigger, which differ between two servers of the same series and
+would make `FR-SRV-026` unsatisfiable.
 
 ## entry label
 

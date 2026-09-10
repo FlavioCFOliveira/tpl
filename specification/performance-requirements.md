@@ -372,9 +372,15 @@ would satisfy a budget.
   places deliberately.
 
 - **BR-PERF-007**: Five of the nine budgets cannot be measured, and neither
-  `WL-001` nor `WL-003` can be realised, until `scripts/mariadb/` exists. That
-  directory, with its container definition, `setup.sql`, `seed.sql`, and the
-  `seed-bench.sql` this file requires, is absent from the repository.
+  `WL-001` nor `WL-003` can be realised, until the fixture is complete.
+  `scripts/mariadb/` now exists, with its container definition, `setup.sql`
+  and `seed.sql`, buildable at each of the four series of `FR-SRV-015`; the
+  `seed-bench.sql` this file requires is still absent, and `WL-001` is what
+  needs it.
+
+  *Amended in the sixth edition.* The whole directory was absent when this rule
+  was written. Three of its four files now exist, so the blocker is narrower
+  and is named precisely rather than as the absence of everything.
 
   The four that need no fixture and no server are the four whose workload is
   `none` in `NFR-PERF-014`: `tpl --version`, `tpl --help`, startup to the first

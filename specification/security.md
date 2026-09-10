@@ -192,6 +192,19 @@ module, `BR-SEC-003` excepted.
   clear; a `required` that does not validate is indistinguishable from no TLS
   against the same adversary.
 
+  *Two limits on this guarantee, both added in the sixth edition and both
+  observed rather than reasoned.* First, the mode must be set explicitly on
+  every connection: both drivers measured default to the wrong posture, and
+  one of them **downgrades to plaintext in silence** against a server that
+  offers no TLS, which is exactly the intermediary's answer above arriving
+  through a dependency rather than through the configuration. `FR-CONF-037`
+  forbids relying on the default. Second, trust material supplied by
+  `ca_file` or `ca_path` is **added** to the public root bundle rather than
+  substituted for it, per `FR-CONF-039`, so pinning a private authority widens
+  the set of certificates that pass `verify-ca` instead of narrowing it. The
+  hostname check of `verify-identity`, which is the default, is what carries
+  the guarantee an operator pinning a CA is usually reaching for.
+
 ## Availability
 
 - **FR-SEC-022**: Every blocking phase SHALL have a deadline. See `FR-CONF-005`
@@ -243,11 +256,12 @@ module, `BR-SEC-003` excepted.
   business rule of this file because the property it asserts is exactly what
   this file exists to state, and no single module owns it.
 
-  *Accepted cost.* The test needs a server to connect to, so it needs the
-  container of `scripts/mariadb/`, which does not exist. The part of it that
-  needs no server — every command that reads `.tpl/.cfg` without connecting,
-  which is most of the tree — can run before the container does, and SHOULD,
-  rather than the whole test waiting on the part that cannot.
+  *Accepted cost, now much reduced.* The test needs a server to connect to, so
+  it needs the container of `scripts/mariadb/`, which now exists at all four
+  series of `FR-SRV-015`. The part of it that needs no server — every command
+  that reads `.tpl/.cfg` without connecting, which is most of the tree — needs
+  no container at all. What still blocks the whole of it is that `tpl` does not
+  exist yet.
 
 - **BR-SEC-002**: `tpl` never issues a write statement against a database. The
   promise has two parts and only one of them prevents: the closed statement
