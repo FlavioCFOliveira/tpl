@@ -110,7 +110,7 @@ Commands take the parameters of the operation on the command line; everything el
 
 | | |
 |---|---|
-| Database | MariaDB 10.6 or later |
+| Database | MariaDB 12.x, 11.x or 10.x — see [`FR-SRV-001`](specification/server-contract.md) for the supported series |
 | Privileges | `SELECT` on `INFORMATION_SCHEMA` for the target database |
 | Build | Rust, edition 2024 |
 

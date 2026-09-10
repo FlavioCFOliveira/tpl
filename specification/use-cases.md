@@ -1,7 +1,7 @@
 ---
 title: Use Cases
-status: draft
-last-reviewed: 2026-09-09
+status: approved
+last-reviewed: 2026-09-10
 related: [schema-commands.md, render-command.md, cache-commands.md, cfg-commands.md]
 ---
 
@@ -21,15 +21,18 @@ here introduces behaviour of its own.
 - **Preconditions**: the destination directory is writable
 - **Main flow**:
   1. Run `tpl init`.
-  2. `tpl` creates `.tpl/.cfg` at mode `0600`, `.tpl/.gitignore`,
-     `.tpl/templates/`, and `.tpl/templates/example.jinja`.
+  2. `tpl` creates the five artefacts of `FR-PROJ-017`: `.tpl/.cfg` at mode
+     `0600`, `.tpl/.gitignore`, `.tpl/templates/`,
+     `.tpl/templates/example.jinja`, and `.tpl/templates/rust/_types.jinja`.
   3. `tpl` writes nothing to stdout and exits `0`.
 - **Alternate flows**:
   - A `.tpl` already exists at the destination: exit `73`, nothing changed.
   - A `.tpl` exists in an ancestor: the nested project is created, a warning
     goes to stderr, exit `0`.
-- **Postconditions**: the project is usable; no database is known to it
-- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`
+- **Postconditions**: the project is usable; no database is known to it, so
+  `tpl cfg database list` answers with an empty listing and exit `0`, per
+  `FR-CFG-040`
+- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`, `FR-PROJ-025`
 
 ## UC-002 — Register a database entry
 
@@ -70,12 +73,28 @@ here introduces behaviour of its own.
 - **Trigger**: an entry has just been registered or repointed
 - **Main flow**:
   1. Run `tpl cfg database test shop`.
-  2. `tpl` connects, enforces the read-only session, and reports.
+  2. `tpl` connects and authenticates, enforces the read-only session, checks
+     the server series, runs the catalogue privilege probe, and reports the
+     outcome of all four, per `FR-CFG-024`.
 - **Alternate flows**:
   - Server unreachable: exit `69`. Authentication refused: exit `77`. Read-only
     session cannot be established: exit `78`.
+  - Connected and authenticated, but the series is not supported: exit `78`
+    with the message of `FR-SRV-030`, per `FR-CFG-043`. The `cause` line says
+    that the connection and the authentication succeeded, which is what
+    separates this outcome from the `69` and the `77` above.
+  - Connected, authenticated, and supported, but the reader cannot see the
+    catalogue: exit `0` with `can_read_catalogue` false, per `FR-CFG-045`. The
+    exit code does not change, so a caller that needs this answer reads the
+    field.
+- **Notes**: the command performs four steps and reports all four; the `server`
+  field of `FR-CFG-039` carries the version, the series, and the standing, and
+  `can_read_catalogue` carries the probe. A server newer than the supported
+  window exits `0` here and is reported with
+  `standing: "newer_than_supported"`, per `FR-SRV-031`
 - **Postconditions**: the cache is untouched, whatever the outcome
-- **Requirements**: `FR-CFG-024`, `FR-CFG-025`, `FR-CACHE-010`
+- **Requirements**: `FR-CFG-024`, `FR-CFG-025`, `FR-CFG-043`, `FR-CFG-039`,
+  `FR-CFG-044`, `FR-CFG-045`, `FR-CACHE-010`, `FR-SRV-034`
 
 ## UC-005 — Learn the whole CLI in one call
 
@@ -84,12 +103,15 @@ here introduces behaviour of its own.
 - **Main flow**:
   1. Run `tpl help --format json`.
   2. `tpl` emits the complete command tree — commands, subcommands, aliases,
-     arguments, options, examples, and exit codes — as one compact document with
-     the global flags listed once.
+     arguments, options, examples, and exit codes — as one compact document in
+     the envelope of `FR-OUT-024`, with `tpl_version` and the global flags
+     listed once under `data`.
+  3. The invocation needs no project: `FR-PROJ-025` exempts every form of
+     `help` from discovery, so this works in a directory that has no `.tpl`.
 - **Alternate flows**:
   - `tpl help schema --format json` for one subtree.
   - `tpl help --format json --pretty` for a readable form.
-- **Requirements**: `FR-HELP-016` … `FR-HELP-024`
+- **Requirements**: `FR-HELP-016` … `FR-HELP-024`, `FR-OUT-024`, `FR-PROJ-025`
 
 ## UC-006 — Inspect the database structure
 
@@ -146,9 +168,12 @@ here introduces behaviour of its own.
   - Pipeline form: `tpl -d shop schema dump | tpl render rust/struct --context - --table orders`.
   - `--context` together with an explicit `-d` on the command line: exit `64`.
   - The document is malformed: exit `65`.
-- **Notes**: the dump carries only the server-derived part; `vars`, `tpl`, and
-  `now` are always injected by the render
-- **Requirements**: `FR-SCH-016` … `FR-SCH-022`, `FR-RND-016` … `FR-RND-024`
+- **Notes**: the dump carries only the server-derived part, inside the `data`
+  of the envelope; `vars`, `tpl`, and `now` are always injected by the render,
+  in the forms `FR-CTX-026` through `FR-CTX-028` fix. `BR-SCH-004` mandates the
+  test that keeps this round-trip working
+- **Requirements**: `FR-SCH-016` … `FR-SCH-022`, `FR-SCH-036`, `BR-SCH-004`,
+  `FR-RND-016` … `FR-RND-024`
 
 ## UC-010 — Work offline from a warm cache
 
@@ -190,16 +215,27 @@ here introduces behaviour of its own.
 - **Trigger**: an invocation failed
 - **Main flow**:
   1. `tpl -d shop schema table ordrs` exits `66`.
-  2. The agent reads the four-line error and finds a runnable command in
-     `hint`, plus `did_you_mean` when the output format is JSON.
+  2. The agent reads the four-line error on stderr and finds a runnable command
+     in `hint`, and the nearest match named beside it.
   3. The agent runs the suggested command and retries with the corrected name.
 - **Alternate flows**:
-  - The name contains characters outside `[A-Za-z0-9_]`: no executable
-    suggestion is offered, and the name appears only as data in
-    `did_you_mean`.
-- **Requirements**: `FR-ERR-008`, `FR-ERR-009`, `FR-ERR-019` … `FR-ERR-024`
+  - The nearest-match candidate contains characters outside `[A-Za-z0-9_]`: it
+    is not presented at all, and only the generic hint is emitted, per
+    `FR-ERR-023`. The generic hint is the listing command, so the name is
+    recoverable in one further invocation.
+  - `--format json` was supplied: the result document would have been JSON, but
+    the error is not. `FR-ERR-033` makes every diagnostic the same four lines of
+    text, whatever the format, and the exit code is the machine-comparable
+    signal
+- **Requirements**: `FR-ERR-008`, `FR-ERR-009`, `FR-ERR-019` … `FR-ERR-024`,
+  `FR-ERR-033`, `FR-ERR-034`
 
 ## Dependencies
 
 Every use case above is a composition of requirements owned by the module files
 listed in the specification [README](README.md#file-index).
+
+## Open questions
+
+None specific to this module. Each use case inherits the open questions of the
+requirements it composes.

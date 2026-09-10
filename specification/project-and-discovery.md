@@ -1,7 +1,7 @@
 ---
 title: Project and Discovery
-status: draft
-last-reviewed: 2026-09-09
+status: approved
+last-reviewed: 2026-09-10
 related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md]
 ---
 
@@ -37,14 +37,18 @@ maintain it.
     ├── .cache/           read catalogue, one folder per entry; not versioned
     ├── .gitignore        excludes .cfg and .cache/
     └── templates/        the project's templates; versioned
-        └── example.jinja
+        ├── example.jinja
+        └── rust/
+            └── _types.jinja
 ```
 
 - **FR-PROJ-001**: A project SHALL be any directory containing a `.tpl` folder.
   That folder is the project root.
 
-- **FR-PROJ-002**: `.tpl` SHALL contain exactly the artefacts above. `.cache/`
-  is absent until the first read populates it.
+- **FR-PROJ-002**: `.tpl` SHALL contain exactly the artefacts above and nothing
+  else that `tpl` reads or writes. `.cache/` is absent until the first read
+  populates it, and `templates/` holds the project's own templates alongside
+  the two `tpl init` writes, per `FR-TMPL-004`.
 
 - **FR-PROJ-003**: `.tpl/templates/` SHALL be versioned with the repository, and
   `.tpl/.cfg` and `.tpl/.cache/` SHALL NOT be.
@@ -67,8 +71,45 @@ maintain it.
   `/var/tmp`, a mounted share — must not be able to supply the configuration.
   The precedent is the `safe.directory` gate git added for CVE-2022-24765.
 
-- **FR-PROJ-006**: IF no `.tpl` folder is found within the boundary, THEN the
-  system SHALL exit `78` (`EX_CONFIG`) and the hint SHALL suggest `tpl init`.
+- **FR-PROJ-006**: IF a command that requires a project finds no `.tpl` folder
+  within the boundary, THEN the system SHALL exit `78` (`EX_CONFIG`) and the
+  hint SHALL suggest `tpl init`.
+
+  *Amended in the third edition.* The qualifier "that requires a project" is
+  new. As first written this requirement made a missing `.tpl` a `78` for every
+  command, including `tpl init`, which creates the folder, and
+  `tpl help --format json`, which exists to be callable before anything else
+  does. `FR-PROJ-025` names the commands it does not reach.
+
+- **FR-PROJ-025**: The following commands, and no others, SHALL NOT require a
+  project and SHALL NOT perform discovery:
+
+  | Command | Why |
+  |---|---|
+  | `tpl init` | It creates `.tpl`, so it cannot require one to be found first |
+  | `tpl help`, `tpl help <command>`, `tpl help --format json` | The command tree is derived from the binary, per `FR-HELP-021` |
+  | `-h/--help` at any node | Byte-identical to `tpl help <node>`, per `FR-HELP-002` |
+  | `tpl version`, `-V/--version` | It prints a constant, per `FR-HELP-005` |
+
+  Every other command SHALL perform discovery, and SHALL fail with `78` per
+  `FR-PROJ-006` when it finds no project.
+
+  *Rationale.* A calling agent's first invocation is `tpl help --format json`,
+  which is how it loads the whole surface, per `FR-HELP-016`. Failing it with a
+  code that says "fix `.tpl/.cfg` or run `tpl init`" before the agent has
+  learned that `tpl init` exists is the worst outcome the exit-code table can
+  produce. `tpl init` is on the list for the plainer reason that requiring a
+  project in order to create one cannot work.
+
+  *Rejected.* Running discovery for every command and making `tpl --help`
+  outside a project a `78`. Also rejected: running discovery but treating its
+  failure as non-fatal for the four, which adds a third state — discovered,
+  absent, absent-but-tolerated — to a model that has two.
+
+  *Accepted cost.* `tpl template list` and every other command still fail
+  outside a project, so the four are a stated exception rather than a rule a
+  caller can generalise. The list is in `tpl --help`, and each of the four
+  omits `78` from its own `EXIT CODES` section, per `FR-HELP-011`.
 
 - **FR-PROJ-007**: There SHALL be no fallback outside the project. A command
   that finds no `.tpl` fails; it does not read settings from anywhere else.
@@ -125,10 +166,10 @@ tpl init [<path>]
   warning to stderr saying that it will shadow the one above, and SHALL exit
   `0`.
 
-  *Known weakness, accepted.* A caller checking only the exit code will not see
-  the warning.
+  *Accepted cost.* A caller checking only the exit code will not see the
+  warning.
 
-- **FR-PROJ-017**: `tpl init` SHALL create exactly four artefacts:
+- **FR-PROJ-017**: `tpl init` SHALL create exactly five artefacts:
 
   | Artefact | Contents |
   |---|---|
@@ -136,6 +177,13 @@ tpl init [<path>]
   | `.tpl/.gitignore` | Two lines: `.cfg` and `.cache/` |
   | `.tpl/templates/` | The project's template directory |
   | `.tpl/templates/example.jinja` | A working example template |
+  | `.tpl/templates/rust/_types.jinja` | A macro file mapping a column to a Rust type |
+
+  *Amended in the second edition.* The fifth artefact is new. `FR-ENV-009`
+  removes the `rust_type` filter from the binary, and `FR-ENV-011` delivers the
+  mapping it performed as a template macro instead, so that the opinion it
+  encodes — whether `DECIMAL` becomes a third-party decimal type, an `f64`, or a
+  `String` — belongs to the project and can be edited there.
 
 - **FR-PROJ-018**: The generated `.cfg` SHALL contain no active database entry.
   A fresh project knows about no database until one is added.
@@ -161,13 +209,25 @@ tpl init [<path>]
 
   | Writer | What it writes |
   |---|---|
-  | `tpl init` | The four artefacts of `FR-PROJ-017` |
+  | `tpl init` | The five artefacts of `FR-PROJ-017`, and the destination directory and its missing parents, per `FR-PROJ-013` |
   | `tpl cfg …` | `.tpl/.cfg` |
   | `tpl cache load` | `.tpl/.cache/` |
   | any cached read command, on a miss | `.tpl/.cache/` |
 
 - **FR-PROJ-024**: The system SHALL NOT create, modify, or delete any file
-  outside `.tpl`, under any circumstance.
+  outside `.tpl`, with exactly one exception: the destination directory of
+  `tpl init` and its missing parent directories, per `FR-PROJ-013`.
+
+  *Amended in the third edition.* The first edition admitted no exception,
+  which contradicted `FR-PROJ-013` outright: `tpl init a/b/c` cannot create
+  `a/b/c` without writing outside `.tpl`. The exception is enumerated rather
+  than the prohibition weakened, so that the invariant still reads as an
+  invariant.
+
+  *Accepted cost.* `tpl init` is the one command that can leave a directory
+  behind on a mistyped path. It creates directories only, never a file outside
+  `.tpl`, and it writes nothing at all if `.tpl` already exists at the
+  destination, per `FR-PROJ-014`.
 
 - **BR-PROJ-001**: What `tpl` does is fully determined by the contents of the
   project, which is what makes its behaviour reproducible between machines and

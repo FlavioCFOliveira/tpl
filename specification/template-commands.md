@@ -1,7 +1,7 @@
 ---
 title: Template Commands (Second Arm)
-status: draft
-last-reviewed: 2026-09-09
+status: approved
+last-reviewed: 2026-09-10
 related: [cli-contract.md, render-command.md, project-and-discovery.md, security.md]
 ---
 
@@ -76,8 +76,9 @@ tpl template path  [<name>]             Print the template root, or one template
   is `_header.jinja` — THEN the system SHALL fail the render with `65`
   (`EX_DATAERR`), naming the template, the line, and the column.
 
-  *Known cost.* A name copied from `tpl template list` into an `{% include %}`
-  fails, because the listing omits the extension the include requires.
+  *Accepted cost.* A name copied from `tpl template list` into an
+  `{% include %}` fails, because the listing omits the extension the include
+  requires.
 
 - **FR-TMPL-010**: The help of `tpl template list` SHALL state that listed names
   omit the `.jinja` extension and that an `{% include %}` requires it.
@@ -92,16 +93,45 @@ tpl template path  [<name>]             Print the template root, or one template
 
   docs/table.md
   example
-  rust/struct
   rust/_types
+  rust/struct
   ```
+
+  *Corrected in the fifth edition.* The listing previously showed
+  `rust/struct` before `rust/_types`, which is not the order `FR-TMPL-013`
+  fixes: byte-wise, `_` (0x5F) sorts before `s` (0x73), so `rust/_types` comes
+  first. The example was the evidence that no order had been stated, and it is
+  now the worked case of the one that has.
 
 - **FR-TMPL-012**: Listed names SHALL be usable verbatim as the positional
   argument of `tpl render`, `tpl template show`, `tpl template check`, and
   `tpl template path`.
 
-- **FR-TMPL-013**: The system SHALL list templates in a fixed order that does
-  not depend on directory iteration order, per `NFR-DET-002`.
+- **FR-TMPL-013**: The system SHALL list templates by the **displayed name** —
+  the path of the file relative to `.tpl/templates/` with the `.jinja`
+  extension removed, per `FR-TMPL-011` — ascending, compared byte by byte,
+  under the default rule of `NFR-DET-002`. The order SHALL NOT depend on
+  directory iteration order.
+
+  *Rationale.* Sorting by the displayed name rather than by the filename on
+  disk is what makes the listing self-evidently ordered: a reader sees the
+  column it is sorted on. The two orders differ, and not only cosmetically —
+  `a.jinja` and `a/b.jinja` display as `a` and `a/b`, and `.` (0x2E) sorts
+  before `/` (0x2F), so a sort on the filename places `a.jinja` first while a
+  sort on the displayed name places `a` first for a different reason and would
+  place them differently the moment a third name fell between. One rule, over
+  the strings actually printed, has no such case.
+
+  Byte-wise and not by any collation, for the reason `NFR-DET-002` gives and
+  `FR-SCH-014` gives for `--pattern`: the order must be the same on every
+  machine and in every locale. The consequence, as there, is that `Docs` sorts
+  before `docs` and `_partials` after `Zebra`.
+
+  *Closes* `OQ-013`, now listed under [Closed](open-questions.md#closed).
+
+  *Composition.* The same order governs `--format json`, per `FR-TMPL-028`:
+  the `templates` array holds objects carrying `name`, and it is ordered by
+  that `name`.
 
 - **FR-TMPL-014**: `tpl template list` SHALL list partials — templates intended
   only to be included — alongside every other template, without a flag to hide
@@ -113,7 +143,14 @@ tpl template path  [<name>]             Print the template root, or one template
 ## `tpl template show`
 
 - **FR-TMPL-015**: `tpl template show <name>` SHALL print the source of the
-  named template, unaltered, to stdout.
+  named template, unaltered, to stdout. The escaping of `FR-OUT-018` SHALL NOT
+  apply to it, per `FR-OUT-019`.
+
+  *Amended in the third edition.* The exemption from `FR-OUT-018` is new. As
+  first written, this requirement and `FR-OUT-018` contradicted each other:
+  `template` was named among the read commands whose output is escaped, and a
+  template containing a tab, a form feed, or an escape sequence in a literal
+  could not be both escaped and unaltered.
 
 - **FR-TMPL-016**: `tpl template show` SHALL take exactly one positional
   argument.
@@ -151,6 +188,34 @@ tpl template path  [<name>]             Print the template root, or one template
   tpl template path                    /proj/.tpl/templates
   tpl template path rust/struct        /proj/.tpl/templates/rust/struct.jinja
   ```
+
+## `json` output
+
+- **FR-TMPL-028**: `tpl template list` SHALL emit its `json` output in the
+  envelope of `FR-OUT-024`, with a `data` of one key, `templates`, per
+  `FR-OUT-030`, whose value is an array of objects each carrying `name`:
+
+  ```json
+  {"schema_version":1,"source":"project","data":{"templates":[{"name":"rust/struct"}]}}
+  ```
+
+  *Rationale.* An array of objects rather than an array of bare strings,
+  because a string cannot gain a field and `FR-OUT-014` makes adding one the
+  only non-breaking way for a listing to grow. It is the same argument
+  `FR-CDOC-010` made for `source`.
+
+- **FR-TMPL-029**: `tpl template path` SHALL emit its `json` output in the
+  envelope of `FR-OUT-024`, with a `data` of one key, `path`, whose value is
+  the absolute path `FR-TMPL-021` or `FR-TMPL-022` would print.
+
+- **FR-TMPL-030**: `source` on a `template` document SHALL be `project`, per
+  `FR-OUT-026`, because no `template` subcommand reads a catalogue, per
+  `FR-TMPL-003`.
+
+- **FR-TMPL-031**: WHEN a project has no template, `tpl template list` SHALL
+  exit `0` with an empty `templates` array, per `FR-OUT-033` through
+  `FR-OUT-035`, and `tpl template check` with no positional argument SHALL
+  check nothing and exit `0`.
 
 ## Containment
 
@@ -193,5 +258,5 @@ tpl template path  [<name>]             Print the template root, or one template
 
 ## Open questions
 
-- [OQ-013](open-questions.md#oq-013) — the exact ordering of
-  `tpl template list`.
+None specific to this module. `OQ-013` is answered by `FR-TMPL-013` and is
+listed under [Closed](open-questions.md#closed).

@@ -1,7 +1,7 @@
 ---
 title: CLI Contract
-status: draft
-last-reviewed: 2026-09-09
+status: approved
+last-reviewed: 2026-09-10
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
 
@@ -18,8 +18,8 @@ here.
 ## Scope
 
 In scope: invocation grammar, the closed command tree, group-node behaviour,
-aliases, strict parsing rules, the absence of environment configuration, and
-determinism of the surface.
+aliases, strict parsing rules including where a global flag may appear, the
+absence of environment configuration, and determinism of the surface.
 
 Out of scope: what each command does with what it parses. That belongs to the
 module that owns the command.
@@ -43,7 +43,8 @@ tpl [global flags] <command> [<subcommand> …] [<arguments>] [local flags]
 - **FR-CLI-001**: The system SHALL accept invocations of the form
   `tpl [global flags] <command> [<subcommand> …] [<arguments>] [local flags]`,
   where `<command>` and each `<subcommand>` are exact names drawn from the
-  command tree defined in this file.
+  command tree defined in this file. This form is canonical, not restrictive:
+  `FR-CLI-024` accepts a global flag in any position.
 
 - **FR-CLI-002**: The command tree SHALL be closed. `tpl` SHALL accept only the
   canonical command names and the aliases declared in this specification.
@@ -53,8 +54,8 @@ tpl [global flags] <command> [<subcommand> …] [<arguments>] [local flags]
   working invocation would begin to fail in a minor version, silently.
 
 - **FR-CLI-003**: IF the first non-flag token is not a command of the tree, THEN
-  the system SHALL exit `64` (`EX_USAGE`) and SHALL offer a nearest-match hint
-  as defined in `FR-ERR-015`.
+  the system SHALL exit `64` (`EX_USAGE`) and SHALL offer a nearest-match
+  suggestion as defined in `FR-ERR-019`.
 
 - **FR-CLI-004**: The system SHALL NOT infer a command from a prefix of its
   name. `tpl sch tables` is `64`.
@@ -155,7 +156,7 @@ tpl
 
 - **BR-CLI-001**: Aliases are never ambiguous. `tbl` and `tbls` differ by one
   character, so a mistyped alias SHALL be resolved through the nearest-match
-  rule of `FR-ERR-015` rather than by inference.
+  rule of `FR-ERR-019` rather than by inference.
 
 ## Parsing rules
 
@@ -190,17 +191,59 @@ tpl
 - **FR-CLI-020**: The system SHALL treat a flag and its value as case-sensitive
   and SHALL NOT normalise the case of either.
 
+- **FR-CLI-024**: A global flag of `FR-GLOB-001` SHALL be accepted in any
+  position on the command line: before the command, between a command and its
+  subcommand, after the positional arguments, and among the local flags. The
+  grammar of `FR-CLI-001` SHALL be read as the canonical form in which this
+  specification and the help write an invocation, and SHALL NOT be read as a
+  constraint on where a global flag may be written.
+
+  ```
+  tpl -d shop schema tables
+  tpl schema tables -d shop
+  tpl schema -d shop tables --pattern '%_log'
+  ```
+
+  All three are the same invocation.
+
+  *Rationale.* Every example in this corpus puts a global flag before the
+  command, and nothing said whether the other positions were accepted. The two
+  candidate answers differ sharply for the primary consumer: an agent that
+  appends `-d shop` to a command line it has already built is the ordinary way
+  a command line gets built programmatically, and refusing it with `64` would
+  make the position of a flag a fact the agent has to learn from a failure. A
+  global flag is global, per `FR-GLOB-002`; a flag that is accepted only in one
+  position is a positional argument wearing a flag's spelling.
+
+  *What is unchanged.* `FR-CLI-017` continues to govern `--`: a token after the
+  argument terminator is a positional argument, so `tpl render x -- -d` passes
+  `-d` to the command as an argument and does not select a database entry.
+  `FR-CLI-014` continues to make a repeated single-value flag `64` wherever the
+  two occurrences appear, and `FR-CLI-019` continues to reject at each node
+  every **local** flag that node does not declare — this requirement frees the
+  position of the seven global flags and of nothing else.
+
+  *Closes* `OQ-015`, now listed under [Closed](open-questions.md#closed).
+
+  *Accepted cost.* A value that looks like a command name cannot be
+  distinguished from a command name by position alone, so `tpl -d schema
+  tables` selects the database entry named `schema` and then fails on `tables`
+  as an unknown top-level command. `FR-CLI-003` gives that a `64` with a
+  nearest-match suggestion, and `FR-CLI-018` already refuses a separate-token
+  flag value beginning with `-`.
+
 ## Configuration surface
 
 - **FR-CLI-021**: The system SHALL NOT read any environment variable to
   determine its behaviour, its defaults, or the location of the project.
 
 - **FR-CLI-022**: The system SHALL resolve every setting through exactly two
-  layers, strongest first: the command line, then `.tpl/.cfg`, then the built-in
-  default declared in this specification.
+  configuration layers above the built-in default, strongest first: the command
+  line, then `.tpl/.cfg`, then the built-in default declared in this
+  specification. `FR-CONF-029` owns this rule.
 
 - **FR-CLI-023**: WHERE a value is written as `${VAR}` inside `.tpl/.cfg`, the
-  system SHALL read the environment to expand it, as defined in `FR-CONF-013`.
+  system SHALL read the environment to expand it, as defined in `FR-CONF-015`.
   This is the only circumstance in which `tpl` reads the environment.
 
   *Rationale.* The ban is on flags and defaults, not on the substitution
@@ -234,11 +277,50 @@ tpl
 ## Determinism
 
 - **NFR-DET-001**: The same invocation against the same project state and the
-  same database state SHALL produce byte-identical output.
+  same database state SHALL produce byte-identical **stdout**. The diagnostic
+  output written to stderr is neither deterministic nor contract.
 
-- **NFR-DET-002**: Orderings SHALL be explicit and stable — tables by name,
-  columns by ordinal position, indexes by name — and SHALL NOT depend on the
-  order in which the server or the filesystem returns rows or entries.
+  *Amended in the second edition.* The first edition said "output" without
+  qualification, which contradicted `FR-GLOB-017`: a phase timing differs on
+  every run by construction. Naming stdout resolves the contradiction in the
+  direction that was always intended — stdout is the result a caller parses and
+  compares between runs, and stderr is diagnosis.
+
+- **NFR-DET-002**: Orderings SHALL be explicit and stable, and SHALL NOT depend
+  on the order in which the server or the filesystem returns rows or entries.
+  Every collection the system presents SHALL be ordered by name, ascending,
+  compared byte by byte, except where this specification names another order:
+
+  | Collection | Order | Fixed by |
+  |---|---|---|
+  | A table's columns | Ordinal position | This requirement |
+  | An index's columns | The order the catalogue states | `FR-CAT-010` |
+  | A routine's parameters | Declaration order | `FR-CAT-018` |
+  | Every other collection | Name, ascending, byte-wise | This requirement |
+
+  *Amended in the third edition.* The default rule and the table of exceptions
+  are new. The first edition named three orders — tables by name, columns by
+  ordinal, indexes by name — and the model carries seven further collections:
+  views, routines, outgoing foreign keys, `referenced_by`, triggers, `CHECK`
+  constraints, and routine parameters. Two of the seven were fixed elsewhere by
+  accident rather than by rule, and five had no stated order at all, so five
+  collections could not satisfy `NFR-DET-001` and `FR-CTX-005` had nothing
+  observable to point at.
+
+  *Rationale.* One default plus three exceptions is checkable in a single test
+  and holds for a collection this specification has not thought of yet. An
+  enumeration of every collection would be incomplete again the next time the
+  model grows.
+
+  *Rejected.* Enumerating an order for each of the ten collections, for the
+  reason above; and ordering by the catalogue's own ordinal wherever one exists,
+  which would make the order of a listing depend on a field the caller cannot
+  see and which `FR-CAT-024` may exclude from the model.
+
+  *Accepted cost.* Byte-wise comparison, chosen for the same reason
+  `FR-SCH-014` folds case over ASCII only, puts `Orders` before `customers`
+  and `_internal` after `Zebra`. The order is the same on every machine and in
+  every locale, which is what a caller comparing two runs needs.
 
 - **NFR-DET-003**: The system SHALL NOT consult `isatty()` or any other terminal
   detection to decide output format, colour, pagination, or content.
@@ -253,7 +335,7 @@ tpl
 
 - **NFR-DET-005**: The `now` render variable is the single documented source of
   non-reproducibility. A template that uses it produces output that differs
-  between runs by design.
+  between runs by design. Its form is fixed by `FR-CTX-028`.
 
 ## Dependencies
 
@@ -265,7 +347,6 @@ tpl
 
 ## Open questions
 
-- [OQ-014](open-questions.md#oq-014) — whether `tpl help` accepts a nested
-  command path.
-- [OQ-015](open-questions.md#oq-015) — the permitted position of a global flag
-  relative to the command name.
+None specific to this module. `OQ-014` is answered by `FR-HELP-026` and
+`OQ-015` by `FR-CLI-024`; both are listed under
+[Closed](open-questions.md#closed).

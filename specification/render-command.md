@@ -1,7 +1,7 @@
 ---
 title: Render Command (Third Arm)
-status: draft
-last-reviewed: 2026-09-09
+status: approved
+last-reviewed: 2026-09-10
 related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md]
 ---
 
@@ -84,7 +84,7 @@ tpl render <template> --routine <name>      binds routine
 
 - **FR-RND-008**: `tpl render` SHALL declare `--set <key>=<value>`, which
   defines one entry under the `vars` context variable. It is repeatable with
-  distinct keys.
+  distinct keys. It SHALL carry no short form, per `FR-GLOB-024`.
 
 - **FR-RND-009**: The system SHALL split a `--set` argument on the first `=`.
   Everything after that first `=` is the value, so `--set "msg=a=b"` sets
@@ -141,8 +141,10 @@ tpl render <template> --routine <name>      binds routine
   as a conflict.
 
 - **FR-RND-020**: IF the document supplied to `--context` is not well-formed
-  JSON, or does not match the document contract of `FR-SCH-017`, THEN the system
-  SHALL exit `65` (`EX_DATAERR`).
+  JSON, or does not match the document contract — the outer shape of
+  `FR-SCH-017` and the structural rules of
+  [context-document.md](context-document.md) — THEN the system SHALL exit `65`
+  (`EX_DATAERR`).
 
 - **FR-RND-021**: The system SHALL accept a `--context` document in either
   compact or indented form.
@@ -165,7 +167,8 @@ tpl render <template> --routine <name>      binds routine
 
 - **FR-RND-024**: The system SHALL always inject `vars`, `tpl`, and `now`. IF
   any of the three appears in a `--context` document, THEN the system SHALL
-  ignore the supplied value.
+  ignore the supplied value. What each of the three holds is fixed by
+  `FR-CTX-026` through `FR-CTX-028`.
 
   *Rationale.* A dump cannot produce "exactly the JSON the render receives as
   context", because three of the five top-level variables do not come from the
@@ -177,7 +180,7 @@ tpl render <template> --routine <name>      binds routine
   the meanings defined in [cache-commands.md](cache-commands.md).
 
 - **FR-RND-026**: WHEN no `--context` is supplied, `tpl render` SHALL read the
-  catalogue through the cache, per `FR-CACHE-002`.
+  catalogue through the cache, per `FR-CACHE-006`.
 
   *Rationale.* Sending `render` to the server while caching the first arm would
   let a stale catalogue produce wrong code that then gets committed; caching
@@ -185,6 +188,15 @@ tpl render <template> --routine <name>      binds routine
 
 - **FR-RND-027**: `tpl render` SHALL NOT declare `--format` or `--pretty`. Its
   result is the rendered text, which has no alternative representation.
+  `tpl render x --format json` is therefore `64`, per `FR-CLI-019`, and the
+  diagnostic is text like every other, per `FR-ERR-033`.
+
+  *Amended in the fifth edition.* The last sentence is new and settles what
+  `OQ-023` asked. The question only existed because the pre-scan of
+  `FR-ERR-017` would have seen `--format json` on a command that declares no
+  such flag and emitted the resulting `64` as JSON. `FR-ERR-017` is withdrawn
+  and no error is JSON, so the outcome is the ordinary unknown-flag error with
+  nothing special about it.
 
 - **FR-RND-028**: `tpl render` SHALL write the rendered result to stdout and
   SHALL NOT write it anywhere else. The system SHALL NOT provide `--output`,
@@ -221,7 +233,9 @@ tpl render <template> --routine <name>      binds routine
   SHALL exit `65`, with the same location information.
 
 - **FR-RND-032**: IF the named object does not exist in the context source, THEN
-  the system SHALL exit `66` with a nearest-match suggestion.
+  the system SHALL exit `66` with a nearest-match suggestion. IF `--routine` is
+  given a bare name matching both a procedure and a function, THEN the system
+  SHALL exit `64`, per `FR-SCH-010`, which applies under any circumstance.
 
 - **FR-RND-033**: IF the render deadline is exceeded, THEN the system SHALL exit
   `65`.
@@ -241,7 +255,6 @@ tpl render <template> --routine <name>      binds routine
 
 ## Open questions
 
-- [OQ-016](open-questions.md#oq-016) — whether `--set` keeps the short form
-  `-s`.
-- [OQ-023](open-questions.md#oq-023) — how the error pre-scan interacts with a
-  command that does not declare `--format`.
+None specific to this module. `OQ-016` is answered by `FR-GLOB-024` — `--set`
+has no short form — and `OQ-023` is **dissolved** with the pre-scan of
+`FR-ERR-017`; both are listed under [Closed](open-questions.md#closed).

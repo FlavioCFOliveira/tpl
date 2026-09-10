@@ -1,7 +1,7 @@
 ---
 title: Schema Commands (First Arm)
-status: draft
-last-reviewed: 2026-09-09
+status: approved
+last-reviewed: 2026-09-10
 related: [cli-contract.md, cache-commands.md, output-formats.md, render-command.md]
 ---
 
@@ -73,8 +73,24 @@ tpl schema dump                        The whole database as one JSON document
   column in `text` output and as a field in `json` output.
 
 - **FR-SCH-008**: The system SHALL NOT provide a `--type` flag on
-  `tpl schema routines`. Selecting one kind is done downstream, from
-  `--format json`.
+  `tpl schema routines`. Selecting one kind from a listing is done downstream,
+  from `--format json`. Wherever a command names one routine — `tpl schema
+  routine`, `tpl render --routine`, `tpl cache load --routine`, and
+  `tpl cache clean --routine` — the system SHALL accept the qualified forms
+  `procedure:<name>` and `function:<name>` as well as the bare name.
+
+  *Amended in the second edition.* The prohibition was written for the listing
+  and is unchanged by the amendment. The addition is the disambiguator the
+  singular forms lacked: procedures and functions occupy distinct namespaces on
+  the server, so `calc_vat` can legally name two objects, and every command that
+  names one routine was ambiguous. The cached form of the same rule is
+  `FR-CDOC-014`.
+
+  *Rejected.* A `--kind` flag to be supplied only when a name is ambiguous,
+  which is easy to forget until the day an ambiguity appears; and resolving a
+  bare ambiguous name in favour of the function with a warning on stderr, which
+  exits `0` — so a caller checking the code never sees it — and leaves the
+  procedure unreachable.
 
 - **FR-SCH-009**: `tpl schema table <name>` SHALL be exhaustive over what the
   catalogue holds for that table: its columns with position, type, nullability,
@@ -84,7 +100,16 @@ tpl schema dump                        The whole database as one JSON document
 
 - **FR-SCH-010**: IF a named table, view, or routine does not exist in the
   selected database, THEN the system SHALL exit `66` (`EX_NOINPUT`) with a
-  nearest-match suggestion over the objects of that kind that do exist.
+  nearest-match suggestion over the objects of that kind that do exist. IF a
+  bare routine name matches both a procedure and a function, THEN the system
+  SHALL exit `64` (`EX_USAGE`), naming both candidates in the qualified form of
+  `FR-SCH-008`.
+
+  *Amended in the second edition.* The ambiguity case is new. The system SHALL
+  NOT resolve it in favour of either kind under any circumstance: a first-wins
+  rule would make one of the two objects permanently unreachable through a bare
+  name, and which one it was would depend on the order the catalogue returned
+  them.
 
 ## The `--pattern` filter
 
@@ -123,8 +148,20 @@ tpl schema dump                        The whole database as one JSON document
 - **FR-SCH-016**: `tpl schema dump` SHALL emit the whole selected database as a
   single JSON document.
 
-- **FR-SCH-017**: The document SHALL have the shape
-  `{"schema_version":1,"database":{…}}`.
+- **FR-SCH-017**: The document SHALL be the envelope of `FR-OUT-024` carrying
+  a `data` of one key, `database`:
+
+  ```json
+  {"schema_version":1,"source":"server","data":{"database":{…}}}
+  ```
+
+  *Amended in the third edition.* The first edition gave the dump the shape
+  `{"schema_version":1,"database":{…}}`, which was one of only two JSON
+  documents this specification ever fixed and which shared nothing with the
+  other fifteen. The envelope of `FR-OUT-024` now governs all seventeen, so the
+  dump gains `source` and its `database` key moves inside `data`. Nothing about
+  the `database` object itself changed; [context-document.md](context-document.md)
+  fixes it, per `FR-CTX-001`.
 
 - **FR-SCH-018**: The document SHALL contain only the server-derived part of the
   render context. It SHALL NOT contain `vars`, `tpl`, or `now`.
@@ -151,7 +188,25 @@ tpl schema dump                        The whole database as one JSON document
   must be able to say for itself that it is whole.
 
 - **FR-SCH-022**: The document emitted by `tpl schema dump` SHALL be accepted by
-  `tpl render --context`, per `FR-RND-009`.
+  `tpl render --context`, per `FR-RND-016`.
+
+- **BR-SCH-004**: The round-trip of `FR-SCH-022` is a contract and carries a
+  mandated test, as the other two contracts of this specification do. The test
+  SHALL dump the reference database, feed the dump back through
+  `tpl render --context`, and assert that the rendered result is byte-identical
+  to the result of the same render against a live read of the same database.
+
+  *Rationale.* This is the only property that makes rendering without a
+  database safe to rely on, and it is the one most likely to break silently
+  when the document shape changes. The precedents are `BR-ERR-001`, which
+  mandates a test per exit code, `BR-HELP-001` and `BR-HELP-003`, which mandate
+  four for the help forms and the command tree, and `FR-SRV-012` and
+  `FR-SRV-013`, which mandate two for the read-only promise. The round-trip was
+  the only contract with none.
+
+  *Accepted cost.* The test needs the container of
+  [performance-requirements.md](performance-requirements.md), and is therefore
+  blocked by the same absence as `OQ-009`.
 
 ## Flags and output
 
@@ -163,7 +218,7 @@ tpl schema dump                        The whole database as one JSON document
   [cache-commands.md](cache-commands.md).
 
 - **FR-SCH-025**: Every `schema` subcommand SHALL read through the catalogue
-  cache, per `FR-CACHE-002`.
+  cache, per `FR-CACHE-006`.
 
 - **FR-SCH-026**: In `text` output, a listing SHALL be presented as aligned
   columns under a header row:
@@ -171,18 +226,87 @@ tpl schema dump                        The whole database as one JSON document
   ```
   tpl -d shop schema tables
 
-  NAME          ENGINE  ROWS   COMMENT
-  customers     InnoDB  1842   Registered buyers
-  order_items   InnoDB  38211
-  orders        InnoDB  9043   One row per order
+  NAME          ENGINE  COLUMNS  COMMENT
+  customers     InnoDB        14  Registered buyers
+  order_items   InnoDB         7
+  orders        InnoDB        21  One row per order
   ```
+
+  *Amended in the second edition.* The listing previously carried a `ROWS`
+  column, which is the server's row estimate. The storage engine revises that
+  estimate without any change to the structure, so two reads of an unchanged
+  database differ — which contradicts `NFR-DET-001` and the argument
+  `FR-SCH-018` used to keep `now` out of the dump. `COLUMNS` is a structural
+  count and is stable. The general rule is `FR-CAT-024`.
 
 - **FR-SCH-027**: The `text` output of any `schema` subcommand is not a
   contract, per `FR-OUT-004`. Anything parsing a listing must use
   `--format json`.
 
+- **FR-SCH-030**: Every `schema` subcommand, `dump` included, SHALL emit its
+  `json` output in the envelope of `FR-OUT-024`.
+
+- **FR-SCH-031**: The `data` of `tpl schema info` SHALL be an object carrying
+  one key, `database`, whose value is the metadata of the selected database.
+
+  *Known gap.* Which fields that object carries is a catalogue field list and
+  is [OQ-024](open-questions.md#oq-024), which cannot be closed until the
+  container of `scripts/mariadb/` exists. The envelope and the `data` key are
+  fixed here; the field list is not.
+
+  *Amended in the fourth edition.* One field of that object is now fixed:
+  `server`, carrying the probed version, the series, and the standing, per
+  `FR-CTX-031` and `FR-CTX-034`. It is outside `OQ-024` because it is not a
+  catalogue field — it comes from the version probe of `FR-SRV-002` — so
+  `BR-CTX-006` could fix it without observing anything.
+
+  *Amended in the fifth edition.* Three more are fixed: the collections
+  `tables`, `views`, and `routines`, per `FR-CTX-035`. They are outside
+  `OQ-024` for the same reason — a collection is a structural rule of
+  [context-document.md](context-document.md), not a catalogue field.
+  `OQ-024` is narrowed again and now covers only the **metadata fields** of the
+  `database` object: the fields describing the database itself, `name` among
+  them. Those remain open.
+
+- **FR-SCH-032**: The `data` of `tpl schema tables`, `tpl schema views`, and
+  `tpl schema routines` SHALL follow `FR-OUT-030`, carrying one key named for
+  the collection — `tables`, `views`, or `routines` — whose value is the array
+  of its members:
+
+  ```json
+  {"schema_version":1,"source":"server","data":{"tables":[…]}}
+  ```
+
+  Each member is an object of the kind [catalogue-coverage.md](catalogue-coverage.md)
+  defines, shaped as [context-document.md](context-document.md) fixes it.
+
+- **FR-SCH-033**: The `data` of `tpl schema table`, `tpl schema view`, and
+  `tpl schema routine` SHALL follow `FR-OUT-031`, carrying one key named for
+  the kind — `table`, `view`, or `routine` — whose value is that object:
+
+  ```json
+  {"schema_version":1,"source":"cache","data":{"table":{…}}}
+  ```
+
+- **FR-SCH-034**: The `data` of `tpl schema dump` SHALL be the object fixed by
+  `FR-SCH-017`: one key, `database`, carrying the whole model of the selected
+  database.
+
+- **FR-SCH-035**: `source` on a `schema` document SHALL be `server` or `cache`,
+  per `FR-OUT-026`, according to which served the read.
+
+- **FR-SCH-036**: A document supplied to `tpl render --context` SHALL carry the
+  whole envelope of `FR-OUT-024`, and the system SHALL NOT accept a bare `data`
+  object in its place.
+
+  *Rationale.* Accepting both would give the round-trip of `FR-SCH-022` two
+  input forms, and a caller that had stripped the envelope would have discarded
+  the `source` field that `FR-CDOC-016` makes the signal of what the document
+  does not promise.
+
 - **FR-SCH-028**: The system SHALL order tables by name, columns by ordinal
-  position, and indexes by name, per `NFR-DET-002`.
+  position, and indexes by name, per `NFR-DET-002`, and every other collection
+  it presents by the default rule of that requirement.
 
 - **FR-SCH-029**: The `EXAMPLES` section of `tpl schema tables` SHALL show the
   canonical loop over every table, which uses `--format json`.
@@ -193,13 +317,15 @@ tpl schema dump                        The whole database as one JSON document
 ## Business rules
 
 - **BR-SCH-002**: The first arm is read-only with respect to the database under
-  every circumstance. It issues no DDL, no DML, and no write statement, and it
-  enforces a read-only session at the engine level on every connection it opens.
-  How that session is established, and the exact statement used, is outside the
-  scope of this edition; the failure to establish it is `78`, per `FR-ERR-001`.
+  every circumstance. The guarantee is the closed statement list of
+  `FR-SRV-006`, which is what prevents a write from being sent at all; the
+  read-only session of `FR-SRV-008`, read back and confirmed under
+  `FR-SRV-009`, is defence in depth. Failure to establish or confirm that
+  session refuses the connection with `78`, per `FR-SRV-010`. There is no flag
+  that disables either part, per `FR-SRV-011`.
 
 - **BR-SCH-003**: The first arm is not read-only with respect to the filesystem.
-  A cache miss writes to `.tpl/.cache/`, per `FR-CACHE-004`. Only
+  A cache miss writes to `.tpl/.cache/`, per `FR-CACHE-007`. Only
   `--direct --no-cache` guarantees that no file is touched.
 
 ## Dependencies
