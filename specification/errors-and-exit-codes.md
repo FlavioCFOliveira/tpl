@@ -79,15 +79,70 @@ Out of scope: the wording of any individual message.
   requirement stated a producing condition, so nothing could confirm that the
   binary is able to return it at all.
 
+  *A consequence that reaches outside this corpus, recorded in the eighth
+  edition.* The first condition requires the process to retain control after a
+  panic and to report it with the message `FR-ERR-032` fixes. The release
+  profile the root `CLAUDE.md` states aborts on panic, and under an aborting
+  profile a panic terminates the process abnormally: the caller receives no
+  code of `FR-ERR-001` and no message, so one of the two producing conditions
+  of a code this corpus makes contract does not exist in the distributed
+  binary. This requirement is unchanged, because the specification precedes
+  the implementation; the correction owed to that file is `DIV-045`.
+
 - **FR-ERR-031**: The system SHALL provide a deliberate trigger for `70`, so
-  that the test `BR-ERR-001` mandates for it can exist. The trigger SHALL NOT
-  appear in any help text, in the JSON command tree of `FR-HELP-016`, or in the
-  command tree of `FR-CLI-002`.
+  that the test `BR-ERR-001` mandates for it can exist. The trigger SHALL be
+  reachable only from within the system's own test configuration, SHALL NOT be
+  reachable from any invocation of the binary the project distributes, and
+  SHALL NOT appear in any help text, in the JSON command tree of
+  `FR-HELP-016`, or in the command tree of `FR-CLI-002`.
 
   *Rationale.* A code with no test is a code nobody has confirmed the binary
   can return, and `70` cannot be reached from a correct invocation by
   definition. Keeping the trigger out of the published surface keeps the tree
   closed, per `FR-CLI-002`, and keeps it out of the caller's context window.
+
+  *Amended in the eighth edition: the mechanism is named, because every
+  mechanism reachable from outside the process collides with a requirement in
+  force.* The first form of this requirement said where the trigger must not
+  appear and left open what it is. Each of the three candidates fails against
+  a requirement this corpus holds:
+
+  | Candidate | The requirement it collides with |
+  |---|---|
+  | A command or a flag, hidden or declared | `FR-CLI-002` closes the tree, and `FR-HELP-021` derives the JSON tree by introspecting the very tree the parser accepts — so a node the parser accepts is in the document this requirement bars it from |
+  | An environment variable | `FR-CLI-021` reads none, `FR-CLI-023` names the one exception, and `NFR-DET-001` promises byte-identical stdout for one invocation against one state |
+  | A build selected by a feature | The artefact verified would not be the artefact distributed, and `NFR-PERF-018` makes every distributed artefact first class |
+
+  The trigger is therefore inside the process and reachable from nothing a
+  caller can write. Nothing on the published surface changes, and none of the
+  four requirements above yields.
+
+  *The exception, stated against the requirement it excepts from.*
+  `BR-ERR-001` requires an **integration** test per exit code. `70` alone is
+  excepted, and `BR-ERR-001` says so in its own text. What replaces it is a
+  composition rather than a lesser test: the guard that detects a violated
+  internal invariant is exercised in process and observed to produce the
+  condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires, and
+  the step from that condition to the process exit status is the same step
+  every other code of `FR-ERR-001` travels — and each of those nine does have
+  the integration test `BR-ERR-001` mandates.
+
+  *Consequence, stated plainly.* No invocation of the distributed binary is
+  observed returning `70`. What is observed is the guard, and separately the
+  step from an error condition to an exit status; the composition of the two
+  is reasoned rather than executed. That is weaker than the nine other rows of
+  `FR-ERR-001`, and it is the price of the trigger being unreachable — which
+  is the property `FR-ERR-030` needs, because a `70` a caller could provoke
+  would not be a defect in `tpl`.
+
+  *Rejected.* Dropping the trigger and leaving `70` with no test of any kind,
+  which is the state the third edition closed in `OQ-067` and would restore.
+  Also rejected: provoking the invariant from an input a caller controls — a
+  hand-written cache document, a `--context` document, a `.cfg` value — which
+  would make `70` reachable from bad input and would then tell the caller that
+  a file they can delete is a defect they cannot fix. That contradicts
+  `FR-ERR-032` and diagnoses the wrong fault, which is the error
+  `FR-CONF-033` rejects in the same shape.
 
 - **FR-ERR-032**: A `70` SHALL follow the message format of `FR-ERR-008`, and
   its `hint` SHALL say that the condition is a defect in `tpl` and is not
@@ -95,8 +150,21 @@ Out of scope: the wording of any individual message.
 
 - **BR-ERR-001**: Exit codes are contract. Each code SHALL have at least one
   integration test that exercises it, and that test is part of the definition of
-  done for the feature that can produce it. `70` is exercised through the
-  trigger of `FR-ERR-031`.
+  done for the feature that can produce it. `70` is the one exception, stated
+  here rather than left to be inferred: neither of its producing conditions in
+  `FR-ERR-030` can be reached deliberately from an invocation of the
+  distributed binary, so it is exercised in process through the trigger of
+  `FR-ERR-031`, and not by an integration test.
+
+  *Amended in the eighth edition.* The rule required an integration test for
+  every code while also saying that `70` "is exercised through the trigger of
+  `FR-ERR-031`", and no trigger satisfying both existed: every mechanism
+  reachable from outside the process collides with `FR-CLI-002`,
+  `FR-CLI-021`, `FR-HELP-021` or `NFR-PERF-018`, which `FR-ERR-031` now
+  records candidate by candidate. This rule yields, for `70` alone. The other
+  nine codes are unchanged, and the composition that stands in for the missing
+  test — together with what it does not establish — is stated in
+  `FR-ERR-031`.
 
 ## No database entry versus a missing entry
 

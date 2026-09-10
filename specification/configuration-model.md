@@ -327,6 +327,41 @@ tls      = "verify-identity"
   | `verify-ca` | encrypted, chain validated against the trust material of `FR-CONF-014` | `69` |
   | `verify-identity` | encrypted, chain and hostname validated | `69` |
 
+  The fixture of `scripts/mariadb/` SHALL be able to present, at each series
+  of `FR-SRV-015`, a server whose certificate names the host by which the
+  project's tests reach it, and SHALL retain a server that offers no TLS. The
+  first is what an acceptance test for the default mode of `FR-CONF-013`
+  requires; the second is the right-hand column of the table above.
+
+  *Amended in the eighth edition: the fixture obligation is a requirement
+  rather than a consequence.* The *Observed* note below records that `tpl`
+  with default configuration cannot reach the fixture over TCP on any series,
+  because `10.11` offers no TLS and the certificate the other three generate
+  automatically carries no `subjectAltName`. Left as a consequence, that made
+  the success cell of `verify-identity` — the default of `FR-CONF-013`, and
+  therefore the mode every caller meets first — the one cell of the table with
+  no test, and it obliged every other test that reaches a server to set `tls`
+  away from its default. The obligation is the fixture's, so it is stated
+  here, in the requirement whose cells it makes demonstrable.
+
+  *Rejected.* Dropping the acceptance test for the default mode and stating
+  the cost. The cost is not one this corpus can state and keep its own rule
+  that a requirement which cannot be tested or demonstrated is not a
+  requirement: `FR-CONF-036` makes the five modes normative over the driver
+  precisely so that each is distinguishable, and a default that nothing
+  exercises end to end is the one a caller reaches without asking for it.
+  Also rejected: configuring the certificate on the three TLS-capable series
+  alone, which leaves `10.11` — supported until 2028-02-16 — unable to run an
+  acceptance test that `FR-SRV-029` requires against every series.
+
+  *What this obligation is not.* It is not a change to any of the ten cells,
+  which stand exactly as observed, and it is not a relaxation of
+  `verify-identity`: a certificate that names the host is what the mode has
+  always required, and supplying one makes the requirement demonstrable rather
+  than weaker. How the certificate is generated, where the fixture keeps it,
+  and how the no-TLS server is retained alongside it are the fixture's own
+  work and are not specified here.
+
   *Observed.* Each cell was verified against two running servers of
   `FR-SRV-015` — one reporting `have_ssl=YES` and one reporting
   `have_ssl=DISABLED` — and encryption was read from the live session rather
@@ -346,10 +381,11 @@ tls      = "verify-identity"
   separates `verify-identity` from `verify-ca` in the observation and is why
   the two are distinct rather than collapsed; what it does not do is
   demonstrate the success cell, which needs a server certificate carrying a
-  name. **Consequence for the project's own tests:** `tpl` with default
-  configuration cannot connect to the fixture of `scripts/mariadb/` over TCP
-  on any series, and an acceptance test for the default mode needs TLS
-  configured in that fixture with a certificate that names the host.
+  name. **Consequence for the project's own tests, now an obligation in the
+  text above:** `tpl` with default configuration cannot connect to the fixture
+  of `scripts/mariadb/` over TCP on any series, and an acceptance test for the
+  default mode needs TLS configured in that fixture with a certificate that
+  names the host.
 
   *A supported series may offer no TLS at all*, so the right-hand column is
   not hypothetical: `10.11` reports `have_ssl=DISABLED` unless an

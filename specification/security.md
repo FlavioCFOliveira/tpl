@@ -116,11 +116,20 @@ module, `BR-SEC-003` excepted.
 
 ## Project discovery
 
-- **FR-SEC-013**: The upward walk SHALL stop at the home directory and at the
-  mount point. See `FR-PROJ-005`.
+- **FR-SEC-013**: The upward walk SHALL stop at the mount point. See
+  `FR-PROJ-005`.
 
-  *Threat closed.* A `.tpl` planted in a world-writable ancestor such as `/tmp`
-  can no longer supply the configuration.
+  *Amended in the eighth edition.* The home directory is no longer a boundary.
+  Locating it required reading `HOME`, which `FR-CLI-021` forbids and which
+  made the boundary a value a shell can set; `FR-PROJ-005` as amended carries
+  the reasoning, the option rejected, and the accepted cost.
+
+  *Threat closed, and it is narrower than the first edition claimed.* The
+  mount point stops a walk that begins inside a mounted share from climbing
+  out of it. A `.tpl` planted in a world-writable ancestor such as `/tmp` is
+  refused by `FR-SEC-014`, the ownership and mode checks on `.tpl/.cfg`, and
+  never was refused by the boundary: a walk that starts beneath `/tmp` reaches
+  `/tmp` before it reaches any mount point.
 
 - **FR-SEC-014**: `.tpl/.cfg` SHALL be owned by the current user and SHALL carry
   no group or other access bits. See `FR-PROJ-010` and `FR-PROJ-011`.

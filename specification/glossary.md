@@ -143,8 +143,8 @@ folder is found, within the boundary defined by `FR-PROJ-005`. See
 ## DSN
 
 A single-string connection descriptor stored in the `dsn` key of a database
-entry, in the form
-`scheme://[user[:password]@]host[:port]/database[?params]`. See `FR-CONF-009`.
+entry, in the form `scheme://[user[:password]@]host[:port]/database`. It
+carries no query parameters, per `FR-CONF-011`. See `FR-CONF-009`.
 
 ## group node
 

@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in seven editions. All are in force; each
+The specification has been written in eight editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -381,6 +381,78 @@ evidence that will not arrive. **The index of
 is complete**: no requirement of it is waiting on a decision, a measurement,
 or an observation.
 
+### Eighth edition — three contradictions between requirements in force
+
+Harvesting the seventh edition for the technical design read requirement
+against requirement rather than requirement against evidence, and found three
+places where two requirements **both in force** could not both be satisfied.
+None was a gap and none needed a decision from outside the corpus: in each
+case one of the two was an invariant of the whole surface and the other a rule
+of one module, so the resolution was to name the requirement that yields and
+to write the reason into its own text. Two stale entries were corrected in the
+same pass.
+
+- **A boundary that read the environment** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-005` stopped
+  project discovery at the user's home directory, which can only be located
+  from `HOME`. `FR-CLI-021` reads no environment variable to determine the
+  location of the project and `FR-CLI-023` names the single exception, so the
+  boundary was an environment read this corpus prohibits — and it made two
+  identical command lines in two shells discover two different projects, which
+  is `BR-CLI-002` failing in its own terms. `FR-PROJ-005` yields: the home
+  boundary is dropped, the mount point remains, and the trust checks of
+  `FR-PROJ-009` through `FR-PROJ-011` are named as what actually refuses a
+  planted project. `BR-CLI-002` gains the clause it was missing — nothing a
+  shell can set decides which project is discovered, which entry is selected,
+  or which server is reached — and `FR-SEC-013` follows.
+- **Two test seams that could appear on no surface** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and
+  [server-contract.md](server-contract.md). `FR-ERR-031` required a deliberate
+  trigger for `70`, and `FR-SRV-035` a seam presenting the reader with a
+  series above its own window. Every mechanism reachable from outside the
+  process collides with a requirement in force: a command or a flag with
+  `FR-CLI-002` and `FR-HELP-021`, an environment variable with `FR-CLI-021`
+  and `NFR-DET-001`, and a feature-selected build with the property that the
+  artefact verified is the artefact distributed. Both seams therefore move
+  **inside the process**, reachable from nothing a caller can write, and none
+  of those four requirements yields. What yields is `BR-ERR-001`, for `70`
+  alone and in its own text, and `FR-SRV-035`'s assertion on the exit code.
+  Both requirements state the composition that stands in — the guard is
+  observed in process, and the step from an error condition to an exit status
+  is observed by the nine other codes — and both state plainly that the
+  composition is reasoned rather than executed.
+- **An acceptance test with no fixture** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-038` recorded, in
+  its own text, that `tpl` with default configuration cannot reach the fixture
+  of `scripts/mariadb/` over TCP on any series, and that an acceptance test
+  for the default mode needs a certificate that names the host. The fixture
+  provides none, so the default of `FR-CONF-013` was the one cell of a
+  ten-cell table with no test. The obligation is now a requirement: the
+  fixture presents, at each series of `FR-SRV-015`, a server whose certificate
+  names the host, and retains a server offering no TLS for the right-hand
+  column. Dropping the test with the cost stated was rejected, because a
+  default that nothing exercises end to end is the case a caller meets first.
+
+**Two editorial corrections.** The glossary's *DSN* form still ended
+`[?params]`, which `FR-CONF-009` removed when `FR-CONF-011` admitted no
+parameter. And `DIV-034` said "thirteen" excluded catalogue fields in one
+clause while its own seventh-edition note said sixteen; the table of
+`FR-CAT-024` carries sixteen rows, so the clause was wrong and is corrected.
+
+**One divergence is recorded rather than resolved.** `FR-ERR-030` makes a
+caught top-level panic a producing condition of `70`, and the release profile
+the root coordination document states aborts on panic, under which that
+condition cannot exist in the distributed binary. The requirement is
+unchanged, because the specification precedes the implementation, and the
+correction owed is `DIV-045`. It is not an open question: nothing in this
+corpus waits on it, and the choice it names belongs to an architecture
+decision.
+
+**No open question is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty. Each resolution above
+rests on an invariant this corpus already held, and where a choice remained
+the requirement records the option rejected and why.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -599,6 +671,16 @@ mistaken for either: `FR-SRV-019` requires the table of `FR-SRV-015` to be
 re-verified against MariaDB's maintenance policy before every release. It
 decays on a schedule this project does not set, and the earliest date on which
 it is known to be wrong is 2028-02-16.
+
+The eighth edition adds one obligation outside this corpus and none inside it.
+`FR-CONF-038` requires the fixture of `scripts/mariadb/` to present, at each
+series of `FR-SRV-015`, a server whose certificate names the host, without
+which the default TLS mode of `FR-CONF-013` has no acceptance test. Like
+`seed-bench.sql` under `DIV-036` it is fixture work with an owner and a
+trigger, not an open question, and no requirement of this corpus is waiting on
+it. `DIV-045`, recorded in the same edition, is a correction owed to the root
+coordination document, which is what
+[upstream-divergences.md](upstream-divergences.md) exists to hold.
 
 Five items previously recorded here have been discharged.
 
