@@ -1,6 +1,6 @@
 ---
 title: CLI Contract
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
@@ -18,8 +18,8 @@ here.
 ## Scope
 
 In scope: invocation grammar, the closed command tree, group-node behaviour,
-aliases, strict parsing rules, the absence of environment configuration, and
-determinism of the surface.
+aliases, strict parsing rules including where a global flag may appear, the
+absence of environment configuration, and determinism of the surface.
 
 Out of scope: what each command does with what it parses. That belongs to the
 module that owns the command.
@@ -43,7 +43,8 @@ tpl [global flags] <command> [<subcommand> …] [<arguments>] [local flags]
 - **FR-CLI-001**: The system SHALL accept invocations of the form
   `tpl [global flags] <command> [<subcommand> …] [<arguments>] [local flags]`,
   where `<command>` and each `<subcommand>` are exact names drawn from the
-  command tree defined in this file.
+  command tree defined in this file. This form is canonical, not restrictive:
+  `FR-CLI-024` accepts a global flag in any position.
 
 - **FR-CLI-002**: The command tree SHALL be closed. `tpl` SHALL accept only the
   canonical command names and the aliases declared in this specification.
@@ -190,6 +191,47 @@ tpl
 - **FR-CLI-020**: The system SHALL treat a flag and its value as case-sensitive
   and SHALL NOT normalise the case of either.
 
+- **FR-CLI-024**: A global flag of `FR-GLOB-001` SHALL be accepted in any
+  position on the command line: before the command, between a command and its
+  subcommand, after the positional arguments, and among the local flags. The
+  grammar of `FR-CLI-001` SHALL be read as the canonical form in which this
+  specification and the help write an invocation, and SHALL NOT be read as a
+  constraint on where a global flag may be written.
+
+  ```
+  tpl -d shop schema tables
+  tpl schema tables -d shop
+  tpl schema -d shop tables --pattern '%_log'
+  ```
+
+  All three are the same invocation.
+
+  *Rationale.* Every example in this corpus puts a global flag before the
+  command, and nothing said whether the other positions were accepted. The two
+  candidate answers differ sharply for the primary consumer: an agent that
+  appends `-d shop` to a command line it has already built is the ordinary way
+  a command line gets built programmatically, and refusing it with `64` would
+  make the position of a flag a fact the agent has to learn from a failure. A
+  global flag is global, per `FR-GLOB-002`; a flag that is accepted only in one
+  position is a positional argument wearing a flag's spelling.
+
+  *What is unchanged.* `FR-CLI-017` continues to govern `--`: a token after the
+  argument terminator is a positional argument, so `tpl render x -- -d` passes
+  `-d` to the command as an argument and does not select a database entry.
+  `FR-CLI-014` continues to make a repeated single-value flag `64` wherever the
+  two occurrences appear, and `FR-CLI-019` continues to reject at each node
+  every **local** flag that node does not declare — this requirement frees the
+  position of the seven global flags and of nothing else.
+
+  *Closes* `OQ-015`, now listed under [Closed](open-questions.md#closed).
+
+  *Accepted cost.* A value that looks like a command name cannot be
+  distinguished from a command name by position alone, so `tpl -d schema
+  tables` selects the database entry named `schema` and then fails on `tables`
+  as an unknown top-level command. `FR-CLI-003` gives that a `64` with a
+  nearest-match suggestion, and `FR-CLI-018` already refuses a separate-token
+  flag value beginning with `-`.
+
 ## Configuration surface
 
 - **FR-CLI-021**: The system SHALL NOT read any environment variable to
@@ -305,7 +347,6 @@ tpl
 
 ## Open questions
 
-- [OQ-014](open-questions.md#oq-014) — whether `tpl help` accepts a nested
-  command path.
-- [OQ-015](open-questions.md#oq-015) — the permitted position of a global flag
-  relative to the command name.
+None specific to this module. `OQ-014` is answered by `FR-HELP-026` and
+`OQ-015` by `FR-CLI-024`; both are listed under
+[Closed](open-questions.md#closed).

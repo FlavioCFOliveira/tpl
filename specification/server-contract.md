@@ -1,6 +1,6 @@
 ---
 title: Server Contract
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md]
 ---
@@ -26,9 +26,10 @@ In scope: the criterion that fixes the supported version window, the series that
 criterion admits today, how the window is maintained, the refusal of a server
 below it and of a server that is not MariaDB, the marked read of a server above
 it, which commands the two checks reach, what the model owes a difference
-between two supported series, the visibility of the probed version and of the
-server's standing to a template, the closed statement list, the read-only
-session and its read-back, and the connection count.
+between two supported series, the register in which each such difference is
+recorded, the visibility of the probed version and of the server's standing to
+a template, the closed statement list, the read-only session and its read-back,
+and the connection count.
 
 Out of scope: which fields are read, which belongs to
 [catalogue-coverage.md](catalogue-coverage.md); the handling of a read that
@@ -186,15 +187,18 @@ repository.
   *Amended in the fourth edition.* The requirement previously read "before
   reading any catalogue data". That tied the gate to *reading* rather than to
   *connecting*, and so it did not reach `tpl cfg database test` — the one
-  command that opens a connection and reads no catalogue, per `FR-CACHE-010`.
-  Attached to the connection, it reaches every command that opens one. The two
+  command that opens a connection and reads nothing into the model, per
+  `FR-CACHE-010`. Attached to the connection, it reaches every command that
+  opens one. The two
   statements it defers to are the ones `FR-SRV-006` already places at connection
   start, so the strongest guarantee this tool makes is still confirmed before
   the server is characterised, as `FR-ERR-006` records.
 
 - **FR-SRV-003**: IF the server is not MariaDB, THEN the system SHALL exit `78`
-  (`EX_CONFIG`) with `kind: server_not_mariadb`, and SHALL NOT read the
-  catalogue.
+  (`EX_CONFIG`), and SHALL NOT read the catalogue. The `cause` SHALL state that
+  the connection and the authentication succeeded, SHALL name the product the
+  server reported, and SHALL state that `tpl` supports MariaDB only, per
+  `FR-ERR-034`.
 
   *Rationale.* MySQL is refused rather than attempted because three verified
   divergences make the model **silently wrong** rather than empty. The catalogue
@@ -208,10 +212,16 @@ repository.
   *Rejected.* Attempting a non-MariaDB server with a warning on stderr, which
   leaves the exit code at `0` and hands the caller a wrong model.
 
+  *Amended in the fifth edition.* The requirement previously also named
+  `kind: server_not_mariadb`, a field `FR-ERR-015` withdraws. The obligation
+  moves to the `cause` line, where `FR-ERR-034` makes it testable: this
+  condition and the one `FR-SRV-020` refuses share the code `78`, so the
+  `cause` is what separates them for the reader who has to act.
+
 - **FR-SRV-020**: IF the server is MariaDB, its series is not one of
   `FR-SRV-015`, and its series is older than the newest series of `FR-SRV-015`,
-  THEN the system SHALL exit `78` with `kind: server_version_unsupported`, and
-  SHALL NOT read the catalogue.
+  THEN the system SHALL exit `78` with the message of `FR-SRV-030`, and SHALL
+  NOT read the catalogue.
 
   *Rationale.* This is the condition of `FR-SRV-001` failing downward, and it
   covers three cases with one rule: a series whose maintenance has ended
@@ -231,8 +241,9 @@ repository.
   field as `null`, which keeps an old setup working at the price of a model
   `tpl` cannot vouch for, indistinguishable from a model it can. Also rejected:
   a distinct code per case — maintenance ended, rolling release, family out of
-  window — which the caller cannot act on differently; the `kind` field carries
-  the distinction, per `FR-ERR-015`. Also rejected: a flag or configuration key
+  window — which the caller cannot act on differently; the `cause` line of
+  `FR-SRV-030` carries the distinction, per `FR-ERR-034`. Also rejected: a flag
+  or configuration key
   that overrides the window. The command tree is closed by `FR-CLI-002`, so no
   such flag exists unless this specification declares one, and declaring one
   would make the support commitment advisory — the same reason `FR-SRV-011`
@@ -243,6 +254,12 @@ repository.
   *The other edge.* This requirement fixes the outcome **below** the window. The
   outcome **above** it is deliberately different and is fixed by `FR-SRV-031`:
   such a server is read, not refused.
+
+  *Amended in the fifth edition.* The requirement previously named
+  `kind: server_version_unsupported`, a field `FR-ERR-015` withdraws. The
+  message of `FR-SRV-030` was already the whole of what a caller receives, and
+  it already carries the three cases in its `cause`; the reference now points
+  at it.
 
 - **FR-SRV-034**: The product check of `FR-SRV-003`, the version check of
   `FR-SRV-020`, and the marked read of `FR-SRV-031` SHALL apply to every command
@@ -256,9 +273,17 @@ repository.
   `template` subcommand and every `cfg` subcommand other than `database test`,
   `FR-RND-022` bars the `--context` path, `NFR-PERF-003` bars a cache hit, and
   `NFR-PERF-005` bars `init`, every form of `help`, and every form of `version`.
-  Of the four that remain, `tpl cfg database test` is the only one that reads no
-  catalogue, and it is therefore the only one the previous wording of
-  `FR-SRV-002` let through. No other command is in that position.
+  Of the four that remain, `tpl cfg database test` is the only one that reads
+  nothing **into the model** — its one catalogue statement is the privilege
+  probe of `FR-CFG-044`, whose result is a boolean, per `FR-CACHE-010` — and it
+  is therefore the only one the previous wording of `FR-SRV-002` let through.
+  No other command is in that position.
+
+  *Amended in the fifth edition.* The clause read "the only one that reads no
+  catalogue". `FR-CFG-044` gives that command a catalogue statement, so the
+  clause stopped being true when `OQ-002` was answered. The property this
+  rationale actually rests on is that nothing it reads enters the model, and
+  `FR-CACHE-010` now states that property.
 
   *Closes* `OQ-074`, now listed under [Closed](open-questions.md#closed). The
   consequence for what that command reports is `FR-CFG-039`.
@@ -412,29 +437,69 @@ satisfies only the last of the three cases below.
   the closed list and already mandatory; one comparison against its result costs
   nothing and is deterministic.
 
-- **FR-SRV-024**: WHERE a fact of the model is present on every series of
-  `FR-SRV-015` but is reported in a different catalogue location, under a
-  different name, or in a different spelling, the system SHALL normalise it to
-  the single representation [context-document.md](context-document.md) fixes.
+- **FR-SRV-024**: WHERE a fact of the model is present on **more than one**
+  series of `FR-SRV-015` but is reported in a different catalogue location,
+  under a different name, or in a different spelling on those series, the
+  system SHALL normalise it to the single representation
+  [context-document.md](context-document.md) fixes. `FR-SRV-004` SHALL mark the
+  series that do not carry the fact at all.
+
+  *Amended in the fifth edition.* The precondition was "present on every series
+  of `FR-SRV-015`". That left a case with no obligation and made
+  `BR-SRV-006`'s three cases non-exhaustive: a fact present on `12.3` and
+  `11.8` and reported differently between them, and absent from `11.4` and
+  `10.11` altogether, met neither `FR-SRV-024`'s "every series" nor
+  `FR-SRV-004`'s "the connected series does not provide it at all" — so the
+  document could carry two different representations of one fact from two
+  supported servers, which is precisely what this section exists to forbid.
+  Lowering the precondition to more than one series closes it: the fact is
+  normalised wherever it exists, and marked `null` wherever it does not. Both
+  obligations can apply to one field on different series, and that combination
+  is now the ordinary case rather than a gap.
+
+  *What is preserved.* `FR-SRV-026` is unchanged and is what makes the
+  amendment testable. It excepts the fields `null` under `FR-SRV-004` from the
+  byte-identical comparison across the four series, so a field normalised on
+  two series and `null` on the other two still satisfies it — which it could
+  not have done had the amendment instead widened `FR-SRV-026`.
 
 - **FR-SRV-004**: WHERE the model defines a field that the connected series does
-  not provide at all, the system SHALL emit that field as `null`.
+  not provide at all, the system SHALL emit that field as `null`. This applies
+  whether or not the fact is normalised on the series that do provide it, per
+  `FR-SRV-024`.
 
   *Amended in the fourth edition.* The field was previously described as one
   "introduced after the floor of `FR-SRV-001`". There is no floor now; the
   condition is that the connected series does not carry the fact, whatever the
   reason.
 
+  *Amended in the fifth edition.* The last sentence is new. It states that this
+  requirement and `FR-SRV-024` compose over one field rather than dividing the
+  fields between them, which is what makes the two cover every difference of
+  presence between the four series.
+
 - **FR-SRV-025**: IF a catalogue field that the system reads carries a different
   **meaning** on two series of `FR-SRV-015`, and the two meanings cannot be
   normalised to one, THEN the model SHALL NOT carry that field at all, and the
-  exclusion SHALL be recorded as a requirement in
-  [catalogue-coverage.md](catalogue-coverage.md), per `FR-CAT-025`.
+  exclusion SHALL be entered in the **ambiguous-meaning exclusion list** of
+  `FR-CAT-029`.
 
   *Rationale.* This is the `FR-SRV-003` argument at field granularity. A field
   that means one thing on `11.4` and another on `12.3` produces plausible output
   that is wrong on one of them, and a template cannot detect the difference. An
   absent field is a gap a generator notices; a redefined field is not.
+
+  *Amended in the fifth edition.* This requirement previously wrote its
+  exclusions into `FR-CAT-025`, which is not a list at all: it is the rule that
+  **closes** the volatile-field list of `FR-CAT-024`. Writing a field of
+  ambiguous meaning into the volatile list would also have been wrong on the
+  merits — the two exclusions have different grounds, different tests, and
+  different futures. A volatile field is excluded because the server changes it
+  without the structure changing, and it will never be admitted; a field of
+  ambiguous meaning is excluded because two supported series disagree about it,
+  and it can be admitted the day they agree or the day one of them leaves the
+  window. `FR-CAT-029` is the second list, parallel to the first, with its own
+  closing rule in `FR-CAT-030`.
 
 - **FR-SRV-005**: The shape of the document SHALL be constant across every
   series of `FR-SRV-015`. A field SHALL NOT be omitted because the server does
@@ -467,6 +532,41 @@ satisfies only the last of the three cases below.
   `11.8`, `11.4` and `10.11` is [OQ-045](open-questions.md#oq-045), blocked by
   the absence of `scripts/mariadb/`. No entry may be written from a changelog,
   from a release note, or from knowledge of MySQL.
+
+- **FR-SRV-036**: The register of `FR-SRV-027` SHALL be the table in the
+  section *The divergence register* below, and SHALL be nowhere else. Each row
+  SHALL carry exactly three columns: the field of the model, the treatment
+  applied to it, and what each series of `FR-SRV-015` was observed to return.
+
+  *Rationale.* `FR-SRV-027` required a record and named no place for it, which
+  is how a register comes to be kept in four places or in none. One table,
+  named here, is also what lets `FR-SRV-029` check it: the integration test
+  executed against every series has a list to compare its observations
+  against, and a difference the test finds and the table does not hold is a
+  missing row rather than an open question about where to put it.
+
+## The divergence register
+
+Every difference the model accommodates under `FR-SRV-024`, `FR-SRV-004`, or
+`FR-SRV-025` is registered here, per `FR-SRV-027` and `FR-SRV-036`.
+
+**The register is empty.** It must stay empty until the differences are
+observed against a real server of each series of `FR-SRV-015`, which is
+[OQ-045](open-questions.md#oq-045) and is blocked by the absence of
+`scripts/mariadb/` from this repository. An empty register is not a claim that
+the four series agree; it is a statement that nobody has looked.
+
+| Field | Treatment | Observed on `12.3` / `11.8` / `11.4` / `10.11` |
+|---|---|---|
+| *(none registered)* | | |
+
+The **Treatment** column takes one of exactly three values, per `BR-SRV-006`:
+`normalised` under `FR-SRV-024`, `marked null` under `FR-SRV-004`, or
+`excluded` under `FR-SRV-025` — and a field may carry `normalised` on the
+series that have it and `marked null` on those that do not, per the amendment
+to `FR-SRV-004`. A row whose treatment is `excluded` SHALL also appear in the
+list of `FR-CAT-029`, which is where the exclusion is normative; the row here
+records the observation that justified it.
 
 - **BR-SRV-006**: Three cases, three different obligations, and the distinction
   is the substance of this section. A fact reported differently is
@@ -502,11 +602,37 @@ satisfies only the last of the three cases below.
 - **FR-SRV-006**: The system SHALL issue only statements drawn from the
   following closed list:
 
-  | Statement | Purpose |
-  |---|---|
-  | `SELECT` against `INFORMATION_SCHEMA.*` | Reading the catalogue |
-  | The server version probe | `FR-SRV-002` |
-  | The read-only session statement issued at connection start | `FR-SRV-008` |
+  | Statement | Purpose | When |
+  |---|---|---|
+  | `SELECT` against `INFORMATION_SCHEMA.*` | Reading the catalogue, and the privilege probe of `FR-CFG-044` | As the command requires |
+  | The server version probe | `FR-SRV-002` | Once, at connection start |
+  | The read-only session statement | `FR-SRV-008` | Once, at connection start |
+  | One read of the session read-only state, reading nothing else | The read-back of `FR-SRV-009` | Once, at connection start, immediately after the statement above |
+
+  *Amended in the fifth edition.* The fourth entry is new, and closes
+  `OQ-046`. `FR-SRV-009` has required a read-back since the second edition and
+  the list contained no statement that could perform one, so the strongest
+  guarantee this tool makes was stated in two requirements that could not both
+  be satisfied. The list gains an entry rather than the read-back being
+  performed another way, because there is no other way: confirming that a
+  session setting took effect means asking the session what it is.
+
+  The entry is stated as narrowly as the other three, and the narrowness is the
+  point. It reads the session read-only state and nothing else — not the whole
+  session, not a set of variables, not anything a widening could later be
+  argued into. It is issued once, at connection start, immediately after the
+  statement whose effect it confirms. It reads no schema, per `FR-SRV-007`, so
+  it does not touch the catalogue and does not count toward the query counts of
+  `NFR-PERF-001` and `NFR-PERF-002`, which count catalogue queries.
+
+  *Rejected.* Inferring that the setting took effect from the absence of an
+  error when it was applied, which is what a list of three would have obliged
+  and which is a detection that detects nothing: a server that accepts the
+  statement and does not apply it is exactly the case `FR-SRV-009` exists to
+  catch. Also rejected: performing the read-back lazily, before the first
+  catalogue query rather than at connection start, which would leave a window
+  in which `FR-SRV-010` had not yet decided and `FR-ERR-006` could not place
+  the check.
 
 - **FR-SRV-007**: The system SHALL NOT issue any other statement. It SHALL issue
   no DDL, no DML, no `SHOW`, no statement against any schema other than
@@ -547,6 +673,15 @@ satisfies only the last of the three cases below.
 
 - **FR-SRV-012**: The closed list of `FR-SRV-006` SHALL be verified by an
   integration test that observes the statements the server actually receives.
+  The test SHALL expect the four kinds of statement `FR-SRV-006` lists and no
+  fifth, and SHALL assert that the three connection-start statements are issued
+  exactly once each, in the order that table states.
+
+  *Amended in the fifth edition.* The list had three entries and now has four,
+  per `OQ-046`. A test written against three would fail on the read-back the
+  specification requires, which is how a closed list and a test drift apart:
+  the list is the contract, and the count in the test is what keeps the list
+  from growing by accident.
 
 - **FR-SRV-013**: The read-back of `FR-SRV-009` SHALL be verified by an
   integration test that exercises both outcomes: the setting taking effect, and
@@ -591,8 +726,8 @@ satisfies only the last of the three cases below.
 ## Dependencies
 
 - [catalogue-coverage.md](catalogue-coverage.md) — the fields whose absence
-  `FR-SRV-004` turns into `null`, and `FR-CAT-025`, the closed exclusion that
-  `FR-SRV-025` writes into.
+  `FR-SRV-004` turns into `null`, and `FR-CAT-029`, the ambiguous-meaning
+  exclusion list that `FR-SRV-025` writes into.
 - [context-document.md](context-document.md) — `FR-CTX-031` and `FR-CTX-034`,
   the shape of the `server` object and of its `standing` field; and
   `FR-CTX-012`, the discriminant that a non-MariaDB server would invert.
@@ -625,5 +760,6 @@ satisfies only the last of the three cases below.
 - [OQ-045](open-questions.md#oq-045) — which fields of the model differ among
   the four series of `FR-SRV-015`, and what each returns; the subject of the
   register `FR-SRV-027` requires.
-- [OQ-046](open-questions.md#oq-046) — how the session read-back of `FR-SRV-009`
-  is performed within the closed statement list of `FR-SRV-006`.
+
+`OQ-046` is answered by the fourth entry of `FR-SRV-006` and is listed under
+[Closed](open-questions.md#closed).

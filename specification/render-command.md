@@ -1,6 +1,6 @@
 ---
 title: Render Command (Third Arm)
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md]
 ---
@@ -84,7 +84,7 @@ tpl render <template> --routine <name>      binds routine
 
 - **FR-RND-008**: `tpl render` SHALL declare `--set <key>=<value>`, which
   defines one entry under the `vars` context variable. It is repeatable with
-  distinct keys.
+  distinct keys. It SHALL carry no short form, per `FR-GLOB-024`.
 
 - **FR-RND-009**: The system SHALL split a `--set` argument on the first `=`.
   Everything after that first `=` is the value, so `--set "msg=a=b"` sets
@@ -188,6 +188,15 @@ tpl render <template> --routine <name>      binds routine
 
 - **FR-RND-027**: `tpl render` SHALL NOT declare `--format` or `--pretty`. Its
   result is the rendered text, which has no alternative representation.
+  `tpl render x --format json` is therefore `64`, per `FR-CLI-019`, and the
+  diagnostic is text like every other, per `FR-ERR-033`.
+
+  *Amended in the fifth edition.* The last sentence is new and settles what
+  `OQ-023` asked. The question only existed because the pre-scan of
+  `FR-ERR-017` would have seen `--format json` on a command that declares no
+  such flag and emitted the resulting `64` as JSON. `FR-ERR-017` is withdrawn
+  and no error is JSON, so the outcome is the ordinary unknown-flag error with
+  nothing special about it.
 
 - **FR-RND-028**: `tpl render` SHALL write the rendered result to stdout and
   SHALL NOT write it anywhere else. The system SHALL NOT provide `--output`,
@@ -246,7 +255,6 @@ tpl render <template> --routine <name>      binds routine
 
 ## Open questions
 
-- [OQ-016](open-questions.md#oq-016) — whether `--set` keeps the short form
-  `-s`.
-- [OQ-023](open-questions.md#oq-023) — how the error pre-scan interacts with a
-  command that does not declare `--format`.
+None specific to this module. `OQ-016` is answered by `FR-GLOB-024` — `--set`
+has no short form — and `OQ-023` is **dissolved** with the pre-scan of
+`FR-ERR-017`; both are listed under [Closed](open-questions.md#closed).

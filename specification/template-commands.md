@@ -1,6 +1,6 @@
 ---
 title: Template Commands (Second Arm)
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [cli-contract.md, render-command.md, project-and-discovery.md, security.md]
 ---
@@ -93,16 +93,45 @@ tpl template path  [<name>]             Print the template root, or one template
 
   docs/table.md
   example
-  rust/struct
   rust/_types
+  rust/struct
   ```
+
+  *Corrected in the fifth edition.* The listing previously showed
+  `rust/struct` before `rust/_types`, which is not the order `FR-TMPL-013`
+  fixes: byte-wise, `_` (0x5F) sorts before `s` (0x73), so `rust/_types` comes
+  first. The example was the evidence that no order had been stated, and it is
+  now the worked case of the one that has.
 
 - **FR-TMPL-012**: Listed names SHALL be usable verbatim as the positional
   argument of `tpl render`, `tpl template show`, `tpl template check`, and
   `tpl template path`.
 
-- **FR-TMPL-013**: The system SHALL list templates in a fixed order that does
-  not depend on directory iteration order, per `NFR-DET-002`.
+- **FR-TMPL-013**: The system SHALL list templates by the **displayed name** —
+  the path of the file relative to `.tpl/templates/` with the `.jinja`
+  extension removed, per `FR-TMPL-011` — ascending, compared byte by byte,
+  under the default rule of `NFR-DET-002`. The order SHALL NOT depend on
+  directory iteration order.
+
+  *Rationale.* Sorting by the displayed name rather than by the filename on
+  disk is what makes the listing self-evidently ordered: a reader sees the
+  column it is sorted on. The two orders differ, and not only cosmetically —
+  `a.jinja` and `a/b.jinja` display as `a` and `a/b`, and `.` (0x2E) sorts
+  before `/` (0x2F), so a sort on the filename places `a.jinja` first while a
+  sort on the displayed name places `a` first for a different reason and would
+  place them differently the moment a third name fell between. One rule, over
+  the strings actually printed, has no such case.
+
+  Byte-wise and not by any collation, for the reason `NFR-DET-002` gives and
+  `FR-SCH-014` gives for `--pattern`: the order must be the same on every
+  machine and in every locale. The consequence, as there, is that `Docs` sorts
+  before `docs` and `_partials` after `Zebra`.
+
+  *Closes* `OQ-013`, now listed under [Closed](open-questions.md#closed).
+
+  *Composition.* The same order governs `--format json`, per `FR-TMPL-028`:
+  the `templates` array holds objects carrying `name`, and it is ordered by
+  that `name`.
 
 - **FR-TMPL-014**: `tpl template list` SHALL list partials — templates intended
   only to be included — alongside every other template, without a flag to hide
@@ -229,5 +258,5 @@ tpl template path  [<name>]             Print the template root, or one template
 
 ## Open questions
 
-- [OQ-013](open-questions.md#oq-013) — the exact ordering of
-  `tpl template list`.
+None specific to this module. `OQ-013` is answered by `FR-TMPL-013` and is
+listed under [Closed](open-questions.md#closed).

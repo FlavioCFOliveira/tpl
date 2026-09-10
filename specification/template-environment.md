@@ -1,6 +1,6 @@
 ---
 title: The Template Environment
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md]
 ---
@@ -21,9 +21,10 @@ left to be discovered.
 
 ## Scope
 
-In scope: the three contract groups, the filters and tests `tpl` registers and
-what each of them does, the global functions, the removals and their reasons,
-auto-escaping, and how the surface is published.
+In scope: the three contract groups and the pin the second is guaranteed
+against, the filters and tests `tpl` registers and what each of them does, the
+global functions, the removals and their reasons, explicit escaping, and how
+the surface is published.
 
 Out of scope: evaluation semantics — the general rule for an operand of the
 wrong type, what an interpolated `null` produces, and how whitespace is handled
@@ -51,9 +52,35 @@ of the context variables, which belongs to
   breaking change. Adding a name to group 1 SHALL NOT be breaking.
 
 - **FR-ENV-003**: A name in group 2 SHALL behave as the pinned engine minor
-  version defines it. Changing the pinned minor version SHALL be a deliberate
-  decision recorded outside this specification, and SHALL be accompanied by a
-  check that every name of group 2 still exists and still behaves as before.
+  version defines it. The pin SHALL exist, SHALL be recorded in the project's
+  architecture decision records, and SHALL be cited from there by this
+  requirement rather than restated in this specification. Changing it SHALL be
+  a deliberate decision recorded in the same place, and SHALL be accompanied by
+  a check that every name of `FR-ENV-018` still exists and still behaves as
+  before.
+
+  *Amended in the fifth edition.* The requirement guaranteed group 2 "against a
+  pinned engine minor version" and nothing obliged that pin to exist, to be
+  written down, or to be findable — so the guarantee named a fact nobody was
+  required to establish. Three obligations replace one: the pin exists, it is
+  recorded in a named place, and this requirement cites that place. The version
+  number itself never enters this corpus, for the reason `BR-SRV-005` gives
+  about the supported-series table and `BR-PERF-006` about a measured figure: a
+  number copied into a second file is the copy that stops being true without
+  saying so, and a dependency version moves on a schedule this specification
+  does not set.
+
+  *Closes* `OQ-049`, now listed under [Closed](open-questions.md#closed). The
+  question asked which minor version the pin names. That is the one thing this
+  requirement will not answer, and the amendment is the recognition that it was
+  the wrong question for this corpus to hold open: what a specification can
+  require is that the pin exist and be findable, and what it cannot own is a
+  dependency version.
+
+  *Accepted cost.* A reader of this file cannot see which engine version group
+  2 is guaranteed against without opening another document. That is the same
+  cost `BR-PERF-006` accepts for a measured figure, and it is paid for the same
+  reason.
 
 - **FR-ENV-004**: The specification and the help SHALL state that group 3
   carries no guarantee, so that a template author knows which side of the line a
@@ -79,7 +106,14 @@ of the context variables, which belongs to
   `camel`, `snake`, `upper_snake`, and `kebab`.
 
 - **FR-ENV-007**: The system SHALL register the code filters `quote`,
-  `sql_type`, `json`, `indent`, and `comment`.
+  `sql_type`, `json`, `indent`, `comment`, and `escape`.
+
+  *Amended in the fifth edition.* `escape` is added to the enumeration. It was
+  required by `FR-ENV-028` and named in no group, so as written it fell into
+  the unguaranteed group 3 — which cannot be right for the one filter the
+  escaping decision of `FR-ENV-026` depends on. `FR-ENV-044` fixes what it
+  does. The inherited list of `FR-ENV-018` is untouched: `escape` is registered
+  by `tpl`, not inherited.
 
 - **FR-ENV-008**: `quote` SHALL quote an identifier for MariaDB using backticks,
   and SHALL be correct for MariaDB rather than for SQL in general.
@@ -278,19 +312,53 @@ row is a case the implementation SHALL satisfy.
   not in the binary. A `comment` that emitted `//` would privilege one target
   language exactly as `rust_type` did.
 
-- **FR-ENV-039**: `sql_type` SHALL be registered in group 1 and SHALL be
-  enumerated by `FR-ENV-005` among the names `tpl help --format json`
-  publishes. The specification states no output for it, and the help SHALL say
-  so rather than describe behaviour it does not fix.
+- **FR-ENV-039**: `sql_type` SHALL return the **normalised type name** of its
+  operand: the value of that column's `data_type` field, exactly as
+  `FR-CTX-015` carries it, and nothing else. It SHALL NOT parse, SHALL NOT
+  reassemble a type clause, and SHALL NOT consult `column_type`.
 
-  *Known gap.* What `sql_type` produces is
-  [OQ-071](open-questions.md#oq-071). `FR-CTX-014` already carries
-  `column_type`, the type exactly as the server writes it, so a filter
-  returning the same string would be redundant with a field every column
-  already has. What it would add — a full DDL type clause, a normalised form,
-  something else — was never decided, and this specification will not invent
-  it. The name is reserved so that answering `OQ-071` adds a name's behaviour
-  rather than a name, which `FR-ENV-002` makes the non-breaking direction.
+  | Operand | Its `data_type` | `sql_type` returns |
+  |---|---|---|
+  | a column | `"varchar"` | `varchar` |
+  | a column | `"decimal"` | `decimal` |
+  | a column of a type the system does not recognise | `null`, per `FR-CTX-018` | `null` |
+
+  `sql_type` SHALL accept an operand that is a column object and nothing else.
+  IF it is applied to any other operand — a table, a view, a routine, a string,
+  a number, `null` — THEN the render SHALL fail with `65`, per `FR-SEM-008`,
+  naming the filter, the type received, and the location. It SHALL NOT return
+  an empty string for an operand it does not accept. This is the same rule
+  `FR-ENV-040` states for the seven tests, which accept a column object and
+  nothing else for the same reason.
+
+  WHERE the operand's `data_type` is `null`, `sql_type` returns `null`, and an
+  interpolated `null` renders as the empty string, per `FR-SEM-010`. That is
+  the one case in which the filter produces nothing, and it is the case
+  `FR-CTX-018` already describes: the type was not recognised and
+  `column_type` is the safety net a template falls back to.
+
+  *Closes* `OQ-071`, now listed under [Closed](open-questions.md#closed). The
+  filter is kept rather than withdrawn.
+
+  *Rationale.* Defined as a convenience over a field that already exists, the
+  filter **cannot diverge from the model**: there is no second derivation to
+  keep in step, no grammar to get wrong, and nothing for it to be right about
+  that `data_type` is wrong about. That is what makes keeping the name
+  defensible where a `sql_type` that parsed `column_type` would not be — a
+  parser would depend on [OQ-028](open-questions.md#oq-028), the textual form
+  of `column_type`, which is unobserved, and it would be a second place the
+  type could be misread. It also earns its place beside a plain field read:
+  `{{ col | sql_type }}` composes into a filter chain and reads as one, where
+  `{{ col.data_type }}` does not, and a template that wants a cased or quoted
+  form writes `{{ col | sql_type | upper }}` without reaching past the filter
+  vocabulary.
+
+  *Rejected.* Withdrawing the name, which was the recommendation and which the
+  user declined. Also rejected, and this is what the definition above forecloses:
+  a full DDL type clause including length, nullability, and default, which is
+  a fourth representation of a type beside `column_type`, the decomposition of
+  `FR-CTX-015`, and this filter; and a form adjusted for a target dialect,
+  which is the opinion `BR-ENV-002` keeps out of the binary.
 
 ### The tests
 
@@ -398,8 +466,64 @@ row is a case the implementation SHALL satisfy.
 - **FR-ENV-027**: The system SHALL NOT key escaping on a file extension, on a
   penultimate extension, or on any other property of a name.
 
-- **FR-ENV-028**: `escape` SHALL be available as an explicit filter. Escaping
-  happens where a template asks for it and nowhere else.
+- **FR-ENV-028**: `escape` SHALL be available as an explicit filter, registered
+  in contract group 1 per `FR-ENV-007`. Escaping happens where a template asks
+  for it and nowhere else.
+
+- **FR-ENV-044**: `escape(target)` SHALL take a required `target` argument with
+  no default, and SHALL replace the following characters in its operand:
+
+  | Character | `escape("html")` | `escape("xml")` |
+  |---|---|---|
+  | `&` | `&amp;` | `&amp;` |
+  | `<` | `&lt;` | `&lt;` |
+  | `>` | `&gt;` | `&gt;` |
+  | `"` | `&quot;` | `&quot;` |
+  | `'` | `&#39;` | `&apos;` |
+
+  It SHALL replace no other character, SHALL replace `&` before the others so
+  that no replacement is escaped twice, and SHALL leave an already-escaped
+  entity in the operand alone in no special way — an input `&amp;` becomes
+  `&amp;amp;`, because the filter escapes text and does not inspect it for
+  markup.
+
+  IF `target` is absent, THEN the render SHALL fail with `65`. IF `target` is
+  any value other than `html` or `xml`, THEN the render SHALL fail with `65`,
+  naming the filter, the value received, and the two permitted values. IF the
+  operand is not a string, THEN the render SHALL fail with `65`, per
+  `FR-SEM-008` and `FR-SEM-009`; there is no coercion.
+
+  *Rationale for the required argument.* Modelled exactly on `FR-ENV-038`'s
+  treatment of `comment`. A default target would be a value nobody can see in
+  the template that changes the generated bytes, which is what `FR-ENV-037`
+  refuses for `indent`, `FR-OUT-002` for the `--format` default, and
+  `BR-CLI-002` for the command line. It matters more here than for `comment`:
+  the two targets differ in exactly one row of the table, so a wrong default
+  produces output that is correct almost everywhere and wrong in the one place
+  an author would not think to check.
+
+  *Rationale for the two targets, and only two.* They are the two `FR-ENV-027`
+  refuses to infer from a filename, and the pair the rejected
+  penultimate-extension rule of `BR-ENV-005` covered. A third target would be a
+  target this tool does not have, which is the reason `BR-ENV-005` gives for
+  refusing an `{% autoescape %}` block.
+
+  *Rationale for the one row that differs.* `&apos;` is defined by XML. In HTML
+  it is not available in every version, so the numeric character reference
+  `&#39;` is the form that is correct in all of them. A filter that emitted
+  `&apos;` for both targets would produce, for HTML, output that renders
+  correctly in current browsers and is not what the target's older
+  specifications define — which is the class of "plausible and wrong" that
+  `BR-SEM-004` refuses.
+
+  *Closes* `OQ-050`, now listed under [Closed](open-questions.md#closed).
+  `escape` is in group 1 and is full contract under `FR-ENV-002`; the
+  inherited list of `FR-ENV-018` is untouched.
+
+  *Accepted cost.* A template generating a document type that is neither HTML
+  nor XML — a JSON string, a shell argument, a CSV field — gets no filter for
+  it. `json` is registered separately, per `FR-ENV-036`, and the other two are
+  the project's own business under `BR-ENV-002`.
 
 - **BR-ENV-005**: Silent escaping in a code generator produces `&amp;`
   inside a SQL string and `&lt;` inside a generic type parameter, and the
@@ -435,13 +559,13 @@ row is a case the implementation SHALL satisfy.
 
 ## Open questions
 
-- [OQ-049](open-questions.md#oq-049) — which engine minor version group 2 is
-  pinned to.
-- [OQ-050](open-questions.md#oq-050) — which contract group `escape` belongs to,
-  and exactly what it escapes.
 - [OQ-070](open-questions.md#oq-070) — how a backtick inside an identifier is
   escaped, so that `FR-ENV-035` can be satisfied.
-- [OQ-071](open-questions.md#oq-071) — what `sql_type` does that `column_type`
-  does not.
 - [OQ-072](open-questions.md#oq-072) — the membership of the numeric,
   temporal, and textual type families.
+
+Both are facts about MariaDB that must be observed against the container of
+`scripts/mariadb/`, which does not exist. The three design questions this file
+carried are closed and listed under [Closed](open-questions.md#closed):
+`OQ-049` by `FR-ENV-003`, `OQ-050` by `FR-ENV-044`, and `OQ-071` by
+`FR-ENV-039`.

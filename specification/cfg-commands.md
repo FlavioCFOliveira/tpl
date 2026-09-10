@@ -1,6 +1,6 @@
 ---
 title: Configuration Commands
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md]
 ---
@@ -170,22 +170,33 @@ tpl cfg database test   <name>
   not be seen by a caller checking only the exit code, and refusing with `64`
   until the reference is cleared by hand would be worse.
 
-- **FR-CFG-024**: `tpl cfg database test <name>` SHALL connect to the server
-  described by that entry, enforce the read-only session, verify that the server
-  is a supported MariaDB series, and report the result.
+- **FR-CFG-024**: `tpl cfg database test <name>` SHALL perform exactly the
+  following four steps, in this order, and SHALL report the outcome of each:
+
+  1. connect to the server described by that entry and authenticate;
+  2. enforce the read-only session of `FR-SRV-008` and confirm it under
+     `FR-SRV-009`;
+  3. verify that the server is a supported MariaDB series, per `FR-SRV-034`;
+  4. run the catalogue privilege probe of `FR-CFG-044`.
 
   *Amended in the fourth edition.* The third step is new. `FR-SRV-034` attaches
   the product check of `FR-SRV-003` and the version check of `FR-SRV-020` to
   opening a connection rather than to reading a catalogue, and this command is
-  the only one that opens a connection and reads no catalogue, per
-  `FR-CACHE-010` — so it was the only one the earlier wording of `FR-SRV-002`
-  let through. An entry that reaches a server every other command refuses must
-  not be reported as working here.
+  the only one that opens a connection and reads no catalogue into the model,
+  per `FR-CACHE-010` — so it was the only one the earlier wording of
+  `FR-SRV-002` let through. An entry that reaches a server every other command
+  refuses must not be reported as working here.
+
+  *Amended in the fifth edition.* The fourth step is new, and the steps are
+  numbered because the command reports one field per step, per `FR-CFG-039`.
+  `OQ-002` asked whether this command reports the reader's effective
+  privileges; the answer is yes, as the single boolean `can_read_catalogue`
+  produced by the probe of `FR-CFG-044`.
 
 - **FR-CFG-043**: IF the server the entry reaches is not a supported MariaDB
-  series, THEN `tpl cfg database test` SHALL exit `78` with
-  `kind: server_version_unsupported` and the message of `FR-SRV-030`, whose
-  `cause` states that the connection and the authentication succeeded.
+  series, THEN `tpl cfg database test` SHALL exit `78` with the message of
+  `FR-SRV-030`, whose `cause` states that the connection and the authentication
+  succeeded.
 
   *Rationale.* This command exists to tell a caller which of three things is
   wrong, and `78` is now one of four outcomes it can report — `0`, `69`, `77`,
@@ -196,6 +207,12 @@ tpl cfg database test   <name>
   a fourth exit code because `FR-ERR-001` fixes the code set and `FR-SRV-020`
   already places this condition on `78`.
 
+  *Amended in the fifth edition.* The requirement previously also named
+  `kind: server_version_unsupported`. `FR-ERR-015` withdraws that field, so the
+  `cause` line of `FR-SRV-030` is the whole of the distinction — which is what
+  this rationale already said carried it, and what `FR-ERR-034` now makes an
+  obligation rather than an intention.
+
   A server newer than the supported window is **not** a failure here: it is read
   under `FR-SRV-031`, so this command exits `0` and reports it, per
   `FR-CFG-039`.
@@ -205,6 +222,78 @@ tpl cfg database test   <name>
 
 - **FR-CFG-026**: `tpl cfg database test` SHALL declare `--format` and
   `--pretty`.
+
+### The catalogue privilege probe
+
+- **FR-CFG-044**: The fourth step of `FR-CFG-024` SHALL be exactly one
+  `SELECT` against `INFORMATION_SCHEMA`, restricted to the server-side database
+  the entry names, whose result the system SHALL NOT read as model content and
+  SHALL read only for two facts: whether the statement was answered without a
+  privilege error, and whether it returned at least one row. The system SHALL
+  set `can_read_catalogue` to true WHEN both hold, and to false otherwise.
+
+  *What the probe proves.* That this reader, on this connection, can see the
+  named database in the catalogue at all. That is the fact a caller needs from
+  a connectivity check and cannot obtain any other way short of attempting the
+  read it is about to make.
+
+  *What the probe does not prove.* That any particular object is readable, that
+  any particular property of an object is readable, or that a later read will be
+  complete under `FR-PRIV-001`. Completeness is a property of a read, per
+  `BR-PRIV-003`, and only a read establishes it.
+
+  *Rationale.* The probe is a boolean and not a privilege listing because
+  anything finer is a field list, and a field list about a catalogue nobody has
+  observed cannot be written: `scripts/mariadb/` does not exist in this
+  repository, and `OQ-009`, `OQ-010` and `OQ-024` are blocked by that absence.
+  A probe whose answer depended on the container would have dragged this
+  question behind the same block that holds those three, which is exactly what
+  answering `OQ-002` was meant to avoid. One statement also keeps the command
+  inside `NFR-PERF-002`: the probe's cost does not grow with the number of
+  objects.
+
+  *Within the closed list.* The probe is a `SELECT` against
+  `INFORMATION_SCHEMA.*` and is therefore already the first entry of
+  `FR-SRV-006`. It widens nothing, and `FR-SRV-007` is unaffected.
+
+  *Not an attempt-and-fall-back read.* `FR-SRV-023` forbids discovering a
+  difference between server series by attempting a read and handling its
+  failure, and this probe attempts a read and reports whether it failed. The
+  two are distinct on both grounds `FR-SRV-023` gives. The probe issues one
+  statement, always the same one, always issued — so nothing is sent that the
+  closed list does not contain, and the statement count does not vary with the
+  server, which is what `NFR-PERF-001` and `NFR-PERF-002` fix. And what it
+  reports is a property of the **reader**, which no other statement can
+  establish, rather than a property of the **series**, which `FR-SRV-022`
+  determines from the version probe without attempting anything.
+
+  *Rejected.* Probing by reading a listing — the tables of the selected
+  database — which answers the same boolean and makes the command's cost, and
+  its correctness, depend on the field list `OQ-024` holds open. Also rejected:
+  reading the reader's granted privileges directly, which is a different
+  catalogue whose shape is equally unobserved and which reports what was granted
+  rather than what this connection can see.
+
+- **FR-CFG-045**: A `can_read_catalogue` of false SHALL NOT change the exit
+  code. `tpl cfg database test` SHALL exit `0` and report it.
+
+  *Rationale.* This command's purpose is to say which of several things is
+  wrong with an entry, and a diagnostic that refuses to answer is less useful
+  than one that answers and says so — the asymmetry `BR-PRIV-001` already
+  settles for a listing. A false that exited `77` could never be observed in
+  the success document of `FR-CFG-039`, which would make the field dead
+  surface.
+
+  `FR-PRIV-003` does not apply: it fails a request that **named** an object,
+  and the probe names none. A `77` from this command therefore still means what
+  it meant before — the server refused the authentication, at step 1 of
+  `FR-CFG-024`.
+
+  *Accepted cost.* Exit `0` no longer means "this entry is fully usable"; it
+  means "the four steps ran and here is what each returned". A caller that
+  branches on the exit code alone and needs the fourth answer must read
+  `can_read_catalogue`. The help of the command states this, and the `EXAMPLES`
+  section shows the field being read.
 
 ## Flags of `add` and `update`
 
@@ -219,6 +308,28 @@ tpl cfg database test   <name>
   | `--user <user>` | `database.<name>.user` |
   | `--schema <name>` | `database.<name>.database` |
   | `--tls <mode>` | `database.<name>.tls` |
+  | `--password-command <command>` | `database.<name>.password_command` |
+  | `--ca-file <path>` | `database.<name>.ca_file` |
+  | `--ca-path <path>` | `database.<name>.ca_path` |
+
+  *Amended in the fifth edition.* The last three rows are new, and close
+  `OQ-017`. The three keys were already in the key space of `FR-CONF-002` and
+  were reachable only through `tpl cfg set`, so registering an entry that used
+  a keychain lookup and a private certificate authority took three invocations
+  where the mapping promised one. Every key of an entry now has a flag.
+
+- **FR-CFG-046**: `--password-command` SHALL accept a single string and SHALL
+  store the array `FR-CONF-025` splits it into. It SHALL NOT accept an array on
+  the command line, and SHALL NOT be repeatable.
+
+  *Rationale.* `FR-CONF-023` fixes the stored form as an array and `FR-CONF-025`
+  already fixes the splitting rule for a string supplied to a command; this flag
+  is that rule's caller. A repeatable flag accumulating one argument per
+  occurrence would be a second way to build the same array, and `FR-CLI-014`
+  makes a repeated single-value flag `64` in any case.
+
+- **FR-CFG-047**: None of the three flags of the amendment above SHALL carry a
+  short form, per `FR-GLOB-024`.
 
 - **FR-CFG-028**: `--schema` SHALL name the database on the server. It is the
   only flag whose name differs from the key it writes.
@@ -243,9 +354,20 @@ tpl cfg database test   <name>
 - **FR-CFG-032**: `tpl cfg set` SHALL accept a literal password written to
   `database.<name>.password`.
 
-- **FR-CFG-033**: The help of `--dsn` and of `tpl cfg set` SHALL state that a
-  value given on the command line is visible in the process table, and SHALL
-  recommend `${VAR}` instead.
+- **FR-CFG-033**: The help of `--dsn`, `--password-command`, `--ca-file`,
+  `--ca-path`, and `tpl cfg set` SHALL state that a value given on the command
+  line is visible in the process table. WHERE the key the flag writes admits
+  `${VAR}` expansion under `FR-CONF-015`, that help SHALL also recommend
+  `${VAR}` instead.
+
+  *Amended in the fifth edition.* The three flags `FR-CFG-027` gained inherit
+  this warning, which is why they are named here. The `${VAR}` recommendation
+  is now conditional because it cannot be given for all of them: `FR-CONF-017`
+  forbids expansion in `password_command`, and `FR-CONF-015` does not admit it
+  in `ca_file` or `ca_path` either. For those three the honest advice is the
+  bare fact: the value is visible in the process table for the life of the
+  invocation, and no expansion alternative exists. `BR-CFG-003` governs — `tpl`
+  warns; it does not prevent.
 
 - **BR-CFG-003**: `tpl` warns; it does not prevent. Putting a secret in the
   argument vector is the caller's decision. What `tpl` guarantees is that no
@@ -254,6 +376,14 @@ tpl cfg database test   <name>
 
 - **FR-CFG-034**: WHEN a `cfg` command rewrites `.tpl/.cfg`, the file SHALL
   retain mode `0600`.
+
+  *Rationale.* `FR-PROJ-019` creates the file at `0600` and `FR-PROJ-011`
+  refuses to read it at any looser mode; a command that loosened it would break
+  the next invocation.
+
+  *Moved in the fifth edition.* This rationale stood under `FR-CFG-042`, where
+  it argued for a mode rather than for the absence of a lock. It is the
+  argument for this requirement and now stands under it.
 
 - **FR-CFG-041**: WHEN a `cfg` command rewrites `.tpl/.cfg`, it SHALL write a
   temporary file in `.tpl/` at mode `0600` and SHALL rename it over the target.
@@ -277,10 +407,6 @@ tpl cfg database test   <name>
   *Accepted cost.* Two concurrent `tpl cfg set` invocations on different keys
   can lose one of the two writes. Both files are whole and valid; the later
   rename wins.
-
-  *Rationale.* `FR-PROJ-019` creates the file at `0600` and `FR-PROJ-011`
-  refuses to read it at any looser mode; a command that loosened it would break
-  the next invocation.
 
 ## `json` output
 
@@ -316,20 +442,23 @@ tpl cfg database test   <name>
   `FR-CFG-021` applied.
 
 - **FR-CFG-039**: The `data` of `tpl cfg database test` SHALL carry `entry`,
-  `connected`, `read_only_session`, and `server`, reporting the outcome of the
-  three steps `FR-CFG-024` requires the command to perform:
+  `connected`, `read_only_session`, `server`, and `can_read_catalogue`, in that
+  order, reporting the outcome of the four steps `FR-CFG-024` requires the
+  command to perform:
 
   ```json
-  {"schema_version":1,"source":"server","data":{"entry":"shop","connected":true,"read_only_session":true,"server":{"version":"11.4.5-MariaDB","series":"11.4","standing":"supported"}}}
+  {"schema_version":1,"source":"server","data":{"entry":"shop","connected":true,"read_only_session":true,"server":{"version":"11.4.5-MariaDB","series":"11.4","standing":"supported"},"can_read_catalogue":true}}
   ```
 
   `server` SHALL be the object of `FR-CTX-031`, with the same three keys and the
-  same meanings.
+  same meanings. `can_read_catalogue` SHALL be the boolean the probe of
+  `FR-CFG-044` produces.
 
-  *Rationale.* A `test` that reaches exit `0` reports that all three steps
-  succeeded; a failure exits `69`, `77`, or `78` instead and emits the error
-  document of `FR-ERR-014`. The fields are named rather than implied so that a
-  caller can branch on them without inferring from the exit code alone.
+  *Rationale.* A `test` that reaches exit `0` reports the outcome of all four
+  steps; a failure exits `69`, `77`, or `78` instead and emits the four-line
+  text diagnostic of `FR-ERR-008`, per `FR-ERR-033`. The fields are named rather
+  than implied so that a caller can branch on them without inferring from the
+  exit code alone.
 
   *Amended in the fourth edition.* `server` is new, and it is required by this
   requirement's own rationale rather than by a new decision: `FR-CFG-024` gained
@@ -339,10 +468,19 @@ tpl cfg database test   <name>
   supported series, and a series newer than the window read under `FR-SRV-031`.
   Adding a field is non-breaking, per `FR-OUT-014`.
 
-  *Known gap.* Whether `test` also reports the reader's effective privileges is
-  [OQ-002](open-questions.md#oq-002) and remains open. Answering it adds a
-  field, which `FR-OUT-014` makes a non-breaking change, so this document is
-  fixed now and grows later if that question is answered yes.
+  *Amended in the fifth edition.* `can_read_catalogue` is new, and closes
+  `OQ-002`. The command exists to tell a caller which of several things is
+  wrong with an entry, and "the credentials work but this reader cannot see the
+  catalogue" was the one outcome it could reach and not report. It is a single
+  boolean rather than a privilege listing for the reason `FR-CFG-044` gives:
+  anything finer would be a field list, and a field list cannot be written until
+  the container of `scripts/mariadb/` exists. Adding a field is non-breaking,
+  per `FR-OUT-014`.
+
+  *Accepted cost.* `can_read_catalogue: true` does not promise that a
+  subsequent read is complete. It promises exactly what `FR-CFG-044` says the
+  probe proves and no more; completeness is `FR-PRIV-001` and only a full read
+  establishes it. The help of this command states the difference.
 
 - **FR-CFG-040**: WHEN a `cfg` listing is empty — `tpl cfg database list` in a
   project with no entry, which `FR-PROJ-018` makes the ordinary first state —
@@ -357,19 +495,19 @@ tpl cfg database test   <name>
   invalidate the cache.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `64`, `66`, `78`.
 - [server-contract.md](server-contract.md) — `FR-SRV-034`, which brings
-  `database test` under the two server checks, and `FR-SRV-030`, the message
-  `FR-CFG-043` emits.
+  `database test` under the two server checks; `FR-SRV-030`, the message
+  `FR-CFG-043` emits; and `FR-SRV-006`, the closed statement list the probe of
+  `FR-CFG-044` falls inside.
+- [privileges-and-completeness.md](privileges-and-completeness.md) —
+  `FR-PRIV-001` and `BR-PRIV-003`, the completeness the probe of `FR-CFG-044`
+  does not establish, and `FR-PRIV-003`, which `FR-CFG-045` explains does not
+  reach the probe.
 
 ## Open questions
 
-- [OQ-002](open-questions.md#oq-002) — whether `test` reports effective
-  privileges or only that the read-only session was established. Answering it
-  yes adds a field to `FR-CFG-039`, which `FR-OUT-014` makes non-breaking.
-- [OQ-002](open-questions.md#oq-002) is the only question left about this
-  document. The version gate, once `OQ-074`, is settled: `FR-CFG-043` and the
-  `server` field of `FR-CFG-039`.
-- [OQ-016](open-questions.md#oq-016) — short forms for the `add` and `update`
-  flags.
-- [OQ-017](open-questions.md#oq-017) — whether `password_command`, `ca_file`,
-  and `ca_path` have flags of their own.
+None specific to this module. The four this file carried are all closed and
+listed under [Closed](open-questions.md#closed): `OQ-002` by `FR-CFG-044`,
+`FR-CFG-045` and the `can_read_catalogue` field of `FR-CFG-039`; `OQ-016` by
+`FR-GLOB-024`; `OQ-017` by the three flags `FR-CFG-027` gained; and `OQ-074`,
+the version gate, by `FR-CFG-043` and the `server` field of `FR-CFG-039`.
 

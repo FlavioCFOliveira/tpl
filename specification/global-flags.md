@@ -1,6 +1,6 @@
 ---
 title: Global Flags
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md]
 ---
@@ -16,8 +16,9 @@ which a setting is resolved.
 
 ## Scope
 
-In scope: the global flag set, each flag's meaning and default, the precedence
-rule, and the list of flags that are deliberately not global.
+In scope: the global flag set, each flag's meaning and default, the complete
+short-flag set of the tool, the precedence rule, and the list of flags that are
+deliberately not global.
 
 Out of scope: the behaviour each flag triggers inside a particular command,
 which belongs to that command's module.
@@ -43,7 +44,7 @@ which belongs to that command's module.
   | `--version` | `-V` | none | — |
 
 - **FR-GLOB-002**: Every node of the command tree SHALL accept every global
-  flag.
+  flag, in any position the command line admits, per `FR-CLI-024`.
 
 - **FR-GLOB-003**: The system SHALL list the global flags once, in the `OPTIONS`
   section of `tpl --help`, and SHALL NOT repeat them in the `OPTIONS` section of
@@ -196,6 +197,40 @@ which belongs to that command's module.
 - **FR-GLOB-023**: The system SHALL NOT declare a flag whose name is `password`
   or whose purpose is to carry a password, at any node.
 
+- **FR-GLOB-024**: The five short forms declared by `FR-GLOB-001` — `-d`, `-v`,
+  `-q`, `-h`, and `-V` — SHALL be the complete short-flag set of the tool. No
+  other flag, global or local, at any node, SHALL declare a short form.
+  `--tpl-dir` and `--timeout` are the two global flags that have none, and
+  SHALL NOT acquire one.
+
+  *Rationale.* A short form is frozen the moment it ships: it cannot be
+  renamed, and it cannot be reassigned to another flag without silently
+  changing what an existing invocation does. Reserving the whole one-letter
+  space for the seven flags that every node accepts means a short form always
+  means the same thing wherever it appears, which is what makes it safe to
+  read. It is also the argument `FR-CLI-012` already makes for refusing a
+  one-letter top-level alias.
+
+  *Closes* `OQ-016`, now listed under [Closed](open-questions.md#closed). The
+  root `README.md` declares `-s` for `--set` on `tpl render`, and `-H`, `-P`
+  and `-u` for the entry flags of `tpl cfg database add` and `update`. None of
+  the four exists; `DIV-003` records the correction owed, alongside the `-p` it
+  already covered.
+
+  *Accepted cost.* Every local flag is typed in full. `tpl cfg database add
+  shop --host db.example.com --port 3306 --user alice` is longer than its
+  short-form equivalent, and an operator typing it at a prompt pays for the
+  guarantee. The primary consumer is a calling agent, per
+  [cli-contract.md](cli-contract.md), which generates the line rather than
+  typing it and reads the long form more reliably than the short one.
+
+  *Rejected.* `-H`, `-P` and `-u` on the entry flags, which would put `-P` for
+  `--port` one shift key away from a `-p` that `FR-CFG-030` refuses to declare
+  for a password — a collision by case alone on the one flag pair where getting
+  it wrong writes a credential into the process table. Also rejected: `-s` for
+  `--set`, which reads as "string", "set", or "schema" depending on which
+  neighbouring tool the caller last used.
+
 ## Business rules
 
 - **BR-GLOB-001**: The global set is small on purpose. A flag becomes global
@@ -217,5 +252,5 @@ which belongs to that command's module.
 
 ## Open questions
 
-- [OQ-015](open-questions.md#oq-015) — the permitted position of a global flag
-  on the command line.
+None specific to this module. `OQ-015` is answered by `FR-CLI-024` and `OQ-016`
+by `FR-GLOB-024`; both are listed under [Closed](open-questions.md#closed).

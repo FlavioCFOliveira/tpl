@@ -1,6 +1,6 @@
 ---
 title: Schema Commands (First Arm)
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [cli-contract.md, cache-commands.md, output-formats.md, render-command.md]
 ---
@@ -258,8 +258,15 @@ tpl schema dump                        The whole database as one JSON document
   `server`, carrying the probed version, the series, and the standing, per
   `FR-CTX-031` and `FR-CTX-034`. It is outside `OQ-024` because it is not a
   catalogue field — it comes from the version probe of `FR-SRV-002` — so
-  `BR-CTX-006` could fix it without observing anything. The rest of the object
-  remains open.
+  `BR-CTX-006` could fix it without observing anything.
+
+  *Amended in the fifth edition.* Three more are fixed: the collections
+  `tables`, `views`, and `routines`, per `FR-CTX-035`. They are outside
+  `OQ-024` for the same reason — a collection is a structural rule of
+  [context-document.md](context-document.md), not a catalogue field.
+  `OQ-024` is narrowed again and now covers only the **metadata fields** of the
+  `database` object: the fields describing the database itself, `name` among
+  them. Those remain open.
 
 - **FR-SCH-032**: The `data` of `tpl schema tables`, `tpl schema views`, and
   `tpl schema routines` SHALL follow `FR-OUT-030`, carrying one key named for

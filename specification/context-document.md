@@ -1,6 +1,6 @@
 ---
 title: The Context Document
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
 ---
@@ -20,10 +20,11 @@ every rule of [output-formats.md](output-formats.md) applies to it.
 
 ## Scope
 
-In scope: the structural rules of the document — array shape, reference depth,
-the default discriminant, the decomposition of a column type, the treatment of
-absence, the server version and standing the document carries, and the
-consistency the document promises; and the content of the three context variables that do not
+In scope: the structural rules of the document — array shape, the collections
+the `database` object carries, reference depth in both directions, the default
+discriminant, the decomposition of a column type, the treatment of absence, the
+server version and standing the document carries, and the consistency the
+document promises; and the content of the three context variables that do not
 come from a server.
 
 Out of scope: which objects and fields the document carries, which is
@@ -79,9 +80,25 @@ variable is bound to a source, which is
   of the referenced tables as strings, not as objects.
 
 - **FR-CTX-009**: The cut of `FR-CTX-008` SHALL be one rule applied at the first
-  hop, whatever the shape of the reference graph. A cycle `A → B → A` therefore
-  terminates at the first hop with a string, and no traversal can fail to
-  terminate.
+  hop, whatever the shape of the reference graph and whichever direction the
+  reference is followed in. A cycle `A → B → A` therefore terminates at the
+  first hop with a string, and no traversal can fail to terminate.
+
+  *Amended in the fifth edition.* The clause about direction is new. As first
+  written this requirement reasoned only about the outgoing direction, because
+  that was the only one that embedded. `FR-CTX-010` now embeds the incoming
+  direction under the same rule, which creates two further shapes the rule must
+  cover, and covers both by being stated once over both directions:
+
+  | Shape | Terminates because |
+  |---|---|
+  | `A` references `B`, and `B` references `A` | The embedded `A` inside `B`, and the embedded `B` inside `A`, are each at the first hop and are each cut to names |
+  | `A` references `B`, so `B` is `referenced_by` `A` | The embedded `B` inside `A`'s `foreign_keys` and the embedded `A` inside `B`'s `referenced_by` are two first hops, not one path of length two |
+  | `A` references itself | The embedded `A` is at the first hop and is cut, in both collections |
+
+  The rule is unchanged: **one hop, then names**. What the amendment removes is
+  the reading under which an outgoing hop followed by an incoming hop could be
+  taken as depth two.
 
 - **BR-CTX-001**: One constant rule was chosen over a rule that adapts to the
   graph because a template author must be able to know, without inspecting the
@@ -101,7 +118,46 @@ variable is bound to a source, which is
   [performance-requirements.md](performance-requirements.md).
 
 - **FR-CTX-010**: `referenced_by` SHALL be a collection, per `FR-CAT-013` and
-  `FR-CTX-003`.
+  `FR-CTX-003`, and SHALL embed the **referencing** table one level deep, under
+  the rule of `FR-CTX-006`. The embedded table SHALL carry its columns, its
+  indexes, and its primary key in full, per `FR-CTX-007`, and the cut of
+  `FR-CTX-008` SHALL apply to it at the first hop, per `FR-CTX-009`.
+
+  *Rationale.* The two directions are the same question asked from the two
+  ends, and a template that can reach the referenced table's column type
+  through `foreign_keys` but only the referencing table's *name* through
+  `referenced_by` cannot generate the has-many side of a relation without a
+  lookup the belongs-to side never needed. `FR-CAT-013` added the incoming
+  direction precisely so that both sides of a relation are reachable;
+  embedding one and not the other would deliver half of that. Symmetry is also
+  the only form a template author can hold in mind: `BR-CTX-001` chose one
+  constant depth over a depth that adapts to the graph, and a depth that
+  differs by direction is a depth that adapts.
+
+  *Closes* `OQ-043`, now listed under [Closed](open-questions.md#closed).
+
+  *Accepted cost, and it is the largest single cost in the document.*
+  `FR-CTX-006` already roughly doubles the column volume of the document over a
+  database with 180 foreign keys across 200 tables, per `BR-CTX-001`. This
+  doubles it again: every table that is referenced now carries a full copy of
+  every table that references it, in addition to a full copy of every table it
+  references. Two consequences follow, and both are recorded rather than
+  discovered:
+
+  - The provisional peak-memory figure of `NFR-PERF-014` — `< 32 MiB` over
+    `WL-001` — was supplied by the root `CLAUDE.md` before either embedding
+    existed. It is the provisional figure most likely to be superseded upward
+    by the first real measurement, and `NFR-PERF-019` is what allows that to
+    happen without the figure having been a limit in the meantime.
+  - The `WL-002` scalar of `N` bytes is unvalued for this reason among others,
+    and the amendment to `WL-002` states it.
+
+  *Rejected.* Names only, which is what the second edition left in place by not
+  composing the two decisions. It is the cheapest document and it makes the
+  has-many accessor the one thing a generator cannot write from the object in
+  hand. Also rejected: embedding the incoming direction to a *shallower* depth
+  than the outgoing one — a name and a primary key — which halves the cost and
+  reintroduces exactly the asymmetry a template author would have to remember.
 
 ## Column defaults
 
@@ -264,13 +320,41 @@ variable is bound to a source, which is
   outside the window; and omitting the field on a supported server, which would
   break `FR-SRV-005`, `FR-OUT-012`, and every template that tested it.
 
-- **BR-CTX-006**: This is the one field of the `database` object that this
-  specification fixes while [OQ-024](open-questions.md#oq-024) leaves the rest of
-  that object open, and it can be fixed for a reason particular to it: it does
-  not come from the catalogue. It comes from the version probe of `FR-SRV-002`,
+- **FR-CTX-035**: The `database` object SHALL carry the collections `tables`,
+  `views`, and `routines`, each a JSON array per `FR-CTX-003`, each ordered by
+  `NFR-DET-002`, and each emitted as `[]` when empty per `FR-CTX-004`. They
+  stand alongside `server`, per `FR-CTX-031`.
+
+  *Rationale.* These are not catalogue fields and are not blocked by the
+  absence of `scripts/mariadb/`. They are the three collections
+  [catalogue-coverage.md](catalogue-coverage.md) covers — `FR-CAT-001`,
+  `FR-CAT-007`, and `FR-CAT-008` — and every command of the first arm already
+  presents one of them: `FR-SCH-032` names `tables`, `views`, and `routines` as
+  the `data` keys of the three listings. What was missing was the statement
+  that the `database` object of a dump carries the same three under the same
+  names, which is the whole of what makes `tpl schema dump` the round-trip
+  partner of `tpl render --context` under `FR-SCH-022`. Nothing about what a
+  member of one of those arrays contains is settled here; that is
+  [catalogue-coverage.md](catalogue-coverage.md) and the open questions it
+  carries.
+
+  *Narrows* `OQ-024`, which now covers only the **metadata fields** of the
+  `database` object — the fields describing the database itself rather than the
+  objects in it. `name` is among them and remains open: the root `README.md`
+  names it, no decision confirms it, and it is a catalogue field like the
+  charset and the collation beside it.
+
+- **BR-CTX-006**: `server` is fixed while [OQ-024](open-questions.md#oq-024)
+  leaves the metadata fields of the `database` object open, and it can be fixed
+  for a reason particular to it: it does not come from the catalogue. It comes from the version probe of `FR-SRV-002`,
   which is a statement of its own in the closed list of `FR-SRV-006`, so fixing
   its shape asserts nothing about what a catalogue table returns and is not
   blocked by the absence of `scripts/mariadb/`.
+
+  The same is true, for a different reason, of the three collections
+  `FR-CTX-035` fixes: a collection is a structural rule of this file, and its
+  name, its array shape, and its order are settled without asserting anything
+  about what a catalogue table returns.
 
   An object rather than a bare string, for the reason `FR-CTX-027` gives for
   `tpl`: `FR-OUT-014` makes gaining a field the only non-breaking way to grow.
@@ -332,7 +416,7 @@ emits — `FR-SCH-018` keeps them out of it.
   filter this specification does not provide; and the engine's own datetime
   type with a date filter added to `FR-ENV-018`, which would put a filter into
   group 2 for the sake of one variable and tie its behaviour to the pinned
-  engine version of `OQ-049`.
+  engine version of `FR-ENV-003`.
 
 - **FR-CTX-029**: `now` SHALL be evaluated once per invocation, at render time,
   and every reference to it in one render SHALL yield the same value.
@@ -401,8 +485,13 @@ emits — `FR-SCH-018` keeps them out of it.
   `length` the catalogue populates for each type.
 - [OQ-031](open-questions.md#oq-031) — how the character set and the collation
   of a column are reported, and what they hold for a non-textual type.
-- [OQ-043](open-questions.md#oq-043) — whether `referenced_by` embeds the
-  referencing table under the rule of `FR-CTX-006`, or holds names only.
 - [OQ-042](open-questions.md#oq-042) — what the version probe returns, which
   fixes the exact string `FR-CTX-031` puts in `version` and the form `series` is
   derived from.
+- [OQ-024](open-questions.md#oq-024) — the metadata fields of the `database`
+  object, as narrowed by `FR-CTX-035`. Its three collections and its `server`
+  object are fixed; the fields describing the database itself, `name` among
+  them, are not.
+
+`OQ-043` is answered by `FR-CTX-010` and is listed under
+[Closed](open-questions.md#closed).

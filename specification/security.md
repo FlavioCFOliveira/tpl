@@ -1,6 +1,6 @@
 ---
 title: Security Rules Across the Surface
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md]
 ---
@@ -11,9 +11,12 @@ related: [configuration-model.md, project-and-discovery.md, errors-and-exit-code
 
 Several rules of this specification exist for security reasons and are enforced
 in more than one place. This file collects them, states the threat each closes,
-and points at the module that owns the requirement. It adds no requirement that
-is not stated elsewhere; where a rule appears here with its own identifier, it
-is because the rule is genuinely cross-cutting and has no single owning module.
+and points at the module that owns the requirement. Almost everything here is a
+cross-reference: a rule appears with its own identifier because it is
+cross-cutting, and its normative statement lives in the module named beside it.
+The one exception is `BR-SEC-003`, the sentinel test, which is stated here and
+nowhere else because the property it asserts spans the whole surface and no
+single module owns it.
 
 ## Scope
 
@@ -21,7 +24,7 @@ In scope: the threat each cross-cutting rule closes, and the module that owns
 the requirement enforcing it.
 
 Out of scope: every rule's normative statement, which lives in its owning
-module. This file adds no requirement that is not stated elsewhere.
+module, `BR-SEC-003` excepted.
 
 ## Trust boundaries
 
@@ -95,6 +98,22 @@ module. This file adds no requirement that is not stated elsewhere.
 - **FR-SEC-012**: `password_command` SHALL be subject to a deadline, exceeding
   which is `78`. See `FR-CONF-028`.
 
+- **FR-SEC-024**: The child process SHALL be bounded and silent. Its standard
+  output SHALL be read to a cap of 4096 bytes, beyond which the child is
+  terminated and the invocation is `78`; its standard error SHALL go to the
+  null device, neither inherited nor captured; and a non-zero exit SHALL be
+  `78`. See `FR-CONF-031` through `FR-CONF-033`.
+
+  *Threat closed.* Two, of different kinds. An unbounded read from a child
+  named in an untrusted `.cfg` is a denial-of-service surface reachable by
+  writing one line into a file that may arrive in a clone. And a child's
+  standard error is the one stream `tpl` cannot inspect before it is written:
+  a helper that prints the secret it failed to fetch would otherwise write it
+  straight to the caller's terminal through an inherited descriptor, past every
+  redaction rule in this file. `FR-SEC-005` forbids `tpl` from writing that
+  stream anywhere; directing it to the null device is what makes the
+  prohibition structural rather than a rule to be remembered.
+
 ## Project discovery
 
 - **FR-SEC-013**: The upward walk SHALL stop at the home directory and at the
@@ -132,9 +151,9 @@ module. This file adds no requirement that is not stated elsewhere.
 ## Output and diagnostics
 
 - **FR-SEC-019**: A `hint` carrying a runnable command SHALL be built only from
-  literals and from names matching `[A-Za-z0-9_]{1,64}`; any other name yields
-  no executable suggestion and appears only as data. See `FR-ERR-022` and
-  `FR-ERR-023`.
+  literals and from names matching `[A-Za-z0-9_]{1,64}`; a nearest-match
+  candidate outside that set is not presented at all, and the generic hint is
+  emitted alone. See `FR-ERR-022` and `FR-ERR-023`.
 
   *Threat closed.* A table name is free text on the server and can contain
   semicolons, quotes, and newlines; formatting one into a suggested command is
@@ -191,7 +210,44 @@ module. This file adds no requirement that is not stated elsewhere.
 - **BR-SEC-001**: The specification states each of these rules where it is
   enforced. This file is a cross-reference and a threat model, not a second
   source of truth; where it and an owning module differ, the owning module
-  governs and the difference is a defect to be corrected here.
+  governs and the difference is a defect to be corrected here. `BR-SEC-003` is
+  the single rule this file owns outright, and it owns it because it is a
+  property of the whole surface rather than of any one module.
+
+- **BR-SEC-003**: A known sentinel password SHALL never appear in any byte
+  `tpl` writes. The obligation is a test, in the form `BR-ERR-001` uses for
+  exit codes and `BR-HELP-003` for the command tree: a database entry is
+  configured whose password is a distinctive sentinel value, every command of
+  the tree of `FR-CLI-002` is run against it at maximum verbosity, and the test
+  asserts that no byte of stdout and no byte of stderr, from any of them,
+  contains the sentinel. The test is part of the definition of done for any
+  change that touches configuration reading, connection setup, diagnostics, or
+  error messages.
+
+  *Rationale.* Every rule in the *Credentials* section above is a prohibition
+  on a particular path — `FR-SEC-003` on two commands, `FR-SEC-005` on the
+  diagnostic stream, `FR-SEC-006` on error messages, `FR-CONF-032` on a child's
+  stderr. Each is testable on its own, and each test proves only that the path
+  it names is closed. A sentinel test proves the property those prohibitions
+  exist to produce, over the whole surface at once, and it is the only form of
+  the check that stays true when a path is added. It covers **every** command,
+  not the ones that obviously touch a password, because the paths that leak are
+  the ones nobody thought were on the credential path.
+
+  *Why maximum verbosity.* `FR-GLOB-018` and `FR-SEC-005` are stated "at any
+  verbosity level", and `-vvv` is where a diagnostic that dumps a resolved
+  connection is most likely to be written and least likely to be reviewed.
+
+  *Closes* `OQ-012`, now listed under [Closed](open-questions.md#closed). It
+  was deferred to the test plan when the logging rules were settled; it is a
+  business rule of this file because the property it asserts is exactly what
+  this file exists to state, and no single module owns it.
+
+  *Accepted cost.* The test needs a server to connect to, so it needs the
+  container of `scripts/mariadb/`, which does not exist. The part of it that
+  needs no server — every command that reads `.tpl/.cfg` without connecting,
+  which is most of the tree — can run before the container does, and SHOULD,
+  rather than the whole test waiting on the part that cannot.
 
 - **BR-SEC-002**: `tpl` never issues a write statement against a database. The
   promise has two parts and only one of them prevents: the closed statement
@@ -212,5 +268,5 @@ Every requirement above names its owning module. The four principal owners are
 
 ## Open questions
 
-- [OQ-012](open-questions.md#oq-012) — whether a sentinel test asserting that a
-  known password never appears in any byte of output becomes mandatory.
+None specific to this module. `OQ-012` is answered by `BR-SEC-003` and is
+listed under [Closed](open-questions.md#closed).

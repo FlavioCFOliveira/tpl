@@ -1,6 +1,6 @@
 ---
 title: Upstream Divergences
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [README.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
@@ -69,6 +69,9 @@ Two kinds of entry appear:
 | [DIV-038](#div-038) | both | Migration | Routine naming has no disambiguator |
 | [DIV-039](#div-039) | both | Contradiction | Determinism stated over all output |
 | [DIV-040](#div-040) | `CLAUDE.md` | Contradiction | `tpl cache` is absent, and the auxiliary set is closed |
+| [DIV-041](#div-041) | `CLAUDE.md` | Migration | The target matrix is deferred; this specification now fixes it, and Linux is `musl` |
+| [DIV-042](#div-042) | `README.md` | Contradiction | The JSON error envelope, the `kind` field, and `did_you_mean` |
+| [DIV-043](#div-043) | `README.md` | Contradiction | The `.cfg` is now read strictly; an unrecognised key is fatal |
 
 ## DIV-001
 
@@ -103,13 +106,28 @@ and that two documented paths remain open.
 
 ## DIV-003
 
-**Target**: `README.md`, flags of `database add` and `update`. **Kind**:
-contradiction.
+**Target**: `README.md`, the flag tables of `database add` and `update` and of
+`render`. **Kind**: contradiction.
 
-*Says*: `--password`, short `-p`, "Password, written to `.cfg`".
-*Specification*: `FR-CFG-030` — the flag does not exist. The short form would
-also collide with `-P` for `--port` by case alone.
-*Correction*: remove the row.
+*Says*: `--password`, short `-p`, "Password, written to `.cfg`"; and short
+forms `-H` for `--host`, `-P` for `--port`, `-u` for `--user`, and `-s` for
+`--set` on `tpl render`.
+*Specification*: `FR-CFG-030` — the `--password` flag does not exist. And
+`FR-GLOB-024` — the five short forms of `FR-GLOB-001` are the whole short-flag
+set of the tool, and no local flag carries one.
+*Correction*: remove the `--password` row, and remove the short-form column
+entry from the `--host`, `--port`, `--user`, and `--set` rows. `--dsn`,
+`--schema`, `--tls`, `--password-command`, `--ca-file`, and `--ca-path` are the
+other flags of those two commands, per `FR-CFG-027`, and none has a short form
+either.
+
+*Extended in the fifth edition.* The entry previously covered `-p` alone, on
+the ground that it collides with `-P` by case. `OQ-016` is now closed the other
+way from the root document: rather than deciding which local short forms to
+keep, `FR-GLOB-024` declares that there are none, so all four of the root
+document's remaining short forms are wrong and not only the one that collides.
+The reasoning is in `FR-GLOB-024`; the `-P`/`-p` collision it describes is the
+worked example of why the whole one-letter space is reserved.
 
 ## DIV-004
 
@@ -211,11 +229,19 @@ writes it as a TOML string, `password_command = "security …"`.
 *Specification*: `FR-CONF-024` — executed directly, without a shell, from an
 array; shell metacharacters are literal arguments. `FR-CONF-023` — stored in
 `.cfg` as an array. `FR-CONF-025` splits a string supplied to a command, not
-one found in the file; whether a string in a hand-edited file is accepted at
-all is `OQ-019`.
-*Correction*: in `README.md`, remove the word "shell" and state the array form;
-the example given there still works exactly as written. In `CLAUDE.md`, rewrite
-the example value as an array.
+one found in the file, and `FR-CONF-035` refuses a string found in the file
+with `78`.
+*Correction*: in `README.md`, remove the word "shell", state the array form,
+and rewrite the `.cfg` example line as
+`password_command = ["security", "find-generic-password", "-s", "tpl-reporting", "-w"]`.
+
+*Amended in the fifth edition.* Two things changed. `OQ-019` is closed by
+`FR-CONF-035`: a `password_command` that is not a TOML array of strings is
+`78`, so the string in the `README.md` example is no longer merely a
+non-canonical spelling — it is a `.cfg` that `tpl` refuses to read, and the
+correction is required rather than tidying. And the `CLAUDE.md` half of this
+entry is discharged: that file no longer carries a `.cfg` example, having been
+reduced to agent coordination, so only `README.md` is left to correct.
 
 ## DIV-014
 
@@ -494,12 +520,21 @@ changed: `--version` and `--help` are separate lines, the
 `FR-RND-007` removed the flag it measured, and four budgets are added — the
 cache-served read per object, which is the one normative target, the failure
 path, `tpl help --format json`, and the loop.
-*Correction*: replace the four-row table with the set of `NFR-PERF-014`, keep
-the figures in `CLAUDE.md` or move them to `BENCHMARKS.md` as that file's
-authors prefer, and point the derived rules at
-[performance-requirements.md](performance-requirements.md). Note that every
-figure in the current table is unmeasured; `OQ-051` through `OQ-060` record
-them.
+*Correction*: replace the four-row table with the set of `NFR-PERF-014` and
+point the derived rules at
+[performance-requirements.md](performance-requirements.md).
+
+*Amended in the fifth edition.* The correction previously offered a choice —
+keep the figures in `CLAUDE.md` or move them to `BENCHMARKS.md` — and cited
+`OQ-051` through `OQ-060` for their being unmeasured. Those ten entries are
+closed and the choice is settled by what the specification now does with them:
+**the four figures `CLAUDE.md` states are adopted into `NFR-PERF-014` as
+provisional**, marked under `NFR-PERF-019`, and each is removed from that table
+by the same step that records a real measurement in `BENCHMARKS.md`, per
+`NFR-PERF-020`. `CLAUDE.md` should therefore keep no figure at all: a third
+copy would be the one nobody updates when the first measurement lands.
+`NFR-PERF-014` records the provenance of each of the four, so removing them
+from `CLAUDE.md` loses nothing.
 
 ## DIV-036
 
@@ -519,8 +554,12 @@ rather than at one, per `FR-SRV-029`. `CLAUDE.md` describes the container in the
 singular throughout; the version window of `FR-SRV-001` makes four the number,
 and the DDL of `setup.sql` and `seed.sql` must be DDL that all four accept.
 Separately, and more urgently than any correction listed in this file, none of
-the four files exists in the repository today. `OQ-009`, `OQ-010`, `OQ-024`,
-`OQ-025` through `OQ-042`, and `OQ-045` are all blocked by that absence.
+the four files exists in the repository today. **All twenty-four open
+questions that remain in this specification are blocked by that absence** —
+`OQ-009`, `OQ-010`, `OQ-024`, `OQ-025` through `OQ-042`, `OQ-045`, `OQ-070`,
+and `OQ-072` — and so are the mandated tests of `BR-SCH-004`, `FR-SRV-029`,
+and `BR-SEC-003`, and five of the nine budgets of `NFR-PERF-014`. It is the
+single largest blocker this specification records.
 
 ## DIV-037
 
@@ -599,3 +638,102 @@ with "apenas".
 and open the auxiliary sentence to include it. `DIV-015`, which replaces
 `tpl database …` and `tpl config …` with `tpl cfg …`, applies to the same
 sentence.
+
+## DIV-041
+
+**Target**: `CLAUDE.md`, supported platforms. **Kind**: migration.
+
+*Says*: "A matriz concreta de alvos — target triples, escolha de libc,
+linkagem e forma de empacotar o binário — é decisão de arquitectura em curso e
+**não se fixa aqui**." It also states, correctly, that no target is second
+class and that a performance baseline always names the target it was measured
+on.
+*Specification*: `NFR-PERF-018` — the target set is exactly four, and it is
+fixed:
+
+| System | Architecture | Target |
+|---|---|---|
+| Linux | amd64 | `x86_64-unknown-linux-musl`, statically linked |
+| Linux | arm64 | `aarch64-unknown-linux-musl`, statically linked |
+| macOS | amd64 | `x86_64-apple-darwin` |
+| macOS | arm64 | `aarch64-apple-darwin` |
+
+The libc question the sentence defers is answered: Linux is `musl`, linked
+statically, so one artefact per architecture runs wherever that architecture
+does with no dependency on the host's C library version. The `gnu` triples are
+not targets.
+*Correction*: replace the deferral with a pointer to `NFR-PERF-018`, and drop
+the two sentences that describe the matrix as an open architecture decision.
+The two rules beside it are correct and this specification now carries them
+both — no target is second class, per `NFR-PERF-018`, and a baseline names its
+target, per `NFR-PERF-012` — so they should point there rather than restate it.
+
+*What the correction must not lose.* The `musl` static linkage has an
+observable consequence, and it is recorded in `NFR-PERF-018` and again at
+`FR-CONF-005`: a statically linked `musl` binary resolves names through
+`musl`'s own `getaddrinfo`, which does not load the platform's name-service
+modules, so a name resolvable only through such a module does not resolve for
+`tpl` on a Linux target. The outcome is an ordinary `69`, per `FR-ERR-027`, and
+what it obliges is precision in the `cause` line, per `FR-ERR-034`. Whoever
+edits `CLAUDE.md` should not present the linkage as a pure packaging decision.
+
+## DIV-042
+
+**Target**: `README.md`, the exit codes and error messages section. **Kind**:
+contradiction.
+
+*Says*: "Under `--format json`, errors are JSON too", followed by the envelope
+verbatim —
+`{"error":{"exit":66,"code":"EX_NOINPUT","kind":"table_not_found", … ,"did_you_mean":["orders"]}}`
+— and then "`kind` is a stable enumerated identifier meant to be compared
+programmatically; `message` is meant to be read."
+*Specification*: `FR-ERR-033` — **no error is ever emitted as JSON**, from any
+command, at any verbosity, under any value of `--format`. When the outcome is
+an error, `--format` is ignored, the four labelled lines of `FR-ERR-008` go to
+stderr, and stdout is empty. Three of the four things the passage states are
+withdrawn with the document that carried them: `FR-ERR-014`, the document;
+`FR-ERR-015` and `FR-ERR-016`, the `kind` field and its compatibility rule;
+and the `did_you_mean` array, per the amendment to `FR-ERR-023`. Nearest-match
+suggestion survives, in the text `hint` line.
+*Correction*: delete the sentence, the JSON block, and the sentence about
+`kind`. Replace them with the statement that `--format` applies to a result and
+never to a failure, that the exit code is the machine-comparable signal, and
+that `FR-ERR-034` states per code what the `cause` line names. Whatever remains
+of the four-line example in that section is correct and stays.
+
+*Note on scope.* The dossier for the fifth edition recorded this envelope as
+appearing in `CLAUDE.md`. It no longer does: that file has been reduced to
+agent coordination and now defers the whole error contract to
+`specification/errors-and-exit-codes.md`, which is `DIV-001` discharged for
+that section. The envelope survives only in the root `README.md`, and this
+entry is written against the files as they now stand.
+
+## DIV-043
+
+**Target**: `README.md`, the configuration section. **Kind**: contradiction.
+
+*Says*: a `.tpl/.cfg` example, and prose describing the file, written at a time
+when an unrecognised key had no stated outcome.
+*Specification*: `FR-CONF-034` — a key outside the enumerated space of
+`FR-CONF-002`, **anywhere** in `.tpl/.cfg`, is `78` (`EX_CONFIG`) with a
+nearest-match suggestion. `FR-CONF-011` — a DSN carries no query parameters,
+and any `?` is `78`. `BR-CONF-004` gives the reason for both: the file is
+untrusted input that decides which host is contacted, which credential is
+used, and which child process is executed, so a reader that accepted what it
+did not understand would be guessing at those three.
+*Correction*: three things follow, and the first is the one that matters.
+
+1. **Check every `.cfg` example in the file against the key space of
+   `FR-CONF-002`, key by key.** A key shown in an example and absent from that
+   table is no longer undocumented — it is a file `tpl` refuses to read, and a
+   reader who copies the example gets `78` on every subsequent invocation. The
+   root document is the first place a user copies a `.cfg` from.
+2. State that the file is read strictly, so that a user who adds a key of their
+   own knows the outcome before they meet it.
+3. State that a DSN carries no query parameters. No example in the root
+   document shows one today, so this is a gap rather than a contradiction, but
+   a DSN copied from another tool commonly carries them and the document is
+   where a reader would look for permission.
+
+`DIV-013` corrects the one line of that example this specification refuses
+outright — `password_command` as a string — and applies to the same block.

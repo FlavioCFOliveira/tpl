@@ -1,6 +1,6 @@
 ---
 title: Project and Discovery
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md]
 ---

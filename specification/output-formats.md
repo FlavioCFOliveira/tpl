@@ -1,6 +1,6 @@
 ---
 title: Output Formats
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [cli-contract.md, schema-commands.md, errors-and-exit-codes.md, help-and-version.md]
 ---
@@ -13,6 +13,10 @@ related: [cli-contract.md, schema-commands.md, errors-and-exit-codes.md, help-an
 is explicitly not a contract. `json` is the plumbing contract: versioned, stable,
 and safe to parse. This file defines both, the `--pretty` rule, and how
 catalogue bytes that are not valid text are handled on the way out.
+
+Both formats describe a **result**. A failure has no result and is never
+formatted: `FR-OUT-015` and `FR-ERR-033` keep every error in the four-line text
+of `FR-ERR-008`, whatever `--format` was asked for.
 
 ## Scope
 
@@ -94,13 +98,21 @@ module that owns the command producing it.
   | Change | Breaking |
   |---|---|
   | Adding a field | No |
-  | Adding a value to an enumerated field such as `kind` | No |
+  | Adding a value to an enumerated field such as `source` | No |
   | Removing a field | Yes |
   | Renaming a field | Yes |
   | Changing the type of a field | Yes |
 
-- **FR-OUT-015**: WHEN an error is emitted in JSON, the document SHALL go to
-  stderr and stdout SHALL remain empty. See `FR-ERR-014`.
+- **FR-OUT-015**: WHEN the outcome of an invocation is an error, the system
+  SHALL ignore `--format`, SHALL write the four-line text diagnostic of
+  `FR-ERR-008` to stderr, and SHALL leave stdout empty. No error is emitted as
+  JSON, per `FR-ERR-033`.
+
+  *Amended in the fifth edition.* The first edition read "WHEN an error is
+  emitted in JSON, the document SHALL go to stderr". `FR-ERR-033` withdraws
+  the JSON error document altogether, so the conditional has no case left. What
+  survives from the original — stdout empty, diagnostic on stderr — is now
+  unconditional, and `--format` no longer reaches an error at all.
 
 - **FR-OUT-016**: `tpl render --context` SHALL accept a document in either
   compact or indented form. What it accepts is the envelope of `FR-OUT-024`
@@ -185,13 +197,16 @@ owns the shape of its `data`.
   {"schema_version":1,"source":"cache","data":{"table":{…}}}
   ```
 
-- **FR-OUT-032**: The JSON error document of `FR-ERR-014` SHALL NOT carry the
-  envelope. It goes to stderr, carries its own single `error` key, and is the
-  one JSON document of `tpl` that the envelope does not govern.
+- **FR-OUT-032**: The envelope of `FR-OUT-024` SHALL govern every JSON document
+  the system emits, without exception. There is no JSON document outside it,
+  because there is no JSON error document: `FR-ERR-033` withdraws it.
 
-  *Rationale.* The envelope's `source` and `data` have no meaning for a
-  failure, and an error document that looked like a result would be parsed as
-  one by a caller reading stdout and stderr together.
+  *Amended in the fifth edition.* The first edition exempted one document, the
+  JSON error of `FR-ERR-014`, on the ground that the envelope's `source` and
+  `data` have no meaning for a failure. That ground was sound and is now
+  settled the other way round: rather than an exempt document, there is no
+  document. The consequence for a caller is that stdout is the only stream
+  carrying JSON, and everything on it is enveloped.
 
 - **BR-OUT-002**: The seventeen documents are enumerated by their owning
   modules and nowhere else: `FR-SCH-030` through `FR-SCH-036` for the eight
@@ -311,9 +326,9 @@ owns the shape of its `data`.
 
 - [cli-contract.md](cli-contract.md) — determinism, and the stream separation
   rule this file details.
-- [errors-and-exit-codes.md](errors-and-exit-codes.md) — the JSON error
-  document, and the `EPIPE` rule that depends on whether a JSON document is
-  mid-flight.
+- [errors-and-exit-codes.md](errors-and-exit-codes.md) — `FR-ERR-033`, which
+  keeps every error out of JSON, and the `EPIPE` rule that depends on whether a
+  JSON document is mid-flight.
 - [help-and-version.md](help-and-version.md) — the JSON command tree, which
   obeys every rule here.
 

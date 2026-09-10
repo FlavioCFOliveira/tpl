@@ -1,6 +1,6 @@
 ---
 title: Privileges and Completeness
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [catalogue-coverage.md, server-contract.md, context-document.md, errors-and-exit-codes.md]
 ---
@@ -25,8 +25,8 @@ says so.
 
 In scope: the definition of a complete and an incomplete read, the outcome for a
 named object, the outcome for a listing and a dump, the marking of an incomplete
-object, the refusal of a marked dump as a context, and the cross-check that
-distinguishes a missing privilege from an absence.
+object and the shape of that marking, the refusal of a marked dump as a context,
+and the cross-check that distinguishes a missing privilege from an absence.
 
 Out of scope: which privileges a reader needs, which depends on the server and
 is not stated here; the connection and authentication failures that precede a
@@ -69,6 +69,64 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   A single flag on the document SHALL NOT stand in for the per-object marking.
 
 - **FR-PRIV-007**: A complete object in the same document SHALL NOT be marked.
+
+- **FR-PRIV-016**: `restricted` SHALL be a JSON array of strings, each naming
+  one property of the model that could not be read for that object. The array
+  SHALL be ordered by name, ascending, byte-wise, per `NFR-DET-002`, SHALL
+  never be empty, and SHALL be **present only on an incomplete object**, per
+  `FR-PRIV-007`.
+
+  ```json
+  {"name":"orders","restricted":["triggers"]}
+  ```
+
+  *Rationale for the array.* A boolean says that something was unreadable and
+  cannot ever say what. Naming the properties is what lets a caller decide
+  whether the shortfall matters: a generator that emits column definitions is
+  unaffected by an unreadable trigger list and stopped by an unreadable column
+  list, and a boolean makes those two the same answer. Strings rather than an
+  enumerated set of identifiers, because the population is the property names
+  of the model itself, which
+  [catalogue-coverage.md](catalogue-coverage.md) already fixes and
+  [context-document.md](context-document.md) already names in the document —
+  a second vocabulary for the same things would be a second thing to keep true.
+
+  *Rationale for presence only where there is something to report.* This
+  departs deliberately from the always-present pattern `FR-CTX-034` sets for
+  `standing` and `FR-CDOC-009` for `source`, and the two cases are not alike.
+  Those two fields answer a question that has an answer on every document —
+  where did this come from, how does this server stand — so an always-present
+  enumerated value is the honest shape. `restricted` answers a question that
+  has no answer on a complete object: there is no list of properties that could
+  not be read, not even an empty one, because nothing was attempted and
+  refused. An empty array on every object of every document would also add one
+  key per object to the largest document `tpl` emits, for the benefit of the
+  case that does not arise.
+
+  *Accepted cost, and it reaches a template.* `FR-SEM-012` fails a render with
+  `65` when a template reads a field that does not exist on the value in hand,
+  so `{% if table.restricted %}` fails on every complete table — which is the
+  argument `BR-SRV-008` used to make `standing` unconditional, arriving here
+  and being answered the other way. It is answered the other way because the
+  field is not for a template. `FR-PRIV-003` fails a **named** incomplete
+  object with `77` before any render begins, and `FR-PRIV-008` refuses a marked
+  document as a `--context`, so the only way a marked object reaches a template
+  at all is inside a collection of a whole-database render against a live or
+  cached source. For that case the specification offers no in-template guard
+  and states so here rather than leaving it to be discovered. `restricted` is
+  plumbing contract, per `BR-PRIV-002`: it is read by the caller that parses
+  the JSON, which is where the decision to render at all belongs.
+
+  *This is the second exception to `FR-OUT-012`*, which otherwise requires an
+  absent value to be emitted as `null` rather than omitted. The first is the
+  `data` of `tpl cfg list`, per `FR-CFG-037`. Both are recorded as exceptions
+  rather than left to be inferred, and there are exactly two.
+
+  *Rejected.* A boolean, for the first reason above. Also rejected: an
+  always-present array that is empty on a complete object, which satisfies
+  `FR-OUT-012` and `FR-SEM-012` and pays for it in every object of every
+  document; and an enumerated string naming a single reason, which cannot
+  report two unreadable properties on one object.
 
 - **BR-PRIV-001**: The asymmetry is the whole design and neither uniform answer
   is acceptable. Failing everywhere would mean a reader without the privilege to
@@ -140,7 +198,8 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
 
 - **BR-PRIV-002**: `restricted` is a field of the document and therefore
   plumbing contract, subject to `FR-OUT-014`. `text` output is not a contract
-  and this file does not constrain it.
+  and this file does not constrain it. It is a field of the object it
+  qualifies and never of the envelope, per `FR-OUT-029`.
 
 - **BR-PRIV-003**: Completeness is a property of a read, not of a server. The
   same database read by two users can produce a complete document for one and a
@@ -159,12 +218,15 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   completeness the round-trip already depends on.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `77`, and the message
   format.
+- [cache-commands.md](cache-commands.md) — `FR-CACHE-037`, which keeps a marked
+  object out of the cache.
+- [cfg-commands.md](cfg-commands.md) — `FR-CFG-044`, whose probe reports
+  whether the catalogue is readable at all, and does not report completeness.
 
 ## Open questions
 
 - [OQ-041](open-questions.md#oq-041) — how an unreadable view is reported, and
   whether the cross-check of `FR-PRIV-011` is observable as stated.
-- [OQ-047](open-questions.md#oq-047) — the shape and content of the `restricted`
-  field.
-- [OQ-048](open-questions.md#oq-048) — whether an incomplete object may be
-  written to the cache.
+
+`OQ-047` is answered by `FR-PRIV-016` and `OQ-048` by `FR-CACHE-037`; both are
+listed under [Closed](open-questions.md#closed).

@@ -1,6 +1,6 @@
 ---
 title: Catalogue Coverage
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md]
 ---
@@ -21,8 +21,9 @@ The model is the same whatever the source. A live read, a cached read, and a
 ## Scope
 
 In scope: the covered object kinds, the properties of each, the closed exclusion
-of volatile catalogue fields, the enumerated exclusions of whole features, and
-the position of coverage filtering relative to `--pattern`.
+of volatile catalogue fields, the closed exclusion of fields whose meaning
+differs between supported series, the enumerated exclusions of whole features,
+and the position of coverage filtering relative to `--pattern`.
 
 Out of scope: how the model is encoded as JSON, which belongs to
 [context-document.md](context-document.md); which statements read it, which
@@ -180,6 +181,60 @@ one of these is a change to this file, not a defect report.
   *Accepted cost.* `tpl` cannot answer "how big is this table". It is a
   structure reader, and a size estimate is not structure.
 
+## Fields excluded because their meaning differs between series
+
+`FR-SRV-025` excludes a catalogue field whose **meaning** differs between two
+series of `FR-SRV-015` and cannot be normalised to one. That is a second
+ground of exclusion, distinct from the volatile-field ground above, and it
+needs a list of its own for the same reason the first one does: an exclusion
+that is not written down is an omission.
+
+- **FR-CAT-029**: The model SHALL NOT carry any of the following catalogue
+  fields, anywhere, under any name:
+
+  | Field | Where the catalogue reports it | Series that disagree | Registered as |
+  |---|---|---|---|
+  | *(none excluded)* | | | |
+
+  **The list is empty.** It must stay empty until a difference of meaning is
+  observed against a real server of each series of `FR-SRV-015`, which is
+  [OQ-045](open-questions.md#oq-045) and is blocked by the absence of
+  `scripts/mariadb/` from this repository. An empty list is not a claim that no
+  such field exists; it is a statement that nobody has looked. No entry may be
+  written from a changelog, from a release note, or from knowledge of MySQL.
+
+  The last column names the row of the divergence register of `FR-SRV-036` that
+  records the observation. An entry here without a row there is a defect: the
+  exclusion is normative here and the evidence for it lives there.
+
+- **FR-CAT-030**: The list of `FR-CAT-029` SHALL be closed. A field is excluded
+  on this ground by appearing in it and by nothing else, and adding such a
+  field to the model requires establishing that the series of `FR-SRV-015`
+  agree about what it means.
+
+  A field SHALL leave this list WHEN the disagreement ends — because the series
+  that disagreed has left the window of `FR-SRV-001`, or because the
+  disagreement was resolved upstream — and the removal SHALL be a change to
+  this requirement's list rather than an inference from the window having
+  moved.
+
+- **BR-CAT-004**: The two exclusion lists are separate because their grounds,
+  their tests, and their futures are different. A field is on the list of
+  `FR-CAT-024` because the server changes it without the structure changing;
+  the test is whether two reads of an unchanged database differ, it can be
+  applied to one server, and the answer never becomes yes. A field is on the
+  list of `FR-CAT-029` because two supported series disagree about what it
+  means; the test needs all four series at once, and the answer changes as the
+  window of `FR-SRV-001` moves. Merging them would put an exclusion that is
+  permanent beside one that expires, under one closing rule that could only be
+  right for one of them.
+
+  *Rejected.* Recording an ambiguous-meaning exclusion in the volatile list of
+  `FR-CAT-024`, which is what `FR-SRV-025` did before the fifth edition — and
+  which pointed at `FR-CAT-025`, the rule that closes that list rather than the
+  list itself, so the reference did not even resolve to a place a field could
+  be written.
+
 ## Coverage and filtering
 
 - **FR-CAT-028**: The system SHALL apply coverage before `--pattern`. An object
@@ -199,8 +254,9 @@ one of these is a change to this file, not a defect report.
   the `--pattern` filter of `FR-SCH-011` through `FR-SCH-015`.
 - [server-contract.md](server-contract.md) — the supported version window of
   `FR-SRV-001`, the fields emitted as `null` where the connected series does not
-  provide them, and `FR-SRV-025`, which writes a field of ambiguous meaning into
-  the closed exclusion of `FR-CAT-025`.
+  provide them, `FR-SRV-025`, which writes a field of ambiguous meaning into
+  the closed exclusion of `FR-CAT-029`, and `FR-SRV-036`, the register in which
+  the observation behind each such exclusion is recorded.
 - [privileges-and-completeness.md](privileges-and-completeness.md) — what
   happens when the covered material cannot be read in full.
 
@@ -226,3 +282,6 @@ one of these is a change to this file, not a defect report.
 - [OQ-039](open-questions.md#oq-039) — the trigger fields.
 - [OQ-040](open-questions.md#oq-040) — how a generated column's expression is
   reported, and how a virtual column is distinguished from a stored one.
+- [OQ-045](open-questions.md#oq-045) — which fields differ among the four
+  supported series, which is what fills or leaves empty the list of
+  `FR-CAT-029`.

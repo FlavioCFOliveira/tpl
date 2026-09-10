@@ -1,7 +1,7 @@
 ---
 title: Render Semantics
-status: draft
-last-reviewed: 2026-09-09
+status: approved
+last-reviewed: 2026-09-10
 related: [template-environment.md, render-command.md, errors-and-exit-codes.md, context-document.md]
 ---
 
@@ -73,9 +73,32 @@ format of an error message, which belongs to
 - **FR-SEM-007**: A test SHALL NOT answer `false` for an operand of a type it
   does not accept.
 
-- **FR-SEM-008**: IF a naming filter is applied to a value that is not a string,
-  THEN the system SHALL fail the render with `65`, naming the filter, the type
-  received, and the location.
+- **FR-SEM-008**: IF a filter is applied to an operand of a type it does not
+  accept, THEN the system SHALL fail the render with `65`, naming the filter,
+  the type received, and the location. A filter SHALL NOT return an empty
+  string, or any other value, for an operand it does not accept.
+
+  This is the rule `FR-SEM-005` and `FR-SEM-007` state for a test, applied to a
+  filter. What each registered filter accepts is fixed by
+  [template-environment.md](template-environment.md):
+
+  | Filter | Accepts |
+  |---|---|
+  | `pascal`, `camel`, `snake`, `upper_snake`, `kebab` | A string, per `FR-ENV-034` |
+  | `quote`, `indent`, `comment`, `escape` | A string, per `FR-ENV-035`, `FR-ENV-037`, `FR-ENV-038`, `FR-ENV-044` |
+  | `json` | Any type the context can hold, per `FR-ENV-036` |
+  | `sql_type` | A column object, per `FR-ENV-039` |
+
+  *Amended in the fifth edition.* The rule read "IF a **naming** filter is
+  applied to a value that is not a string". It was true of the five naming
+  filters and covered none of the other five registered ones, so `indent`,
+  `comment`, and `escape` had no stated behaviour on a non-string operand and
+  `sql_type` none on an operand that is not a column. Two identifiers were
+  cited for the gap and neither was right: `FR-SEM-005` governs a test, not a
+  filter, and this requirement as written governed only a subset of the
+  filters. Stating it over every filter, and putting what each accepts in one
+  table, closes both. `FR-ENV-034` is unchanged and remains the naming
+  filters' own statement of the same rule.
 
 - **FR-SEM-009**: The system SHALL NOT coerce a value to a string before
   applying a filter that requires one. `{{ 42 | snake }}` SHALL fail.
@@ -99,6 +122,21 @@ format of an error message, which belongs to
 - **FR-SEM-012**: IF a template reads a field that does not exist on the value
   in hand, THEN the system SHALL fail the render with `65`.
 
+  *Load-bearing elsewhere, and recorded here so that it is not weakened by
+  accident.* Three requirements outside this file are decided by this one, and
+  two of them are decided in opposite directions:
+
+  | Requirement | What this rule decides there |
+  |---|---|
+  | `FR-CTX-034`, with `BR-SRV-008` | `standing` is present in every document with an enumerated value. A marker that appeared only when something was wrong would make `{% if database.server.standing != "supported" %}` fail on every server where nothing was |
+  | `FR-PRIV-016` | `restricted` is present only on an incomplete object, and the specification therefore offers a template no in-template guard for it. The field is for the caller that parses the JSON, per `BR-PRIV-002` |
+  | `FR-ENV-017`, with `FR-SEM-017` | A column whose `table_name` is absent from the context fails rather than answering `false` |
+
+  Relaxing this requirement — treating a missing field as `null`, which
+  `BR-SEM-003` rejects — would silently remove the guarantee `FR-CTX-034` is
+  shaped around and change nothing visible until a template read a
+  misspelled field and generated wrong code from the empty string.
+
 - **FR-SEM-013**: The distinction of `FR-SEM-010` and `FR-SEM-012` SHALL be
   preserved. "There is no comment" and "you misspelled the field name" are
   different failures and produce different outcomes.
@@ -120,7 +158,8 @@ format of an error message, which belongs to
   `FR-ERR-011`.
 
 - **FR-SEM-016**: The system SHALL NOT provide a way for a template to emit a
-  warning and continue, per `FR-ENV-020`.
+  warning and continue. `FR-ENV-020` closes the set of global functions and
+  `BR-ENV-004` records the rejection of a `warn` beside it.
 
   *Rationale.* A warning leaves the exit code at `0`, so a caller that checks
   only the code receives an incomplete generated file and has no way to know.
@@ -168,4 +207,8 @@ format of an error message, which belongs to
 
 ## Open questions
 
-None specific to this module.
+None specific to this module, and none was opened by the fifth edition. This
+file was the only one the fourth edition did not touch; it was reviewed against
+the whole corpus in the fifth, which widened `FR-SEM-008` from the naming
+filters to every filter requiring a string operand, and recorded under
+`FR-SEM-012` the three requirements elsewhere that depend on it.

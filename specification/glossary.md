@@ -1,6 +1,6 @@
 ---
 title: Glossary
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md]
 ---
@@ -25,10 +25,19 @@ One of the three read-only capabilities `tpl` provides: exploring the database
 
 ## budget
 
-A named performance measurement with a recorded baseline, listed in
-`NFR-PERF-014`. A budget states what is measured and over which reference
-workload; the figure itself lives in `BENCHMARKS.md` and in the project's
-architecture decision records, never in this specification.
+A named performance measurement, listed in `NFR-PERF-014`, which states what is
+measured, over which reference workload, and whether a server is needed. A
+budget's **ratified** figure lives in `BENCHMARKS.md` and never in this
+specification, per `BR-PERF-006`. Until a budget is measured it may carry a
+**provisional figure** here instead.
+
+## provisional figure
+
+A working target carried in the table of `NFR-PERF-014` and marked as
+provisional. It is not a limit: it fails no change, is not a baseline, and is
+superseded by the first valid measurement of that budget under the gate of
+`NFR-PERF-020`. See `NFR-PERF-019`. A number in this corpus that is neither
+marked provisional nor recorded in `BENCHMARKS.md` is a defect.
 
 ## cache
 
@@ -107,6 +116,14 @@ Which object kinds and which of their properties enter the model, fixed by
 shows and what the server holds is attributable to one or the other and never to
 both.
 
+## divergence register
+
+The table in [server-contract.md](server-contract.md) that records every
+difference between the supported series which the model accommodates: the
+field, the treatment applied, and what each series was observed to return. Its
+form is fixed by `FR-SRV-036` and its content is required by `FR-SRV-027`. It is
+empty, because nothing has been observed.
+
 ## database entry
 
 A `[database.<name>]` block in `.tpl/.cfg` describing how to reach one server
@@ -145,7 +162,9 @@ A command rejects any flag it does not declare. Contrast global flag.
 
 ## global flag
 
-One of the seven flags accepted by every node of the tree. See
+One of the seven flags accepted by every node of the tree, in any position, per
+`FR-CLI-024`. Five of the seven carry a short form, and those five are the
+whole short-flag set of the tool: no local flag has one, per `FR-GLOB-024`. See
 [global-flags.md](global-flags.md).
 
 ## word list
@@ -190,11 +209,6 @@ Every plumbing document shares the envelope of `FR-OUT-024` and is versioned by
 Output intended to be read by a person. In `tpl`, `--format text`, which is
 explicitly not a contract. See `FR-OUT-004`.
 
-## pre-scan
-
-A scan of the raw argument vector, performed before the parser runs, that
-determines whether errors are emitted as text or as JSON. See `FR-ERR-017`.
-
 ## project
 
 Any directory containing a `.tpl` folder. The `.tpl` folder is the project root
@@ -237,9 +251,12 @@ the process and needs no stopwatch. The six are `NFR-PERF-001` through
 ## restricted
 
 The field by which a listing or a dump marks an object the reader could not read
-in full. An object requested by name never carries it, because that case fails
-with `77` instead. A document carrying it is refused as a `--context`. See
-`FR-PRIV-005` and `FR-PRIV-008`.
+in full. It is an array of strings naming the properties that could not be read,
+present only on an incomplete object, per `FR-PRIV-016`. An object requested by
+name never carries it, because that case fails with `77` instead; a document
+carrying it is refused as a `--context`; and an object carrying it is never
+written to the cache, per `FR-CACHE-037`. See `FR-PRIV-005`, `FR-PRIV-008`, and
+`FR-PRIV-016`.
 
 ## routine
 
@@ -290,6 +307,14 @@ the read was made against sits relative to the supported window: `supported`, or
 `newer_than_supported`. It is enumerated, always present, and never `null`, per
 `FR-CTX-034`. A series *below* the window has no value because it never reaches
 a document — `FR-SRV-020` refuses it before the catalogue is read.
+
+## target
+
+One of the four build targets of `NFR-PERF-018`: Linux on amd64 and arm64,
+statically linked against `musl`, and macOS on amd64 and arm64. Every
+measurement, every baseline, and every budget is stated against one of them,
+and measurements on different targets are never compared, per `NFR-PERF-012`.
+None is second class.
 
 ## template
 

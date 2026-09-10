@@ -1,6 +1,6 @@
 ---
 title: Catalogue Cache
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md]
 ---
@@ -18,7 +18,8 @@ command group, `tpl cache`, loads it, cleans it, and reports on it.
 
 In scope: the cache location and keying, read-through semantics, the `--direct`
 and `--no-cache` flags, the three `cache` subcommands, invalidation policy,
-write atomicity, and the failure modes the model accepts.
+write atomicity, what is never written, and the failure modes the model
+accepts.
 
 Out of scope: the on-disk encoding of a cached object, and how the catalogue is
 read from the server on a miss.
@@ -74,8 +75,8 @@ read from the server on a miss.
   open a connection.
 
 - **FR-CACHE-007**: WHEN a cached read misses, the system SHALL read the server,
-  SHALL write the result to the cache, and SHALL then answer. The write happens
-  before the answer.
+  SHALL write the result to the cache except for the objects `FR-CACHE-037`
+  excludes, and SHALL then answer. The write happens before the answer.
 
 - **FR-CACHE-008**: The system SHALL NOT apply a time-to-live and SHALL NOT
   expire an entry automatically. A cached object stays until `tpl cache clean`
@@ -88,10 +89,24 @@ read from the server on a miss.
 - **FR-CACHE-009**: The following commands SHALL read through the cache: the
   eight `schema` subcommands, and `tpl render` when it has no `--context`.
 
-- **FR-CACHE-010**: `tpl cfg database test` SHALL always contact the server and
-  SHALL neither read nor write the cache.
+- **FR-CACHE-010**: `tpl cfg database test` SHALL always contact the server,
+  SHALL neither read nor write the cache, and SHALL read nothing into the
+  model. The one statement it issues against the catalogue is the privilege
+  probe of `FR-CFG-044`, whose result is a boolean and not model content.
 
-  *Rationale.* Contacting the server is the command's only reason to exist.
+  *Rationale.* Contacting the server is the command's only reason to exist, and
+  it must reach a verdict without a cache standing between it and the server.
+
+  *Amended in the fifth edition.* The last clause is new, and it is a
+  correction rather than an addition. Three passages in this corpus cite this
+  requirement for the proposition that `tpl cfg database test` is the one
+  command that opens a connection and reads no catalogue — `FR-CFG-024`,
+  `FR-SRV-002`, and `FR-SRV-034`. `FR-CFG-044` gives the command a catalogue
+  statement, so the proposition as those passages state it stopped being true
+  the moment `OQ-002` was answered. What remains true, and what those passages
+  rely on, is that nothing the command reads enters the model: no object, no
+  field, nothing cacheable. This requirement now says that, so the three
+  citations resolve to something that is the case.
 
 - **FR-CACHE-011**: No `template` subcommand and no `cfg` subcommand other than
   `database test` SHALL contact a database or touch the cache.
@@ -255,6 +270,66 @@ tpl -d shop cache status
   version, THEN the system SHALL treat it as a miss: read from the server,
   rewrite the file, and report neither an error nor a warning.
 
+- **FR-CACHE-036**: IF the system cannot write to `.tpl/.cache/`, THEN it SHALL
+  answer from what it read, SHALL exit `0`, SHALL leave the cache as it found
+  it, and SHALL report neither an error nor a warning. A failed cache write
+  SHALL NOT change the exit code and SHALL NOT change a byte of stdout.
+
+  *Rationale.* The read succeeded. The answer the caller asked for is correct,
+  complete, and live, and the only thing that did not happen is an
+  optimisation. Failing the command would make `.tpl/` being read-only —
+  a checked-out worktree, a container with a mounted project, a
+  CI runner — turn every correct read into a failure, when `FR-CACHE-016`
+  already offers `--direct --no-cache` as the form for exactly that situation
+  and the caller should not have to know to reach for it. It is the symmetric
+  rule to `FR-CACHE-033`, which treats an unreadable cache file as a miss and
+  says nothing: the cache is an optimisation in both directions, and an
+  optimisation that fails is not an event in the contract.
+
+  *Rejected.* Exiting non-zero, which fails a correct read; and a warning on
+  stderr, which a caller checking the exit code never sees, per `NFR-DET-001`,
+  and which would appear on every invocation for as long as the condition
+  lasts.
+
+  *Accepted cost, and it is real.* A project whose `.tpl/` is persistently
+  unwritable pays the network on every invocation and nothing in any output
+  says so. The signal exists but must be sought: `tpl cache status` reports
+  what the cache holds, per `FR-CACHE-025`, and a cache that is never written
+  reports an empty one with `loaded_at` `null`, per `FR-CACHE-035`. That is
+  where the condition shows, per `BR-CACHE-001`, which already makes
+  `tpl cache status` the supported way to learn the state of the cache.
+
+- **FR-CACHE-037**: The system SHALL NOT write to the cache any object marked
+  `restricted` under `FR-PRIV-005`. A later read of that object SHALL be a
+  miss.
+
+  *Rationale.* The cache is keyed by database entry name and by nothing else,
+  per `FR-CACHE-002`, and completeness is a property of a read rather than of
+  a server, per `BR-PRIV-003`. Together those two make a cached restricted
+  object a trap: the stub one reader produced would be served under
+  `FR-CDOC-008` to a later invocation, possibly by a reader with sufficient
+  privilege, who would receive a marked object where a whole one was available
+  and had never been asked for. The marking would be intact and would still be
+  wrong, because it would describe a privilege that is not the one in force.
+
+  A collection containing an object excluded by this requirement SHALL NOT be
+  recorded as whole under `FR-CDOC-006`. Recording it as whole would make
+  `FR-CDOC-007` serve a listing from the cache with the excluded object simply
+  missing, which is a wrong answer wearing the appearance of a right one —
+  exactly what `BR-CDOC-002` requires the completeness record to prevent.
+
+  *Consequence.* A read by a reader whose privileges are short is correct and
+  is not cached; the same read repeated pays the network again, and the listing
+  it belongs to is a miss until a reader who can see the whole object warms it.
+  That is the right price: the alternative is a cache whose contents depend on
+  which credentials happened to warm it.
+
+  *Rejected.* Caching the object with the marking intact, which is the failure
+  above. Also rejected: keying the cache by reader as well as by entry, which
+  would answer the objection and would make `FR-CACHE-002` false, multiply the
+  cache by the number of credentials a project uses, and give `tpl cache clean`
+  a scope nobody can see.
+
 ## Dependencies
 
 - [schema-commands.md](schema-commands.md) and
@@ -267,6 +342,6 @@ tpl -d shop cache status
 
 ## Open questions
 
-- [OQ-021](open-questions.md#oq-021) — the exit code for a failed cache write.
-- [OQ-048](open-questions.md#oq-048) — whether an incomplete object may be
-  written to the cache.
+None specific to this module. `OQ-021` is answered by `FR-CACHE-036` and
+`OQ-048` by `FR-CACHE-037`; both are listed under
+[Closed](open-questions.md#closed).

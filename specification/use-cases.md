@@ -1,6 +1,6 @@
 ---
 title: Use Cases
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [schema-commands.md, render-command.md, cache-commands.md, cfg-commands.md]
 ---
@@ -73,21 +73,28 @@ here introduces behaviour of its own.
 - **Trigger**: an entry has just been registered or repointed
 - **Main flow**:
   1. Run `tpl cfg database test shop`.
-  2. `tpl` connects, enforces the read-only session, and reports.
+  2. `tpl` connects and authenticates, enforces the read-only session, checks
+     the server series, runs the catalogue privilege probe, and reports the
+     outcome of all four, per `FR-CFG-024`.
 - **Alternate flows**:
   - Server unreachable: exit `69`. Authentication refused: exit `77`. Read-only
     session cannot be established: exit `78`.
-  - Connected and authenticated, but the series is not supported: exit `78` with
-    `kind: server_version_unsupported`, per `FR-CFG-043`. The `cause` line says
+  - Connected and authenticated, but the series is not supported: exit `78`
+    with the message of `FR-SRV-030`, per `FR-CFG-043`. The `cause` line says
     that the connection and the authentication succeeded, which is what
     separates this outcome from the `69` and the `77` above.
-- **Notes**: the command performs three steps and reports all three; the
-  `server` field of `FR-CFG-039` carries the version, the series, and the
-  standing. A server newer than the supported window exits `0` here and is
-  reported with `standing: "newer_than_supported"`, per `FR-SRV-031`
+  - Connected, authenticated, and supported, but the reader cannot see the
+    catalogue: exit `0` with `can_read_catalogue` false, per `FR-CFG-045`. The
+    exit code does not change, so a caller that needs this answer reads the
+    field.
+- **Notes**: the command performs four steps and reports all four; the `server`
+  field of `FR-CFG-039` carries the version, the series, and the standing, and
+  `can_read_catalogue` carries the probe. A server newer than the supported
+  window exits `0` here and is reported with
+  `standing: "newer_than_supported"`, per `FR-SRV-031`
 - **Postconditions**: the cache is untouched, whatever the outcome
 - **Requirements**: `FR-CFG-024`, `FR-CFG-025`, `FR-CFG-043`, `FR-CFG-039`,
-  `FR-CACHE-010`, `FR-SRV-034`
+  `FR-CFG-044`, `FR-CFG-045`, `FR-CACHE-010`, `FR-SRV-034`
 
 ## UC-005 — Learn the whole CLI in one call
 
@@ -208,14 +215,20 @@ here introduces behaviour of its own.
 - **Trigger**: an invocation failed
 - **Main flow**:
   1. `tpl -d shop schema table ordrs` exits `66`.
-  2. The agent reads the four-line error and finds a runnable command in
-     `hint`, plus `did_you_mean` when the output format is JSON.
+  2. The agent reads the four-line error on stderr and finds a runnable command
+     in `hint`, and the nearest match named beside it.
   3. The agent runs the suggested command and retries with the corrected name.
 - **Alternate flows**:
-  - The name contains characters outside `[A-Za-z0-9_]`: no executable
-    suggestion is offered, and the name appears only as data in
-    `did_you_mean`.
-- **Requirements**: `FR-ERR-008`, `FR-ERR-009`, `FR-ERR-019` … `FR-ERR-024`
+  - The nearest-match candidate contains characters outside `[A-Za-z0-9_]`: it
+    is not presented at all, and only the generic hint is emitted, per
+    `FR-ERR-023`. The generic hint is the listing command, so the name is
+    recoverable in one further invocation.
+  - `--format json` was supplied: the result document would have been JSON, but
+    the error is not. `FR-ERR-033` makes every diagnostic the same four lines of
+    text, whatever the format, and the exit code is the machine-comparable
+    signal
+- **Requirements**: `FR-ERR-008`, `FR-ERR-009`, `FR-ERR-019` … `FR-ERR-024`,
+  `FR-ERR-033`, `FR-ERR-034`
 
 ## Dependencies
 

@@ -1,6 +1,6 @@
 ---
 title: Cache Documents
-status: draft
+status: approved
 last-reviewed: 2026-09-10
 related: [cache-commands.md, context-document.md, output-formats.md, catalogue-coverage.md]
 ---
@@ -74,6 +74,13 @@ Out of scope: when the cache is consulted or written, which is
 
 - **FR-CDOC-008**: An individual object SHALL be served from the cache whenever
   it is present, regardless of the completeness of its collection.
+
+  *Note added in the fifth edition.* "Present" is now narrower than it was. An
+  object marked `restricted` is never written, per `FR-CACHE-037`, so it is
+  never present and a read of it is always a miss. This requirement is
+  unchanged; what changed is the population it ranges over, and the change
+  closes the case `OQ-048` raised — a stub served under this requirement to a
+  reader who could have seen the whole object.
 
 - **BR-CDOC-002**: Without the record, `tpl schema tables` run after
   `tpl -d shop cache load --table orders` would return exactly one table and
@@ -162,11 +169,20 @@ Out of scope: when the cache is consulted or written, which is
   The two version fields are required so that the binary can decide what it may
   serve, not so that a caller can read them.
 
-- **BR-CDOC-006**: `source` and `restricted` answer different questions and both
-  can appear on the same object. `source` says where the bytes came from;
-  `restricted`, defined in
+- **BR-CDOC-006**: `source` and `restricted` answer different questions.
+  `source` says where the bytes came from; `restricted`, defined in
   [privileges-and-completeness.md](privileges-and-completeness.md), says that
-  the reader could not see all of them.
+  the reader could not see all of them. They differ in shape as well as in
+  subject: `source` is on the envelope, is enumerated, and is present on every
+  document, per `FR-OUT-026`; `restricted` is on the object, is an array of
+  property names, and is present only where there is something to report, per
+  `FR-PRIV-016`.
+
+  *Amended in the fifth edition.* This rule previously said both can appear on
+  the same object, which was two errors in one sentence. `source` is not a
+  field of an object at all, per `FR-OUT-029`; and since `FR-CACHE-037` a
+  restricted object is never cached, so no object in a document with
+  `"source":"cache"` carries a `restricted` array.
 
 ## Dependencies
 
@@ -181,5 +197,5 @@ Out of scope: when the cache is consulted or written, which is
 
 ## Open questions
 
-- [OQ-048](open-questions.md#oq-048) — whether an incomplete object may be
-  written to the cache at all.
+None specific to this module. `OQ-048` is answered by `FR-CACHE-037` and is
+listed under [Closed](open-questions.md#closed).
