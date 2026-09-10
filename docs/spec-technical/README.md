@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -22,10 +22,11 @@ difference is a defect to be reported.
    and who owns each open point.
 
 A document listed below as *waiting* does not exist yet, and it waits on a
-named entry of `open-decisions.md`. It waits deliberately: writing it around an
-unsettled point would produce a technical statement with no trace, which this
-folder does not admit. A document listed as *unblocked* has no entry against it
-and has simply not been written.
+named entry of `open-decisions.md`, or on a residual inside an entry that is
+otherwise settled. It waits deliberately: writing it around an unsettled point
+would produce a technical statement with no trace, which this folder does not
+admit. A document listed as *unblocked* has no entry against it and has simply
+not been written.
 
 ## The four sources of truth
 
@@ -72,16 +73,16 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: settled entries with their rejected options, open entries with their owners, conflicts owed to the functional owner | written |
+| `open-decisions.md` | The decision register: settled entries with their rejected options, open entries with their owners, and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
-| `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | waiting on `OD-05`, `OD-06`, `OD-12`, `OD-15`, `OD-17`, `OD-24`, `OD-25` |
-| `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | waiting on `OD-17`, `OD-24`, `OD-25` |
+| `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | waiting on `OD-05`, `OD-06`, `OD-12`, `OD-15`, `OD-17`, `OD-25`, `OD-28` |
+| `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | waiting on `OD-17`, `OD-25`, `OD-28`, and the residual of `OD-24` |
 | `interfaces.md` | The contracts crossing a component boundary, and how each external contract is realised | waiting on `OD-05`, `OD-06`, `OD-08`, `OD-12`, `OD-18`, and the residual of `OD-20` |
 | `data-model.md` | The model in memory and everything persisted: `.tpl/.cfg`, `.tpl/.cache/`, `meta.json`, versions, migration | waiting on `OD-18` |
-| `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | waiting on `OD-15`, `OD-24` |
-| `operations.md` | Build, target matrix, packaging, release gates, observability | waiting on `OD-17`, `OD-21`, and the residual of `OD-04` |
+| `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | waiting on `OD-15` |
+| `operations.md` | Build, target matrix, packaging, release gates, observability | waiting on `OD-17`, `OD-28`, and the residuals of `OD-04` and `OD-22` |
 | `quality-attributes.md` | Performance and reliability targets, and how each is measured | waiting on `OD-12` |
-| `verification.md` | Test strategy, harness, fixture, the mandated-test register, the test seams | waiting on `OD-21`, `OD-22` |
+| `verification.md` | Test strategy, harness, fixture, the mandated-test register, the test seams | waiting on the residuals of `OD-21` and `OD-22` |
 | `decisions.md` | Retired. The register and its index live at [`docs/adr/`](../adr/README.md) | n/a |
 
 `glossary.md` is **not** proposed. `specification/glossary.md` fixes the
@@ -104,8 +105,8 @@ requirement text.
 ### `architecture.md`
 
 **Answers.** The eight ordered steps of the invocation pipeline and the four
-commands that skip two of them. Project discovery, its two boundaries, and the
-trust checks. Configuration resolution across two layers and a built-in
+commands that skip two of them. Project discovery, its mount-point boundary,
+and the trust checks. Configuration resolution across two layers and a built-in
 default. The connection lifecycle: at most one, opened late, probe then
 read-only set then read-back, closed when the read ends. The catalogue reader
 and the query-count invariants. The cache as a read-through layer. The model as
@@ -171,7 +172,7 @@ does not promise. The four writers inside `.tpl`.
 **Answers.** The six untrusted inputs and the component that first sees each.
 Credential handling and the three read paths over `.cfg`. The six categories
 never written to a diagnostic stream. The sentinel property. `${VAR}` expansion
-and its ordering inside a DSN. The child process. Discovery boundaries,
+and its ordering inside a DSN. The child process. The discovery boundary,
 canonicalisation, ownership and mode checks. Template containment. The
 injection surfaces. Transport, including the mode set explicitly on every
 connection and the trust material that widens rather than narrows. The

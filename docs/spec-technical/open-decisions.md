@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [README.md, traceability.md]
 ---
 
@@ -9,26 +9,34 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Twenty-seven entries, each a decision the repository could not settle on its
-own. Sixteen are settled — by the product owner in the interview of
-2026-09-10, and by the establishment of the decision register — three are
-**conflicts** owed to the functional owner, and eight are open under
-`technical-writer`. None is open under `adr-guardian`. Sixteen, three and
-eight are the whole of the twenty-seven.
+Twenty-eight entries, each a decision the repository could not settle on its
+own. Nineteen are settled — by the product owner in the interview of
+2026-09-10, by the establishment of the decision register, and by the eighth
+edition of `/specification` — and nine are open under `technical-writer`.
+Nineteen and nine are the whole of the twenty-eight. None is open under
+`adr-guardian`.
+
+**No entry is a conflict.** The three that were — `OD-21`, `OD-22` and
+`OD-24` — were resolved in the eighth edition, which read requirement against
+requirement and named the requirement that yields in each case. Each is now
+settled with the resolution the corpus made, and each carries a residual that
+is a technical choice rather than a defect.
 
 Each settled entry records the decision, its rationale, and **the options
 rejected**, for the reason [`docs/adr/README.md`](../adr/README.md) gives for
 the same section in a record.
 
-Where an architecture decision record register exists (`OD-01`), a settled
-entry's rationale belongs there and this file cites it. Until then the rationale
-is carried here.
+The architecture decision record register now exists (`OD-01`). A settled
+entry's rationale belongs there where rule R4 of
+[`docs/adr/README.md`](../adr/README.md) admits it, and this file cites it by
+`ADR-NNN`; everything R4 does not admit is carried here.
 
 ## Status legend
 
 | Status | Meaning |
 |---|---|
 | **Settled** | Decided. The rationale and the rejected options are recorded in the entry |
+| **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it |
 | **Open** | Not decided. The entry names the options and the owner |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it |
 
@@ -56,15 +64,17 @@ is carried here.
 | [OD-18](#od-18--serialisation-key-order-and-the-two-omissions) | Serialisation, key order, and the two omissions | Open | `technical-writer` |
 | [OD-19](#od-19--whether-the-two-embeddings-are-materialised) | Whether the two embeddings are materialised | Settled | — |
 | [OD-20](#od-20--edit-distance-and-the-other-small-algorithms) | Edit distance, and the other small algorithms | Settled, with a residual | `technical-writer` |
-| [OD-21](#od-21--two-test-seams-that-must-not-be-on-the-published-surface) | Two test seams that must not be on the published surface | **Conflict** | `specification-manager` |
-| [OD-22](#od-22--the-test-harness-and-the-fixture-certificate-gap) | The test harness, and the fixture certificate gap | **Conflict** | `specification-manager` |
+| [OD-21](#od-21--two-test-seams-that-must-not-be-on-the-published-surface) | Two test seams that must not be on the published surface | Settled, with a residual | `technical-writer` |
+| [OD-22](#od-22--the-test-harness-and-the-fixture-certificate) | The test harness, and the fixture certificate | Settled, with a residual | `technical-writer` |
 | [OD-23](#od-23--packaging-artefacts-and-the-musl-build-path) | Packaging, artefacts, and the musl build path | Settled | — |
-| [OD-24](#od-24--privileged-filesystem-enquiry-and-the-home-conflict) | Privileged filesystem enquiry, and the `HOME` conflict | **Conflict** | `specification-manager` |
+| [OD-24](#od-24--the-discovery-boundary-and-the-process-uid) | The discovery boundary, and the process uid | Settled, with a residual | `technical-writer` |
 | [OD-25](#od-25--the-clock-source-for-now) | The clock source for `now` | Open | `technical-writer` |
 | [OD-26](#od-26--the-boundary-against-the-knowledge-graph) | The boundary against the knowledge graph | Settled | — |
 | [OD-27](#od-27--seed-benchsql-and-wl-001) | `seed-bench.sql` and `WL-001` | Settled | — |
+| [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Open | `technical-writer` |
 
-Two editorial defects are carried at the end as `ED-01` and `ED-02`.
+Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
+were corrected in the eighth edition; neither is outstanding.
 
 ## Verification note
 
@@ -73,6 +83,11 @@ Every version number and every library behaviour cited below was verified on
 `docs.rs`, the crate index, the Rust Edition Guide, or a file of this
 repository. Anything not verified says so in its own text. No claim rests on
 recollection.
+
+The three entries the eighth edition settled — `OD-21`, `OD-22`, `OD-24` —
+were re-read against the corpus as it stands at commit `9efa791` on
+**2026-09-11**, requirement by requirement. Every identifier they cite was
+confirmed to exist in that corpus.
 
 ---
 
@@ -215,15 +230,14 @@ error value, and how are the four labelled lines built?
 - `FR-ERR-034` fixes, **per code**, what the `cause` line must name, and bans a `cause` "whose wording would be equally true of a different failure". The error value must therefore carry the instance, not the category.
 - `FR-ERR-015` is withdrawn, and its *Rejected* note refuses "retaining `kind` as an internal taxonomy with no external carrier", on the ground that a classification nothing outside the process can observe cannot be tested.
 - `CLAUDE.md`: `thiserror` in the library, `anyhow` in the binary; `#[non_exhaustive]` on public enums.
-- `FR-ERR-030`: `70` is produced by a caught top-level panic and by a detected invariant violation — under a release profile that sets `panic = "abort"`.
+- `FR-ERR-030`: `70` is produced by a caught top-level panic and by a detected invariant violation. Whether the first condition survives the release profile is `OD-28`, which carries `DIV-045`; this entry takes that answer as given and decides only how the error value yields the code.
 
 **Still to settle, with written rationale.** One enum against per-module enums
 composed by `From`; whether the exit code is a method on the error or a table
 in the binary; whether the four lines come from `Display` or from a separate
 renderer, which `FR-ERR-024`'s escaping and `FR-ERR-022`'s character set both
-argue for; how a caught panic is reconciled with `panic = "abort"`; and whether
-the discriminant an exit-code mapping needs is the taxonomy `FR-ERR-015`
-rejected or is distinguishable from it.
+argue for; and whether the discriminant an exit-code mapping needs is the
+taxonomy `FR-ERR-015` rejected or is distinguishable from it.
 
 **Blocks.** `interfaces`, `architecture`.
 
@@ -534,7 +548,10 @@ raw driver error is one logging call away at every call site; and whether
 `tracing` earns its place under the dependency budget for four levels and one
 structured line.
 
-**Blocks.** `operations`, `architecture`.
+**Blocks.** `operations`, `architecture`, `technology-stack` — the last because
+whether `tracing` earns its place is a dependency-budget question, and
+[README.md](README.md#the-documents) already listed that document against this
+entry.
 
 ---
 
@@ -637,68 +654,105 @@ folding would be wrong.
 
 ## OD-21 — Two test seams that must not be on the published surface
 
-**Status: conflict. Owner: `specification-manager`.**
+**Status: settled by the eighth edition, with a residual. Owner of the
+residual: `technical-writer`.**
 
-**The conflict.** Two requirements demand a reachable seam that appears nowhere
-a caller can see, and every mechanism visible in the repository is forbidden by
-another requirement.
+**What the conflict was.** `FR-ERR-031` required a deliberate trigger for `70`
+and `FR-SRV-035` a seam that presents the reader with a series above its own
+window, both barred from every help text and from both command trees — while
+`BR-ERR-001` demanded an **integration** test per exit code and `FR-SRV-035`
+an assertion on the exit code, neither observable without running the binary.
+Every mechanism a running binary could reach collided with a requirement in
+force.
 
-- `FR-ERR-031`: a deliberate trigger for `70` must exist so that the test `BR-ERR-001` mandates can exist, and it "SHALL NOT appear in any help text, in the JSON command tree of `FR-HELP-016`, or in the command tree of `FR-CLI-002`".
-- `FR-SRV-035`: the newer-than-window read is verified by a test that presents the reader with a series above its own window — so the seam narrows `tpl`'s own window — under the same three prohibitions.
+**The resolution, made in the corpus and not here.** Both seams move **inside
+the process**, reachable from nothing a caller can write. The four requirements
+`BR-ERR-001` enumerates hold unchanged — `FR-CLI-002`, `FR-CLI-021`,
+`FR-HELP-021`, `NFR-PERF-018`, to which `FR-ERR-031`'s own table adds
+`FR-CLI-023` and `NFR-DET-001` — and the two that yield say so in their own
+text.
 
-| Mechanism | Forbidden by |
+| Requirement | What it now fixes |
 |---|---|
-| A hidden command or flag | `FR-CLI-002` closes the tree, and both requirements bar the seam from both trees. A hidden argument is still in the tree the parser accepts, and `FR-HELP-021` derives the JSON tree **by introspecting that tree** |
-| An environment variable | `FR-CLI-021` — no environment variable may determine behaviour, defaults or the project location — and `FR-CLI-023`, which makes `${VAR}` expansion the only environment read |
-| A cargo feature | It changes the shipped binary's build matrix, and `NFR-PERF-018` makes all four targets first-class; `cargo test --all-features` in `CLAUDE.md`'s pipeline would enable it |
+| `FR-ERR-031` | The trigger is reachable **only from within the system's own test configuration**, is reachable from **no invocation of the binary the project distributes**, and appears in no help text, in the JSON tree of `FR-HELP-016`, or in the tree of `FR-CLI-002`. The requirement enumerates the three rejected candidates and the requirement each collides with |
+| `BR-ERR-001` | Yields **for `70` alone**, stated in its own text: `70` is exercised in process through the trigger and **not** by an integration test. The nine other codes are unchanged |
+| `FR-SRV-035` | Yields the assertion on the exit code. The test asserts that the read completes without error and that `standing` is `newer_than_supported`; the seam is the one `FR-ERR-031` names. Building an impostor server to make the observation external is rejected in the requirement |
+| `BR-SRV-003` | States what it reaches: the three promises about what the process **sends** (`FR-SRV-012` … `FR-SRV-014`), and not `FR-SRV-035`, which is a promise about what the reader **emits** |
 
-A further tension sits beside it: `FR-ERR-030` requires `70` to be reachable
-from a caught top-level panic, under a release profile that sets
-`panic = "abort"`.
+**What this decides for `verification`.** Two tests, both in process, each
+described with the limit its own requirement states rather than a limit this
+folder invents: what is executed is the guard, and separately the step from an
+error condition to an exit status — `BR-CLI-004` for `FR-SRV-035`, and the nine
+integration-tested codes for `FR-ERR-031`. The composition of the two is
+reasoned rather than executed, and both requirements say so. `verification`
+cites that limit and does not restate it.
 
-**Why it is not settled here.** The likely resolution is an in-process seam
-with a library-level test, but `BR-ERR-001` says "integration test",
-`NFR-PERF-007` and `BR-SRV-003` insist on observation from **outside** the
-process, and `FR-SRV-035` describes a reader being presented with a server.
-Whether an in-process test satisfies `BR-ERR-001` is a question for the
-functional owner. Nothing is written around the defect.
+**No longer part of this entry.** The tension between `FR-ERR-030`'s caught
+panic and an aborting release profile is not a seam question, and the eighth
+edition recorded it as `DIV-045` rather than resolving it. It is carried in
+`OD-28`. `FR-ERR-031`'s trigger exercises the **other** producing condition of
+`70` — the detected invariant violation — so the exception `BR-ERR-001` grants
+does not depend on that answer.
 
-**Blocks.** `verification`, `operations`.
+**Residual, open under `technical-writer`.** Which in-process construct
+realises a seam that the project's own tests reach and the distributed binary
+does not — for both seams, since `FR-SRV-035` now points at `FR-ERR-031`'s —
+and, following from it, which test kind each of the two tests is. To be
+settled in `verification`, with the construct's visibility from each test kind
+verified against the toolchain's own documentation rather than assumed.
+
+**Blocks.** `verification`.
 
 ---
 
-## OD-22 — The test harness, and the fixture certificate gap
+## OD-22 — The test harness, and the fixture certificate
 
-**Status: conflict. Owner: `specification-manager`.**
+**Status: settled by the eighth edition, with a residual. Owner of the
+residual: `technical-writer`.**
 
-**The conflict.** `FR-CONF-038` states, in its own text, that "`tpl` with
-default configuration cannot connect to the fixture of `scripts/mariadb/` over
-TCP on any series, and an acceptance test for the default mode needs TLS
-configured in that fixture with a certificate that names the host." The fixture
-does not provide one: `scripts/mariadb/README.md` records that `10.11` reports
-`have_ssl=DISABLED` and that the other three present an automatically generated
-self-signed certificate, which `FR-CONF-038` observed to carry no
-`subjectAltName`. `FR-CONF-013` defaults `tls` to `verify-identity`, so the
-default mode has **no acceptance test** and cannot have one against the fixture
-as it stands.
+**What the conflict was.** `FR-CONF-013` defaults `tls` to `verify-identity`,
+and `FR-CONF-038` recorded that `tpl` with default configuration cannot reach
+the fixture of `scripts/mariadb/` over TCP on any series. The default mode was
+therefore the one cell of a ten-cell table with no acceptance test, and the
+fixture could not supply one.
 
-**What else the entry carries, and what it needs from the harness.**
+**The resolution.** `FR-CONF-038` now states the fixture obligation as a
+requirement: the fixture **SHALL** be able to present, at each series of
+`FR-SRV-015`, a server whose certificate names the host by which the project's
+tests reach it, and **SHALL** retain a server that offers no TLS. Two options
+are rejected in the requirement's own text — dropping the acceptance test and
+stating the cost, because the default is the mode a caller meets without asking
+for it; and configuring the certificate on the three TLS-capable series alone,
+because `FR-SRV-029` requires the test against every series and `10.11` is
+supported until 2028-02-16. None of the ten cells changed, and
+`verify-identity` is not relaxed: a certificate naming the host is what the
+mode always required.
 
-- `CLAUDE.md`: validation needing a database uses the containers of `scripts/mariadb/` — never mocks, never external instances — launched before and stopped after.
-- `scripts/mariadb/README.md`: four images, four containers, four host ports, one build per series, and "Leave no container running after a validation run."
+**What the requirement hands to this folder.** `FR-CONF-038` states that how
+the certificate is generated, where the fixture keeps it, and how the no-TLS
+server is retained beside it "are the fixture's own work and are not specified
+here". The distance to be covered is recorded in the fixture's own
+documentation: `scripts/mariadb/README.md` gives four images, four containers,
+four host ports and one build per series, records that `10.11` reports
+`have_ssl=DISABLED` and needs `--skip-ssl` over TCP, and that the other three
+present the self-signed certificate MariaDB generates automatically — which
+`FR-CONF-038` observed to carry no `subjectAltName`.
+
+**What the harness must still serve, unchanged by the resolution.**
+
+- `CLAUDE.md`: validation needing a database uses the containers of `scripts/mariadb/` — never mocks, never external instances — launched before and stopped after; `scripts/mariadb/README.md` adds "Leave no container running after a validation run."
 - `FR-SRV-029`: the cross-series equivalence test runs against every series, and the refusal test against at least one series outside the window.
 - `NFR-PERF-007` and `BR-SRV-003`: nine properties are verified from **outside** the process — the statements the server receives, the connections it accepts, the files the process opens.
 - `FR-SRV-012`: the closed statement list is checked by observing what the server actually receives, expecting four kinds and no fifth, with the three connection-start statements issued once each in the stated order.
 - `BR-SEC-003`: the sentinel test runs every command of the tree at maximum verbosity and asserts the sentinel appears in no byte of either stream.
 
-**Why it is not settled here.** Whether the fixture gains a host-naming
-certificate is a change to `scripts/mariadb/` justified by a requirement's own
-note, and the alternative is that a stated default has no test. Either answer
-belongs to the functional owner. The orchestration choices — how the four
-containers are driven, whether server-dependent tests are gated, and how each
-outside-the-process observation is instrumented — are settled in `verification`
-once the gap is answered, because the answer decides whether a default-mode
-acceptance test exists to be harnessed.
+**Residual, open under `technical-writer`.** Two halves, each with its own
+document.
+
+| Half | Settled in |
+|---|---|
+| How the fixture satisfies `FR-CONF-038`: how a certificate naming the host is produced and kept for each series, and how a server offering no TLS is retained beside it | `operations` |
+| How the four containers are driven, whether server-dependent tests are gated, and how each outside-the-process observation above is instrumented | `verification` |
 
 **Blocks.** `verification`, `operations`.
 
@@ -736,44 +790,60 @@ binary, archive, checksums, signature — is not fixed by this entry.
 
 ---
 
-## OD-24 — Privileged filesystem enquiry, and the `HOME` conflict
+## OD-24 — The discovery boundary, and the process uid
 
-**Status: conflict. Owner: `specification-manager`.**
+**Status: settled by the eighth edition, with a residual. Owner of the
+residual: `technical-writer`.**
 
-**The conflict.** `FR-PROJ-005` makes the user's home directory a boundary of
-project discovery. `FR-CLI-021` states that `tpl` "SHALL NOT read any
-environment variable to determine its behaviour, its defaults, or **the
-location of the project**", and `FR-CLI-023` names `${VAR}` expansion as "the
-only circumstance in which `tpl` reads the environment". Any `HOME`-based
-answer reads the environment to decide where discovery stops, which is the
-location of the project. `BR-CLI-002` — "Two identical command lines run in two
-different shells, against the same project state, cannot read different
-databases" — is falsified by a shell that exports a different `HOME`.
+**What the conflict was.** `FR-PROJ-005` made the user's home directory a
+boundary of project discovery. It can only be located from `HOME`, which
+`FR-CLI-021` forbids reading to determine the location of the project, and a
+shell exporting a different `HOME` falsified `BR-CLI-002`.
 
-`std::env::home_dir` is **not** deprecated and on Unix "Returns the value of
-the `HOME` environment variable if it is set (and not an empty string)",
-falling back to `getpwuid_r` (docs.rs `std::env::home_dir`, verified
-2026-09-10). So the obvious implementation is the one the requirements forbid.
+**The resolution.** `FR-PROJ-005` is the requirement that yields. The upward
+walk stops at **the mount point alone**, and the boundary "SHALL be determined
+without reading any environment variable". Three statements follow it.
 
-**The second half of the entry: three checks, one of which needs a
-dependency.**
+| Requirement | What changed |
+|---|---|
+| `BR-CLI-002` | Gains the clause it was missing: nothing a shell can set may decide which project is discovered, which database entry is selected, or which server is reached |
+| `FR-SEC-013` | The walk stops at the mount point; the threat it closes is narrower than the first edition claimed, and a `.tpl` planted in a world-writable ancestor is refused by `FR-SEC-014`, not by any boundary |
+| `DIV-024` | Shortened by one clause: the correction owed to `CLAUDE.md` no longer names a home boundary |
 
-| What is needed | Requirement | What is available |
-|---|---|---|
-| The current process's uid, to compare against the file's owner | `FR-PROJ-010` | `std::os::unix::fs::MetadataExt::uid()` gives the **file's** uid. The process's uid comes from `getuid()`, which is `unsafe` through `libc`, and `CLAUDE.md` forbids `unsafe` and requires `#![forbid(unsafe_code)]`. A safe wrapper crate is needed and none is in the stack table |
-| The mount point, to stop the upward walk | `FR-PROJ-005` | `MetadataExt::dev()`, compared between a directory and its parent. In `std`, no `unsafe` |
-| The home directory, to stop the upward walk | `FR-PROJ-005` | the conflict above |
+Locating the home directory from the system's own account record rather than
+from `HOME` was rejected in `FR-PROJ-005`'s own text: the boundary would then
+sit wherever that record says, which need not be an ancestor of the working
+directory, so the rule could silently never fire.
 
-**Why it is not settled here.** The home boundary cannot be implemented as
-specified without contradicting two requirements of the same corpus. Three
-answers are available — `getpwuid_r` only, `HOME` with the contradiction
-recorded as a stated exception, or dropping the home boundary in favour of the
-mount-point boundary alone — and choosing among them changes what
-`FR-PROJ-005` guarantees. That is the functional owner's decision. Once it is
-made, the safe wrapper that supplies `getuid` is a stack addition to be
-settled in `technology-stack`.
+**Technical consequence.** No home-directory lookup remains anywhere in
+discovery, so `std::env::home_dir` and every substitute for it leave the
+implementation's path entirely. The one boundary that remains is
+`std::os::unix::fs::MetadataExt::dev()`, compared between a directory and its
+parent: in `std`, and no `unsafe`.
 
-**Blocks.** `security`, `architecture`, `technology-stack`.
+**The accepted cost, stated by `FR-PROJ-005` and inherited here.** A `.tpl`
+folder above the caller's home directory and on the same filesystem — at
+`/home`, at `/Users`, or at `/` — is now within the walk. Three things bound
+it: such a directory is not ordinarily writable by the caller, so a `.tpl`
+there is either the caller's own or is refused by `FR-PROJ-010`; `tpl init`
+warns on stderr when it creates a project that shadows one above it, per
+`FR-PROJ-016`; and `FR-PROJ-007` admits no fallback, so a walk that reaches the
+boundary without finding a `.tpl` fails with `78` per `FR-PROJ-006` rather than
+reading settings from anywhere else.
+
+**Residual, open under `technical-writer`.** The process's own uid.
+`FR-PROJ-010` requires `.tpl/.cfg` to be owned by the current user, so the
+check compares two values: `std::os::unix::fs::MetadataExt::uid()` gives the
+**file's** uid, while the process's uid comes from `getuid()`, which is
+`unsafe` through `libc` — and `CLAUDE.md` forbids `unsafe` and requires
+`#![forbid(unsafe_code)]`. A safe wrapper is needed and none is in the stack
+table. To be settled in `technology-stack`, under the dependency budget, with
+what the candidate drags in recorded. `FR-PROJ-011`'s mode check needs nothing
+further: `MetadataExt` supplies `mode()` on the same metadata (`std` API
+documentation, `std::os::unix::fs::MetadataExt`, Rust 1.98.1, verified
+2026-09-11).
+
+**Blocks.** `technology-stack`.
 
 ---
 
@@ -878,24 +948,62 @@ project-structure tree and one of the testing section naming the file.
 
 ---
 
-## Editorial defects owed to the functional owner
+## OD-28 — The release profile against the caught-panic condition of `70`
 
-Two statements in `specification/` are stale. They are reported here, owed to
-`specification-manager`, and corrected nowhere: no document of this folder
-relies on either.
+**Status: open. Owner: `technical-writer`.**
 
-| Id | Where | Defect |
-|---|---|---|
-| **ED-01** | `glossary.md`, entry *DSN* | Gives the form `scheme://[user[:password]@]host[:port]/database[?params]`. `FR-CONF-009`, as amended in the fifth edition, removed the optional group, and `FR-CONF-011` admits no query parameter at all — a `?` is `78` whatever follows it |
-| **ED-02** | `upstream-divergences.md`, `DIV-034` | The body reads "Thirteen volatile catalogue fields are excluded outright by `FR-CAT-024`", while its own seventh-edition amendment reads "Sixteen volatile fields are now excluded by `FR-CAT-024`, not thirteen". The two clauses contradict each other within one entry; `FR-CAT-024`'s table has sixteen rows, so the amendment is the correct one |
+**Question.** `FR-ERR-030` makes **a panic caught at the top level of the
+process** one of exactly two producing conditions of `70`, and `FR-ERR-032`
+requires that `70` to carry the four labelled lines of `FR-ERR-008`. The
+release profile `CLAUDE.md` fixes sets `panic = "abort"`, under which a panic
+terminates the process abnormally: no code of `FR-ERR-001` reaches the caller
+and no message is written. Which yields — the profile, or the requirement?
+
+**Visible from the repository, and verified.**
+
+- `DIV-045`, recorded in the eighth edition, states the contradiction and names both admissible resolutions: the profile leaves the panic path catchable, **or** `FR-ERR-030` is amended first — through `specification-manager` — to drop the caught-panic condition and to state the resulting limit in its own text. Leaving both statements standing is the one outcome it refuses, because a caller reading `FR-ERR-001` would branch on a code the binary cannot produce.
+- `FR-ERR-030` is unchanged and carries a note pointing at `DIV-045`, because the specification precedes the implementation.
+- `FR-ERR-031`'s in-process trigger exercises the **other** producing condition, the detected invariant violation, so `BR-ERR-001`'s exception for `70` stands whichever way this entry goes. See `OD-21`.
+- `CLAUDE.md` fixes the profile as `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, `opt-level = 3`, and makes a change to that table an architecture decision to be recorded before it is implemented.
+- The cost of unwinding is **not measured**. `BENCHMARKS.md` records the same five settings for the artefacts it measured, so every figure in it was taken under an aborting profile and none of them separates the two.
+
+**Still to settle, with written rationale.** Whether the profile unwinds — at a
+cost in binary size and speed to be measured on the targets of `NFR-PERF-018`
+before it is accepted, since no recorded figure separates the two profiles — or
+whether the profile stands and the amendment `DIV-045` names is requested of
+`specification-manager` first. The order is not interchangeable: an
+implementation choice never narrows a contractual code without the corpus
+saying so.
+
+**Blocks.** `architecture`, `technology-stack`, `operations`.
+
+---
+
+## Editorial defects, reported and corrected
+
+Two statements in `specification/` were stale when this register was written.
+Both were corrected in the eighth edition, at commit `9efa791` of 2026-09-10,
+and neither is outstanding. No document of this folder ever relied on either.
+
+| Id | Where | Defect reported | Correction verified 2026-09-11 |
+|---|---|---|---|
+| **ED-01** | `glossary.md`, entry *DSN* | The form ended `[?params]`, which `FR-CONF-009` removed in the fifth edition and of which `FR-CONF-011` admits nothing | The entry gives `scheme://[user[:password]@]host[:port]/database` and states that it carries no query parameters, per `FR-CONF-011` |
+| **ED-02** | `upstream-divergences.md`, `DIV-034` | The body said thirteen volatile catalogue fields were excluded by `FR-CAT-024` while its own seventh-edition note said sixteen | The clause reads sixteen, the note beside it records the growth from thirteen as history, and both agree with the sixteen rows of `FR-CAT-024`'s table |
+
+Both identifiers are retired rather than deleted, and neither is reused: a
+reader who meets `ED-01` or `ED-02` in the history is bounced here rather than
+left hunting for an open defect.
 
 ## Order of work
 
+Recomputed after the eighth edition settled the three conflicts. `OD-01` leaves
+the table: the register it called for exists, and `ADR-001` and `ADR-002` are
+accepted in it.
+
 | Order | Entries | Why |
 |---|---|---|
-| 1 | `OD-24`, `OD-21`, `OD-22` | The three conflicts. Each blocks a document that waits for the correction rather than being written around it, and each may be a defect in a requirement rather than a gap |
-| 2 | `OD-01` | Two requirements in force cite a register that does not exist, so two settled facts — the engine pin and the TLS mapping — have nowhere to be recorded |
-| 3 | `OD-12` | Flagged as the likeliest to turn out to be unmeetable as written; the sooner it is examined, the sooner it becomes a conflict or a design |
-| 4 | `OD-14`'s owed observation | A settled decision resting on one unverified engine behaviour, which `FR-SEM-010` and `FR-SEM-011` would contradict outright if it does not hold |
-| 5 | `OD-05`, `OD-06`, `OD-08`, `OD-15`, `OD-17`, `OD-18`, `OD-25` | The remaining open entries, each with its options already enumerated |
-| 6 | `OD-04` and `OD-20`'s residuals | Narrow points inside settled entries |
+| 1 | `OD-28` | The only entry whose answer may change a requirement. `DIV-045` leaves two statements standing beside each other, and one of its two resolutions must reach `specification-manager` before any code is written against it |
+| 2 | `OD-12` | Flagged as the likeliest to turn out to be unmeetable as written; the sooner it is examined, the sooner it becomes a conflict or a design |
+| 3 | `OD-14`'s owed observation | A settled decision resting on one unverified engine behaviour, which `FR-SEM-010` and `FR-SEM-011` would contradict outright if it does not hold |
+| 4 | `OD-05`, `OD-06`, `OD-08`, `OD-15`, `OD-17`, `OD-18`, `OD-25` | The remaining open entries, each with its options already enumerated |
+| 5 | The residuals of `OD-04`, `OD-20`, `OD-21`, `OD-22`, `OD-24` | Narrow points inside settled entries, each naming the document that settles it |

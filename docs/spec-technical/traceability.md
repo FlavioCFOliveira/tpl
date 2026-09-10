@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [README.md, open-decisions.md]
 ---
 
@@ -21,7 +21,11 @@ directions.
   than through any one file.
 
 `specification/` holds **26 files**: 25 requirement modules and `README.md`,
-the index. All 26 are covered.
+the index. All 26 are covered. The mapping was harvested against the seventh
+edition and reconciled against the **eighth** on 2026-09-11, which changed the
+rows drawn from `cli-contract.md`, `configuration-model.md`,
+`project-and-discovery.md`, `errors-and-exit-codes.md`, `server-contract.md`,
+`performance-requirements.md`, `glossary.md` and `upstream-divergences.md`.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -59,7 +63,7 @@ identifier is the authority and the wording here is a summary.
 | A repeated single-value flag is `64` **and must name both values** — a last-wins parser cannot do this; the parser must retain both occurrences | `FR-CLI-014` | `interfaces` (`OD-07`, `OD-08`) |
 | A global flag is accepted in **any position** at every depth, while a local flag is rejected at any node that does not declare it | `FR-CLI-024`, `FR-CLI-019`, `FR-GLOB-002` | `interfaces` |
 | A separate-token flag value beginning with `-` is `64` **with a corrected `--flag=value` hint** | `FR-CLI-018` | `interfaces` |
-| No environment variable may determine behaviour or the project location; `${VAR}` expansion inside `.cfg` is the single exception | `FR-CLI-021`, `FR-CLI-023` | `security`, `architecture` (`OD-24` — conflicts with `FR-PROJ-005`) |
+| No environment variable may determine behaviour or the project location; `${VAR}` expansion inside `.cfg` is the single exception, and nothing a shell can set may decide which project, entry or server is reached | `FR-CLI-021`, `FR-CLI-023`, `BR-CLI-002` | `security`, `architecture` |
 | Group nodes have no action and print their own help at exit `0`: the dispatcher needs a node kind, not a fallthrough | `FR-CLI-007`, `FR-CLI-008`, `FR-CLI-009` | `architecture`, `interfaces` |
 | Never interactive: no prompt, no pager, no stdin read except `--context -` | `BR-CLI-003` | `architecture`, `security` |
 | Byte-identical **stdout** for one invocation against one state; stderr is explicitly outside the contract | `NFR-DET-001` | `quality-attributes`, `verification` |
@@ -205,6 +209,7 @@ identifier is the authority and the wording here is a summary.
 | A DSN carries **no** query parameters; a `?` is `78` whatever follows it | `FR-CONF-011`, `FR-CONF-012` | `interfaces`, `security` |
 | Five TLS modes, set **explicitly on every connection**, never inherited from the driver's default — including `disabled` | `FR-CONF-013`, `FR-CONF-037` | `security` (`OD-16`) |
 | The five modes' observed behaviour against a TLS-offering and a TLS-less server is fixed; the **mapping onto the driver belongs in an ADR** and is cited, not restated | `FR-CONF-038` | `security`; [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) |
+| The **fixture is under obligation**: at each supported series it presents a server whose certificate names the host the tests reach it by, and retains a server offering no TLS. Without the first, the default mode of `FR-CONF-013` has no acceptance test; how either is provisioned is left to this folder | `FR-CONF-038` as amended in the eighth edition; `FR-SRV-015`, `FR-SRV-029` | `operations`, `verification` (the residual of `OD-22`) |
 | Trust material is **additional** to the platform/bundled roots; exclusive trust is not deliverable and must not be claimed | `FR-CONF-039` | `security` (`OD-16`) |
 | `${VAR}` expands in six fields only; inside a DSN the URL is **parsed first**, expanded within the delimited field, then percent-encoded | `FR-CONF-015`, `FR-CONF-018` | `security`, `interfaces` |
 | Single-pass expansion, `$$` literal, unclosed brace `78`, undefined variable `78` | `FR-CONF-019` … `FR-CONF-022` | `interfaces` |
@@ -220,10 +225,10 @@ identifier is the authority and the wording here is a summary.
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | A project is any directory containing `.tpl`; discovery walks **up** and stops at the first one | `FR-PROJ-001`, `FR-PROJ-004` | `architecture` |
-| The walk stops at the **home directory** and at the **filesystem mount point** | `FR-PROJ-005` | `security`, `architecture` (`OD-24` — the home directory needs `HOME`, which `FR-CLI-021` forbids reading) |
+| The walk stops at the **filesystem mount point alone**, determined without reading any environment variable — so a directory is compared with its parent and no home directory is located | `FR-PROJ-005`, `FR-SEC-013` | `security`, `architecture` |
 | Exactly four commands skip discovery entirely and must reach that decision **before** any filesystem access | `FR-PROJ-025`, `NFR-PERF-005` | `architecture`, `quality-attributes` |
 | The `.tpl` path is canonicalised **before** any check, so a symlinked `.tpl` is verified at its target | `FR-PROJ-009`, `FR-SEC-015` | `security` |
-| `.cfg` must be owned by the current user and carry no group or other bits: the current uid and the file's uid and mode are both needed | `FR-PROJ-010`, `FR-PROJ-011` | `security` (`OD-24`) |
+| `.cfg` must be owned by the current user and carry no group or other bits: the current process's uid and the file's uid and mode are all needed, and `std` supplies only the file's | `FR-PROJ-010`, `FR-PROJ-011` | `security`, `technology-stack` (the residual of `OD-24`) |
 | `tpl init` creates five artefacts, `.cfg` at `0600`, missing parents included, and refuses an existing `.tpl` with `73` changing nothing | `FR-PROJ-013` … `FR-PROJ-019` | `interfaces`, `operations` |
 | Two artefacts are **shipped content**: `example.jinja` and `rust/_types.jinja`; the example must render against any table of any supported series and use at least one filter and one test | `FR-PROJ-017`, `FR-PROJ-021`, `FR-ENV-011` | `operations`, `verification` |
 | The generated `.cfg` carries a **commented-out** example entry — the file must survive later rewrites with its comments | `FR-PROJ-017`, `FR-PROJ-018` | `data-model` (`OD-09`) |
@@ -260,13 +265,13 @@ identifier is the authority and the wording here is a summary.
 | Four labelled lines on stderr: `error:`, `cause:`, `hint:`, `exit:` | `FR-ERR-008` | `interfaces` |
 | The `cause` line has a **per-code obligation table** naming what it must contain; the error value must therefore carry the instance, not the category | `FR-ERR-034`, `FR-ERR-010`, `FR-ERR-012` | `interfaces` (`OD-06`) |
 | An internal taxonomy with no external carrier was **explicitly rejected**, while an exit code still has to be derived from the error value | `FR-ERR-015` *Rejected*; `BR-ERR-002` | `interfaces` (`OD-06`) |
-| `70` has exactly two producing conditions — a caught top-level panic and a detected invariant violation — so a panic hook and a catch boundary are required, under `panic = "abort"` | `FR-ERR-030`, `FR-ERR-032` | `architecture`, `operations` (`OD-21`) |
-| A deliberate `70` trigger must exist and appear in **neither** command tree nor any help text | `FR-ERR-031` | `verification` (`OD-21`) |
+| `70` has exactly two producing conditions — a caught top-level panic and a detected invariant violation — and the first cannot exist under an aborting release profile, which `DIV-045` records as a contradiction owed to the root coordination document | `FR-ERR-030`, `FR-ERR-032`, `DIV-045` | `architecture`, `operations`, `technology-stack` (`OD-28`) |
+| The deliberate `70` trigger is reachable **only from within the system's own test configuration** and from no invocation of the distributed binary, and appears in neither command tree nor any help text; `BR-ERR-001` excepts `70` from its integration test in consequence | `FR-ERR-031`, `BR-ERR-001` | `verification` (the residual of `OD-21`) |
 | Nearest match: at most three candidates within edit distance two, ordered by distance then name, over eight populations | `FR-ERR-019` … `FR-ERR-021` | `interfaces`, `quality-attributes` (`OD-20`) |
 | A runnable hint is built only from literals and `[A-Za-z0-9_]{1,64}`; a candidate outside that set is not presented **at all** | `FR-ERR-022`, `FR-ERR-023` | `security` |
 | Every interpolated value in a message escapes `\n`, `\r`, `\t` and C0 — a different rule from read output | `FR-ERR-024` | `security`, `interfaces` |
 | `EPIPE` is `0` normally and `74` if a JSON document was mid-flight: the writer must know whether it is inside a document | `FR-ERR-025`, `FR-ERR-026` | `architecture`, `interfaces` |
-| Every code carries at least one integration test, part of the definition of done | `BR-ERR-001` | `verification` |
+| Nine codes carry at least one integration test, part of the definition of done; `70` is the single exception and is exercised in process | `BR-ERR-001` | `verification` |
 
 ---
 
@@ -392,7 +397,7 @@ identifier is the authority and the wording here is a summary.
 | The session read-only setting is applied **and read back** at connection start, in that order, once each; failure of either refuses the connection with `78` | `FR-SRV-008` … `FR-SRV-010` | `architecture`, `security` |
 | No flag, key or environment condition disables any of it | `FR-SRV-011` | `security` |
 | Verification is from **outside the process**, on the server: the statements it receives, the connections it accepts | `FR-SRV-012` … `FR-SRV-014`, `BR-SRV-003` | `verification` |
-| The newer-than-window path needs a **test seam that narrows the reader's own window**, off the published surface | `FR-SRV-035` | `verification` (`OD-21`) |
+| The newer-than-window path is verified through the in-process seam of `FR-ERR-031`, asserting that the read completes without error and that `standing` is `newer_than_supported`; `BR-SRV-003` states in its own text that it does not reach this requirement | `FR-SRV-035`, `BR-SRV-003` | `verification` (the residual of `OD-21`) |
 | Eleven observed differences bound the reader's assumptions; one does **not** separate `10.11` from the rest, so tests must not model the window as one old server and three modern ones | `FR-SRV-038`, difference 8 | `verification` |
 
 ---
@@ -418,7 +423,7 @@ identifier is the authority and the wording here is a summary.
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | Six **requirements of form** constrain the design from the first commit: query count independent of object count for a full read and for a single object, no connection on a cache hit, at most one connection, nothing at all for four commands, no connection for any command needing no catalogue | `NFR-PERF-001` … `NFR-PERF-006` | `quality-attributes`, `architecture` |
-| Each is verified from **outside the process** — statements, connections, files opened — never by reading the source | `NFR-PERF-007`, `BR-SRV-003` | `verification` (`OD-22`) |
+| Each is verified from **outside the process** — statements, connections, files opened — never by reading the source | `NFR-PERF-007`, `BR-SRV-003` | `verification` (the residual of `OD-22`) |
 | The query count must be observable from the diagnostic stream, which makes one diagnostic line structurally load-bearing although stderr is not contract | `NFR-PERF-008`, `FR-GLOB-017` | `operations`, `verification` (`OD-17`) |
 | Exactly four targets; Linux is `musl`, statically linked; no target is second class | `NFR-PERF-018` | `operations` |
 | Nine budgets, one normative, five needing a server; a measurement names its target **and its server series** | `NFR-PERF-012`, `NFR-PERF-014` | `quality-attributes` |
@@ -438,7 +443,7 @@ identifier is the authority and the wording here is a summary.
 | `plumbing` / `porcelain` name the two output audiences; the technical spec's naming of modules and types should not invent a third vocabulary | *plumbing*, *porcelain* | `interfaces` |
 | One term already carries two meanings by decision — `schema` (the arm, and the `--schema` flag) — and code naming must disambiguate rather than pick one | *schema (the word, two meanings)*; `FR-CFG-028` | `interfaces` |
 | `target` is defined as one of four build targets: the word is reserved and must not be reused for a render target | *target*; `NFR-PERF-018` | `operations`, `quality-attributes` |
-| One entry is stale and is reported rather than corrected: see `ED-01` under *Editorial defects owed to the functional owner*, below | *DSN* against `FR-CONF-009` | — |
+| The *DSN* entry was stale when this mapping was harvested and was corrected in the eighth edition; it now agrees with `FR-CONF-009` and `FR-CONF-011` and nothing is owed | *DSN*; `ED-01`, retired | — |
 
 ---
 
@@ -460,6 +465,7 @@ identifier is the authority and the wording here is a summary.
 | The library API and the `model/` structs are **not** a public surface: five questions the functional spec declines — owned versus borrowed types, public fields versus accessors, newtypes for names, whether the serialisation crate is a public dependency, `#[non_exhaustive]` — are named as **architecture decisions** | `DIV-032` | `interfaces`, `decisions` (`OD-05`) |
 | The whole engine `Environment` surface is **not** contract; only the three groups are | `DIV-033` | `technology-stack` |
 | The target matrix is fixed and Linux is `musl`; the `gnu` triples are not targets. The linkage has an observable DNS consequence that must not be presented as pure packaging | `DIV-041` | `operations` |
+| The release profile's `panic = "abort"` removes one of the two producing conditions of `70` in the only artefact a caller runs. Either the profile leaves the panic path catchable, or `FR-ERR-030` is amended first through `specification-manager`; both statements may not stand together | `DIV-045` | `architecture`, `technology-stack`, `operations` (`OD-28`) |
 | `CLAUDE.md`'s four performance figures are adopted as provisional and should exist in **no** third place | `DIV-035` | `quality-attributes` |
 | `scripts/mariadb/` still owes `seed-bench.sql`, plus one line of the project tree and one of the testing section | `DIV-036` | `verification` (`OD-27`) |
 | The catalogue is read through `INFORMATION_SCHEMA` only; the `SHOW` escape hatch `CLAUDE.md` allows does not exist | `DIV-031` | `security`, `interfaces` |
@@ -519,14 +525,9 @@ and each is the reason a document of this folder exists.
 
 ## Editorial defects found while harvesting
 
-Two statements in `specification/` are stale. They are reported here and owed
-to `specification-manager`; nothing in this folder corrects them, and no
-document of this folder relies on either.
-
-| Where | Defect |
-|---|---|
-| `glossary.md`, entry *DSN* | Gives the form `scheme://[user[:password]@]host[:port]/database[?params]`. `FR-CONF-009`, as amended in the fifth edition, removed the optional group, and `FR-CONF-011` admits no parameter at all |
-| `upstream-divergences.md`, `DIV-034` | The body reads "Thirteen volatile catalogue fields are excluded outright by `FR-CAT-024`", while its own seventh-edition amendment reads "Sixteen volatile fields are now excluded by `FR-CAT-024`, not thirteen". The two clauses contradict each other within one entry |
-
-They are carried as `ED-01` and `ED-02` in
-[open-decisions.md](open-decisions.md#editorial-defects-owed-to-the-functional-owner).
+Both are closed. The two stale statements reported here — the *DSN* form in
+`glossary.md` and the field count in `DIV-034` — were corrected in the eighth
+edition of `/specification`, and neither is outstanding. What each said and what
+each now says is recorded once, as `ED-01` and `ED-02` in
+[open-decisions.md](open-decisions.md#editorial-defects-reported-and-corrected),
+and is not repeated here.
