@@ -238,4 +238,5 @@ listed in the specification [README](README.md#file-index).
 ## Open questions
 
 None specific to this module. Each use case inherits the open questions of the
-requirements it composes.
+requirements it composes, and those requirements carry none: the index of
+[open-questions.md](open-questions.md) is empty.

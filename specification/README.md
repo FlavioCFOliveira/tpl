@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in five editions. All are in force; each
+The specification has been written in seven editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -84,7 +84,8 @@ output (`FR-OUT-019`); and a mandated test for the dump round-trip
 
 One finding was left open deliberately: `FR-PRIV-015` now states *why* the
 privilege cross-check covers views alone, and records that the choice to
-generalise it is blocked on observing `OQ-041`.
+generalise it was blocked on observing `OQ-041`. The sixth edition observed it
+and generalised the check to one further kind.
 
 ### Fourth edition — the supported version window
 
@@ -103,8 +104,9 @@ differences between the versions in it.
   `FR-SRV-024` normalises a fact reported differently, `FR-SRV-004` marks a fact
   a series does not have, `FR-SRV-025` excludes a field whose meaning differs,
   and `FR-SRV-026` states the whole of it as one testable equivalence. Which
-  differences actually exist is [OQ-045](open-questions.md#oq-045) and cannot be
-  written until the container exists.
+  differences actually exist was `OQ-045`, which the sixth edition answered
+  against the container: seven were found and none of them is a field the
+  model carries.
 - **The server version in the model** — `FR-SRV-028` and `FR-CTX-031`. A
   template that must accommodate a difference could not previously see which
   server it was rendering against.
@@ -129,9 +131,9 @@ came back decided:
 
 The fourth edition left thirty-three points open that a decision could settle.
 All thirty-three were put to the user, all came back decided, and the fifth
-edition writes them in. **No design question remains open**: what is left in
-[open-questions.md](open-questions.md) is twenty-four facts about a MariaDB
-catalogue nobody has observed, and one driver mapping that waits on a
+edition writes them in. **No design question remained open**: what it left in
+[open-questions.md](open-questions.md) was twenty-four facts about a MariaDB
+catalogue nobody had observed, and one driver mapping that waited on a
 measurement.
 
 Four of the changes reach beyond the module that owns them.
@@ -184,10 +186,200 @@ sentinel test (`BR-SEC-003`).
 
 Three defects of structure were corrected rather than decided. `FR-SRV-024`
 normalises a fact present on more than one series rather than on every series,
-which makes `BR-SRV-006`'s three cases exhaustive. `FR-SRV-025` pointed at
+which makes `BR-SRV-006`'s three cases exhaustive over differences of presence
+and of representation — the sixth edition found a difference of **value** that
+they still do not cover, `OQ-075`. `FR-SRV-025` pointed at
 `FR-CAT-025`, which is a closing rule and not a list; it now writes into
 `FR-CAT-029`, a second exclusion list created for it. And the register
 `FR-SRV-027` required had no home; `FR-SRV-036` gives it one.
+
+### Sixth edition — the first observations
+
+The fifth edition left twenty-five entries open, and every one of them waited
+on something outside this corpus. Both arrived on 2026-09-10: the container
+fixture of `scripts/mariadb/`, buildable at each of the four series of
+`FR-SRV-015`, and the driver choice, settled by measurement. The sixth edition
+writes down what was observed — and, where an observation showed a requirement
+already in force to be wrong, corrects it.
+
+**Five entries close.**
+
+- **`OQ-003`, the TLS mapping** — [configuration-model.md](configuration-model.md).
+  `FR-CONF-038` states the behaviour of each of the five modes against a server
+  that offers TLS and a server that does not, verified cell by cell against
+  running servers with encryption read from the live session rather than from
+  the configuration that asked for it. The corpus still names no driver: the
+  mapping onto the chosen one is recorded in the architecture decision records
+  and cited, as `FR-ENV-003` does for the engine pin.
+- **`OQ-045`, the differences between the four series** —
+  [server-contract.md](server-contract.md). Seven differences were found and
+  **none of them was a field the model then carried**, so the divergence
+  register of `FR-SRV-036` stayed empty — as an observed result rather than
+  as an absence of one. `FR-SRV-038` records all seven, because six of them
+  constrain the reader, the fixture, or an open question rather than the
+  document, and `FR-SRV-027` records only what the model accommodates. The
+  seventh edition took the record to eleven and the register to two rows.
+- **`OQ-041`, how an unreadable view is reported** —
+  [privileges-and-completeness.md](privileges-and-completeness.md), and it is
+  the correction described below.
+- **`OQ-025`, the table types** — `FR-CAT-031` fixes the set a server can
+  emit, and
+  `FR-CAT-032` requires the exclusion of temporary tables to be a filter,
+  because on `10.11` the catalogue omits them and on the other three it does
+  not.
+- **`OQ-070`, the escaping of a backtick** — `FR-ENV-045`: doubling, accepted
+  by all four series.
+
+**Three requirements in force were corrected, all in one file.** The
+observation of a reduced-privilege reader established that a privilege-driven
+absence has **three shapes**, not one, and that `FR-PRIV-011` was written
+against a shape the server does not produce.
+
+- `FR-PRIV-011` inferred a missing privilege from an empty view collection. The
+  collection is not empty: every row is present and only the definition is
+  short, and it is short by being the **empty string**. The check could never
+  have fired. It is rewritten per view and is now strictly stronger.
+- `FR-PRIV-010` was an unqualified prohibition on reporting an absence whose
+  cause is a missing privilege, and it cannot be honoured: a hidden trigger
+  list and an empty one are identical in every byte a reader can obtain.
+  `FR-PRIV-020` states exactly where the guarantee stops.
+- `FR-PRIV-015` left open whether the cross-check should generalise. It
+  generalises to exactly one further kind — `FR-PRIV-019`, the foreign key,
+  because a reduced reader keeps every key column and loses every referential
+  rule, so a table appears structurally whole with no relations at all.
+
+**One requirement is new because the reader cannot work without it.**
+`FR-SRV-037` forbids a statement naming a fixed list of `INFORMATION_SCHEMA`
+columns that is not present on every series: three of those tables differ in
+width, and naming an absent column is a hard `ERROR 1054` rather than a `NULL`
+or a warning.
+
+**One entry is new.** `OQ-075` records a case `BR-SRV-006`'s three treatments
+do not cover — a field whose *value* differs between series because the
+servers' own defaults differ. It cannot be closed by observing more.
+
+**Twenty entries were left open, and the reason was worth stating
+precisely.** They were catalogue field lists, and they were no longer blocked
+by the absence of a container. The campaign recorded the *differences*
+between the four servers, not what any of them returned, and a comparison
+that found no difference is not a record of a field list. Each entry named
+the query that would close it, and the seventh edition ran every one of
+them.
+
+### Seventh edition — the catalogue field lists
+
+The sixth edition observed the four series against each other and recorded the
+**differences**. It could not close the twenty entries that asked for the
+field lists themselves, because a comparison that finds no difference is not a
+record of what was returned. A second observation pass, on 2026-09-10 against
+all four series of `FR-SRV-015`, recorded every one of them verbatim. The
+seventh edition writes them in, settles the one entry that needed a decision,
+and corrects what the evidence contradicts.
+
+**Twenty entries close, and the last entry the corpus held closes with
+them.** The field lists of every object kind are now fixed: comments and
+defaults (`FR-CAT-039`), the column attribute string (`FR-CAT-041`), indexes
+(`FR-CAT-042`), the primary key (`FR-CAT-043`), foreign keys
+(`FR-CAT-045`), `CHECK` constraints
+(`FR-CAT-046`), views (`FR-CAT-047`), routines (`FR-CAT-048`), routine
+parameters (`FR-CAT-049`), triggers (`FR-CAT-050`), and generated columns
+(`FR-CAT-051`); and on the document side the default discriminant
+(`FR-CTX-037`), the raw type string (`FR-CTX-038`), the `ENUM` member list
+(`FR-CTX-039`), the type parts (`FR-CTX-040`), the character set and
+collation (`FR-CTX-041`), and the metadata fields of the `database` object
+(`FR-CTX-036`). `FR-ENV-046` fixes the membership of the three type families.
+`BR-CAT-005` states, once, the rule by which a catalogue field list becomes a
+model property list — carry by default, exclude on a stated ground — so that
+no omission is indistinguishable from an oversight.
+
+**Four decisions came from the product owner, and one of them reorders two
+values this specification had held to be compatible.**
+
+- **A collation is passed through, not normalised** —
+  [server-contract.md](server-contract.md). `FR-SRV-039` is a **fourth**
+  treatment beside the three of `BR-SRV-006`: a field present everywhere,
+  meaning the same everywhere, whose value differs because the servers' own
+  defaults differ, is carried **exactly as the server returns it**. Each
+  collation is a collation, and character sets and collations are preserved
+  regardless of the server version. The cost is stated rather than
+  discovered: `FR-SRV-026` must except such a field, so the same template
+  rendered against a `10.11` and a `12.3` will differ wherever it reads one.
+  This ranks **fidelity to the server above determinism across servers**, and
+  it is the only place the two are traded against each other. It closes
+  `OQ-075` and fills the gap the sixth edition found in `BR-SRV-006`.
+- **The default discriminant is three-way** —
+  [context-document.md](context-document.md). `FR-CTX-012` required four
+  distinguishable cases and the catalogue draws three: `DEFAULT NULL` and a
+  nullable column with no `DEFAULT` return identical bytes, because in
+  MariaDB they are one state. `kind: null` covers both, the bare `null` is
+  reserved for the only case that returns SQL `NULL`, and `FR-CTX-013`
+  narrows the enumeration to three values — a **narrowing of contract
+  surface**.
+- **The primary key comes from the index table** — `FR-CAT-043`. The three
+  catalogue sources disagree on a system-versioned table, and one of them
+  names an implicit period column the column table does not carry at all.
+  `FR-CAT-011` now names a source and `FR-CAT-044` makes the governing
+  property an invariant: a key never names a column absent from the same
+  table's column list.
+- **Pinned trust material is additional to the public root bundle** —
+  `FR-CONF-039`, accepted as the sixth edition wrote it. Requiring exclusive
+  trust would leave `FR-CONF-036` with no qualifying driver, and a
+  requirement no implementation can satisfy is worse than a weaker guarantee
+  stated honestly.
+
+**Four requirements in force were contradicted by the evidence, and two of
+them describe an artefact that cannot exist.**
+
+- **`FR-CTX-012` could not be implemented**, as above.
+- **`FR-SCH-009` requires a table character set the catalogue does not
+  report.** The table catalogue carries a collation and no character set, on
+  all four series. The item is removed rather than reconstructed from the
+  collation's leading segment, which would be an inference; `CHECK`
+  constraints, required since the second edition and never named in that
+  list, are added in the same amendment.
+- **`NFR-DET-002` would have corrupted three ordered collections.** Its
+  default rule sorts by name, and it excepted an index's columns but not a
+  primary key's, not a foreign key's — whose two column lists are paired
+  positionally — and not an `ENUM` member list, whose order **is** the
+  ordinal each member is stored as. All three are silent corruptions of
+  correct-looking output, and none was reachable before the field lists were
+  recorded.
+- **`FR-CAT-035` assumed a field holds one attribute at a time.** The column
+  attribute field carries six distinct values and no column of the fixture
+  carries two at once, so the multi-attribute case is unobserved.
+  `FR-CAT-041` records the population and bounds the claim.
+
+**Two exclusions grew, and one of them had to.** `FR-CAT-024` gains a
+routine's creation and alteration timestamps and a trigger's creation
+timestamp: they are wall-clock times recorded when the object was installed
+and they differ between two servers of the **same** series, so carrying any
+of them would make `FR-SRV-026` unsatisfiable outright. `FR-CAT-052` requires
+the coverage filter to reach the column read as well as the object read,
+because the column catalogue carries the eight columns of a sequence and the
+columns of every view alongside those of the tables.
+
+**The record of differences between the series grows from seven to eleven**,
+per `FR-SRV-038`, and one of the four new ones matters beyond its content:
+the declared nullability of the index table's comment column splits `10.11`
+and `11.4` from `11.8` and `12.3`. It is the only difference in the record
+that does not fall after `10.11`, and it is recorded as a caution that a
+difference may fall anywhere in the window. The divergence register of
+`FR-SRV-036`, empty through six editions, gains its first two rows — both
+created by `FR-SRV-039`.
+
+**The last open entry closes, and it closes on a limit rather than on an
+answer.** `FR-SRV-040` fixes what the version probe returns and `FR-SRV-041`
+the **necessary** condition for a server to be MariaDB. The **sufficient**
+condition cannot be observed against a fixture of four MariaDB servers, and
+it is very likely unobtainable in principle: every check available is made
+over responses the server itself controls, so a server that emulates MariaDB
+completely is indistinguishable from MariaDB by any wire observation.
+`FR-SRV-041` therefore states the limit in its own text — a server determined
+to pass as MariaDB will pass — and `OQ-042` closes rather than waiting for
+evidence that will not arrive. **The index of
+[open-questions.md](open-questions.md) is now empty, and this specification
+is complete**: no requirement of it is waiting on a decision, a measurement,
+or an observation.
 
 ### Still out of scope
 
@@ -245,7 +437,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 Identifiers are stable once assigned. They are never renumbered to tidy a file,
 never reused after a requirement is withdrawn, and are the reference used in
 commit messages, task descriptions, and test names. A gap in a sequence is
-therefore expected, not a defect: forty-nine open questions are closed and
+therefore expected, not a defect: all seventy-five open questions are closed and
 their numbers are not reused. The *Closed* table of
 [open-questions.md](open-questions.md#closed) records each and what answered
 it.
@@ -316,6 +508,14 @@ because they constrain the whole module rather than one interaction.
   block deliberately shows both an invocation and its output.
 - No emoji, no decorative characters, no HTML.
 - A requirement that cannot be tested or demonstrated is not a requirement.
+- **Where a guarantee stops, the requirement says so in its own text**, and
+  always in the same shape: the limiting clause belongs in the requirement
+  rather than in a note beside it; an *Observed* note records what was seen;
+  a *Consequence, stated plainly* note says what a reader would otherwise
+  wrongly assume; and a *What would change this* note names what would lift
+  the limit. Three requirements are written this way — `FR-SRV-041`,
+  `FR-PRIV-020` and `FR-CONF-039` — and each cites the other two, so that
+  three honest limits read as one pattern rather than three accidents.
 
 ## Status legend
 
@@ -329,14 +529,17 @@ because they constrain the whole module rather than one interaction.
 
 Every requirement in this specification derives from one of three sources:
 
-1. Five decision logs. The first interview settled 53 points about the CLI
+1. Six decision logs. The first interview settled 53 points about the CLI
    surface; the second settled 28 points about the model, the document, the
    template surface, the server contract, and performance, and recorded four
    defects found in the first edition; the third is the audit of 2026-09-10,
    whose fifteen findings the user answered with fourteen decisions and one
    deliberate deferral; the fourth settled the supported version window; the
    fifth put every remaining decidable question to the user and settled all
-   thirty-three, four of them against the recommendation. Each
+   thirty-three, four of them against the recommendation; the sixth settled
+   the four points the observation raised, one of which — `FR-SRV-039` —
+   reversed a recommendation and reordered two values this corpus had held to
+   be compatible. Each
    decision carries its own reasoning and the alternatives it rejected; where
    the reasoning explains why a requirement reads as it does, it is preserved in
    the `Rationale`, the `Rejected`, or the `Accepted cost` note under that
@@ -350,13 +553,46 @@ Every requirement in this specification derives from one of three sources:
    source, states when it was checked, and names what obliges a maintainer to
    check it again — `FR-SRV-019` for this one. It is not a decision this project
    is free to make, and it decays on a schedule this project does not set.
-4. Nothing else. Where information is missing, this specification records an
-   entry in [open-questions.md](open-questions.md) rather than filling the gap.
+4. A **direct observation** against a running server or a measured artefact,
+   dated, and stating what was observed and on which series. The sixth edition
+   introduced the first of these: every requirement it adds carries an
+   *Observed* note naming what was seen on each of the four series of
+   `FR-SRV-015`, or on the two servers a TLS mode was verified against. The
+   seventh edition rests on this provenance more heavily than any other —
+   nineteen of its requirements are records of what four servers returned —
+   and it adds a discipline the sixth did not need: where a fixture exercised
+   only part of a field's population, the requirement carries a **bounded
+   claim** naming what was not observed, so that a later reader can tell a
+   settled fact from a fact that merely has not been contradicted yet. Such a
+   requirement records behaviour rather than choosing it, and it is falsifiable
+   by a second observation in a way a decision is not. Behaviour that has not
+   been observed is never written down, however confidently it could be
+   inferred from MySQL or from documentation.
+5. Nothing else. Where information is missing, this specification records an
+   entry in [open-questions.md](open-questions.md) rather than filling the
+   gap. Where it is not merely missing but unobtainable, the entry closes on
+   a **stated limit** written into the requirement, in the form the writing
+   conventions above fix — never on an inference standing in for the
+   observation that cannot be made.
 
 ## Maintenance debt
 
-**No maintenance debt is outstanding.** Everything previously recorded here has
-been discharged, and the fifth edition added none.
+**None outstanding.** The item this section carried through the sixth edition
+— twenty catalogue field lists that no observation had recorded — was
+discharged by the seventh: the fixture was read against all four series of
+`FR-SRV-015` on 2026-09-10, every field list was recorded verbatim, and each
+is now a requirement in
+[catalogue-coverage.md](catalogue-coverage.md) or
+[context-document.md](context-document.md). The document shapes and the field
+lists are frozen, and implementation is no longer blocked on them.
+
+[open-questions.md](open-questions.md) has an empty index: no entry of this
+corpus is open. The last, `OQ-042`, is closed and was never debt of this
+corpus — it waited on evidence no fixture of MariaDB servers can produce, and
+it is very likely unobtainable at all, so the limit is written into
+`FR-SRV-041` instead. Nothing in this specification claims a detection it
+does not have: that requirement states, in its own text, that a server
+determined to pass as MariaDB will pass.
 
 One obligation is not debt but recurs, and is recorded so that it is not
 mistaken for either: `FR-SRV-019` requires the table of `FR-SRV-015` to be
@@ -364,13 +600,18 @@ re-verified against MariaDB's maintenance policy before every release. It
 decays on a schedule this project does not set, and the earliest date on which
 it is known to be wrong is 2028-02-16.
 
-Four items previously recorded here have been discharged.
+Five items previously recorded here have been discharged.
+
+- **The catalogue field lists.** Twenty entries, blocked first by the absence
+  of a container and then by the absence of a recorded observation. Both are
+  gone.
 
 - **The first edition's open questions.** `OQ-002` through `OQ-024`, less
   `OQ-008`, `OQ-020`, and `OQ-022`, sat unanswered through the second and
   fourth editions. The fifth put every one of them to the user and closed all
-  of them; `OQ-024` alone survives, narrowed twice more, and only because it is
-  a catalogue field list that no decision can settle.
+  of them; `OQ-024` alone survived, narrowed twice more, because it is a
+  catalogue field list that no decision could settle. The seventh observed it
+  and closed it, in `FR-CTX-036`.
 - **The wrong cross-reference targets.** Twenty-seven references, across
   twenty-four passages, resolved to an identifier that exists but was not the
   intended one; the offsets were small and consistent, which pointed at a late
@@ -390,3 +631,13 @@ The fifth edition found the rule earning its place twice: `FR-SRV-025` cited
 `FR-CAT-025`, a closing rule rather than the list it names, and `FR-ENV-044`
 would have cited `FR-SEM-008` for a filter that rule did not cover. Both
 identifiers existed; neither reference was correct.
+
+The seventh edition adds a second rule of the same shape, learned from four
+requirements the observation contradicted. **A requirement that names a
+catalogue field, a field's value, or a field's shape must cite the
+observation that established it, and a requirement written before any
+observation existed must be re-read against the first one that reaches it.**
+`FR-CTX-012`, `FR-SCH-009`, `FR-CAT-035` and `NFR-DET-002` were each
+internally coherent, cross-referenced correctly, and describing a catalogue
+that does not exist. Nothing in a reference check could have found them; only
+reading them against the evidence could.

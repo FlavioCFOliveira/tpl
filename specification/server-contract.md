@@ -26,10 +26,11 @@ In scope: the criterion that fixes the supported version window, the series that
 criterion admits today, how the window is maintained, the refusal of a server
 below it and of a server that is not MariaDB, the marked read of a server above
 it, which commands the two checks reach, what the model owes a difference
-between two supported series, the register in which each such difference is
-recorded, the visibility of the probed version and of the server's standing to
-a template, the closed statement list, the read-only session and its read-back,
-and the connection count.
+between two supported series, the register in which each accommodated
+difference is recorded, the record of the differences actually observed between
+the four series, the visibility of the probed version and of the server's
+standing to a template, the closed statement list, the read-only session and
+its read-back, and the connection count.
 
 Out of scope: which fields are read, which belongs to
 [catalogue-coverage.md](catalogue-coverage.md); the handling of a read that
@@ -39,12 +40,17 @@ settings and TLS, which belong to
 [configuration-model.md](configuration-model.md); and the text of any statement.
 
 Also out of scope, and for a reason worth stating rather than assuming: **what
-any particular series' catalogue actually returns.** This file fixes the window,
-the outcomes at its edges, the detection mechanism, and the contract the model
-owes a difference. Which differences exist among the four supported series is
-[OQ-045](open-questions.md#oq-045), and no such difference may be written down
-until it has been observed, because `scripts/mariadb/` does not exist in this
-repository.
+any particular series' catalogue actually returns.** That belongs to
+[catalogue-coverage.md](catalogue-coverage.md), which records the field lists,
+and to [context-document.md](context-document.md), which records the shape of
+each value. This file fixes the window, the outcomes at its edges, the
+detection mechanism, the form of the version string, and the contract the
+model owes a difference. Which differences exist among the four supported
+series was `OQ-045`, now listed under [Closed](open-questions.md#closed). The
+fixture of `scripts/mariadb/` exists, the four series have been observed
+against it twice, and what was found is recorded in *Differences observed
+between the series* below, per `FR-SRV-038`. A difference that is not in that
+record has not been observed, and SHALL NOT be written down.
 
 ## Actors
 
@@ -193,6 +199,95 @@ repository.
   statements it defers to are the ones `FR-SRV-006` already places at connection
   start, so the strongest guarantee this tool makes is still confirmed before
   the server is characterised, as `FR-ERR-006` records.
+
+- **FR-SRV-040**: The version string the probe of `FR-SRV-002` returns SHALL
+  be taken to have the form
+  `<major>.<minor>.<patch>-MariaDB` optionally followed by `-<suffix>`, and
+  the `series` of `FR-CTX-031` SHALL be derived from it as `<major>.<minor>`
+  and from nothing else. The suffix SHALL NOT be used to derive anything.
+
+  *Observed.* The four fixture servers returned, verbatim:
+
+  ```text
+  10.11 -> 10.11.19-MariaDB-ubu2204
+  11.4  -> 11.4.13-MariaDB-ubu2404
+  11.8  -> 11.8.9-MariaDB-ubu2404
+  12.3  -> 12.3.3-MariaDB-ubu2404
+  ```
+
+  The suffix is the distribution the image was built on and is a property of
+  the **build**, not of the series: three of the four carry `ubu2404` and one
+  carries `ubu2204`. Two further readings return the same string on all four —
+  the session version variable and its global counterpart — and the global
+  variables table of `INFORMATION_SCHEMA` carries the same value under the
+  variable name `VERSION`, which matters because that reading is a `SELECT`
+  against `INFORMATION_SCHEMA` and so falls inside the closed list of
+  `FR-SRV-006` without needing the probe's own entry.
+
+  *Closes the first half of* [OQ-042](open-questions.md#closed). The second
+  half is closed by `FR-SRV-041`, which states the limit that closes it.
+
+  *Two further readings were taken and neither is a version.* The build's
+  source revision is a distinct 40-character hash per build and differs
+  between all four; the SSL library string differs between `10.11` and the
+  other three. Both are properties of the build. A malloc-library variable was
+  requested and **no row came back on any of the four**, so no such variable
+  exists on these servers.
+
+- **FR-SRV-041**: IF the version string the probe returns does not contain the
+  product marker `MariaDB`, THEN the server SHALL NOT be taken to be MariaDB,
+  and `FR-SRV-003` SHALL apply. The condition is **necessary and not
+  sufficient**: the system SHALL NOT claim to distinguish MariaDB from a
+  server that is not MariaDB and reports a MariaDB-compatible version string,
+  and this file SHALL state that limit rather than leave it to be
+  discovered.
+
+  *Observed.* All four series of `FR-SRV-015` carry the literal `-MariaDB`
+  immediately after the patch number, and the version-comment variable reads
+  `mariadb.org binary distribution` on all four. No server that is not
+  MariaDB was observed: the fixture of `scripts/mariadb/` holds four MariaDB
+  servers and no impostor.
+
+  *Consequence, stated plainly because it is a weaker guarantee than the words
+  suggest.* **A server determined to pass as MariaDB will pass.** Every
+  reading the condition can rest on — the version string, the version-comment
+  variable, and any other reading the probe could take — is a response the
+  server itself composes, so a server that emulates MariaDB completely is
+  indistinguishable from MariaDB by any observation `tpl` can make over the
+  wire. `FR-SRV-003` refuses every server the condition rejects and no other:
+  `tpl` does not detect an impostor, and no passage of this corpus says it
+  does.
+
+  *Closes the second half of* [OQ-042](open-questions.md#closed), and with
+  `FR-SRV-040` the entry entire — on the necessary condition, with the limit
+  written here rather than left as an entry. It closes rather than waits
+  because the evidence it asked for is very likely unobtainable in principle
+  and not merely unobserved for want of a fixture: every check available is
+  made over responses the server itself controls, and a complete emulation
+  defeats all of them at once. An entry that no achievable observation can
+  close is not an open question but a limit, and a limit belongs beside the
+  requirement it qualifies.
+
+  *Rejected.* Building an impostor into `scripts/mariadb/`. MySQL cannot be
+  made to report a MariaDB version string, so the fixture would need a proxy
+  that lies; and observing one impostor yields a rule that separates that
+  impostor rather than the class. Also rejected: leaving the entry open. The
+  evidence will not arrive, so it would sit open permanently and drain the
+  meaning of an index whose other entries were each something someone could
+  go and settle.
+
+  *What would change this.* A published external authority stating how the two
+  are separated, cited by name and by date under the fourth provenance of the
+  [README](README.md#provenance) and re-verified on the schedule that
+  provenance requires. That is an amendment to this requirement and to
+  `FR-SRV-003` together, and it would turn a necessary condition into a
+  sufficient one. Nothing short of it will.
+
+  *A stated limit.* This requirement names where a guarantee stops, in the
+  form the [README](README.md#writing-conventions) fixes for all three:
+  `FR-PRIV-020`, where a table whose triggers are hidden cannot be told from
+  a table that has none, and `FR-CONF-039`, where pinned trust material is
+  additional to the public root bundle rather than exclusive of it.
 
 - **FR-SRV-003**: IF the server is not MariaDB, THEN the system SHALL exit `78`
   (`EX_CONFIG`), and SHALL NOT read the catalogue. The `cause` SHALL state that
@@ -437,6 +532,39 @@ satisfies only the last of the three cases below.
   the closed list and already mandatory; one comparison against its result costs
   nothing and is deterministic.
 
+- **FR-SRV-037**: The system SHALL NOT issue a statement that names a fixed
+  list of `INFORMATION_SCHEMA` columns unless every column named is present on
+  every series of `FR-SRV-015`. Where a column is present on some series and
+  not on others, the system SHALL select the column list from the series
+  resolved by `FR-SRV-022`, or SHALL restrict the list to the columns common to
+  all four series, and SHALL NOT determine the list by issuing a statement and
+  handling its failure.
+
+  *Observed.* Three `INFORMATION_SCHEMA` tables differ in width across the four
+  series, recorded as differences 5, 6 and 7 of *Differences observed between
+  the series* below. Naming a column a series does not have is a hard
+  `ERROR 1054 (42S22)` — not a `NULL`, not a warning — so a single fixed
+  column list against `INFORMATION_SCHEMA.COLUMNS` or
+  `INFORMATION_SCHEMA.PARAMETERS` cannot run unmodified on all four.
+
+  *Rationale.* This is `FR-SRV-023` applied to the shape of the catalogue
+  rather than to its content, and it is stated separately because the failure
+  mode is different in kind. A difference of content produces a wrong value; a
+  difference of width produces a statement the server refuses outright, which
+  would make `tpl` unusable against a whole supported series rather than
+  inaccurate against it. The two permitted answers are the two `FR-SRV-022`
+  already licenses: the treatment of a known difference is selected from the
+  resolved series, and a list that names nothing series-specific needs no
+  selection at all.
+
+  *Rejected.* Probing the shape of these tables at connection time. It is a
+  `SELECT` against `INFORMATION_SCHEMA` and so is inside the closed list of
+  `FR-SRV-006`, but it adds a catalogue query whose presence depends on the
+  server, which `NFR-PERF-001` and `NFR-PERF-002` forbid, and it buys nothing
+  the series already determines. Also rejected: naming every column of the
+  widest series and tolerating the error on the others, which `FR-SRV-023`
+  forbids and which would make a supported series unreadable.
+
 - **FR-SRV-024**: WHERE a fact of the model is present on **more than one**
   series of `FR-SRV-015` but is reported in a different catalogue location,
   under a different name, or in a different spelling on those series, the
@@ -501,6 +629,65 @@ satisfies only the last of the three cases below.
   window. `FR-CAT-029` is the second list, parallel to the first, with its own
   closing rule in `FR-CAT-030`.
 
+- **FR-SRV-039**: WHERE a catalogue field the model carries is present on
+  every series of `FR-SRV-015`, means the same thing on every one of them, is
+  reported in the same place under the same name, and nonetheless carries a
+  **different value** on one of them because the servers' own defaults
+  differ, the system SHALL carry that value **exactly as the server returns
+  it**, without normalisation, substitution or adjustment of any kind. Every
+  character-set value and every collation value the model carries SHALL be
+  passed through under this rule.
+
+  *This is the fourth treatment of `BR-SRV-006`, and it exists because the
+  first three do not reach the case.* The field is not reported differently,
+  so `FR-SRV-024` cannot normalise it; it is present everywhere, so
+  `FR-SRV-004` does not mark it; its meaning is identical everywhere, so
+  `FR-SRV-025` does not exclude it. It is a difference of **value**, and the
+  three cases were written over differences of presence and of
+  representation.
+
+  *Observed.* The session collation recorded against every view, stored
+  routine and trigger reads `utf8mb4_general_ci` on `10.11` and
+  `utf8mb4_uca1400_ai_ci` on the other three, from identical DDL, because the
+  servers' own default collations differ — difference 1 of `FR-SRV-038`. The
+  same root cause reaches the schema's default collation, which differs for a
+  database created without an explicit one — difference 11.
+
+  *Rationale, in the product owner's terms.* Each collation is a collation.
+  `utf8mb4_general_ci` and `utf8mb4_uca1400_ai_ci` are two different
+  collations, not two spellings of one, so normalising either onto the other
+  would discard the information the field exists to carry — and every
+  candidate target for such a normalisation is a choice of one server's answer
+  over another's. Values are passed through exactly as received, without
+  interference, and **character sets and collations are respected and
+  preserved regardless of the server version**.
+
+  *Accepted cost, stated here so it is not discovered later.* The same
+  template rendered against a `10.11` and against a `12.3` holding the same
+  schema **will differ** wherever it reads such a field. This ranks
+  **fidelity to what the server holds above determinism across servers**, and
+  it is the one place in this specification where those two are traded
+  against each other. `FR-SRV-026` excepts these fields for exactly this
+  reason, and `NFR-DET-001` is untouched: two reads of one server still
+  produce identical output.
+
+  *Closes* `OQ-075`, now listed under
+  [Closed](open-questions.md#closed).
+
+  *Rejected by the product owner.* Excluding such a field from the model, as
+  a third ground of exclusion parallel to `FR-CAT-024` and `FR-CAT-029` —
+  which was the recommendation. Also rejected: admitting the field and
+  normalising the value away, in any of the three forms offered — to the
+  character set alone, to the newest series' value, or to the schema's own
+  collation — each of which discards a real difference between two real
+  collations.
+
+  *What this rule does not reach.* A value that differs between two servers
+  because the server **computed** it rather than recorded it. An index
+  cardinality is the case, and `FR-CAT-024` excludes it as volatile for the
+  reason `BR-CAT-002` gives: passing an estimate through would make two reads
+  of one unchanged database differ, which this rule never does.
+
 - **FR-SRV-005**: The shape of the document SHALL be constant across every
   series of `FR-SRV-015`. A field SHALL NOT be omitted because the server does
   not provide it, per `FR-OUT-012`.
@@ -511,10 +698,20 @@ satisfies only the last of the three cases below.
 
 - **FR-SRV-026**: For a database created from the same accepted DDL on each
   series of `FR-SRV-015`, the document of `FR-SCH-017` SHALL be byte-identical
-  across the four, except for the fields `null` under `FR-SRV-004` and the
-  `server` object of `FR-SRV-028`. This equivalence SHALL be bounded to the
-  series of `FR-SRV-015` and SHALL NOT extend to a server above the window, per
+  across the four, except for the fields `null` under `FR-SRV-004`, the
+  `server` object of `FR-SRV-028`, and the values passed through under
+  `FR-SRV-039`. This equivalence SHALL be bounded to the series of
+  `FR-SRV-015` and SHALL NOT extend to a server above the window, per
   `FR-SRV-033`.
+
+  *Amended in the seventh edition, and the exception is a real weakening.*
+  `FR-SRV-039` admits a field whose raw value differs between two supported
+  servers, and a raw value that differs cannot be byte-identical, so the
+  exception follows from the decision rather than being a further choice. The
+  fields it reaches are enumerated in the register of `FR-SRV-036`, which is
+  what keeps the exception from swallowing the comparison: a field that
+  differs and is not in that register is a failure of this requirement, not
+  an instance of its exception.
 
   *Rationale.* This is what "properly supported" means, stated so that it can be
   tested rather than reviewed. `FR-SRV-005` fixes the shape; this fixes the
@@ -523,15 +720,21 @@ satisfies only the last of the three cases below.
   that is absent until four documents are diffed.
 
 - **FR-SRV-027**: Every difference the model accommodates under `FR-SRV-024`,
-  `FR-SRV-004`, or `FR-SRV-025` SHALL be recorded in this specification, naming
-  the field, the series affected, and what each of the four series was observed
-  to return.
+  `FR-SRV-004`, `FR-SRV-025`, or `FR-SRV-039` SHALL be recorded in this
+  specification, naming the field, the series affected, and what each of the
+  four series was observed to return.
 
-  *Known gap.* The register that `FR-SRV-027` requires is empty, and must stay
-  empty until the differences are observed. Which fields differ among `12.3`,
-  `11.8`, `11.4` and `10.11` is [OQ-045](open-questions.md#oq-045), blocked by
-  the absence of `scripts/mariadb/`. No entry may be written from a changelog,
-  from a release note, or from knowledge of MySQL.
+  *Amended in the seventh edition.* `FR-SRV-039` is a fourth treatment and
+  owes the register the same record as the other three. Adding it is also
+  what turns the register from a statement about what was **not** found into
+  a record of what was.
+
+  *State of the register.* The register held nothing through the sixth
+  edition and now holds two rows, both created by `FR-SRV-039`. Of the
+  **eleven** differences observed between the series, two reach a field the
+  model carries; the other nine reach the reader, the fixture, or a
+  requirement, and produce no row here. No entry may be written from a
+  changelog, from a release note, or from knowledge of MySQL.
 
 - **FR-SRV-036**: The register of `FR-SRV-027` SHALL be the table in the
   section *The divergence register* below, and SHALL be nowhere else. Each row
@@ -550,23 +753,37 @@ satisfies only the last of the three cases below.
 Every difference the model accommodates under `FR-SRV-024`, `FR-SRV-004`, or
 `FR-SRV-025` is registered here, per `FR-SRV-027` and `FR-SRV-036`.
 
-**The register is empty.** It must stay empty until the differences are
-observed against a real server of each series of `FR-SRV-015`, which is
-[OQ-045](open-questions.md#oq-045) and is blocked by the absence of
-`scripts/mariadb/` from this repository. An empty register is not a claim that
-the four series agree; it is a statement that nobody has looked.
+**The register held nothing through the sixth edition and now holds two
+rows.** The four series were stood up from the fixture of `scripts/mariadb/`
+on 2026-09-10, the `freight` catalogue was dumped from each and compared field
+by field, `INFORMATION_SCHEMA` itself was compared table by table, and a
+second pass recorded the field lists themselves. Eleven differences were
+found, and the two rows below are the two that reach a field the model
+carries. Both arrived by the same route — the servers' own default collations
+differ — and both are accommodated by `FR-SRV-039` rather than by any of the
+three treatments the sixth edition had.
 
 | Field | Treatment | Observed on `12.3` / `11.8` / `11.4` / `10.11` |
 |---|---|---|
-| *(none registered)* | | |
+| `collation_connection`, on every view, routine and trigger — `FR-CAT-047`, `FR-CAT-048`, `FR-CAT-050` | passed through | `utf8mb4_uca1400_ai_ci` / `utf8mb4_uca1400_ai_ci` / `utf8mb4_uca1400_ai_ci` / **`utf8mb4_general_ci`** |
+| `database.collation`, WHERE the database declares no collation of its own — `FR-CTX-036` | passed through | `utf8mb4_uca1400_ai_ci` / `utf8mb4_uca1400_ai_ci` / `utf8mb4_uca1400_ai_ci` / **`utf8mb4_general_ci`** |
 
-The **Treatment** column takes one of exactly three values, per `BR-SRV-006`:
-`normalised` under `FR-SRV-024`, `marked null` under `FR-SRV-004`, or
-`excluded` under `FR-SRV-025` — and a field may carry `normalised` on the
-series that have it and `marked null` on those that do not, per the amendment
-to `FR-SRV-004`. A row whose treatment is `excluded` SHALL also appear in the
-list of `FR-CAT-029`, which is where the exclusion is normative; the row here
-records the observation that justified it.
+The second row was observed on the `mysql` schema of the four servers rather
+than on `freight`, which declares its collation explicitly and therefore reads
+identically on all four. The row is registered on the property rather than on
+the fixture object, because the difference is a property of any database
+created without an explicit collation.
+
+The **Treatment** column takes one of exactly four values, per `BR-SRV-006`:
+`normalised` under `FR-SRV-024`, `marked null` under `FR-SRV-004`, `excluded`
+under `FR-SRV-025`, or `passed through` under `FR-SRV-039` — and a field may
+carry `normalised` on the series that have it and `marked null` on those that
+do not, per the amendment to `FR-SRV-004`. A row whose treatment is `excluded`
+SHALL also appear in the list of `FR-CAT-029`, which is where the exclusion is
+normative; the row here records the observation that justified it. A row whose
+treatment is `passed through` is also the licence for that field's exception
+to `FR-SRV-026`, and a field that differs without a row here is a failure of
+that requirement.
 
 - **BR-SRV-006**: Three cases, three different obligations, and the distinction
   is the substance of this section. A fact reported differently is
@@ -576,6 +793,129 @@ records the observation that justified it.
   marking it can make it safe. Collapsing all three onto `null` — which is how
   the second edition read — would leave the first case delivering different
   documents from identical databases, and the third delivering wrong ones.
+
+  *Amended in the seventh edition: there are four cases, and the fourth was
+  found by observation.* A field present on all four series, meaning the same
+  thing on all four, reported in the same place under the same name, and
+  carrying a **different value** on one of them because the servers' own
+  defaults differ — difference 1 of `FR-SRV-038` — is reached by none of the
+  three above. Such a field is **passed through**, verbatim, under
+  `FR-SRV-039`: the value is carried exactly as the server returns it, and
+  `FR-SRV-026` excepts it from the byte-identical comparison. That is the one
+  place this specification prefers fidelity to the server over determinism
+  across servers, and `FR-SRV-039` states the cost.
+
+  The four cases are now exhaustive over differences of **presence**, of
+  **representation**, and of **value**. They remain silent about a difference
+  of **meaning** only in the sense that `FR-SRV-025` answers it by exclusion.
+
+  *Closes* `OQ-075`, now listed under
+  [Closed](open-questions.md#closed).
+
+## Differences observed between the series
+
+- **FR-SRV-038**: Every difference observed between the series of
+  `FR-SRV-015` SHALL be recorded in this section, whether or not it reaches the
+  model, naming what was observed on each series and what the difference
+  obliges. A difference recorded here that reaches the model SHALL also
+  produce a row in the register of `FR-SRV-036`; a difference that does not
+  reach the model SHALL NOT produce one. An observation that differs between
+  two servers **of the same series** is not a difference between the series
+  and SHALL NOT be given a row, but SHALL be recorded below the table so that
+  it is not counted as one.
+
+  *Rationale.* `FR-SRV-027` records only what the model **accommodates**, which
+  is the right scope for a normative register and the wrong scope for an
+  observation. Nine of the eleven differences below reach the reader, the
+  fixture, or a requirement rather than the document, and each of them
+  constrains work that has not been done yet: without a home they would be
+  rediscovered, or worse, contradicted. Keeping the two apart also keeps the
+  register honest — two rows in the register beside eleven in the observation
+  record says *we looked, and this is the part the document carries*, which is
+  a much stronger statement than either table alone.
+
+**Method and date.** The four images were built from `scripts/mariadb/` and run
+side by side on 2026-09-10; server versions `12.3.3`, `11.8.9`, `11.4.13` and
+`10.11.19`. Two passes were made. The first dumped the `freight` catalogue from
+each and compared them field by field, and compared `INFORMATION_SCHEMA` table
+by table; it found seven differences. The second recorded the **field lists
+themselves**, verbatim, for the twenty entries of
+[open-questions.md](open-questions.md) that asked for them; it found four
+more, taking the total to **eleven**.
+
+| # | Observed | `12.3` | `11.8` | `11.4` | `10.11` | What it obliges |
+|---|---|---|---|---|---|---|
+| 1 | Default server collation, which propagates into the session collation recorded against every view, routine and trigger | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_general_ci` | Passed through verbatim, `FR-SRV-039`; excepted from `FR-SRV-026`. Registered under `FR-SRV-036`. Carried by `FR-CAT-047`, `FR-CAT-048`, `FR-CAT-050` |
+| 2 | Position of `INVISIBLE` in `SHOW CREATE TABLE`; `INFORMATION_SCHEMA.COLUMNS.EXTRA` is `INVISIBLE` on all four | after the default | after the default | before the default | before the default | Nothing. `FR-SRV-007` bars `SHOW`, so the difference cannot reach `tpl` |
+| 3 | `have_ssl` | `YES` | `YES` | `YES` | `DISABLED` | A supported series may offer no TLS at all. `FR-CONF-038` |
+| 4 | A temporary table in `INFORMATION_SCHEMA.TABLES` after `CREATE TEMPORARY TABLE` | one row, `TABLE_TYPE='TEMPORARY'` | one row | one row | no row | Fixes the set of `table_type` values a server can emit. `FR-CAT-031`, `FR-CAT-032` |
+| 5 | Width of `INFORMATION_SCHEMA.COLUMNS` | 24 | 24 | 24 | 22 | `FR-SRV-037`. The two extra columns are `IS_SYSTEM_TIME_PERIOD_START` and `IS_SYSTEM_TIME_PERIOD_END` |
+| 6 | Width of `INFORMATION_SCHEMA.PARAMETERS` | 17 | 16 | 16 | 16 | `FR-SRV-037`. The extra column is `PARAMETER_DEFAULT`, and `FR-CAT-049` does not carry it: it was SQL `NULL` on every parameter of the fixture on the one series that has it |
+| 7 | `INFORMATION_SCHEMA.PERIODS` | present, empty | present, empty | present, empty | absent, `ERROR 1109 (42S02)` | `FR-SRV-037`. `FR-CAT-022` already excludes application-time periods, so nothing else follows today |
+| 8 | Declared nullability of the index table's comment column | `varchar(16)` `NOT NULL` | `varchar(16)` `NOT NULL` | `varchar(16)` nullable | `varchar(16)` nullable | Nothing today. `FR-CAT-042` does not carry the field. **The split falls between `11.4` and `11.8`** — see below |
+| 9 | Declared width of the trigger table's event column | `varchar(20)` | `varchar(6)` | `varchar(6)` | `varchar(6)` | Nothing. The values returned are `INSERT`, `UPDATE`, `DELETE` on all four, and the column is present on all four, so `FR-SRV-037` is not engaged |
+| 10 | Index cardinality **over identical data** | an estimate | the same estimate as `11.8`'s neighbours | agrees with `11.8` and `12.3` | **differs** | Nothing. `FR-CAT-024` excludes it as volatile, and its amendment states why an estimate is not passed through under `FR-SRV-039` |
+| 11 | The schema catalogue's default collation, for a database that declares none | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_general_ci` | Passed through, `FR-SRV-039`. Registered under `FR-SRV-036`. Same root cause as difference 1 |
+
+**Difference 1 is the one that would have falsified `FR-SRV-026`, and it is
+now the one `FR-SRV-039` accommodates.** The four servers were given identical
+DDL and recorded a different session collation against every view, routine and
+trigger, because their own defaults differ. It is not a difference of catalogue
+shape, of catalogue meaning, or of presence, so `FR-SRV-024`, `FR-SRV-004` and
+`FR-SRV-025` do not reach it. The sixth edition recorded it as a gap in the
+taxonomy of `BR-SRV-006` and barred the field from the model while
+`OQ-075` was open. That entry is settled: the field
+is admitted, its value is carried exactly as the server returns it under
+`FR-SRV-039`, and `FR-SRV-026` excepts it. Difference 11 is the same cause
+reaching the schema's own collation, and it is registered beside it.
+
+**Difference 8 is the only split in this record that does not fall after
+`10.11`, and it is recorded for that reason as much as for its content.**
+Ten of the eleven separate `10.11` from the other three, or `12.3` from the
+other three; this one puts `10.11` and `11.4` on one side and `11.8` and
+`12.3` on the other. Nothing structural follows — `FR-SRV-022` already selects
+a treatment from the resolved series rather than from a two-way split, and no
+requirement in this corpus is written as *`10.11` against the rest*. What
+follows is a caution for the reader, the fixture, and the test of
+`FR-SRV-029`: **a difference may fall anywhere in the window**, and code or
+tests that model the four series as one old server and three modern ones will
+be right ten times out of eleven and wrong once.
+
+**Differences 8 and 9 do not engage `FR-SRV-037`.** Both change a column's
+declared type and neither changes a table's width, so a statement naming a
+fixed column list runs unmodified on all four.
+
+**One further difference was observed and is not a difference between the
+series.** A routine's creation and alteration timestamps and a trigger's
+creation timestamp are wall-clock times recording when each container ran its
+initialisation scripts, and they differ between the four captures for that
+reason alone — two servers of the **same** series would differ in the same
+way. It is listed here so that a reader comparing the four captures does not
+count it as a twelfth series difference. Its consequence is real and is
+carried elsewhere: `FR-CAT-024` excludes all three fields, because a document
+carrying any of them could never satisfy `FR-SRV-026` against any pair of
+servers.
+
+**Everything else matched exactly**, on all four: all 301 columns and every
+field of them — types, nullability, defaults, generation expressions,
+per-column character sets and collations, comments and attribute strings —
+all 68 constraint rows, all fifteen referential constraints, all 54 key
+columns, all twenty-four check constraints, all 77 index rows **but for their
+cardinality**, all five views but for difference 1, all seven routines and all
+six triggers but for difference 1 and the timestamps, the `freight` row of the
+schema catalogue, the sequence, and every reading taken as the reduced-grant
+reader. `11.8` and `12.3` produced byte-identical catalogue dumps and are
+separated only by differences 6 and 9.
+
+**What this evidence is, and what it is not.** It is a comparison of the
+**catalogue material the model draws on**, which is the strongest evidence
+available before `tpl` exists. It is not the test of `FR-SRV-026`, which
+compares the document `tpl` emits and which `FR-SRV-029` still requires. Three
+gaps in the fixture bound the claim and are named so that they are not mistaken
+for observations: no row holds a non-`NULL` `INET4`, `INET6` or `UUID` value;
+no comment carries a supplementary-plane character; and the system-versioned
+table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
+`IS_SYSTEM_TIME_PERIOD_END` never read `YES` for any column.
 
 ## The probed version in the model
 
@@ -695,13 +1035,19 @@ records the observation that justified it.
   refusal of `FR-SRV-020` by an integration test against at least one series
   outside it.
 
-  *Consequence for the fixture.* The container of `scripts/mariadb/` must
-  therefore be buildable at four server versions rather than one, and the DDL of
-  its fixture must be DDL that all four accept. Where a structure cannot be
-  created on all four, the difference is not a fixture problem but an entry the
-  register of `FR-SRV-027` owes. This is recorded in
-  [OQ-045](open-questions.md#oq-045) so that it reaches whoever stands the
-  container up.
+  *Consequence for the fixture, now discharged.* The container of
+  `scripts/mariadb/` is buildable at four server versions rather than one, and
+  its DDL is DDL that all four accept. Two structures could not be created on
+  all four and are absent from the shared DDL rather than hidden behind a
+  conditional: a `VECTOR` column or index, rejected by `10.11` and `11.4` with
+  `ERROR 4161`, and a `SET` member containing a comma, rejected by all four
+  with `ERROR 1367` — the second is not a series difference at all but a
+  property of the type, recorded in `FR-CAT-034`.
+
+  *Still owed.* The test itself. The observation recorded under `FR-SRV-038`
+  compares catalogue dumps, not the documents `tpl` emits, so it is evidence
+  for `FR-SRV-026` and not the verification `FR-SRV-026` requires. That test
+  cannot be written until `tpl` can emit a document.
 
 - **FR-SRV-035**: The marked read of `FR-SRV-031` SHALL be verified by an
   integration test that presents the reader with a series above its own window,
@@ -737,7 +1083,11 @@ records the observation that justified it.
   `NFR-PERF-002` and `NFR-PERF-004`, the query-count and connection invariants
   that `FR-SRV-023` relies on.
 - [security.md](security.md) — `BR-SEC-002`, the cross-cutting statement of the
-  read-only promise.
+  read-only promise, and `FR-SEC-021`, the transport guarantee that difference
+  3 of `FR-SRV-038` bounds.
+- [configuration-model.md](configuration-model.md) — `FR-CONF-038`, the
+  behaviour of the five TLS modes against a server that offers TLS and one
+  that does not.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, `77`, and `78`;
   the validation order of `FR-ERR-006` in which the refusals of `FR-SRV-003` and
   `FR-SRV-020` fall; and `FR-ERR-002`, `FR-ERR-009`, `FR-ERR-010` and
@@ -754,12 +1104,24 @@ records the observation that justified it.
 
 ## Open questions
 
-- [OQ-042](open-questions.md#oq-042) — what the version probe returns, and how
-  MariaDB is distinguished from a server reporting a MariaDB-compatible version
-  string. It also fixes the exact string `FR-SRV-028` carries.
-- [OQ-045](open-questions.md#oq-045) — which fields of the model differ among
-  the four series of `FR-SRV-015`, and what each returns; the subject of the
-  register `FR-SRV-027` requires.
+**None.** The seven entries this file carried are closed and are listed under
+[Closed](open-questions.md#closed):
 
-`OQ-046` is answered by the fourth entry of `FR-SRV-006` and is listed under
-[Closed](open-questions.md#closed).
+| Entry | Closed by |
+|---|---|
+| [OQ-042](open-questions.md#closed) | `FR-SRV-040` and `FR-SRV-041` |
+| [OQ-044](open-questions.md#closed) | `FR-SRV-020`, with `FR-SRV-021` |
+| [OQ-045](open-questions.md#closed) | `FR-SRV-038`, and the register of `FR-SRV-036` |
+| [OQ-046](open-questions.md#closed) | The fourth entry of `FR-SRV-006`, with `FR-SRV-012` as amended |
+| [OQ-073](open-questions.md#closed) | `FR-SRV-031` through `FR-SRV-033`, with `BR-SRV-008`, `BR-SRV-009` and `FR-CTX-034` |
+| [OQ-074](open-questions.md#closed) | `FR-SRV-002` as amended, with `FR-SRV-034` |
+| [OQ-075](open-questions.md#closed) | `FR-SRV-039`, with `BR-SRV-006` and `FR-SRV-026` as amended |
+
+`OQ-042` was the last entry the corpus held open, and it is the one entry
+here that closes on a **limit** rather than on an answer. `FR-SRV-040` fixes
+what the probe returns — the form of the version string, the readings that
+carry it, and the derivation of `series` — and `FR-SRV-041` fixes the
+necessary condition for a server to be MariaDB and states, in the requirement
+itself, that the condition is not a sufficient one: a server determined to
+pass as MariaDB will pass. That limit is now specification rather than an
+entry, because no observation this project can make would close it.

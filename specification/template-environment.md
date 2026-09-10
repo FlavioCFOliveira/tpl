@@ -267,12 +267,31 @@ row is a case the implementation SHALL satisfy.
   identifier — including one that contains a backtick — the output SHALL be a
   single quoted identifier that MariaDB parses back to exactly that string.
 
-  *Known gap.* The exact escaping mechanism for a backtick inside an
-  identifier is [OQ-070](open-questions.md#oq-070). It is a fact about MariaDB
-  and this specification does not state one that has not been observed: there
-  is no `scripts/mariadb/` in the repository, so there is no container to
-  observe against. The requirement above is a product requirement and needs no
-  observation; the mechanism that satisfies it does.
+- **FR-ENV-045**: The escaping `FR-ENV-035` requires SHALL be the doubling of
+  every backtick within the identifier, the whole then enclosed in a single
+  pair of backticks. `quote` applied to the identifier `back` followed by a
+  backtick followed by `tick` SHALL therefore yield:
+
+  ```
+  `back``tick`
+  ```
+
+  *Observed.* That form is the form MariaDB accepts, on every series of
+  `FR-SRV-015`: the fixture of `scripts/mariadb/` declares a column and an
+  index whose names contain a backtick, written exactly so, and the identical
+  DDL was accepted without error or warning by `12.3`, `11.8`, `11.4` and
+  `10.11`, with the objects appearing in the catalogue under those names on
+  all four. No other escape — a backslash, a percent encoding, a doubled pair
+  — was accepted or needed.
+
+  *Rationale for stating the mechanism as well as the product requirement.*
+  `FR-ENV-035` is testable only against a server: an output that is wrong here
+  is still a string, still renders, still commits, and fails at the point
+  where the generated SQL is executed, which may be a different machine and a
+  different week. Naming the mechanism makes the filter testable without a
+  server, and `BR-SEM-004` is the reason that matters.
+
+  *Closes* `OQ-070`, now listed under [Closed](open-questions.md#closed).
 
 - **FR-ENV-036**: `json` SHALL serialise its operand as a JSON value in the
   compact form of `FR-OUT-007`: one line, no superfluous whitespace, and no
@@ -345,7 +364,7 @@ row is a case the implementation SHALL satisfy.
   keep in step, no grammar to get wrong, and nothing for it to be right about
   that `data_type` is wrong about. That is what makes keeping the name
   defensible where a `sql_type` that parsed `column_type` would not be — a
-  parser would depend on [OQ-028](open-questions.md#oq-028), the textual form
+  parser would depend on `OQ-028`, the textual form
   of `column_type`, which is unobserved, and it would be a second place the
   type could be misread. It also earns its place beside a plain field read:
   `{{ col | sql_type }}` composes into a filter chain and reads as one, where
@@ -388,16 +407,63 @@ row is a case the implementation SHALL satisfy.
 
   *Rationale.* Disjointness is testable today and is the property a template
   actually depends on: `{% if col is numeric %}…{% elif col is textual %}` must
-  not take two branches, and a spatial or JSON column must be able to fall
-  through to neither without failing the render.
+  not take two branches, and a column of a type in no family — a spatial one,
+  for instance — must be able to fall through to neither without failing the
+  render.
 
-  *Known gap.* Which `data_type` values fall in each family is
-  [OQ-072](open-questions.md#oq-072). It is a fact about what MariaDB writes in
-  the catalogue, the textual form of `data_type` is itself
-  [OQ-028](open-questions.md#oq-028), and neither may be carried over from
-  MySQL knowledge — there is no container to observe against. The three tests
-  are fixed here as disjoint predicates over a family; the memberships are
-  not.
+  *Amended in the sixth edition.* The rationale offered a JSON column as its
+  second example of a type in no family. `FR-CAT-038` records that MariaDB
+  reports such a column as `longtext`, so whether it falls through depended
+  entirely on where `longtext` landed, and the example asserted an outcome
+  the observation does not support. The requirement is unchanged; only the
+  illustration was wrong.
+
+  *Settled in the seventh edition.* `longtext` is **textual**, per
+  `FR-ENV-046`, so a column declared `JSON` satisfies `textual` and does not
+  fall through. A spatial column is the example that survives.
+
+- **FR-ENV-046**: The three families of `FR-ENV-041` SHALL have exactly the
+  following memberships over the `data_type` values a series of `FR-SRV-015`
+  was observed to produce:
+
+  | Family | `data_type` values |
+  |---|---|
+  | `numeric` | `bigint`, `bit`, `decimal`, `double`, `float`, `int`, `mediumint`, `smallint`, `tinyint` |
+  | `temporal` | `date`, `datetime`, `time`, `timestamp`, `year` |
+  | `textual` | `char`, `enum`, `longtext`, `mediumtext`, `set`, `text`, `tinytext`, `varchar` |
+  | none of the three | `binary`, `blob`, `geometry`, `geometrycollection`, `inet4`, `inet6`, `linestring`, `longblob`, `mediumblob`, `multilinestring`, `multipoint`, `multipolygon`, `point`, `polygon`, `tinyblob`, `uuid`, `varbinary` |
+
+  A `data_type` value that appears in none of the four rows SHALL satisfy none
+  of the three tests, per `FR-ENV-042`, and SHALL NOT fail the render.
+
+  *Observed.* The fixture's 301 columns yielded **exactly 39 distinct
+  `data_type` values**, byte-identical on all four series, and the four rows
+  above partition those 39: nine, five, eight, and seventeen. `json` is not
+  among them, because a `JSON` column reports `longtext`, per `FR-CAT-038`;
+  neither is `numeric`, because a `NUMERIC` column reports `decimal`.
+
+  *Closes* `OQ-072`, now listed under
+  [Closed](open-questions.md#closed).
+
+  *Two of the four rows are drawn from the observation rather than from
+  taxonomy, and that is what makes them checkable.* The **textual** row is
+  exactly the set of types for which the catalogue reports a character set
+  and a collation, per `FR-CTX-041` — the same eight types, no more and no
+  fewer. That is why the binary and blob types are **not** textual although
+  they carry a length: the catalogue reports SQL `NULL` for their character
+  set, and a byte string has no character set to report. `bit` is
+  **numeric** on the same kind of ground: the catalogue populates its numeric
+  precision with the bit width and reports no character-set part, so it
+  decomposes exactly as the integer types beside it.
+
+  *Bounded claim.* The memberships are fixed over the 39 values the fixture
+  produced, which is every value the types it declares can yield. Two types a
+  supported server can hold are not among them and are named so the
+  boundedness is legible: `VECTOR`, which `10.11` and `11.4` reject and which
+  the shared DDL therefore omits, per `FR-SRV-029`; and any type a series
+  newer than the window introduces, which reaches `FR-CTX-018` and then this
+  requirement's fall-through. Neither may be assigned to a family without an
+  observation.
 
 - **FR-ENV-043**: `primary_key` and `unique` SHALL fail the render with `65`
   WHEN the table named by the operand's `table_name` is absent from the render
@@ -559,13 +625,11 @@ row is a case the implementation SHALL satisfy.
 
 ## Open questions
 
-- [OQ-070](open-questions.md#oq-070) — how a backtick inside an identifier is
-  escaped, so that `FR-ENV-035` can be satisfied.
-- [OQ-072](open-questions.md#oq-072) — the membership of the numeric,
-  temporal, and textual type families.
+**None.** [OQ-072](open-questions.md#closed) — the membership of the numeric,
+date-and-time and character-string families — is answered by `FR-ENV-046` and
+is listed under [Closed](open-questions.md#closed). It was blocked in turn by
+`OQ-028`, which `FR-CTX-038` closes.
 
-Both are facts about MariaDB that must be observed against the container of
-`scripts/mariadb/`, which does not exist. The three design questions this file
-carried are closed and listed under [Closed](open-questions.md#closed):
-`OQ-049` by `FR-ENV-003`, `OQ-050` by `FR-ENV-044`, and `OQ-071` by
-`FR-ENV-039`.
+`OQ-070` is answered by `FR-ENV-045`. The three design questions this file
+carried are answered too: `OQ-049` by `FR-ENV-003`, `OQ-050` by `FR-ENV-044`,
+and `OQ-071` by `FR-ENV-039`.

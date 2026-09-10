@@ -18,8 +18,9 @@ obtained without being written to disk.
 ## Scope
 
 In scope: the `.cfg` key space, value types and defaults, the strictness with
-which the file is read, entry shape, DSN grammar, TLS modes, timeouts, `${VAR}`
-expansion, and `password_command` execution and its failure modes.
+which the file is read, entry shape, DSN grammar, the five TLS modes and the
+behaviour by which they are distinguished, timeouts, `${VAR}` expansion, and
+`password_command` execution and its failure modes.
 
 Out of scope: the commands that read and write the file, which belong to
 [cfg-commands.md](cfg-commands.md); and the ownership and permission checks
@@ -289,10 +290,115 @@ tls      = "verify-identity"
   and stripped binary size, and the outcome does not change any requirement of
   this file.
 
-  *Known gap.* What each of the five modes maps to in the chosen driver is
-  [OQ-003](open-questions.md#oq-003) and stays open until that task reports.
-  This requirement fixes what the mapping must satisfy; it does not state one
-  that has not been verified.
+  *The gap is closed.* What each of the five modes maps to in the chosen driver
+  was `OQ-003`, and the driver was chosen by
+  measurement on 2026-09-10. The mapping was verified mode by mode against
+  running servers and satisfies this requirement: all five modes are
+  expressible and all five behave distinctly. `FR-CONF-038` states the
+  behaviour that was observed, `FR-CONF-037` states what `tpl` must do with it,
+  and `FR-CONF-039` states the one guarantee the mapping does **not** deliver.
+
+- **FR-CONF-037**: The system SHALL set the TLS mode of `FR-CONF-013`
+  explicitly on every connection it opens, and SHALL NOT rely on the database
+  driver's default for any mode, including `disabled`.
+
+  *Rationale, and it is empirical rather than defensive.* Both drivers
+  measured on 2026-09-10 default to the wrong posture for `tpl`, in opposite
+  directions. One never negotiates TLS at all, so a connection to a server
+  that offers it is plaintext unless the caller intervenes. The other defaults
+  to a preferring mode that upgrades where the server advertises TLS and
+  **falls back to plaintext in silence** where it does not — which is
+  `disabled` wearing the appearance of `required`. An inherited default is
+  therefore not a neutral starting point but a fifth, unnamed mode, and
+  `BR-CONF-001` already makes `tls` the sole authority on encryption for an
+  entry. A default that changes with a dependency upgrade would move that
+  authority out of the configuration without anything in the configuration
+  changing.
+
+- **FR-CONF-038**: The five modes SHALL be distinguishable by observed
+  behaviour, and their behaviour SHALL be the following against a server that
+  offers TLS and a server that does not:
+
+  | Mode | Server offering TLS | Server offering no TLS |
+  |---|---|---|
+  | `disabled` | plaintext | plaintext |
+  | `preferred` | encrypted | plaintext |
+  | `required` | encrypted, chain not validated | `69` (`EX_UNAVAILABLE`) |
+  | `verify-ca` | encrypted, chain validated against the trust material of `FR-CONF-014` | `69` |
+  | `verify-identity` | encrypted, chain and hostname validated | `69` |
+
+  *Observed.* Each cell was verified against two running servers of
+  `FR-SRV-015` — one reporting `have_ssl=YES` and one reporting
+  `have_ssl=DISABLED` — and encryption was read from the live session rather
+  than from the configuration that requested it. Three controls separate the
+  modes from one another: `verify-ca` without trust material fails on an
+  unknown issuer, so it genuinely validates the chain; `preferred` without
+  trust material still connects encrypted, so it is not a disguised
+  `verify-ca`; and `required` with trust material ignores it, so it is not one
+  either.
+
+  *One cell was observed only in its failing form, and the reason matters for
+  testing rather than for the requirement.* `verify-identity` against a
+  TLS-offering server was observed to fail on the hostname, because the
+  certificate MariaDB generates automatically from `11.4` onward carries **no
+  `subjectAltName`** — it is self-signed, has no extensions at all, and is
+  regenerated on every server start. No hostname can match it. That is what
+  separates `verify-identity` from `verify-ca` in the observation and is why
+  the two are distinct rather than collapsed; what it does not do is
+  demonstrate the success cell, which needs a server certificate carrying a
+  name. **Consequence for the project's own tests:** `tpl` with default
+  configuration cannot connect to the fixture of `scripts/mariadb/` over TCP
+  on any series, and an acceptance test for the default mode needs TLS
+  configured in that fixture with a certificate that names the host.
+
+  *A supported series may offer no TLS at all*, so the right-hand column is
+  not hypothetical: `10.11` reports `have_ssl=DISABLED` unless an
+  administrator configures a certificate, and it is supported until
+  2028-02-16. The `69` in three of its cells is correct behaviour and not a
+  defect — `FR-CONF-013` defaults to `verify-identity`, and a server that
+  cannot encrypt cannot satisfy it. `69` is the code because the failure is in
+  the TLS handshake phase, per `FR-ERR-001`, and `FR-ERR-034` requires the
+  `cause` to name that phase and what it returned.
+
+  *The mapping onto the chosen driver* SHALL be recorded in the project's
+  architecture decision records and cited from there, and SHALL NOT be
+  restated in this corpus, for the reason `BR-SRV-005` gives about the
+  supported-series table and `FR-ENV-003` about the engine pin. This
+  specification names no driver, and the behaviour above is what a caller can
+  observe whichever one is chosen.
+
+  *Closes* `OQ-003`, now listed under [Closed](open-questions.md#closed).
+
+- **FR-CONF-039**: The trust material supplied by `ca_file` or `ca_path` SHALL
+  be **additional** to the trust anchors the TLS implementation already
+  trusts, and `verify-ca` and `verify-identity` SHALL NOT be described,
+  documented, or reported as exclusive trust in the supplied authority.
+
+  *Observed.* Both drivers measured add a supplied certificate to the public
+  root bundle rather than substituting it for the bundle. Neither can express
+  "trust only this authority", and the limitation is symmetric — it is a
+  property of how the two crates build their root store, not a difference
+  between them.
+
+  *Consequence, stated plainly because it is a weaker guarantee than the words
+  suggest.* Under `verify-ca`, a server presenting a certificate issued by any
+  publicly trusted authority validates, even though the operator pinned a
+  private one. Pinning therefore **widens** the set of certificates that pass;
+  it does not narrow it. `verify-identity` adds the hostname check on top,
+  which is what an operator pinning a private CA is usually reaching for, and
+  it is the default of `FR-CONF-013`.
+
+  *What would change this.* Exclusive trust is a stronger requirement than
+  `FR-CONF-036` states, and no candidate driver satisfies it as shipped, so
+  requiring it would leave the project with no driver at all. If it is ever
+  required, it is an amendment to this requirement and to `FR-CONF-036`
+  together, and it re-opens the driver choice.
+
+  *A stated limit.* This requirement names where a guarantee stops, in the
+  form the [README](README.md#writing-conventions) fixes for all three:
+  `FR-PRIV-020`, where a table whose triggers are hidden cannot be told from
+  a table that has none, and `FR-SRV-041`, where a server determined to pass
+  as MariaDB will pass.
 
 - **BR-CONF-001**: The `tls` key is the sole authority on encryption for an
   entry. No other key, flag, or DSN parameter may weaken or override it.
@@ -452,14 +558,16 @@ tls      = "verify-identity"
   checks applied to `.cfg` before it is trusted.
 - [security.md](security.md) — these rules restated as a cross-cutting threat
   model.
+- [server-contract.md](server-contract.md) — `FR-SRV-015`, the four supported
+  series, one of which may be configured to offer no TLS at all, which is the
+  right-hand column of `FR-CONF-038`.
+- [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, the code a TLS
+  handshake failure produces, and `FR-ERR-034`, which fixes what its `cause`
+  must name.
 
 ## Open questions
 
-- [OQ-003](open-questions.md#oq-003) — what each of the five TLS modes maps to
-  in the chosen driver. `FR-CONF-036` fixes what the mapping must satisfy; the
-  mapping itself is blocked on the driver being chosen.
-
-The other six this file carried are closed and listed under
-[Closed](open-questions.md#closed): `OQ-004` by `FR-CONF-011`, `OQ-005` by
-`FR-CONF-031`, `OQ-006` by `FR-CONF-032`, `OQ-007` by `FR-CONF-033`, `OQ-018`
-by `FR-CONF-034`, and `OQ-019` by `FR-CONF-035`.
+**None.** All seven this file carried are closed and listed under
+[Closed](open-questions.md#closed): `OQ-003` by `FR-CONF-038`, `OQ-004` by
+`FR-CONF-011`, `OQ-005` by `FR-CONF-031`, `OQ-006` by `FR-CONF-032`, `OQ-007`
+by `FR-CONF-033`, `OQ-018` by `FR-CONF-034`, and `OQ-019` by `FR-CONF-035`.

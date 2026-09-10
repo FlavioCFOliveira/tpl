@@ -95,8 +95,21 @@ tpl schema dump                        The whole database as one JSON document
 - **FR-SCH-009**: `tpl schema table <name>` SHALL be exhaustive over what the
   catalogue holds for that table: its columns with position, type, nullability,
   default, comment, and generated-column status; its primary key, indexes, and
-  foreign keys with their `ON UPDATE` and `ON DELETE` rules; its triggers; and
-  its engine, character set, collation, and comment.
+  foreign keys with their `ON UPDATE` and `ON DELETE` rules; its triggers; its
+  `CHECK` constraints; and its engine, collation, and comment.
+
+  *Amended in the seventh edition, because one item on the list does not
+  exist.* The requirement named a table's **character set**, and the
+  catalogue has no such field: the table catalogue carries a collation and no
+  character set, observed on all four series of `FR-SRV-015`. The three
+  places a character set is reachable are the database, per `FR-CTX-036`, and
+  each individual column, per `FR-CTX-041` — not the table between them.
+  Deriving one from the collation's leading segment would be an inference the
+  catalogue does not state, and this specification does not write down what
+  it has not observed, so the item is removed rather than reconstructed.
+  `CHECK` constraints are added in the same amendment: `FR-CAT-015` has
+  required them since the second edition and this list, written in the first,
+  never named them.
 
 - **FR-SCH-010**: IF a named table, view, or routine does not exist in the
   selected database, THEN the system SHALL exit `66` (`EX_NOINPUT`) with a
@@ -205,8 +218,9 @@ tpl schema dump                        The whole database as one JSON document
   the only contract with none.
 
   *Accepted cost.* The test needs the container of
-  [performance-requirements.md](performance-requirements.md), and is therefore
-  blocked by the same absence as `OQ-009`.
+  [performance-requirements.md](performance-requirements.md), which now
+  exists at all four series of `FR-SRV-015`. It is blocked only by `tpl` not
+  existing.
 
 ## Flags and output
 
@@ -249,10 +263,10 @@ tpl schema dump                        The whole database as one JSON document
 - **FR-SCH-031**: The `data` of `tpl schema info` SHALL be an object carrying
   one key, `database`, whose value is the metadata of the selected database.
 
-  *Known gap.* Which fields that object carries is a catalogue field list and
-  is [OQ-024](open-questions.md#oq-024), which cannot be closed until the
-  container of `scripts/mariadb/` exists. The envelope and the `data` key are
-  fixed here; the field list is not.
+  *The field list is fixed by `FR-CTX-036`*: three metadata fields — `name`,
+  `charset`, and `collation` — beside the `server` object of `FR-CTX-031` and
+  the three collections of `FR-CTX-035`. The envelope and the `data` key are
+  fixed here.
 
   *Amended in the fourth edition.* One field of that object is now fixed:
   `server`, carrying the probed version, the series, and the standing, per
@@ -264,9 +278,12 @@ tpl schema dump                        The whole database as one JSON document
   `tables`, `views`, and `routines`, per `FR-CTX-035`. They are outside
   `OQ-024` for the same reason — a collection is a structural rule of
   [context-document.md](context-document.md), not a catalogue field.
-  `OQ-024` is narrowed again and now covers only the **metadata fields** of the
-  `database` object: the fields describing the database itself, `name` among
-  them. Those remain open.
+
+  *Amended in the seventh edition, and the gap is closed.* The schema
+  catalogue was observed against all four series and returns six columns.
+  `FR-CTX-036` takes three of them as the metadata fields and states, field by
+  field, why the other three are not carried. `OQ-024` is now listed under
+  [Closed](open-questions.md#closed).
 
 - **FR-SCH-032**: The `data` of `tpl schema tables`, `tpl schema views`, and
   `tpl schema routines` SHALL follow `FR-OUT-030`, carrying one key named for
@@ -340,8 +357,16 @@ tpl schema dump                        The whole database as one JSON document
 
 ## Open questions
 
-- [OQ-009](open-questions.md#oq-009) — catalogue return types and collation, to
-  be verified against the container.
-- [OQ-010](open-questions.md#oq-010) — the exact field lists for routines,
-  triggers, generated columns, and foreign-key rules.
-- [OQ-024](open-questions.md#oq-024) — the field list of `tpl schema info`.
+**None.** The three entries this file carried are closed, and the requirements
+that answer them live in the two files that own the catalogue rather than in
+this one, which is where the corresponding partial answers already were:
+
+| Entry | Closed by | In |
+|---|---|---|
+| [OQ-009](open-questions.md#closed) | `FR-CAT-039`, with `FR-CAT-036` and `FR-CTX-037` | [catalogue-coverage.md](catalogue-coverage.md), [context-document.md](context-document.md) |
+| [OQ-010](open-questions.md#closed) | `FR-CAT-045`, `FR-CAT-048`, `FR-CAT-050`, `FR-CAT-051` | [catalogue-coverage.md](catalogue-coverage.md) |
+| [OQ-024](open-questions.md#closed) | `FR-CTX-036` | [context-document.md](context-document.md) |
+
+The field lists behind `FR-SCH-007` and `FR-SCH-009` are therefore frozen, and
+`FR-SCH-009` was corrected in the same edition: it named a table character set
+the catalogue does not report.

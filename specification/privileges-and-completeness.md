@@ -26,7 +26,9 @@ says so.
 In scope: the definition of a complete and an incomplete read, the outcome for a
 named object, the outcome for a listing and a dump, the marking of an incomplete
 object and the shape of that marking, the refusal of a marked dump as a context,
-and the cross-check that distinguishes a missing privilege from an absence.
+the three shapes a privilege-driven absence takes, the cross-checks that
+distinguish a missing privilege from an absence, and the one place where the
+catalogue makes no such distinction possible.
 
 Out of scope: which privileges a reader needs, which depends on the server and
 is not stated here; the connection and authentication failures that precede a
@@ -77,8 +79,14 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   `FR-PRIV-007`.
 
   ```json
-  {"name":"orders","restricted":["triggers"]}
+  {"name":"sp_book_consignment","restricted":["body"]}
   ```
+
+  *Amended in the sixth edition.* The example read
+  `{"name":"orders","restricted":["triggers"]}`, and `FR-PRIV-020` establishes
+  that `tpl` cannot produce it: a hidden trigger list is indistinguishable
+  from an empty one, so `triggers` can never appear in this array. An
+  unreadable routine body can, and is the commonest case.
 
   *Rationale for the array.* A boolean says that something was unreadable and
   cannot ever say what. Naming the properties is what lets a caller decide
@@ -152,38 +160,191 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
 
 ## Absence versus privilege
 
-- **FR-PRIV-010**: The system SHALL NOT report an absence where the true cause
-  is a missing privilege.
+- **FR-PRIV-010**: WHERE the catalogue makes the two cases distinguishable,
+  the system SHALL NOT report an absence whose true cause is a missing
+  privilege. WHERE the catalogue does not, the limit SHALL be stated in this
+  file rather than left to be discovered, per `FR-PRIV-020`.
 
-- **FR-PRIV-011**: IF the catalogue reports rows of table type `VIEW` while the
-  view collection comes back empty, THEN the system SHALL treat that as a
-  missing privilege and SHALL exit `77`.
+  *Amended in the sixth edition.* The requirement was an unqualified
+  prohibition, and the observation of 2026-09-10 established that it cannot be
+  honoured for one of the properties of the model. A
+  reader that lacks the privilege receives **zero rows** from
+  `INFORMATION_SCHEMA.TRIGGERS`, which is byte-for-byte what a table with no
+  triggers returns; nothing in the catalogue separates them. Left absolute,
+  the requirement obliged a detection that does not exist, and a requirement
+  that cannot be satisfied is not a requirement — it is a place where the
+  specification would have been believed and wrong. `FR-PRIV-020` records
+  exactly where the guarantee stops.
 
-  *Rationale.* The two observations are contradictory and only one explanation
-  fits: the reader can see that views exist but cannot read them. Reporting
-  "this database has no views" would be a wrong answer wearing the appearance of
-  a right one, and a generator acting on it would silently emit nothing.
+- **FR-PRIV-018**: A privilege-driven absence SHALL be detected by the shape
+  the catalogue actually gives it. There are **three shapes** — the empty
+  string, `NULL`, and zero rows — and they fall across the properties of the
+  model as follows, as observed on 2026-09-10 against all four series of
+  `FR-SRV-015`:
 
-- **FR-PRIV-012**: The cross-check of `FR-PRIV-011` SHALL be performed on every
-  read that presents the view collection, including a dump.
+  | Property | Read as a privileged reader | Read as a reader without the privilege | Detectable |
+  |---|---|---|---|
+  | A view's definition | the full text | the **empty string**, length 0, on a row that is present | yes, `FR-PRIV-011` |
+  | A routine's body | the full body | **`NULL`**, on a row that is present | yes, `FR-PRIV-017` |
+  | A table's referential rules, and the constraint table beside them | 15 and 68 rows for the fixture | **zero rows** | yes, `FR-PRIV-019` |
+  | A table's triggers | 6 rows for the fixture | **zero rows** | **no**, `FR-PRIV-020` |
+
+  *Observed.* The reduced-grant reader of the fixture holds
+  `SELECT, EXECUTE ON freight.*` and nothing more. It sees all 23 catalogue
+  objects and all 7 routine rows; it loses the view definitions to an empty
+  string, the routine bodies to `NULL`, and the whole of
+  `INFORMATION_SCHEMA.TABLE_CONSTRAINTS`, `REFERENTIAL_CONSTRAINTS` and
+  `TRIGGERS` to zero rows, while `KEY_COLUMN_USAGE` and `CHECK_CONSTRAINTS`
+  are unaffected. The behaviour is identical on all four series.
+
+  *Rationale.* The first edition of this file assumed one shape of absence and
+  wrote one detection for it. There are three, they do not resemble each
+  other, and a reader that looks for one of them finds none of the others: an
+  empty string is not the same absence as a `NULL`, and neither of them is a
+  row that is not there.
+
+  *Closes* `OQ-041`, now listed under [Closed](open-questions.md#closed).
+
+  *Amended in the seventh edition: the third row is narrowed, because it
+  over-stated what such a reader loses.* Of the four kinds of key and
+  constraint a table carries, the reduced reader loses exactly one. It keeps
+  every **check constraint**, which it reads from a table the privilege does
+  not remove — all 24 rows of the fixture. It keeps every **index**,
+  including the unique ones, and it keeps the **primary key**, because
+  `FR-CAT-043` reads both from the index table and that table returns all 77
+  rows to it. What it loses is the **referential rule** of every foreign key,
+  and only that. The row above is worded accordingly, and `FR-PRIV-019`
+  detects exactly the loss that remains.
+
+- **FR-PRIV-011**: IF the catalogue reports a view whose definition is the
+  empty string, THEN the system SHALL treat that as a missing privilege and
+  SHALL exit `77`.
+
+  *Amended in the sixth edition, because the requirement was written against a
+  shape the server does not produce.* It read: *IF the catalogue reports rows
+  of table type `VIEW` while the view collection comes back empty, THEN …*.
+  Observed against all four series, the view collection does **not** come back
+  empty for a reader without `SHOW VIEW`: every row is present, carrying its
+  name and its attributes, and only `VIEW_DEFINITION` is short — and it is
+  short by being the empty string rather than `NULL`. The check as written
+  could therefore never fire, on any supported server, against the exact
+  reader it was written for. The corrected check is also strictly stronger:
+  it fires per view rather than only when every view is unreadable, so a
+  reader that can see some definitions and not others is caught too.
+
+  *Rationale.* A view's definition is the view. The empty string is not a
+  value a view can legitimately carry, so the observation admits one
+  explanation: the reader can see that the view exists and cannot read it.
+  Reporting "this view has no definition" would be a wrong answer wearing the
+  appearance of a right one, and a generator acting on it would silently emit
+  nothing.
+
+- **FR-PRIV-017**: IF the catalogue reports a routine whose body is `NULL`,
+  THEN the system SHALL treat that as a missing privilege, and the routine
+  SHALL be incomplete under `FR-PRIV-002`.
+
+  *Observed.* A reader holding `SELECT` and `EXECUTE` and no more sees every
+  routine row and receives `NULL` for every `ROUTINE_DEFINITION`, on all four
+  series. So the body is **not** readable with the privilege that lists
+  routines, which is the second half of `OQ-037`.
+
+  *Consequence, and it calibrates `FR-PRIV-003`.* `tpl schema routine` names
+  an object, so such a reader receives `77` for every routine in the database
+  rather than a stub. In a listing or a dump the routine is marked instead,
+  per `FR-PRIV-005`, with `body` among the names in `restricted`. This is the
+  ordinary case for a least-privilege reader, not an edge one: the privilege
+  that exposes a routine body is not among those a read-only catalogue user is
+  usually granted.
+
+  *Partially closed* `OQ-037`; `FR-CAT-048` closes
+  the rest, and the entry is now listed under
+  [Closed](open-questions.md#closed).
+
+- **FR-PRIV-019**: IF the catalogue reports a key column that names a
+  referenced table while no referential-constraint row exists for the
+  constraint that column belongs to, THEN the system SHALL treat that as a
+  missing privilege and SHALL exit `77` for a named object, or mark the table
+  under `FR-PRIV-005` in a listing or a dump.
+
+  *Observed.* The reduced-grant reader receives **zero rows** from
+  `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` and from
+  `REFERENTIAL_CONSTRAINTS`, and **all 54 rows** from `KEY_COLUMN_USAGE`. It
+  therefore sees every foreign-key column and not one foreign-key rule: the
+  table appears structurally whole while its referential semantics are gone.
+
+  *Rationale.* This is the second place the catalogue offers two independent
+  views of one population, and it is the one the third edition was waiting
+  for. The two observations are contradictory — a column cannot reference a
+  table under no constraint — and only one explanation fits. Without the
+  check, `FR-CAT-012` and `FR-CAT-013` would report every table as having no
+  foreign keys, with exit `0`, and a generator would emit a schema with no
+  relations at all. That is a larger silent failure than the one
+  `FR-PRIV-011` prevents.
+
+- **FR-PRIV-020**: The system SHALL NOT claim to distinguish a table with no
+  triggers from a table whose triggers the reader may not see, and this file
+  SHALL state that limit rather than leave it to be discovered.
+
+  *Observed.* `INFORMATION_SCHEMA.TRIGGERS` returns zero rows to a reader
+  without the privilege and zero rows for a table that has no triggers. The
+  catalogue offers no second view of the trigger population — `KEY_COLUMN_USAGE`
+  has no analogue here — so the two cases are identical in every byte a
+  reader can obtain.
+
+  *Consequence, stated plainly because it is a weaker guarantee than the words
+  suggest.* A table whose triggers are hidden is reported as having none,
+  complete, at exit `0`. `FR-PRIV-002` is not satisfied for it and cannot be:
+  the system does not know that a property could not be read.
+
+  *Rejected.* Inferring the privilege from the reader's grants by reading
+  `INFORMATION_SCHEMA.USER_PRIVILEGES` or an equivalent. It is a second
+  catalogue query on every read, `NFR-PERF-001` and `NFR-PERF-002` fix the
+  query count, and the inference is not sound in any case — the grant tables
+  do not settle what the current session can see through the catalogue's own
+  filtering. Also rejected: marking every table `restricted` for triggers
+  whenever the trigger collection is empty across the whole database, which
+  reports a privilege problem for the common case of a database with no
+  triggers at all.
+
+  *What would change this.* A second view of the trigger population in the
+  catalogue, or a reading that announces the privilege rather than being
+  inferred from grants. Neither exists on any series of `FR-SRV-015`. If one
+  appears, it is an amendment to this requirement and to `FR-PRIV-015`
+  together, and the trigger gains the cross-check it currently admits none of.
+
+  *A stated limit.* This requirement names where a guarantee stops, in the
+  form the [README](README.md#writing-conventions) fixes for all three:
+  `FR-SRV-041`, where a server determined to pass as MariaDB will pass, and
+  `FR-CONF-039`, where pinned trust material is additional to the public root
+  bundle rather than exclusive of it.
+
+- **FR-PRIV-012**: The cross-checks of `FR-PRIV-011`, `FR-PRIV-017` and
+  `FR-PRIV-019` SHALL be performed on every read that presents the property
+  they guard, including a dump.
+
+  *Amended in the sixth edition.* The requirement named the view cross-check
+  alone, which was the only one that existed.
 
 - **FR-PRIV-015**: The cross-check of `FR-PRIV-011` SHALL be performed for
-  views and for no other object kind.
+  views, that of `FR-PRIV-019` for foreign keys, and no cross-check SHALL be
+  performed for any other object kind.
 
-  *Rationale.* Views are the only kind for which the catalogue offers two
-  independent counts to compare: the rows of table type `VIEW` among the tables,
-  and the members of the view collection. A cross-check needs two observations
-  that can disagree, and neither tables nor routines offer a second one — a
-  reader who cannot see a table does not see it counted somewhere else either.
-  The general principle remains `FR-PRIV-010`; this is the one place the
-  catalogue makes it enforceable.
+  *Rationale.* A cross-check needs two observations of one population that can
+  disagree, and the catalogue offers exactly two such pairs: the rows of table
+  type `VIEW` against the readability of each view's definition, and the key
+  columns that name a referenced table against the referential-constraint rows
+  that should describe them. Tables and routines offer no second observation —
+  a reader who cannot see a table does not see it counted somewhere else
+  either — and triggers offer none, which is `FR-PRIV-020`.
 
-  *Known gap.* Whether the check should instead be generalised — to any object
-  kind for which the catalogue offers two views of the same population — cannot
-  be settled until [OQ-041](open-questions.md#oq-041) is observed against the
-  container, because it depends on what a reader without the privilege actually
-  receives. The audit of 2026-09-10 left the choice open deliberately and wrote
-  the reason for the present asymmetry rather than the decision.
+  *Amended in the sixth edition, and the gap it recorded is now closed.* The
+  third edition left open whether the check should be generalised, because the
+  answer depended on what a reader without the privilege actually receives.
+  `OQ-041` has been observed, and it generalises to
+  exactly one further kind: the foreign key, through `KEY_COLUMN_USAGE`
+  surviving a privilege that removes `REFERENTIAL_CONSTRAINTS` entirely. The
+  routine body needed no cross-check at all — `NULL` is self-announcing — and
+  the trigger admits none.
 
 ## Reporting
 
@@ -225,8 +386,10 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
 
 ## Open questions
 
-- [OQ-041](open-questions.md#oq-041) — how an unreadable view is reported, and
-  whether the cross-check of `FR-PRIV-011` is observable as stated.
-
-`OQ-047` is answered by `FR-PRIV-016` and `OQ-048` by `FR-CACHE-037`; both are
-listed under [Closed](open-questions.md#closed).
+**None.** `OQ-041` is answered by `FR-PRIV-018` and by `FR-PRIV-011` as
+amended, `OQ-047` by `FR-PRIV-016`, and `OQ-048` by `FR-CACHE-037`; all three
+were closed in the sixth edition. The half of `OQ-037` that belongs to this
+file — whether a routine body is readable without additional privilege — is
+answered by `FR-PRIV-017`, and the seventh edition closed the routine field
+list itself in `FR-CAT-048`. All four are listed under
+[Closed](open-questions.md#closed).

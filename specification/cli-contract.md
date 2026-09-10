@@ -295,6 +295,9 @@ tpl
   |---|---|---|
   | A table's columns | Ordinal position | This requirement |
   | An index's columns | The order the catalogue states | `FR-CAT-010` |
+  | A primary key's columns | The order the catalogue states | `FR-CAT-043` |
+  | A foreign key's columns, and the referenced columns paired with them | The order the catalogue states | `FR-CAT-045` |
+  | An `ENUM` or `SET` member list | The order the catalogue states | `FR-CTX-016` |
   | A routine's parameters | Declaration order | `FR-CAT-018` |
   | Every other collection | Name, ascending, byte-wise | This requirement |
 
@@ -307,10 +310,32 @@ tpl
   collections could not satisfy `NFR-DET-001` and `FR-CTX-005` had nothing
   observable to point at.
 
-  *Rationale.* One default plus three exceptions is checkable in a single test
-  and holds for a collection this specification has not thought of yet. An
-  enumeration of every collection would be incomplete again the next time the
-  model grows.
+  *Rationale.* One default plus a short list of exceptions is checkable in a
+  single test and holds for a collection this specification has not thought
+  of yet. An enumeration of every collection would be incomplete again the
+  next time the model grows.
+
+  *Amended in the seventh edition: three exceptions added, and every one of
+  them is a collection the default rule would have corrupted.* The exceptions
+  were written when the catalogue field lists were unobserved, so three
+  ordered collections the model carries had no entry and fell to the default.
+
+  - **A primary key's columns.** `voyage_leg`'s key is
+    `(vessel_imo, voyage_number, leg_sequence)`; sorted by name it becomes
+    `(leg_sequence, vessel_imo, voyage_number)`, which is a different key.
+  - **A foreign key's columns.** The referencing list and the referenced list
+    are **paired positionally**, per `FR-CAT-045`, so sorting either one
+    independently pairs each column with the wrong counterpart, and sorting
+    both pairs them wrongly whenever the two orders differ.
+  - **An `ENUM` or `SET` member list.** The order **is the meaning**: a
+    member's position is the ordinal it is stored as. Sorting
+    `enum('Draft','Booked','Loaded',…)` by name renumbers every member, and a
+    generator emitting a target-language enumeration from it would assign
+    every value the wrong discriminant, at exit `0`.
+
+  All three are silent corruptions of correct-looking output, which is the
+  class of failure this corpus works hardest to prevent, and none of them was
+  reachable before the field lists were recorded.
 
   *Rejected.* Enumerating an order for each of the ten collections, for the
   reason above; and ordering by the catalogue's own ordinal wherever one exists,
