@@ -77,8 +77,17 @@ here introduces behaviour of its own.
 - **Alternate flows**:
   - Server unreachable: exit `69`. Authentication refused: exit `77`. Read-only
     session cannot be established: exit `78`.
+  - Connected and authenticated, but the series is not supported: exit `78` with
+    `kind: server_version_unsupported`, per `FR-CFG-043`. The `cause` line says
+    that the connection and the authentication succeeded, which is what
+    separates this outcome from the `69` and the `77` above.
+- **Notes**: the command performs three steps and reports all three; the
+  `server` field of `FR-CFG-039` carries the version, the series, and the
+  standing. A server newer than the supported window exits `0` here and is
+  reported with `standing: "newer_than_supported"`, per `FR-SRV-031`
 - **Postconditions**: the cache is untouched, whatever the outcome
-- **Requirements**: `FR-CFG-024`, `FR-CFG-025`, `FR-CACHE-010`
+- **Requirements**: `FR-CFG-024`, `FR-CFG-025`, `FR-CFG-043`, `FR-CFG-039`,
+  `FR-CACHE-010`, `FR-SRV-034`
 
 ## UC-005 — Learn the whole CLI in one call
 

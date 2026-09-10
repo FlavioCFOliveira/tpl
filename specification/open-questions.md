@@ -34,16 +34,25 @@ They are recorded here rather than guessed at in
 [performance-requirements.md](performance-requirements.md), which states what is
 observable now and cites these entries for what is not.
 
-Third, thirteen entries have been closed and are listed under *Closed* below
+Third, sixteen entries have been closed and are listed under *Closed* below
 rather than removed without trace. `OQ-020` was answered by the second edition;
-the other twelve were answered by the third, which put the audit's findings to
-the user and wrote the decisions into the owning modules. Their identifiers are
-not reused, per the identifier scheme of the [README](README.md#identifier-scheme).
+twelve were answered by the third, which put the audit's findings to the user
+and wrote the decisions into the owning modules; and three — `OQ-044`, `OQ-073`
+and `OQ-074` — by the fourth. Their identifiers are not reused, per the
+identifier scheme of the [README](README.md#identifier-scheme).
 
 Fourth, `OQ-070` through `OQ-072` are what remained of `OQ-068` after the third
 edition specified the behaviour of the registered filters and tests. Two are
 facts about MariaDB that must be observed and one is a design decision the
 specification declined to invent.
+
+Fifth, the fourth edition opened three questions and closed all three within the
+same edition, so none appears in the index below. `OQ-044` — the outcome below
+the supported window — was answered by `FR-SRV-020`. `OQ-073` and `OQ-074` were
+the two the window itself created: the outcome above the ceiling, and the reach
+of the check that enforces it. Both were put to the user as escalations and both
+came back decided, as `FR-SRV-031` and `FR-SRV-034`. Their entries are in the
+*Closed* table, not above it; the identifiers are retired all the same.
 
 ## Index
 
@@ -88,8 +97,7 @@ specification declined to invent.
 | [OQ-041](#oq-041) | How an unreadable view is reported | `privileges-and-completeness.md` | `FR-PRIV-011` |
 | [OQ-042](#oq-042) | The version probe and MariaDB detection | `server-contract.md` | `FR-SRV-002`, `FR-SRV-003` |
 | [OQ-043](#oq-043) | Whether `referenced_by` embeds | `context-document.md` | `FR-CTX-010` |
-| [OQ-044](#oq-044) | Outcome for a server below the floor | `server-contract.md` | `FR-SRV-001` |
-| [OQ-045](#oq-045) | Which fields post-date the floor | `server-contract.md` | `FR-SRV-004` |
+| [OQ-045](#oq-045) | Which fields differ among the four supported series | `server-contract.md` | `FR-SRV-004`, `FR-SRV-024`, `FR-SRV-027` |
 | [OQ-046](#oq-046) | Read-back within the closed statement list | `server-contract.md` | `FR-SRV-009` |
 | [OQ-047](#oq-047) | Shape of the `restricted` field | `privileges-and-completeness.md` | `FR-PRIV-005` |
 | [OQ-048](#oq-048) | Whether an incomplete object may be cached | `cache-documents.md` | `FR-CACHE-007` |
@@ -130,6 +138,9 @@ above is expected rather than a defect.
 | OQ-067 | How `70` is produced, and how it is exercised | `FR-ERR-030` through `FR-ERR-032`, `BR-ERR-001` | Third edition |
 | OQ-068 | What each registered filter and test does | `FR-ENV-030` through `FR-ENV-043`; residue in `OQ-070` through `OQ-072` | Third edition |
 | OQ-069 | The shape of the `vars`, `tpl`, and `now` context variables | `FR-CTX-026` through `FR-CTX-030` | Third edition |
+| OQ-044 | The outcome for a server below the supported window | `FR-SRV-020`, `FR-SRV-021` | Fourth edition |
+| OQ-073 | The outcome for a server newer than the supported window | `FR-SRV-031` through `FR-SRV-033`, `BR-SRV-008`, `BR-SRV-009`, `FR-CTX-034` | Fourth edition |
+| OQ-074 | Whether `tpl cfg database test` applies the version gate | `FR-SRV-002` as amended, `FR-SRV-034`, `FR-CFG-024`, `FR-CFG-039` | Fourth edition |
 
 ## OQ-002
 
@@ -339,6 +350,11 @@ third edition closed against the envelope — it cannot be closed by a decision:
 it is a catalogue field list, and `scripts/mariadb/` does not exist, so there
 is no container to observe against. It is blocked by the same absence as
 `OQ-009`, `OQ-010`, and `OQ-025` through `OQ-042`.
+*Narrowed again by the fourth edition*: one field of the `database` object is
+now fixed and is outside this question — `server`, carrying the probed version,
+the series, and the standing, per `FR-CTX-031` and `FR-CTX-034`. It is not a catalogue field, so `BR-CTX-006`
+could fix it without observing anything. Every other field of the object
+remains open.
 
 ## OQ-025
 
@@ -533,8 +549,9 @@ from a server that reports a MariaDB-compatible version string?**
 *Origin*: `FR-SRV-002` and `FR-SRV-003`.
 *Why it is open*: the refusal of a non-MariaDB server is only as good as the
 detection, and several servers report version strings designed to be mistaken
-for another product's.
-*Blocks*: `FR-SRV-002` and `FR-SRV-003`.
+for another product's. It also fixes the exact string `FR-CTX-031` carries in
+`version`, and the form from which its `series` is derived.
+*Blocks*: `FR-SRV-002`, `FR-SRV-003`, and `FR-CTX-031`.
 
 ## OQ-043
 
@@ -549,27 +566,33 @@ embedding already costs, so the choice has a direct effect on the memory budget
 and on the `WL-002` scalar. It is a design decision, not a measurement.
 *Blocks*: `FR-CTX-010`, and the value of N in `OQ-060`.
 
-## OQ-044
-
-**What happens when the server is MariaDB but older than 10.6?**
-
-*Origin*: a gap found while writing the second edition. `FR-SRV-001` fixes the
-floor and `FR-SRV-003` fixes the outcome for a server that is not MariaDB;
-nothing fixes the outcome below the floor.
-*Why it is open*: refusing with `78`, and reading anyway with fields the server
-does not provide emitted as `null`, are both defensible, and they differ in
-whether an old-but-working setup keeps working.
-*Blocks*: `FR-SRV-001`.
-
 ## OQ-045
 
-**Which fields of the model were introduced after MariaDB 10.6?**
+**Which fields of the model differ among MariaDB `12.3`, `11.8`, `11.4` and
+`10.11`, and what does each of the four return for them?**
 
-*Origin*: `FR-SRV-004`, which emits such a field as `null`.
-*Why it is open*: the requirement has no subject until the set is enumerated,
-and the enumeration must be verified against the server rather than against a
-changelog reading.
-*Blocks*: `FR-SRV-004`.
+*Origin*: `FR-SRV-004`, `FR-SRV-024` and `FR-SRV-025`, which fix three different
+obligations for three kinds of difference, and `FR-SRV-027`, which requires each
+accommodated difference to be registered.
+*Restated by the fourth edition*: the subject was "which fields were introduced
+after MariaDB 10.6". The floor is withdrawn and the subject is now the
+differences among the four series the window of `FR-SRV-001` admits — in both
+directions, since a field absent from `10.11` and a field reported differently
+on `12.3` are both differences and carry different obligations.
+*Why it is open*: `FR-SRV-027` requires the field, the series, and the observed
+behaviour of each of the four, and the project forbids documenting catalogue
+behaviour that has not been observed. It cannot be answered from a changelog, a
+release note, or MySQL knowledge. `scripts/mariadb/` does not exist in this
+repository, so there is no container to observe against; it is blocked by the
+same absence as `OQ-009`, `OQ-010`, `OQ-024`, and `OQ-025` through `OQ-042`.
+*Consequence for the container*: the fixture must now be observed against **four
+server versions rather than one**, per `FR-SRV-029`, and the DDL of `setup.sql`
+and `seed.sql` must be DDL that all four accept. Where a structure cannot be
+created on all four, that is not a fixture defect but an entry this question
+owes. Whoever stands the container up must plan for four, not discover it after
+building one.
+*Blocks*: `FR-SRV-004`, `FR-SRV-024`, `FR-SRV-025`, `FR-SRV-027`, and the
+verification of `FR-SRV-026`.
 
 ## OQ-046
 

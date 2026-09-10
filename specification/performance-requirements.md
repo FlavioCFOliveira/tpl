@@ -142,6 +142,15 @@ to measure; and the implementation choices that would satisfy a budget.
   on. Measurements taken on different targets SHALL NOT be compared with each
   other.
 
+  *Amended in the fourth edition.* A measurement that reaches a server SHALL
+  additionally name the server series it was taken against, and measurements
+  taken against different series SHALL NOT be compared with each other. The
+  reason is the reason the rule already gives for the target: the four series of
+  `FR-SRV-015` are four different programs answering the catalogue queries, and
+  a number that does not say which one answered cannot be a baseline. This binds
+  only the budgets that touch a server; `NFR-PERF-013` keeps every normative
+  budget away from one.
+
 - **NFR-PERF-013**: Every normative budget SHALL run over `--context` or over
   the cache, and SHALL therefore require no server.
 

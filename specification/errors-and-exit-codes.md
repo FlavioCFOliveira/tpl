@@ -44,7 +44,7 @@ Out of scope: the wording of any individual message.
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
   | `74` | `EX_IOERR` | I/O failure reading `.tpl`, or writing to stdout, including a pipe closed mid-document in JSON | Check permissions and free space |
   | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue | Fix the credentials, or request read access |
-  | `78` | `EX_CONFIG` | No `.tpl` found; unsafe `.cfg` ownership or mode; malformed `.cfg`; invalid entry; undefined `${VAR}`; `password_command` deadline exceeded; read-only session could not be enforced; no database entry selected | Fix `.tpl/.cfg`, or run `tpl init` |
+  | `78` | `EX_CONFIG` | No `.tpl` found; unsafe `.cfg` ownership or mode; malformed `.cfg`; invalid entry; undefined `${VAR}`; `password_command` deadline exceeded; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
 
 - **FR-ERR-002**: Each distinct condition SHALL have its own code. The system
   SHALL NOT collapse two conditions onto one code where the caller's next step
@@ -106,7 +106,7 @@ Out of scope: the wording of any individual message.
   2. .tpl discovery and trust checks           78
   3. .cfg read and validation                  78
   4. database entry resolution                 78 or 66
-  5. cache or connection                       69 or 77
+  5. cache or connection                       69, 77, or 78
   6. catalogue object resolution               66
   7. template resolution                       66
   8. render                                    65
@@ -119,6 +119,14 @@ Out of scope: the wording of any individual message.
   *Amended in the third edition.* The sentence about steps 2 and 3 is new. The
   order alone did not say whether `--help` reached discovery; `FR-PROJ-025` now
   names the commands that skip them.
+
+  *Amended in the fourth edition.* Step 5 gains `78`. Three conditions are
+  decided once a connection is open and before any catalogue read, and all three
+  are configuration faults rather than availability ones: the read-only session
+  of `FR-SRV-010`, which the first edition already routed to `78` without the
+  order saying where; the product check of `FR-SRV-003`; and the version-window
+  check of `FR-SRV-020`. They are evaluated in that order among themselves, so
+  the strongest guarantee is confirmed before the server is characterised.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.

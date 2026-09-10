@@ -2,7 +2,7 @@
 title: Configuration Commands
 status: draft
 last-reviewed: 2026-09-10
-related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md]
+related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md]
 ---
 
 # Configuration Commands
@@ -171,7 +171,34 @@ tpl cfg database test   <name>
   until the reference is cleared by hand would be worse.
 
 - **FR-CFG-024**: `tpl cfg database test <name>` SHALL connect to the server
-  described by that entry, enforce the read-only session, and report the result.
+  described by that entry, enforce the read-only session, verify that the server
+  is a supported MariaDB series, and report the result.
+
+  *Amended in the fourth edition.* The third step is new. `FR-SRV-034` attaches
+  the product check of `FR-SRV-003` and the version check of `FR-SRV-020` to
+  opening a connection rather than to reading a catalogue, and this command is
+  the only one that opens a connection and reads no catalogue, per
+  `FR-CACHE-010` — so it was the only one the earlier wording of `FR-SRV-002`
+  let through. An entry that reaches a server every other command refuses must
+  not be reported as working here.
+
+- **FR-CFG-043**: IF the server the entry reaches is not a supported MariaDB
+  series, THEN `tpl cfg database test` SHALL exit `78` with
+  `kind: server_version_unsupported` and the message of `FR-SRV-030`, whose
+  `cause` states that the connection and the authentication succeeded.
+
+  *Rationale.* This command exists to tell a caller which of three things is
+  wrong, and `78` is now one of four outcomes it can report — `0`, `69`, `77`,
+  `78`. Without the `cause` line of `FR-SRV-030` the caller could not separate
+  "your host is unreachable" from "your credentials are refused" from "your
+  network and credentials are fine and your server is too old", which are three
+  different next steps. The distinction is stated in the message rather than in
+  a fourth exit code because `FR-ERR-001` fixes the code set and `FR-SRV-020`
+  already places this condition on `78`.
+
+  A server newer than the supported window is **not** a failure here: it is read
+  under `FR-SRV-031`, so this command exits `0` and reports it, per
+  `FR-CFG-039`.
 
 - **FR-CFG-025**: `tpl cfg database test` SHALL NOT read or write the cache, per
   `FR-CACHE-010`.
@@ -289,17 +316,28 @@ tpl cfg database test   <name>
   `FR-CFG-021` applied.
 
 - **FR-CFG-039**: The `data` of `tpl cfg database test` SHALL carry `entry`,
-  `connected`, and `read_only_session`, reporting the outcome of the two steps
-  `FR-CFG-024` requires the command to perform:
+  `connected`, `read_only_session`, and `server`, reporting the outcome of the
+  three steps `FR-CFG-024` requires the command to perform:
 
   ```json
-  {"schema_version":1,"source":"server","data":{"entry":"shop","connected":true,"read_only_session":true}}
+  {"schema_version":1,"source":"server","data":{"entry":"shop","connected":true,"read_only_session":true,"server":{"version":"11.4.5-MariaDB","series":"11.4","standing":"supported"}}}
   ```
 
-  *Rationale.* A `test` that reaches exit `0` reports that both steps
+  `server` SHALL be the object of `FR-CTX-031`, with the same three keys and the
+  same meanings.
+
+  *Rationale.* A `test` that reaches exit `0` reports that all three steps
   succeeded; a failure exits `69`, `77`, or `78` instead and emits the error
   document of `FR-ERR-014`. The fields are named rather than implied so that a
   caller can branch on them without inferring from the exit code alone.
+
+  *Amended in the fourth edition.* `server` is new, and it is required by this
+  requirement's own rationale rather than by a new decision: `FR-CFG-024` gained
+  a third step, and a step whose outcome is not reported cannot be branched on.
+  It carries the whole object rather than a bare boolean because `standing` is
+  the one field that distinguishes the two ways this command can exit `0` — a
+  supported series, and a series newer than the window read under `FR-SRV-031`.
+  Adding a field is non-breaking, per `FR-OUT-014`.
 
   *Known gap.* Whether `test` also reports the reader's effective privileges is
   [OQ-002](open-questions.md#oq-002) and remains open. Answering it adds a
@@ -318,12 +356,18 @@ tpl cfg database test   <name>
 - [cache-commands.md](cache-commands.md) — why repointing an entry does not
   invalidate the cache.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `64`, `66`, `78`.
+- [server-contract.md](server-contract.md) — `FR-SRV-034`, which brings
+  `database test` under the two server checks, and `FR-SRV-030`, the message
+  `FR-CFG-043` emits.
 
 ## Open questions
 
 - [OQ-002](open-questions.md#oq-002) — whether `test` reports effective
   privileges or only that the read-only session was established. Answering it
   yes adds a field to `FR-CFG-039`, which `FR-OUT-014` makes non-breaking.
+- [OQ-002](open-questions.md#oq-002) is the only question left about this
+  document. The version gate, once `OQ-074`, is settled: `FR-CFG-043` and the
+  `server` field of `FR-CFG-039`.
 - [OQ-016](open-questions.md#oq-016) — short forms for the `add` and `update`
   flags.
 - [OQ-017](open-questions.md#oq-017) — whether `password_command`, `ca_file`,

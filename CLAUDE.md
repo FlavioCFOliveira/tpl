@@ -510,19 +510,23 @@ Usar **sempre** o agente `rust-elite-developer` para tarefas de programação em
 
 ## Testes contra MariaDB
 
-Testes ou validações que necessitem de uma base de dados real **têm** de usar o container definido em `scripts/mariadb/Dockerfile`. Lançar o container antes, terminá-lo depois. **Nunca** usar instâncias externas, mocks ou stubs como substituto.
+Testes ou validações que necessitem de uma base de dados real **têm** de usar os containers definidos em `scripts/mariadb/`. Lançar os containers antes, terminá-los depois. **Nunca** usar instâncias externas, mocks ou stubs como substituto.
+
+O `tpl` suporta **mais do que uma série de MariaDB**: as famílias major mais recentes e, dentro de cada uma, as séries ainda mantidas. A lista concreta pertence à especificação — `FR-SRV-001`, em `specification/server-contract.md` — e **não se copia para aqui**. Uma segunda cópia deixa de ser verdadeira sem dar sinal disso.
 
 Sempre que for preciso confirmar o conteúdo, a estrutura ou os tipos devolvidos por uma query ao `INFORMATION_SCHEMA`:
 
-1. Lançar o container MariaDB a partir do Dockerfile.
-2. Executar a query real e observar a resposta efectiva.
+1. Lançar o container de **cada série suportada**.
+2. Executar a query real em cada uma e observar a resposta efectiva.
 3. Confirmar o comportamento na documentação oficial do MariaDB.
 4. Documentar o código em conformidade com o que foi observado **e** confirmado.
-5. Terminar o container.
+5. Terminar os containers.
+
+**Uma divergência entre séries é ela própria um achado** e regista-se como tal. É a razão de o `tpl` ler mais do que uma versão, e é o que a especificação exige que seja tratado — não uma nota de rodapé.
 
 **É proibido** assumir, inferir ou documentar o comportamento do catálogo sem executar estes passos. Conhecimento genérico sobre MySQL não é suficiente: as divergências entre MariaDB e MySQL no `INFORMATION_SCHEMA` são reais e relevantes.
 
-Os scripts `scripts/mariadb/setup.sql` e `seed.sql` devem cobrir exaustivamente a superfície que o `tpl` lê: todos os tipos de dados nativos do MariaDB, chaves primárias simples e compostas, índices únicos e compostos, chaves estrangeiras com regras `ON UPDATE`/`ON DELETE` distintas, colunas geradas, vistas, procedimentos e funções, triggers e comentários. O domínio modelado deve ser realista, nunca `id=1, name='test'`.
+Os scripts `scripts/mariadb/setup.sql` e `seed.sql` devem cobrir exaustivamente a superfície que o `tpl` lê: todos os tipos de dados nativos do MariaDB, chaves primárias simples e compostas, índices únicos e compostos, chaves estrangeiras com regras `ON UPDATE`/`ON DELETE` distintas, colunas geradas, vistas, procedimentos e funções, triggers e comentários. O domínio modelado deve ser realista, nunca `id=1, name='test'`. O DDL tem de ser aceite por **todas** as séries suportadas.
 
 ## Documentação
 

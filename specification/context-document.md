@@ -2,7 +2,7 @@
 title: The Context Document
 status: draft
 last-reviewed: 2026-09-10
-related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md]
+related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
 ---
 
 # The Context Document
@@ -22,8 +22,9 @@ every rule of [output-formats.md](output-formats.md) applies to it.
 
 In scope: the structural rules of the document — array shape, reference depth,
 the default discriminant, the decomposition of a column type, the treatment of
-absence, and the consistency the document promises; and the content of the
-three context variables that do not come from a server.
+absence, the server version and standing the document carries, and the
+consistency the document promises; and the content of the three context variables that do not
+come from a server.
 
 Out of scope: which objects and fields the document carries, which is
 [catalogue-coverage.md](catalogue-coverage.md); the transport rules of JSON,
@@ -188,6 +189,105 @@ variable is bound to a source, which is
   which would leave `tpl` with two grammatical classes of test and a template
   author guessing which class a given test belongs to.
 
+## The server version
+
+- **FR-CTX-031**: The `database` object SHALL carry a `server` object holding
+  exactly three keys, `version`, `series`, and `standing`:
+
+  ```json
+  {"server":{"version":"11.4.5-MariaDB","series":"11.4","standing":"supported"}}
+  ```
+
+  `version` SHALL be the string the probe of `FR-SRV-002` returns, unaltered.
+  `series` SHALL be the series identifier — the major family and the series
+  number joined by a dot. `standing` SHALL be as `FR-CTX-034` fixes it.
+
+- **FR-CTX-032**: `series` SHALL be a field of its own. A template SHALL NOT be
+  required to derive it by parsing `version`.
+
+  *Rationale.* It could not. The inherited filter list of `FR-ENV-018` is closed
+  by `FR-ENV-019` and contains nothing that splits a string, so a template given
+  `11.4.5-MariaDB` alone has no way to reach `11.4`. The series is the field a
+  template branches on, per `BR-SRV-007`, and a field that cannot be read is not
+  exposed.
+
+- **FR-CTX-033**: WHEN the document is produced by a server read, `series` SHALL
+  be one of the series of `FR-SRV-015`, or newer than every one of them under
+  `FR-SRV-031`. WHEN the document is supplied to `tpl render --context`, the
+  system SHALL NOT validate `series` against `FR-SRV-015`, SHALL NOT check
+  `standing` against `series`, and SHALL require only that all three keys of
+  `FR-CTX-031` are present, are strings, and that `standing` holds one of the
+  values of `FR-CTX-034`.
+
+  *Rationale.* The refusal of `FR-SRV-020` is about a server `tpl` would have to
+  read and cannot vouch for. `FR-RND-022` opens no connection on the `--context`
+  path, so there is no such server: the document is a record of a read that
+  already happened, and `FR-CTX-025` already establishes that such a record may
+  carry a weaker promise than a live read. Validating it against the window would
+  also make every committed dump expire on a calendar date as the window moved,
+  which would break a working pipeline for a reason nothing in the pipeline
+  changed.
+
+  *Rejected.* Applying the window to `--context` as well, for symmetry with the
+  server path. It is symmetry bought with a time bomb, and the asymmetry it
+  removes is not real: one case is a server being read, the other is bytes
+  already on disk.
+
+  *Accepted cost.* A dump taken from a server the window has since left still
+  renders. A template written against a newer model may generate wrongly from it,
+  and nothing in the document warns of that beyond the `series` field itself,
+  which a template can read.
+
+- **FR-CTX-034**: `standing` SHALL be an enumerated field stating the server's
+  standing relative to the supported window of `FR-SRV-001`, and SHALL take
+  exactly the following values:
+
+  | Value | Meaning |
+  |---|---|
+  | `supported` | The series is one of `FR-SRV-015` |
+  | `newer_than_supported` | The series is newer than every series of `FR-SRV-015`, and the document was produced under `FR-SRV-031` |
+
+  It SHALL be present in every document, whatever the series. It SHALL NOT be
+  omitted, SHALL NOT be `null`, and SHALL NOT be conditional on the server.
+
+  *Rationale.* Two values and no third, because a series below the window never
+  reaches a document: `FR-SRV-020` refuses it before the catalogue is read. The
+  field is enumerated rather than boolean for the reason `FR-CDOC-010` gives for
+  `source` — `FR-OUT-014` lets an enumerated field gain a value and does not let
+  a boolean gain a state — and it is always present for the reason `BR-SRV-008`
+  gives, which is the one that decides the question: `FR-SEM-012` fails the
+  render when a template reads a field that is not there, so a marker that
+  appeared only when something was wrong would make the guard that looks for it
+  fail on every server where nothing was.
+
+  *Rejected.* A boolean `supported`, which cannot later say *how* a server sits
+  outside the window; and omitting the field on a supported server, which would
+  break `FR-SRV-005`, `FR-OUT-012`, and every template that tested it.
+
+- **BR-CTX-006**: This is the one field of the `database` object that this
+  specification fixes while [OQ-024](open-questions.md#oq-024) leaves the rest of
+  that object open, and it can be fixed for a reason particular to it: it does
+  not come from the catalogue. It comes from the version probe of `FR-SRV-002`,
+  which is a statement of its own in the closed list of `FR-SRV-006`, so fixing
+  its shape asserts nothing about what a catalogue table returns and is not
+  blocked by the absence of `scripts/mariadb/`.
+
+  An object rather than a bare string, for the reason `FR-CTX-027` gives for
+  `tpl`: `FR-OUT-014` makes gaining a field the only non-breaking way to grow.
+  A cache-served document carries the `version`, `series`, and `standing` of the
+  server the read was made against rather than of any server reachable now,
+  which is what the `source` field of `FR-CDOC-009` already signals about every
+  other field in it. A cached document therefore keeps
+  `standing: "newer_than_supported"` for as long as it is served, even from a
+  binary whose window has since caught up — the field describes the read, and
+  `tpl cache clean` is how a caller discards it.
+
+  Because `server` is a structural rule of this file, a `--context` document that
+  omits it does not match the document contract and is `65` under `FR-RND-020`.
+  That is intended, and it costs a hand-written document three keys: the
+  document is a record of a read against a server, and `FR-SCH-022` makes the
+  ordinary way to obtain one a `tpl schema dump`, which always carries them.
+
 ## The non-server variables
 
 `FR-RND-023` names five top-level context variables and `FR-RND-024` requires
@@ -284,6 +384,10 @@ emits — `FR-SCH-018` keeps them out of it.
 - [render-command.md](render-command.md) — `--context`, which consumes it, and
   `FR-RND-020`, the code for a document that does not match this contract.
 - [cache-documents.md](cache-documents.md) — the fields a cached read adds.
+- [server-contract.md](server-contract.md) — `FR-SRV-002`, the probe whose
+  result `FR-CTX-031` carries; `FR-SRV-015`, the series `series` may hold on the
+  server path; and `FR-SRV-028`, which requires the version to reach this
+  document at all.
 
 ## Open questions
 
@@ -299,3 +403,6 @@ emits — `FR-SCH-018` keeps them out of it.
   of a column are reported, and what they hold for a non-textual type.
 - [OQ-043](open-questions.md#oq-043) — whether `referenced_by` embeds the
   referencing table under the rule of `FR-CTX-006`, or holds names only.
+- [OQ-042](open-questions.md#oq-042) — what the version probe returns, which
+  fixes the exact string `FR-CTX-031` puts in `version` and the form `series` is
+  derived from.

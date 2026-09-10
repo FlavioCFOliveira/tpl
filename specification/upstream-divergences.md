@@ -64,8 +64,8 @@ Two kinds of entry appear:
 | [DIV-033](#div-033) | `CLAUDE.md` | Contradiction | The whole `Environment` surface as contract |
 | [DIV-034](#div-034) | both | Contradiction | The `table` and `column` field lists |
 | [DIV-035](#div-035) | `CLAUDE.md` | Migration | The performance budget table |
-| [DIV-036](#div-036) | `CLAUDE.md` | Migration | `scripts/mariadb/` lacks the benchmark fixture |
-| [DIV-037](#div-037) | both | Contradiction | No minimum server version, and no refusal of MySQL |
+| [DIV-036](#div-036) | `CLAUDE.md` | Migration | `scripts/mariadb/` lacks the benchmark fixture, and is described in the singular |
+| [DIV-037](#div-037) | both | Contradiction | A withdrawn MariaDB floor, no ceiling, and no refusal of MySQL |
 | [DIV-038](#div-038) | both | Migration | Routine naming has no disambiguator |
 | [DIV-039](#div-039) | both | Contradiction | Determinism stated over all output |
 | [DIV-040](#div-040) | `CLAUDE.md` | Contradiction | `tpl cache` is absent, and the auxiliary set is closed |
@@ -513,26 +513,42 @@ and the two SQL scripts must cover the read surface exhaustively.
 exhaustive variety at minimal volume, for correctness, and `seed-bench.sql` is
 volume at minimal variety, for measurement. One fixture serving both would hide
 an N+1, which is invisible at ten tables.
-*Correction*: add `seed-bench.sql` to the tree and to the testing section.
+*Correction*: add `seed-bench.sql` to the tree and to the testing section, and
+state that the container must be buildable at **each** supported server series
+rather than at one, per `FR-SRV-029`. `CLAUDE.md` describes the container in the
+singular throughout; the version window of `FR-SRV-001` makes four the number,
+and the DDL of `setup.sql` and `seed.sql` must be DDL that all four accept.
 Separately, and more urgently than any correction listed in this file, none of
-the four exists in the repository today. `OQ-009`, `OQ-010`, `OQ-024`, and
-`OQ-025` through `OQ-042` are all blocked by that absence.
+the four files exists in the repository today. `OQ-009`, `OQ-010`, `OQ-024`,
+`OQ-025` through `OQ-042`, and `OQ-045` are all blocked by that absence.
 
 ## DIV-037
 
 **Target**: both. **Kind**: contradiction.
 
-*Says*: neither file states a minimum server version. `README.md` states that
-the generated example template "renders without error against any table of any
-MariaDB database", and `CLAUDE.md` observes that MariaDB and MySQL diverge in
-the catalogue without saying what `tpl` does about it.
-*Specification*: `FR-SRV-001` — the floor is MariaDB 10.6. `FR-SRV-003` — a
+*Says*: `README.md` states, in its requirements table, `MariaDB 10.6 or later`,
+and states that the generated example template "renders without error against
+any table of any MariaDB database". `CLAUDE.md` states no version at all, and
+observes that MariaDB and MySQL diverge in the catalogue without saying what
+`tpl` does about it. The `README.md` line is wrong in both directions: `10.6`
+left community maintenance on 2026-07-06, and `or later` states no ceiling.
+*Specification*: `FR-SRV-001` — the supported servers are the MariaDB series
+that belong to one of the three most recent major families **and** are under
+community maintenance, which on 2026-09-10 is `12.3`, `11.8`, `11.4` and
+`10.11`, per `FR-SRV-015`. `FR-SRV-020` — a MariaDB below that window is
+refused with `78` and `kind: server_version_unsupported`. `FR-SRV-003` — a
 server that is not MariaDB is refused with `78` and `kind: server_not_mariadb`,
 because three verified divergences would make the model silently wrong rather
 than empty.
-*Correction*: state the floor wherever requirements are stated, qualify the
-`README.md` sentence to a supported server, and state that MySQL is refused
-rather than attempted.
+*Correction*: qualify the `README.md` sentence to a supported server, state that
+MySQL is refused rather than attempted, and — wherever either file needs to name
+the supported versions — cite `FR-SRV-001` rather than copy the table of
+`FR-SRV-015`, per `BR-SRV-005`. A second copy of four version numbers in a file
+this specification does not own is the copy nobody will re-verify.
+*Amended in the fourth edition*: this entry previously recorded the correction
+against a minimum of MariaDB 10.6. That floor is withdrawn — 10.6 left community
+maintenance on 2026-07-06 — and the correction owed is now the window, not a
+floor.
 
 ## DIV-038
 

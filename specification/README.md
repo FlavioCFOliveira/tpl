@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in three editions. All are in force; each
+The specification has been written in four editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -86,6 +86,45 @@ One finding was left open deliberately: `FR-PRIV-015` now states *why* the
 privilege cross-check covers views alone, and records that the choice to
 generalise it is blocked on observing `OQ-041`.
 
+### Fourth edition — the supported version window
+
+The product owner replaced the open-ended version floor with a window that
+moves as MariaDB's own maintenance moves, and raised what `tpl` owes the
+differences between the versions in it.
+
+- **Which MariaDB versions are supported** —
+  [server-contract.md](server-contract.md). `FR-SRV-001` states a two-part
+  criterion: the series of the three most recent major families that are also
+  under community maintenance. `FR-SRV-015` names the four series that criterion
+  admits on 2026-09-10, with its source and its verification date, and
+  `FR-SRV-019` makes re-verifying it a release gate. The floor of MariaDB 10.6
+  is withdrawn, because 10.6 left community maintenance on 2026-07-06.
+- **What a difference between two supported series obliges** — the same file.
+  `FR-SRV-024` normalises a fact reported differently, `FR-SRV-004` marks a fact
+  a series does not have, `FR-SRV-025` excludes a field whose meaning differs,
+  and `FR-SRV-026` states the whole of it as one testable equivalence. Which
+  differences actually exist is [OQ-045](open-questions.md#oq-045) and cannot be
+  written until the container exists.
+- **The server version in the model** — `FR-SRV-028` and `FR-CTX-031`. A
+  template that must accommodate a difference could not previously see which
+  server it was rendering against.
+
+Three open questions are closed and none is left open. `OQ-044` — the outcome
+below the window — is `FR-SRV-020`: refusal with `78` and
+`kind: server_version_unsupported`. The other two were the escalations the
+ceiling created, and both came back decided:
+
+- `OQ-073` — a server **newer** than the window is **read**, treated as the
+  newest supported series, and the divergence is marked **in the document**:
+  `FR-SRV-031` through `FR-SRV-033`, with the marker a permanent enumerated
+  field, `FR-CTX-034`. It could not be a field that appears only when there is
+  something to report — `FR-SEM-012` would then fail the very guard that looks
+  for it.
+- `OQ-074` — the two server checks attach to **connecting**, not to reading, so
+  they reach `tpl cfg database test`: `FR-SRV-002` as amended and `FR-SRV-034`,
+  which closes the list of commands that open a connection. That command was
+  the only one escaping the gate.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -123,7 +162,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [context-document.md](context-document.md) | `CTX` | The structure of the document that carries the model |
 | [template-environment.md](template-environment.md) | `ENV` | Filters, tests, global functions, and what is contract |
 | [render-semantics.md](render-semantics.md) | `SEM` | Whitespace, operands, null versus absence, author-signalled failure |
-| [server-contract.md](server-contract.md) | `SRV` | Supported servers, the closed statement list, the read-only promise |
+| [server-contract.md](server-contract.md) | `SRV` | The supported version window, differences between series, the closed statement list, the read-only promise |
 | [privileges-and-completeness.md](privileges-and-completeness.md) | `PRIV` | Complete and incomplete reads, and how a short read is reported |
 | [cache-documents.md](cache-documents.md) | `CDOC` | Cache versions, completeness records, and the `source` field |
 | [performance-requirements.md](performance-requirements.md) | `PERF` | Requirements of form, reference workloads, measurement protocol |
@@ -135,7 +174,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 Identifiers are stable once assigned. They are never renumbered to tidy a file,
 never reused after a requirement is withdrawn, and are the reference used in
 commit messages, task descriptions, and test names. A gap in a sequence is
-therefore expected, not a defect: thirteen open questions are closed and their
+therefore expected, not a defect: sixteen open questions are closed and their
 numbers are not reused. The *Closed* table of
 [open-questions.md](open-questions.md#closed) records each and what answered
 it.
@@ -196,18 +235,26 @@ because they constrain the whole module rather than one interaction.
 
 Every requirement in this specification derives from one of three sources:
 
-1. Three decision logs. The first interview settled 53 points about the CLI
+1. Four decision logs. The first interview settled 53 points about the CLI
    surface; the second settled 28 points about the model, the document, the
    template surface, the server contract, and performance, and recorded four
    defects found in the first edition; the third is the audit of 2026-09-10,
    whose fifteen findings the user answered with fourteen decisions and one
-   deliberate deferral. Each decision carries its own reasoning and the
-   alternatives it rejected; where the reasoning explains why a requirement
-   reads as it does, it is preserved in the `Rationale`, the `Rejected`, or the
-   `Accepted cost` note under that requirement.
+   deliberate deferral; the fourth settled the supported version window. Each
+   decision carries its own reasoning and the alternatives it rejected; where
+   the reasoning explains why a requirement reads as it does, it is preserved in
+   the `Rationale`, the `Rejected`, or the `Accepted cost` note under that
+   requirement.
 2. The root `README.md` and `CLAUDE.md`, used only where no decision contradicts
    them. Such requirements carry a provenance note.
-3. Nothing else. Where information is missing, this specification records an
+3. A published external authority, cited by name and by date. The fourth
+   edition introduced the first: `FR-SRV-015` derives its four series from
+   MariaDB's own maintenance policy, and records the source and the date it was
+   verified beside the table it produced. A requirement of this kind states its
+   source, states when it was checked, and names what obliges a maintainer to
+   check it again — `FR-SRV-019` for this one. It is not a decision this project
+   is free to make, and it decays on a schedule this project does not set.
+4. Nothing else. Where information is missing, this specification records an
    entry in [open-questions.md](open-questions.md) rather than filling the gap.
 
 ## Maintenance debt

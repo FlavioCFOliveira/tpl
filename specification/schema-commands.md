@@ -254,6 +254,13 @@ tpl schema dump                        The whole database as one JSON document
   container of `scripts/mariadb/` exists. The envelope and the `data` key are
   fixed here; the field list is not.
 
+  *Amended in the fourth edition.* One field of that object is now fixed:
+  `server`, carrying the probed version, the series, and the standing, per
+  `FR-CTX-031` and `FR-CTX-034`. It is outside `OQ-024` because it is not a
+  catalogue field — it comes from the version probe of `FR-SRV-002` — so
+  `BR-CTX-006` could fix it without observing anything. The rest of the object
+  remains open.
+
 - **FR-SCH-032**: The `data` of `tpl schema tables`, `tpl schema views`, and
   `tpl schema routines` SHALL follow `FR-OUT-030`, carrying one key named for
   the collection — `tables`, `views`, or `routines` — whose value is the array

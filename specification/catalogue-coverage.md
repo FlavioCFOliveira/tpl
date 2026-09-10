@@ -1,7 +1,7 @@
 ---
 title: Catalogue Coverage
 status: draft
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-10
 related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md]
 ---
 
@@ -197,8 +197,10 @@ one of these is a change to this file, not a defect report.
   shaped as a document.
 - [schema-commands.md](schema-commands.md) — the commands that present it, and
   the `--pattern` filter of `FR-SCH-011` through `FR-SCH-015`.
-- [server-contract.md](server-contract.md) — the minimum server, and the fields
-  emitted as `null` where the server does not provide them.
+- [server-contract.md](server-contract.md) — the supported version window of
+  `FR-SRV-001`, the fields emitted as `null` where the connected series does not
+  provide them, and `FR-SRV-025`, which writes a field of ambiguous meaning into
+  the closed exclusion of `FR-CAT-025`.
 - [privileges-and-completeness.md](privileges-and-completeness.md) — what
   happens when the covered material cannot be read in full.
 

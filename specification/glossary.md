@@ -247,6 +247,24 @@ A stored procedure or a stored function. MariaDB distinguishes the two in
 `INFORMATION_SCHEMA.ROUTINES.ROUTINE_TYPE`; `tpl` reports both under the single
 term "routine" and states the kind per object.
 
+## series / supported series / major family
+
+A **major family** is a MariaDB release line identified by its leading number:
+`10`, `11`, `12`. A **series** is a release line within a family, identified by
+two parts: `10.11`, `11.4`, `12.3`. A **supported series** is one that
+`FR-SRV-001` admits — it belongs to one of the three most recent major families
+and is under MariaDB community maintenance. The four supported series on the
+verification date are named by `FR-SRV-015`, which is the only place in this
+corpus that names them, per `BR-SRV-005`.
+
+A **rolling release** is a series MariaDB does not maintain after GA. No rolling
+release is a supported series, per `FR-SRV-016`.
+
+Version comparison in this specification is always by series, never by point
+release: `10.11.14` and `10.11.2` are the same series, per `FR-SRV-021`. A
+series **below** the window is refused, per `FR-SRV-020`; one **above** it is
+read and marked, per `FR-SRV-031` — see *standing* below.
+
 ## schema (the word, two meanings)
 
 1. The first arm, `tpl schema …`, which reads the structure of a database.
@@ -264,6 +282,14 @@ breaking the contract, per `FR-CDOC-010` — two were added by the third edition
 `"source":"cache"` is also the signal that a document promises neither
 referential integrity nor a snapshot, per `FR-CDOC-016`. The value set is fixed
 by `FR-OUT-026`.
+
+## standing
+
+The third key of the `server` object of `FR-CTX-031`, stating where the server
+the read was made against sits relative to the supported window: `supported`, or
+`newer_than_supported`. It is enumerated, always present, and never `null`, per
+`FR-CTX-034`. A series *below* the window has no value because it never reaches
+a document — `FR-SRV-020` refuses it before the catalogue is read.
 
 ## template
 
