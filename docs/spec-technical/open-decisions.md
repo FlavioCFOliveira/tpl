@@ -10,17 +10,30 @@ related: [README.md, traceability.md]
 ## What this is
 
 Twenty-eight entries, each a decision the repository could not settle on its
-own. Nineteen are settled — by the product owner in the interview of
-2026-09-10, by the establishment of the decision register, and by the eighth
-edition of `/specification` — and nine are open under `technical-writer`.
-Nineteen and nine are the whole of the twenty-eight. None is open under
-`adr-guardian`.
+own. **All twenty-eight are settled. None is open.** Nineteen were settled by
+the product owner in the interview of 2026-09-10, by the establishment of the
+decision register, and by the eighth edition of `/specification`; the remaining
+nine were settled on 2026-09-11, together with four of the five residuals the
+eighth edition left inside settled entries. The fifth, `OD-22`'s, is work
+rather than a decision, and is restated below as belonging to two named
+documents.
+
+Four obligations survive the settlement, and each is named in its own entry
+rather than left to be inferred:
+
+| Entry | What is owed | To whom |
+|---|---|---|
+| `OD-28` | An amendment to `FR-ERR-030`, **before** any implementation narrows the caught-panic condition of `70` | `specification-manager` |
+| `OD-12` | An observation: `FR-CONF-005` names six phases and `FR-CONF-002` supplies four `[core]` keys, so `FR-CONF-004`'s "the `[core]` key for that phase" has no unique referent for three of them. Plus one behaviour to verify against the fixture when the reader exists | `specification-manager`; then `verification` |
+| `OD-14` | An observation about a **defined** `null` under `UndefinedBehavior::Strict`, unverified against the engine pin | `technical-writer` |
+| `OD-22` | Two halves of fixture and harness work that `FR-CONF-038` hands out explicitly, each already assigned to a document | `technical-writer` |
 
 **No entry is a conflict.** The three that were — `OD-21`, `OD-22` and
 `OD-24` — were resolved in the eighth edition, which read requirement against
-requirement and named the requirement that yields in each case. Each is now
-settled with the resolution the corpus made, and each carries a residual that
-is a technical choice rather than a defect.
+requirement and named the requirement that yields in each case. `OD-28` is the
+one entry whose settlement obliges the functional corpus to move, and it moves
+first: an implementation choice never narrows a contractual code without the
+corpus saying so.
 
 Each settled entry records the decision, its rationale, and **the options
 rejected**, for the reason [`docs/adr/README.md`](../adr/README.md) gives for
@@ -37,8 +50,10 @@ entry's rationale belongs there where rule R4 of
 |---|---|
 | **Settled** | Decided. The rationale and the rejected options are recorded in the entry |
 | **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it |
-| **Open** | Not decided. The entry names the options and the owner |
-| **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it |
+| **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
+| **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order |
+| **Open** | Not decided. The entry names the options and the owner. **No entry carries this status today** |
+| **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
 ## Index
 
@@ -47,42 +62,48 @@ entry's rationale belongs there where rule R4 of
 | [OD-01](#od-01--where-the-architecture-decision-records-live) | Where the architecture decision records live | Settled | — |
 | [OD-02](#od-02--the-msrv) | The MSRV | Settled | — |
 | [OD-03](#od-03--versioning-the-binary-the-document-the-cache-the-changelog) | Versioning: binary, document, cache, changelog | Settled | — |
-| [OD-04](#od-04--one-package-or-a-workspace) | One package, or a workspace | Settled, with a residual | `technical-writer` |
-| [OD-05](#od-05--the-module-decomposition) | The module decomposition | Open | `technical-writer` |
-| [OD-06](#od-06--the-error-types-shape-and-the-exit-code-derivation) | The error type's shape and the exit-code derivation | Open | `technical-writer` |
+| [OD-04](#od-04--one-package-or-a-workspace) | One package, or a workspace | Settled | — |
+| [OD-05](#od-05--the-module-decomposition) | The module decomposition | Settled | — |
+| [OD-06](#od-06--the-error-types-shape-and-the-exit-code-derivation) | The error type's shape and the exit-code derivation | Settled | — |
 | [OD-07](#od-07--help-the-parsers-renderer-or-tpls-own) | Help: the parser's renderer, or `tpl`'s own | Settled | — |
-| [OD-08](#od-08--the-parsers-own-diagnostics) | The parser's own diagnostics | Open | `technical-writer` |
+| [OD-08](#od-08--the-parsers-own-diagnostics) | The parser's own diagnostics | Settled | — |
 | [OD-09](#od-09--toml-the-read-path-and-the-write-path) | TOML: the read path and the write path | Settled | — |
 | [OD-10](#od-10--cache-filenames-and-the-case-collision) | Cache filenames, and the case collision | Settled | — |
 | [OD-11](#od-11--the-scope-of-the-async-runtime) | The scope of the async runtime | Settled | — |
-| [OD-12](#od-12--how-six-phase-deadlines-are-enforced) | How six phase deadlines are enforced | Open | `technical-writer` |
+| [OD-12](#od-12--how-six-phase-deadlines-are-enforced) | How six phase deadlines are enforced | Settled, with an observation owed | `specification-manager` |
 | [OD-13](#od-13--the-engine-pin-and-minijinja-contrib) | The engine pin, and `minijinja-contrib` | Settled | — |
-| [OD-14](#od-14--which-undefined-behaviour-the-engine-is-configured-with) | Which undefined behaviour the engine is configured with | Settled, with one observation owed | — |
-| [OD-15](#od-15--the-template-loader) | The template loader | Open | `technical-writer` |
+| [OD-14](#od-14--which-undefined-behaviour-the-engine-is-configured-with) | Which undefined behaviour the engine is configured with | Settled, with an observation owed | `technical-writer` |
+| [OD-15](#od-15--the-template-loader) | The template loader | Settled | — |
 | [OD-16](#od-16--the-tls-backend-and-the-root-store) | The TLS backend and the root store | Settled | — |
-| [OD-17](#od-17--observability) | Observability | Open | `technical-writer` |
-| [OD-18](#od-18--serialisation-key-order-and-the-two-omissions) | Serialisation, key order, and the two omissions | Open | `technical-writer` |
+| [OD-17](#od-17--observability) | Observability | Settled | — |
+| [OD-18](#od-18--serialisation-key-order-and-the-two-omissions) | Serialisation, key order, and the two omissions | Settled | — |
 | [OD-19](#od-19--whether-the-two-embeddings-are-materialised) | Whether the two embeddings are materialised | Settled | — |
-| [OD-20](#od-20--edit-distance-and-the-other-small-algorithms) | Edit distance, and the other small algorithms | Settled, with a residual | `technical-writer` |
-| [OD-21](#od-21--two-test-seams-that-must-not-be-on-the-published-surface) | Two test seams that must not be on the published surface | Settled, with a residual | `technical-writer` |
+| [OD-20](#od-20--edit-distance-and-the-other-small-algorithms) | Edit distance, and the other small algorithms | Settled | — |
+| [OD-21](#od-21--two-test-seams-that-must-not-be-on-the-published-surface) | Two test seams that must not be on the published surface | Settled | — |
 | [OD-22](#od-22--the-test-harness-and-the-fixture-certificate) | The test harness, and the fixture certificate | Settled, with a residual | `technical-writer` |
 | [OD-23](#od-23--packaging-artefacts-and-the-musl-build-path) | Packaging, artefacts, and the musl build path | Settled | — |
-| [OD-24](#od-24--the-discovery-boundary-and-the-process-uid) | The discovery boundary, and the process uid | Settled, with a residual | `technical-writer` |
-| [OD-25](#od-25--the-clock-source-for-now) | The clock source for `now` | Open | `technical-writer` |
+| [OD-24](#od-24--the-discovery-boundary-and-the-process-uid) | The discovery boundary, and the process uid | Settled | — |
+| [OD-25](#od-25--the-clock-source-for-now) | The clock source for `now` | Settled | — |
 | [OD-26](#od-26--the-boundary-against-the-knowledge-graph) | The boundary against the knowledge graph | Settled | — |
 | [OD-27](#od-27--seed-benchsql-and-wl-001) | `seed-bench.sql` and `WL-001` | Settled | — |
-| [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Open | `technical-writer` |
+| [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Settled, with an amendment owed | `specification-manager` |
+
+Twenty-four entries are settled outright; `OD-12` and `OD-14` carry an
+observation owed, `OD-22` a residual, and `OD-28` an amendment owed. Twenty-four
+and four are the whole of the twenty-eight.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
 
 ## Verification note
 
-Every version number and every library behaviour cited below was verified on
-**2026-09-10** against the source named beside it — vendor documentation on
-`docs.rs`, the crate index, the Rust Edition Guide, or a file of this
-repository. Anything not verified says so in its own text. No claim rests on
-recollection.
+Every version number and every library behaviour cited below was verified
+against the source named beside it — vendor documentation on `docs.rs`, the
+crate index, the Rust Edition Guide, the Rust Reference, the Rust Book, the
+Cargo Book, or a file of this repository. Each claim carries the date it was
+verified on: **2026-09-10** for the nineteen entries settled that day,
+**2026-09-11** for everything added since. Anything not verified says so in its
+own text. No claim rests on recollection.
 
 The three entries the eighth edition settled — `OD-21`, `OD-22`, `OD-24` —
 were re-read against the corpus as it stands at commit `9efa791` on
@@ -163,7 +184,7 @@ affects only the other."
 
 ## OD-04 — One package, or a workspace
 
-**Status: settled, with a residual.**
+**Status: settled.** The residual the eighth edition left is settled below.
 
 **Decision.** **One Cargo package**, carrying a library and a binary. The logic
 lives in the library and is testable without launching a process; the binary
@@ -179,67 +200,197 @@ protect.
 consumes and multiplies the manifests that must agree on the release profile
 and the MSRV.
 
-**Residual, open under `technical-writer`.** Whether `benches/` needs a package
-of its own to keep the measurement crates — `criterion`, `dhat` — out of the
-shipped dependency graph. `CLAUDE.md` *Orçamento de dependências* requires
-knowing what each dependency drags in, and a dev-dependency of the same package
-still appears in `cargo tree`. To be settled in `operations`, with the
-dependency graph of both arrangements recorded.
+**Residual, settled 2026-09-11. `benches/` needs no package of its own.**
+`criterion` and `dhat` are dev-dependencies, and the question the residual
+raised is answered by naming the command that answers it rather than by a
+second manifest. `cargo tree`'s default is `normal,build,dev`, which is why an
+unfiltered listing shows a dev-dependency; the shipped graph is what
+`cargo tree --edges normal,build` prints, which is "a mostly equivalent
+overview of what `cargo build` does" (Cargo Book, *cargo-tree*, `--edges`,
+verified 2026-09-11). Nothing a dev-dependency drags in is compiled into the
+release artefact, so a second package would move nothing out of a graph it was
+never in.
+
+**Rejected.** A `benches` package, or a workspace member for it, which adds a
+manifest that must agree with the first on the release profile and the MSRV —
+the reason this entry already rejected a workspace — and changes nothing about
+what `cargo build --release` compiles.
+
+**One caveat, and it belongs to `operations`.** `dhat` profiles the process it
+is linked into: "for heap profiling, enable the global allocator by adding this
+code to your program" (docs.rs `dhat` 0.3.3, verified 2026-09-11). Heap
+profiling of the **binary** therefore needs `dhat` as an optional normal
+dependency behind a feature that installs a global allocator, which is not a
+dev-dependency and does enter the graph of the build that carries it. That
+build is not distributed, and `NFR-PERF-018` reaches distributed artefacts.
+Whether the project takes that path is a build question for `operations`, and
+nothing in this entry depends on the answer.
 
 ---
 
 ## OD-05 — The module decomposition
 
-**Status: open. Owner: `technical-writer`.**
+**Status: settled.**
 
-**Question.** `CLAUDE.md` names `main.rs`, `cli/`, `project/`, `mariadb/`,
-`model/`, `render/` and `error.rs`. Six responsibilities have no home among
-them. Where does each live?
+**Decision.** Eleven modules under `src/`, the seven the project already
+sketches plus four new ones. Each new module exists because a responsibility
+crosses every command and would otherwise be copied per command, or because
+placing it under an existing module would make that module own a subject its
+name denies.
 
-| Responsibility | Requirements | Homes visible |
-|---|---|---|
-| The catalogue cache | `FR-CACHE-*`, `FR-CDOC-*` | a `cache/` module; under `project/`; under `mariadb/` |
-| Output formatting, the envelope, `text` layout, escaping | `FR-OUT-*` | an `output/` module; under `cli/`; under `model/` |
-| Help text and the typed examples and exit-codes table | `FR-HELP-022` | under `cli/`; a `help/` module |
-| The privilege cross-checks | `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019` | under `mariadb/`; under `model/` |
-| The configuration reader and writer | `FR-CONF-*`, `FR-CFG-*` | under `project/`; a `config/` module |
-| The diagnostic renderer and the suggestion machinery | `FR-ERR-008`, `FR-ERR-019` | under `error.rs`; a `diag/` module |
+```
+src/
+├── main.rs        parse, dispatch, map the error to an exit status, and nothing else
+├── lib.rs         the crate root and its deliberate re-exports
+├── cli/           the parser tree, one module per porcelain command, and the help renderer
+├── project/       discovery, the trust checks, and the configuration reader and writer
+├── mariadb/       the connection, the catalogue reader, and the privilege cross-checks
+├── model/         the model read from the catalogue — the published surface
+├── cache/         the read-through cache and its on-disk arrangement
+├── render/        the engine, the loader, and the registered template surface
+├── output/        the envelope, the JSON emitter, the text layouts, escaping, the writer
+├── diagnostics/   the four-line renderer, the suggestion machinery, the verbosity gate
+├── deadline.rs    the phase clock and the timer thread of OD-12
+└── error.rs       the error type and the exit-code derivation
+```
 
-**Constrained by.** `CLAUDE.md` *Convenções de Código Rust*: `snake_case`, no
-module name repeating its parent, `foo.rs` beside `foo/` and never `mod.rs`,
-and the visibility ladder private → `pub(super)` → `pub(crate)` → `pub`.
+**The six placements the entry asked for, and the seventh the answer to
+`OD-12` created.**
 
-**Still to settle, with written rationale.** All six placements, and whether
-`cli/` holds one module per porcelain command that delegates the work, or the
-work itself.
+| Responsibility | Home | Why there | Home rejected, and why |
+|---|---|---|---|
+| The catalogue cache | `cache/` | It sits **between** the reader and every consumer, and owns a subject neither neighbour owns: an on-disk arrangement with its own version, `cache_format`, which `FR-CDOC-005` makes independent of the model's | Under `mariadb/`, which would make a module named after the server own a filesystem format and a version the server knows nothing about; under `project/`, which would make the project module own catalogue semantics and per-collection completeness |
+| Output formatting, the envelope, `text` layout, escaping | `output/` | One envelope governs all seventeen documents, per `FR-OUT-032`, and `FR-OUT-018` escapes on the way out of four command groups. A single owner is what makes "the envelope is the same everywhere" a property of the code rather than of review | Under `cli/`, which would put the envelope in as many places as there are commands that emit; under `model/`, which would make the model own its own presentation and put an escaping rule inside the type `FR-SCH-022` requires to round-trip unchanged |
+| Help text and the typed examples and exit-codes table | `cli/help.rs` | `FR-HELP-021` derives the JSON command tree by introspecting the parser's tree, which lives here, and `FR-HELP-022`'s table is indexed by command path — `cli/`'s own vocabulary. It emits through `output/` for `help --format json` | A top-level `help/`, which would have to reach into `cli/` for the tree and the paths that are its only inputs, inverting the dependency for no gain |
+| The privilege cross-checks | `mariadb/privileges.rs` | The three checks read the **shape of the rows the server returned** — an empty `VIEW_DEFINITION` (`FR-PRIV-011`), a `NULL` `ROUTINE_DEFINITION` (`FR-PRIV-017`), zero rows from three catalogue tables (`FR-PRIV-019`). None is a property of the model; each is a property of a read | Under `model/`, which would make the published model type know about grants, and would put a check on a shape the model no longer carries by the time it is built |
+| The configuration reader and writer | `project/config.rs` | `FR-PROJ-010` and `FR-PROJ-011` make the ownership and mode of `.tpl/.cfg` a precondition of reading it, so the file and the folder that holds it are one subject. One module owns both paths over one key space, which is what keeps the fifteen keys of `FR-CONF-002` in one place | A top-level `config/`, which separates the file from the discovery that found it and the trust checks that gate it, and puts the key space one module away from the rule that decides whether it may be read at all |
+| The diagnostic renderer and the suggestion machinery | `diagnostics/` | It holds transformations, not a taxonomy: the escaping of `FR-ERR-024`, the character set of `FR-ERR-022` and `FR-ERR-023`, the candidate selection of `FR-ERR-019`, and the four-line layout of `FR-ERR-008`. It also owns the verbosity gate of `FR-GLOB-014` and the typed diagnostic sinks of `OD-17` | Inside `error.rs`, which would put presentation beside the taxonomy and make the error type depend on an edit-distance implementation. `OD-06` separates the two for the same reason |
+| The phase clock and the timer thread | `deadline.rs` | `OD-12` gives one construct three users — the runtime inside `mariadb/`, the child process, and the render — and `FR-GLOB-012` composes every phase deadline with one budget measured from process start. A budget shared by three modules belongs to none of them | Inside `project/config.rs` beside the four `[core]` keys, which resolves the values but cannot hold the construct that applies them; and inside each of the three users, which is the same rule written three times |
 
-**Blocks.** `architecture`, `interfaces`.
+**The name `diagnostics` rather than `diag`.** The project's own convention
+refuses obscure abbreviations in module names. The register named `diag/` as a
+candidate; it is spelled out.
+
+**`cli/` delegates; it does not do the work.** Each porcelain command is a
+module under `cli/` that validates its own arguments, calls the library, and
+hands the result to `output/`. The work itself lives in the module that owns
+the subject.
+
+**Rationale.** Three requirements decide this rather than taste. The project's
+own organisation rule puts the logic in the library and reduces `main.rs` to
+parse, dispatch and map. `NFR-PERF-005` requires `tpl init`, every form of
+`help` and every form of `version` to perform no discovery, read no
+configuration and open no connection — a property that is *observable* when a
+command module is a thin adapter over a lazily reached subject, and that has to
+be argued when a command module contains the work. And the same subject is
+reached from several commands — a table is read by `schema table`, by
+`schema dump`, by `render` and by `cache load` — so work placed in a command
+module is work that is either duplicated or reached sideways.
+
+**Rejected — a flat module per command with the work inside it.** It is the
+shape a CLI takes when it grows without a decomposition, and it makes each of
+the four rules above unenforceable: the envelope would exist per command, the
+catalogue read would exist per command, and `NFR-PERF-005` would be a review
+item rather than an observation.
+
+**Rejected — folding `output/` and `diagnostics/` into one module.** They
+share nothing: `FR-OUT-018` excepts tab and `FR-ERR-024` escapes it, on streams
+with opposite contracts — stdout is byte-identical under `NFR-DET-001` and
+stderr is explicitly neither deterministic nor contract. One module holding two
+opposite escaping rules over two opposite promises is the shape in which the
+wrong one gets applied.
+
+**Visibility.** Everything is private by default; `pub(crate)` for what crosses
+a module boundary; `pub` for `model/` and `error.rs` alone, which are the
+surface the project documents. `lib.rs` re-exports those two deliberately and
+re-exports no module whole.
+
+**Unblocks.** `architecture`, `interfaces`.
 
 ---
 
 ## OD-06 — The error type's shape and the exit-code derivation
 
-**Status: open. Owner: `technical-writer`.**
+**Status: settled.**
 
-**Question.** One error enum or several? How is the exit code obtained from an
-error value, and how are the four labelled lines built?
+**Decision.** Three answers, in the order the entry asked them.
 
-**Visible from the repository.**
+| Question | Answer |
+|---|---|
+| One enum or several | **One** public `#[non_exhaustive] enum Error` in `error.rs`, derived with `thiserror`. A module may carry a private error for its own convenience and converts it at its own boundary with `From`; no module error is public and none carries an exit code |
+| Where the exit code comes from | **An inherent method on the error**, `Error::exit_code`, in the library beside the enum. `main.rs` calls it and returns the status |
+| Where the four labelled lines come from | **A renderer in `diagnostics/`**, not `Display`. `Display` carries the `error:` line's content and nothing else |
 
-- `FR-ERR-001` fixes ten codes; `FR-ERR-002` forbids collapsing two conditions onto one code where the caller's next step differs.
-- `FR-ERR-034` fixes, **per code**, what the `cause` line must name, and bans a `cause` "whose wording would be equally true of a different failure". The error value must therefore carry the instance, not the category.
-- `FR-ERR-015` is withdrawn, and its *Rejected* note refuses "retaining `kind` as an internal taxonomy with no external carrier", on the ground that a classification nothing outside the process can observe cannot be tested.
-- `CLAUDE.md`: `thiserror` in the library, `anyhow` in the binary; `#[non_exhaustive]` on public enums.
-- `FR-ERR-030`: `70` is produced by a caught top-level panic and by a detected invariant violation. Whether the first condition survives the release profile is `OD-28`, which carries `DIV-045`; this entry takes that answer as given and decides only how the error value yields the code.
+**Why one enum.** `FR-ERR-001` fixes ten codes and `FR-ERR-002` forbids
+collapsing two conditions onto one code where the caller's next step differs,
+so every condition the program can reach has to be assigned a code by someone
+who can see all of them at once. One enum puts that assignment in one
+exhaustive match, and the project's own rule against a `_ =>` arm that swallows
+future variants turns a new condition without a code into a **compile error**.
+Per-module enums composed by `From` spread the assignment across the `From`
+implementations, where a new variant in a leaf module reaches the boundary with
+whatever code the conversion happened to pick.
 
-**Still to settle, with written rationale.** One enum against per-module enums
-composed by `From`; whether the exit code is a method on the error or a table
-in the binary; whether the four lines come from `Display` or from a separate
-renderer, which `FR-ERR-024`'s escaping and `FR-ERR-022`'s character set both
-argue for; and whether the discriminant an exit-code mapping needs is the
-taxonomy `FR-ERR-015` rejected or is distinguishable from it.
+**Why the method and not a table in the binary.** The project's conventions
+name the error enum as a typical carrier of `#[non_exhaustive]`, and it is
+applied here. The Rust Reference states the effect plainly: "Cannot match on a non-exhaustive enum
+without including a wildcard arm", because "matching on a variant does not
+contribute towards the exhaustiveness of the arms" (Rust Reference, *Type
+system attributes*, verified 2026-09-11). The binary is a **downstream crate**
+of the library, so a table there could not be exhaustive: it would need the
+wildcard arm, and the wildcard arm is exactly the construct that lets a new
+condition ship with the wrong code. Inside the defining crate the match is
+exhaustive and the compiler enforces the assignment.
 
-**Blocks.** `interfaces`, `architecture`.
+**Why a renderer and not `Display`.** Four requirements pull the four lines
+apart from the type:
+
+- `FR-ERR-010` forbids `cause` to restate `error`, so one value owes **two** distinct strings and `Display` supplies one.
+- `FR-ERR-034` fixes, per code, what `cause` must name, so the second string is derived from a per-code obligation rather than from the variant's own wording.
+- `FR-ERR-024` escapes `\n`, `\r`, `\t` and every C0 control in **every value interpolated into a message**. The renderer escapes each composed line as a whole, which makes the rule hold for interpolations nobody remembered to escape — a property that review cannot supply and that a `Display` implementation per variant cannot either.
+- `FR-ERR-022` and `FR-ERR-023` restrict what may enter a runnable `hint` and require a candidate outside `[A-Za-z0-9_]{1,64}` to be dropped entirely. That is a filter over a candidate set, not a property of the error value.
+
+`Display` is still implemented, because `thiserror` derives it from the
+`#[error(...)]` attribute and because the project's conventions ask for it where
+the type justifies one. Its output is the `error:` line's content, unescaped;
+the renderer escapes it on the way out.
+
+**Why the variant set is not the taxonomy `FR-ERR-015` rejected.** That
+requirement withdrew an emitted `kind` field, and its *Rejected* note refuses
+"retaining `kind` as an internal taxonomy with no external carrier", on the
+ground that "a classification nothing outside the process can observe cannot be
+tested". The variant set has two external carriers and is tested through both:
+the **exit code**, which `FR-ERR-001` makes contract and `BR-ERR-001` requires
+an integration test for, code by code; and the **`cause` line**, whose content
+`FR-ERR-034` obliges per code. What `FR-ERR-015` refuses is a *second*
+classification that nothing observes. This is the first, and its projection is
+what a caller branches on.
+
+**The structural consequence for `FR-GLOB-018`, recorded here because it is the
+type that enforces it.** No variant carries the database driver's error. The
+driver's failure is classified at the `mariadb/` boundary into a phase, a host,
+a port and a classification, and the original value is dropped; `#[from]` is
+not used on `sqlx::Error`. A raw driver error therefore has no route to any
+stream, because it has no home in the value that reaches one. The template
+engine is the deliberate asymmetry: `FR-ERR-011` requires "the chain of
+underlying template-engine errors", so a render variant carries that chain, and
+`FR-GLOB-018` forbids the **driver** error alone.
+
+**Rejected.**
+
+- **Per-module enums composed by `From`,** for the reason above; and additionally because `FR-ERR-034` requires the `cause` to name an instance rather than a category, so each conversion would have to carry the instance forward through every layer, which is where instances are lost.
+- **`anyhow::Error` in the library.** The project fixes `thiserror` there, and an opaque error cannot carry the per-code obligations of `FR-ERR-034` or the exhaustive match `exit_code` depends on.
+- **An exit code stored as a field on the error.** It makes two variants able to disagree with the table by construction, and it moves the assignment from a compiler-checked match to a value someone writes at each construction site.
+
+**One observation for `technology-stack`.** With `main.rs` reduced to calling
+the library, reading `exit_code`, and returning, the binary has no dynamic error
+to carry, so `anyhow` earns nothing under the dependency budget. Whether it
+stays in the stack table is a dependency question for that document; nothing in
+this entry depends on the answer, and the correction to the coordination
+document, if any, is prepared for the user rather than made here — as `OD-09`
+did for `toml_edit`.
+
+**Unblocks.** `interfaces`, `architecture`.
 
 ---
 
@@ -277,25 +428,78 @@ open for the parser's error messages, which this decision does not reach.
 
 ## OD-08 — The parser's own diagnostics
 
-**Status: open. Owner: `technical-writer`.**
+**Status: settled.**
 
-**Question.** Are `clap`'s error messages intercepted and re-rendered, or are
-its diagnostic features disabled?
+**Decision.** **Intercept `clap::Error` and re-render.** The parser keeps
+`error-context`; `suggestions` and `color` are turned off; `clap`'s own
+renderer is never invoked, so no byte it produces reaches a caller.
 
-**Visible from the repository, and verified.**
+| clap feature | State | Why |
+|---|---|---|
+| `error-context` | **on** | It is the only source of the token `FR-ERR-034` row `64` obliges the `cause` line to name |
+| `suggestions` | **off** | `FR-ERR-019` and `FR-ERR-020` fix the suggestion rule — at most three, within an edit distance of two, ordered by distance then by name — and `OD-20` fixes the distance as Damerau-Levenshtein. A second candidate generator with different rules would be dead weight whose output is discarded |
+| `color` | **off** | `NFR-DET-004` forbids colour and every ANSI escape sequence on stdout and on stderr, "under any circumstances", and names removing colour as what "lets the argument parser be built without its colour support" |
+| `wrap_help` | off (default) | `FR-HELP-009` and `FR-HELP-010` put the line breaks in the text and forbid reading `COLUMNS`. Settled in `OD-07` |
 
-- `FR-ERR-008` fixes four labelled lines; `FR-ERR-033` makes them the whole of what a caller receives.
-- `FR-ERR-019` and `FR-ERR-020` fix the suggestion rule; `FR-ERR-022` and `FR-ERR-023` restrict a runnable hint to literals and `[A-Za-z0-9_]{1,64}` and refuse a candidate outside that set entirely.
-- `FR-CLI-014` requires a repeated single-value flag to be `64` **naming both values**.
-- `clap`'s default features include `error-context` and `suggestions`, and `color` (clap feature-flags documentation, verified 2026-09-10). Its message shape cannot be emitted as it stands.
+Feature names and their documented descriptions: clap feature-flags
+documentation, clap 4.6.6, verified 2026-09-11 — `error-context` is "Include
+contextual information for errors (which arg failed, etc)" and `suggestions`
+"Turns on the `Did you mean '--myoption'?` feature".
 
-**Still to settle, with written rationale.** Intercept `clap::Error` and
-re-render from its kind and context, against turning `error-context` and
-`suggestions` off and producing every diagnostic in `tpl`. The second forfeits
-the context that would let a re-rendering name both values of a repeated flag;
-whether the parser exposes enough to do that at all was **not verified**.
+**Why interception rather than local production.** `FR-ERR-034` row `64`
+obliges the `cause` line to name "the token rejected as written, and why it was
+rejected: the unknown command or flag, the value that did not conform together
+with the type expected, or both members of the mutually exclusive pair". With
+`error-context` off, `clap::Error` carries a kind and nothing else, so `tpl`
+would have to recover the token by re-reading `argv` — parsing untrusted input a
+second time, by a second set of rules, to answer a question the parser already
+answered. With the feature on, the token is read from typed context:
+`clap::error::ContextKind` is "available only when the `error-context` crate
+feature is enabled" and carries `InvalidArg` ("the cause of the error"),
+`InvalidValue` ("rejected values") and `PriorArg` ("existing arguments") among
+its variants (docs.rs `clap::error::ContextKind`, clap 4.6.6, verified
+2026-09-11).
 
-**Blocks.** `interfaces`.
+**Why this does not repeat the dependency `OD-07` rejected.** That entry
+refused making a contract output depend on the parser's renderer staying
+byte-stable. Nothing here depends on rendered text: `ErrorKind` and
+`ContextKind` are typed API, checked by the compiler, and the four lines are
+composed by `tpl`. What remains is an API-level dependency on **which** context
+kinds clap populates for a given kind of failure, which no documentation
+promises. `verification` therefore owes one test per `ErrorKind` that `tpl`
+maps, asserting the four lines it produces — the same discipline `FR-HELP-002`
+already imposes on the help surface through snapshots.
+
+**`ContextKind` is `#[non_exhaustive]`** (same source and date), so the mapping
+carries a wildcard arm by force of the language. That arm produces a `64` whose
+`cause` names the token and states that the invocation was rejected, which is
+the minimum `FR-ERR-034` row `64` admits; it never produces a code other than
+`64`, so no unmapped context can move a caller onto a different branch.
+
+**`FR-CLI-014` is answered without the parser's context at all.** A flag that
+carries a single value is declared with `ArgAction::Append`, and `tpl` rejects
+a second occurrence itself, naming **both values**. The alternative is not
+available: `ArgAction::Set` "will result in an `ArgumentConflict`" on a second
+occurrence, which yields the `64` but reports a conflict between arguments
+rather than the two values the requirement demands (docs.rs `clap::ArgAction`,
+clap 4.6.6, verified 2026-09-11). Declaring the flag as repeatable and refusing
+the repetition locally is what puts both values in hand — and it makes
+`FR-CLI-014` independent of anything clap chooses to place in its context.
+
+**Rejected.**
+
+- **Turning `error-context` and `suggestions` off and producing every diagnostic in `tpl`.** It forfeits the token that `FR-ERR-034` row `64` requires, and buys back only a feature flag. Recovering the token would mean a second parse of `argv` inside `tpl`, on the path `FR-ERR-006` places first in the validation order, where a disagreement between the two parses is a wrong `cause` line for a correctly rejected invocation.
+- **Letting `clap` render its own errors.** `FR-ERR-008` fixes four labelled lines and `FR-ERR-033` makes them the whole of what a caller receives; clap's message shape is not that shape, and adopting it would make a contract output move when the parser's renderer moves. This is the argument `OD-07` already made, and it applies unchanged.
+- **Keeping `suggestions` on and using clap's candidates.** `FR-ERR-019` fixes the count, the distance and the ordering, and `FR-ERR-023` refuses a candidate outside `[A-Za-z0-9_]{1,64}` entirely. A candidate set produced by another rule would have to be filtered and re-ordered into the specified one, so the feature would compute a set that is then discarded.
+
+**Composition.** `FR-ERR-024` escapes every value interpolated into a message,
+including the argument vector, and the token this entry recovers is such a
+value: it reaches the reader through the renderer of `OD-06`, escaped, and never
+through clap. `FR-GLOB-018` forbids the argument **vector** on a diagnostic
+stream; one rejected token is not the vector, and `FR-ERR-034` row `64`
+requires it.
+
+**Unblocks.** `interfaces`.
 
 ---
 
@@ -401,35 +605,117 @@ raw loopback, tracked as roadmap task `#8`; it bears on `OD-12`.
 
 ## OD-12 — How six phase deadlines are enforced
 
-**Status: open. Owner: `technical-writer`. Flagged as the entry likeliest to
-turn out to be a requirement that cannot be met as written.**
+**Status: settled, with an observation owed to `specification-manager` and one
+behaviour owed a verification.** It was flagged as the entry likeliest to prove
+a requirement unmeetable. It did not: five of the six phases separate cleanly,
+and the sixth pair separates in the report rather than in the call.
 
-**Question.** `FR-CONF-005` requires a deadline on six distinct phases, and
-`FR-ERR-034` requires the `cause` to name **which** of DNS resolution, TCP
-connect, TLS handshake or catalogue query failed. How are the phases
-separated, and how is a deadline applied to a synchronous template render?
+**Decision.** Three mechanisms, chosen by what the phase is waiting on.
 
-**Visible from the repository.**
+| Phase | Bounded by | Deadline |
+|---|---|---|
+| DNS resolution | `tokio::time::timeout` around `tokio::net::lookup_host`, performed by `tpl` before the driver is called | the connection deadline |
+| TCP connect **and** TLS handshake | one `tokio::time::timeout` around the driver's `connect_with`, which receives an address the resolution already produced | the remainder of the connection deadline |
+| Catalogue query | `tokio::time::timeout` around each query | `core.query_timeout` |
+| `password_command` | a timer thread that kills the child; the parent reports the deadline | `core.password_timeout` |
+| Render | a timer thread that writes the `65` diagnostic and exits the process | `core.render_timeout` |
 
-- `FR-CONF-005`: deadlines on DNS resolution, TCP connect, TLS handshake, catalogue query, `password_command`, and render.
-- `FR-GLOB-012`: a phase ends at the first of its own deadline and what remains of the overall budget, measured from process start.
-- `FR-GLOB-013` and `FR-ERR-027`: the exit code is the phase's — `69`, `78` or `65`.
-- `FR-ERR-034`, row `69`: the `cause` names the phase that failed, the host and port attempted, and what that phase returned.
-- `FR-CONF-005` note with `NFR-PERF-018`: a static `musl` build resolves names differently, and "a name that did not resolve is not a host that refused a connection".
-- `FR-RND-033`: exceeding the render deadline is `65`. Whether the template engine offers any timeout or fuel mechanism was **not verified**.
+The **connection deadline** is one instant, set at `core.connect_timeout` from
+the start of connection establishment and shared by the three connection
+phases. Every deadline above composes with the overall budget as `FR-GLOB-012`
+requires: a phase ends at the first of its own deadline and what remains of
+`--timeout` measured from process start.
 
-**Why it may be unmeetable.** A driver `connect` covers resolution, connection
-and handshake in one call, so naming which of the three failed may not be
-obtainable without `tpl` resolving and connecting itself and handing the driver
-a socket — and a synchronous render has no obvious interruption point at all.
-If either turns out to be unobtainable it is a defect owed to
-`specification-manager`, not a design to be invented here.
+**How the phases are separated.**
 
-**Still to settle, with written rationale.** Whether the connect phase is
-decomposed and how; and how a render is bounded — a watchdog, a cooperative
-check inside a registered filter, or a stated limit.
+1. **DNS is separated because `tpl` performs it.** This is obliged rather than chosen: `FR-CONF-005`'s note and `NFR-PERF-018`'s accepted cost both require the `cause` line to say that a name did not resolve rather than that a host refused a connection, and that distinction cannot be recovered from a driver call that resolves internally. `MySqlConnectOptions` exposes `host` and `port` and no pre-resolution hook, so handing it the address the resolution produced leaves it nothing to resolve (docs.rs `sqlx::mysql::MySqlConnectOptions`, sqlx 0.9.0, verified 2026-09-11).
+2. **TCP connect and TLS handshake are not separable in the call.** `MySqlConnectOptions` has **no method that accepts an already-connected stream or socket**; `socket()` takes the path of a Unix socket and changes the transport rather than supplying a connection (same source and date). One call therefore covers both phases, which is what `BENCHMARKS.md` measured when it attributed 44.18 ms to `connect_with` as a whole.
+3. **They are separated in the report, by the driver's own discriminant.** `sqlx::Error::Tls` is documented as "Error occurred while attempting to establish a TLS connection" and `sqlx::Error::Io` as "Error communicating with the database backend" (docs.rs `sqlx::Error`, sqlx 0.9.0, verified 2026-09-11). The phase named in the `cause` line is derived from the variant, not from the call site.
+4. **Catalogue query, `password_command` and render are separate calls** and need no argument.
 
-**Blocks.** `architecture`, `interfaces`, `quality-attributes`.
+**What the `cause` line may carry.** `FR-ERR-034` row `69` requires it to name
+the phase, the host and port attempted, and what that phase returned, while
+`FR-GLOB-018` forbids the raw driver error on any diagnostic stream at any
+level. Both hold only if the driver's error is **classified and re-worded**
+rather than rendered: the error value carries the phase, the host, the port and
+a classification of the failure, and the driver error's `Display` is never
+reached. `OD-06` makes that structural by refusing the driver error a home
+inside the error type.
+
+**How a render is bounded.** A **timer thread**. The render runs on the calling
+thread; a thread created immediately before it waits on a channel with
+`std::sync::mpsc::Receiver::recv_timeout`, whose signature is
+`recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError>` and
+which returns `Err(RecvTimeoutError::Timeout)` when the duration is exceeded
+before a message arrives (Rust standard library documentation,
+`std::sync::mpsc::Receiver`, verified 2026-09-11). The render signals the
+channel when it completes. If the deadline arrives first the timer
+writes the four labelled lines of `FR-ERR-008` for a `65` — naming which
+deadline expired and its resolved value, per `FR-ERR-034` row `65` — and
+terminates the process with status `65`.
+
+Three requirements make this admissible rather than merely convenient.
+`FR-RND-034` already admits that stdout carries at most one incomplete result
+when a render fails, so an interrupted render does not violate a promise about
+stdout. `NFR-DET-001` keeps stderr outside the contract, so the timer writing
+to it while the render writes to stdout interleaves nothing that is contract.
+And `FR-GLOB-013` requires the exit code of the **phase in progress**, which a
+timer holding the phase it was created for supplies directly; the same
+construct therefore realises the overall budget of `FR-GLOB-011` when
+`--timeout` is supplied.
+
+**Why a timer thread is not the speculative parallelism the project forbids.**
+The rule refuses concurrency adopted for speed without a measurement. A timer
+performs no work of the invocation and makes nothing faster; it is the only
+construct that can bound a computation with no interruption point. It is
+created only on the two paths that need it, so the four commands of
+`NFR-PERF-005` — `tpl init`, every form of `help`, every form of `version` —
+create no thread, open no socket and read no file, exactly as before.
+
+**Rejected.**
+
+- **A pre-flight TCP connect by `tpl`, to attribute the connect phase exactly.** It would resolve the ambiguity of point 3 outright, at the price of a second connection per invocation, which `NFR-PERF-004` forbids: "One invocation SHALL open at most one connection."
+- **Reporting TCP connect and TLS handshake as one `connect` phase.** `FR-ERR-034` row `69` enumerates four phases and obliges the `cause` to name the one that failed; a `cause` reading "connect failed" would be equally true of two different failures, which the same requirement forbids in its own words.
+- **`minijinja`'s `set_fuel`.** Fuel is an instruction budget consumed per instruction, gated behind the `fuel` crate feature (docs.rs `minijinja::Environment`, verified 2026-09-11). `FR-CONF-002` states every deadline in **seconds** and `FR-GLOB-012` composes them with a wall-clock budget measured from process start, so a fuel figure would have to be calibrated into seconds — per target, since `NFR-PERF-012` forbids carrying a figure from one target to another. A budget that has to be re-derived on four targets to mean what a requirement already states in seconds is not the mechanism. `set_recursion_limit` stays at its documented default of 500, which bounds recursion and not time.
+- **A cooperative clock check inside the output writer.** It bounds a template that emits and not one that loops without emitting, so it would bound some renders rather than the render — and which ones would depend on the template, which is caller input.
+- **Rendering on a worker thread while the calling thread waits with `recv_timeout`.** The same construct inverted. It moves the hot path off the calling thread for no gain and puts the writer on the thread that is abandoned.
+
+**The observation owed to `specification-manager`, and the reading this entry
+takes meanwhile.** `FR-CONF-005` names six phases, `FR-CONF-002` supplies four
+`[core]` timeout keys, and `FR-CONF-004` resolves "each phase deadline from the
+`[core]` key for that phase". Three of the six phases have no key of their own
+and `core.connect_timeout` is the only candidate for all three, so the rule as
+written has no unique referent for them. Two readings are available: three
+independent timers of `connect_timeout` each, whose sum is three times the key
+the caller set; or one budget of `connect_timeout` shared by the three, which
+is what the key's name states. **This entry takes the second**, because a caller
+who writes `connect_timeout = 10` is stating how long connecting may take, and
+because the first reading makes the configured value unable to bound the thing
+it is named after. `FR-CONF-005` is satisfied under both: no phase runs
+unbounded. The correction owed is one of wording, not of substance, and it is
+`specification-manager`'s to make.
+
+**The behaviour owed a verification, and what it costs if it does not hold.**
+Whether a TLS handshake failure reaches `tpl` as `sqlx::Error::Tls` — for an
+untrusted certificate, for a name mismatch, and for a server that offers no
+TLS — is **not confirmed in sqlx's documentation**, which states what each
+variant means and not which failures map to it. If a handshake failure arrives
+as `Error::Io`, point 3 fails and `FR-ERR-034` row `69` cannot be met as
+written; that is then a defect owed to `specification-manager`, naming
+`FR-ERR-034`. The test that decides it belongs to `verification` and runs
+against the fixture, whose obligation under `FR-CONF-038` already provides all
+three failure modes. See the residual of `OD-22`.
+
+**One consequence recorded for `architecture`.** `tokio::net::lookup_host` is
+gated behind tokio's `net` feature (docs.rs `tokio::net::lookup_host`, tokio
+1.53.1, verified 2026-09-11) and resolves through the platform resolver. The
+deadline bounds `tpl`'s **wait**, not the resolver's work: a resolution that
+outlives its deadline is abandoned and ends with the process. That is the
+honest statement of what a deadline on DNS can be, and it is what
+`NFR-PERF-018`'s musl note already assumes when it says a name simply does not
+resolve.
+
+**Unblocks.** `architecture`, `interfaces`, `quality-attributes`.
 
 ---
 
@@ -451,7 +737,7 @@ there; `ADR-001` is that record.
 
 ## OD-14 — Which undefined behaviour the engine is configured with
 
-**Status: settled, with one observation owed.**
+**Status: settled, with an observation owed.**
 
 **Decision.** `UndefinedBehavior::Strict`.
 
@@ -485,26 +771,74 @@ and the two requirements are contradicted outright if it does not hold.
 
 ## OD-15 — The template loader
 
-**Status: open. Owner: `technical-writer`.**
+**Status: settled.**
 
-**Question.** Is the engine given the stock path loader, or a loader written
-for the containment rules?
+**Decision.** **`tpl` writes the loader.** `minijinja::path_loader` is not used.
+One function in `render/` resolves a template name to a path, and it is the
+**only** resolution in the crate: the loader closure calls it, and so do
+`template list`, `template show` and `template path`, which resolve paths
+without the engine.
 
-**Visible from the repository, and verified.**
+The resolution is one sequence, and it is stated here because five requirements
+constrain it and none of them may be applied twice:
 
-- `FR-TMPL-023`: the template root is the boundary of every lookup.
-- `FR-TMPL-024`: a symbolic link inside `templates/` is refused — not listed, shown, checked, rendered, or included.
-- `FR-TMPL-025` and `FR-TMPL-026`: every resolved path is canonicalised and re-checked against the root, and an escape is `65`.
-- `FR-TMPL-008`: inside a template a name is literal, so `tpl` adds no resolution layer the engine does not have.
-- `FR-SEC-017` names the threat: `ln -s ../.cfg .tpl/templates/leak.jinja`.
-- minijinja's `path_loader` is documented as refusing names that start with a dot or sit in a dot-directory. The documentation does **not** state that it rejects `..`, an absolute path, or a symlink (docs.rs `minijinja::path_loader`, verified 2026-09-10). That is a gap in the documentation, not a verified behaviour.
+1. Reject a name that is not a template under `FR-TMPL-004` and `FR-TMPL-005` — a name whose file does not end in `.jinja` is not a template and is not resolved.
+2. Join the name to the template root of `FR-TMPL-023`.
+3. Canonicalise, per `FR-TMPL-025`.
+4. Re-check the canonical path against the canonicalised root; an escape is `65`, per `FR-TMPL-026`.
+5. Refuse a symbolic link, per `FR-TMPL-024`, by reading the entry's own metadata rather than following it — `std::fs::symlink_metadata`, which "queries the metadata about a file without following symlinks" and "corresponds to the `lstat` function on Unix" (Rust standard library documentation, `std::fs::symlink_metadata`, verified 2026-09-11).
+6. Open the path that was checked, and no other.
 
-**Still to settle, with written rationale.** Wrap `path_loader` with the checks
-in front of it, against writing a loader that performs them; and where the same
-checks live for the three `template` subcommands, which resolve paths without
-the engine.
+**Why not wrap `path_loader`.** Wrapping runs `tpl`'s checks on one path and
+lets the engine's helper resolve a second one from the same name, by a rule
+that is not ours. Two consequences follow, and either is disqualifying. The
+path that was **checked** would not be the path that is **opened**, which is the
+shape of defect `FR-TMPL-025` exists to close by requiring the resolved path to
+be canonicalised and re-checked. And the inner rule is not knowable: the helper
+is documented to refuse templates that "start with a dot (`.`) or are contained
+in a folder starting with a dot", and its documentation states **nothing** about
+`..`, about an absolute path, or about a symbolic link (docs.rs
+`minijinja::path_loader`, verified 2026-09-11). Silence is not a behaviour. A
+containment property that `FR-SEC-017` names by exploit —
+`ln -s ../.cfg .tpl/templates/leak.jinja` — may not rest on an undocumented
+one.
 
-**Blocks.** `architecture`, `security`.
+The engine asks for exactly what a written loader supplies:
+`Environment::set_loader` takes `Fn(&str) -> Result<Option<String>, Error>`, and
+"once loaded, templates are cached, so the loader is invoked only once per
+template name" (docs.rs `minijinja::Environment`, verified 2026-09-11) — which
+is also what the project's rule that each template is parsed once per process
+requires.
+
+**How the two codes stay apart.** `FR-ERR-028` makes a **missing template**
+`66` with a nearest-match suggestion under `FR-TMPL-027`, while `FR-TMPL-009`
+makes an `{% include %}` that does not resolve literally a `65` naming the
+template, the line and the column. The split is decided by **who asks**:
+
+| Asked by | Mechanism | Code |
+|---|---|---|
+| The command line, before the engine is built | `tpl` resolves the named template itself and produces the suggestion over the names that exist | `66` |
+| A template, through `{% include %}`, `{% import %}` or `{% extends %}` | The loader returns `Ok(None)`; the engine raises its own not-found error, which carries the line and the column `FR-TMPL-009` requires | `65` |
+| Either, with a path that escapes the root | The loader returns `Err`, and the escape is reported as an escape | `65` |
+
+`FR-TMPL-008` is preserved by construction: inside a template a name is
+literal, and step 1 adds no extension. The optional extension of `FR-TMPL-007`
+is a **command-line** affordance and is applied in `cli/` before the resolution
+is asked for, so the engine never sees a name `tpl` completed.
+
+**Rejected.**
+
+- **Wrapping `path_loader` with the checks in front of it**, for the two reasons above.
+- **Loading every template into the environment at startup with `add_template_owned`.** It makes containment a property of a single enumeration and would be simple to verify — and it reads and parses every template in the project for an invocation that renders one, which is the startup work `NFR-PERF-005` and the project's lazy-initialisation rule both refuse, and which would make `tpl render` pay for a template directory it does not use.
+- **Placing the checks in each of the four `template` subcommands and again in the loader.** Five copies of a security rule is five places for it to differ; `FR-TMPL-023` makes the root "the boundary of every template lookup", which is one boundary and therefore one implementation.
+
+**Composition with `security`.** The same function is the single place where
+`FR-TMPL-024`, `FR-TMPL-025` and `FR-TMPL-026` are enforced, so `security.md`
+cites one containment point rather than describing four. Which of the four
+subcommands reaches it, and in what order relative to the trust checks of
+`FR-PROJ-010`, is `architecture`'s to state.
+
+**Unblocks.** `architecture`, `security`.
 
 ---
 
@@ -526,62 +860,154 @@ that record.
 
 ## OD-17 — Observability
 
-**Status: open. Owner: `technical-writer`.**
+**Status: settled.**
 
-**Question.** How is the diagnostic stream produced, and how is the prohibition
-on six content categories enforced by structure rather than by review?
+**Decision.** **No subscriber is installed, and `tracing-subscriber` is not a
+dependency.** `tpl`'s diagnostics are written by a small module in
+`diagnostics/`: a level held once, a locked and buffered handle on stderr, and
+a **closed set of typed emission functions**. There is no general-purpose sink
+that accepts arbitrary text.
 
-**Visible from the repository, and verified.**
+**How `FR-GLOB-018` becomes structural rather than reviewed.** Two properties,
+and together they close the two routes a forbidden category can take.
 
-- `FR-GLOB-014` and `FR-GLOB-015`: three `-v` levels mapping to `INFO`, `DEBUG`, `TRACE`, saturating; `-q` is errors only.
-- `FR-GLOB-017`: at `INFO`, which phases ran and how long each took, and **exactly one line per catalogue query, distinguishable from every other diagnostic line**; at `DEBUG`, each cache hit and miss.
-- `NFR-PERF-008`: that line is what makes the query count observable from outside the process, which is how `NFR-PERF-001` and `NFR-PERF-002` are checked at all.
-- `NFR-DET-001`: stderr is neither deterministic nor contract — so the line must be stable enough to count and free enough to change.
-- `FR-GLOB-018`: six categories never appear at any level, the raw driver error among them.
-- `CLAUDE.md`: `tracing` 0.1.44 with `tracing-subscriber` 0.3.23 (crates.io, verified 2026-09-10).
+1. **Nothing a dependency emits can reach the stream.** `tracing` states it: "Any trace events generated outside the context of a subscriber will not be collected", and the crate "does not contain any `Subscriber` implementations" (docs.rs `tracing` 0.1.44, verified 2026-09-11). With no subscriber installed, every event any dependency emits — including whatever the database driver chooses to record about a statement or a failure — is discarded before it exists. The raw driver error therefore has no route to stderr at all, which is what `FR-GLOB-018` names first among the six.
+2. **Nothing in `tpl` can emit an arbitrary string.** The emission functions take typed arguments — a phase and a duration, a query identity, a cache key and a hit or a miss — and compose the line themselves. There is no `debug!("{e}")` to write, because there is no function that takes a formatted message. This is the same move `OD-06` makes in the error type: the forbidden content is denied a **home**, not denied by a rule someone must remember.
 
-**Still to settle, with written rationale.** A bespoke minimal layer against
-`tracing-subscriber`'s `fmt` layer with a custom formatter; how the query line
-is made distinguishable, and whether a test may depend on that while stderr
-stays outside the contract; how `FR-GLOB-018` is made structural, given that a
-raw driver error is one logging call away at every call site; and whether
-`tracing` earns its place under the dependency budget for four levels and one
-structured line.
+`OD-06` supplies the third leg: the driver's error is classified at the
+`mariadb/` boundary and the original value is dropped, so it is not present in
+the process to be logged even by a function that would take it.
 
-**Blocks.** `operations`, `architecture`, `technology-stack` — the last because
-whether `tracing` earns its place is a dependency-budget question, and
-[README.md](README.md#the-documents) already listed that document against this
-entry.
+**How the one line per catalogue query is distinguishable.** It is emitted by
+**one** function, and that function is the only writer of a fixed leading token
+on the line. `FR-GLOB-017` constrains the existence of the line and its
+distinguishability, not its wording, and `NFR-DET-001` keeps stderr outside the
+contract. A test may therefore depend on the **token** without depending on the
+stream being contract: what it asserts is the two properties the requirement
+states — that exactly one such line exists per query, and that no other line
+carries the token — which is precisely what `NFR-PERF-008` needs to make
+`NFR-PERF-001` and `NFR-PERF-002` checkable. The wording after the token stays
+free to change, and no test reads it.
+
+**How the phase timings are produced.** From the deadline machinery of `OD-12`,
+which already holds the start instant and the elapsed time of every phase
+because it has to enforce a deadline on each and compose it with the overall
+budget of `FR-GLOB-012`. `FR-GLOB-017`'s "which phases ran and how long each
+took" is a report of data the program already has; measuring it a second time
+through instrumentation spans would be two clocks for one fact.
+
+**The levels.** `-v` raises the level to `INFO`, `DEBUG`, `TRACE` and saturates
+(`FR-GLOB-014`); `-q` lowers it to errors only (`FR-GLOB-015`); neither touches
+stdout (`FR-GLOB-016`). The level is resolved once, during argument handling,
+and read from an ordinary shared value. `NFR-DET-004` forbids colour and every
+ANSI escape sequence on either stream, so the writer emits none and has no
+terminal detection to perform — `NFR-DET-003` forbids that too.
+
+**Rejected.**
+
+- **`tracing-subscriber`'s `fmt` layer with a custom `FormatEvent`.** It supplies a formatter and a span-timing facility that this program does not need — the timings come from the deadline machinery — and it costs the property that decides this entry: with a subscriber installed, every dependency's events become emittable, so `FR-GLOB-018` would be restored to a review item over every crate in the graph rather than a consequence of the architecture.
+- **A minimal `Subscriber` written in `tpl`, keeping `tracing` as the front end.** It keeps the dependency-budget question open for a facade this program does not otherwise use, and it re-opens route 1: a subscriber that filters foreign events by target is a rule that can be got wrong, where installing none cannot.
+- **Keeping `tracing` and `tracing-subscriber` because they are the ecosystem's default.** The project's dependency budget refuses a crate used for a trivial function, and what is used here is four levels and a handful of typed lines on one stream, with no asynchronous context to correlate and no structured consumer to serve.
+
+**Consequence, prepared for the user and not made here.** The coordination
+document's stack table names `tracing` and `tracing-subscriber` for logging.
+This decision removes the second outright and leaves the first with no role of
+its own; if the driver brings `tracing` transitively it stays in the graph as a
+transitive dependency and not as a facility `tpl` uses. That table is an
+architecture decision by that file's own terms, and the change is prepared for
+the user rather than applied, exactly as `OD-09` prepared the addition of
+`toml_edit`.
+
+**Not verified.** Whether the database driver depends on `tracing` or on `log`,
+and what it records at which level. It does not bear on the decision: with no
+subscriber and no logger installed, both facades discard what they are given.
+
+**Unblocks.** `operations`, `architecture`, `technology-stack`.
 
 ---
 
 ## OD-18 — Serialisation, key order, and the two omissions
 
-**Status: open. Owner: `technical-writer`.**
+**Status: settled.**
 
-**Question.** Are the seventeen documents emitted by derived serialisation or by
-a hand-written writer, and how are the two exceptions to "absent is `null`"
-expressed?
+**Decision.** **Derived `Serialize`**, written through `serde_json` into a
+writer `tpl` owns. Five answers follow, one per question the entry asked.
 
-**Visible from the repository, and verified.**
+| Question | Answer |
+|---|---|
+| Derived or bespoke | Derived. The emitted types are the model's, and their **field declaration order is the key order** |
+| `preserve_order` | **Off**, and `indexmap` is not in the graph |
+| The order of the two map-shaped documents | Byte-wise ascending by key, because `NFR-DET-002` already fixes it |
+| The two omissions | One is a map that is never given the key; the other is one `skip_serializing_if`, used once in the crate |
+| `serde` in the library's public signature | Yes, and it costs nothing |
 
-- `FR-OUT-013` and `FR-HELP-023`: fixed key order per structure, and no unordered map on the emitting path.
-- `FR-OUT-012`: absent is `null` and never omitted, with exactly two exceptions — `FR-CFG-037`, where an unset key is absent from `cfg list`, and `FR-PRIV-016`, where `restricted` appears only on an incomplete object.
-- `FR-OUT-007` and `FR-OUT-008`: compact by default; `--pretty` is a two-space indent, which is `serde_json`'s own default — "Construct a pretty printer formatter that defaults to using two spaces for indentation" (docs.rs `serde_json::ser::PrettyFormatter`, verified 2026-09-10).
-- `FR-OUT-017`: invalid UTF-8 becomes U+FFFD, so catalogue values are read as bytes and converted lossily.
-- `FR-OUT-018`: C0 escaping over every interpolated value in read output — a transformation on the way out, not a property of the model.
-- `FR-CTX-026` and `FR-CFG-037` are maps whose order no requirement fixes; `serde_json`'s default map is ordered by key unless `preserve_order` is enabled.
-- `serde` 1.0.229, `serde_json` 1.0.151 (crates.io, verified 2026-09-10).
+**Why derived rather than a bespoke writer.** `FR-OUT-013` requires a fixed key
+order per structure. Under derived serialisation that order **is** the struct's
+declaration order, so it is stated once, in the type, and cannot drift from the
+type. A bespoke writer states it a second time, in the writer, and a document
+whose key order lives in two places is a document whose two statements
+eventually disagree — the failure this folder's own conventions name. The same
+argument decides `FR-SCH-022`'s round trip: `--context` is deserialised into
+the same types, so the dump and its re-emission are inverse by construction
+rather than by a pair of hand-written routines that must be kept inverse.
 
-**Still to settle, with written rationale.** Derived `Serialize` against a
-bespoke writer — the C0 escaping and the mid-document pipe state of
-`FR-ERR-026` both argue for a writer wrapper; whether `preserve_order` is
-enabled, and what order `vars` and the `cfg list` document take; whether the
-two omissions use `skip_serializing_if` or a distinct type; and whether `serde`
-becomes a public dependency of the library, which `DIV-032` names as an
-architecture decision.
+**Why the two arguments for a bespoke writer do not hold.**
 
-**Blocks.** `interfaces`, `data-model`.
+- **C0 escaping.** On the JSON path it is the encoder's already: `serde_json::ser::CharEscape` enumerates `Backspace`, `FormFeed`, `LineFeed`, `CarriageReturn`, `Tab` and `AsciiControl(u8)` — "an escaped ASCII plane control character (usually escaped as `\u00XX`)" (docs.rs `serde_json` 1.0.151, verified 2026-09-11). JSON admits no raw control character inside a string, so `FR-OUT-018`'s exception for tab has no effect there: a tab is emitted as `\t`, which is the escape. On the **`text`** path the escaping is `tpl`'s own, with tab excepted for the column alignment `FR-OUT-006` needs, and it lives in `output/` beside the layouts it exists for. Neither path needs a serialiser wrapper.
+- **The mid-document pipe state.** `FR-ERR-026` makes a stdout closed part-way through a JSON document a `74`. That is a property of the **writer**, not of the encoder: `tpl` writes through a buffered writer that records whether any byte of a document has been emitted, and reports `74` when a write fails after the first. `FR-OUT-021` and the project's own rule that I/O is aggregated require that writer regardless, so the state costs nothing extra.
+
+**The order of `vars` and of the `cfg list` document is not a free choice.**
+`NFR-DET-002` states the default and its exceptions: "Every collection the
+system presents SHALL be ordered by name, ascending, compared byte by byte,
+except where this specification names another order", and its table names six
+exceptions, of which neither `FR-CTX-026`'s `vars` nor `FR-CFG-037`'s document
+is one. Both therefore fall to the default. The model carries them as ordered
+maps keyed by `String`, whose iteration order is byte-wise ascending, and
+`serde_json::Value` never appears on the emitting path — so `preserve_order`
+would change nothing if it were enabled, and it is not enabled. `indexmap` does
+not enter the dependency graph.
+
+**The two exceptions to "absent is `null`", expressed differently because they
+are different things.**
+
+| Exception | Mechanism | Why |
+|---|---|---|
+| `FR-CFG-037` — a key absent from `.cfg` is absent from the `cfg list` document | The document is **built from the keys the file carries**. An absent key is a key never inserted | `FR-CFG-014` forbids applying defaults, so there is no value to omit. Modelling every key as an `Option` and omitting the `None`s would put fifteen omissions in the type to express one rule about a file |
+| `FR-PRIV-016` — `restricted` appears only on an incomplete object | One `#[serde(skip_serializing_if = "Option::is_none")]`, on that field alone | The property belongs to the object and is genuinely optional. `FR-PRIV-016` also requires the array never to be empty, which the `Option` states and an empty `Vec` would not |
+
+The attribute appears **exactly once** in the crate. That is the enforceable
+form of `FR-OUT-012`: every other `Option` serialises as `null`, by serde's
+default, and a second appearance of the attribute is a visible change rather
+than a silent one. `verification` owes the test that counts the omissions in
+the seventeen documents.
+
+**`--pretty`.** `FR-OUT-008` fixes a two-space indent, which is
+`serde_json`'s own default — "construct a pretty printer formatter that
+defaults to using two spaces for indentation" (docs.rs
+`serde_json::ser::PrettyFormatter`, verified 2026-09-10). Compact is the
+default form under `FR-OUT-007` and is `serde_json`'s ordinary serialiser.
+
+**`serde` is a public dependency of the library, deliberately.** The model
+derives `Serialize` and `Deserialize`, so serde's traits appear in the public
+signature. `DIV-032` records that the library carries no compatibility
+guarantee, which removes the cost a public dependency ordinarily has: there is
+no consumer whose build a serde major version could break. `technology-stack`
+records it as a fact about the surface, not as a risk.
+
+**Where the lossy conversion happens.** `FR-OUT-017` replaces an invalid UTF-8
+byte sequence with U+FFFD. That happens in `mariadb/`, where catalogue values
+are read as bytes, so the model holds only valid UTF-8 and every consumer —
+JSON, `text`, the render context, the cache — inherits the substitution once.
+It is not an emitting-path transformation and does not belong to `output/`.
+
+**Rejected.**
+
+- **A bespoke writer for the seventeen documents.** It duplicates the key order that the types already state, and it puts the round trip of `FR-SCH-022` in the hands of two routines that have to stay inverse.
+- **Enabling `preserve_order`.** It contradicts `NFR-DET-002` for the two map-shaped documents — insertion order is neither name order nor a named exception — and it changes the ordering of every map globally to answer a question about two.
+- **`skip_serializing_if` as a general convention.** It would silently omit every future `Option`, which is exactly what `FR-OUT-012` forbids: "An absent value SHALL be emitted as `null` and SHALL NOT be omitted, so that the shape of a document is constant."
+- **A distinct type to express absence for the two exceptions.** It states the rule in the type system at the price of two parallel model shapes for two fields, and `FR-OUT-014` already makes adding a field non-breaking, so the shape has to stay one shape.
+
+**Unblocks.** `interfaces`, `data-model`.
 
 ---
 
@@ -617,7 +1043,8 @@ figure having been a limit in the meantime.
 
 ## OD-20 — Edit distance, and the other small algorithms
 
-**Status: settled for the distance, with a residual.**
+**Status: settled.** The distance was settled in the eighth edition; the four
+further algorithms are settled below.
 
 **Decision.** **Damerau-Levenshtein, hand-rolled, no dependency.**
 
@@ -642,20 +1069,30 @@ over `WL-001` — so the implementation must be ours to measure.
 errors and would drop a transposed name from the candidate set whenever a
 second error is present; and a distance crate, for the dependency budget.
 
-**Residual, open under `technical-writer`.** Four further specified algorithms
-were not reached by this decision and each needs its own rationale in
-`interfaces`: the `LIKE` matcher of `FR-SCH-012` through `FR-SCH-014`; the
-POSIX word splitting of `FR-CONF-025`; the word-list tokeniser of
-`FR-ENV-030`, which has a published eight-row vector; and the ASCII-only case
-folding of `FR-ENV-031` and `FR-SCH-014`, where a locale-aware or Unicode
-folding would be wrong.
+**Residual, settled 2026-09-11. All four are implemented in the crate, with no
+dependency.** The four are decided together because one argument decides all of
+them: each has a **closed grammar written into the corpus**, so a library would
+have to be constrained back to that grammar rather than consulted for it, and
+the dependency budget refuses a crate used for one function.
+
+| Algorithm | Requirements | Decision | Rejected |
+|---|---|---|---|
+| The `LIKE` matcher | `FR-SCH-012` … `FR-SCH-014` | Implemented in the crate over the two metacharacters and the two escapes the requirement enumerates — `%`, `_`, `\%`, `\_` — matched in memory and never sent to the server | A regular-expression crate, which brings a full engine and a translation step for a two-metacharacter grammar, and whose own escaping rules would have to be got right over a name that is free text on the server; a glob crate, whose semantics are a different language |
+| POSIX word splitting | `FR-CONF-025` | Implemented in the crate, honouring single and double quotes as the requirement states. It runs **only** on a string supplied to a command, never on a value read from `.cfg`: `FR-CONF-035`'s rationale refuses "a quoting engine on the path that reads an untrusted `.cfg`", and `FR-CONF-024` makes one unnecessary by executing the stored array directly and without a shell | A shell-words crate, for the dependency budget, and because the splitting a crate performs is the shell's whole grammar rather than the two quoting forms the requirement names |
+| The word-list tokeniser | `FR-ENV-030`, with the eight-row vector of `FR-ENV-032` | Implemented in the crate. The five rules are stated in the requirement, applied once, left to right, and `FR-ENV-032` publishes the expected output for eight operands — so the implementation is testable against the corpus rather than against a library's idea of a word | An inflection or case-conversion crate, whose rules are its own: `FR-ENV-033`'s accepted cost fixes `HTTP_server` → `HttpServer`, and a crate that preserves acronyms would produce a different generated identifier at exit `0` |
+| ASCII-only case folding | `FR-ENV-031`, `FR-SCH-014` | `std`: the ASCII-restricted `str::eq_ignore_ascii_case` and `str::to_ascii_lowercase`, which exist beside the Unicode-aware `str::to_lowercase` for exactly this distinction (Rust standard library documentation, `str`, verified 2026-09-11; the exact wording of their guarantee was not retrievable from the rendered page and is not quoted here) | Unicode or locale-aware folding, which both requirements refuse in their own text, because it would make the same template produce different output on two machines and break `NFR-DET-001` |
+
+**What still belongs to `interfaces`.** The surface of each — the signature,
+the inputs it accepts, and the errors it can produce — is described there.
+What is settled here is the choice and its rejection, which is what this
+register exists to carry.
 
 ---
 
 ## OD-21 — Two test seams that must not be on the published surface
 
-**Status: settled by the eighth edition, with a residual. Owner of the
-residual: `technical-writer`.**
+**Status: settled.** The conflict was resolved by the eighth edition; the
+residual it left is settled below.
 
 **What the conflict was.** `FR-ERR-031` required a deliberate trigger for `70`
 and `FR-SRV-035` a seam that presents the reader with a series above its own
@@ -694,21 +1131,43 @@ edition recorded it as `DIV-045` rather than resolving it. It is carried in
 `70` — the detected invariant violation — so the exception `BR-ERR-001` grants
 does not depend on that answer.
 
-**Residual, open under `technical-writer`.** Which in-process construct
-realises a seam that the project's own tests reach and the distributed binary
-does not — for both seams, since `FR-SRV-035` now points at `FR-ERR-031`'s —
-and, following from it, which test kind each of the two tests is. To be
-settled in `verification`, with the construct's visibility from each test kind
-verified against the toolchain's own documentation rather than assumed.
+**Residual, settled 2026-09-11. The construct is `#[cfg(test)]`, and both tests
+are therefore unit tests inside the library.**
 
-**Blocks.** `verification`.
+`FR-ERR-031` requires the trigger to be "reachable only from within the
+system's own test configuration". `#[cfg(test)]` *is* that configuration, and
+the toolchain's own documentation states both halves of what the residual asked
+to be verified rather than assumed (The Rust Programming Language, ch. 11.3,
+verified 2026-09-11):
+
+- **Absent from the distributed binary.** "The `#[cfg(test)]` annotation on the `tests` module tells Rust to compile and run the test code only when you run `cargo test`, not when you run `cargo build`. This saves compile time … and saves space in the resultant compiled artifact because the tests are not included."
+- **Absent from an integration test.** "Each file in the *tests* directory is a separate crate, so we need to bring our library into each test crate's scope." A separate crate is compiled without `cfg(test)` for the library it links, so an item behind `#[cfg(test)]` is not there to be reached.
+
+The second half decides the test kind, and it decides it the same way for both
+seams: an integration test **cannot** see the construct, so each test is a
+**unit test in the library crate**. That is consistent with what the corpus
+already granted — `BR-ERR-001` yields the integration test for `70` alone and
+says so in its own text, and `FR-SRV-035` asserts on what the reader emits
+rather than on a process exit status.
+
+**Rejected.**
+
+- **A `#[doc(hidden)] pub` item.** It satisfies `FR-ERR-031` literally — a library item is not reachable from an invocation of the binary — and it puts a trigger on the surface the project publishes, which is the property this entry's title refuses. `DIV-032` removes the compatibility cost, not the surface.
+- **A cargo feature.** `FR-ERR-031` rejects it by name: "the artefact verified would not be the artefact distributed", and `NFR-PERF-018` makes every distributed artefact first class.
+- **An environment variable or a hidden command.** Both are rejected in `FR-ERR-031`'s own table, against `FR-CLI-021`, `FR-CLI-023`, `NFR-DET-001`, `FR-CLI-002` and `FR-HELP-021`.
+
+**What `verification` still owes.** The register of the two tests, each
+described with the limit its own requirement states — not a limit this folder
+invents — and the naming of both by requirement identifier.
+
+**Unblocks.** `verification`.
 
 ---
 
 ## OD-22 — The test harness, and the fixture certificate
 
-**Status: settled by the eighth edition, with a residual. Owner of the
-residual: `technical-writer`.**
+**Status: settled by the eighth edition, with a residual that is work rather
+than a decision. Owner of the residual: `technical-writer`.**
 
 **What the conflict was.** `FR-CONF-013` defaults `tls` to `verify-identity`,
 and `FR-CONF-038` recorded that `tpl` with default configuration cannot reach
@@ -746,15 +1205,24 @@ present the self-signed certificate MariaDB generates automatically — which
 - `FR-SRV-012`: the closed statement list is checked by observing what the server actually receives, expecting four kinds and no fifth, with the three connection-start statements issued once each in the stated order.
 - `BR-SEC-003`: the sentinel test runs every command of the tree at maximum verbosity and asserts the sentinel appears in no byte of either stream.
 
-**Residual, open under `technical-writer`.** Two halves, each with its own
-document.
+**Residual, restated 2026-09-11 as belonging to two named documents. It is
+work, not a choice.** `FR-CONF-038` hands both halves out in its own text —
+how the certificate is generated, where the fixture keeps it, and how the
+no-TLS server is retained beside it "are the fixture's own work and are not
+specified here" — and neither half admits a decision this register could take
+without the containers in front of it. Recording an arrangement of files and
+commands that nobody has run would put a description of something imaginary in
+a specification whose discipline is to describe what is true today, which is
+the ground `OD-23` already gave for prescribing no continuous-integration
+pipeline.
 
-| Half | Settled in |
-|---|---|
-| How the fixture satisfies `FR-CONF-038`: how a certificate naming the host is produced and kept for each series, and how a server offering no TLS is retained beside it | `operations` |
-| How the four containers are driven, whether server-dependent tests are gated, and how each outside-the-process observation above is instrumented | `verification` |
+| Half | Belongs to | What it must produce |
+|---|---|---|
+| The fixture certificate | `operations` | For each series of `FR-SRV-015`, a server presenting a certificate that names the host the project's tests reach it by, and a server beside it offering no TLS. `scripts/mariadb/README.md` records the distance to be covered: `10.11` reports `have_ssl=DISABLED` and needs `--skip-ssl` over TCP, and the other three present the self-signed certificate MariaDB generates, which `FR-CONF-038` observed to carry no `subjectAltName` |
+| The harness | `verification` | How the four containers are driven and stopped, whether server-dependent tests are gated, and how each of the nine outside-the-process observations above is instrumented |
 
-**Blocks.** `verification`, `operations`.
+**Unblocks nothing yet.** `operations` and `verification` wait on this residual,
+and on nothing else in this register.
 
 ---
 
@@ -792,8 +1260,8 @@ binary, archive, checksums, signature — is not fixed by this entry.
 
 ## OD-24 — The discovery boundary, and the process uid
 
-**Status: settled by the eighth edition, with a residual. Owner of the
-residual: `technical-writer`.**
+**Status: settled.** The conflict was resolved by the eighth edition; the
+residual it left is settled below.
 
 **What the conflict was.** `FR-PROJ-005` made the user's home directory a
 boundary of project discovery. It can only be located from `HOME`, which
@@ -831,43 +1299,96 @@ warns on stderr when it creates a project that shadows one above it, per
 boundary without finding a `.tpl` fails with `78` per `FR-PROJ-006` rather than
 reading settings from anywhere else.
 
-**Residual, open under `technical-writer`.** The process's own uid.
-`FR-PROJ-010` requires `.tpl/.cfg` to be owned by the current user, so the
-check compares two values: `std::os::unix::fs::MetadataExt::uid()` gives the
-**file's** uid, while the process's uid comes from `getuid()`, which is
-`unsafe` through `libc` — and `CLAUDE.md` forbids `unsafe` and requires
-`#![forbid(unsafe_code)]`. A safe wrapper is needed and none is in the stack
-table. To be settled in `technology-stack`, under the dependency budget, with
-what the candidate drags in recorded. `FR-PROJ-011`'s mode check needs nothing
-further: `MetadataExt` supplies `mode()` on the same metadata (`std` API
+**Residual, settled 2026-09-11. The safe wrapper is `rustix`, with default
+features off and the `process` feature alone.** `rustix::process::getuid` is
+declared `pub fn getuid() -> Uid`, is a safe function, and is "available on
+crate feature `process` only" (docs.rs `rustix` 1.1.4, verified 2026-09-11).
+That is the one value `std` does not supply: `std::os::unix::fs::MetadataExt`
+gives the **file's** `uid()` and its `mode()` on the same metadata (`std` API
 documentation, `std::os::unix::fs::MetadataExt`, Rust 1.98.1, verified
-2026-09-11).
+2026-09-11), so `FR-PROJ-011`'s mode check needs nothing further and
+`FR-PROJ-010` needs exactly one call.
 
-**Blocks.** `technology-stack`.
+**Why a dependency at all.** `getuid()` through `libc` is an `unsafe` call, and
+the project forbids `unsafe` and keeps `#![forbid(unsafe_code)]` at the top of
+the crate. That is not a rule to be weighed against a dependency: it is one of
+the project's non-negotiable rules, and the crate that satisfies it is the
+smallest one that does.
+
+**Rejected.**
+
+- **`libc` with a local `unsafe` block.** Forbidden outright, and the attribute that forbids it is required to stay.
+- **`nix`.** It answers the same question and carries a far larger surface for it; the budget prefers the narrower crate.
+- **A crate that resolves the user account** — `uzers` and its predecessors. `FR-PROJ-010` compares two uids and needs no user name, and `OD-24` has already removed every account lookup from discovery.
+- **Inferring ownership by effect**, by attempting a write. `.tpl/.cfg` is read-only to every command that checks it, and `BR-TMPL-002` and the project's own scope statement keep `tpl` from writing where it was not asked to.
+
+**One consequence for `technology-stack`.** `rustix` is a new normal
+dependency and the stack table does not name it. What it drags in on each of
+the four targets of `NFR-PERF-018` is recorded there, under the dependency
+budget; the correction to the coordination document's stack table, if any, is
+prepared for the user rather than made here, as `OD-09` did for `toml_edit`.
+
+**Unblocks.** `technology-stack`.
 
 ---
 
 ## OD-25 — The clock source for `now`
 
-**Status: open. Owner: `technical-writer`.**
+**Status: settled.**
 
-**Question.** `FR-CTX-028` requires an RFC 3339 timestamp in UTC with second
-precision. Where does the calendar conversion come from, and does it also
-parse?
+**Decision.** **Hand-rolled, in `std`, no date dependency.** One clock read per
+invocation, one civil-date conversion, and **one grammar used in both
+directions** — the fixed twenty-character form `YYYY-MM-DDTHH:MM:SSZ` and
+nothing else.
 
-**Visible from the repository.**
+- The instant is `std::time::SystemTime::now`, converted with `duration_since(UNIX_EPOCH)`, whose seconds are documented as "the number of non-leap seconds since the start of 1970 UTC", equivalent to a POSIX `time_t` (Rust standard library documentation, `std::time::SystemTime`, verified 2026-09-11).
+- The seconds are split into days and seconds-of-day, and the days are converted to a proleptic Gregorian civil date by integer arithmetic. `FR-CTX-029` reads the clock once per invocation, so the conversion runs at most twice — once to write, once to read a cached value back.
+- The reverse direction parses **only** that form, position by position, and rejects everything else.
 
-- `FR-CTX-028`: the form is exactly `2026-09-10T08:14:22Z` — UTC, `Z` offset, second precision. Its rationale rejects a structured value because no date filter exists.
-- `FR-CTX-029`: evaluated once per invocation.
-- `FR-ENV-025`: no template function may read a clock; `now` is a template's only source of time.
-- `FR-CDOC-013`: `loaded_at` appears in `meta.json` and in `cache status`, in the same form — so the same conversion serves both, and the cache **reads one back**.
-- `std::time::SystemTime` yields a duration since the Unix epoch; a civil date needs either arithmetic in the crate or a dependency. `CLAUDE.md` prefers `std` and refuses a crate used for one trivial function. No date crate is in the stack table.
+**Why one grammar in both directions is the whole of the argument.**
+`FR-CTX-028` fixes the form exactly — UTC, `Z` offset, second precision — and
+`FR-CDOC-013` puts the same value in `meta.json` and in the output of
+`tpl cache status`, where `FR-CACHE-034` shows it in that form. So `tpl` writes
+one form and must read back the form it wrote. A date crate reads the whole of
+RFC 3339, which admits a fractional part (`time-secfrac = "." 1*DIGIT`), a
+numeric offset (`time-offset = "Z" / time-numoffset`), and lower-case `t` and
+`z` — "the 'T' and 'Z' characters in this syntax may alternatively be lower
+case 't' or 'z' respectively" (RFC 3339, §5.6, verified 2026-09-11). A reader
+that accepts all of that and a writer that emits one of them are **not
+inverse**: a hand-edited `meta.json` carrying `2026-09-10t08:14:22.5+01:00`
+would parse, and `tpl cache status` would then re-emit a `loaded_at` in a form
+`FR-CDOC-013` does not fix, or silently shift the value into UTC. Writing both
+directions against one grammar removes the case rather than handling it.
 
-**Still to settle, with written rationale.** Hand-rolled civil-from-days
-arithmetic, which must also parse for `loaded_at`, against a date crate — and
-if a crate, which, and whether two uses justify it.
+**What a value that does not parse means.** The cache file is unreadable, and
+`FR-CACHE-033` already fixes the outcome: treat it as a miss, read from the
+server, rewrite the file, and report neither an error nor a warning. No new
+rule is needed, and no `70` is reachable from a file the caller can edit —
+which `FR-ERR-031` refuses in its own *Rejected* note.
 
-**Blocks.** `technology-stack`, `architecture`.
+**What the conversion must be, so that `verification` can test it.** Proleptic
+Gregorian, no leap seconds — the epoch seconds are non-leap by the
+documentation quoted above — and correct across the range a `SystemTime` can
+carry. It is a closed function of one integer with a published expected value
+per input, so it is testable as a vector rather than against a clock.
+
+**One property recorded, because it is a property of the clock and not of the
+conversion.** `SystemTime` "is not monotonic" and `duration_since` returns a
+`Result` because "an earlier `SystemTime` may actually be later than a later
+one" (same source and date). A system clock behind 1970 therefore has no
+representation in this form. `now` is documented by `NFR-DET-005` as the single
+source of non-reproducibility, and a clock that cannot be converted is a defect
+in the host rather than in the input — `FR-ERR-030`'s detected invariant
+violation, not a caller-facing condition.
+
+**Rejected.**
+
+- **A date crate — `chrono`, `time`, or `jiff`.** Each brings a formatting and parsing engine, and each brings or optionally brings a timezone database, to answer a question with no timezone, no locale, no offset, no fractional part and no alternative form. The project's dependency budget refuses a crate used for one trivial function, and this is one integer-to-civil-date conversion and one twenty-character format.
+- **A date crate confined to the write path, with a hand-rolled reader.** It is the worst of both: a dependency *and* two grammars, which is the failure the decision above exists to avoid.
+- **Storing `loaded_at` as an epoch integer in `meta.json` and formatting it only on the way out.** It removes the parse, and it contradicts `FR-CDOC-013`, which puts the value in `meta.json` and in `cache status` as one value in one form; `BR-CDOC-005` keeps `meta.json` outside the plumbing contract but does not license a second representation of a field the corpus names in both places.
+- **Emitting the stored string verbatim without parsing it.** It removes the conversion and admits into a contract-shaped document whatever a hand-edited `meta.json` carries, which `FR-CDOC-013` and `FR-CACHE-034` between them do not admit.
+
+**Unblocks.** `technology-stack`, `architecture`.
 
 ---
 
@@ -950,32 +1471,93 @@ project-structure tree and one of the testing section naming the file.
 
 ## OD-28 — The release profile against the caught-panic condition of `70`
 
-**Status: open. Owner: `technical-writer`.**
+**Status: settled, with an amendment owed to `specification-manager`.**
 
-**Question.** `FR-ERR-030` makes **a panic caught at the top level of the
-process** one of exactly two producing conditions of `70`, and `FR-ERR-032`
-requires that `70` to carry the four labelled lines of `FR-ERR-008`. The
-release profile `CLAUDE.md` fixes sets `panic = "abort"`, under which a panic
-terminates the process abnormally: no code of `FR-ERR-001` reaches the caller
-and no message is written. Which yields — the profile, or the requirement?
+**Verdict. The profile stands.** `panic = "abort"` is kept, with the four
+settings beside it, and the process installs a **panic hook** that writes the
+four labelled lines of `FR-ERR-008` to stderr and terminates the process with
+status `70`. The observable behaviour `FR-ERR-032` and `FR-ERR-001` require is
+therefore present in the distributed binary, and no code of `FR-ERR-001` is
+unreachable.
 
-**Visible from the repository, and verified.**
+**The three facts this rests on, each verified 2026-09-11.**
 
-- `DIV-045`, recorded in the eighth edition, states the contradiction and names both admissible resolutions: the profile leaves the panic path catchable, **or** `FR-ERR-030` is amended first — through `specification-manager` — to drop the caught-panic condition and to state the resulting limit in its own text. Leaving both statements standing is the one outcome it refuses, because a caller reading `FR-ERR-001` would branch on a code the binary cannot produce.
-- `FR-ERR-030` is unchanged and carries a note pointing at `DIV-045`, because the specification precedes the implementation.
-- `FR-ERR-031`'s in-process trigger exercises the **other** producing condition, the detected invariant violation, so `BR-ERR-001`'s exception for `70` stands whichever way this entry goes. See `OD-21`.
-- `CLAUDE.md` fixes the profile as `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, `opt-level = 3`, and makes a change to that table an architecture decision to be recorded before it is implemented.
-- The cost of unwinding is **not measured**. `BENCHMARKS.md` records the same five settings for the artefacts it measured, so every figure in it was taken under an aborting profile and none of them separates the two.
+| Fact | Source |
+|---|---|
+| The hook runs before the panic runtime, and "the hook will run with both the aborting and unwinding runtimes" | `std::panic::set_hook`, Rust standard library documentation |
+| `PanicHookInfo` carries the payload and "the source code location from which the panic originated" | `std::panic::PanicHookInfo`, same |
+| `std::process::exit` will "immediately terminate the current process", passing the code "through to the underlying OS", and "no destructors on the current stack or any other thread's stack will be run" | `std::process::exit`, same |
 
-**Still to settle, with written rationale.** Whether the profile unwinds — at a
-cost in binary size and speed to be measured on the targets of `NFR-PERF-018`
-before it is accepted, since no recorded figure separates the two profiles — or
-whether the profile stands and the amendment `DIV-045` names is requested of
-`specification-manager` first. The order is not interchangeable: an
-implementation choice never narrows a contractual code without the corpus
-saying so.
+The hook therefore has both what `FR-ERR-034` row `70` obliges the `cause` line
+to name — that a panic occurred at the top level, and **where** — and the means
+to leave the process with the status `FR-ERR-001` fixes, before the aborting
+runtime is reached.
 
-**Blocks.** `architecture`, `technology-stack`, `operations`.
+**What the hook writes, and what it does not.** The `cause` line carries the
+panic's **location** and not its payload. `FR-ERR-034` row `70` requires the
+location and does not require the payload; a payload is arbitrary text composed
+at the panic site, and keeping it out of the stream is the structural way to
+keep `FR-GLOB-018` true on a path nobody reviews. The cost is stated rather
+than hidden: a maintainer reading a bug report sees the site and not the
+message. `FR-ERR-032`'s `hint` already tells the caller the condition is a
+defect in `tpl` and not theirs to correct, so nothing the caller can act on is
+lost.
+
+**The amendment owed, and the order, which is not interchangeable.**
+`FR-ERR-030` says `70` is produced by "a panic **caught** at the top level of
+the process". Under an aborting runtime nothing is caught: no unwinding occurs,
+no frame is resumed, and no code downstream of the panic site runs. The hook
+**reports** the panic and exits; it does not catch it. The requirement's
+wording and the mechanism therefore differ, and the requirement moves first:
+
+1. `specification-manager` amends `FR-ERR-030`.
+2. Only then may an implementation be written against the amended wording.
+
+**The content of the amendment is the functional owner's to choose, not this
+folder's.** `DIV-045` anticipated one form — drop the caught-panic condition
+and state the resulting limit. The evidence above admits a narrower one: the
+condition survives and its wording changes, because the observable outcome
+`FR-ERR-032` promises is obtainable. Which of the two the corpus takes is a
+requirement decision.
+
+**The premise of `DIV-045` that this entry contradicts, reported and not
+acted upon.** `DIV-045` states that under `panic = "abort"` "a panic terminates
+the process abnormally, the caller receives no code of `FR-ERR-001`, and no
+message is written". That is true of the **default** hook and not of a hook the
+process installs. `DIV-045` lives in `/specification` and is
+`specification-manager`'s; this entry reports both readings and changes
+neither, per the rule [README.md](README.md#conventions) states for a
+contradiction.
+
+**Rejected — switching the profile to `panic = "unwind"` with `catch_unwind` at
+the top level.** It is the literal reading of `FR-ERR-030` and needs no
+amendment, and it was still refused, for three reasons that compose:
+
+- **The trade cannot be evaluated.** `DIV-045` admits keeping the profile "for its size and its speed", and no recorded figure separates the two profiles: `BENCHMARKS.md` states one release profile, "identical in all four crates", with `panic = "abort"` among its five settings, so every figure it holds was taken under the aborting profile. Changing the profile to buy a wording that a hook already satisfies would be a trade made blind in both directions.
+- **It costs the comparability of every recorded baseline.** `NFR-PERF-012` makes a measurement meaningful only against one stated target, and `NFR-PERF-017` fails a change that regresses against a baseline. A profile change makes every existing figure incomparable with every later one, so all four targets of `NFR-PERF-018` would have to be re-measured before any later number meant anything — to obtain a behaviour that is already obtainable.
+- **It buys nothing observable.** `catch_unwind` and the hook produce the same four lines and the same exit status. What unwinding adds is the running of destructors on the way out, and the process is exiting: the one destructor whose absence a caller could detect is the flush of a buffered stdout, and `FR-ERR-033` requires stdout to be **empty** on an error path while `FR-RND-034` already admits at most one incomplete result.
+
+**Also rejected — leaving both statements standing**, which `DIV-045` refuses
+outright and which this entry does not do: the profile is kept *and* the
+amendment is requested.
+
+**Two facts recorded so that nobody re-derives them.**
+
+- The cost of unwinding is **unmeasured**, per the first rejection above. No figure in this repository separates the two profiles, and none is asserted here.
+- `FR-ERR-031`'s in-process trigger exercises the **other** producing condition of `70`, the detected invariant violation, so `BR-ERR-001`'s exception is independent of this entry. See `OD-21`.
+
+**One reasoned step, marked because it is reasoned.** `strip = true` remains in
+the profile, and `core::panic::Location` is `&'static` data the compiler emits
+rather than debug information, so stripping leaves the file, line and column
+available to the hook. That composition is reasoned from the two definitions
+and is **not** a sentence either document states; it is verified when the first
+`70` is exercised through `FR-ERR-031`'s trigger.
+
+**Consequence for the coordination document.** None. The profile table is
+unchanged, so the architecture decision that file requires before a change to
+it is not triggered.
+
+**Unblocks.** `architecture`, `technology-stack`, `operations`.
 
 ---
 
@@ -994,16 +1576,20 @@ Both identifiers are retired rather than deleted, and neither is reused: a
 reader who meets `ED-01` or `ED-02` in the history is bounced here rather than
 left hunting for an open defect.
 
-## Order of work
+## What remains
 
-Recomputed after the eighth edition settled the three conflicts. `OD-01` leaves
-the table: the register it called for exists, and `ADR-001` and `ADR-002` are
-accepted in it.
+No entry is open, so there is no order of work over the register. What remains
+are four obligations, and none of them blocks a document of this folder except
+where the row says so.
 
-| Order | Entries | Why |
-|---|---|---|
-| 1 | `OD-28` | The only entry whose answer may change a requirement. `DIV-045` leaves two statements standing beside each other, and one of its two resolutions must reach `specification-manager` before any code is written against it |
-| 2 | `OD-12` | Flagged as the likeliest to turn out to be unmeetable as written; the sooner it is examined, the sooner it becomes a conflict or a design |
-| 3 | `OD-14`'s owed observation | A settled decision resting on one unverified engine behaviour, which `FR-SEM-010` and `FR-SEM-011` would contradict outright if it does not hold |
-| 4 | `OD-05`, `OD-06`, `OD-08`, `OD-15`, `OD-17`, `OD-18`, `OD-25` | The remaining open entries, each with its options already enumerated |
-| 5 | The residuals of `OD-04`, `OD-20`, `OD-21`, `OD-22`, `OD-24` | Narrow points inside settled entries, each naming the document that settles it |
+| Order | What | Owner | Blocks |
+|---|---|---|---|
+| 1 | `OD-28` — the amendment to `FR-ERR-030`. It goes first because the specification precedes the implementation: no code may be written against the narrowed wording until the corpus carries it | `specification-manager` | Nothing here. `architecture`, `technology-stack` and `operations` may be written on the settled decision, which does not change with the amendment's wording |
+| 2 | `OD-12` — the observation on `FR-CONF-004`'s referent for three of six phases, and the reading this folder takes meanwhile | `specification-manager` | Nothing. The reading is stated in the entry and cited from `architecture` |
+| 3 | `OD-14`'s owed observation — that a **defined** `null` interpolates as the empty string under `UndefinedBehavior::Strict`. It is unverified, and `FR-SEM-010` and `FR-SEM-011` are contradicted outright if it does not hold | `technical-writer` | `architecture` may not assert the behaviour until it is verified |
+| 4 | `OD-22`'s residual — the fixture certificate, and the harness that drives four containers | `technical-writer` | `operations`, `verification` |
+
+Two further obligations fall to `verification` rather than to this register, and
+are recorded in the entries that create them: one test per mapped
+`clap::ErrorKind` (`OD-08`), and the phase attribution of a TLS handshake
+failure against the fixture (`OD-12`).

@@ -28,6 +28,11 @@ would produce a technical statement with no trace, which this folder does not
 admit. A document listed as *unblocked* has no entry against it and has simply
 not been written.
 
+As of 2026-09-11 every entry of `open-decisions.md` is settled, so seven of the
+nine unwritten documents below are unblocked. Two still wait, on the two halves
+of the one residual that is work rather than a decision: `OD-22`'s fixture
+certificate and its container harness.
+
 ## The four sources of truth
 
 The project has four, with scopes that do not overlap.
@@ -73,16 +78,16 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: settled entries with their rejected options, open entries with their owners, and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: twenty-eight settled entries with their rejected options, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
-| `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | waiting on `OD-05`, `OD-06`, `OD-12`, `OD-15`, `OD-17`, `OD-25`, `OD-28` |
-| `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | waiting on `OD-17`, `OD-25`, `OD-28`, and the residual of `OD-24` |
-| `interfaces.md` | The contracts crossing a component boundary, and how each external contract is realised | waiting on `OD-05`, `OD-06`, `OD-08`, `OD-12`, `OD-18`, and the residual of `OD-20` |
-| `data-model.md` | The model in memory and everything persisted: `.tpl/.cfg`, `.tpl/.cache/`, `meta.json`, versions, migration | waiting on `OD-18` |
-| `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | waiting on `OD-15` |
-| `operations.md` | Build, target matrix, packaging, release gates, observability | waiting on `OD-17`, `OD-28`, and the residuals of `OD-04` and `OD-22` |
-| `quality-attributes.md` | Performance and reliability targets, and how each is measured | waiting on `OD-12` |
-| `verification.md` | Test strategy, harness, fixture, the mandated-test register, the test seams | waiting on the residuals of `OD-21` and `OD-22` |
+| `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. `OD-14`'s owed observation bounds one sentence: the behaviour of a **defined** `null` under `UndefinedBehavior::Strict` may not be asserted until it is verified |
+| `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
+| `interfaces.md` | The contracts crossing a component boundary, and how each external contract is realised | unblocked |
+| `data-model.md` | The model in memory and everything persisted: `.tpl/.cfg`, `.tpl/.cache/`, `meta.json`, versions, migration | unblocked |
+| `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | unblocked |
+| `operations.md` | Build, target matrix, packaging, release gates, observability | waiting on the residual of `OD-22` — the fixture certificate |
+| `quality-attributes.md` | Performance and reliability targets, and how each is measured | unblocked |
+| `verification.md` | Test strategy, harness, fixture, the mandated-test register, the test seams | waiting on the residual of `OD-22` — the harness |
 | `decisions.md` | Retired. The register and its index live at [`docs/adr/`](../adr/README.md) | n/a |
 
 `glossary.md` is **not** proposed. `specification/glossary.md` fixes the
