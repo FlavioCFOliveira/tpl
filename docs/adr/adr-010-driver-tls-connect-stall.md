@@ -20,6 +20,12 @@ with the measured effect of each. This record does not make that choice and does
 not re-open it; it records the option taken, the three refused, and the
 condition that ends it.
 
+**The one question this record left open — where the patched source lives — was
+closed by the same user on 2026-09-11**, from three options put to them. The
+decision below did not change; the parameter it was missing was supplied. That
+makes this an edit in place under this register's own rule rather than a
+successor record, and the two halves are meant to read as one decision.
+
 ## Context
 
 `ADR-003` pins `sqlx` 0.9.0. That version carries a defect which task `#8`
@@ -105,14 +111,54 @@ register's own lifecycle. The patch is an interval measure with a named end; a
 patch with no stated expiry becomes permanent by forgetting, and this one must
 not.
 
-**What this record does not decide.** Where the patched source lives — a fork
-pinned by revision, or a vendored copy inside this repository — is open, and is
-the one question the sprint that writes the manifest cannot answer from this
-record alone. The driver and its pin are `ADR-003`; the mapping of the five TLS
-modes onto it is `ADR-002`; the runtime's scope is `ADR-005`; the toolchain
-floor the pin implies is `ADR-007`.
+**Where the patched source lives: a vendored copy inside this repository.** The
+sprint that writes the manifest SHALL place the patched source at
+`vendor/sqlx-core-0.9.0/` — a tracked directory holding the published 0.9.0
+source of `sqlx-core` with the one added statement and nothing else — and SHALL
+redirect to it by path, `sqlx-core = { path = "vendor/sqlx-core-0.9.0" }` under
+the `[patch.crates-io]` table of that manifest. It is the form `BENCHMARKS.md`
+records for the measured candidates, so what this record prescribes is the
+configuration the measurement was taken on. The version belongs in the directory
+name: a later version is a different tree, never an overwrite of this one. The
+tree is maintained by hand — nothing here prescribes `cargo vendor` — and the
+single statement is the only edit it carries, so any other divergence from the
+published source is a defect in it.
+
+**Of the three forms the immutability constraint admits, this is the
+strongest.** The bytes compiled are fixed by the commit of this repository the
+build was taken at, so a baseline names its artefact by naming that commit and
+its target, which is what `NFR-PERF-012` requires; no revision of a second
+repository has to be recorded, resolved, or still reachable for that name to
+keep its meaning. The vendored tree SHALL carry its provenance beside it: the
+crate and version it was taken from, and the upstream change the added
+statement reproduces, PR `#4336`. Both are already facts of this record; what
+the vendored form adds is that they travel with the source, so the divergence
+from the published crate is checkable with no network access — the property the
+form was chosen for.
+
+**The manifest SHALL exclude that directory from the workspace.** Cargo makes
+every path dependency residing in the workspace directory a workspace member
+automatically, and `exclude` is what prevents it. Whether a `[patch.crates-io]`
+entry whose source is a path inside the workspace is itself caught by that rule
+is not established here; the exclusion costs one line and makes the question
+moot. Without it the mandatory validation pipeline — `cargo fmt --all`, `cargo
+clippy --all-targets --all-features -- -D warnings`, `cargo test --all-features`
+— would run over third-party source this project does not own and cannot fix,
+and `-D warnings` is not negotiable here. The exclusion adds a `[workspace]`
+table to the one manifest of `ADR-006`; it adds no second manifest, and that
+record's decision is untouched.
+
+**The choice of form was the user's, on 2026-09-11**, on the ground that a
+vendored copy is self-contained and builds with no network access. The driver
+and its pin are `ADR-003`; the mapping of the five TLS modes onto it is
+`ADR-002`; the runtime's scope is `ADR-005`; the toolchain floor the pin implies
+is `ADR-007`; the build path and the four targets are `ADR-008`.
 
 ## Alternatives rejected
+
+The first three refusals answer *whether and how to patch*; the last two answer
+*where the patched source lives*. Each was put to the user with its merits, and
+each was refused by the user.
 
 - **Implementing `write_vectored` on `StdSocket` instead.** It removes the same
   stall, and `BENCHMARKS.md` records the two as equivalent at the point they
@@ -160,19 +206,46 @@ floor the pin implies is `ADR-007`.
   statement and expires; this one costs an amendment to the corpus that would
   outlive the defect.
 
+- **A fork of `sqlx` pinned by revision, rather than a vendored copy.** Its
+  merits are real and were put as such: it keeps this repository's tree free of
+  third-party source, so the review surface, the licence surface and every
+  repository-wide search stay exactly what they are today; it makes the
+  divergence from upstream visible as a diff in the fork itself, maintained by
+  the tool built for precisely that; and pinned to a `rev` it satisfies the
+  immutability constraint as fully as a path does. It is refused for two costs
+  the vendored form does not carry: a second repository to create, keep, and
+  keep reachable for as long as the patch lives, and a build that must reach the
+  network for a dependency's source. The second weighs more here than it would
+  elsewhere — the two Linux targets of `ADR-008` are `musl` targets, and the
+  dependency budget the root coordination document imposes already requires
+  every dependency to build on all four. Against that, the fork's advantages are
+  bounded by the size of what is being carried: one statement, over a source
+  that already exists in published form.
+
+- **Deferring the question to the sprint that writes the manifest.** It is the
+  cheapest option today and the only one that costs something later. This
+  record's own Consequences make the `[patch.crates-io]` entry part of the
+  manifest's first version, so the sprint that inherits the question would
+  inherit it as a known blocker rather than discover it — a pendency recorded as
+  closing one sprint by opening a hole in the next. The question was answerable
+  now; nothing was waiting on evidence that did not yet exist.
+
 ## Consequences
 
 **An obligation lands on the sprint that creates the manifest**, which is the
-next one. The `[patch.crates-io]` entry is part of the manifest's first version,
-not a later addition, and the open question this record names — where the
-patched source lives — is answered before it is written.
+next one, and it is now fully specified. The `[patch.crates-io]` entry, the
+vendored tree it points at, and the workspace exclusion are part of the
+manifest's first version, not a later addition. Nothing about this decision is
+left for that sprint to settle.
 
 **No artefact built under the patch is the published crate.** A baseline
 taken against it names an artefact that differs from `sqlx-core` 0.9.0 by one
 statement, and `NFR-PERF-012` requires that to be visible in what is recorded.
 Removing the patch when the fix ships changes the artefact again; the change
 should be behaviour-neutral by construction, since the statement removed is the
-statement the release adds.
+statement the release adds. Under the vendored form that identity is cheap to
+state: the commit of this repository names the patched source exactly, so a
+baseline names the commit and the target and has named its artefact.
 
 **The stall is not a corner case, and the record should not be read as covering
 one.** `FR-CONF-013` defaults to `verify-identity`; four of its five modes can
@@ -181,16 +254,43 @@ the patch. Only the plaintext path is exempt, which is why the plaintext pair of
 the driver selection was unaffected and why `ADR-003`'s choice does not rest on
 the defect.
 
-**The review surface is one statement.** That is what makes the patched source
-cheap to audit against the published crate, and what makes its removal a
-deletion rather than a merge.
+**The divergence is one statement; the tree is a whole crate.** That asymmetry
+is what the vendored form buys and what it costs. Auditing the patch against the
+published crate stays cheap — one statement, checkable with no network access —
+and removing it when the fix ships is the deletion of a directory and of the
+manifest lines that point at it, never a merge. What changes is everything that
+reads this repository by walking it: the tree now contains third-party source,
+so a repository-wide search, a code review, a licence review, and any inventory
+of "the code in this project" have to treat that directory as what it is. Three
+obligations follow, and none of them existed under the fork form:
 
-**One thing the manifest must confirm and this record cannot.** Whether
-`cargo audit` — which the mandatory validation pipeline runs — resolves
-advisories through a `[patch.crates-io]` source is not established anywhere in
-this repository. It is not an obstacle to the decision; it is a check owed when
-the manifest exists, and it is marked unverified below rather than asserted
-either way.
+- The copy SHALL preserve the upstream licence and notice files exactly as
+  published. Vendoring moves source; it does not move it onto new terms.
+- The prohibition on `unsafe` is a property of this project's own crate and does
+  not reach the vendored tree. That source is the same third-party code it was
+  when Cargo fetched it from the registry, and a copy of it sitting in the tree
+  does not make it this project's to conform.
+- The vendored crate is **not a new dependency** and does not enter the
+  dependency budget as one. The dependency is still `sqlx` 0.9.0 under
+  `ADR-003`; only where one of its crates is read from has changed.
+
+Whether the knowledge graph covers the vendored tree, and on what terms, is a
+question for the owner of that graph. It is raised here, not answered.
+
+**One thing the manifest must confirm and this record cannot.** `cargo audit`,
+command 5 of the mandatory validation pipeline, audits `Cargo.lock`. Whether it
+resolves advisories through a `[patch.crates-io]` source is not established
+anywhere in this repository, and the vendored form sharpens that question rather
+than settling it: what the check must establish is whether the patched
+`sqlx-core` reaches the audit at all, and if it does, under which identity, the
+crate being read from a path rather than from the registry. It remains
+unverifiable today for the reason it was unverifiable when this record was
+written — there is no `Cargo.toml`, so there is no lockfile to look at — and it
+stays marked unverified below rather than asserted either way. The sprint that
+writes the manifest owes the check against a real lockfile. Whatever it finds,
+the exposure is bounded and knowable without the tool: the vendored tree is
+`sqlx-core` 0.9.0, an advisory against that version applies to it unchanged, and
+the one added statement is the whole of the divergence.
 
 **`ADR-003`'s open defect is closed by this record.** That record carried the
 anomaly as unexplained, tracked as task `#8`, and described it as a property of
@@ -226,4 +326,8 @@ not by this register.
 | The cell-by-cell behaviour of the five modes was established against running servers on 2026-09-10, against the version `ADR-003` pins and against no other; the failure this guards against is silent and is not visible from an API listing | `ADR-002`, *Context*; `ADR-003`, *Alternatives rejected* | 2026-09-11 |
 | The toolchain floor of 1.94.0 is declared by the crate at the version `ADR-003` pins, and moves with it | `ADR-007`, *Decision* | 2026-09-11 |
 | Cargo reads `[patch]` settings only from the workspace-root manifest and ignores them in dependencies; a patch source may be a git repository pinned to a branch, tag or rev, or a local path | The Cargo Book, *Overriding Dependencies* | 2026-09-11 |
-| Whether `cargo audit` resolves advisories through a `[patch.crates-io]` source | **Unverified.** Nothing in this repository establishes it, and no claim is made either way; the sprint that writes the manifest owes the check | — |
+| All `path` dependencies residing in the workspace directory automatically become workspace members, and the `exclude` key prevents a path from being included | The Cargo Book, *Workspaces*, the `members` and `exclude` fields | 2026-09-11 |
+| The measured candidate fixes were produced by vendoring `sqlx-core` 0.9.0 and redirecting to it with `[patch.crates-io]` and a `path` — the form this record prescribes | `BENCHMARKS.md`, "2026-09-11 — The TLS connect stall on Linux loopback", *Reproduction* | 2026-09-11 |
+| `cargo audit`, command 5 of the mandatory validation pipeline, audits `Cargo.lock` | `docs/spec-technical/operations.md`, the pipeline table, row 5, which cites the crates.io index and rustsec.org for `cargo-audit` 0.22.2 | 2026-09-11 |
+| Whether `cargo audit` resolves advisories through a `[patch.crates-io]` source, and under which identity a path-sourced crate reaches it | **Unverified.** Nothing in this repository establishes it, and no claim is made either way. It cannot be settled while there is no `Cargo.toml` and therefore no lockfile; the sprint that writes the manifest owes the check | — |
+| Whether a `[patch.crates-io]` entry whose source is a path inside the workspace directory is itself made a workspace member by the rule above | **Unverified.** The Cargo Book states that rule for `path` dependencies and says nothing about patch entries; the workspace exclusion this record prescribes makes the question moot | — |
