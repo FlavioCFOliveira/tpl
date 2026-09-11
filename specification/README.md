@@ -14,16 +14,20 @@ defers to another document for its meaning.
 `README.md` at the repository root is the entry door to the repository.
 `CLAUDE.md` at the repository root is agent coordination. Neither carries
 functional requirements. Where either still repeats functional content that this
-specification now owns, the divergence is recorded in
-[upstream-divergences.md](upstream-divergences.md) and the duplicate must be
-removed from those files.
+specification now owns, contradicts it, or states as present something the
+repository does not contain, the divergence is recorded in
+[upstream-divergences.md](upstream-divergences.md) and the passage must be
+corrected in those files. That register is re-read against both files whenever
+either of them changes — for entries the files have discharged and for
+divergences it does not yet hold — and every entry records whether the
+correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eleven editions. All are in force; each
-adds to the ones before it and amends them in place, and every amendment
-carries an *Amended in the nth edition* note beside the requirement it
-changes.
+The specification has been written in eighteen editions. All are in force;
+each adds to the ones before it and amends them in place, and every
+amendment carries an *Amended in the nth edition* note beside the
+requirement it changes.
 
 ### First edition — the command-line surface
 
@@ -218,8 +222,12 @@ already in force to be wrong, corrects it.
   as an absence of one. `FR-SRV-038` records all seven, because six of them
   constrain the reader, the fixture, or an open question rather than the
   document, and `FR-SRV-027` records only what the model accommodates. The
-  seventh edition took the record to eleven and the register to two rows, and
-  the tenth took the record to twelve.
+  seventh edition took the record to eleven and the register to two rows, the
+  tenth took the record to twelve, and the twelfth to thirteen; the thirteenth
+  took it to fourteen, with a difference observed before any of them. The
+  eighteenth added no row and records three readings of the build below the
+  table, where an observation that differs across the window without being a
+  difference between the series belongs.
 - **`OQ-041`, how an unreadable view is reported** —
   [privileges-and-completeness.md](privileges-and-completeness.md), and it is
   the correction described below.
@@ -362,11 +370,12 @@ columns of every view alongside those of the tables.
 **The record of differences between the series grows from seven to eleven**,
 per `FR-SRV-038`, and one of the four new ones matters beyond its content:
 the declared nullability of the index table's comment column splits `10.11`
-and `11.4` from `11.8` and `12.3`. It is the only difference in the record
-that does not fall after `10.11`, and it is recorded as a caution that a
-difference may fall anywhere in the window. The divergence register of
-`FR-SRV-036`, empty through six editions, gains its first two rows — both
-created by `FR-SRV-039`.
+and `11.4` from `11.8` and `12.3`. It is the second difference in the record
+to split the window in the middle rather than at one of its ends — difference
+2 was already there — and it is recorded as a caution that a difference may
+fall anywhere in the window. This edition wrote it as the only one; the
+twelfth corrects it. The divergence register of `FR-SRV-036`, empty through
+six editions, gains its first two rows — both created by `FR-SRV-039`.
 
 **The last open entry closes, and it closes on a limit rather than on an
 answer.** `FR-SRV-040` fixes what the version probe returns and `FR-SRV-041`
@@ -427,7 +436,7 @@ same pass.
   its own text, that `tpl` with default configuration cannot reach the fixture
   of `scripts/mariadb/` over TCP on any series, and that an acceptance test
   for the default mode needs a certificate that names the host. The fixture
-  provides none, so the default of `FR-CONF-013` was the one cell of a
+  provided none, so the default of `FR-CONF-013` was the one cell of a
   ten-cell table with no test. The obligation is now a requirement: the
   fixture presents, at each series of `FR-SRV-015`, a server whose certificate
   names the host, and retains a server offering no TLS for the right-hand
@@ -625,9 +634,812 @@ Integrity Protection is a configuration of a contributor's machine and a
 password prompt cannot be automated — and it is recorded in *What would change
 this* as a decision the project may still take, rather than one taken here.
 
+**One editorial correction.** `DIV-031` said the closed statement list of
+`FR-SRV-006` has **three** entries, which was true when the second edition
+wrote it and has not been since: the fifth edition added the read-back as a
+fourth entry and the tenth named the variable it reads. The table carries four
+rows, so the clause was wrong and is corrected. What that entry owes the root
+`CLAUDE.md` is unchanged — the removal of the `SHOW` clause — and the entry
+says so in its own note.
+
 **No requirement is withdrawn, no identifier is retired, and no open question
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
+
+### Twelfth edition — the announced version is not the probed one
+
+A MariaDB server states its version twice: once when the connection opens,
+unasked, and once when the probe of `FR-SRV-002` asks for it. On three of the
+four supported series the two strings are identical. On `10.11` they are not —
+the announcement carries a `5.5.5-` prefix and the probe's answer does not —
+and the fixture of `scripts/mariadb/` recorded that while it was being built.
+`FR-SRV-038` obliges **every** difference observed between the series to be
+recorded, whether or not it reaches the model, and this one was not. This
+edition records it.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.** The
+two requirements the difference bears on were checked and both stand as
+written; each now carries a note saying it was checked, so that the next reader
+does not check it again.
+
+- **The record of differences grows from twelve to thirteen** —
+  [server-contract.md](server-contract.md). Difference 13 states both readings
+  of the version on each of the four series, verbatim, with the date and the
+  instrument: the announcement was read over a plain socket by the fixture's
+  own gate, which opens the connection and closes without authenticating. The
+  claim is bounded — one server of each series, at the four patch releases
+  `FR-SRV-040` records — and the fifth listener of the fixture, the same
+  `10.11` image started without TLS, announced the same prefixed string, so the
+  prefix does not depend on TLS being in force.
+- **The register of `FR-SRV-036` keeps its two rows, and the reason is written
+  rather than left implied** — `FR-SRV-038`. The announcement reaches no field
+  of the model, because `FR-CTX-031` carries the string the probe returns and
+  `FR-SRV-040` derives `series` from that string and from nothing else. The
+  reason is **not** difference 12's reason, and the record says so: difference
+  12 is a session variable the model could not carry whatever `tpl` did with
+  it, while this one touches a field the model does carry by a reading the
+  model does not take. The register records what the model accommodates; this
+  is a difference the model avoids, by naming its reading.
+- **`FR-SRV-040` is checked and unchanged** — the clause *and from nothing
+  else* already bars the announcement, and the note records what would follow
+  if it did not: `<major>.<minor>` taken from the announcement reads `5.5` on
+  `10.11`, and `FR-SRV-020` would refuse a supported server as older than the
+  window.
+- **`FR-SRV-041` is checked and unchanged** — the marker `MariaDB` is carried
+  by both readings on all four series, so the necessary condition returns the
+  same verdict from either, and no server is admitted or refused by the
+  difference. The limit that requirement states covers the announcement too:
+  it is one more response the server composes.
+- **`FR-CAT-029`'s count follows and its list stays empty** —
+  [catalogue-coverage.md](catalogue-coverage.md). The announcement is not a
+  catalogue field, so it cannot be a field whose meaning two series disagree
+  about.
+
+**One defect was found while this edition ran, and is corrected in it.**
+Recomputing the tally beside the note on difference 8 showed the claim that
+tally supports to be wrong: difference 2 splits `10.11` and `11.4` from `11.8`
+and `12.3` exactly as difference 8 does, so the record holds two such splits
+and not one. The tally was corrected with the record of thirteen and the claim
+was left standing, because it predates this edition and was not what this
+edition was opened to settle; it was recorded under
+*[Maintenance debt](#maintenance-debt)* for a correction of its own, and that
+correction is the editorial one below.
+
+**One editorial correction, made after the record of thirteen was written.**
+The note beside difference 8 called it *the only split in this record that
+does not fall after `10.11`*. Two of the thirteen split the window in the
+middle — difference 2 as well as difference 8 — and the note now says so,
+counts the thirteen three ways, and names the differences in each count. A
+second count in the same note was wrong for a reason of its own: code that
+models the four series as one old server and three modern ones is right for
+nine of the thirteen and not for eleven, because the two splits that isolate
+`12.3` defeat that model as surely as the two that fall in the middle. The
+caution the note exists to give — a difference may fall anywhere in the
+window — is unchanged and is stronger for the second example. The seventh
+edition's account of the same note, above, is corrected with it. No
+requirement is amended, no row of the record changes, and the register of
+`FR-SRV-036` keeps its two rows. Recorded under this edition rather than
+opening a thirteenth: a gloss on an observation binds nothing, no requirement
+rests on the claim, and nothing here is observed, decided, or amended. The
+eleventh edition settled the same case the same way for `DIV-031`'s count.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
+### Thirteenth edition — a record assembled from its own table
+
+`FR-SRV-038` obliges every difference observed between the series to be
+recorded in its own section, whether or not it reaches the model. A fourteenth
+difference was observed on 2026-09-10, while the shared DDL of
+`scripts/mariadb/` was being settled, and was written down beside `FR-SRV-029`,
+whose fixture consequence it decided. It never reached the record. Two
+recounts — the tenth edition's and the twelfth's — passed over it, because each
+was computed over the rows the record already held rather than over everything
+the corpus had observed. This edition records the difference, and names where
+the method failed.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.**
+
+- **The record of differences grows from thirteen to fourteen** —
+  [server-contract.md](server-contract.md). Difference 14 is the refusal of a
+  `VECTOR` column or a vector index at DDL time by `10.11` and by `11.4`, with
+  `ERROR 4161 (HY000)`, and its acceptance by `11.8` and `12.3`. It is the only
+  difference in the record that is about what a server **accepts** rather than
+  what it reports. The claim is bounded to acceptance: nothing was observed
+  about what the catalogue reports for such an object on the two series that
+  accept one, because the shared DDL declares none for any series to report.
+- **The counts beside difference 8 are recomputed over fourteen rows, and the
+  twelfth edition's classification of the thirteen was checked against the rows
+  rather than taken on trust.** It holds — nine differences isolate `10.11`,
+  two isolate `12.3`, and two split the window in the middle. Difference 14 has
+  the middle shape, so that count goes from two to three and the closing one
+  from four differences to five, 2, 6, 8, 9 and 14; the other two counts do not
+  move, which is the check that the recount was made over the rows.
+- **The register of `FR-SRV-036` keeps its two rows, and the reason is written
+  rather than left implied** — `FR-SRV-038`. A row of that register carries
+  three columns — the field, the treatment, and what each series returned — and
+  this difference fills none of them: it was observed in a server's answer to a
+  `CREATE`, no field of the model is in question, and no catalogue reading was
+  taken for a `VECTOR` object on any series. The reason is neither difference
+  12's nor difference 13's; it is upstream of both, in which databases can
+  exist on each series at all.
+- **The method is named where the record states it** — `FR-SRV-038`. *Method
+  and date* now counts five observation occasions rather than four passes, and
+  says why no pass could have found this one: a pass compares what running
+  servers report, and this difference is in what a server accepts, which is
+  settled before any comparison can be made. The Scope of
+  [server-contract.md](server-contract.md) follows it.
+- **`FR-CAT-029`'s count follows and its list stays empty** —
+  [catalogue-coverage.md](catalogue-coverage.md). A difference in what a server
+  accepts is not a field whose meaning two series disagree about.
+- **`FR-ENV-046` cites the record and not the fixture consequence alone** —
+  [template-environment.md](template-environment.md). Its bounded claim already
+  named `VECTOR` as a type a supported server can hold and the fixture's 39
+  `data_type` values do not cover; it now cites the difference that establishes
+  it.
+
+**One defect of wording was corrected in passing.** *Method and date* said
+*Three passes were made* and then described four: the twelfth edition added the
+fourth pass and left the count behind it. The paragraph now states five
+occasions and enumerates five.
+
+**One defect was found by the sweep this edition ran and is not corrected in
+it.** Two further readings that differ across the window — the build's source
+revision and the SSL library string — are recorded under `FR-SRV-040` and
+classified there as properties of the build. `FR-SRV-038` then offered an
+observation two homes and no third: a row in its table if it is a difference
+between the series, or a line below the table if it was observed to differ
+between two servers of the same series, so that it is not counted as one.
+Neither reading had either. It is recorded under
+*[Maintenance debt](#maintenance-debt)* for a correction of its own, because
+the correction is a decision rather than an editorial tidy — the timestamps
+recorded below that table were observed to differ between two servers of the
+**same** series, and the SSL library string was not. The eighteenth edition
+settles it, on a rule in force rather than on a decision from outside this
+corpus, and finds a third reading of the same shape that this edition's sweep
+did not name.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
+### Fourteenth edition — an observation of servers nobody had configured
+
+`FR-SRV-038` records what four servers were observed to report, and one of its
+fourteen rows recorded a reading taken before this project's own fixture
+changed the thing it read. `have_ssl` is `DISABLED` on `10.11` until an
+administrator configures a certificate; `FR-CONF-038` has said so since the
+eighth edition, and it now obliges the fixture to configure one at every
+series. The row said `DISABLED` and said nothing else, so an observation record
+contradicted the fixture the observation was taken from. This edition puts the
+condition in the row and checks the other thirteen rows for the same defect.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.**
+
+- **Difference 3 names the condition it was read under** —
+  [server-contract.md](server-contract.md). The row now reads `have_ssl`, on a
+  server left to itself, with no TLS material configured for it, and cites
+  `FR-CONF-038` for that condition and for the fixture obligation that lifts
+  it, rather than restating either. The difference itself is unchanged:
+  `10.11` offers no TLS until something configures it, and that is the whole
+  of what makes it a difference between the series. The row also gains a
+  bounded claim, in the form differences 13 and 14 already carry.
+- **The other thirteen rows are checked against the same defect, and none has
+  it** — `FR-SRV-038`. The check reads each row against what the fixture
+  configures rather than against the other rows: three TLS settings in one
+  file, two initialisation scripts, a root password and a published port, and
+  no other server variable on any series. Nine rows are properties of the
+  server build, two are the servers' own default collation, which the fixture
+  leaves untouched and which is visible for that reason, one is a statistic
+  over identical data and already states that condition, and one is not a
+  reading at all. Only `have_ssl` is a value the fixture sets. The negative is
+  recorded with its method, because a sweep that finds nothing is worth only
+  as much as the reader can see of how far it went.
+- **The record says which of its occasions the fixture had TLS material for**
+  — `FR-SRV-038`, *Method and date*. The first two passes ran before it and
+  the fourth after it, and difference 13's bounded claim had already recorded
+  the later state. One condition of observation was therefore not constant
+  across the five occasions, and the record now says so instead of leaving
+  each row to be read as though it were.
+- **`FR-CONF-038`'s consequence note says when it was true** —
+  [configuration-model.md](configuration-model.md). It stated in the present
+  tense that `tpl` with default configuration cannot reach the fixture over
+  TCP on any series, which the fixture's own certificate has since made false.
+  The observation and its date are unchanged; the note now bounds the claim to
+  the fixture as it then stood and records the discharge. The note that states
+  the condition cites difference 3 in return, so the two point at each other.
+- **The eighth edition's fixture obligation is recorded as discharged** —
+  *[Maintenance debt](#maintenance-debt)*. It was the one obligation that
+  edition placed outside this corpus, and `scripts/mariadb/` now carries the
+  material it asked for.
+
+**One editorial correction.** The eighth edition's entry above said *the
+fixture provides none*, in the present tense, inside a narrative of what that
+edition found; it now says *provided*, which is what it meant.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
+### Fifteenth edition — a register nobody re-read
+
+[upstream-divergences.md](upstream-divergences.md) recorded forty-five
+corrections owed to the root `README.md` and the root `CLAUDE.md`, and no
+edition had re-read it against those files since the files changed. `DIV-031`
+asks for the removal of the clause that admitted `SHOW` as a way to read the
+catalogue — "e, quando estritamente necessário, `SHOW`" — which `0ea5624`
+removed several sprints before the
+eleventh edition amended that very entry for a miscount. The amendment
+recounted the list and did not check whether the sentence it corrected was
+still in the file. One entry reclaiming work already done destroys the
+presumption that the other forty-four are current, so this edition classifies
+every one of them and writes down the obligation that was missing.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.** No
+root document is edited either: this corpus does not hold the pen on those two
+files, and discharging an entry by making its correction is not what this
+edition did.
+
+- **Every entry carries a Status, and the index carries a Status column** —
+  [upstream-divergences.md](upstream-divergences.md). Each of the forty-five
+  was classified against the current text of the file its **Target** names, as
+  that file stood at `87dd6e3`: **ten were due in full, fourteen discharged,
+  and twenty-one partly discharged**. Thirty-one entries still owed something,
+  twenty-eight of them to `README.md`. The sixteenth edition adds four entries
+  and those figures are its own; the register's own count is in its Overview.
+- **A discharged entry names the commit that discharged it.** Twelve were
+  discharged outright by `0ea5624`, which reduced `CLAUDE.md` to agent
+  coordination, and that same commit discharged one half of nineteen more; one
+  by `26e1739`, one by `011c059` and one by `87dd6e3`, each in part. An entry
+  that says when it stopped being owed can be audited; an entry that merely
+  says it is not owed has to be re-derived by the next reader.
+- **A discharged entry is kept in place, with its identifier** —
+  [upstream-divergences.md](upstream-divergences.md). This is the rule the
+  *[Identifier scheme](#identifier-scheme)* above states for a withdrawn
+  requirement, and `DIV-045` has carried the in-place form since the ninth
+  edition. The alternative considered and rejected was the *Closed* table of
+  [open-questions.md](open-questions.md): entries of the register cite each
+  other, and a citation whose target has been moved to a row resolves to a row
+  rather than to the reasoning.
+- **The partly discharged case is given a treatment, because it is the
+  ordinary case and not the exception.** Nineteen entries name both files, and
+  the two are edited under separate authorisations, so such an entry is
+  discharged in halves. **No entry is recorded as discharged while any part of
+  it stands**, and a partial status names, part by part, what was discharged
+  and by which commit. `DIV-018` is the first to carry it: `26e1739` replaced
+  the three TLS modes in the flag row of `README.md` and the `.cfg` example in
+  the same file still shows neither `ca_file` nor `ca_path`.
+- **The index and one entry are brought back into agreement** —
+  `DIV-013`. The index said `README.md` and the entry said `both`, because the
+  fifth edition discharged the `CLAUDE.md` half and narrowed the index row
+  without narrowing the field. The field is authoritative and the row now
+  matches it; what is owed, and to which file, is the Status column's job.
+- **One entry is discharged that no commit discharged, and the finding is
+  recorded rather than deleted** — `DIV-025`. Its *Says* clause quotes a
+  sentence saying `/specification` does not yet exist. Searching the history
+  for those words finds one occurrence in the whole repository, in the register
+  itself, at `1352a2d`. The subsection it asks to be removed was never in
+  `CLAUDE.md`. An entry raised against an unverified reading of a target is the
+  same defect as an entry left standing after the reading went stale, and the
+  identifier must resolve to that explanation.
+- **Two statements about `CLAUDE.md` made outside the register are corrected
+  with it** — [performance-requirements.md](performance-requirements.md). The
+  provenance note of `NFR-PERF-018` said that file's matrix *still names* the
+  `gnu` triples; it named them from `a8c5390` until `0ea5624` removed the
+  matrix, and what stands there now is the deferral `DIV-041` quotes. The
+  provenance note of `NFR-PERF-014` said a correction is owed to that file
+  under `DIV-035`; `0ea5624` removed the budget table and the entry is
+  discharged. Both notes keep what they record — where five provisional
+  figures and four targets came from — and lose only the present-tense claim
+  about a file that has moved on. A register is not the only place this corpus
+  says something about a document it does not own, which is why the fifth rule
+  is written over registers **and** over any such statement.
+
+**One observation is recorded in passing and owes nothing.** `DIV-045`, which
+the ninth edition discharged by amendment, quotes a release-profile table that
+`50153d6` has since reduced to a citation of `ADR-004`. Its *Says* clause no
+longer matches the file, which changes nothing about an entry that owes
+nothing. Every discharged entry now carries a quotation that outlived its
+source; this one is worth naming because the entry had already been closed, so
+nothing would have brought a reader back to it.
+
+**The rule this edition adds is the fifth of its kind**, and it is stated under
+*[Maintenance debt](#maintenance-debt)* with the other four. A register is not
+a requirement: it describes a file this corpus does not own, so it decays
+whenever somebody else edits that file, and no reference check, recount or
+sweep of this corpus can see it happen.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
+### Sixteenth edition — the entries a swept register did not hold
+
+The fifteenth edition re-read every entry of
+[upstream-divergences.md](upstream-divergences.md) against the two root
+documents and classified all forty-five. It did not ask whether forty-five was
+all of them. A reading of the root `README.md` against this corpus, made for
+another purpose, found four divergences that no entry asks for, and the first
+of them is the first instruction in that file a reader acts on. This edition
+records the four, and two more that the readings which followed found in
+`CLAUDE.md` — six in all — and writes down the check that would have found
+them.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.** No
+root document is edited either, for the reason the fifteenth edition gave: this
+corpus does not hold the pen on those two files, and recording a correction is
+not making it.
+
+- **Seven entries are added, and all seven are due** — `DIV-046` through
+  `DIV-052`, each checked against its target file at `87dd6e3`, which is still
+  the last commit to touch either root document and so the same state the
+  fifteenth edition classified the other forty-five against. The register now
+  holds fifty-two entries: **seventeen due in full, fourteen discharged,
+  twenty-one partly discharged**, and thirty-eight still owe something,
+  thirty-two of them to `README.md` and seven to `CLAUDE.md`.
+  - `DIV-046` — *Installation* tells a reader to run `cargo build --release`,
+    and *Development* gives eight `cargo` commands, in a repository that has no
+    `Cargo.toml`. The document-scope banner says no command described below is
+    implemented yet; it does not say the crate does not exist, so a reader who
+    takes the banner at its word expects the build to work and the commands to
+    be unfinished.
+  - `DIV-047` — the flag table of `render` omits `--direct` and `--no-cache`,
+    which `FR-GLOB-021` declares on that command and `FR-GLOB-022` requires it
+    to list.
+  - `DIV-048` — the entry flag is spelled `--database`, where `FR-CFG-027`
+    names it `--schema`. The name the file uses is the global flag of
+    `FR-GLOB-001`, which `FR-GLOB-002` makes acceptable at that very node and
+    `FR-GLOB-004` gives a different meaning, so the invocation the table
+    teaches is accepted and writes the wrong key.
+  - `DIV-049` — the same table omits `--ca-file` and `--ca-path`, which
+    `FR-CFG-027` has declared since the fifth edition, while its `--tls` row
+    already names the two modes that `FR-CONF-014` says the trust material
+    serves.
+  - `DIV-050` — the project-structure tree of `CLAUDE.md` states a crate and
+    five directories the repository does not have, in a block that carries no
+    tense. It is the first of the two entries raised against that file, and
+    both had to separate what the document is entitled to say from the way it
+    says it: the module decomposition under `src/` is where code will go and
+    belongs in a coordination document, so what is owed is a qualifier on the
+    tree and not its removal.
+  - `DIV-051` — the *Desenvolvimento* section of `CLAUDE.md` gives three
+    `cargo` commands and the mandatory validation pipeline under it five more,
+    and gates the completion of all work on those five. Every one of the eight
+    fails for want of a manifest. They are the same eight commands `DIV-046`
+    records of the other file's *Development*, and `DIV-001` leaves the
+    pipeline with `CLAUDE.md`, so what is owed is a qualifier on the two blocks
+    and not the removal of a command.
+  - `DIV-052` — the *Disciplina de medição* subsection of `CLAUDE.md` states
+    that the benchmarks live in `benches/` and run against the containers'
+    dataset, in a repository with no such directory and no benchmark of any
+    kind. The measurement discipline stated beside it is in force and is
+    stated correctly, so what is owed is a qualifier on one clause. It is the
+    third of this edition's entries against that file, and the only one of the
+    four that needs a second fact besides the missing crate: the fixture the
+    sentence invokes is in part what `DIV-036` still owes.
+- **The register gains a third kind of entry** —
+  [upstream-divergences.md](upstream-divergences.md). **Contradiction** and
+  **Migration** both describe the relation between a root document and this
+  corpus. `DIV-046` describes the relation between a root document and the
+  repository: it contradicts no requirement, nothing is owed to this folder,
+  and acting on it fails anyway. **Overstatement** names that, and four
+  entries carry it — `DIV-046` against the root `README.md`, and `DIV-050`,
+  `DIV-051` and `DIV-052` against `CLAUDE.md`. Forcing them into
+  **Contradiction** was rejected, because it would have obliged a
+  *Specification* clause to cite a requirement that does not exist.
+- **Each new entry names the existing entry it was checked against, where one
+  looks as though it covers the ground.** `DIV-023` records the same two flags
+  as missing from the **global** tables and replaces those tables with a
+  pointer; applied exactly as written it leaves the `render` table silent,
+  which is `DIV-047`'s subject. `DIV-003` names `--ca-file` and `--ca-path`,
+  but only to say that neither carries a short form, and `DIV-018` asks for
+  `ca_file` and `ca_path` in the `.cfg` example rather than in the flag table;
+  neither reaches `DIV-049`. `DIV-032` and `DIV-036` both name the project
+  structure of `CLAUDE.md` in their **Target**, and neither reaches `DIV-050`:
+  the first is about the sentence below the tree, and the second asked for a
+  line to be **added** to the tree and was discharged in that half by
+  `87dd6e3`, which corrected the line it named and left standing the six that
+  state a crate the repository has not got. `DIV-051` is checked against
+  `DIV-050`, which is the entry that looks most like it — same file, same fact
+  about the repository, same shape of correction — and against `DIV-046`, which
+  records the same eight commands in the other root document; the reasons
+  neither absorbs it are written under it. An entry that looks covered and is
+  not is how these came to be missing, so the check is written into the entries
+  rather than left to the next reader.
+
+**The divergence that had no entry now has one.** The project-structure tree
+of `CLAUDE.md` names `Cargo.toml`, `src/`, `tests/`, `benches/`, `templates/`
+and `examples/`, and the repository has none of them — the same divergence as
+`DIV-046`, in the other root document. It was first recorded in prose, here and
+in `DIV-046`, because that entry's **Target** is `README.md` and an entry is
+not widened to a file the survey that raised it did not read. `DIV-050` is the
+entry it needed, raised against `CLAUDE.md`, and it is added to this edition
+rather than opening a seventeenth. Nothing the corpus knows changes with it:
+the finding, the kind it belongs to, and the reason it could not be folded into
+`DIV-046` were all settled here, and what was outstanding was the entry alone.
+An edition records what this corpus learned, and one whose whole content was
+*write down what the edition before it had already found* would turn the
+edition record into a log of working sessions.
+
+**What the prose above had not settled is the correction**, and it is not a
+deletion. The seven lines under `src/` are the project's module decomposition —
+an architecture decision, recorded as one outside this corpus — and a document
+whose job is to say how work is executed here is entitled to say where code
+will live. What it may not do is say it in the indicative of the present, in a
+block that carries no tense and sits in a file with no banner of any kind about
+how much of the repository exists. So `DIV-050` asks for a qualifier on the
+tree, and says in as many words that neither the tree nor the decomposition is
+to be removed. An entry read as *delete the tree* would have the project strike
+its own structure from the file every agent reads first.
+
+**The second divergence this edition recorded rather than acted on now has an
+entry too.** `DIV-050` named, and did not record, the eight `cargo` commands of
+`CLAUDE.md`'s *Desenvolvimento* section and of the mandatory validation
+pipeline under it: three in the first block, five in the second, and a sentence between
+them making the completion of all work conditional on the five. Every one of
+them fails for want of a manifest, which is what `DIV-046` records of
+*Development* in the other root document. `DIV-051` is the entry they needed.
+
+**It is a second entry against `CLAUDE.md` and not a widening of `DIV-050`**,
+and the reason is the one `DIV-046` acted on rather than the one it appears to
+have acted on. That entry covers two sections of `README.md` because one
+sentence at the head of each discharges both, not because the two sit near each
+other: they are about four hundred lines apart, at the head of the file and at
+its foot. Here the two passages do not take one correction. `DIV-050` qualifies
+a tree of paths and forbids the removal of the decomposition under `src/`;
+`DIV-051` qualifies two blocks of commands and the obligation stated between
+them, and an editor who applies the first exactly as written leaves the eight
+commands untouched under a heading it does not name. The two passages are also
+edited apart, which `87dd6e3` demonstrates — it rewrote the tree and left
+*Desenvolvimento* alone — and **Target** is the authority on where an entry is
+re-checked, so one entry over both would have gone to *partly discharged* on an
+edit that did nothing for the commands. What the merge would have bought is one
+item instead of two for whoever holds the pen on that file; the register's
+index groups by **Target**, so that reader already has both in one place.
+
+**The correction preserves every command.** `DIV-001` leaves the validation
+pipeline with `CLAUDE.md` — it names the pipeline among the content that file
+keeps — so the commands are that file's to state, they are the right commands,
+and they run unchanged the moment the manifest exists. What is wrong is the
+tense, exactly as in `DIV-050`, and an entry read as *delete the pipeline*
+would strike the project's completion gate out of the file every agent reads
+first. `DIV-051` therefore asks for a qualifier at the head of the section, or
+a mark on the two blocks, and says in as many words that neither the commands
+nor the obligation between them is to be removed.
+
+**This entry is added to this edition rather than opening a seventeenth**, for
+the reason `DIV-050` was. What was outstanding was the entry alone: the finding,
+the kind it belongs to, the file it is owed to, and the fact that it needed an
+entry of its own were all recorded here when this edition was written, and its
+placement was settled by applying a rule this edition had already stated twice
+rather than by learning anything new. An edition records what this corpus
+learned; opening one whose whole content was *write down the second of the two
+findings the edition before it had already made* would turn the edition record
+into a log of working sessions, and doing it twice from one edition's backlog
+would make the point twice over.
+
+**The third divergence this edition recorded rather than acted on now has an
+entry too.** `DIV-051` named, and did not record, the *Disciplina de medição*
+subsection of `CLAUDE.md`, which states that the benchmarks live in `benches/`
+and run against the dataset of the MariaDB containers. The repository has no
+such directory and no benchmark of any kind, and `BENCHMARKS.md` does not stand
+in for them: its two campaigns measured probe binaries this repository does not
+hold, and it says of itself that no figure in it is a baseline for `tpl`.
+`DIV-052` is the entry that sentence needed.
+
+**It is the third of this edition's entries against `CLAUDE.md`, and the
+criterion that placed it is the one `DIV-051` settled**: the shape of the
+correction decides where an entry goes, not the proximity of the passages. Here that criterion cuts against
+proximity rather than with it. *Disciplina de medição* sits some fifty lines
+below the head of *Desenvolvimento*, in the very next top-level section, so
+nearness argues for a merge as loudly as distance argued against one in
+`DIV-046`; what decides is that no one correction serves both. A qualifier at
+the head of *Desenvolvimento* does not reach a subsection of *Desempenho e
+Eficiência*, and the two discharge on different conditions: `DIV-051`'s eight
+commands run unchanged the moment the manifest exists, while this sentence does
+not become true with a manifest, because a benchmark has to be written and what
+it is said to run against is not complete. The passages are also edited apart,
+which `87dd6e3` demonstrates for both — it rewrote the project tree and touched
+neither.
+
+**The correction preserves the measurement discipline.** No performance claim
+without numbers, the baseline recorded in `BENCHMARKS.md` against a named
+target, and a regression failing the change are obligations in force today, and
+they governed both campaigns that file already holds; `NFR-PERF-009` through
+`NFR-PERF-013` and `NFR-PERF-017` carry the same rules in this corpus, and
+`DIV-035` left the discipline with `CLAUDE.md` when it took the figures out.
+What is wrong is the assertion of state in front of it, so `DIV-052` asks for a
+qualifier on one clause and says in as many words that neither the discipline
+nor the location is to be removed. An entry read as *drop the benchmark rule*
+would take the project's only statement of what fails a change out of the file
+every agent reads first.
+
+**The relation to `DIV-036` is written in both directions, and neither covers
+the other.** That entry is partly discharged and still owes
+`scripts/mariadb/seed-bench.sql` with the two lines that name it; `WL-001` is
+realised by that file, and `BR-PERF-007` records that the budgets over it
+cannot be measured until it exists. So the dataset the sentence promises
+reproducibility against is in part what `DIV-036` owes. But `DIV-036` is a
+**migration** whose correction is an addition, and applied exactly as written
+it leaves the sentence standing; `DIV-052` is an **overstatement** whose
+correction is a qualifier, and it produces no fixture.
+
+**This entry is added to this edition rather than opening a seventeenth**, for
+the reason `DIV-050` and `DIV-051` were, and the reason is stronger the third
+time. What was outstanding was the entry alone: the finding, the kind, the file
+it is owed to, the entries checked against it, and the fact that it needed an
+entry of its own were all recorded here and in `DIV-051` when this edition was
+written, and its placement was settled by applying a rule this edition had
+already stated three times. An edition records what this corpus learned;
+opening one to hold the last of three findings the edition before it had
+already made would turn the edition record into a log of working sessions.
+
+**Whether any passage of this class is left in `CLAUDE.md` was checked, and one
+candidate stands.** The whole file was read against the question rather than
+trusted to the previous reading, because a claim that a class is exhausted is
+worth only the sweep behind it. Every other path, file and artefact that
+document names exists, and its passages on `#![forbid(unsafe_code)]`,
+`#![warn(missing_docs)]`, the release profile and the module conventions direct
+how code is to be written rather than assert what the tree holds. One passage
+is not settled by that reading: *Plataformas Suportadas* calls Linux and macOS
+"suportados e verificados" and says of the other Unixes that they do not run in
+validation, which presupposes that the four targets do, where the validation
+that would do it is the pipeline `DIV-051` records as unable to run at all. It
+is an adjective inside a declaration of policy rather than a block a reader
+executes, and whether it asserts a state or names a class is a judgement for a
+reading of that section, which `DIV-041` targets on other grounds and does not
+reach. **It is named and not recorded**, on the rule all four entries keep: an
+entry does not reach past the reading that raised it. So the seam is not
+declared closed — four passages of the class are registered, and one candidate
+is left for a reading of its own.
+
+**The fifth validation rule is extended rather than joined by a sixth**, and
+the extension is stated under *[Maintenance debt](#maintenance-debt)* beside
+it. As written, the rule obliges a register to be re-read against its target
+whenever the target changes, and an entry found discharged to record the commit
+that discharged it. That is a rule about entries that have gone stale, and it
+is silent about the divergence nobody ever wrote down. Both are the same
+obligation seen from each end — the register is true of the file or it is not
+— so the rule states both rather than splitting one obligation across two
+numbers. The extension is the third rule's lesson carried across: a record is
+assembled from every place an observation was made, not from the entries it
+already holds, and no amount of care in classifying forty-five entries
+establishes that there are forty-five.
+
+**One editorial correction to the edition above.** The fifteenth edition's
+account of itself was written in the present tense — the register *records*
+forty-five corrections, thirty-one entries *still owe* something — which was
+true of the register when that edition closed and is not true now. The figures
+are that edition's finding and are kept; the tense is put in the past, so that
+a reader does not take an edition's account of what it found for a statement
+about the register today. The register's own count is in its Overview, which is
+the one place obliged to be current.
+
+**One editorial correction inside this edition.** The account of `DIV-046`
+above said that *Development* gives four `cargo` commands more than
+*Installation*. That entry's own *Says* clause gives three commands and then a
+five-command pipeline, which is eight, and it is the same eight `DIV-051`
+records of the other file. The count is corrected here rather than left for a
+later edition, because this edition is the one being written and a number it
+states about the eight commands it registers should be right when it closes.
+Nothing in `DIV-046` changes: the entry itself never carried the wrong figure.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
+### Seventeenth edition — the candidate that was policy and not state
+
+The sixteenth edition swept `CLAUDE.md` for passages that state as present
+something the repository does not contain, registered four of them, and named
+one candidate it did not register: *Plataformas Suportadas* calls Linux and
+macOS "suportados e **verificados**" and says of the other Unixes that they do
+not run in validation, where nothing has been run on any target. It left the
+judgement to a reading of that section, and said in as many words that the seam
+was therefore not closed. **This edition is that reading. It registers nothing,
+and that is its result.**
+
+**The passage declares an intention; it does not assert a state.** The reading
+and its four grounds are recorded at *[A candidate read, and not
+recorded](upstream-divergences.md#a-candidate-read-and-not-recorded)*, at the
+foot of the register, and the grounds are these. The section says two
+paragraphs below the adjective that the concrete matrix of targets is an
+architecture decision still open, and a section that declines to name the
+triples cannot earlier be reporting that artefacts were verified on them. The
+presupposition sits inside a three-part rule whose payload is its third
+part — a problem seen only on an unsupported Unix does not fail a change —
+which is deontic throughout. The section states in its first sentence that its
+job is to bound what the code may assume, and every other sentence in it does
+that job. And this corpus states verification in the same mode in the very
+requirement the passage would be measured against: `NFR-PERF-005` says of a
+clause of itself that it "SHALL be verified on every target of
+`NFR-PERF-018`", and the eleventh edition's note
+under `NFR-PERF-018` says every requirement of that file is verified on all
+four targets — written when nothing had been run, and true today, because what
+it states is the reach of an obligation and not a history of runs. A corpus
+cannot record as an overstatement, in a document it does not own, a mode of
+statement it uses itself in force.
+
+**The decision record was the strongest argument the other way, and it does not
+carry.** `ADR-008` records that no `musl` artefact has been run outside a
+container and marks that expectation unverified, so if `CLAUDE.md` asserted a
+verification the two would contradict each other on a matter of fact. That
+record does not read the file that way: it calls the five-command sequence one
+the root coordination document **mandates** and lists the no-second-class rule
+among four obligations **carried by hand** until a pipeline exists. What it
+marks unverified is also narrower than the passage, and both halves of it are
+claims about baselines under `NFR-PERF-012`, which is a different section of
+`CLAUDE.md` and one `DIV-041` has already read and found correct.
+
+**Nothing is registered, and the register says so where a reader will find
+it.** The finding is recorded in three places in
+[upstream-divergences.md](upstream-divergences.md), because a conclusion that
+nothing is owed leaves no trace otherwise and is re-opened from scratch by the
+next reader: a paragraph in the Overview beside the definition of the third
+kind, a line under the Index where the absent row would be, and a forward link
+at the foot of `DIV-052`, which is the entry that named the candidate. The
+alternative — an entry with a **Status** of *due* for a correction nobody can
+make — was rejected, because it would weaken the four entries that stand by
+putting a manufactured fifth beside them.
+
+**One caution is owed to `DIV-041`, which targets that section on other
+grounds.** That entry is a migration about the deferral of the target matrix,
+and its correction replaces the deferral with a pointer to `NFR-PERF-018`.
+Making it removes the first of this reading's four grounds, so whoever holds
+the pen re-reads the adjective in the section the correction leaves behind: a
+sentence calling four named triples *verificados* is a stronger claim than the
+one read here. One observation is named and not acted on for the same entry —
+the sentence naming Linux and macOS on two architectures states coarsely what
+`NFR-PERF-018` now fixes exactly, and whether that is two sources for one truth
+is a question about `DIV-041`'s target and kind rather than about this reading.
+
+**The class is exhausted in `CLAUDE.md`, and the claim is verified rather than
+inherited.** The whole file was swept again instead of the sixteenth edition's
+answer being trusted, on the rule that edition acted on — a claim that a class
+is exhausted is worth only the sweep behind it, and the sixteenth edition's own
+sweep is what found the entries the fifteenth had missed. Every path, file and
+artefact the document names was tested against the working tree at `87dd6e3`,
+still the last commit to touch either root document, and all exist but those
+already recorded under `DIV-050`, `DIV-051` and `DIV-052`. Two
+further passages were read on their own and are not of the kind: the workflow
+step and the language rule that name a `CHANGELOG` the repository has not got,
+which are directions rather than claims and which the technical specification
+already records as prescribed and not yet observable; and the routing sentence
+of *Desempenho e Eficiência*, which names `BENCHMARKS.md` and describes it as
+that file describes itself. **So the seam is shut**: four passages registered
+in `CLAUDE.md`, one in the root `README.md` under `DIV-046`, and the candidate
+read and dismissed with its reason.
+
+**Why this is an edition and not an addition to the sixteenth.** Three entries
+were added to that edition after it was written — `DIV-050`, `DIV-051` and
+`DIV-052` — each on the ground that what was outstanding was the entry alone:
+the finding, the kind and the placement had all been settled there, and an
+edition whose whole content was *write down what the edition before it had
+already found* would turn the edition record into a log of working sessions.
+That ground does not reach this reading, and it argues the other way. The
+sixteenth edition did not make this finding; it recorded that it could not, and
+deferred the judgement to a reading it had not made. What this edition adds is
+that judgement, the criterion that produced it — a passage that directs is not
+a passage that asserts, and the test of the third kind is whether a reader who
+acts on it fails — and a completeness claim the edition before it declined to
+make. An edition records what this corpus learned, and this corpus did not know
+any of the three.
+
+**No requirement is added, amended or withdrawn, no identifier is retired, and
+no entry is added to the register.** The index of
+[open-questions.md](open-questions.md) stays empty, and no root document is
+edited: this corpus does not hold the pen on those two files, and judging that
+a passage needs no correction is not making one.
+
+### Eighteenth edition — two readings with no home, and a phrase doing two jobs
+
+`FR-SRV-038` obliges every difference observed between the series to be
+recorded in its own section, and offered an observation two homes: a row in
+its table, or a line below the table if it was observed to differ between two
+servers of the same series, so that it is not counted as one. The thirteenth edition's sweep found two
+readings with neither — the build's source revision and the SSL library string,
+both recorded under `FR-SRV-040` and classified there as properties of the
+build — and left the correction for a task of its own, because it is a decision
+and not an editorial tidy: the routine and trigger timestamps earn their line
+below that table by what a wall-clock time is, and no two servers of one series
+had ever been compared for the SSL library string. This edition settles it, and
+finds beside it a third reading of the same shape and one phrase doing two
+jobs.
+
+**Nothing here changes what `tpl` does, and no requirement is withdrawn.** One
+requirement is amended, the observation record gains a passage, one stale count
+is corrected, and no row enters the table.
+
+- **The second home is stated over what it actually holds** —
+  [server-contract.md](server-contract.md). `FR-SRV-038` named one
+  disqualifying test — observed to differ between two servers of the same
+  series — and an observation can fail both that test and the test for a row.
+  The requirement now states what a row requires, and three grounds for the
+  line below the table: an observation that differs within a series, a property
+  of the **build**, which the fixture selects and does not pin, and an
+  observation whose entailment by the series is not established, which must
+  state its bound and name the observation that would settle it. The third
+  ground is what the two readings needed, and the record had no way to say it.
+- **Three readings are recorded, not two.** The version string's suffix — the
+  distribution each image was built on — differs between `10.11` and the other
+  three exactly as the SSL library string does, is classified in the same
+  sentence of `FR-SRV-040`, and had no home either. It is also what makes the
+  SSL library string's classification legible, so recording the two without it
+  would have recorded the weaker half of the finding. This is the thirteenth
+  edition's third validation rule again, applied to the sweep that edition ran:
+  a record is assembled from every place an observation was made, and its own
+  list of what it lacks is not that place.
+- **The classification is settled on a rule in force, not handed back.** The
+  fourth validation rule decides it — a reading this project's own fixture can
+  move is not credited to the series until the condition is varied — and the
+  fixture names a series and not a patch release, so the build behind it is
+  exactly such a condition. For the suffix and the source revision the ground
+  is stronger and needs no rule: a distribution is not a MariaDB fact, and
+  `FR-SRV-040` already calls the revision *a distinct hash per build*, where a
+  series holds many builds. For the SSL library string the ground carries only
+  as far as **not established** — its split is coextensive with the split of
+  the distribution, and nothing observed separates the two explanations — which
+  is exactly what a line below the table claims and what a row would exceed.
+  The passage states the bound and names the observation that would settle it.
+- **A row was impossible in any case, for a reason prior to the
+  classification.** A row names what each series returned. The observation
+  recorded that the four servers differ in the source revision and in the SSL
+  library string, and did not record what any of the four returned, so four
+  columns of each row could not be filled from anything this corpus holds. The
+  outcome that would have produced new evidence was therefore not the only one
+  that needed it: a row needs a new observation too, and a different one.
+- **One phrase was doing two jobs, and the record now separates them** —
+  `FR-SRV-038`. The fourteenth edition's sweep calls nine rows of the table
+  properties of the server build, to establish that no setting of the fixture
+  can move them. The three readings below the table are properties of the build
+  in a second sense: the build carries them and the series does not fix them.
+  The first sense makes a row immune to the fixture; the second keeps a reading
+  out of the table. Left unseparated, the record would have called the same
+  phrase a difference between the series in nine places and not a difference in
+  three.
+- **One stale count is corrected, and a second is checked and does not move.**
+  The paragraph guarding the timestamps warned a reader not to count them as a
+  *twelfth* series difference, which was right when the record held eleven rows
+  and has been wrong since the tenth edition; it reads fifteenth now, because
+  the number a reader would wrongly reach is one past the rows the table holds
+  and moves with them. `FR-CAT-029` in
+  [catalogue-coverage.md](catalogue-coverage.md) is the second, and it does not
+  move at all, because no row enters the table; the check is recorded there all
+  the same, since a count that did not move is worth only as much as the reader
+  can see of it having been recomputed.
+
+**Why this is an edition, and not an amendment folded into the seventeenth.**
+The test the sixteenth and seventeenth editions settled between them is whether
+this corpus learned anything, and the seventeenth's answer turned on its having
+changed no requirement: what it added was a judgement. This edition **amends a
+requirement in force**. `FR-SRV-038` admitted two homes and an observation
+could fail the test for both, which is a defect in the rule and not in the rows
+kept under it; the requirement now states what a row requires and what the home
+below the table holds, and three readings enter that home. The thirteenth
+edition, which found the defect, deliberately did not fix it and said why — the
+correction was a decision — so what was outstanding here was neither an entry
+nor a writing-down but the decision itself and the ground for it. An edition is
+what records that.
+
+**Two editorial corrections, both of one shape: a narrative of what an earlier
+edition did, written in the present tense and overtaken.** The thirteenth
+edition's account above described `FR-SRV-038` as offering two homes, and this
+edition gives the requirement a third; it now says *then offered*, and states
+the second home as that edition read it. And five paragraphs of
+*[Maintenance debt](#maintenance-debt)* — the thirteenth edition's and the four
+that follow it — said that the item each of them left alone *is* or *remains*
+outstanding, which was each edition's own true report and is false of the item
+now; each says what it did, in the tense it did it in. The fourteenth edition
+made the same correction on the same ground, to the eighth edition's *the
+fixture provides none*.
+
+**No open question is raised, and none could be.** No requirement of this
+corpus reads any of the three readings, so nothing waits on the observation the
+passage names; an entry would sit in an index whose emptiness means that
+nothing is waiting. The index of [open-questions.md](open-questions.md) stays
+empty, and the last item of *[Maintenance debt](#maintenance-debt)* is
+discharged.
 
 ### Still out of scope
 
@@ -678,7 +1490,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [cache-documents.md](cache-documents.md) | `CDOC` | Cache versions, completeness records, and the `source` field |
 | [performance-requirements.md](performance-requirements.md) | `PERF` | Requirements of form, reference workloads, measurement protocol |
 | [open-questions.md](open-questions.md) | `OQ` | Points this specification cannot yet fix |
-| [upstream-divergences.md](upstream-divergences.md) | `DIV` | Corrections owed to the root `CLAUDE.md` and `README.md` |
+| [upstream-divergences.md](upstream-divergences.md) | `DIV` | Corrections owed to the root `CLAUDE.md` and `README.md`, and what discharged each |
 
 ## Identifier scheme
 
@@ -836,8 +1648,10 @@ Every requirement in this specification derives from one of three sources:
 
 ## Maintenance debt
 
-**None outstanding.** The item this section carried through the sixth edition
-— twenty catalogue field lists that no observation had recorded — was
+**No item is outstanding.** The last, recorded by the thirteenth edition and
+discharged by the eighteenth, is listed below with the others. The item this
+section carried through the sixth
+edition — twenty catalogue field lists that no observation had recorded — was
 discharged by the seventh: the fixture was read against all four series of
 `FR-SRV-015` on 2026-09-10, every field list was recorded verbatim, and each
 is now a requirement in
@@ -865,9 +1679,12 @@ series of `FR-SRV-015`, a server whose certificate names the host, without
 which the default TLS mode of `FR-CONF-013` has no acceptance test. Like
 `seed-bench.sql` under `DIV-036` it is fixture work with an owner and a
 trigger, not an open question, and no requirement of this corpus is waiting on
-it. `DIV-045`, recorded in the same edition, was a correction owed to the root
-coordination document; the ninth edition discharges it, because `FR-ERR-030` as
-amended and the profile that document states no longer contradict each other.
+it. **It is discharged**: `scripts/mariadb/` carries TLS material of its own
+and configures it at every series, and the fourteenth edition records what
+that changes for the observation record of `FR-SRV-038`. `DIV-045`, recorded
+in the same edition, was a correction owed to the root coordination document;
+the ninth edition discharges it, because `FR-ERR-030` as amended and the
+profile that document states no longer contradict each other.
 
 The ninth edition adds no obligation of either kind. Its four changes are
 corrections of wording, each stated beside the requirement it changed.
@@ -886,7 +1703,95 @@ rather than created: the file-open observation of `NFR-PERF-005` is owed on the
 two Linux targets and is owed on neither macOS target, so a verification suite
 that skips it there is conforming and not incomplete.
 
-Five items previously recorded here have been discharged.
+The twelfth edition adds no obligation of either kind. It records a difference
+`FR-SRV-038` already obliged this corpus to hold, checks the two requirements
+that difference bears on and leaves both as written, and adds no row to the
+register of `FR-SRV-036`. The one obligation it did record — a defect it found
+while recomputing a tally and did not correct at the time — was discharged
+inside the same edition and is listed below.
+
+The thirteenth edition adds no obligation of either kind either. It records a
+difference `FR-SRV-038` already obliged this corpus to hold, recomputes the
+counts that follow it, checks the twelfth edition's classification of the
+thirteen against the rows, and adds no row to the register of `FR-SRV-036`. It
+does record one item of debt, and that item stood outstanding until the
+eighteenth edition discharged it.
+
+The fourteenth edition adds no obligation of either kind, and discharges one
+recorded outside this corpus by the eighth. It corrects one row of the record
+of `FR-SRV-038`, which was true of servers nobody had configured and false of
+the servers the fixture now runs, checks the other thirteen rows against the
+same defect and finds none, and amends one note of `FR-CONF-038` for the same
+reason. The item below was untouched by it and stayed outstanding.
+
+The fifteenth edition adds no obligation of either kind, and records none as
+discharged. It classifies all forty-five entries of
+[upstream-divergences.md](upstream-divergences.md) against the two root
+documents as they stand, fixes what becomes of a discharged entry and of a
+partly discharged one, and adds the fifth validation rule below. It changes no
+requirement. It does confirm one obligation already recorded outside this
+corpus and narrow another: `seed-bench.sql` is still absent from
+`scripts/mariadb/` under `DIV-036`, and the project-tree half of that entry is
+discharged, because the tree's fixture line now describes what the directory
+holds instead of listing its files. The item below was untouched by it and
+stayed outstanding.
+
+The sixteenth edition adds no obligation of either kind, and records none as
+discharged. It adds seven entries to
+[upstream-divergences.md](upstream-divergences.md), all due — four owed to the
+root `README.md` and three to `CLAUDE.md` — gives that register a third kind of
+entry for the four of them that contradict the repository rather than a
+requirement, and extends the fifth validation rule below to cover the
+divergence a register does not yet hold. It changes no requirement. All three
+findings it first recorded rather than acted on have been acted on. The
+project-structure tree of `CLAUDE.md` names a crate and five directories the
+repository does not have, and `DIV-050` is the entry that divergence needed;
+the eight `cargo` commands of that file's *Desenvolvimento* section and of the
+validation pipeline under it fail in this repository for the reason `DIV-046`
+records of *Development* in the other file, and `DIV-051` is theirs; the
+*Disciplina de medição* subsection of the same file says the benchmarks live in
+`benches/`, a directory the repository has not got and where no benchmark
+exists to live, and `DIV-052` is its. The three are recorded apart because the
+corrections differ and the passages are edited apart, which is set out above.
+One observation is named and not recorded: the sweep that asked whether any
+passage of that class is left in `CLAUDE.md` found one candidate of a different
+shape — *Plataformas Suportadas* calls Linux and macOS "suportados e
+verificados" where nothing has been verified on any target — and whether that
+asserts a state or names a class is a judgement for a reading of that section.
+It is an observation about a file this corpus does not own, so it is debt only
+in the sense `DIV-036` is, and it blocks nothing here. The item below was
+untouched by it and stayed outstanding.
+
+The seventeenth edition adds no obligation of either kind, adds no entry to
+[upstream-divergences.md](upstream-divergences.md), and changes no
+requirement. It **discharges the observation the sixteenth edition named and
+could not judge**: the reading of *Plataformas Suportadas* finds that
+"suportados e verificados" declares a policy rather than asserting a state, so
+nothing is owed for it and no entry is opened; the reading, its four grounds
+and the sweep that closes the **Overstatement** class in `CLAUDE.md` are at
+*[A candidate read, and not
+recorded](upstream-divergences.md#a-candidate-read-and-not-recorded)*. One
+caution is left with `DIV-041`, whose correction to that same section removes
+the first of those grounds and therefore obliges whoever makes it to re-read
+the adjective it leaves behind; and one observation is named and not acted on,
+that the section's sentence naming Linux and macOS states coarsely what
+`NFR-PERF-018` fixes exactly. Both are about a file this corpus does not own,
+so neither is debt here in any other sense than `DIV-036` is. The item below
+was untouched by it and stayed outstanding.
+
+The eighteenth edition adds no obligation of either kind, and discharges the
+one item this section still carried. It amends `FR-SRV-038` to state what the
+home below its table actually holds, records three readings of the build there,
+corrects one stale count and checks a second that does not move, and adds no
+row and no register entry. It records no obligation outside this corpus
+either: the observation its passage names would
+settle a classification that nothing in this corpus reads, so no requirement
+waits on it and no test is owed for it.
+
+The section therefore carries nothing outstanding, and the seven items it has
+held are all accounted for below.
+
+Seven items previously recorded here have been discharged.
 
 - **The catalogue field lists.** Twenty entries, blocked first by the absence
   of a container and then by the absence of a recorded observation. Both are
@@ -909,6 +1814,36 @@ Five items previously recorded here have been discharged.
 - **The specified surface without specified documents.** `--format json` was
   contract in name only. Settled by the third edition: `FR-OUT-024` fixes one
   envelope for all seventeen documents.
+- **The note on difference 8 of `FR-SRV-038`.** Recorded by the twelfth
+  edition, which found while recomputing a tally that the note called
+  difference 8 the only split in the record not falling after `10.11` when
+  difference 2 has the same shape, and left the claim for a correction of its
+  own. Discharged in the same edition —
+  [server-contract.md](server-contract.md), *Differences observed between the
+  series*. The note counts the differences three ways — those isolating
+  `10.11`, those isolating `12.3`, and those splitting the window in the
+  middle — and names the differences in each count, so that the arithmetic can
+  be checked against the rows instead of recomputed from scratch; the
+  thirteenth edition recomputed all three over fourteen rows when it added
+  difference 14. Nothing about `tpl` turned on it: no requirement rested on the
+  claim.
+- **The two readings with no home under `FR-SRV-038`.** Recorded by the
+  thirteenth edition, whose sweep found that `FR-SRV-040` reports a source
+  revision differing between all four servers and an SSL library string
+  differing between `10.11` and the other three, classifies both as properties
+  of the build, and that the record of `FR-SRV-038` held neither a row for them
+  nor a line below its table. It was left for a task of its own because the
+  correction was a decision and not an editorial tidy: the classification
+  beside theirs rested on an observation and this one did not. Discharged by
+  the eighteenth edition —
+  [server-contract.md](server-contract.md), *Differences observed between the
+  series*. Three readings are recorded below the table rather than two, the
+  requirement states the ground that admits them, and the one classification
+  that is not settled says so, states its bound, and names the observation that
+  would settle it. It was settled on the fourth validation rule below and not
+  referred back: the fixture names a series and not a patch release, so the
+  build is a condition of observation this project's own fixture moves. Nothing
+  about `tpl` turned on it either: no requirement reads any of the three.
 
 A reference check must verify the **target** of a cross-reference, not merely
 that the identifier exists. The first edition was validated as having no dead
@@ -927,3 +1862,66 @@ observation existed must be re-read against the first one that reaches it.**
 internally coherent, cross-referenced correctly, and describing a catalogue
 that does not exist. Nothing in a reference check could have found them; only
 reading them against the evidence could.
+
+The thirteenth edition adds a third rule, learned from a record that was
+recounted twice and was never wrong about its own rows. **A record of
+observations must be assembled from every place an observation was made, not
+from the entries it already holds.** Difference 14 of `FR-SRV-038` was observed
+before any of the four comparison passes, was written down in the requirement
+whose decision it drove, and was invisible to both recounts because each was
+computed over the rows of the table. Counting a table correctly establishes
+nothing about whether the table is complete. The check that finds a defect of
+this shape is a sweep of the corpus for observations recorded outside the
+record that owns them — every *Observed* note, every passage naming a series,
+and every statement that a server accepted or refused something — and it is
+what this edition ran.
+
+The fourteenth edition adds a fourth rule, learned from a row that was accurate
+on the day it was written. **An observation of what a server reports must
+record the conditions it was taken under wherever this project's own fixture
+can change them, and the record must be re-read whenever the fixture does
+change.** Difference 3 of `FR-SRV-038` was true of four servers nobody had
+configured and false of the four the fixture now runs, and nothing in the row
+said which it described. No reference check and no recount could find a defect
+of this shape: the row was internally coherent, cited correctly, and counted
+right. What finds it is reading the record against what has since been done to
+the thing observed, which is how this one was found — from the technical
+specification, read against this corpus rather than from within it.
+
+The fifteenth edition adds a fifth rule, learned from a register that asked for
+work done several sprints earlier. **A register of corrections owed to a file
+this specification does not own must be re-read against that file whenever the
+file changes — both for the entries the file has discharged and for the
+divergences the register does not yet hold — and an entry found discharged must
+record the commit that discharged it. The obligation is over every statement
+this corpus makes about such a file and not over a register alone**: the
+fifteenth edition found two
+outside the register, in the provenance notes of `NFR-PERF-014` and
+`NFR-PERF-018`, each describing a passage of `CLAUDE.md` that `0ea5624` had
+removed. `DIV-031` asked for the removal of a clause `0ea5624` had
+already removed, and the eleventh edition amended that entry — recounting a
+list inside it — without checking whether the sentence the entry corrects was
+still in the file. The four rules above are all checks this corpus can run on
+itself: a reference resolves or it does not, a requirement matches an
+observation or it does not, a record is complete against the corpus or it is
+not, a row names its conditions or it does not. This one cannot be run on this
+corpus at all, because what decays is outside it and decays when somebody else
+edits it. The trigger is therefore the edit and not the edition, and the
+evidence is the commit: an entry that says *when* it stopped being owed can be
+audited, while an entry that merely stops being listed leaves the next reader
+to re-derive it. A register whose entries are true only of a state nobody has
+checked since is worse than no register — it sends a reader to correct what is
+already correct, and it spends the standing of the entries that are still
+owed.
+
+*Extended in the sixteenth edition.* The rule was written over one half of the
+sweep. It obliged the register to be re-read for entries the target file had
+discharged, and said nothing about the divergence that had never been recorded
+at all, so a register could satisfy it in full and still be incomplete — which
+is what the fifteenth edition left behind. Four divergences of the root
+`README.md` had no entry, and the reading that found them was made for another
+purpose and could as easily not have been made. The clause now names both
+directions. This is the third rule's lesson in a second setting: counting a
+record's own rows correctly, or classifying a register's own entries
+correctly, establishes nothing about whether either is complete against the
+thing it describes.

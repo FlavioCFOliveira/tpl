@@ -364,7 +364,7 @@ and are not restated; what belongs here is what the tests must not assume.
 
 | Caution | Source |
 |---|---|
-| A difference may fall **anywhere** in the window. Eleven of the twelve observed differences separate `10.11` from the rest or `12.3` from the rest; difference 8 puts `10.11` and `11.4` on one side. A test that models the window as one old server and three modern ones is right eleven times out of twelve | `FR-SRV-038`, difference 8 |
+| A difference may fall **anywhere** in the window. Of the fourteen differences `FR-SRV-038` records, nine separate `10.11` from the rest and two separate `12.3` from the rest; three — differences 2, 8 and 14 — put `10.11` and `11.4` on one side and `11.8` and `12.3` on the other. A test that models the window as one old server and three modern ones is right for nine of the fourteen and wrong for five: differences 2, 6, 8, 9 and 14 | `FR-SRV-038`, differences 2, 8, 14 |
 | A statement naming a fixed `INFORMATION_SCHEMA` column list must be common to all four series or selected per series. Naming an absent column is a hard `ERROR 1054`, not a `NULL` and not a warning | `FR-SRV-037`; differences 5, 6, 7 |
 | A field that differs between series without a row in the register is a **failure** of `FR-SRV-026`, not an instance of its exception | `FR-SRV-027`, `FR-SRV-036`, `FR-SRV-039` |
 | The catalogue comparison already recorded under `FR-SRV-038` is evidence, not the test: it compares catalogue material, and `FR-SRV-026` compares the document `tpl` emits | `FR-SRV-038`, `FR-SRV-029` |
@@ -390,17 +390,20 @@ series, and names none outside the window. Both readings are recorded:
 Nothing is corrected in either file. What the refusal test runs against is **not
 established**, and it is named among what the harness does not supply below.
 
-**Recorded gap — one observed difference has no row in `FR-SRV-038`.** The
+**The greeting gap is discharged, and what it obliges a test is not.** The
 harness observed that the version a server sends in its initial handshake
-greeting carries a `5.5.5-` prefix on `10.11` and on no other series, while
-`SELECT VERSION()` answers without it everywhere
-(`scripts/mariadb/README.md`, difference 9). `FR-SRV-038` obliges every
-difference observed between the series to be recorded in its own section, and
-the twelve recorded there do not include it. No test named here rests on it —
-`FR-SRV-002` determines the version by the probe, not by the greeting — and a
-test that reads a greeting must not assume the two agree. It is reported to the
-functional owner; this folder does not record a difference on the corpus's
-behalf.
+greeting carries a `5.5.5-` prefix on `10.11` and on no other series, while the
+probe of `FR-SRV-002` answers without it everywhere
+(`scripts/mariadb/README.md`, difference 9), and this folder reported the
+observation to the functional owner rather than record a difference on the
+corpus's behalf. The twelfth edition of `/specification` recorded it, as
+**difference 13 of `FR-SRV-038`**, and the two requirements it bears on —
+`FR-SRV-040` and `FR-SRV-041` — each carry a note saying it was checked against
+the difference and stands. What survives the discharge is an obligation on a
+test: no test named here rests on the greeting — `FR-SRV-002` determines the
+version by the probe, not by the announcement — and a test, a diagnostic or a
+fixture gate that reads a greeting must not assume the two readings agree,
+because on one of the four supported series they do not.
 
 ## The reduced-privilege reader and the three shapes of absence
 
@@ -554,8 +557,8 @@ the instrument sees what a client sends, not what any particular client sends.
 | Every budget, its standing, the measurement protocol and the three workloads | [quality-attributes.md](quality-attributes.md) |
 | Every measured figure and every recorded baseline | `BENCHMARKS.md` |
 | The validation pipeline, the release gates and the fixture's operational standing | [operations.md](operations.md) |
-| The fixture's contents, its credentials, its deliberate omissions, the harness scripts and their recorded output | `scripts/mariadb/README.md` |
-| The record of every difference observed between the series — twelve | `FR-SRV-038` |
+| The fixture's contents, its credentials, its deliberate omissions, the harness scripts and their recorded output, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
+| The record of every difference observed between the series — fourteen | `FR-SRV-038` |
 | The privilege detections as built, the diagnostic renderer, the emitter and the help surface | [interfaces.md](interfaces.md) |
 | The engine construction the seams and the vectors run against | [architecture.md](architecture.md) |
 | What a mandated test asserts **about**, requirement by requirement | `/specification`, cited here by identifier and never reproduced |

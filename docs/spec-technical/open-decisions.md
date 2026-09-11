@@ -52,6 +52,65 @@ entry's rationale belongs there where rule R4 of
 reduced today**, each naming its record in its own status line; `OD-01` cites
 the register itself rather than a record.
 
+### Corrections owed to `CLAUDE.md`
+
+`CLAUDE.md` is coordination and is never edited by this folder; four entries
+prepared a correction to it and **all four were applied on 2026-09-11**, each
+entry now recording the commit that discharged it.
+
+| Entry | Correction | Applied by |
+|---|---|---|
+| `OD-09` | The stack table's configuration row splits into `toml` and `toml_edit` | Task #20, commit `ee7363d` |
+| `OD-17` | The logging row loses `tracing` and `tracing-subscriber` | Task #20, commit `ee7363d` |
+| `OD-24` | The stack table gains a row for `rustix` | Task #20, commit `ee7363d` |
+| `OD-26` | *Fontes de Verdade* gains this folder as a fourth source | Task #46, commit `c6356df` |
+
+**The whole register was re-read against `CLAUDE.md`** at commit `c6356df`, the
+last that touched the file, on 2026-09-11. **No other entry claims a correction
+is owed to `CLAUDE.md`, and none names the root `README.md` at all.** Two
+statements about the file remain accurate and are not corrections owed by this
+register: `OD-06` leaves the fate of `anyhow` in that table conditional on a
+dependency question `technology-stack` owns, and `OD-27` cites `DIV-036`
+— an entry of `/specification`'s register, not of this one — for
+`scripts/mariadb/seed-bench.sql`, which does not yet exist; what that entry
+still owes the file is the entry's to state.
+
+**A second sweep, for quotations rather than claims**, ran on 2026-09-11 over
+the whole folder: every quoted span, every cited section name and every
+Portuguese fragment attributed to a root document was tested against
+`CLAUDE.md` at commit `c6356df` and against the root `README.md` at commit
+`87dd6e3`, the last to touch each. **`OD-02` was the only stale quotation**,
+and is corrected in its own entry. Two passages quote the graph's former row —
+[`OD-26`](#od-26--the-boundary-against-the-knowledge-graph) and
+[README.md](README.md#the-four-sources-of-truth) — each explicitly as the text
+`c6356df` replaced, which was confirmed against that commit. No passage of this
+folder quotes the root `README.md`. This sweep is a different check from the
+one above: a claim that a correction is owed says what this folder will do, and
+a quotation says what another file contains, so a register can be clean of the
+first while carrying the second.
+
+**A third sweep, for summaries of the entries of `/specification`'s divergence
+register**, ran on 2026-09-11 over the whole folder. Every citation of a
+`DIV-NNN` identifier outside this record — forty, in eight files, naming twelve
+distinct entries — was read against that entry's current state in
+`specification/upstream-divergences.md`, which classifies its fifty-two entries
+due, discharged or partly discharged. **Eleven passages were stale**: five rows
+of section 26 of [traceability.md](traceability.md), two of
+[quality-attributes.md](quality-attributes.md), two of this file, and one each
+in [overview.md](overview.md) and [data-model.md](data-model.md). Each cited a
+discharged or partly discharged entry and asserted in the present indicative
+what `CLAUDE.md` contains or still owes; `0ea5624` and `87dd6e3` are the commits
+that falsified them. All eleven now state the technical concern or the entry
+instead, for the reason [README.md](README.md#conventions) gives. The other
+twenty-nine citations name `DIV-024`, `DIV-032`, `DIV-033`, `DIV-034`,
+`DIV-036`, `DIV-039`, `DIV-041` and `DIV-045`, and each was verified against
+its entry. This sweep is a third check again: a summary claims no correction
+and quotes nothing, so it passes both checks above while decaying on the same
+edit.
+
+The re-reading is now a convention of this folder rather than an occasion, for
+the reason [README.md](README.md#conventions) gives.
+
 ## Status legend
 
 | Status | Meaning |
@@ -146,8 +205,17 @@ rule R3 of that document.
 
 **Status: settled. Recorded in [`ADR-007`](../adr/adr-007-msrv.md).**
 
-**Decision.** The MSRV is the floor `ADR-007` states, and `CLAUDE.md`'s
-deferral — "MSRV a fixar no `Cargo.toml`" — is settled by it.
+**Decision.** The MSRV is the floor `ADR-007` states.
+
+**The deferral this entry answered is discharged, and the entry no longer
+quotes it.** `CLAUDE.md` left the figure to be fixed in the `Cargo.toml` until
+commit `50153d6` of 2026-09-11 reduced that row to a citation of `ADR-007`,
+while this entry went on reproducing the deferral verbatim. A quotation of a
+file this folder neither owns nor may edit decays when its owner edits it, and
+no check the folder runs on itself detects that; the relation between the two
+documents is recorded here instead, and the text of neither is reproduced. That
+is the reason [README.md](README.md#conventions) gives for re-reading against
+the target file, and it governs a quotation as much as a correction owed.
 
 **The number this entry carried is superseded.** It stated a floor under an
 explicit "not verified" caveat over the dependency floors. Those floors have
@@ -489,7 +557,7 @@ requires it.
 
 ## OD-09 — TOML: the read path and the write path
 
-**Status: settled.**
+**Status: settled. Applied to `CLAUDE.md` on 2026-09-11.**
 
 **Decision.** **Read path `toml` with `serde`; write path `toml_edit` 0.25**,
 which preserves comments, spacing and the relative order of items.
@@ -512,11 +580,15 @@ comments, which the write side must not destroy.
 **Rejected.**
 
 - **`toml_edit` for both paths.** It loses the serde mapping, so the fifteen typed keys of `FR-CONF-002` would be validated against a document tree by hand — more code on the path that reads untrusted input, which `BR-CONF-004` is written to keep small.
-- **`toml` alone**, which is what `CLAUDE.md`'s stack table names. The first `tpl cfg set` would delete the commented example that `FR-PROJ-018` requires the file to carry, so a stated requirement would stop holding on the second invocation, silently.
+- **`toml` alone**, which is what `CLAUDE.md`'s stack table named until this was applied. The first `tpl cfg set` would delete the commented example that `FR-PROJ-018` requires the file to carry, so a stated requirement would stop holding on the second invocation, silently.
 
-**Consequence.** The `Stack` table of `CLAUDE.md` gains `toml_edit`. That table
-is an architecture decision by that file's own terms, and the change is
-prepared for the user rather than made here.
+**What was applied.** Task #20, at commit `ee7363d` of 2026-09-11: the `Stack`
+table of `CLAUDE.md` splits its configuration row into `toml` with `serde` on
+the read path and `toml_edit` on the write path, and cites this entry by file
+and identifier. That table is an architecture decision by that file's own
+terms, so the change was prepared for the user rather than made here and
+applied under the authorisation of that day, which the commit records as not
+generalising.
 
 ---
 
@@ -833,7 +905,7 @@ that record.
 
 ## OD-17 — Observability
 
-**Status: settled.**
+**Status: settled. Applied to `CLAUDE.md` on 2026-09-11.**
 
 **Decision.** **No subscriber is installed, and `tracing-subscriber` is not a
 dependency.** `tpl`'s diagnostics are written by a small module in
@@ -882,14 +954,17 @@ terminal detection to perform — `NFR-DET-003` forbids that too.
 - **A minimal `Subscriber` written in `tpl`, keeping `tracing` as the front end.** It keeps the dependency-budget question open for a facade this program does not otherwise use, and it re-opens route 1: a subscriber that filters foreign events by target is a rule that can be got wrong, where installing none cannot.
 - **Keeping `tracing` and `tracing-subscriber` because they are the ecosystem's default.** The project's dependency budget refuses a crate used for a trivial function, and what is used here is four levels and a handful of typed lines on one stream, with no asynchronous context to correlate and no structured consumer to serve.
 
-**Consequence, prepared for the user and not made here.** The coordination
-document's stack table names `tracing` and `tracing-subscriber` for logging.
-This decision removes the second outright and leaves the first with no role of
-its own; if the driver brings `tracing` transitively it stays in the graph as a
-transitive dependency and not as a facility `tpl` uses. That table is an
-architecture decision by that file's own terms, and the change is prepared for
-the user rather than applied, exactly as `OD-09` prepared the addition of
-`toml_edit`.
+**What was applied.** Task #20, at commit `ee7363d` of 2026-09-11. The
+coordination document's stack table named `tracing` and `tracing-subscriber`
+as the logging choice; its logging row now states the positive choice —
+`tpl`'s own diagnostics, no subscriber installed — names the two crates only to
+record that neither is used, and cites this entry. The decision removed the
+second outright and left the first with no role of its own; if the driver
+brings `tracing` transitively it stays in the graph as a transitive dependency
+and not as a facility `tpl` uses. That table is an architecture decision by
+that file's own terms, so the change was prepared for the user rather than made
+here and applied under the authorisation of that day, in the same commit as
+`OD-09`'s addition of `toml_edit`.
 
 **Not verified.** Whether the database driver depends on `tracing` or on `log`,
 and what it records at which level. It does not bear on the decision: with no
@@ -1197,8 +1272,8 @@ recorded in `ADR-008` and are **not restated here**, per rule R3 of
 
 ## OD-24 — The discovery boundary, and the process uid
 
-**Status: settled.** The conflict was resolved by the eighth edition; the
-residual it left is settled below.
+**Status: settled. Applied to `CLAUDE.md` on 2026-09-11.** The conflict was
+resolved by the eighth edition; the residual it left is settled below.
 
 **What the conflict was.** `FR-PROJ-005` made the user's home directory a
 boundary of project discovery. It can only be located from `HOME`, which
@@ -1260,10 +1335,16 @@ smallest one that does.
 - **Inferring ownership by effect**, by attempting a write. `.tpl/.cfg` is read-only to every command that checks it, and `BR-TMPL-002` and the project's own scope statement keep `tpl` from writing where it was not asked to.
 
 **One consequence for `technology-stack`.** `rustix` is a new normal
-dependency and the stack table does not name it. What it drags in on each of
-the four targets of `NFR-PERF-018` is recorded there, under the dependency
-budget; the correction to the coordination document's stack table, if any, is
-prepared for the user rather than made here, as `OD-09` did for `toml_edit`.
+dependency. What it drags in on each of the four targets of `NFR-PERF-018` is
+recorded there, under the dependency budget.
+
+**What was applied.** Task #20, at commit `ee7363d` of 2026-09-11: the `Stack`
+table of `CLAUDE.md`, which named no such dependency, gains a row for the
+process uid — `rustix`, with `default-features = false` and the `process`
+feature alone — and cites this entry. That table is an architecture decision by
+that file's own terms, so the change was prepared for the user rather than made
+here and applied under the authorisation of that day, in the same commit as
+`OD-09`'s and `OD-17`'s corrections.
 
 **Unblocks.** `technology-stack`.
 
@@ -1331,24 +1412,31 @@ violation, not a caller-facing condition.
 
 ## OD-26 — The boundary against the knowledge graph
 
-**Status: settled.**
+**Status: settled. Applied to `CLAUDE.md` on 2026-09-11.**
 
 **Decision.** `docs/spec-technical/` becomes the **fourth row** of the
 coordination file's sources-of-truth table, owned by `technical-writer`,
 answering **how the system is built**. The knowledge graph stays **descriptive**
-for code-level facts. The change to `CLAUDE.md` is **prepared for the user's
-approval and is never made unilaterally**.
+for code-level facts. The change to `CLAUDE.md` is **never made unilaterally**;
+it waited for the user's approval, and it has it.
 
 **Rationale.** `specification/README.md` hands the crate layout, the module
 layout, the types and the library API to architecture without naming where
 architecture lives, and two requirements — `FR-ENV-003` and `FR-CONF-038` —
 already cite a home outside the functional corpus. A source of truth that is
 not in the coordination table is a source of truth agents will not consult.
-`CLAUDE.md` currently assigns *"Onde e **como**"* to the graph, which overlaps
-this folder's scope, so the third row narrows as the fourth is added.
+`CLAUDE.md` assigned *"Onde e **como**"* to the graph, which overlapped this
+folder's scope, so the third row narrowed as the fourth was added.
 
-**The two rows, in the language of the file they are destined for.** For the
-user to apply, or not:
+**What was applied.** Task #46, under the user's authorisation of that day:
+`CLAUDE.md` now opens *Fontes de Verdade* with four sources and carries the two
+rows below verbatim. The same task added the governance this entry does **not**
+cover — `docs/adr/`, which `OD-26` never mentions: who writes the records and
+when one is required, citing [`docs/adr/README.md`](../adr/README.md) for their
+rules rather than restating them.
+
+**The two rows, in the language of the file they are destined for**, as
+applied:
 
 ```
 | Knowledge Graph | **Onde** — que código existe, como se articula, e que requisito cada componente satisfaz | skill `knowledge-authority` |
@@ -1401,8 +1489,8 @@ merging it into `seed.sql`, which `BR-PERF-002` forbids and which would make
 the correctness suite pay for 200 tables on every run.
 
 **Consequence to record.** `WL-002`'s byte scalar `N` cannot be computed until
-the fixture exists, and `DIV-036` still owes `CLAUDE.md` one line of the
-project-structure tree and one of the testing section naming the file.
+the fixture exists; `DIV-036` is the register entry that tracks what naming
+the file still owes the root coordination document.
 
 ---
 

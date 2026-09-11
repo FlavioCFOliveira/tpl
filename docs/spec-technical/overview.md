@@ -42,8 +42,8 @@ of `FR-CLI-010` into three arms and the auxiliary set:
 arms and four auxiliary command groups"*. `specification/glossary.md` names
 five auxiliary command groups — `tpl cache`, `tpl cfg`, `tpl init`, `tpl help`
 and `tpl version` — which is what `FR-CLI-010` leaves once the three arms are
-removed. `DIV-040` reaches four by counting inside the sentence of `CLAUDE.md`
-it corrects, not inside `FR-CLI-010`. Both readings are recorded; the table
+removed. `DIV-040` reaches four by counting inside the sentence it was
+raised against, not inside `FR-CLI-010`. Both readings are recorded; the table
 above follows `FR-CLI-010`, which is the requirement. The count is load-bearing
 for nothing in this folder, and the wording is the functional owner's to settle.
 

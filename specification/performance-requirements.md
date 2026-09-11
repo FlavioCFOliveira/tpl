@@ -310,11 +310,19 @@ would satisfy a budget.
 
   *Provenance.* The two macOS targets and the two architectures come from the
   root `CLAUDE.md` and are contradicted by no decision. The two Linux targets
-  are the settled answer to the open question that file records beside them:
+  are the settled answer to the open question that file recorded beside them:
   Linux is built against `musl` and linked statically, so one artefact per
   architecture runs wherever that architecture does, with no dependency on the
-  host's C library version. The correction owed to `CLAUDE.md`, whose matrix
-  still names the `gnu` triples, is recorded as `DIV-041`.
+  host's C library version. The correction owed to `CLAUDE.md` is recorded as
+  `DIV-041`.
+
+  *Amended in the fifteenth edition.* This note said that `CLAUDE.md`'s matrix
+  **still names** the `gnu` triples. It did name them, from `a8c5390` until
+  `0ea5624` removed the matrix; what that file now carries is the deferral
+  `DIV-041` quotes, which is why that entry is still due while this clause was
+  not. The re-check of [upstream-divergences.md](upstream-divergences.md) found
+  it, and the rule that obliges the re-check is the fifth in
+  [README.md](README.md#maintenance-debt).
 
   *Accepted cost, and it is the one that reaches behaviour.* A statically
   linked `musl` binary resolves names through `musl`'s own `getaddrinfo`,
@@ -386,7 +394,15 @@ would satisfy a budget.
   `< 500 ms` line is stated there as dominated by server time, which is why
   this table records the server column beside it. The `< 32 MiB` figure is
   stated there for a database of 200 tables, which is `WL-001`. The correction
-  owed to that file is `DIV-035`.
+  owed to that file was `DIV-035`, and it is discharged.
+
+  *Amended in the fifteenth edition.* The paragraph above is a record of where
+  five provisional figures came from, and it is true of `CLAUDE.md` as it stood
+  when they were adopted; `0ea5624` has since removed the budget table it
+  quotes, which is what discharged `DIV-035`. Nothing here changes: the figures
+  keep the provenance they were adopted with, `NFR-PERF-019` still marks them
+  provisional, and `NFR-PERF-020` still removes each on the first real
+  measurement. Only the sentence claiming a correction is owed is corrected.
 
   *Why the other four are blank.* `CLAUDE.md` supplies no figure for them, and
   `BR-PERF-006` forbids inventing one. Three of the four did not exist as

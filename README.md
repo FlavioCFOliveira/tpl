@@ -327,7 +327,7 @@ Flags for `add` and `update`:
 | `--password` | `-p` | Password, written to `.cfg`. See [What to version, and what not to](#what-to-version-and-what-not-to). |
 | `--password-command` | | Shell command whose trimmed stdout is used as the password. |
 | `--database` | | Database name on the server. |
-| `--tls <mode>` | | `disabled`, `preferred`, or `required`. Defaults to `preferred`. |
+| `--tls <mode>` | | One of `disabled`, `preferred`, `required`, `verify-ca`, or `verify-identity`. Defaults to `verify-identity`, which validates the certificate chain and the hostname. See [`FR-CONF-013`](specification/configuration-model.md). |
 
 The entry name is a label local to the project; it need not match the database name on the server.
 
@@ -535,4 +535,6 @@ cargo test --all-features
 cargo audit
 ```
 
-Tests that need a live database use the containers defined in `scripts/mariadb/`: one server per supported MariaDB series, seeded from `setup.sql` and `seed.sql` and presenting the fixture's own TLS certificate, and one further server offering no TLS at all. What the directory holds, how to bring it up and how to verify it are described in [`scripts/mariadb/README.md`](scripts/mariadb/README.md). External database instances are not used, and neither are mocks standing in for a real engine.
+Tests that need a live database use the containers defined in `scripts/mariadb/`: one server per supported MariaDB series, seeded from `setup.sql` and `seed.sql` and presenting the fixture's own TLS certificate, and one further server offering no TLS at all.
+
+The fixture is driven by its own scripts, and they are the supported way to operate it: they bring the servers up and verify each one, take them down and prove nothing was left behind, answer whether the fixture is up before a server-dependent test runs, and instrument the observations that have to be made from outside the process. Use them rather than Docker commands of your own. What the directory holds, which scripts drive it, how to invoke them and how to verify the result are described in [`scripts/mariadb/README.md`](scripts/mariadb/README.md). External database instances are not used, and neither are mocks standing in for a real engine.

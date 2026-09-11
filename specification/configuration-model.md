@@ -374,8 +374,9 @@ tls      = "verify-identity"
 
   *Amended in the eighth edition: the fixture obligation is a requirement
   rather than a consequence.* The *Observed* note below records that `tpl`
-  with default configuration cannot reach the fixture over TCP on any series,
-  because `10.11` offers no TLS and the certificate the other three generate
+  with default configuration could not reach the fixture over TCP on any
+  series **as that fixture then stood**, because `10.11` offers no TLS until
+  something configures it and the certificate the other three generate
   automatically carries no `subjectAltName`. Left as a consequence, that made
   the success cell of `verify-identity` — the default of `FR-CONF-013`, and
   therefore the mode every caller meets first — the one cell of the table with
@@ -421,19 +422,30 @@ tls      = "verify-identity"
   the two are distinct rather than collapsed; what it does not do is
   demonstrate the success cell, which needs a server certificate carrying a
   name. **Consequence for the project's own tests, now an obligation in the
-  text above:** `tpl` with default configuration cannot connect to the fixture
-  of `scripts/mariadb/` over TCP on any series, and an acceptance test for the
-  default mode needs TLS configured in that fixture with a certificate that
-  names the host.
+  text above and discharged in the fixture:** `tpl` with default configuration
+  could not connect to the fixture of `scripts/mariadb/` over TCP on any
+  series **as that fixture then stood**, and an acceptance test for the
+  default mode needs TLS configured in it with a certificate that names the
+  host. The fixture carries material of its own and configures it at all four
+  series, which is what the obligation above requires.
+
+  *Amended in the fourteenth edition: the consequence says when it was true.*
+  It was written in the present tense, and the fixture has since been given
+  the certificate the obligation demands, so the sentence asserted of today's
+  fixture the opposite of what that fixture does. The observation it draws on
+  is unchanged and keeps its date; only the tense and the discharge are added.
+  The same defect in the observation record of `FR-SRV-038` — difference 3,
+  which cites the note below — is corrected in the same edition.
 
   *A supported series may offer no TLS at all*, so the right-hand column is
   not hypothetical: `10.11` reports `have_ssl=DISABLED` unless an
   administrator configures a certificate, and it is supported until
-  2028-02-16. The `69` in three of its cells is correct behaviour and not a
-  defect — `FR-CONF-013` defaults to `verify-identity`, and a server that
-  cannot encrypt cannot satisfy it. `69` is the code because the failure is in
-  the TLS handshake phase, per `FR-ERR-001`, and `FR-ERR-034` requires the
-  `cause` to name that phase and what it returned.
+  2028-02-16. That condition is the one difference 3 of `FR-SRV-038` records
+  and cites rather than restates. The `69` in three of its cells is correct
+  behaviour and not a defect — `FR-CONF-013` defaults to `verify-identity`,
+  and a server that cannot encrypt cannot satisfy it. `69` is the code because
+  the failure is in the TLS handshake phase, per `FR-ERR-001`, and
+  `FR-ERR-034` requires the `cause` to name that phase and what it returned.
 
   *The mapping onto the chosen driver* SHALL be recorded in the project's
   architecture decision records and cited from there, and SHALL NOT be

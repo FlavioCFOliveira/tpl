@@ -384,11 +384,6 @@ stderr.
 change and no test reads it
 ([`OD-17`](open-decisions.md#od-17--observability)).
 
-**Consequence prepared for the user and not made here.** `CLAUDE.md`'s stack
-table names `tracing` and `tracing-subscriber` for logging. The register
-prepared that correction rather than applying it, because that file is
-coordination and is never edited unilaterally.
-
 ## What `tpl init` ships
 
 `FR-PROJ-017` fixes exactly five artefacts and `FR-PROJ-013` the one write
@@ -502,5 +497,5 @@ difference between two runs over unchanged inputs a defect rather than noise.
 | The four numbers themselves, and everything `.tpl` holds | [data-model.md](data-model.md) |
 | The six untrusted inputs, credentials, and transport | [security.md](security.md) |
 | The fixture's contents, its deliberate omissions, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
-| The record of every difference observed between the series — twelve | `FR-SRV-038` |
+| The record of every difference observed between the series — fourteen | `FR-SRV-038` |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

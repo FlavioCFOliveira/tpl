@@ -1007,10 +1007,10 @@ that is not written down is an omission.
 
   **The list is empty, and this is an observed result.** The four series were
   observed against the fixture of `scripts/mariadb/` on 2026-09-10 and again
-  on 2026-09-11, and no field of ambiguous meaning was found; the **twelve**
-  differences that were found are recorded under `FR-SRV-038` and not one of
-  them is a difference of meaning. The claim is bounded by what the fixture
-  exercises, which `FR-SRV-038` states. No entry may be written from a
+  on 2026-09-11, and no field of ambiguous meaning was found; the
+  **fourteen** differences that were found are recorded under `FR-SRV-038` and
+  not one of them is a difference of meaning. The claim is bounded by what the
+  fixture exercises, which `FR-SRV-038` states. No entry may be written from a
   changelog, from a release note, or from knowledge of MySQL.
 
   *Amended in the seventh edition: the count only.* The second observation
@@ -1026,6 +1026,29 @@ that is not written down is an omission.
   of a session variable and not a catalogue field at all, so it cannot be a
   field of ambiguous meaning and the list stays empty for the reason it has
   always been empty.
+
+  *Amended in the twelfth edition: the count only.* A fourth observation pass
+  added a thirteenth difference, recorded under `FR-SRV-038`. It is the version
+  a server announces when the connection opens — not a catalogue field, and not
+  a reading any requirement of this corpus takes — so it cannot be a field
+  whose meaning two series disagree about, and the list stays empty for the
+  reason it has always been empty.
+
+  *Amended in the thirteenth edition: the count only.* A fourteenth difference
+  was brought into the record of `FR-SRV-038` from the note in which it had
+  been written down. It is the refusal of a `VECTOR` column or index by two of
+  the four series at DDL time — a difference in what a server accepts, not in
+  what its catalogue reports, so there is no field for two series to disagree
+  about, and the list stays empty for the reason it has always been empty.
+
+  *Checked in the eighteenth edition, and the count does not move.* That
+  edition records three readings of the **build** that differ across the window
+  — the distribution each image was built on, the build's source revision and
+  the SSL library string — below the table of `FR-SRV-038` rather than in it,
+  because none of them is established as a difference between the series. No
+  row enters the table, so the count above stands at fourteen; and none of the
+  three is a catalogue field at all, so none could be a field whose meaning two
+  series disagree about however it were classified.
 
   The last column names the row of the divergence register of `FR-SRV-036` that
   records the observation. An entry here without a row there is a defect: the
