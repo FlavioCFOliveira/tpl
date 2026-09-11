@@ -50,7 +50,7 @@ detection mechanism, the form of the version string, and the contract the
 model owes a difference. Which differences exist among the four supported
 series was `OQ-045`, now listed under [Closed](open-questions.md#closed). The
 fixture of `scripts/mariadb/` exists, the four series have been observed
-against it three times, and what was found is recorded in *Differences observed
+against it four times, and what was found is recorded in *Differences observed
 between the series* below, per `FR-SRV-038`. A difference that is not in that
 record has not been observed, and SHALL NOT be written down.
 
@@ -236,6 +236,18 @@ record has not been observed, and SHALL NOT be written down.
   requested and **no row came back on any of the four**, so no such variable
   exists on these servers.
 
+  *Checked in the twelfth edition against difference 13 of `FR-SRV-038`, and
+  unchanged.* A server also announces a version when the connection opens, and
+  on `10.11` that announcement is the same string with a `5.5.5-` prefix in
+  front of it. This requirement is not reached by it: it fixes the form of the
+  string **the probe returns**, and the probe's answer carries no prefix on any
+  of the four. The clause *and from nothing else* is what keeps it that way,
+  and it is load-bearing rather than decorative — `<major>.<minor>` taken from
+  the announcement would read `5.5` on `10.11`, and `FR-SRV-020` would refuse a
+  supported server as older than the window. The requirement stands as
+  written, and the observation is recorded under `FR-SRV-038` rather than
+  here.
+
 - **FR-SRV-041**: IF the version string the probe returns does not contain the
   product marker `MariaDB`, THEN the server SHALL NOT be taken to be MariaDB,
   and `FR-SRV-003` SHALL apply. The condition is **necessary and not
@@ -284,6 +296,16 @@ record has not been observed, and SHALL NOT be written down.
   provenance requires. That is an amendment to this requirement and to
   `FR-SRV-003` together, and it would turn a necessary condition into a
   sufficient one. Nothing short of it will.
+
+  *Checked in the twelfth edition against difference 13 of `FR-SRV-038`, and
+  unchanged.* The marker this condition rests on is carried by both readings of
+  the version on all four series: the announcement a server makes when the
+  connection opens carries `MariaDB` where the probe's answer does, and on
+  `10.11` carries it behind the `5.5.5-` prefix as well. The condition returns
+  the same verdict from either reading, so no server is admitted or refused by
+  that difference, and the limit below is untouched by it — an announcement is
+  one more response the server composes, and a server that emulates MariaDB
+  completely composes that one too.
 
   *A stated limit.* This requirement names where a guarantee stops, in the
   form the [README](README.md#writing-conventions) fixes for all three:
@@ -733,8 +755,8 @@ satisfies only the last of the three cases below.
 
   *State of the register.* The register held nothing through the sixth
   edition and now holds two rows, both created by `FR-SRV-039`. Of the
-  **twelve** differences observed between the series, two reach a field the
-  model carries; the other ten reach the reader, the fixture, or a
+  **thirteen** differences observed between the series, two reach a field the
+  model carries; the other eleven reach the reader, the fixture, or a
   requirement, and produce no row here. No entry may be written from a
   changelog, from a release note, or from knowledge of MySQL.
 
@@ -760,11 +782,12 @@ rows.** The four series were stood up from the fixture of `scripts/mariadb/`
 on 2026-09-10, the `freight` catalogue was dumped from each and compared field
 by field, `INFORMATION_SCHEMA` itself was compared table by table, and a
 second pass recorded the field lists themselves; a third pass, on 2026-09-11,
-read the session read-only state under each of its two spellings. Twelve
-differences were found, and the two rows below are the two that reach a field
-the model carries. Both arrived by the same route — the servers' own default
-collations differ — and both are accommodated by `FR-SRV-039` rather than by
-any of the three treatments the sixth edition had.
+read the session read-only state under each of its two spellings, and a fourth,
+the same day, read the version each server announces when the connection opens.
+Thirteen differences were found, and the two rows below are the two that
+reach a field the model carries. Both arrived by the same route — the servers'
+own default collations differ — and both are accommodated by `FR-SRV-039`
+rather than by any of the three treatments the sixth edition had.
 
 | Field | Treatment | Observed on `12.3` / `11.8` / `11.4` / `10.11` |
 |---|---|---|
@@ -829,11 +852,11 @@ that requirement.
 
   *Rationale.* `FR-SRV-027` records only what the model **accommodates**, which
   is the right scope for a normative register and the wrong scope for an
-  observation. Ten of the twelve differences below reach the reader, the
+  observation. Eleven of the thirteen differences below reach the reader, the
   fixture, or a requirement rather than the document, and each of them
   constrains work that has not been done yet: without a home they would be
   rediscovered, or worse, contradicted. Keeping the two apart also keeps the
-  register honest — two rows in the register beside twelve in the observation
+  register honest — two rows in the register beside thirteen in the observation
   record says *we looked, and this is the part the document carries*, which is
   a much stronger statement than either table alone.
 
@@ -847,7 +870,10 @@ lists themselves**, verbatim, for the twenty entries of
 more, taking the total to eleven. The third ran the same four images on
 2026-09-11 and read the session read-only state under each of its two
 spellings, each spelling in its own statement; it found one more, taking the
-total to **twelve**.
+total to twelve. The fourth, the same day and on the same four images, read
+the version each server announces when the connection opens, over a plain
+socket and without authenticating; it found one more, taking the total to
+**thirteen**.
 
 | # | Observed | `12.3` | `11.8` | `11.4` | `10.11` | What it obliges |
 |---|---|---|---|---|---|---|
@@ -863,6 +889,7 @@ total to **twelve**.
 | 10 | Index cardinality **over identical data** | an estimate | the same estimate as `11.8`'s neighbours | agrees with `11.8` and `12.3` | **differs** | Nothing. `FR-CAT-024` excludes it as volatile, and its amendment states why an estimate is not passed through under `FR-SRV-039` |
 | 11 | The schema catalogue's default collation, for a database that declares none | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_general_ci` | Passed through, `FR-SRV-039`. Registered under `FR-SRV-036`. Same root cause as difference 1 |
 | 12 | The session read-only state under the spelling `transaction_read_only`; the spelling `tx_read_only` is present on all four | present, `0` | present, `0` | present, `0` | absent, `ERROR 1193 (HY000)` | Fixes the spelling of the read-back at `tx_read_only`, in the fourth entry of `FR-SRV-006` and in `FR-SRV-009`. Reaches no field of the model, so no row in the register of `FR-SRV-036`. Does not engage `FR-SRV-037` — see below |
+| 13 | The version a server announces when the connection opens — the initial handshake greeting, sent before authentication and before any statement; the probe of `FR-SRV-002` answers without the prefix on all four | `12.3.3-MariaDB-ubu2404` | `11.8.9-MariaDB-ubu2404` | `11.4.13-MariaDB-ubu2404` | **`5.5.5-10.11.19-MariaDB-ubu2204`** | Nothing today. The model carries the probe's string, per `FR-CTX-031` and `FR-SRV-040`, so the greeting reaches no field of it and takes no row in the register of `FR-SRV-036`. It obliges a test, a diagnostic or a fixture gate that reads a greeting — see below |
 
 **Difference 1 is the one that would have falsified `FR-SRV-026`, and it is
 now the one `FR-SRV-039` accommodates.** The four servers were given identical
@@ -878,15 +905,15 @@ reaching the schema's own collation, and it is registered beside it.
 
 **Difference 8 is the only split in this record that does not fall after
 `10.11`, and it is recorded for that reason as much as for its content.**
-Eleven of the twelve separate `10.11` from the other three, or `12.3` from the
-other three; this one puts `10.11` and `11.4` on one side and `11.8` and
+Eleven of the thirteen separate `10.11` from the other three, or `12.3` from
+the other three; this one puts `10.11` and `11.4` on one side and `11.8` and
 `12.3` on the other. Nothing structural follows — `FR-SRV-022` already selects
 a treatment from the resolved series rather than from a two-way split, and no
 requirement in this corpus is written as *`10.11` against the rest*. What
 follows is a caution for the reader, the fixture, and the test of
 `FR-SRV-029`: **a difference may fall anywhere in the window**, and code or
 tests that model the four series as one old server and three modern ones will
-be right eleven times out of twelve and wrong once.
+be right for eleven of the thirteen and wrong for the rest.
 
 **Differences 8 and 9 do not engage `FR-SRV-037`.** Both change a column's
 declared type and neither changes a table's width, so a statement naming a
@@ -911,6 +938,60 @@ name the variable. Widening `FR-SRV-037` to cover it was considered and
 rejected: it would import a licence to select per series into the one
 statement that must be identical on every server, and would make one
 requirement say two things.
+
+**Difference 13 is a disagreement between two readings of the same version,
+and the reading this specification takes is written down rather than left
+implied.** A MariaDB server announces a version when the connection opens,
+before authentication and before any statement, and on `10.11` that
+announcement carries a `5.5.5-` prefix that the probe of `FR-SRV-002` does not.
+Nothing in this corpus reads the announcement: `FR-CTX-031` carries *the string
+the probe returns, unaltered*, and `FR-SRV-040` derives `series` from that
+string *and from nothing else*, which bars every other reading in terms. The
+difference therefore reaches no field of the model and takes no row in the
+register of `FR-SRV-036`.
+
+**The reason it takes no row is not difference 12's reason, and the two are
+worth keeping apart.** Difference 12 is a session variable the model could not
+carry whatever `tpl` did with it. This one touches a field the model does
+carry — the `version` key of the `server` object of `FR-CTX-031` — by a
+reading the model does not take. An implementation that took the announcement
+for the probe's answer would put `5.5.5-10.11.19-MariaDB-ubu2204` in `version`
+and derive `5.5` for `series`, and `FR-SRV-020` would then refuse a supported
+server as older than the window. The register records what the model
+**accommodates**; this is a difference the model **avoids**, by naming the
+reading it takes.
+
+**It engages neither `FR-SRV-006` nor `FR-SRV-037`.** The announcement is not a
+statement — it arrives unasked when the socket opens, ahead of anything `tpl`
+could issue — so the closed list is untouched. It names no catalogue column,
+so the column-list rule of `FR-SRV-037` has no subject here. What the
+difference obliges falls entirely on work not yet done: a test, a diagnostic
+or a fixture gate that reads a greeting cannot assume the two readings agree,
+because on one of the four supported series they do not.
+
+*Observed*, on the four series of `FR-SRV-015`, on 2026-09-11:
+
+```text
+series  announced when the connection opens  returned by the probe
+10.11   5.5.5-10.11.19-MariaDB-ubu2204       10.11.19-MariaDB-ubu2204
+11.4    11.4.13-MariaDB-ubu2404              11.4.13-MariaDB-ubu2404
+11.8    11.8.9-MariaDB-ubu2404               11.8.9-MariaDB-ubu2404
+12.3    12.3.3-MariaDB-ubu2404               12.3.3-MariaDB-ubu2404
+```
+
+The left-hand column was read over a plain TCP socket by the fixture's own
+gate, which opens the connection, reads the announcement and closes without
+authenticating; the right-hand column is the reading `FR-SRV-040` records. The
+prefix is the whole of the difference: strip it and the two agree on every
+series.
+
+*Bounded claim.* One server of each series was read, at the four patch releases
+`FR-SRV-040` records, and nothing was observed about any other build of the
+same series. The four servers offer TLS, and a fifth listener of the fixture —
+the same `10.11` image started without it — announced the same prefixed string,
+so the prefix does not depend on whether TLS is in force; that fifth listener
+is not a fifth series and is not counted as one. Nothing was observed about
+what a server outside the window of `FR-SRV-015` announces.
 
 **One further difference was observed and is not a difference between the
 series.** A routine's creation and alteration timestamps and a trigger's

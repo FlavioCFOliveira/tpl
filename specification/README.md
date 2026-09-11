@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in eleven editions. All are in force; each
+The specification has been written in twelve editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -218,8 +218,8 @@ already in force to be wrong, corrects it.
   as an absence of one. `FR-SRV-038` records all seven, because six of them
   constrain the reader, the fixture, or an open question rather than the
   document, and `FR-SRV-027` records only what the model accommodates. The
-  seventh edition took the record to eleven and the register to two rows, and
-  the tenth took the record to twelve.
+  seventh edition took the record to eleven and the register to two rows, the
+  tenth took the record to twelve, and the twelfth to thirteen.
 - **`OQ-041`, how an unreadable view is reported** —
   [privileges-and-completeness.md](privileges-and-completeness.md), and it is
   the correction described below.
@@ -637,6 +637,67 @@ says so in its own note.
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Twelfth edition — the announced version is not the probed one
+
+A MariaDB server states its version twice: once when the connection opens,
+unasked, and once when the probe of `FR-SRV-002` asks for it. On three of the
+four supported series the two strings are identical. On `10.11` they are not —
+the announcement carries a `5.5.5-` prefix and the probe's answer does not —
+and the fixture of `scripts/mariadb/` recorded that while it was being built.
+`FR-SRV-038` obliges **every** difference observed between the series to be
+recorded, whether or not it reaches the model, and this one was not. This
+edition records it.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.** The
+two requirements the difference bears on were checked and both stand as
+written; each now carries a note saying it was checked, so that the next reader
+does not check it again.
+
+- **The record of differences grows from twelve to thirteen** —
+  [server-contract.md](server-contract.md). Difference 13 states both readings
+  of the version on each of the four series, verbatim, with the date and the
+  instrument: the announcement was read over a plain socket by the fixture's
+  own gate, which opens the connection and closes without authenticating. The
+  claim is bounded — one server of each series, at the four patch releases
+  `FR-SRV-040` records — and the fifth listener of the fixture, the same
+  `10.11` image started without TLS, announced the same prefixed string, so the
+  prefix does not depend on TLS being in force.
+- **The register of `FR-SRV-036` keeps its two rows, and the reason is written
+  rather than left implied** — `FR-SRV-038`. The announcement reaches no field
+  of the model, because `FR-CTX-031` carries the string the probe returns and
+  `FR-SRV-040` derives `series` from that string and from nothing else. The
+  reason is **not** difference 12's reason, and the record says so: difference
+  12 is a session variable the model could not carry whatever `tpl` did with
+  it, while this one touches a field the model does carry by a reading the
+  model does not take. The register records what the model accommodates; this
+  is a difference the model avoids, by naming its reading.
+- **`FR-SRV-040` is checked and unchanged** — the clause *and from nothing
+  else* already bars the announcement, and the note records what would follow
+  if it did not: `<major>.<minor>` taken from the announcement reads `5.5` on
+  `10.11`, and `FR-SRV-020` would refuse a supported server as older than the
+  window.
+- **`FR-SRV-041` is checked and unchanged** — the marker `MariaDB` is carried
+  by both readings on all four series, so the necessary condition returns the
+  same verdict from either, and no server is admitted or refused by the
+  difference. The limit that requirement states covers the announcement too:
+  it is one more response the server composes.
+- **`FR-CAT-029`'s count follows and its list stays empty** —
+  [catalogue-coverage.md](catalogue-coverage.md). The announcement is not a
+  catalogue field, so it cannot be a field whose meaning two series disagree
+  about.
+
+**One defect was found and is not corrected here.** Recomputing the tally
+beside the note on difference 8 showed the claim that tally supports to be
+wrong: difference 2 splits `10.11` and `11.4` from `11.8` and `12.3` exactly as
+difference 8 does, so the record holds two such splits and not one. The tally
+now follows the record of thirteen; the claim it glosses predates this edition,
+is not what this edition was opened to settle, and is recorded under
+*[Maintenance debt](#maintenance-debt)* for a correction of its own.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -844,7 +905,8 @@ Every requirement in this specification derives from one of three sources:
 
 ## Maintenance debt
 
-**None outstanding.** The item this section carried through the sixth edition
+**One item is outstanding**, recorded by the twelfth edition and stated below.
+The item this section carried through the sixth edition
 — twenty catalogue field lists that no observation had recorded — was
 discharged by the seventh: the fixture was read against all four series of
 `FR-SRV-015` on 2026-09-10, every field list was recorded verbatim, and each
@@ -893,6 +955,24 @@ instrument does not establish. One obligation outside this corpus is narrowed
 rather than created: the file-open observation of `NFR-PERF-005` is owed on the
 two Linux targets and is owed on neither macOS target, so a verification suite
 that skips it there is conforming and not incomplete.
+
+The twelfth edition adds no obligation outside this corpus and one inside it.
+It records a difference `FR-SRV-038` already obliged this corpus to hold,
+checks the two requirements that difference bears on and leaves both as
+written, and adds no row to the register of `FR-SRV-036`. The obligation is the
+defect it found while recomputing a tally and did not correct.
+
+**Outstanding: the note on difference 8 of `FR-SRV-038` overstates itself** —
+[server-contract.md](server-contract.md), *Differences observed between the
+series*. The note calls difference 8 the only split in the record that does not
+fall after `10.11`. Difference 2 has the same shape — `10.11` and `11.4` report
+the position of `INVISIBLE` one way and `11.8` and `12.3` the other — so there
+are two such splits and not one. The tally beside the claim was corrected to
+follow the record of thirteen; the claim itself was left, because it predates
+the edition that found it. What is owed is a correction to that note. Nothing
+about `tpl` turns on it: no requirement rests on the claim, and the caution the
+note exists to give — that a difference may fall anywhere in the window — is
+strengthened by the second example rather than weakened.
 
 Five items previously recorded here have been discharged.
 
