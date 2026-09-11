@@ -903,17 +903,35 @@ is admitted, its value is carried exactly as the server returns it under
 `FR-SRV-039`, and `FR-SRV-026` excepts it. Difference 11 is the same cause
 reaching the schema's own collation, and it is registered beside it.
 
-**Difference 8 is the only split in this record that does not fall after
-`10.11`, and it is recorded for that reason as much as for its content.**
-Eleven of the thirteen separate `10.11` from the other three, or `12.3` from
-the other three; this one puts `10.11` and `11.4` on one side and `11.8` and
-`12.3` on the other. Nothing structural follows — `FR-SRV-022` already selects
-a treatment from the resolved series rather than from a two-way split, and no
-requirement in this corpus is written as *`10.11` against the rest*. What
-follows is a caution for the reader, the fixture, and the test of
-`FR-SRV-029`: **a difference may fall anywhere in the window**, and code or
-tests that model the four series as one old server and three modern ones will
-be right for eleven of the thirteen and wrong for the rest.
+**Difference 8 splits the window in the middle rather than at one of its
+ends, and it is one of two differences in this record that do. It is recorded
+for that reason as much as for its content.** Of the thirteen, nine separate
+`10.11` from the other three and two separate `12.3` from the other three; the
+remaining two — difference 2 and this one — put `10.11` and `11.4` on one side
+and `11.8` and `12.3` on the other. The three counts are over the thirteen
+rows above, and are recomputed whenever a row is added. Nothing structural
+follows — `FR-SRV-022` already selects a treatment from the resolved series
+rather than from a two-way split, and no requirement in this corpus is written
+as *`10.11` against the rest*. What follows is a caution for the reader, the
+fixture, and the test of `FR-SRV-029`: **a difference may fall anywhere in the
+window**, and code or tests that model the four series as one old server and
+three modern ones will be right for nine of the thirteen and wrong for four —
+differences 2, 6, 8 and 9.
+
+*Amended in the twelfth edition: two splits fall in the middle of the window,
+not one, and the closing count was wrong for a second reason.* The note read
+*difference 8 is the only split in this record that does not fall after
+`10.11`*. Difference 2 has the identical shape — `10.11` and `11.4` report the
+position of `INVISIBLE` one way, `11.8` and `12.3` the other — and it was
+recorded before the note was written, so the claim was never true. The closing
+count was wrong independently of that: it reused the figure of eleven, which
+counts the two splits isolating `12.3` alongside the nine isolating `10.11`,
+and a model of one old server against three modern ones is defeated by the
+first two as surely as by the two that fall in the middle. Both counts are now
+stated against the thirteen rows and name the differences they count, so that
+either can be checked without being recomputed from scratch — which is how the
+first one came to be wrong. The caution is unchanged, and the second example
+strengthens it.
 
 **Differences 8 and 9 do not engage `FR-SRV-037`.** Both change a column's
 declared type and neither changes a table's width, so a statement naming a

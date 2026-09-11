@@ -362,11 +362,12 @@ columns of every view alongside those of the tables.
 **The record of differences between the series grows from seven to eleven**,
 per `FR-SRV-038`, and one of the four new ones matters beyond its content:
 the declared nullability of the index table's comment column splits `10.11`
-and `11.4` from `11.8` and `12.3`. It is the only difference in the record
-that does not fall after `10.11`, and it is recorded as a caution that a
-difference may fall anywhere in the window. The divergence register of
-`FR-SRV-036`, empty through six editions, gains its first two rows — both
-created by `FR-SRV-039`.
+and `11.4` from `11.8` and `12.3`. It is the second difference in the record
+to split the window in the middle rather than at one of its ends — difference
+2 was already there — and it is recorded as a caution that a difference may
+fall anywhere in the window. This edition wrote it as the only one; the
+twelfth corrects it. The divergence register of `FR-SRV-036`, empty through
+six editions, gains its first two rows — both created by `FR-SRV-039`.
 
 **The last open entry closes, and it closes on a limit rather than on an
 answer.** `FR-SRV-040` fixes what the version probe returns and `FR-SRV-041`
@@ -686,13 +687,33 @@ does not check it again.
   catalogue field, so it cannot be a field whose meaning two series disagree
   about.
 
-**One defect was found and is not corrected here.** Recomputing the tally
-beside the note on difference 8 showed the claim that tally supports to be
-wrong: difference 2 splits `10.11` and `11.4` from `11.8` and `12.3` exactly as
-difference 8 does, so the record holds two such splits and not one. The tally
-now follows the record of thirteen; the claim it glosses predates this edition,
-is not what this edition was opened to settle, and is recorded under
-*[Maintenance debt](#maintenance-debt)* for a correction of its own.
+**One defect was found while this edition ran, and is corrected in it.**
+Recomputing the tally beside the note on difference 8 showed the claim that
+tally supports to be wrong: difference 2 splits `10.11` and `11.4` from `11.8`
+and `12.3` exactly as difference 8 does, so the record holds two such splits
+and not one. The tally was corrected with the record of thirteen and the claim
+was left standing, because it predates this edition and was not what this
+edition was opened to settle; it was recorded under
+*[Maintenance debt](#maintenance-debt)* for a correction of its own, and that
+correction is the editorial one below.
+
+**One editorial correction, made after the record of thirteen was written.**
+The note beside difference 8 called it *the only split in this record that
+does not fall after `10.11`*. Two of the thirteen split the window in the
+middle — difference 2 as well as difference 8 — and the note now says so,
+counts the thirteen three ways, and names the differences in each count. A
+second count in the same note was wrong for a reason of its own: code that
+models the four series as one old server and three modern ones is right for
+nine of the thirteen and not for eleven, because the two splits that isolate
+`12.3` defeat that model as surely as the two that fall in the middle. The
+caution the note exists to give — a difference may fall anywhere in the
+window — is unchanged and is stronger for the second example. The seventh
+edition's account of the same note, above, is corrected with it. No
+requirement is amended, no row of the record changes, and the register of
+`FR-SRV-036` keeps its two rows. Recorded under this edition rather than
+opening a thirteenth: a gloss on an observation binds nothing, no requirement
+rests on the claim, and nothing here is observed, decided, or amended. The
+eleventh edition settled the same case the same way for `DIV-031`'s count.
 
 **No requirement is withdrawn, no identifier is retired, and no open question
 is raised or reopened.** The index of
@@ -905,9 +926,8 @@ Every requirement in this specification derives from one of three sources:
 
 ## Maintenance debt
 
-**One item is outstanding**, recorded by the twelfth edition and stated below.
-The item this section carried through the sixth edition
-— twenty catalogue field lists that no observation had recorded — was
+**No item is outstanding.** The item this section carried through the sixth
+edition — twenty catalogue field lists that no observation had recorded — was
 discharged by the seventh: the fixture was read against all four series of
 `FR-SRV-015` on 2026-09-10, every field list was recorded verbatim, and each
 is now a requirement in
@@ -956,25 +976,14 @@ rather than created: the file-open observation of `NFR-PERF-005` is owed on the
 two Linux targets and is owed on neither macOS target, so a verification suite
 that skips it there is conforming and not incomplete.
 
-The twelfth edition adds no obligation outside this corpus and one inside it.
-It records a difference `FR-SRV-038` already obliged this corpus to hold,
-checks the two requirements that difference bears on and leaves both as
-written, and adds no row to the register of `FR-SRV-036`. The obligation is the
-defect it found while recomputing a tally and did not correct.
+The twelfth edition adds no obligation of either kind. It records a difference
+`FR-SRV-038` already obliged this corpus to hold, checks the two requirements
+that difference bears on and leaves both as written, and adds no row to the
+register of `FR-SRV-036`. The one obligation it did record — a defect it found
+while recomputing a tally and did not correct at the time — was discharged
+inside the same edition and is listed below.
 
-**Outstanding: the note on difference 8 of `FR-SRV-038` overstates itself** —
-[server-contract.md](server-contract.md), *Differences observed between the
-series*. The note calls difference 8 the only split in the record that does not
-fall after `10.11`. Difference 2 has the same shape — `10.11` and `11.4` report
-the position of `INVISIBLE` one way and `11.8` and `12.3` the other — so there
-are two such splits and not one. The tally beside the claim was corrected to
-follow the record of thirteen; the claim itself was left, because it predates
-the edition that found it. What is owed is a correction to that note. Nothing
-about `tpl` turns on it: no requirement rests on the claim, and the caution the
-note exists to give — that a difference may fall anywhere in the window — is
-strengthened by the second example rather than weakened.
-
-Five items previously recorded here have been discharged.
+Six items previously recorded here have been discharged.
 
 - **The catalogue field lists.** Twenty entries, blocked first by the absence
   of a container and then by the absence of a recorded observation. Both are
@@ -997,6 +1006,17 @@ Five items previously recorded here have been discharged.
 - **The specified surface without specified documents.** `--format json` was
   contract in name only. Settled by the third edition: `FR-OUT-024` fixes one
   envelope for all seventeen documents.
+- **The note on difference 8 of `FR-SRV-038`.** Recorded by the twelfth
+  edition, which found while recomputing a tally that the note called
+  difference 8 the only split in the record not falling after `10.11` when
+  difference 2 has the same shape, and left the claim for a correction of its
+  own. Discharged in the same edition —
+  [server-contract.md](server-contract.md), *Differences observed between the
+  series*. The note now counts the thirteen differences three ways — nine
+  isolating `10.11`, two isolating `12.3`, two splitting the window in the
+  middle — and names the differences in each count, so that the arithmetic can
+  be checked against the rows instead of recomputed from scratch. Nothing
+  about `tpl` turned on it: no requirement rested on the claim.
 
 A reference check must verify the **target** of a cross-reference, not merely
 that the identifier exists. The first edition was validated as having no dead
