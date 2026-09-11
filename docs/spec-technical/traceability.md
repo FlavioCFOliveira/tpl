@@ -466,18 +466,24 @@ identifier is the authority and the wording here is a summary.
 
 ## 26. `upstream-divergences.md` — corrections owed to the root documents
 
+**Each row states the technical concern, never the content of the file the
+entry corrects.** A summary of that content would go false the next time
+somebody edits the file, and nothing here would say so; the form is fixed by
+the re-check convention of [README.md](README.md#conventions). An entry's state
+is named only where a row would otherwise imply a correction is outstanding.
+
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | The library API and the `model/` structs are **not** a public surface: five questions the functional spec declines — owned versus borrowed types, public fields versus accessors, newtypes for names, whether the serialisation crate is a public dependency, `#[non_exhaustive]` — are named as **architecture decisions** | `DIV-032` | `interfaces`, `decisions` (`OD-05`) |
 | The whole engine `Environment` surface is **not** contract; only the three groups are | `DIV-033` | `technology-stack` |
 | The target matrix is fixed and Linux is `musl`; the `gnu` triples are not targets. The linkage has an observable DNS consequence that must not be presented as pure packaging | `DIV-041` | `operations` |
 | `panic = "abort"` settles how a panic **ends** the process, not whether the process may report it first. The profile stands as written, `FR-ERR-030` as amended obliges the message and the code without obliging the panic path to be catchable, and `DIV-045` is discharged with nothing owed to the root coordination document | `DIV-045` | `architecture`, `technology-stack`, `operations` (`OD-28`); [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md) |
-| `CLAUDE.md`'s four performance figures are adopted as provisional and should exist in **no** third place | `DIV-035` | `quality-attributes` |
-| `scripts/mariadb/` still owes `seed-bench.sql`, plus one line of the project tree and one of the testing section | `DIV-036` | `verification` (`OD-27`) |
-| The catalogue is read through `INFORMATION_SCHEMA` only; the `SHOW` escape hatch `CLAUDE.md` allows does not exist | `DIV-031` | `security`, `interfaces` |
+| No performance figure is written in this folder: `NFR-PERF-014` holds a budget's provisional figure and `BENCHMARKS.md` its ratified one, and a third place would be the copy nobody updates | `DIV-035` | `quality-attributes` |
+| `WL-001` needs `scripts/mariadb/seed-bench.sql`, which the repository has not got; the budgets over that workload cannot be measured until it exists | `DIV-036` | `verification` (`OD-27`) |
+| The catalogue is read through `INFORMATION_SCHEMA` only: the closed list of `FR-SRV-006` has four entries, `SHOW` is not one of them, and no necessity admits a fifth | `DIV-031` | `security`, `interfaces` |
 | Determinism is over **stdout** only | `DIV-039` | `quality-attributes` |
-| Four writers inside `.tpl`, not three | `DIV-005` | `architecture` |
-| `tpl cache` is a fourth auxiliary group that `CLAUDE.md` omits entirely | `DIV-040` | `architecture` |
+| Four things write inside `.tpl`: `tpl init`, `tpl cfg …`, `tpl cache load`, and any cached read command on a miss | `DIV-005` | `architecture` |
+| `tpl cache` is a group node of the command tree in its own right, with three subcommands, and not a part of project management: the auxiliary set is not closed without it | `DIV-040` | `architecture` |
 | Every divergence is a correction owed to a file **the specification never edits** — the technical spec inherits that restraint and must not restate the corrected content either | *Overview* | `README`, `overview` |
 
 ---

@@ -255,9 +255,11 @@ rejected options as well as the choice.
 - A contradiction between this folder and the code, or between this folder and
   `/specification`, is reported with both readings. It is never closed by
   revising this folder to match.
-- **A correction this folder records as owed to a file it does not own is
-  re-read against that file whenever that file changes, and an entry found
-  discharged records the date and the commit that discharged it.** Adopted
+- **A statement this folder makes about a file it does not own is re-read
+  against that file whenever that file changes**, in each of the three forms
+  such a statement takes: a correction recorded as **owed**, a **quotation**,
+  and a **summary of a register entry** about that file. An entry found
+  discharged records the date and the commit that discharged it. Adopted
   2026-09-11 from the fifth validation rule of
   [`specification/README.md`](../../specification/README.md), unchanged in
   substance. The reason is that
@@ -270,3 +272,19 @@ rejected options as well as the choice.
   commit is the evidence: an entry that says *when* it stopped being owed can
   be audited, where one that merely stops being listed leaves the next reader
   to re-derive it.
+- **Widened on 2026-09-11 from corrections to statements, with a form rule that
+  makes most of the re-reading unnecessary.** A third sweep, recorded in
+  [open-decisions.md](open-decisions.md#corrections-owed-to-claudemd), found
+  eleven stale passages: three restate what an entry of `/specification`'s
+  divergence register still owes, which the first wording reached, and eight
+  summarise such an entry faithfully, claim no correction at all, and still
+  assert in the present indicative what `CLAUDE.md` contains. It is one
+  obligation seen from each end — a correction says what this folder will do, a
+  summary says what the other file is like, and both go false on the same edit
+  — so the rule is widened rather than doubled. The form rule follows: **state
+  the technical concern or the register entry, never the content of the file
+  that entry corrects.** A concern drawn from an entry does not move when the
+  target file is edited, so it never needs re-reading; the file's content does,
+  and a present-tense summary of it decays out of sight. Where an entry's state
+  must be named, name the state and not the file — a discharge is terminal, and
+  a divergence raised again takes a new identifier.

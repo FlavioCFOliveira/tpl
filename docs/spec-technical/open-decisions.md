@@ -70,10 +70,10 @@ last that touched the file, on 2026-09-11. **No other entry claims a correction
 is owed to `CLAUDE.md`, and none names the root `README.md` at all.** Two
 statements about the file remain accurate and are not corrections owed by this
 register: `OD-06` leaves the fate of `anyhow` in that table conditional on a
-dependency question `technology-stack` owns, and `OD-27` records that `DIV-036`
-— an entry of `/specification`'s register, not of this one — still owes the
-file two lines naming `scripts/mariadb/seed-bench.sql`, which does not yet
-exist.
+dependency question `technology-stack` owns, and `OD-27` cites `DIV-036`
+— an entry of `/specification`'s register, not of this one — for
+`scripts/mariadb/seed-bench.sql`, which does not yet exist; what that entry
+still owes the file is the entry's to state.
 
 **A second sweep, for quotations rather than claims**, ran on 2026-09-11 over
 the whole folder: every quoted span, every cited section name and every
@@ -88,6 +88,25 @@ folder quotes the root `README.md`. This sweep is a different check from the
 one above: a claim that a correction is owed says what this folder will do, and
 a quotation says what another file contains, so a register can be clean of the
 first while carrying the second.
+
+**A third sweep, for summaries of the entries of `/specification`'s divergence
+register**, ran on 2026-09-11 over the whole folder. Every citation of a
+`DIV-NNN` identifier outside this record — forty, in eight files, naming twelve
+distinct entries — was read against that entry's current state in
+`specification/upstream-divergences.md`, which classifies its fifty-two entries
+due, discharged or partly discharged. **Eleven passages were stale**: five rows
+of section 26 of [traceability.md](traceability.md), two of
+[quality-attributes.md](quality-attributes.md), two of this file, and one each
+in [overview.md](overview.md) and [data-model.md](data-model.md). Each cited a
+discharged or partly discharged entry and asserted in the present indicative
+what `CLAUDE.md` contains or still owes; `0ea5624` and `87dd6e3` are the commits
+that falsified them. All eleven now state the technical concern or the entry
+instead, for the reason [README.md](README.md#conventions) gives. The other
+twenty-nine citations name `DIV-024`, `DIV-032`, `DIV-033`, `DIV-034`,
+`DIV-036`, `DIV-039`, `DIV-041` and `DIV-045`, and each was verified against
+its entry. This sweep is a third check again: a summary claims no correction
+and quotes nothing, so it passes both checks above while decaying on the same
+edit.
 
 The re-reading is now a convention of this folder rather than an occasion, for
 the reason [README.md](README.md#conventions) gives.
@@ -1470,8 +1489,8 @@ merging it into `seed.sql`, which `BR-PERF-002` forbids and which would make
 the correctness suite pay for 200 tables on every run.
 
 **Consequence to record.** `WL-002`'s byte scalar `N` cannot be computed until
-the fixture exists, and `DIV-036` still owes `CLAUDE.md` one line of the
-project-structure tree and one of the testing section naming the file.
+the fixture exists; `DIV-036` is the register entry that tracks what naming
+the file still owes the root coordination document.
 
 ---
 

@@ -18,9 +18,9 @@ requirement text is reproduced here.
 **No figure appears in this document.** A budget's provisional figure lives in
 `NFR-PERF-014` and a ratified one in `BENCHMARKS.md`, and `NFR-PERF-020` is the
 step that moves it from the first place to the second. A third copy would be the
-copy nobody updates, which is what `DIV-035` corrects in the root coordination
-document. A **budget** is a requirement's target; a **baseline** is a
-measurement. The two are never written in one place.
+copy nobody updates, which is the point `DIV-035` carries against the root
+coordination document. A **budget** is a requirement's target; a **baseline**
+is a measurement. The two are never written in one place.
 
 The tests and the harness that take a measurement are `verification.md`; the
 build, the target matrix and the release gates are `operations.md`.
@@ -53,9 +53,9 @@ that is `operations.md`, settled in
 `NFR-DET-001` fixes the extent of the contract: **stdout**, byte-identical for
 one invocation against one project state and one database state. stderr is
 neither deterministic nor contract, and cannot be, because `FR-GLOB-017`
-requires phase timings that differ on every run. The correction owed to the root
-documents, which state the rule over all output, is `DIV-039`; this folder cites
-it and does not restate it.
+requires phase timings that differ on every run. `DIV-039` is the register
+entry that carries the unqualified form of this rule against the root
+documents; this folder cites it and does not restate it.
 
 | Consequence for the built system | Forced by | Described in |
 |---|---|---|
