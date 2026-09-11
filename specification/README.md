@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in twelve editions. All are in force; each
+The specification has been written in thirteen editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -219,7 +219,8 @@ already in force to be wrong, corrects it.
   constrain the reader, the fixture, or an open question rather than the
   document, and `FR-SRV-027` records only what the model accommodates. The
   seventh edition took the record to eleven and the register to two rows, the
-  tenth took the record to twelve, and the twelfth to thirteen.
+  tenth took the record to twelve, and the twelfth to thirteen; the thirteenth
+  took it to fourteen, with a difference observed before any of them.
 - **`OQ-041`, how an unreadable view is reported** —
   [privileges-and-completeness.md](privileges-and-completeness.md), and it is
   the correction described below.
@@ -719,6 +720,79 @@ eleventh edition settled the same case the same way for `DIV-031`'s count.
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Thirteenth edition — a record assembled from its own table
+
+`FR-SRV-038` obliges every difference observed between the series to be
+recorded in its own section, whether or not it reaches the model. A fourteenth
+difference was observed on 2026-09-10, while the shared DDL of
+`scripts/mariadb/` was being settled, and was written down beside `FR-SRV-029`,
+whose fixture consequence it decided. It never reached the record. Two
+recounts — the tenth edition's and the twelfth's — passed over it, because each
+was computed over the rows the record already held rather than over everything
+the corpus had observed. This edition records the difference, and names where
+the method failed.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.**
+
+- **The record of differences grows from thirteen to fourteen** —
+  [server-contract.md](server-contract.md). Difference 14 is the refusal of a
+  `VECTOR` column or a vector index at DDL time by `10.11` and by `11.4`, with
+  `ERROR 4161 (HY000)`, and its acceptance by `11.8` and `12.3`. It is the only
+  difference in the record that is about what a server **accepts** rather than
+  what it reports. The claim is bounded to acceptance: nothing was observed
+  about what the catalogue reports for such an object on the two series that
+  accept one, because the shared DDL declares none for any series to report.
+- **The counts beside difference 8 are recomputed over fourteen rows, and the
+  twelfth edition's classification of the thirteen was checked against the rows
+  rather than taken on trust.** It holds — nine differences isolate `10.11`,
+  two isolate `12.3`, and two split the window in the middle. Difference 14 has
+  the middle shape, so that count goes from two to three and the closing one
+  from four differences to five, 2, 6, 8, 9 and 14; the other two counts do not
+  move, which is the check that the recount was made over the rows.
+- **The register of `FR-SRV-036` keeps its two rows, and the reason is written
+  rather than left implied** — `FR-SRV-038`. A row of that register carries
+  three columns — the field, the treatment, and what each series returned — and
+  this difference fills none of them: it was observed in a server's answer to a
+  `CREATE`, no field of the model is in question, and no catalogue reading was
+  taken for a `VECTOR` object on any series. The reason is neither difference
+  12's nor difference 13's; it is upstream of both, in which databases can
+  exist on each series at all.
+- **The method is named where the record states it** — `FR-SRV-038`. *Method
+  and date* now counts five observation occasions rather than four passes, and
+  says why no pass could have found this one: a pass compares what running
+  servers report, and this difference is in what a server accepts, which is
+  settled before any comparison can be made. The Scope of
+  [server-contract.md](server-contract.md) follows it.
+- **`FR-CAT-029`'s count follows and its list stays empty** —
+  [catalogue-coverage.md](catalogue-coverage.md). A difference in what a server
+  accepts is not a field whose meaning two series disagree about.
+- **`FR-ENV-046` cites the record and not the fixture consequence alone** —
+  [template-environment.md](template-environment.md). Its bounded claim already
+  named `VECTOR` as a type a supported server can hold and the fixture's 39
+  `data_type` values do not cover; it now cites the difference that establishes
+  it.
+
+**One defect of wording was corrected in passing.** *Method and date* said
+*Three passes were made* and then described four: the twelfth edition added the
+fourth pass and left the count behind it. The paragraph now states five
+occasions and enumerates five.
+
+**One defect was found by the sweep this edition ran and is not corrected in
+it.** Two further readings that differ across the window — the build's source
+revision and the SSL library string — are recorded under `FR-SRV-040` and
+classified there as properties of the build. `FR-SRV-038` offers an observation
+two homes and no third: a row in its table if it is a difference between the
+series, or a line below the table if it is not, so that it is not counted as
+one. Neither reading has either. It is recorded under
+*[Maintenance debt](#maintenance-debt)* for a correction of its own, because
+the correction is a decision rather than an editorial tidy — the timestamps
+recorded below that table were observed to differ between two servers of the
+**same** series, and the SSL library string was not.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -926,7 +1000,8 @@ Every requirement in this specification derives from one of three sources:
 
 ## Maintenance debt
 
-**No item is outstanding.** The item this section carried through the sixth
+**One item is outstanding**, recorded by the thirteenth edition and stated
+below. The item this section carried through the sixth
 edition — twenty catalogue field lists that no observation had recorded — was
 discharged by the seventh: the fixture was read against all four series of
 `FR-SRV-015` on 2026-09-10, every field list was recorded verbatim, and each
@@ -983,6 +1058,29 @@ register of `FR-SRV-036`. The one obligation it did record — a defect it found
 while recomputing a tally and did not correct at the time — was discharged
 inside the same edition and is listed below.
 
+The thirteenth edition adds no obligation of either kind either. It records a
+difference `FR-SRV-038` already obliged this corpus to hold, recomputes the
+counts that follow it, checks the twelfth edition's classification of the
+thirteen against the rows, and adds no row to the register of `FR-SRV-036`. It
+does record one item of debt, and that item is outstanding.
+
+**Outstanding — two readings that differ across the window and sit under
+neither of `FR-SRV-038`'s two headings.** `FR-SRV-040` reports that the build's
+source revision differs between all four servers and that the SSL library
+string differs between `10.11` and the other three, and classifies both as
+properties of the build. `FR-SRV-038` gives an observation two homes and no
+third: a row in its table if it is a difference between the series, or a line
+below the table if it is not, so that it is not counted as one. Neither reading
+has either, so the record is incomplete however they are classified. The
+classification is also weaker than the one it stands beside: the routine and
+trigger timestamps recorded below that table were **observed** to differ
+between two containers of the same series, while no two servers of one series
+have been compared for the SSL library string — one server of each series was
+read, which is the bound every observation in this corpus carries. The
+correction is therefore a decision and not an editorial tidy — a row, a line
+below the table, or an observation that settles which — and it is left for a
+task of its own.
+
 Six items previously recorded here have been discharged.
 
 - **The catalogue field lists.** Twenty entries, blocked first by the absence
@@ -1012,11 +1110,13 @@ Six items previously recorded here have been discharged.
   difference 2 has the same shape, and left the claim for a correction of its
   own. Discharged in the same edition —
   [server-contract.md](server-contract.md), *Differences observed between the
-  series*. The note now counts the thirteen differences three ways — nine
-  isolating `10.11`, two isolating `12.3`, two splitting the window in the
+  series*. The note counts the differences three ways — those isolating
+  `10.11`, those isolating `12.3`, and those splitting the window in the
   middle — and names the differences in each count, so that the arithmetic can
-  be checked against the rows instead of recomputed from scratch. Nothing
-  about `tpl` turned on it: no requirement rested on the claim.
+  be checked against the rows instead of recomputed from scratch; the
+  thirteenth edition recomputed all three over fourteen rows when it added
+  difference 14. Nothing about `tpl` turned on it: no requirement rested on the
+  claim.
 
 A reference check must verify the **target** of a cross-reference, not merely
 that the identifier exists. The first edition was validated as having no dead
@@ -1035,3 +1135,16 @@ observation existed must be re-read against the first one that reaches it.**
 internally coherent, cross-referenced correctly, and describing a catalogue
 that does not exist. Nothing in a reference check could have found them; only
 reading them against the evidence could.
+
+The thirteenth edition adds a third rule, learned from a record that was
+recounted twice and was never wrong about its own rows. **A record of
+observations must be assembled from every place an observation was made, not
+from the entries it already holds.** Difference 14 of `FR-SRV-038` was observed
+before any of the four comparison passes, was written down in the requirement
+whose decision it drove, and was invisible to both recounts because each was
+computed over the rows of the table. Counting a table correctly establishes
+nothing about whether the table is complete. The check that finds a defect of
+this shape is a sweep of the corpus for observations recorded outside the
+record that owns them — every *Observed* note, every passage naming a series,
+and every statement that a server accepted or refused something — and it is
+what this edition ran.

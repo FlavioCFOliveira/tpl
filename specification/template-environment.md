@@ -1,7 +1,7 @@
 ---
 title: The Template Environment
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md]
 ---
 
@@ -459,8 +459,9 @@ row is a case the implementation SHALL satisfy.
   *Bounded claim.* The memberships are fixed over the 39 values the fixture
   produced, which is every value the types it declares can yield. Two types a
   supported server can hold are not among them and are named so the
-  boundedness is legible: `VECTOR`, which `10.11` and `11.4` reject and which
-  the shared DDL therefore omits, per `FR-SRV-029`; and any type a series
+  boundedness is legible: `VECTOR`, which `10.11` and `11.4` reject at DDL time
+  and which the shared DDL therefore omits — difference 14 of `FR-SRV-038`,
+  and the fixture consequence recorded under `FR-SRV-029`; and any type a series
   newer than the window introduces, which reaches `FR-CTX-018` and then this
   requirement's fall-through. Neither may be assigned to a family without an
   observation.

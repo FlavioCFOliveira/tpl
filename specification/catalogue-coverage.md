@@ -1008,7 +1008,7 @@ that is not written down is an omission.
   **The list is empty, and this is an observed result.** The four series were
   observed against the fixture of `scripts/mariadb/` on 2026-09-10 and again
   on 2026-09-11, and no field of ambiguous meaning was found; the
-  **thirteen** differences that were found are recorded under `FR-SRV-038` and
+  **fourteen** differences that were found are recorded under `FR-SRV-038` and
   not one of them is a difference of meaning. The claim is bounded by what the
   fixture exercises, which `FR-SRV-038` states. No entry may be written from a
   changelog, from a release note, or from knowledge of MySQL.
@@ -1033,6 +1033,13 @@ that is not written down is an omission.
   a reading any requirement of this corpus takes — so it cannot be a field
   whose meaning two series disagree about, and the list stays empty for the
   reason it has always been empty.
+
+  *Amended in the thirteenth edition: the count only.* A fourteenth difference
+  was brought into the record of `FR-SRV-038` from the note in which it had
+  been written down. It is the refusal of a `VECTOR` column or index by two of
+  the four series at DDL time — a difference in what a server accepts, not in
+  what its catalogue reports, so there is no field for two series to disagree
+  about, and the list stays empty for the reason it has always been empty.
 
   The last column names the row of the divergence register of `FR-SRV-036` that
   records the observation. An entry here without a row there is a defect: the

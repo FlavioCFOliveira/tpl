@@ -50,8 +50,9 @@ detection mechanism, the form of the version string, and the contract the
 model owes a difference. Which differences exist among the four supported
 series was `OQ-045`, now listed under [Closed](open-questions.md#closed). The
 fixture of `scripts/mariadb/` exists, the four series have been observed
-against it four times, and what was found is recorded in *Differences observed
-between the series* below, per `FR-SRV-038`. A difference that is not in that
+against it on five occasions — four comparison passes, and the settling of the
+shared DDL that made the fixture buildable at all four — and what was found is
+recorded in *Differences observed between the series* below, per `FR-SRV-038`. A difference that is not in that
 record has not been observed, and SHALL NOT be written down.
 
 ## Actors
@@ -755,8 +756,8 @@ satisfies only the last of the three cases below.
 
   *State of the register.* The register held nothing through the sixth
   edition and now holds two rows, both created by `FR-SRV-039`. Of the
-  **thirteen** differences observed between the series, two reach a field the
-  model carries; the other eleven reach the reader, the fixture, or a
+  **fourteen** differences observed between the series, two reach a field the
+  model carries; the other twelve reach the reader, the fixture, or a
   requirement, and produce no row here. No entry may be written from a
   changelog, from a release note, or from knowledge of MySQL.
 
@@ -784,8 +785,10 @@ by field, `INFORMATION_SCHEMA` itself was compared table by table, and a
 second pass recorded the field lists themselves; a third pass, on 2026-09-11,
 read the session read-only state under each of its two spellings, and a fourth,
 the same day, read the version each server announces when the connection opens.
-Thirteen differences were found, and the two rows below are the two that
-reach a field the model carries. Both arrived by the same route — the servers'
+A fifth observation was made before any of the four, while the shared DDL was
+being settled, and was recorded elsewhere until the thirteenth edition brought
+it here. Fourteen differences were found, and the two rows below are the two
+that reach a field the model carries. Both arrived by the same route — the servers'
 own default collations differ — and both are accommodated by `FR-SRV-039`
 rather than by any of the three treatments the sixth edition had.
 
@@ -852,20 +855,22 @@ that requirement.
 
   *Rationale.* `FR-SRV-027` records only what the model **accommodates**, which
   is the right scope for a normative register and the wrong scope for an
-  observation. Eleven of the thirteen differences below reach the reader, the
+  observation. Twelve of the fourteen differences below reach the reader, the
   fixture, or a requirement rather than the document, and each of them
   constrains work that has not been done yet: without a home they would be
   rediscovered, or worse, contradicted. Keeping the two apart also keeps the
-  register honest — two rows in the register beside thirteen in the observation
+  register honest — two rows in the register beside fourteen in the observation
   record says *we looked, and this is the part the document carries*, which is
   a much stronger statement than either table alone.
 
 **Method and date.** The four images were built from `scripts/mariadb/` and run
 side by side on 2026-09-10; server versions `12.3.3`, `11.8.9`, `11.4.13` and
-`10.11.19`. Three passes were made. The first dumped the `freight` catalogue
-from each and compared them field by field, and compared `INFORMATION_SCHEMA`
-table by table; it found seven differences. The second recorded the **field
-lists themselves**, verbatim, for the twenty entries of
+`10.11.19`. Five observation occasions are recorded here: four comparison
+passes over running servers and, before all of them, the settling of the shared
+DDL. The first pass dumped the `freight` catalogue from each and compared them
+field by field, and compared `INFORMATION_SCHEMA` table by table; it found
+seven differences. The second recorded the **field lists themselves**,
+verbatim, for the twenty entries of
 [open-questions.md](open-questions.md) that asked for them; it found four
 more, taking the total to eleven. The third ran the same four images on
 2026-09-11 and read the session read-only state under each of its two
@@ -873,7 +878,17 @@ spellings, each spelling in its own statement; it found one more, taking the
 total to twelve. The fourth, the same day and on the same four images, read
 the version each server announces when the connection opens, over a plain
 socket and without authenticating; it found one more, taking the total to
-**thirteen**.
+thirteen.
+
+**The fifth occasion was not a pass, and its late arrival is recorded with
+it.** The rejection of a `VECTOR` column or index by two of the four series was
+observed on 2026-09-10, while the shared DDL of `scripts/mariadb/` was being
+settled — the work that made the fixture buildable at all four — and it was
+written down beside `FR-SRV-029`, whose fixture consequence it decided, rather
+than here. No pass found it because no pass looked for it: a pass compares what
+four running servers **report**, and this difference is in what each server
+**accepts**, which is settled before any server can be compared with another.
+It is difference 14 below, and it takes the total to **fourteen**.
 
 | # | Observed | `12.3` | `11.8` | `11.4` | `10.11` | What it obliges |
 |---|---|---|---|---|---|---|
@@ -890,6 +905,7 @@ socket and without authenticating; it found one more, taking the total to
 | 11 | The schema catalogue's default collation, for a database that declares none | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_general_ci` | Passed through, `FR-SRV-039`. Registered under `FR-SRV-036`. Same root cause as difference 1 |
 | 12 | The session read-only state under the spelling `transaction_read_only`; the spelling `tx_read_only` is present on all four | present, `0` | present, `0` | present, `0` | absent, `ERROR 1193 (HY000)` | Fixes the spelling of the read-back at `tx_read_only`, in the fourth entry of `FR-SRV-006` and in `FR-SRV-009`. Reaches no field of the model, so no row in the register of `FR-SRV-036`. Does not engage `FR-SRV-037` — see below |
 | 13 | The version a server announces when the connection opens — the initial handshake greeting, sent before authentication and before any statement; the probe of `FR-SRV-002` answers without the prefix on all four | `12.3.3-MariaDB-ubu2404` | `11.8.9-MariaDB-ubu2404` | `11.4.13-MariaDB-ubu2404` | **`5.5.5-10.11.19-MariaDB-ubu2204`** | Nothing today. The model carries the probe's string, per `FR-CTX-031` and `FR-SRV-040`, so the greeting reaches no field of it and takes no row in the register of `FR-SRV-036`. It obliges a test, a diagnostic or a fixture gate that reads a greeting — see below |
+| 14 | Acceptance of a `VECTOR` column or a vector index at DDL time | accepted | accepted | rejected, `ERROR 4161 (HY000)` | rejected, `ERROR 4161 (HY000)` | Fixes what the shared DDL of `scripts/mariadb/` may declare: the structure is omitted from it rather than made conditional, per `FR-SRV-029`. Bounds the memberships of `FR-ENV-046`, which names the type for that reason. Reaches no field of the model — no `VECTOR` column was read on any series — so no row in the register of `FR-SRV-036`. **The split falls between `11.4` and `11.8`** — see below |
 
 **Difference 1 is the one that would have falsified `FR-SRV-026`, and it is
 now the one `FR-SRV-039` accommodates.** The four servers were given identical
@@ -904,19 +920,20 @@ is admitted, its value is carried exactly as the server returns it under
 reaching the schema's own collation, and it is registered beside it.
 
 **Difference 8 splits the window in the middle rather than at one of its
-ends, and it is one of two differences in this record that do. It is recorded
-for that reason as much as for its content.** Of the thirteen, nine separate
+ends, and it is one of three differences in this record that do. It is recorded
+for that reason as much as for its content.** Of the fourteen, nine separate
 `10.11` from the other three and two separate `12.3` from the other three; the
-remaining two — difference 2 and this one — put `10.11` and `11.4` on one side
-and `11.8` and `12.3` on the other. The three counts are over the thirteen
-rows above, and are recomputed whenever a row is added. Nothing structural
+remaining three — differences 2, 8 and 14 — put `10.11` and `11.4` on one side
+and `11.8` and `12.3` on the other. Those three counts are over the fourteen
+rows above, as is the fourth in the caution below, and all four are recomputed
+whenever a row is added. Nothing structural
 follows — `FR-SRV-022` already selects a treatment from the resolved series
 rather than from a two-way split, and no requirement in this corpus is written
 as *`10.11` against the rest*. What follows is a caution for the reader, the
 fixture, and the test of `FR-SRV-029`: **a difference may fall anywhere in the
 window**, and code or tests that model the four series as one old server and
-three modern ones will be right for nine of the thirteen and wrong for four —
-differences 2, 6, 8 and 9.
+three modern ones will be right for nine of the fourteen and wrong for five —
+differences 2, 6, 8, 9 and 14.
 
 *Amended in the twelfth edition: two splits fall in the middle of the window,
 not one, and the closing count was wrong for a second reason.* The note read
@@ -927,11 +944,23 @@ recorded before the note was written, so the claim was never true. The closing
 count was wrong independently of that: it reused the figure of eleven, which
 counts the two splits isolating `12.3` alongside the nine isolating `10.11`,
 and a model of one old server against three modern ones is defeated by the
-first two as surely as by the two that fall in the middle. Both counts are now
-stated against the thirteen rows and name the differences they count, so that
-either can be checked without being recomputed from scratch — which is how the
-first one came to be wrong. The caution is unchanged, and the second example
+first two as surely as by the two that fall in the middle. Both counts were
+restated against the thirteen rows the record then held, and each was made to
+name the differences it counts, so that either can be checked without being
+recomputed from scratch — which is how the first one came to be wrong. The caution is unchanged, and the second example
 strengthens it.
+
+*Amended in the thirteenth edition: three splits fall in the middle of the
+window, and all four counts are recomputed over fourteen rows.* Difference 14
+has the shape difference 2 and difference 8 have — `10.11` and `11.4` on one
+side, `11.8` and `12.3` on the other — and it was observed before either of
+them and written down outside this table, which is why neither of the two
+recounts reached it. Two counts move: the middle split, from two to three, and
+the closing one, from four differences to five. The nine that isolate `10.11`
+and the two that isolate `12.3` are unchanged, which is the check that the
+recount was done over the rows rather than adjusted by one. The caution is
+unchanged again, and a third example of the same shape makes it harder to read
+as an exception.
 
 **Differences 8 and 9 do not engage `FR-SRV-037`.** Both change a column's
 declared type and neither changes a table's width, so a statement naming a
@@ -1010,6 +1039,68 @@ the same `10.11` image started without it — announced the same prefixed string
 so the prefix does not depend on whether TLS is in force; that fifth listener
 is not a fifth series and is not counted as one. Nothing was observed about
 what a server outside the window of `FR-SRV-015` announces.
+
+**Difference 14 is a difference in what each server will accept, not in what
+it reports, and it is the only one of that kind in this record.** A `VECTOR`
+column and a vector index are refused outright at DDL time by `10.11` and by
+`11.4`, and created without complaint by `11.8` and `12.3`. What it obliges
+falls on the fixture: `FR-SRV-029` requires a container buildable at four
+server versions whose DDL all four accept, so the structure is absent from the
+shared DDL rather than hidden behind a conditional, and the note beside that
+requirement records the consequence.
+
+**It takes no row in the register of `FR-SRV-036`, and its reason is neither
+difference 12's nor difference 13's.** `FR-SRV-036` fixes three columns for a
+row — the field of the model, the treatment applied to it, and what each series
+was observed to return — and none of the three can be filled here. No field is
+in question: the difference was observed in a server's answer to a `CREATE`,
+and the catalogue was never asked about a `VECTOR` column on any series,
+because the shared DDL declares none. There is therefore no treatment to
+record, and no per-series value to record. Difference 12 is a fact the model
+could not carry whatever `tpl` did with it; difference 13 touches a field the
+model does carry, by a reading it does not take; this one is upstream of both,
+in which databases can exist on each series at all.
+
+**What it bounds, rather than what it obliges.** `FR-SRV-026` requires
+identical DDL to produce byte-identical documents across the four series, and
+this difference fixes what *identical DDL* may contain: a schema holding a
+`VECTOR` column exists on two of the four series and cannot be created on the
+other two, so no document can be compared across the window for it. The bound
+is on the evidence and not on the requirement — `FR-SRV-026` speaks of a
+database all four servers hold, and a database two of them cannot hold is
+outside its subject. Where the same bound reaches a requirement it is already
+stated: `FR-ENV-046` names `VECTOR` in its bounded claim as a type a supported
+server can hold and the fixture's 39 `data_type` values do not cover, and a
+`data_type` no observation covers falls through `FR-CTX-018` rather than being
+assigned a family.
+
+**It engages neither the closed statement list nor `FR-SRV-037`.** The
+statement observed is a `CREATE` issued by the fixture's own initialisation,
+not a statement `tpl` issues — `FR-SRV-006` and `FR-SRV-007` between them
+allow `tpl` no DDL at all — so the closed list is untouched. It names no
+`INFORMATION_SCHEMA` column, so the column-list rule of `FR-SRV-037` has no
+subject here.
+
+*Observed*, on the four series of `FR-SRV-015`, on 2026-09-10, while the shared
+DDL of `scripts/mariadb/` was being settled:
+
+```text
+series  a VECTOR column or a vector index, at DDL time
+10.11   ERROR 4161 (HY000): Unknown data type: 'VECTOR'
+11.4    ERROR 4161 (HY000): Unknown data type: 'VECTOR'
+11.8    accepted
+12.3    accepted
+```
+
+*Bounded claim.* The observation is of **acceptance**, and of nothing else. One
+server of each series was read, at the four patch releases `FR-SRV-040`
+records. Nothing was observed about what the catalogue reports for a `VECTOR`
+column or a vector index on the two series that accept one, because no such
+object survives in the shared DDL to be read: no field list, no `data_type`
+value, and no index shape may be written from this. Nothing was observed about
+a server outside the window of `FR-SRV-015`, and nothing about which release
+first accepted the type — the record states which of the four supported series
+accept it, which is what was seen.
 
 **One further difference was observed and is not a difference between the
 series.** A routine's creation and alteration timestamps and a trigger's
@@ -1240,7 +1331,10 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   conditional: a `VECTOR` column or index, rejected by `10.11` and `11.4` with
   `ERROR 4161`, and a `SET` member containing a comma, rejected by all four
   with `ERROR 1367` — the second is not a series difference at all but a
-  property of the type, recorded in `FR-CAT-034`.
+  property of the type, recorded in `FR-CAT-034`. The first **is** a difference
+  between the series: it is difference 14 of `FR-SRV-038`, where that
+  requirement obliges it to be, and it was written here alone until the
+  thirteenth edition.
 
   *Still owed.* The test itself. The observation recorded under `FR-SRV-038`
   compares catalogue dumps, not the documents `tpl` emits, so it is evidence
