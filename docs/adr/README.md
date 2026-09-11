@@ -205,6 +205,7 @@ specification, which is how a fourth place starts drifting.
 | [ADR-007](adr-007-msrv.md) | The minimum supported Rust version | Accepted 2026-09-11 | — | — |
 | [ADR-008](adr-008-packaging-and-build-path.md) | Packaging and the build path for the four targets | Accepted 2026-09-10 | `NFR-PERF-018`, `NFR-PERF-012` | — |
 | [ADR-009](adr-009-foreign-key-embedding-representation.md) | The in-memory representation of the two foreign-key embeddings | Accepted 2026-09-10 | `FR-CTX-006` … `FR-CTX-010`, `FR-SCH-022` | — |
+| [ADR-010](adr-010-driver-tls-connect-stall.md) | The TLS connect stall in the pinned driver | Accepted 2026-09-11 | `FR-CONF-013`, `NFR-PERF-014` | — |
 
 The `Serves` column names the requirements a reader is most likely to arrive
 from. The complete list per record is its `requirements:` field, which is the

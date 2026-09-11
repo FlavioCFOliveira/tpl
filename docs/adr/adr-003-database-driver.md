@@ -73,7 +73,8 @@ true just as quietly.
 **What this record does not decide.** The runtime's flavour, its scope, and
 where it is built are `ADR-005`. The mapping of the five modes onto this
 driver's TLS surface is `ADR-002`. The toolchain floor this pin implies is
-`ADR-007`.
+`ADR-007`. What the project does about the TLS connect stall carried by the
+pinned version is `ADR-010`.
 
 ## Alternatives rejected
 
@@ -132,12 +133,20 @@ baseline was taken on.
 connection per invocation, and the process is ephemeral, so nothing a pool
 offers is reachable within an invocation.
 
-**One defect is open against this driver and is not a property of the choice.**
-`BENCHMARKS.md` records an unexplained blocking cost inside connection
-establishment on `musl` over raw loopback — reproducible, absent on the macOS
-host, and tracked as roadmap task `#8`. The decision does not rest on that row:
-the plaintext pair decides the same target the same way. It is a defect to be
-understood before TLS over loopback is relied upon.
+**One defect is carried by the pinned version, and it is not a property of the
+choice.** The blocking cost this record first carried as unexplained was
+diagnosed by task `#8` on 2026-09-11: it is a TLS connect stall caused by a
+regression in `sqlx-core` 0.9.0, reproducible on every supported server series
+and over the bridge path as well as loopback, and it is neither specific to
+`musl` nor a property of the raw loopback path as this record first described
+it. `BENCHMARKS.md` supersedes that account in its 2026-09-11 entry, and
+**`ADR-010` holds what the project does about it.** The decision recorded here
+does not rest on the defect: the plaintext pair decides the same target the same
+way, and the defect is in the version, not in the driver.
+
+**Moving this pin onto the release that carries the upstream fix retires
+`ADR-010`.** That is a third obligation on a version move, beside the two named
+above, and that record states what the move must remove with it.
 
 **Under R3, the pin and its rationale live here alone.** A document that needs
 to name the driver may name the crate, as the root coordination document's stack
@@ -155,7 +164,7 @@ for the composition it records.
 | `preferred` is not expressible through the rejected candidate's `Option<SslOpts>` surface; `verify-ca` collapses onto `verify-identity` behind an arm that never matches, returning a byte-identical error; both established against running servers | `BENCHMARKS.md`, same entry, "What decided it was a rule, not the numbers" | 2026-09-10 |
 | There is no third candidate: `mysqlclient-sys` is an FFI binding, `diesel` an ORM over the same C library, and `mariadb`, `libmariadb-sys` and `mariadb-connector-c` do not exist on crates.io | `BENCHMARKS.md`, same entry | 2026-09-10 |
 | The async candidate led on startup, stripped binary size and peak resident memory in every TLS-equalised comparison | `BENCHMARKS.md`, same entry, "Like for like, TLS equalised, paired per round" | 2026-09-10 |
-| An unexplained blocking cost inside connection establishment on `musl` over raw loopback, reproducible, absent on macOS, tracked as roadmap task `#8` | `BENCHMARKS.md`, same entry, "The musl anomaly" | 2026-09-10 |
+| A blocking cost inside connection establishment, recorded on 2026-09-10 as unexplained and specific to `musl` over raw loopback. **That account is superseded**: task `#8` established a TLS connect stall in `sqlx-core` 0.9.0, on every supported series and over both network paths measured, and `ADR-010` holds the response | `BENCHMARKS.md`, "The musl anomaly — resolved on 2026-09-11" and "2026-09-11 — The TLS connect stall on Linux loopback" | 2026-09-11 |
 | `sqlx` 0.9.0 is the maximum stable release of the crate, published 2026-05-21 | crates.io crate index, `sqlx`, version 0.9.0 | 2026-09-11 |
 | The five modes are normative over the driver; a driver that cannot express all five distinctly is disqualified; the choice may not be settled by reducing the mode set | `specification/configuration-model.md`, `FR-CONF-036` | 2026-09-11 |
 | The corpus names no driver and states that which one is chosen is an architecture decision | `specification/README.md`, *Still out of scope* | 2026-09-11 |
