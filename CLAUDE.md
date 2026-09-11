@@ -337,7 +337,7 @@ tpl/
 ├── templates/               # templates de arranque
 ├── tests/                   # testes de integração (CLI end-to-end)
 ├── benches/                 # benchmarks
-├── scripts/mariadb/         # Dockerfile, setup.sql, seed.sql
+├── scripts/mariadb/         # Dockerfile, setup.sql, seed.sql, tls/
 ├── examples/                # pipelines completos: schema → template → output
 └── specification/           # especificação funcional
 ```
@@ -457,6 +457,8 @@ Para trabalho de optimização, usar o agente `rust-perf-engineer`; para investi
 
 Testes ou validações que necessitem de uma base de dados real **têm** de usar os containers definidos em `scripts/mariadb/`. Lançar os containers antes, terminá-los depois. **Nunca** usar instâncias externas, mocks ou stubs como substituto.
 
+`scripts/mariadb/` não contém só imagens de servidor e SQL: os servidores apresentam o certificado TLS versionado em `scripts/mariadb/tls/`, e ao lado deles corre um servidor que não oferece TLS nenhum. O que lá está, como se lança e como se verifica está em `scripts/mariadb/README.md` — **lê-se lá, e não se copia para aqui**.
+
 O `tpl` suporta **mais do que uma série de MariaDB**. Quais são, e o que uma diferença entre séries obriga, pertence a `specification/server-contract.md` e **não se copia para aqui**.
 
 Sempre que for preciso confirmar o conteúdo, a estrutura ou os tipos devolvidos por uma query ao `INFORMATION_SCHEMA`:
@@ -471,7 +473,9 @@ Sempre que for preciso confirmar o conteúdo, a estrutura ou os tipos devolvidos
 
 **É proibido** assumir, inferir ou documentar o comportamento do catálogo sem executar estes passos. Conhecimento genérico sobre MySQL não é suficiente: as divergências entre MariaDB e MySQL no `INFORMATION_SCHEMA` são reais e relevantes.
 
-Os scripts `scripts/mariadb/setup.sql` e `seed.sql` devem cobrir exaustivamente a superfície que o `tpl` lê: todos os tipos de dados nativos do MariaDB, chaves primárias simples e compostas, índices únicos e compostos, chaves estrangeiras com regras `ON UPDATE`/`ON DELETE` distintas, colunas geradas, vistas, procedimentos e funções, triggers e comentários. O domínio modelado deve ser realista, nunca `id=1, name='test'`. O DDL tem de ser aceite por **todas** as séries suportadas.
+Os scripts `scripts/mariadb/setup.sql` e `seed.sql` devem cobrir exaustivamente a superfície de catálogo que o `tpl` lê: todos os tipos de dados nativos do MariaDB, chaves primárias simples e compostas, índices únicos e compostos, chaves estrangeiras com regras `ON UPDATE`/`ON DELETE` distintas, colunas geradas, vistas, procedimentos e funções, triggers e comentários. O domínio modelado deve ser realista, nunca `id=1, name='test'`. O DDL tem de ser aceite por **todas** as séries suportadas.
+
+A exigência de exaustividade não acaba no catálogo: vale igualmente para a superfície de transporte, e é `FR-CONF-038`, em `specification/configuration-model.md`, que fixa o que o material TLS e o servidor sem TLS têm de tornar demonstrável.
 
 ## Documentação
 
