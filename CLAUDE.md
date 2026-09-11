@@ -290,17 +290,17 @@ Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tab
 
 | Área | Escolha | Notas |
 |---|---|---|
-| Linguagem | Rust (edition 2024, MSRV a fixar no `Cargo.toml`) | |
+| Linguagem | Rust (edition 2024) | MSRV fixado em `ADR-007`, em `docs/adr/` |
 | CLI | `clap` v4 (derive) | Árvore de comandos, aliases, `--help` por subcomando |
 | Templates | `minijinja` + `minijinja-contrib` | Runtime, sempre |
-| Acesso MariaDB | `sqlx` 0.9 + `tokio` 1, runtime *current-thread* | `mysql` rejeitado; ver `BENCHMARKS.md` |
+| Acesso MariaDB | `sqlx` + `tokio` | Versões, âmbito do runtime e candidato rejeitado: `ADR-003` e `ADR-005`, em `docs/adr/` |
 | Serialização | `serde` + `serde_json` | O contexto de render é `serde`-serializável |
 | Configuração | `toml` + `serde` na leitura; `toml_edit` na escrita | A escrita preserva comentários e ordem; `OD-09`, em `docs/spec-technical/open-decisions.md` |
 | Erros | `thiserror` na biblioteca, `anyhow` no binário | |
 | Logging | Diagnósticos próprios, sem subscriber instalado | Sem `tracing` nem `tracing-subscriber`; controlado pela flag de verbosidade; `OD-17`, em `docs/spec-technical/open-decisions.md` |
 | uid do processo | `rustix`, `default-features = false`, `features = ["process"]` | `getuid` seguro; via `libc` exigiria `unsafe`; `OD-24`, em `docs/spec-technical/open-decisions.md` |
 
-> **Decisão fechada — driver MariaDB.** A escolha recaiu sobre o `sqlx` com o `tokio` num runtime *current-thread*; o `mysql` foi rejeitado. Quem decidiu foi `FR-CONF-036`, em `specification/configuration-model.md`: o candidato síncrono não exprime os cinco modos de TLS de forma distinta, e reduzir o conjunto de modos para o acomodar está vedado. A medição concordou — e desmentiu a suspeita que aqui estava escrita: o runtime assíncrono não penalizou arranque, tamanho de binário nem memória residente, ficou à frente nos três. Os números, o protocolo e as ressalvas estão em `BENCHMARKS.md`.
+> **Decisão fechada — driver MariaDB.** A escolha, a regra que a decidiu, o candidato rejeitado e a medição que confirmou a escolha — desmentindo a suspeita que aqui estava escrita — estão em `ADR-003`, em `docs/adr/`. O âmbito do runtime está em `ADR-005`.
 
 ## Plataformas Suportadas
 
@@ -434,7 +434,7 @@ O desempenho e a economia de recursos são requisitos de **primeira ordem**: pes
 - **Streaming sempre que a operação o permita.** A memória deve escalar com o maior objecto individual, não com a base de dados inteira, em tudo o que não exija o documento completo.
 - **Uma só ligação à base de dados**, aberta o mais tarde possível e fechada assim que a leitura termina. Sem pool: o processo é efémero e faz um punhado de queries.
 - **Orçamento de dependências.** Cada crate tem de justificar a sua presença. Preferir a `std`. Antes de acrescentar uma dependência, verificar o que ela arrasta (`cargo tree`) e o que custa (`cargo bloat`, tempo de arranque). Uma dependência que só se usa para uma função trivial não entra.
-- **Perfil de release** afinado no `Cargo.toml`: `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, `opt-level = 3`.
+- **Perfil de release** afinado no `Cargo.toml`: as cinco definições, e a composição com o panic hook que satisfaz `FR-ERR-030`, estão em `ADR-004`, em `docs/adr/`.
 - **Sem paralelismo especulativo.** Concorrência só entra com benefício medido, em benchmark, sobre carga representativa. Paralelizar porque é possível é proibido — o custo de sincronização e de arranque de threads é real, e em cargas pequenas perde.
 
 ### Disciplina de medição
