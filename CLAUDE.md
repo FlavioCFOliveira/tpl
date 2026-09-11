@@ -16,15 +16,16 @@ O modelo de interacção é **inspirado no `git`**: um único executável, subco
 
 ## Fontes de Verdade
 
-O projecto tem três fontes de verdade, com âmbitos que não se sobrepõem. Confundi-las é o erro previsível:
+O projecto tem quatro fontes de verdade, com âmbitos que não se sobrepõem. Confundi-las é o erro previsível:
 
 | Fonte | Responde a | Dono |
 |---|---|---|
 | `/specification` | **O que** o `tpl` faz — requisitos, regras, casos de uso | subagente `specification-manager` |
 | `rmp` | **Quando e por quem** — sprints, tarefas, estado, decisões | skill `roadmap-manager` |
-| Knowledge Graph | **Onde e como** — que código existe e como se articula | skill `knowledge-authority` |
+| Knowledge Graph | **Onde** — que código existe, como se articula, e que requisito cada componente satisfaz | skill `knowledge-authority` |
+| `docs/spec-technical/` | **Como** o `tpl` é construído — arquitectura, interfaces, dados, segurança, operação, qualidade | subagente `technical-writer` |
 
-Uma tarefa no `rmp` implementa um requisito da especificação; não o substitui. Um facto no grafo descreve o código que existe; não legitima código que a especificação não pediu.
+Uma tarefa no `rmp` implementa um requisito da especificação; não o substitui. Um facto no grafo descreve o código que existe; não legitima código que a especificação não pediu. A especificação técnica prescreve como se constrói o que a especificação funcional pede; onde discordarem, governa `/specification`. Os registos de decisão de arquitectura, em `docs/adr/`, não acrescentam uma quinta fonte: fundamentam a quarta, e nenhum é autoridade para um requisito.
 
 **Este ficheiro não é fonte de verdade funcional.** Não descreve comandos, flags, formatos de saída, exit codes, variáveis de contexto, filtros, nem a estrutura da configuração. Perante qualquer pergunta sobre *o que* o `tpl` faz, ler a especificação — nunca responder a partir deste ficheiro, e nunca reintroduzir aqui o que ela já diz. Uma segunda cópia deixa de ser verdadeira sem dar sinal disso.
 
@@ -69,6 +70,7 @@ Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desen
 | Tarefas, sprints e comentários **só** pela skill `roadmap-manager` | **PARAR**. Nunca `rmp` invocado do Bash |
 | Conhecimento sobre o código **só** pela skill `knowledge-authority` | **PARAR**. Nunca `rmp graph …` directamente |
 | A **especificação precede a implementação**, e `/specification` só é escrita pelo subagente `specification-manager` | **PARAR** e formalizar o requisito primeiro |
+| `docs/spec-technical/` só é escrita pelo subagente `technical-writer`; `docs/adr/`, pelo `adr-guardian` | **PARAR** e delegar. Nenhuma se edita por iniciativa própria |
 | **Nada se lê, lista ou referencia fora da raiz do repositório** | **PARAR**. O que faltar pergunta-se ao utilizador |
 | **`unsafe` é proibido**; `#![forbid(unsafe_code)]` mantém-se no topo do crate | **PARAR** e resolver em Rust seguro |
 | O **pipeline de validação obrigatório** passa antes de o trabalho estar concluído | O trabalho **não está concluído**. Corrigir e repetir |
@@ -248,6 +250,22 @@ Sem excepção:
 4. Se durante a implementação se descobrir que a especificação está errada ou incompleta, **PARAR**. Corrigi-la através do subagente `specification-manager` e só então retomar. **NUNCA** implementar contra a especificação, e **NUNCA** deixar código e especificação a divergir.
 
 Esta é a etapa 1 do Fluxo de Trabalho, e a razão de ser a primeira.
+
+## Especificação Técnica e Registos de Decisão
+
+A especificação funcional diz **o que** o `tpl` faz; **como** é construído vive em `docs/spec-technical/`, escrita **exclusivamente** pelo subagente `technical-writer`. **Nenhum outro agente a edita** — nem para corrigir uma gralha.
+
+Nada aí é requisito: cada afirmação traça para um requisito de `/specification` ou para uma restrição explícita. Onde as duas discordarem, a divergência é um defeito a reportar — **nunca** se fecha reescrevendo a especificação funcional, e **nunca** se deixa de pé. O índice, o que cada documento responde e por onde se começa estão em `docs/spec-technical/README.md`; lê-se lá, e não se copia para aqui.
+
+### Registos de decisão de arquitectura — `docs/adr/`
+
+Os registos de decisão de arquitectura (`ADR-NNN`, em `docs/adr/`) guardam o **porquê** de uma decisão e as alternativas que foram rejeitadas — a fundamentação que a especificação técnica não carrega. Escreve-os o subagente `adr-guardian`, e mais ninguém.
+
+**Exige-se um registo** em dois casos: quando um requisito em vigor delega o facto para fora da especificação funcional, e quando a decisão é de arquitectura e as alternativas rejeitadas têm de sobreviver à escolha. Fora deles não se abre registo — a decisão fica em `docs/spec-technical/`. A admissão é estreita de propósito, e quem a fixa é a regra R4 de `docs/adr/README.md`.
+
+**O que um registo guarda não se repete em mais lado nenhum.** Este ficheiro cita `ADR-NNN` — como já fazem as linhas da **Stack** e a do perfil de release — e nunca reescreve o que o registo diz. Estar prestes a trazer para aqui uma versão, um número ou uma justificação que um registo já guarda é motivo para **PARAR** e citar.
+
+O ciclo de vida de um registo, os seus estados, a numeração, o formato e as quatro regras que o governam estão em `docs/adr/README.md`. Lê-se lá — e **não se copia para aqui**.
 
 ## Fluxo de Trabalho
 

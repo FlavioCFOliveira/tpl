@@ -45,13 +45,13 @@ The project has four, with scopes that do not overlap.
 | Knowledge Graph | **Where** — what code exists, how it articulates, and which requirement each component satisfies | `knowledge-authority` |
 | `docs/spec-technical/` | **How** the system is built — architecture, interfaces, data, security, operation, quality | `technical-writer` |
 
-The fourth row is new. The coordination file `CLAUDE.md` currently names three
-sources and assigns *"Onde e **como**"* to the knowledge graph, which overlaps
-this folder's scope. The correction is **prepared for the user's approval and
-has not been made**: `CLAUDE.md` is coordination and is never edited
-unilaterally. The two rows it needs are recorded in
-[open-decisions.md](open-decisions.md#od-26--the-boundary-against-the-knowledge-graph),
-in the language of the file they are destined for.
+The coordination file `CLAUDE.md` carries the same four rows, applied on
+2026-09-11 with the user's authorisation and recorded in
+[open-decisions.md](open-decisions.md#od-26--the-boundary-against-the-knowledge-graph):
+the fourth row was added, and the graph's row narrowed from *"Onde e
+**como**"*, which overlapped this folder's scope. `CLAUDE.md` also governs
+[`docs/adr/`](../adr/README.md) — who writes a record and when one is required
+— which `OD-26` does not cover.
 
 ## The architecture is carried twice
 

@@ -1331,24 +1331,31 @@ violation, not a caller-facing condition.
 
 ## OD-26 — The boundary against the knowledge graph
 
-**Status: settled.**
+**Status: settled. Applied to `CLAUDE.md` on 2026-09-11.**
 
 **Decision.** `docs/spec-technical/` becomes the **fourth row** of the
 coordination file's sources-of-truth table, owned by `technical-writer`,
 answering **how the system is built**. The knowledge graph stays **descriptive**
-for code-level facts. The change to `CLAUDE.md` is **prepared for the user's
-approval and is never made unilaterally**.
+for code-level facts. The change to `CLAUDE.md` is **never made unilaterally**;
+it waited for the user's approval, and it has it.
 
 **Rationale.** `specification/README.md` hands the crate layout, the module
 layout, the types and the library API to architecture without naming where
 architecture lives, and two requirements — `FR-ENV-003` and `FR-CONF-038` —
 already cite a home outside the functional corpus. A source of truth that is
 not in the coordination table is a source of truth agents will not consult.
-`CLAUDE.md` currently assigns *"Onde e **como**"* to the graph, which overlaps
-this folder's scope, so the third row narrows as the fourth is added.
+`CLAUDE.md` assigned *"Onde e **como**"* to the graph, which overlapped this
+folder's scope, so the third row narrowed as the fourth was added.
 
-**The two rows, in the language of the file they are destined for.** For the
-user to apply, or not:
+**What was applied.** Task #46, under the user's authorisation of that day:
+`CLAUDE.md` now opens *Fontes de Verdade* with four sources and carries the two
+rows below verbatim. The same task added the governance this entry does **not**
+cover — `docs/adr/`, which `OD-26` never mentions: who writes the records and
+when one is required, citing [`docs/adr/README.md`](../adr/README.md) for their
+rules rather than restating them.
+
+**The two rows, in the language of the file they are destined for**, as
+applied:
 
 ```
 | Knowledge Graph | **Onde** — que código existe, como se articula, e que requisito cada componente satisfaz | skill `knowledge-authority` |
