@@ -74,7 +74,7 @@ Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desen
 | O **pipeline de validação obrigatório** passa antes de o trabalho estar concluído | O trabalho **não está concluído**. Corrigir e repetir |
 | O `tpl` **nunca escreve na base de dados** | **PARAR**. A leitura do catálogo é só por `INFORMATION_SCHEMA` |
 | Templates carregam-se **em runtime**, nunca embebidos em tempo de compilação | **PARAR**. Motores compile-time estão excluídos |
-| Validação que precise de base de dados usa os **containers do projecto** | **PARAR** e lançar o container. Nunca mocks nem instâncias externas |
+| Validação que precise de base de dados usa a **fixture do projecto**, operada pelo seu harness | **PARAR** e levantá-la pelo harness. Nunca à mão, nunca mocks nem instâncias externas |
 
 ## Antes de Começar
 
@@ -326,6 +326,8 @@ A matriz concreta de alvos — target triples, escolha de libc, linkagem e forma
 ```
 tpl/
 ├── Cargo.toml
+├── BENCHMARKS.md            # baselines de desempenho, com o alvo em que foram medidas
+├── knowledge-model.md       # modelo do grafo — só a skill knowledge-authority escreve
 ├── src/
 │   ├── main.rs              # entrypoint: parse, dispatch, mapeamento de exit codes
 │   ├── cli/                 # árvore clap — um módulo por comando porcelain
@@ -337,9 +339,10 @@ tpl/
 ├── templates/               # templates de arranque
 ├── tests/                   # testes de integração (CLI end-to-end)
 ├── benches/                 # benchmarks
-├── scripts/mariadb/         # Dockerfile, setup.sql, seed.sql, tls/
+├── scripts/mariadb/         # fixture MariaDB: imagens, SQL, material TLS, harness
 ├── examples/                # pipelines completos: schema → template → output
-└── specification/           # especificação funcional
+├── specification/           # especificação funcional
+└── docs/                    # especificação técnica e registos de decisão (ADR)
 ```
 
 O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o que um template vê. A sua forma não se decide no código — é a especificação que a fixa (`specification/catalogue-coverage.md` e `specification/context-document.md`); o `model/` implementa-a e as suas structs são a superfície pública documentada.
@@ -455,19 +458,21 @@ Para trabalho de optimização, usar o agente `rust-perf-engineer`; para investi
 
 ## Testes contra MariaDB
 
-Testes ou validações que necessitem de uma base de dados real **têm** de usar os containers definidos em `scripts/mariadb/`. Lançar os containers antes, terminá-los depois. **Nunca** usar instâncias externas, mocks ou stubs como substituto.
+Testes ou validações que necessitem de uma base de dados real **têm** de usar a fixture definida em `scripts/mariadb/`. **Nunca** usar instâncias externas, mocks ou stubs como substituto.
 
 `scripts/mariadb/` não contém só imagens de servidor e SQL: os servidores apresentam o certificado TLS versionado em `scripts/mariadb/tls/`, e ao lado deles corre um servidor que não oferece TLS nenhum. O que lá está, como se lança e como se verifica está em `scripts/mariadb/README.md` — **lê-se lá, e não se copia para aqui**.
+
+**A fixture não se opera à mão.** Traz o seu próprio harness — um conjunto de scripts que a levanta e verifica servidor a servidor, que a termina e prova que nada ficou para trás, que responde se está de pé antes de um teste dependente de servidor correr, e que instrumenta as observações que a especificação exige que sejam feitas fora do processo. É por eles que a fixture se opera, sempre: um comando Docker escrito à mão no lugar do harness é motivo para **PARAR**. Quais são, como se invocam e o que cada um faz lê-se aí.
 
 O `tpl` suporta **mais do que uma série de MariaDB**. Quais são, e o que uma diferença entre séries obriga, pertence a `specification/server-contract.md` e **não se copia para aqui**.
 
 Sempre que for preciso confirmar o conteúdo, a estrutura ou os tipos devolvidos por uma query ao `INFORMATION_SCHEMA`:
 
-1. Lançar o container de **cada série suportada**.
-2. Executar a query real em cada uma e observar a resposta efectiva.
+1. Levantar a fixture pelo harness, em **todas as séries suportadas**, e confirmar por ele que todas responderam.
+2. Executar a query real em cada série e observar a resposta efectiva.
 3. Confirmar o comportamento na documentação oficial do MariaDB.
 4. Documentar o código em conformidade com o que foi observado **e** confirmado.
-5. Terminar os containers.
+5. Terminar a fixture pelo harness, que confirma que nada dela ficou a correr.
 
 **Uma divergência entre séries é ela própria um achado** e regista-se como tal. É a razão de o `tpl` ler mais do que uma versão, e é o que a especificação exige que seja tratado — não uma nota de rodapé.
 
