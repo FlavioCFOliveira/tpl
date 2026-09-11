@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in nine editions. All are in force; each
+The specification has been written in ten editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -218,7 +218,8 @@ already in force to be wrong, corrects it.
   as an absence of one. `FR-SRV-038` records all seven, because six of them
   constrain the reader, the fixture, or an open question rather than the
   document, and `FR-SRV-027` records only what the model accommodates. The
-  seventh edition took the record to eleven and the register to two rows.
+  seventh edition took the record to eleven and the register to two rows, and
+  the tenth took the record to twelve.
 - **`OQ-041`, how an unreadable view is reported** —
   [privileges-and-completeness.md](privileges-and-completeness.md), and it is
   the correction described below.
@@ -512,6 +513,52 @@ stated.
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Tenth edition — the read-back names its variable
+
+Reading this corpus once more before any code is written against it reached a
+statement it requires on **every** connection and describes without naming.
+The fourth entry of the closed list of `FR-SRV-006` read "one read of the
+session read-only state", and the session read-only state has two spellings on
+MariaDB. They are not interchangeable across the window: `10.11` has
+`tx_read_only` and does not have `transaction_read_only`, which it refuses
+with `ERROR 1193 (HY000)`. The other three series have both. An implementer
+who chose the longer spelling would be told it works by three servers out of
+four and would fail outright on the fourth, at connection start, on the
+statement that confirms the strongest guarantee this tool makes.
+
+**Nothing is decided here; a reading is written down.** The four containers of
+`scripts/mariadb/` were run again on 2026-09-11 and each spelling was read in
+its own statement on each series, so that a failure of one could not mask the
+other. **No requirement changes what `tpl` does**: two name the variable they
+already commanded, one verification is bound to the servers that can falsify
+it, and one difference joins the observation record.
+
+- **The variable is named, in both places that command it** —
+  [server-contract.md](server-contract.md). The fourth entry of `FR-SRV-006`
+  now reads `@@session.tx_read_only`, and `FR-SRV-009` names the same variable
+  and forbids the other spelling. The evidence, its bound, and the rejected
+  alternatives sit under `FR-SRV-006`: selecting the spelling per series, which
+  `FR-SRV-037` licenses for a catalogue column list, is refused because an
+  entry of a closed list that takes a different form per server is not one
+  entry, and because the two spellings agree wherever both exist, so the
+  spelling every series has costs nothing to prefer.
+- **The verification is bound to every series** — `FR-SRV-013`. The test that
+  exercises the read-back named no server, and exactly one series of the window
+  discriminates the two spellings, so a test that runs anywhere else passes
+  under either. It now runs against every series of `FR-SRV-015`, in the words
+  `FR-SRV-029` already used.
+- **The record of differences grows from eleven to twelve** — `FR-SRV-038`.
+  The presence of `transaction_read_only` is difference 12. It reaches no
+  field of the model, so the register of `FR-SRV-036` keeps its two rows; and
+  it does not engage `FR-SRV-037`, whose subject is the column list of a
+  catalogue read. A note beside the table says why, and why widening
+  `FR-SRV-037` to cover it was rejected, so that the next reader does not
+  re-open it. `FR-CAT-029`'s count follows it, and that list is still empty.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -743,6 +790,12 @@ amended and the profile that document states no longer contradict each other.
 
 The ninth edition adds no obligation of either kind. Its four changes are
 corrections of wording, each stated beside the requirement it changed.
+
+The tenth edition adds no obligation of either kind either. It names a variable
+that two requirements had left to the implementer, records a twelfth difference
+between the series, and widens one verification that was already owed —
+`FR-SRV-013`, which like every test this corpus mandates is blocked only by
+`tpl` not existing.
 
 Five items previously recorded here have been discharged.
 

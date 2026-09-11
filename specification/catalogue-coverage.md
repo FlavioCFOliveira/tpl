@@ -1,7 +1,7 @@
 ---
 title: Catalogue Coverage
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md]
 ---
 
@@ -1006,12 +1006,12 @@ that is not written down is an omission.
   | *(none excluded)* | | | |
 
   **The list is empty, and this is an observed result.** The four series were
-  observed against the fixture of `scripts/mariadb/` on 2026-09-10 and no field
-  of ambiguous meaning was found; the **eleven** differences that were found
-  are recorded under `FR-SRV-038` and not one of them is a difference of
-  meaning. The claim is bounded by what the fixture exercises, which
-  `FR-SRV-038` states. No entry may be written from a changelog, from a
-  release note, or from knowledge of MySQL.
+  observed against the fixture of `scripts/mariadb/` on 2026-09-10 and again
+  on 2026-09-11, and no field of ambiguous meaning was found; the **twelve**
+  differences that were found are recorded under `FR-SRV-038` and not one of
+  them is a difference of meaning. The claim is bounded by what the fixture
+  exercises, which `FR-SRV-038` states. No entry may be written from a
+  changelog, from a release note, or from knowledge of MySQL.
 
   *Amended in the seventh edition: the count only.* The second observation
   pass took the recorded differences from seven to eleven. Three of the four
@@ -1020,6 +1020,12 @@ that is not written down is an omission.
   before — none of the eleven is a field whose **meaning** two series
   disagree about. A difference of value is now treated by `FR-SRV-039`
   instead.
+
+  *Amended in the tenth edition: the count only.* A third observation pass
+  added a twelfth difference, recorded under `FR-SRV-038`. It is the presence
+  of a session variable and not a catalogue field at all, so it cannot be a
+  field of ambiguous meaning and the list stays empty for the reason it has
+  always been empty.
 
   The last column names the row of the divergence register of `FR-SRV-036` that
   records the observation. An entry here without a row there is a defect: the
