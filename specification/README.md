@@ -625,6 +625,14 @@ Integrity Protection is a configuration of a contributor's machine and a
 password prompt cannot be automated — and it is recorded in *What would change
 this* as a decision the project may still take, rather than one taken here.
 
+**One editorial correction.** `DIV-031` said the closed statement list of
+`FR-SRV-006` has **three** entries, which was true when the second edition
+wrote it and has not been since: the fifth edition added the read-back as a
+fourth entry and the tenth named the variable it reads. The table carries four
+rows, so the clause was wrong and is corrected. What that entry owes the root
+`CLAUDE.md` is unchanged — the removal of the `SHOW` clause — and the entry
+says so in its own note.
+
 **No requirement is withdrawn, no identifier is retired, and no open question
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.

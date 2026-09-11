@@ -455,11 +455,21 @@ failure, and the absence of a flag to disable any of it, are unchanged.
 
 *Says*: the catalogue is read exclusively through `INFORMATION_SCHEMA` "e,
 quando estritamente necessário, `SHOW`".
-*Specification*: `FR-SRV-006` and `FR-SRV-007` — the closed list has three
+*Specification*: `FR-SRV-006` and `FR-SRV-007` — the closed list has four
 entries and `SHOW` is not one of them. A statement outside the list is not
 permitted however necessary it seems.
 *Correction*: remove the `SHOW` clause. The prohibition on `mysqldump` and on
 any external process is unchanged and is restated by `FR-SRV-007`.
+
+*Amended in the eleventh edition.* The clause above said **three** entries. It
+was written in the second edition, when the list had three; the fifth edition
+added a fourth — the read-back of the session read-only variable, which the
+tenth edition named `@@session.tx_read_only` — and this entry was not revisited
+with it. `FR-SRV-006` carries four rows, counted in its own table on
+2026-09-11, and `FR-SRV-012` requires a test that expects four kinds of
+statement and no fifth. **Only the count changes.** `SHOW` is no more one of
+the four than it was one of the three, and the correction owed to `CLAUDE.md`
+is the one stated above and nothing more.
 
 ## DIV-032
 
