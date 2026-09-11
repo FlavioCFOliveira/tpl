@@ -20,9 +20,9 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Fifty entries are recorded. As of 2026-09-11, fifteen are due in
+**Fifty-one entries are recorded. As of 2026-09-11, sixteen are due in
 full, fourteen are discharged, and twenty-one are partly discharged.**
-Thirty-six entries still owe something: thirty-two owe it to `README.md`, five
+Thirty-seven entries still owe something: thirty-two owe it to `README.md`, six
 owe it to `CLAUDE.md`, and `DIV-037` is in both counts because it owes a
 different thing to each. The asymmetry has one cause. `CLAUDE.md` was reduced
 to agent coordination in a single commit, `0ea5624`, which discharged twelve
@@ -40,9 +40,14 @@ Three kinds of entry appear:
   contradicted; what is wrong is that a reader who acts on the passage fails.
   Leaving it spends the credit of everything else the file says.
 
-*The third kind is added in the sixteenth edition*, and two entries carry it:
-`DIV-046` against `README.md` and `DIV-050` against `CLAUDE.md`, which are one
-divergence written twice, once in each root document. The two kinds above were
+*The third kind is added in the sixteenth edition*, and three entries carry
+it: `DIV-046` against `README.md`, and `DIV-050` and `DIV-051` against
+`CLAUDE.md`. All three record one fact about the repository — it holds no
+crate — against three passages that state otherwise, and no one of them
+discharges another, because each is corrected in the passage it was raised
+against. `DIV-046` and `DIV-051` are the closest pair of the three: they record
+the same eight `cargo` commands, under headings that are each other's
+translation, once in each root document. The two kinds above were
 written when every entry
 described the relation between a root document and this corpus. An entry that
 describes the relation between a root document and the repository has no home
@@ -197,6 +202,7 @@ discharges, and it is the reason this file's remaining work is almost entirely
 | [DIV-048](#div-048) | `README.md` | Contradiction | Due | The entry flag is `--database`, which is the global flag's name |
 | [DIV-049](#div-049) | `README.md` | Contradiction | Due | The entry flag table omits `--ca-file` and `--ca-path` |
 | [DIV-050](#div-050) | `CLAUDE.md` | Overstatement | Due | The project tree, in a repository with no crate |
+| [DIV-051](#div-051) | `CLAUDE.md` | Overstatement | Due | The eight `cargo` commands, in a repository with no crate |
 
 ## DIV-001
 
@@ -1339,6 +1345,13 @@ neither discharges the other: each is corrected by an edit to its own file,
 under its own authorisation, so a reader who corrects both sequences of
 `README.md` leaves the tree of `CLAUDE.md` still saying the crate is there.
 
+*The same commands stand in `CLAUDE.md`, under `DIV-051`.* That file's
+*Desenvolvimento* section and the validation pipeline under it give the same
+three commands and the same five, and they are recorded against that file as an
+entry of their own, in the same edition and for the reason written there. The
+relation is the one above: neither entry discharges the other, and correcting
+*Development* here leaves the other file's copy standing.
+
 ## DIV-047
 
 **Target**: `README.md`, the flag table of `render`. **Kind**: contradiction.
@@ -1542,4 +1555,131 @@ recorded under this entry: the reading that raised this one was authorised over
 the project tree, and an entry that reached past its own reading is the defect
 the paragraph above keeps `DIV-046` clear of. `DIV-001` leaves the validation
 pipeline with `CLAUDE.md`, so that section belongs where it is too, and as here
-only its tense would be in question. It needs an entry of its own.
+only its tense would be in question. It needed an entry of its own, and has
+since been raised as `DIV-051`, in the same edition; the reason the two are
+recorded apart is written there.
+
+## DIV-051
+
+**Target**: `CLAUDE.md`, *Desenvolvimento* and the *Pipeline de validação
+obrigatório* under it. **Kind**: overstatement.
+
+**Status**: due, checked on 2026-09-11 at `87dd6e3` — still the last commit to
+touch either root document. Both fenced blocks stand, and that commit left them
+untouched while it rewrote the project tree two sections above. The
+repository holds no crate: a search of the working tree finds no `Cargo.toml`
+at any depth and no `Cargo.lock`, and none of `src/`, `tests/`, `benches/`,
+`templates/`, `examples/` or `target/`. Every one of the eight commands fails
+for want of a manifest.
+
+
+
+*Says*: *Desenvolvimento* opens with a fenced block giving `cargo build`,
+`cargo run -- --help` and `cargo test`. The subsection under it, *Pipeline de
+validação obrigatório*, states that no work is complete until every command
+below it passes, in the order given, and gives five:
+`cargo fmt --all -- --check`,
+`cargo clippy --all-targets --all-features -- -D warnings`,
+`cargo build --release`, `cargo test --all-features` and `cargo audit`.
+Neither block carries a tense or a marker, and the sentence between them states
+an obligation in the present indicative.
+*Specification*: none, and that is what the third kind records. No requirement
+of this corpus is contradicted and nothing is owed to this folder. `DIV-001`
+leaves the validation pipeline with `CLAUDE.md` — it names the pipeline among
+the content that file keeps — so the section belongs where it is, exactly as
+*Installation* belongs to `README.md` under `DIV-046`, and only its tense is
+false. It is false of the repository rather than of a requirement, and false to
+the reader that file declares for itself: an agent that runs the pipeline
+before reporting a task complete gets five failures that say nothing about the
+work it did, and one that follows the section above it gets the other three. The cost is larger here than in a passage a reader merely
+consults, because the sentence between the blocks is a gate on work in the
+present. Four sprints of work have been closed in this repository, and the gate
+as written could not have been passed in any of them.
+*Correction*: say at the head of the section that the crate does not exist yet
+and that the commands become runnable with it, or mark the two blocks. **The
+eight commands are not to be removed, and neither is the obligation stated
+between them.** They are the right commands, they are this file's to state
+under `DIV-001`, and they run unchanged the moment the manifest exists. What is
+wrong is the tense and not the substance — which is the whole of this entry, as
+the same distinction is the whole of `DIV-050`.
+
+*Why this is an entry of its own and not a widening of `DIV-050`.* Both entries
+are raised against `CLAUDE.md`, both record the same fact about the repository,
+and both ask for a qualifier rather than a deletion, so the question is whether
+they are one correction the way `DIV-046`'s two sections are. They are not, on
+three grounds.
+
+First, the criterion `DIV-046` used is the correction and not the
+neighbourhood. Its two sections are about four hundred lines apart in
+`README.md` — *Installation* near the head of the file and *Development* near
+its foot — so proximity is not what joined them. What joined them is that both
+are sequences of build commands, and one sentence written at the head of each
+discharges both.
+
+Second, the correction asked for here is not the one `DIV-050` asks for. That
+entry qualifies a tree of paths and says in as many words that neither the tree
+nor the decomposition under `src/` may be removed, because the decomposition is
+an architecture decision the document is entitled to state. This entry
+qualifies two blocks of commands and the obligation stated between them. An
+editor who applies `DIV-050` exactly as written — a line at the head of the
+tree, or a mark on the lines that are already there — leaves the eight commands
+where they are, under a heading and a subheading that entry does not name, and
+leaves a rule that gates the completion of work on commands that cannot run.
+
+Third, the two passages are edited apart and must therefore be re-checked
+apart. **Target** is the authority on where to look when an entry is
+re-checked, and `87dd6e3` is the demonstration: it rewrote the tree, adding
+three artefacts because they exist, and did not touch *Desenvolvimento*. An
+entry whose target named both sections would have been re-read against that
+commit and recorded as partly discharged on the strength of an edit that did
+nothing for the commands.
+
+What a merge would buy is that whoever holds the pen on `CLAUDE.md` sees one
+item instead of two, and both corrections are likely to be made in one commit.
+That is not enough to merge them. The index groups by **Target**, so a reader
+working through what `CLAUDE.md` owes sees both entries together and loses
+nothing; while an entry carrying two corrections of different shapes under one
+status is what the *partly discharged* machinery exists to describe, and
+describing as one thing what is two makes the register a worse work list rather
+than a shorter one.
+
+The reading that raised `DIV-050` was authorised over the project tree and
+named this passage without recording it, which left the placement open rather
+than settled. It is settled here, by a reading of the section itself and on the
+three grounds above.
+
+*The same eight commands as `DIV-046` records of `README.md`.* *Development* in
+that file gives `cargo build`, `cargo run -- --help` and `cargo test`, and then
+the same five-command pipeline under the sentence *Before any change is
+considered complete*. The two passages are one list written twice, once in each
+root document, under headings that are each other's translation. This is the
+relation `DIV-046` and `DIV-050` already carry, and it holds the same way here:
+neither entry discharges the other, because each is corrected by an edit to its
+own file under its own authorisation, so a reader who qualifies *Development*
+leaves `CLAUDE.md` still telling an agent that no work is complete until eight
+commands pass that cannot run. The link is written in both directions.
+
+*Three passages elsewhere in the file cite the pipeline and need nothing.* The
+rules table at the head of `CLAUDE.md` makes it a rule that the mandatory
+pipeline passes before work is complete; the platforms section requires what
+passes it to pass on every supported target; and the code-conventions section
+names `rustfmt` and `clippy` as the arbiters that run in it. Each states an
+obligation and names the section that holds the commands, and none of them says
+anything about the working tree, so the qualifier this entry asks for at the
+head of that section reaches them where they stand. It is the reading `DIV-050`
+gives the lines of the tree it leaves alone: a direction and a claim about the
+working tree are different things, and only the second is false.
+
+*One observation that this entry does not own.* The *Disciplina de medição*
+subsection states that the benchmarks live in `benches/` and run against the
+dataset of the MariaDB containers, so as to be reproducible. `benches/` is one
+of the six paths `DIV-050` records as absent, and there are no benchmarks to
+live in it; the sentence is the same class of claim as the two blocks above,
+in the present indicative with nothing around it to carry a tense. It is not
+recorded under this entry: the reading that raised this one was authorised over
+the eight commands, and reaching past its own reading is the defect `DIV-046`
+and `DIV-050` each keep themselves clear of. No entry covers it. `DIV-035` was
+the performance budget table and is discharged; `DIV-036` targets the project
+tree and the MariaDB testing section, and what it still owes is
+`seed-bench.sql` and the sentence that ought to name it. It needs an entry of
+its own.
