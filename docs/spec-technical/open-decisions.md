@@ -306,9 +306,10 @@ catalogue read would exist per command, and `NFR-PERF-005` would be a review
 item rather than an observation.
 
 **Rejected — folding `output/` and `diagnostics/` into one module.** They
-share nothing: `FR-OUT-018` excepts tab and `FR-ERR-024` escapes it, on streams
-with opposite contracts — stdout is byte-identical under `NFR-DET-001` and
-stderr is explicitly neither deterministic nor contract. One module holding two
+share nothing: `FR-OUT-018` excepts tab in `text` read output and
+`FR-ERR-024` escapes it in every message, on streams with opposite contracts —
+stdout is byte-identical under `NFR-DET-001` and stderr is explicitly neither
+deterministic nor contract. One module holding two
 opposite escaping rules over two opposite promises is the shape in which the
 wrong one gets applied.
 
@@ -1139,9 +1140,11 @@ integration-tested codes for `FR-ERR-031`. The composition of the two is
 reasoned rather than executed, and both requirements say so. `verification`
 cites that limit and does not restate it.
 
-**No longer part of this entry.** The tension between `FR-ERR-030`'s caught
-panic and an aborting release profile is not a seam question, and the eighth
-edition recorded it as `DIV-045` rather than resolving it. It is carried in
+**No longer part of this entry.** The tension between the condition
+`FR-ERR-030` carried before the ninth edition — a panic **caught** at the top
+level — and an aborting release profile is not a seam question; the eighth
+edition recorded it as `DIV-045` rather than resolving it, and the ninth
+amended the requirement to state the outcome instead. It is carried in
 `OD-28`. `FR-ERR-031`'s trigger exercises the **other** producing condition of
 `70` — the detected invariant violation — so the exception `BR-ERR-001` grants
 does not depend on that answer.

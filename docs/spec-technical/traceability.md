@@ -22,15 +22,16 @@ directions.
 
 `specification/` holds **26 files**: 25 requirement modules and `README.md`,
 the index. All 26 are covered. The mapping was harvested against the seventh
-edition and reconciled against the **eighth** on 2026-09-11, which changed the
-rows drawn from `cli-contract.md`, `configuration-model.md`,
-`project-and-discovery.md`, `errors-and-exit-codes.md`, `server-contract.md`,
-`performance-requirements.md`, `glossary.md` and `upstream-divergences.md`.
-Two rows were discharged against the **ninth** edition on 2026-09-11: `70`'s
-producing conditions in section 14, and `DIV-045` in section 26. That edition's
-other two changes — the phase-to-key mapping of `FR-CONF-005` and the tab
-exception of `FR-OUT-018`, confined to `text` — are not yet carried into
-sections 11 and 13.
+edition and is **current with the ninth**, reconciled on 2026-09-11. The eighth
+edition changed the rows drawn from `cli-contract.md`,
+`configuration-model.md`, `project-and-discovery.md`,
+`errors-and-exit-codes.md`, `server-contract.md`,
+`performance-requirements.md`, `glossary.md` and `upstream-divergences.md`. The
+ninth amended six files, and four of them moved a row: `configuration-model.md`
+in section 11, `output-formats.md` in section 13, `errors-and-exit-codes.md` in
+section 14, and `upstream-divergences.md` in section 26. Its amendments to
+`security.md` and to the index left sections 15 and 1 standing as written, and
+those two sections were re-read against it.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -220,7 +221,7 @@ identifier is the authority and the wording here is a summary.
 | Single-pass expansion, `$$` literal, unclosed brace `78`, undefined variable `78` | `FR-CONF-019` … `FR-CONF-022` | `interfaces` |
 | `password_command` runs **without a shell** from an argument array; metacharacters are literal | `FR-CONF-024`, `FR-CONF-026` | `security` |
 | The child is bounded and silent: 4096-byte stdout cap then terminate, stderr to the null device, non-zero exit is `78` naming the command and status | `FR-CONF-031` … `FR-CONF-033` | `security`, `architecture` |
-| A deadline on every blocking phase: DNS, TCP connect, TLS handshake, catalogue query, `password_command`, render — six separately named phases | `FR-CONF-005` | `architecture` (`OD-12`) |
+| A deadline on every blocking phase, **six phases against four keys**: catalogue query, `password_command` and render take a budget each from `core.query_timeout`, `core.password_timeout` and `core.render_timeout`; DNS resolution, TCP connect and TLS handshake **share one** budget of `core.connect_timeout`, measured from the first of the three that runs. The deadline machinery therefore carries one clock across three phases, and reports an expiry against the phase in progress when it expired | `FR-CONF-005`, `FR-CONF-004`; `FR-ERR-034` | `architecture` (`OD-12`) |
 | The `musl` static linkage changes DNS behaviour, and the `cause` line owes the caller the distinction | `FR-CONF-005` note; `NFR-PERF-018` | `operations`, `interfaces` |
 
 ---
@@ -255,7 +256,7 @@ identifier is the authority and the wording here is a summary.
 | A five-row compatibility rule governs document evolution: adding a field or an enumerated value is not breaking | `FR-OUT-014` | `data-model`, `operations` (`OD-03`) |
 | An error is never formatted: `--format` is ignored, stdout stays empty, the four lines go to stderr | `FR-OUT-015`, `FR-ERR-033` | `interfaces` |
 | Invalid UTF-8 from the catalogue becomes U+FFFD and the read continues — so catalogue values must be read as **bytes** and converted lossily, not as validated strings | `FR-OUT-017` | `architecture`, `interfaces` |
-| C0 escaping in read output (tab excepted) applies to **every interpolated value whatever its source**; `render` and `template show` are exempt and byte-for-byte | `FR-OUT-018`, `FR-OUT-019` | `security`, `interfaces` |
+| C0 escaping in read output applies to **every interpolated value whatever its source**, and the two paths differ: in `text` tab is excepted, because the aligned columns of `FR-OUT-006` are laid out with it; in `json` there is no exception, a tab being emitted as the escape the format defines. `render` and `template show` are exempt and byte-for-byte | `FR-OUT-018`, `FR-OUT-019`, `FR-OUT-006` | `security`, `interfaces` |
 | An empty result is `0`: the header row alone in `text`, the collection key with `[]` in `json` | `FR-OUT-033` … `FR-OUT-037` | `interfaces` |
 | Results to stdout, everything else to stderr, nothing else on stdout for a piped command | `FR-OUT-020`, `FR-OUT-021` | `architecture` |
 
@@ -274,7 +275,7 @@ identifier is the authority and the wording here is a summary.
 | The deliberate `70` trigger is reachable **only from within the system's own test configuration** and from no invocation of the distributed binary, and appears in neither command tree nor any help text; `BR-ERR-001` excepts `70` from its integration test in consequence | `FR-ERR-031`, `BR-ERR-001` | `verification` (the residual of `OD-21`) |
 | Nearest match: at most three candidates within edit distance two, ordered by distance then name, over eight populations | `FR-ERR-019` … `FR-ERR-021` | `interfaces`, `quality-attributes` (`OD-20`) |
 | A runnable hint is built only from literals and `[A-Za-z0-9_]{1,64}`; a candidate outside that set is not presented **at all** | `FR-ERR-022`, `FR-ERR-023` | `security` |
-| Every interpolated value in a message escapes `\n`, `\r`, `\t` and C0 — a different rule from read output | `FR-ERR-024` | `security`, `interfaces` |
+| Every interpolated value in a message escapes `\n`, `\r`, `\t` and C0 — a different rule from the `text` read output, which is the one path that excepts tab | `FR-ERR-024`, `FR-OUT-018` | `security`, `interfaces` |
 | `EPIPE` is `0` normally and `74` if a JSON document was mid-flight: the writer must know whether it is inside a document | `FR-ERR-025`, `FR-ERR-026` | `architecture`, `interfaces` |
 | Nine codes carry at least one integration test, part of the definition of done; `70` is the single exception and is exercised in process | `BR-ERR-001` | `verification` |
 
