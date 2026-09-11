@@ -18,22 +18,28 @@ eighth edition left inside settled entries. The fifth, `OD-22`'s, is work
 rather than a decision, and is restated below as belonging to two named
 documents.
 
-Four obligations survive the settlement, and each is named in its own entry
+Two obligations survive the settlement, and each is named in its own entry
 rather than left to be inferred:
 
 | Entry | What is owed | To whom |
 |---|---|---|
-| `OD-28` | An amendment to `FR-ERR-030`, **before** any implementation narrows the caught-panic condition of `70` | `specification-manager` |
-| `OD-12` | An observation: `FR-CONF-005` names six phases and `FR-CONF-002` supplies four `[core]` keys, so `FR-CONF-004`'s "the `[core]` key for that phase" has no unique referent for three of them. Plus one behaviour to verify against the fixture when the reader exists | `specification-manager`; then `verification` |
 | `OD-14` | An observation about a **defined** `null` under `UndefinedBehavior::Strict`, unverified against the engine pin | `technical-writer` |
 | `OD-22` | Two halves of fixture and harness work that `FR-CONF-038` hands out explicitly, each already assigned to a document | `technical-writer` |
 
+**Two further obligations were discharged by the ninth edition of
+`/specification`**, at commit `4ad5e8c` of 2026-09-11: `OD-28`'s amendment to
+`FR-ERR-030`, and `OD-12`'s observation on the referent of `FR-CONF-004`.
+Neither entry is reopened and neither history is dropped; each records what
+landed. One obligation of `OD-12`'s survives inside that entry and falls to
+`verification` rather than to this register, as `OD-08`'s does.
+
 **No entry is a conflict.** The three that were — `OD-21`, `OD-22` and
 `OD-24` — were resolved in the eighth edition, which read requirement against
-requirement and named the requirement that yields in each case. `OD-28` is the
-one entry whose settlement obliges the functional corpus to move, and it moves
-first: an implementation choice never narrows a contractual code without the
-corpus saying so.
+requirement and named the requirement that yields in each case. `OD-28` was the
+one entry whose settlement obliged the functional corpus to move, and it moved
+first: the ninth edition amended `FR-ERR-030` before any implementation was
+written against it, which is the order an implementation choice may never
+invert when a contractual code is at stake.
 
 Each settled entry records the decision, its rationale, and **the options
 rejected**, for the reason [`docs/adr/README.md`](../adr/README.md) gives for
@@ -51,7 +57,7 @@ entry's rationale belongs there where rule R4 of
 | **Settled** | Decided. The rationale and the rejected options are recorded in the entry |
 | **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it |
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
-| **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order |
+| **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
 | **Open** | Not decided. The entry names the options and the owner. **No entry carries this status today** |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
@@ -70,7 +76,7 @@ entry's rationale belongs there where rule R4 of
 | [OD-09](#od-09--toml-the-read-path-and-the-write-path) | TOML: the read path and the write path | Settled | — |
 | [OD-10](#od-10--cache-filenames-and-the-case-collision) | Cache filenames, and the case collision | Settled | — |
 | [OD-11](#od-11--the-scope-of-the-async-runtime) | The scope of the async runtime | Settled | — |
-| [OD-12](#od-12--how-six-phase-deadlines-are-enforced) | How six phase deadlines are enforced | Settled, with an observation owed | `specification-manager` |
+| [OD-12](#od-12--how-six-phase-deadlines-are-enforced) | How six phase deadlines are enforced | Settled | — |
 | [OD-13](#od-13--the-engine-pin-and-minijinja-contrib) | The engine pin, and `minijinja-contrib` | Settled | — |
 | [OD-14](#od-14--which-undefined-behaviour-the-engine-is-configured-with) | Which undefined behaviour the engine is configured with | Settled, with an observation owed | `technical-writer` |
 | [OD-15](#od-15--the-template-loader) | The template loader | Settled | — |
@@ -86,11 +92,10 @@ entry's rationale belongs there where rule R4 of
 | [OD-25](#od-25--the-clock-source-for-now) | The clock source for `now` | Settled | — |
 | [OD-26](#od-26--the-boundary-against-the-knowledge-graph) | The boundary against the knowledge graph | Settled | — |
 | [OD-27](#od-27--seed-benchsql-and-wl-001) | `seed-bench.sql` and `WL-001` | Settled | — |
-| [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Settled, with an amendment owed | `specification-manager` |
+| [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Settled | — |
 
-Twenty-four entries are settled outright; `OD-12` and `OD-14` carry an
-observation owed, `OD-22` a residual, and `OD-28` an amendment owed. Twenty-four
-and four are the whole of the twenty-eight.
+Twenty-six entries are settled outright; `OD-14` carries an observation owed
+and `OD-22` a residual. Twenty-six and two are the whole of the twenty-eight.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
@@ -106,9 +111,16 @@ verified on: **2026-09-10** for the nineteen entries settled that day,
 own text. No claim rests on recollection.
 
 The three entries the eighth edition settled — `OD-21`, `OD-22`, `OD-24` —
-were re-read against the corpus as it stands at commit `9efa791` on
-**2026-09-11**, requirement by requirement. Every identifier they cite was
-confirmed to exist in that corpus.
+were re-read against the corpus at commit `9efa791` on **2026-09-11**,
+requirement by requirement. Every identifier they cite was confirmed to exist in
+that corpus.
+
+The two entries the **ninth** edition discharged — `OD-12` and `OD-28` — were
+re-read the same way against commit `4ad5e8c` of 2026-09-11, over
+`errors-and-exit-codes.md`, `configuration-model.md`, `output-formats.md`,
+`upstream-divergences.md` and the edition's own section of `README.md`. Every
+identifier cited in the paragraphs that changed was confirmed to exist in that
+corpus.
 
 ---
 
@@ -605,10 +617,12 @@ raw loopback, tracked as roadmap task `#8`; it bears on `OD-12`.
 
 ## OD-12 — How six phase deadlines are enforced
 
-**Status: settled, with an observation owed to `specification-manager` and one
-behaviour owed a verification.** It was flagged as the entry likeliest to prove
-a requirement unmeetable. It did not: five of the six phases separate cleanly,
-and the sixth pair separates in the report rather than in the call.
+**Status: settled.** The observation it owed `specification-manager` landed in
+the ninth edition; one behaviour is still owed a verification, which falls to
+`verification` rather than to this register, exactly as `OD-08`'s does. It was
+flagged as the entry likeliest to prove a requirement unmeetable. It did not:
+five of the six phases separate cleanly, and the sixth pair separates in the
+report rather than in the call.
 
 **Decision.** Three mechanisms, chosen by what the phase is waiting on.
 
@@ -680,20 +694,21 @@ create no thread, open no socket and read no file, exactly as before.
 - **A cooperative clock check inside the output writer.** It bounds a template that emits and not one that loops without emitting, so it would bound some renders rather than the render — and which ones would depend on the template, which is caller input.
 - **Rendering on a worker thread while the calling thread waits with `recv_timeout`.** The same construct inverted. It moves the hot path off the calling thread for no gain and puts the writer on the thread that is abandoned.
 
-**The observation owed to `specification-manager`, and the reading this entry
-takes meanwhile.** `FR-CONF-005` names six phases, `FR-CONF-002` supplies four
-`[core]` timeout keys, and `FR-CONF-004` resolves "each phase deadline from the
-`[core]` key for that phase". Three of the six phases have no key of their own
-and `core.connect_timeout` is the only candidate for all three, so the rule as
-written has no unique referent for them. Two readings are available: three
-independent timers of `connect_timeout` each, whose sum is three times the key
-the caller set; or one budget of `connect_timeout` shared by the three, which
-is what the key's name states. **This entry takes the second**, because a caller
-who writes `connect_timeout = 10` is stating how long connecting may take, and
-because the first reading makes the configured value unable to bound the thing
-it is named after. `FR-CONF-005` is satisfied under both: no phase runs
-unbounded. The correction owed is one of wording, not of substance, and it is
-`specification-manager`'s to make.
+**The observation owed to `specification-manager`, discharged by the ninth
+edition.** It reported that `FR-CONF-005` named six phases, `FR-CONF-002`
+supplies four `[core]` timeout keys, and `FR-CONF-004` resolved "each phase
+deadline from the `[core]` key for that phase", which left the three connection
+phases with no unique referent. Two readings were available: three independent
+timers of `connect_timeout` each, whose sum is three times the key the caller
+set; or one budget of `connect_timeout` shared by the three, which is what the
+key's name states. **This entry took the second**, because a caller who writes
+`connect_timeout = 10` is stating how long connecting may take, and because the
+first reading makes the configured value unable to bound the thing it is named
+after. `FR-CONF-005` now carries the phase-to-key mapping and the shared
+connection budget in its own text, and `FR-CONF-004` points at that mapping
+instead of implying a key per phase — so the shared connection deadline above is
+the corpus's rule rather than this entry's reading. Nothing in the decision
+changes.
 
 **The behaviour owed a verification, and what it costs if it does not hold.**
 Whether a TLS handshake failure reaches `tpl` as `sqlx::Error::Tls` — for an
@@ -953,7 +968,7 @@ rather than by a pair of hand-written routines that must be kept inverse.
 
 **Why the two arguments for a bespoke writer do not hold.**
 
-- **C0 escaping.** On the JSON path it is the encoder's already: `serde_json::ser::CharEscape` enumerates `Backspace`, `FormFeed`, `LineFeed`, `CarriageReturn`, `Tab` and `AsciiControl(u8)` — "an escaped ASCII plane control character (usually escaped as `\u00XX`)" (docs.rs `serde_json` 1.0.151, verified 2026-09-11). JSON admits no raw control character inside a string, so `FR-OUT-018`'s exception for tab has no effect there: a tab is emitted as `\t`, which is the escape. On the **`text`** path the escaping is `tpl`'s own, with tab excepted for the column alignment `FR-OUT-006` needs, and it lives in `output/` beside the layouts it exists for. Neither path needs a serialiser wrapper.
+- **C0 escaping.** On the JSON path it is the encoder's already: `serde_json::ser::CharEscape` enumerates `Backspace`, `FormFeed`, `LineFeed`, `CarriageReturn`, `Tab` and `AsciiControl(u8)` — "an escaped ASCII plane control character (usually escaped as `\u00XX`)" (docs.rs `serde_json` 1.0.151, verified 2026-09-11). JSON admits no raw control character inside a string, so a tab is emitted as `\t`, which is the escape. The ninth edition settled the reading this entry took: `FR-OUT-018`'s tab exception is now confined to `text`, and on the `json` path the requirement states that the escape the format defines is what satisfies it. On the **`text`** path the escaping is `tpl`'s own, with tab excepted for the column alignment `FR-OUT-006` needs, and it lives in `output/` beside the layouts it exists for. Neither path needs a serialiser wrapper.
 - **The mid-document pipe state.** `FR-ERR-026` makes a stdout closed part-way through a JSON document a `74`. That is a property of the **writer**, not of the encoder: `tpl` writes through a buffered writer that records whether any byte of a document has been emitted, and reports `74` when a write fails after the first. `FR-OUT-021` and the project's own rule that I/O is aggregated require that writer regardless, so the state costs nothing extra.
 
 **The order of `vars` and of the `cfg list` document is not a free choice.**
@@ -1471,7 +1486,8 @@ project-structure tree and one of the testing section naming the file.
 
 ## OD-28 — The release profile against the caught-panic condition of `70`
 
-**Status: settled, with an amendment owed to `specification-manager`.**
+**Status: settled.** The amendment it owed `specification-manager` landed in
+the ninth edition of `/specification`, at commit `4ad5e8c` of 2026-09-11.
 
 **Verdict. The profile stands.** `panic = "abort"` is kept, with the four
 settings beside it, and the process installs a **panic hook** that writes the
@@ -1503,31 +1519,33 @@ message. `FR-ERR-032`'s `hint` already tells the caller the condition is a
 defect in `tpl` and not theirs to correct, so nothing the caller can act on is
 lost.
 
-**The amendment owed, and the order, which is not interchangeable.**
-`FR-ERR-030` says `70` is produced by "a panic **caught** at the top level of
+**The amendment owed, and the order, which was not interchangeable.**
+`FR-ERR-030` said `70` was produced by "a panic **caught** at the top level of
 the process". Under an aborting runtime nothing is caught: no unwinding occurs,
 no frame is resumed, and no code downstream of the panic site runs. The hook
-**reports** the panic and exits; it does not catch it. The requirement's
-wording and the mechanism therefore differ, and the requirement moves first:
+**reports** the panic and exits; it does not catch it. The requirement's wording
+and the mechanism therefore differed, and the requirement moved first, as it had
+to: `specification-manager` amended `FR-ERR-030`, and only then may an
+implementation be written against the amended wording.
 
-1. `specification-manager` amends `FR-ERR-030`.
-2. Only then may an implementation be written against the amended wording.
+**What landed, and it is narrower than either form `DIV-045` anticipated.** The
+condition survives with its wording changed rather than being dropped:
+`FR-ERR-030` now states the outcome a caller observes — the message of
+`FR-ERR-032` and exit `70` — names no mechanism, and leaves both producing
+conditions in the distributed binary; `FR-ERR-034`'s `70` row loses the same
+word; and the code table of `FR-ERR-001` is unchanged. The hook above is one
+mechanism that produces the outcome, and the corpus no longer names any.
 
-**The content of the amendment is the functional owner's to choose, not this
-folder's.** `DIV-045` anticipated one form — drop the caught-panic condition
-and state the resulting limit. The evidence above admits a narrower one: the
-condition survives and its wording changes, because the observable outcome
-`FR-ERR-032` promises is obtainable. Which of the two the corpus takes is a
-requirement decision.
-
-**The premise of `DIV-045` that this entry contradicts, reported and not
-acted upon.** `DIV-045` states that under `panic = "abort"` "a panic terminates
-the process abnormally, the caller receives no code of `FR-ERR-001`, and no
-message is written". That is true of the **default** hook and not of a hook the
-process installs. `DIV-045` lives in `/specification` and is
-`specification-manager`'s; this entry reports both readings and changes
-neither, per the rule [README.md](README.md#conventions) states for a
-contradiction.
+**The premise of `DIV-045` that this entry contradicted, reported and not acted
+upon, and since corrected by its owner.** `DIV-045` stated that under
+`panic = "abort"` "a panic terminates the process abnormally, the caller
+receives no code of `FR-ERR-001`, and no message is written". That is true of
+the **default** hook and not of a hook the process installs. `DIV-045` lives in
+`/specification` and is `specification-manager`'s; this entry reported both
+readings and changed neither, per the rule
+[README.md](README.md#conventions) states for a contradiction. The ninth edition
+corrected the clause, and `DIV-045` is discharged with nothing owed to
+`CLAUDE.md` under it.
 
 **Rejected — switching the profile to `panic = "unwind"` with `catch_unwind` at
 the top level.** It is the literal reading of `FR-ERR-030` and needs no
@@ -1537,9 +1555,9 @@ amendment, and it was still refused, for three reasons that compose:
 - **It costs the comparability of every recorded baseline.** `NFR-PERF-012` makes a measurement meaningful only against one stated target, and `NFR-PERF-017` fails a change that regresses against a baseline. A profile change makes every existing figure incomparable with every later one, so all four targets of `NFR-PERF-018` would have to be re-measured before any later number meant anything — to obtain a behaviour that is already obtainable.
 - **It buys nothing observable.** `catch_unwind` and the hook produce the same four lines and the same exit status. What unwinding adds is the running of destructors on the way out, and the process is exiting: the one destructor whose absence a caller could detect is the flush of a buffered stdout, and `FR-ERR-033` requires stdout to be **empty** on an error path while `FR-RND-034` already admits at most one incomplete result.
 
-**Also rejected — leaving both statements standing**, which `DIV-045` refuses
-outright and which this entry does not do: the profile is kept *and* the
-amendment is requested.
+**Also rejected — leaving both statements standing**, which `DIV-045` refused
+outright and which this entry did not do: the profile is kept *and* the
+amendment was requested, which the ninth edition made.
 
 **Two facts recorded so that nobody re-derives them.**
 
@@ -1579,15 +1597,18 @@ left hunting for an open defect.
 ## What remains
 
 No entry is open, so there is no order of work over the register. What remains
-are four obligations, and none of them blocks a document of this folder except
-where the row says so.
+are two obligations, and neither blocks a document of this folder except where
+the row says so.
 
 | Order | What | Owner | Blocks |
 |---|---|---|---|
-| 1 | `OD-28` — the amendment to `FR-ERR-030`. It goes first because the specification precedes the implementation: no code may be written against the narrowed wording until the corpus carries it | `specification-manager` | Nothing here. `architecture`, `technology-stack` and `operations` may be written on the settled decision, which does not change with the amendment's wording |
-| 2 | `OD-12` — the observation on `FR-CONF-004`'s referent for three of six phases, and the reading this folder takes meanwhile | `specification-manager` | Nothing. The reading is stated in the entry and cited from `architecture` |
-| 3 | `OD-14`'s owed observation — that a **defined** `null` interpolates as the empty string under `UndefinedBehavior::Strict`. It is unverified, and `FR-SEM-010` and `FR-SEM-011` are contradicted outright if it does not hold | `technical-writer` | `architecture` may not assert the behaviour until it is verified |
-| 4 | `OD-22`'s residual — the fixture certificate, and the harness that drives four containers | `technical-writer` | `operations`, `verification` |
+| 1 | `OD-14`'s owed observation — that a **defined** `null` interpolates as the empty string under `UndefinedBehavior::Strict`. It is unverified, and `FR-SEM-010` and `FR-SEM-011` are contradicted outright if it does not hold | `technical-writer` | `architecture` may not assert the behaviour until it is verified |
+| 2 | `OD-22`'s residual — the fixture certificate, and the harness that drives four containers | `technical-writer` | `operations`, `verification` |
+
+The two obligations this table carried for `specification-manager` are
+discharged: the ninth edition amended `FR-ERR-030` (`OD-28`) and gave
+`FR-CONF-005` the phase-to-key mapping with its shared connection budget
+(`OD-12`). Each entry records what landed, and neither is reopened.
 
 Two further obligations fall to `verification` rather than to this register, and
 are recorded in the entries that create them: one test per mapped

@@ -26,6 +26,11 @@ edition and reconciled against the **eighth** on 2026-09-11, which changed the
 rows drawn from `cli-contract.md`, `configuration-model.md`,
 `project-and-discovery.md`, `errors-and-exit-codes.md`, `server-contract.md`,
 `performance-requirements.md`, `glossary.md` and `upstream-divergences.md`.
+Two rows were discharged against the **ninth** edition on 2026-09-11: `70`'s
+producing conditions in section 14, and `DIV-045` in section 26. That edition's
+other two changes — the phase-to-key mapping of `FR-CONF-005` and the tab
+exception of `FR-OUT-018`, confined to `text` — are not yet carried into
+sections 11 and 13.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -265,7 +270,7 @@ identifier is the authority and the wording here is a summary.
 | Four labelled lines on stderr: `error:`, `cause:`, `hint:`, `exit:` | `FR-ERR-008` | `interfaces` |
 | The `cause` line has a **per-code obligation table** naming what it must contain; the error value must therefore carry the instance, not the category | `FR-ERR-034`, `FR-ERR-010`, `FR-ERR-012` | `interfaces` (`OD-06`) |
 | An internal taxonomy with no external carrier was **explicitly rejected**, while an exit code still has to be derived from the error value | `FR-ERR-015` *Rejected*; `BR-ERR-002` | `interfaces` (`OD-06`) |
-| `70` has exactly two producing conditions — a caught top-level panic and a detected invariant violation — and the first cannot exist under an aborting release profile, which `DIV-045` records as a contradiction owed to the root coordination document | `FR-ERR-030`, `FR-ERR-032`, `DIV-045` | `architecture`, `operations`, `technology-stack` (`OD-28`) |
+| `70` has exactly two producing conditions — a panic in the process and a detected invariant violation — and **both** exist in the distributed binary: the ninth edition states the first as the outcome a caller observes, so a process that reports the panic and exits `70` satisfies it, and which mechanism does so is an architecture decision the corpus does not name | `FR-ERR-030`, `FR-ERR-032`, `FR-ERR-034` row `70` | `architecture`, `operations`, `technology-stack` (`OD-28`) |
 | The deliberate `70` trigger is reachable **only from within the system's own test configuration** and from no invocation of the distributed binary, and appears in neither command tree nor any help text; `BR-ERR-001` excepts `70` from its integration test in consequence | `FR-ERR-031`, `BR-ERR-001` | `verification` (the residual of `OD-21`) |
 | Nearest match: at most three candidates within edit distance two, ordered by distance then name, over eight populations | `FR-ERR-019` … `FR-ERR-021` | `interfaces`, `quality-attributes` (`OD-20`) |
 | A runnable hint is built only from literals and `[A-Za-z0-9_]{1,64}`; a candidate outside that set is not presented **at all** | `FR-ERR-022`, `FR-ERR-023` | `security` |
@@ -465,7 +470,7 @@ identifier is the authority and the wording here is a summary.
 | The library API and the `model/` structs are **not** a public surface: five questions the functional spec declines — owned versus borrowed types, public fields versus accessors, newtypes for names, whether the serialisation crate is a public dependency, `#[non_exhaustive]` — are named as **architecture decisions** | `DIV-032` | `interfaces`, `decisions` (`OD-05`) |
 | The whole engine `Environment` surface is **not** contract; only the three groups are | `DIV-033` | `technology-stack` |
 | The target matrix is fixed and Linux is `musl`; the `gnu` triples are not targets. The linkage has an observable DNS consequence that must not be presented as pure packaging | `DIV-041` | `operations` |
-| The release profile's `panic = "abort"` removes one of the two producing conditions of `70` in the only artefact a caller runs. Either the profile leaves the panic path catchable, or `FR-ERR-030` is amended first through `specification-manager`; both statements may not stand together | `DIV-045` | `architecture`, `technology-stack`, `operations` (`OD-28`) |
+| `panic = "abort"` settles how a panic **ends** the process, not whether the process may report it first. The profile stands as written, `FR-ERR-030` as amended obliges the message and the code without obliging the panic path to be catchable, and `DIV-045` is discharged with nothing owed to the root coordination document | `DIV-045` | `architecture`, `technology-stack`, `operations` (`OD-28`) |
 | `CLAUDE.md`'s four performance figures are adopted as provisional and should exist in **no** third place | `DIV-035` | `quality-attributes` |
 | `scripts/mariadb/` still owes `seed-bench.sql`, plus one line of the project tree and one of the testing section | `DIV-036` | `verification` (`OD-27`) |
 | The catalogue is read through `INFORMATION_SCHEMA` only; the `SHOW` escape hatch `CLAUDE.md` allows does not exist | `DIV-031` | `security`, `interfaces` |
