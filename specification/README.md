@@ -962,13 +962,13 @@ root document is edited either, for the reason the fifteenth edition gave: this
 corpus does not hold the pen on those two files, and recording a correction is
 not making it.
 
-- **Four entries are added, and all four are due** — `DIV-046` through
-  `DIV-049`, each checked against `README.md` at `87dd6e3`, which is still the
-  last commit to touch either root document and so the same state the fifteenth
-  edition classified the other forty-five against. The register now holds
-  forty-nine entries: **fourteen due in full, fourteen discharged, twenty-one
-  partly discharged**, and thirty-five still owe something, thirty-two of them
-  to `README.md`.
+- **Five entries are added, and all five are due** — `DIV-046` through
+  `DIV-050`, each checked against its target file at `87dd6e3`, which is still
+  the last commit to touch either root document and so the same state the
+  fifteenth edition classified the other forty-five against. The register now
+  holds fifty entries: **fifteen due in full, fourteen discharged, twenty-one
+  partly discharged**, and thirty-six still owe something, thirty-two of them
+  to `README.md` and five to `CLAUDE.md`.
   - `DIV-046` — *Installation* tells a reader to run `cargo build --release`
     and *Development* four more `cargo` commands, in a repository that has no
     `Cargo.toml`. The document-scope banner says no command described below is
@@ -987,15 +987,22 @@ not making it.
     `FR-CFG-027` has declared since the fifth edition, while its `--tls` row
     already names the two modes that `FR-CONF-014` says the trust material
     serves.
+  - `DIV-050` — the project-structure tree of `CLAUDE.md` states a crate and
+    five directories the repository does not have, in a block that carries no
+    tense. It is the only entry of the five raised against that file, and the
+    only one whose correction had to separate what the document is entitled to
+    say from the way it says it: the module decomposition under `src/` is where
+    code will go and belongs in a coordination document, so what is owed is a
+    qualifier on the tree and not its removal.
 - **The register gains a third kind of entry** —
   [upstream-divergences.md](upstream-divergences.md). **Contradiction** and
   **Migration** both describe the relation between a root document and this
   corpus. `DIV-046` describes the relation between a root document and the
   repository: it contradicts no requirement, nothing is owed to this folder,
-  and acting on it fails anyway. **Overstatement** names that, and `DIV-046` is
-  the only entry carrying it. Forcing it into **Contradiction** was rejected,
-  because it would have obliged a *Specification* clause to cite a requirement
-  that does not exist.
+  and acting on it fails anyway. **Overstatement** names that, and two entries
+  carry it — `DIV-046` and `DIV-050`, one in each root document. Forcing them
+  into **Contradiction** was rejected, because it would have obliged a
+  *Specification* clause to cite a requirement that does not exist.
 - **Each new entry names the existing entry it was checked against, where one
   looks as though it covers the ground.** `DIV-023` records the same two flags
   as missing from the **global** tables and replaces those tables with a
@@ -1003,17 +1010,39 @@ not making it.
   which is `DIV-047`'s subject. `DIV-003` names `--ca-file` and `--ca-path`,
   but only to say that neither carries a short form, and `DIV-018` asks for
   `ca_file` and `ca_path` in the `.cfg` example rather than in the flag table;
-  neither reaches `DIV-049`. An entry that looks covered and is not is how the
-  four came to be missing, so the check is written into the entries rather than
-  left to the next reader.
+  neither reaches `DIV-049`. `DIV-032` and `DIV-036` both name the project
+  structure of `CLAUDE.md` in their **Target**, and neither reaches `DIV-050`:
+  the first is about the sentence below the tree, and the second asked for a
+  line to be **added** to the tree and was discharged in that half by
+  `87dd6e3`, which corrected the line it named and left standing the six that
+  state a crate the repository has not got. An entry that looks covered and is
+  not is how these came to be missing, so the check is written into the entries
+  rather than left to the next reader.
 
-**One divergence is recorded and owes nothing under these entries.** The
-project-structure tree of `CLAUDE.md` names `Cargo.toml`, `src/`, `tests/`,
-`benches/`, `templates/` and `examples/`, and the repository has none of them
-— the same divergence as `DIV-046`, in the other root document. `DIV-046`'s
-**Target** is `README.md`, and an entry is not widened to a file the survey
-that raised it did not read, so the correction needs an entry of its own. It is
-named in `DIV-046` and here so that it is not lost between them.
+**The divergence that had no entry now has one.** The project-structure tree
+of `CLAUDE.md` names `Cargo.toml`, `src/`, `tests/`, `benches/`, `templates/`
+and `examples/`, and the repository has none of them — the same divergence as
+`DIV-046`, in the other root document. It was first recorded in prose, here and
+in `DIV-046`, because that entry's **Target** is `README.md` and an entry is
+not widened to a file the survey that raised it did not read. `DIV-050` is the
+entry it needed, raised against `CLAUDE.md`, and it is added to this edition
+rather than opening a seventeenth. Nothing the corpus knows changes with it:
+the finding, the kind it belongs to, and the reason it could not be folded into
+`DIV-046` were all settled here, and what was outstanding was the entry alone.
+An edition records what this corpus learned, and one whose whole content was
+*write down what the edition before it had already found* would turn the
+edition record into a log of working sessions.
+
+**What the prose above had not settled is the correction**, and it is not a
+deletion. The seven lines under `src/` are the project's module decomposition —
+an architecture decision, recorded as one outside this corpus — and a document
+whose job is to say how work is executed here is entitled to say where code
+will live. What it may not do is say it in the indicative of the present, in a
+block that carries no tense and sits in a file with no banner of any kind about
+how much of the repository exists. So `DIV-050` asks for a qualifier on the
+tree, and says in as many words that neither the tree nor the decomposition is
+to be removed. An entry read as *delete the tree* would have the project strike
+its own structure from the file every agent reads first.
 
 **The fifth validation rule is extended rather than joined by a sixth**, and
 the extension is stated under *[Maintenance debt](#maintenance-debt)* beside
@@ -1335,16 +1364,21 @@ holds instead of listing its files. The item below is untouched and remains
 outstanding.
 
 The sixteenth edition adds no obligation of either kind, and records none as
-discharged. It adds four entries to
-[upstream-divergences.md](upstream-divergences.md), all due and all owed to the
-root `README.md`, gives that register a third kind of entry for the one of them
-that contradicts the repository rather than a requirement, and extends the
-fifth validation rule below to cover the divergence a register does not yet
-hold. It changes no requirement. One finding is recorded rather than acted on:
-the project-structure tree of `CLAUDE.md` names a crate and five directories
-the repository does not have, which is the same divergence as `DIV-046` in the
-other root document and needs an entry of its own. The item below is untouched
-and remains outstanding.
+discharged. It adds five entries to
+[upstream-divergences.md](upstream-divergences.md), all due — four owed to the
+root `README.md` and one to `CLAUDE.md` — gives that register a third kind of
+entry for the two of them that contradict the repository rather than a
+requirement, and extends the fifth validation rule below to cover the
+divergence a register does not yet hold. It changes no requirement. The finding
+it first recorded rather than acted on has been acted on: the project-structure
+tree of `CLAUDE.md` names a crate and five directories the repository does not
+have, and `DIV-050` is the entry that divergence needed. One finding of its own
+is recorded rather than acted on in turn — the eight `cargo` commands of that
+file's *Desenvolvimento* section and its validation pipeline, which fail in
+this repository for the reason `DIV-046` records of *Development* in the other
+file. `DIV-050` was raised over the project tree and does not reach them; they
+are named in it and need an entry of their own. The item below is untouched and
+remains outstanding.
 
 **Outstanding — two readings that differ across the window and sit under
 neither of `FR-SRV-038`'s two headings.** `FR-SRV-040` reports that the build's

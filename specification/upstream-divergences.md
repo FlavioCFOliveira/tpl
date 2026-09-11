@@ -20,9 +20,9 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Forty-nine entries are recorded. As of 2026-09-11, fourteen are due in
+**Fifty entries are recorded. As of 2026-09-11, fifteen are due in
 full, fourteen are discharged, and twenty-one are partly discharged.**
-Thirty-five entries still owe something: thirty-two owe it to `README.md`, four
+Thirty-six entries still owe something: thirty-two owe it to `README.md`, five
 owe it to `CLAUDE.md`, and `DIV-037` is in both counts because it owes a
 different thing to each. The asymmetry has one cause. `CLAUDE.md` was reduced
 to agent coordination in a single commit, `0ea5624`, which discharged twelve
@@ -40,8 +40,10 @@ Three kinds of entry appear:
   contradicted; what is wrong is that a reader who acts on the passage fails.
   Leaving it spends the credit of everything else the file says.
 
-*The third kind is added in the sixteenth edition*, with `DIV-046`, the only
-entry that carries it. The two kinds above were written when every entry
+*The third kind is added in the sixteenth edition*, and two entries carry it:
+`DIV-046` against `README.md` and `DIV-050` against `CLAUDE.md`, which are one
+divergence written twice, once in each root document. The two kinds above were
+written when every entry
 described the relation between a root document and this corpus. An entry that
 describes the relation between a root document and the repository has no home
 among them, and labelling it a contradiction would have named a requirement
@@ -194,6 +196,7 @@ discharges, and it is the reason this file's remaining work is almost entirely
 | [DIV-047](#div-047) | `README.md` | Contradiction | Due | The `render` flag table omits `--direct` and `--no-cache` |
 | [DIV-048](#div-048) | `README.md` | Contradiction | Due | The entry flag is `--database`, which is the global flag's name |
 | [DIV-049](#div-049) | `README.md` | Contradiction | Due | The entry flag table omits `--ca-file` and `--ca-path` |
+| [DIV-050](#div-050) | `CLAUDE.md` | Overstatement | Due | The project tree, in a repository with no crate |
 
 ## DIV-001
 
@@ -1325,13 +1328,16 @@ under a second heading, and an entry that corrected one would leave a reader
 running `cargo fmt --all -- --check` against a directory with no manifest. The
 two are one correction and are recorded as one.
 
-*One observation that this entry does not own.* The project-structure tree of
-`CLAUDE.md` also names `Cargo.toml`, `src/`, `tests/`, `benches/`,
-`templates/` and `examples/`, none of which the repository has. `CLAUDE.md` is
-not this entry's **Target**, nothing is owed there under it, and the
-divergence needs an entry of its own raised against that file. It is named
-here so that whoever discharges this one knows the same sentence is written
-twice.
+*One observation that this entry does not own, and where it now lives.* The
+project-structure tree of `CLAUDE.md` also names `Cargo.toml`, `src/`,
+`tests/`, `benches/`, `templates/` and `examples/`, none of which the
+repository has. `CLAUDE.md` is not this entry's **Target** and nothing is owed
+there under it, so the divergence was named here only to keep it from being
+lost between the two files. It has since been raised against that file as
+`DIV-050`, in the same edition. The two are one divergence written twice, and
+neither discharges the other: each is corrected by an edit to its own file,
+under its own authorisation, so a reader who corrects both sequences of
+`README.md` leaves the tree of `CLAUDE.md` still saying the crate is there.
 
 ## DIV-047
 
@@ -1429,3 +1435,111 @@ for nothing to be added. `DIV-018` asks for `ca_file` and `ca_path` to be
 added to the `.cfg` example, which is the configuration file and not this
 table; that half of `DIV-018` is still due, and discharging it in full would
 leave this entry standing.
+
+## DIV-050
+
+**Target**: `CLAUDE.md`, *Estrutura do Projecto*. **Kind**: overstatement.
+
+**Status**: due, checked on 2026-09-11 at `87dd6e3` — the last commit to touch
+either root document, and the commit that last rewrote this very tree. Six of
+the tree's lines name artefacts the working tree does not hold: `Cargo.toml`,
+`src/` with all seven of its children, `templates/`, `tests/`, `benches/` and
+`examples/`. The five that remain — `BENCHMARKS.md`, `knowledge-model.md`,
+`scripts/mariadb/`, `specification/` and `docs/` — all exist, and nothing is
+owed for them.
+
+
+
+*Says*: a fenced tree headed `tpl/`, listing `Cargo.toml`; `src/` with
+`main.rs`, `cli/`, `project/`, `mariadb/`, `model/`, `render/` and `error.rs`;
+`templates/`, `tests/`, `benches/` and `examples/`, each with a comment naming
+what it holds — starter templates, end-to-end CLI integration tests,
+benchmarks, complete pipelines; and `BENCHMARKS.md`, `knowledge-model.md`,
+`scripts/mariadb/`, `specification/` and `docs/`. Nothing in the block or
+around it carries a tense or a marker: it reads as the contents of the
+directory, and the paragraph directly under it speaks of `model/` in the
+present indicative.
+*Specification*: none, and that is what the third kind records. No requirement
+of this corpus is contradicted and nothing is owed to this folder. `DIV-001`
+leaves this section where it is — it reduces `CLAUDE.md` to agent coordination
+and names implementation conventions among the content it does not touch — so
+the section belongs to that file exactly as *Installation* belongs to
+`README.md` under `DIV-046`, and only its tense is false. It is false of the
+repository rather than of a requirement, and false to the reader that file
+declares for itself: an agent that takes the tree for the map of what it may
+open finds nothing at any of the six paths. `87dd6e3` makes that reading the
+natural one, because it shows the tree being maintained against the
+repository — three artefacts were added to it because they exist — which tells
+a reader the list is kept current.
+*Correction*: say at the head of the tree that no code artefact exists yet and
+that what follows is the structure the project will have, or mark the lines
+that are already there and leave the rest unmarked. **Neither the tree nor the
+decomposition under `src/` is to be removed**, and that distinction is the
+whole of this entry.
+
+*Planned decomposition and assertion of present state.* The six lines do two
+different jobs. `Cargo.toml`, `templates/`, `tests/`, `benches/` and
+`examples/` say the project will be an ordinary Rust project, and cost a reader
+nothing beyond the paths that are not there. The seven lines under `src/` are a
+decision: they are the module decomposition, they tell an implementer where
+each responsibility goes before any of it is written, and a document whose
+stated job is to say how work is executed here is the right place for them.
+That decomposition is an architecture decision, recorded as one outside this
+corpus, and this entry takes no position on its content — only on the tense it
+is stated in. Removing the six lines would therefore make the document worse in
+the name of making it true: the project would lose, from the file every agent
+reads first, its only statement of where code belongs, and the next
+implementer would invent a structure rather than follow one. What the section
+may not do is state a plan in the indicative of the present. A direction and a
+claim about the working tree are different things, and the tree is read as the
+second because nothing in the section says it is the first. That is why the
+correction above is a qualifier and not a deletion.
+
+*There is no banner to argue about here.* `DIV-046` had to explain why
+`README.md`'s document-scope banner does not discharge the same defect in that
+file: it says no command described below is implemented yet, which a reader
+takes to mean the binary builds and the commands are unfinished. `CLAUDE.md`
+carries no equivalent. It opens by saying that it is agent coordination and
+that it holds no functional requirements, and it says nothing anywhere about
+how much of the repository exists. Every statement it makes about the working
+tree is therefore taken at face value, and the qualifier this entry asks for
+has nothing standing in for it.
+
+*The same divergence as `DIV-046`, and not a widening of it.* That entry
+records the build sequences of `README.md` in a repository with no crate; this
+one records the tree of `CLAUDE.md` in the same repository. It is one disease
+in two files, and the two are recorded apart because **Target** is the
+authority on where to look when an entry is re-checked: `DIV-046` was raised by
+a reading of `README.md` alone, and widening its target to `both` would have
+made it assert of `CLAUDE.md` what nobody had read there. The consequence is
+that neither entry discharges the other. Each is corrected by an edit to its
+own file under its own authorisation, and the link is written in both
+directions so that whoever holds the pen on one file is told the other is still
+saying it.
+
+*Not covered by `DIV-032` or `DIV-036`.* Both name the project structure of
+`CLAUDE.md` in their **Target**, and both are the nearest thing to an entry
+that already reads this section. Neither reaches the tree's six false lines.
+`DIV-032` is about the sentence below the tree, which calls the structs of
+`model/` the documented public surface; it contradicts a requirement, its
+correction rewrites that sentence, and applied exactly as written it leaves the
+tree as it stands. `DIV-036` did target the tree, and asked for a line to be
+**added** to it — `seed-bench.sql`, which the fixture line then enumerated
+around — and `87dd6e3` discharged that half by making the line describe the
+directory instead of listing it. So the tree has been read against this corpus
+under an entry and corrected under one, and both times the subject was a line
+that ought to be there rather than the six that ought not to be stated in the
+present. An addition and a tense are different corrections, and neither entry
+carries the other.
+
+*One observation that this entry does not own.* *Desenvolvimento* gives `cargo
+build`, `cargo run -- --help` and `cargo test`, and the mandatory validation
+pipeline under it adds `cargo fmt --all -- --check`, `cargo clippy`, `cargo
+build --release`, `cargo test --all-features` and `cargo audit` — eight
+commands, every one of which fails in this repository for want of a manifest,
+which is what `DIV-046` records of *Development* in the other file. It is not
+recorded under this entry: the reading that raised this one was authorised over
+the project tree, and an entry that reached past its own reading is the defect
+the paragraph above keeps `DIV-046` clear of. `DIV-001` leaves the validation
+pipeline with `CLAUDE.md`, so that section belongs where it is too, and as here
+only its tense would be in question. It needs an entry of its own.
