@@ -47,7 +47,7 @@ One tracked source file the model covers.
 |---|---|---|
 | **`path`** | string | **Identity.** Repository-relative path, e.g. `specification/cli-contract.md`. Never absolute, never prefixed with `./`. |
 | `name` | string | Basename, e.g. `cli-contract.md`. |
-| `kind` | string | One of `spec`, `fixture`, `benchmark`, `techspec`, `adr`, `source`, `test`, `template`. |
+| `kind` | string | One of `spec`, `fixture`, `benchmark`, `techspec`, `adr`, `coordination`, `source`, `test`, `template`. |
 | `title` | string | The front-matter `title`. **Absent** where the file has no front matter. |
 | `status` | string | The front-matter `status`. **Absent** where the file has no front matter. |
 
@@ -92,6 +92,35 @@ real, not cosmetic:
 - `DIV` — the *Subject* column of the divergence **index table**. The `## DIV-0NN`
   headings themselves are bare and supply no title, so the index table is the only
   source. A reader expecting the title on the heading will find nothing.
+
+### `Decision`
+
+One stable identifier defined by the project's **technical** record — the
+decision register in `docs/spec-technical/`, and the architecture decision
+records in `docs/adr/`. A `Decision` answers *how the system is built*, where a
+`Requirement` answers *what it must do*.
+
+| Property | Type | Meaning |
+|---|---|---|
+| **`id`** | string | **Identity.** The identifier exactly as written, e.g. `OD-05`, `ADR-003`. |
+| `family` | string | One of `OD` (an entry of the decision register) or `ADR` (an architecture decision record). |
+| `ordinal` | **integer** | The trailing number, as an integer. `OD-05` is `5`, not `'05'`, and its identifier is two digits wide where `ADR` is three — the ordinal erases that difference and the `id` preserves it. |
+| `title` | string | The decision's subject. Always present: an `OD` takes it from the text after the em dash on its `## OD-NN — …` heading, an `ADR` from its front-matter `title`. |
+
+**Why this is not an eighth `family` of `Requirement`.** The two labels are kept
+apart because the project keeps their sources apart: the functional
+specification answers *what*, and the technical record answers *how*, and the
+root coordination document names confusing the two as the predictable error. A
+single label would make `MATCH (r:Requirement)` return architecture decisions,
+and every query asking whether a requirement is satisfied would have to filter a
+family out first.
+
+*Rejected:* folding `OD` into `Requirement` as an eighth `family`. It buys one
+`UNIQUE` constraint instead of two — the bootstrap's own argument for one label
+across seven families — but that argument holds only where the families share a
+role. These do not. The cost of the split is nil in the direction that matters:
+an impact query reaches its target through `-[:CITES|REFERENCES]->(:Requirement)`
+whatever label the citing node carries.
 
 ### `Baseline`
 
@@ -251,8 +280,13 @@ assertion and is listed separately.
 | `CONTAINS` | `(Directory)→(File)` | The file lives directly in this directory, not in a descendant of it. | — |
 | `DECLARES` | `(File)→(Baseline)` | This file is the single site that declares the baseline. | — |
 | `DEFINES` | `(File)→(Requirement)` | This file is the **single canonical definition site** of the identifier. Exactly one per `Requirement`. | `line` (**integer**) — the 1-based line of the definition. |
+| `DEFINES` | `(File)→(Decision)` | Same assertion, for a technical identifier. Exactly one per `Decision`. The definition site of an `OD` is its heading in the register; of an `ADR`, the `id` line of its own front matter. | `line` (**integer**). |
+| `TARGETS` | `(Requirement)→(File)` | A divergence record names this file as the document owing the correction. Only the `DIV` family has this edge, and every `DIV` node carries at least one: the record states its target in a structured field, and a record whose field reads *both* produces two edges. | — |
 | `CITES` | `(Requirement)→(Requirement)` | The source requirement's own prose names the target identifier. **This is the impact-analysis edge**: it answers "what else must be revisited if this requirement changes?". | `firstLine` (**integer**) — first line of the citation; `path` (string) — file the citation was read in. |
+| `CITES` | `(Decision)→(Requirement)` | The decision's own text names the requirement. Same impact-analysis role as the row above, from the technical side: it answers "which decisions must be revisited if this requirement changes?". | `firstLine` (**integer**); `path` (string). |
+| `CITES` | `(Decision)→(Decision)` | The decision's own text names another decision. | `firstLine` (**integer**); `path` (string). |
 | `REFERENCES` | `(File)→(Requirement)` | The file names the identifier **outside** any definition block — narrative prose, an index table, a fixture comment. | `firstLine` (**integer**). |
+| `REFERENCES` | `(File)→(Decision)` | Same assertion, for a technical identifier. | `firstLine` (**integer**). |
 | `RELATED_TO` | `(File)→(File)` | The source file's front-matter `related:` list declares the target adjacent. Directed and **not** automatically reciprocal: traverse both ways when adjacency in either direction matters. | — |
 
 `CITES` and `REFERENCES` **partition** every non-definition occurrence of an
@@ -260,9 +294,17 @@ identifier, and the partition rule is one line: an occurrence inside a
 definition block becomes `CITES`, from the requirement that owns the block; an
 occurrence outside every definition block becomes `REFERENCES`, from the file.
 A definition block is the bullet and its indented continuation for `FR`, `NFR`,
-`BR` and `WL`; the whole `##` section for `UC` and `DIV`; the single table row for
-`OQ`. An occurrence naming the very requirement whose block it sits in is a
+`BR` and `WL`; the whole `##` section for `UC`, `DIV` and `OD`; the single table row
+for `OQ`; and, for an `ADR`, the whole file below its front matter, since the
+record defines exactly one identifier and everything in it is that identifier's
+own text. An occurrence naming the very identifier whose block it sits in is a
 self-reference and produces no edge.
+
+The rule is stated over the **owner of the block**, not over the owner's label,
+which is why it carries `Decision` without amendment: an occurrence inside an
+`OD` or `ADR` block becomes `CITES` from that decision, and an occurrence in a
+file that declares no block at all — every technical document but the register,
+and both coordination documents — becomes `REFERENCES` from the file.
 
 Both edges are deduplicated on their endpoint pair and keep the **first**
 occurrence's line, which is why the property is `firstLine` and not `line`.
@@ -329,6 +371,8 @@ CREATE CONSTRAINT directory_path_uniq      IF NOT EXISTS FOR (x:Directory)   REQ
 CREATE CONSTRAINT directory_path_notnull   IF NOT EXISTS FOR (x:Directory)   REQUIRE x.path IS NOT NULL;
 CREATE CONSTRAINT requirement_id_uniq      IF NOT EXISTS FOR (x:Requirement) REQUIRE x.id IS UNIQUE;
 CREATE CONSTRAINT requirement_id_notnull   IF NOT EXISTS FOR (x:Requirement) REQUIRE x.id IS NOT NULL;
+CREATE CONSTRAINT decision_id_uniq         IF NOT EXISTS FOR (x:Decision)    REQUIRE x.id IS UNIQUE;
+CREATE CONSTRAINT decision_id_notnull      IF NOT EXISTS FOR (x:Decision)    REQUIRE x.id IS NOT NULL;
 CREATE CONSTRAINT baseline_key_uniq        IF NOT EXISTS FOR (x:Baseline)    REQUIRE x.key IS UNIQUE;
 CREATE CONSTRAINT baseline_key_notnull     IF NOT EXISTS FOR (x:Baseline)    REQUIRE x.key IS NOT NULL;
 CREATE CONSTRAINT component_name_uniq      IF NOT EXISTS FOR (x:Component)   REQUIRE x.name IS UNIQUE;
@@ -354,6 +398,30 @@ CREATE CONSTRAINT test_key_notnull         IF NOT EXISTS FOR (x:Test)        REQ
 Constraints on an unpopulated label are declared all the same: they cost nothing
 and they are in force before the first row of that label ever lands, which is the
 only moment at which they can prevent the duplication trap.
+
+### Writing an edge where another edge already joins the pair
+
+**`MERGE` of a relationship between two bound nodes matches an existing
+relationship of a *different type* between the same pair.** It then reports `ok`,
+returns **no `counters` block at all**, and creates nothing. Measured on this
+engine while populating the technical documents.
+
+This model walks into it by design: `DEFINES` and `REFERENCES` run between the
+same `(File, Requirement)` and `(File, Decision)` pairs whenever a file names an
+identifier it also defines — an index table beside the definitions is the ordinary
+case, not a rare one. A `MERGE` issued for the second edge silently does nothing,
+and because a no-op carries no counters, the alarm the write rule relies on never
+fires.
+
+The rule that works: **diff the desired set against the live set and `CREATE`
+only what is absent.**
+
+```cypher
+MATCH (f:File)-[:REFERENCES]->(t) RETURN f.path, t.id     // the live set
+```
+
+`MERGE` remains correct for an edge whose endpoint pair carries no other edge,
+and for every node upsert.
 
 ### The engine's limits
 
