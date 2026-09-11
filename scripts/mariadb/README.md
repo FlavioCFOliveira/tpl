@@ -11,12 +11,22 @@ described from documentation alone.
 | `Dockerfile` | One image definition, parameterised by release series |
 | `setup.sql` | The `freight` schema: DDL only |
 | `seed.sql` | The data, plus the statements that make the triggers, the sequence and the system-versioned table actually fire |
+| `tls/generate.sh` | Regenerates the TLS material below |
+| `tls/openssl.cnf` | The certificate profile: what the certificate says, including the names it carries |
+| `tls/ca.pem` | The fixture's root certificate, and the file to pass as `ca_file` |
+| `tls/server-cert.pem` | The certificate the server presents |
+| `tls/server-key.pem` | Its private key |
+| `tls/server-tls.cnf` | The three server settings that put the material into service |
 | `README.md` | This file |
 
 The Dockerfile copies `setup.sql` to `/docker-entrypoint-initdb.d/01-setup.sql`
 and `seed.sql` to `02-seed.sql`. The rename is load-bearing: the official
 entrypoint runs that directory in collation order, and `seed.sql` sorts before
 `setup.sql`.
+
+It copies the three `tls/` certificate files to `/etc/mysql/tls/` and
+`tls/server-tls.cnf` to `/etc/mysql/conf.d/90-tls.cnf`, which
+`/etc/mysql/my.cnf` includes last. See [TLS](#tls).
 
 ## Supported series
 
@@ -30,6 +40,10 @@ all four can run side by side.
 | `11.4` | `tpl-mariadb:11.4` | `tpl-mariadb-11.4` | `13307` |
 | `11.8` | `tpl-mariadb:11.8` | `tpl-mariadb-11.8` | `13308` |
 | `12.3` | `tpl-mariadb:12.3` | `tpl-mariadb-12.3` | `13309` |
+
+Port `13310` is reserved for a fifth container that is not a fifth series: the
+server offering no TLS, described under [TLS](#tls). It runs the `10.11` image
+with one extra flag.
 
 The upstream `mariadb:<series>` tags all publish a `linux/arm64` image as well
 as `linux/amd64`, so the fixtures run unmodified on both supported
@@ -54,6 +68,9 @@ Editing `setup.sql` or `seed.sql` requires a rebuild **and** a fresh container:
 the entrypoint runs the init directory only when the data directory is empty, so
 an existing container will not pick the change up.
 
+No preparatory step is needed: the TLS material the build copies in is
+committed. Changing it is a rebuild too — see [TLS](#tls).
+
 ## Running
 
 ```sh
@@ -61,6 +78,13 @@ docker run -d --name tpl-mariadb-10.11 -e MARIADB_ROOT_PASSWORD=tpl-root -p 1330
 docker run -d --name tpl-mariadb-11.4  -e MARIADB_ROOT_PASSWORD=tpl-root -p 13307:3306 tpl-mariadb:11.4
 docker run -d --name tpl-mariadb-11.8  -e MARIADB_ROOT_PASSWORD=tpl-root -p 13308:3306 tpl-mariadb:11.8
 docker run -d --name tpl-mariadb-12.3  -e MARIADB_ROOT_PASSWORD=tpl-root -p 13309:3306 tpl-mariadb:12.3
+```
+
+Every one of those four offers TLS, with the certificate described under
+[TLS](#tls). The fifth container is the one that offers none:
+
+```sh
+docker run -d --name tpl-mariadb-notls -e MARIADB_ROOT_PASSWORD=tpl-root -p 13310:3306 tpl-mariadb:10.11 --skip-ssl
 ```
 
 First start takes a few seconds longer than later ones, because the entrypoint
@@ -98,8 +122,8 @@ start on all four series; both come from the container runtime's kernel. On
 ### Through `docker exec`
 
 The client inside the container connects over the Unix socket, which sidesteps
-the TLS difference described below. This is the recommended way to interrogate a
-fixture by hand.
+every TLS question. This is the recommended way to interrogate a fixture by
+hand.
 
 ```sh
 docker exec -it tpl-mariadb-11.4 mariadb -uroot -ptpl-root freight
@@ -109,30 +133,184 @@ docker exec -i  tpl-mariadb-11.4 mariadb -uroot -ptpl-root freight < some-query.
 ### Over TCP from the host
 
 ```sh
-mariadb -h 127.0.0.1 -P 13307 -u tpl_reader -ptpl-reader-pw freight
+mariadb -h 127.0.0.1 -P 13307 -u tpl_reader -ptpl-reader-pw \
+  --ssl-ca=tls/ca.pem --ssl-verify-server-cert freight
 ```
 
-**The `10.11` fixture needs `--skip-ssl`.** MariaDB 11.4 introduced automatic
-generation of a self-signed certificate on first start; 10.11 has none, and
-reports `have_ssl=DISABLED`. The refusal is the **MariaDB client's default TLS
-mode**, not a property of modern clients in general. An `11.4` MariaDB client
-and a `12.3` MariaDB client both fail against `10.11` over TCP with:
+Run it from this directory, so that `tls/ca.pem` resolves. That is the full
+check — chain and host name — and it succeeds on all four series, by
+`127.0.0.1` and by `localhost` alike. What happens when the two flags are
+dropped depends on the client, and is the subject of the rest of this section.
+
+**A modern MariaDB client with no flags at all fails against `10.11`.** It
+succeeds against the other three. The message is:
 
 ```
-ERROR 2026 (HY000): TLS/SSL error: SSL is required, but the server does not support it
+ERROR 2026 (HY000): TLS/SSL error: Certificate verification failure: The certificate is NOT trusted.
 ```
 
-Both succeed with `--skip-ssl`. A `10.11` MariaDB client reaches a `12.3` server
-unmodified, and a MySQL client connects to `10.11` over TCP with no flags at
-all.
+Observed with the `11.4` and the `12.3` client, against the `10.11` fixture,
+and not against `11.4`, `11.8` or `12.3`. What the flagless client is missing
+is a way to establish trust without being given the certificate authority, and
+what it uses on the other three arrives **after authentication**: with a wrong
+password every series answers `ERROR 1045`, and only with the right one does
+`10.11` answer `NOT trusted`. Whatever the mechanism is called, `10.11` does
+not have it and the three later series do.
 
-So, for 10.11 only:
+Three flags get such a client through to `10.11`: `--ssl-ca` together with
+`--ssl-verify-server-cert`, as above, which is also the only one of the three
+that verifies anything; `--disable-ssl-verify-server-cert`, which encrypts and
+trusts blindly; and `--skip-ssl`, which does neither.
+
+A `10.11` MariaDB client reaches all four servers with no flags and an
+encrypted session, because it does not verify by default, and reaches the
+no-TLS server in plaintext. A MySQL client reaches all four with
+`--ssl-mode=VERIFY_IDENTITY --ssl-ca=tls/ca.pem`, and refuses the no-TLS server
+with `SSL is required but the server doesn't support it`.
+
+## TLS
+
+`FR-CONF-038`, in `specification/configuration-model.md`, obliges this fixture
+to present, at each supported series, a server whose certificate names the host
+the project's tests reach it by, and to keep a server that offers none. The
+first is what an acceptance test for `verify-identity` — the default `tls` mode
+of `FR-CONF-013` — needs; the second is the right-hand column of that
+requirement's mode table.
+
+Nothing the servers produce by themselves satisfies the first. `10.11` offers
+no TLS at all unless a certificate is configured. `11.4` and later generate one
+when none is, and it names nothing: `CN=MariaDB Server`, self-signed, serial
+`0`, **zero X509v3 extensions** and therefore no `subjectAltName` for any host
+name to match. It is also regenerated on every start — two consecutive starts
+of the same container served two different SHA-256 fingerprints. The fixture
+therefore carries its own certificate.
+
+### The certificate
+
+| | |
+|---|---|
+| Names | `DNS:localhost`, `IP:127.0.0.1`, `IP:::1` |
+| Subject | `O=tpl MariaDB test fixture, CN=localhost` |
+| Issuer | `O=tpl MariaDB test fixture, CN=tpl fixture root CA`, in `tls/ca.pem` |
+| Key | RSA 2048, signed with SHA-256 |
+| Validity | 3650 days from generation |
+
+The three names are the three spellings of the loopback a test can write, so
+the certificate matches whichever one it uses. `tls/ca.pem` is the file to pass
+as `ca_file` (`FR-CONF-014`); it is the only trust material needed, and the
+private key that signed it was destroyed at generation time and is not in this
+repository.
+
+The material is committed, so a fresh clone can build and run the fixture with
+no preparatory step. It is not secret: the fixture's passwords are in this
+directory too, and a certificate that names `localhost` is worth nothing
+anywhere else.
+
+### In the image
+
+```
+/etc/mysql/tls/ca.pem              0644 root:root
+/etc/mysql/tls/server-cert.pem     0644 root:root
+/etc/mysql/tls/server-key.pem      owned by mysql, which is the user the server runs as
+/etc/mysql/conf.d/90-tls.cnf       ssl_ca, ssl_cert, ssl_key
+```
+
+`/etc/mysql/my.cnf` includes `conf.d` last, so those three settings win over
+the packaged `50-server.cnf`, where they ship commented out. The group name is
+`[server]`, which every series reads: `10.11` keeps its own settings under
+`[mysqld]` and `12.3` under `[mariadbd]`, so neither of those is portable.
+
+All four series then report `have_ssl=YES`, `10.11` included:
 
 ```sh
-mariadb -h 127.0.0.1 -P 13306 -u tpl_reader -ptpl-reader-pw --skip-ssl freight
+docker exec tpl-mariadb-10.11 mariadb -uroot -ptpl-root \
+  -e "SHOW VARIABLES WHERE Variable_name IN ('have_ssl','ssl_cert')"
 ```
 
-The other three accept a TLS connection without further configuration.
+`require_secure_transport` is deliberately **not** set. Two cells of the
+`FR-CONF-038` table — `disabled` and `preferred` against a server offering TLS
+— expect a plaintext connection to be accepted, and requiring transport
+security here would turn both into failures.
+
+### The server that offers no TLS
+
+`--skip-ssl`, passed to the container as a server argument, disables TLS
+whatever `90-tls.cnf` says. `have_ssl` then reads `DISABLED` while `ssl_cert`
+and `ssl_key` still show the configured paths.
+
+```sh
+docker run -d --name tpl-mariadb-notls -e MARIADB_ROOT_PASSWORD=tpl-root \
+  -p 13310:3306 tpl-mariadb:10.11 --skip-ssl
+```
+
+Observed on `10.11` and on `11.4`, where it also suppresses the automatically
+generated certificate. `10.11` is the canonical one, because it is the series
+that has no TLS of its own. The schema is the same 23 tables; only the
+transport differs.
+
+Clearing the paths instead of using `--skip-ssl` does not work, and does not
+fail the same way on every series. `--ssl-cert= --ssl-key= --ssl-ca=` makes
+`10.11` refuse to start:
+
+```
+SSL error: Unable to get certificate from ''
+[ERROR] Failed to setup SSL
+[ERROR] Aborting
+```
+
+while `11.4` starts, ignores the empty values and falls back to its own
+generated certificate, reporting `have_ssl=YES` with `ssl_cert` empty. Neither
+is the no-TLS server, and `--skip-ssl` is the only spelling that is.
+
+### Regenerating
+
+```sh
+cd scripts/mariadb
+tls/generate.sh
+docker build --build-arg MARIADB_SERIES=10.11 -t tpl-mariadb:10.11 .   # and the other three
+```
+
+`tls/generate.sh` needs `openssl` and nothing else. It takes everything the
+certificate says from `tls/openssl.cnf` — change the names there, not in the
+script — makes a root, signs the leaf with it, and destroys the root's private
+key. Two consequences follow from that last step: the material cannot be
+extended later without regenerating all of it, and nobody can mint a second
+certificate that the committed `ca.pem` would vouch for.
+
+Regeneration is not byte-reproducible; each run makes fresh keys, a fresh root
+and fresh dates. What this directory reproduces is the material's meaning — the
+same names, the same key type, the same extensions, every run.
+
+The images carry the material, so a regeneration takes effect only after a
+rebuild and a new container started from the rebuilt image.
+
+### Verifying it
+
+Chain and host name, from the host, with `openssl`:
+
+```sh
+cd scripts/mariadb/tls
+openssl s_client -starttls mysql -connect 127.0.0.1:13306 \
+  -CAfile ca.pem -verify_return_error -verify_hostname localhost -brief </dev/null
+```
+
+A healthy answer contains `Verification: OK` and `Verified peername:
+localhost`. Two controls are worth running alongside it, because they are what
+prove the check is real: `-verify_hostname something.else` fails with
+`hostname mismatch`, and omitting `-CAfile` fails with `self-signed certificate
+in certificate chain`.
+
+The same check with each series' own client, over TCP, inside the container:
+
+```sh
+docker exec tpl-mariadb-10.11 mariadb --ssl-ca=/etc/mysql/tls/ca.pem \
+  --ssl-verify-server-cert -h 127.0.0.1 -P 3306 -u tpl_reader -ptpl-reader-pw \
+  -e "SHOW SESSION STATUS LIKE 'Ssl_cipher'"
+```
+
+`Ssl_cipher` is read from the live session, so a non-empty value is the
+session's own evidence that it is encrypted, rather than a restatement of what
+was asked for. Against the no-TLS server the same variable comes back empty.
 
 ## Credentials
 
@@ -258,14 +436,31 @@ differences were found.
    reader that goes through `INFORMATION_SCHEMA` is unaffected and one that
    parses `SHOW CREATE TABLE` is not.
 
-3. **TLS availability.** `10.11` reports `have_ssl=DISABLED`; the other three
-   report `have_ssl=YES`, from the self-signed certificate MariaDB began
-   generating automatically at first start in 11.4. Consequences: a **MariaDB**
-   client of 11.4 or later cannot reach the `10.11` fixture over TCP without
-   `--skip-ssl`, while a `10.11` MariaDB client reaches a `12.3` server
-   unmodified and a MySQL client reaches `10.11` with no flags at all.
-   Connections made through `docker exec` use the Unix socket and are
-   unaffected.
+3. **TLS.** Left to themselves the four do not agree: `10.11` offers none and
+   reports `have_ssl=DISABLED`, while `11.4` and later generate a nameless
+   self-signed certificate at every start and report `have_ssl=YES`. The
+   fixture now configures its own certificate on all four, so all four report
+   `have_ssl=YES` and present the same one — see [TLS](#tls) — and what is left
+   of the divergence is three narrower observations:
+
+   - A **MariaDB** client of 11.4 or later, given no flags, reaches `11.4`,
+     `11.8` and `12.3` but fails against `10.11` with `Certificate
+     verification failure: The certificate is NOT trusted.` The trust it uses
+     on the three is established after authentication — a wrong password gives
+     `ERROR 1045` on every series, and only the right one gets as far as `NOT
+     trusted` on `10.11` — and `10.11` does not implement it. A `10.11`
+     MariaDB client verifies nothing by default and reaches all four
+     unmodified.
+   - `--skip-ssl` given to the **server** disables TLS on every series tried,
+     overriding a configured certificate. Clearing the paths instead —
+     `--ssl-cert= --ssl-key= --ssl-ca=` — makes `10.11` abort at startup with
+     `SSL error: Unable to get certificate from ''`, while `11.4` starts and
+     silently falls back to its own generated certificate.
+   - Connections made through `docker exec` over the Unix socket are still
+     unaffected by all of this, with one exception worth knowing: an `11.4`
+     client talking to an `11.4` server that was started `--skip-ssl` is
+     refused over the socket too, with `SSL is required, but the server does
+     not support it`, and needs `--skip-ssl` itself.
 
 4. **Temporary tables in `INFORMATION_SCHEMA.TABLES`.** After a `CREATE
    TEMPORARY TABLE`, `10.11` returns no row for it at all; `11.4`, `11.8` and
@@ -314,14 +509,14 @@ observing.
 ## Stopping and removing
 
 ```sh
-docker stop tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3
-docker rm   tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3
+docker stop tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3 tpl-mariadb-notls
+docker rm   tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3 tpl-mariadb-notls
 ```
 
 Or in one step, discarding the anonymous volume the entrypoint created with it:
 
 ```sh
-docker rm -f -v tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3
+docker rm -f -v tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3 tpl-mariadb-notls
 ```
 
 Leave no container running after a validation run. To drop the images too:

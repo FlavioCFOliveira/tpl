@@ -1,0 +1,19 @@
+# Server-side TLS for the `tpl` MariaDB fixture.
+#
+# Copied by the Dockerfile to /etc/mysql/conf.d/90-tls.cnf, which /etc/mysql/my.cnf
+# includes last, so these three settings win over the packaged 50-server.cnf
+# (where they ship commented out) on every supported series.
+#
+# [server] is the group every MariaDB server reads, whatever the binary is
+# called: 10.11 ships its settings under [mysqld] and 12.3 under [mariadbd], so
+# neither of those two names is portable across the four series and [server] is.
+#
+# require_secure_transport is deliberately absent. Two cells of the FR-CONF-038
+# mode table — `disabled` and `preferred` against a server offering TLS — expect
+# a plaintext connection to be accepted, and requiring transport security here
+# would turn both into connection failures.
+
+[server]
+ssl_ca   = /etc/mysql/tls/ca.pem
+ssl_cert = /etc/mysql/tls/server-cert.pem
+ssl_key  = /etc/mysql/tls/server-key.pem
