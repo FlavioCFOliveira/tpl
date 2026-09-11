@@ -215,7 +215,7 @@ identifier is the authority and the wording here is a summary.
 | A DSN carries **no** query parameters; a `?` is `78` whatever follows it | `FR-CONF-011`, `FR-CONF-012` | `interfaces`, `security` |
 | Five TLS modes, set **explicitly on every connection**, never inherited from the driver's default — including `disabled` | `FR-CONF-013`, `FR-CONF-037` | `security` (`OD-16`) |
 | The five modes' observed behaviour against a TLS-offering and a TLS-less server is fixed; the **mapping onto the driver belongs in an ADR** and is cited, not restated | `FR-CONF-038` | `security`; [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) |
-| The **fixture is under obligation**: at each supported series it presents a server whose certificate names the host the tests reach it by, and retains a server offering no TLS. Without the first, the default mode of `FR-CONF-013` has no acceptance test; how either is provisioned is left to this folder | `FR-CONF-038` as amended in the eighth edition; `FR-SRV-015`, `FR-SRV-029` | `operations`, `verification` (the residual of `OD-22`) |
+| The **fixture is under obligation**: at each supported series it presents a server whose certificate names the host the tests reach it by, and retains a server offering no TLS. How either is provisioned is left to this folder, and both were provisioned on 2026-09-11 | `FR-CONF-038` as amended in the eighth edition; `FR-SRV-015`, `FR-SRV-029` | `operations`, `verification` |
 | Trust material is **additional** to the platform/bundled roots; exclusive trust is not deliverable and must not be claimed | `FR-CONF-039` | `security` (`OD-16`) |
 | `${VAR}` expands in six fields only; inside a DSN the URL is **parsed first**, expanded within the delimited field, then percent-encoded | `FR-CONF-015`, `FR-CONF-018` | `security`, `interfaces` |
 | Single-pass expansion, `$$` literal, unclosed brace `78`, undefined variable `78` | `FR-CONF-019` … `FR-CONF-022` | `interfaces` |
@@ -400,11 +400,11 @@ identifier is the authority and the wording here is a summary.
 | Four treatments of a difference: normalise, mark `null`, exclude, **pass through** — the fourth ranks fidelity above cross-server determinism for character sets and collations | `FR-SRV-024`, `FR-SRV-004`, `FR-SRV-025`, `FR-SRV-039`, `BR-SRV-006` | `data-model`, `quality-attributes` |
 | Byte-identical documents across the four series from identical DDL, with three stated exceptions — the strongest testable form of "supported" | `FR-SRV-026`, `FR-SRV-029` | `verification`, `quality-attributes` |
 | A **closed list of four statement kinds** and nothing else: no DDL, no DML, no `SHOW`, no non-`INFORMATION_SCHEMA` schema, no external process | `FR-SRV-006`, `FR-SRV-007` | `security`, `interfaces` |
-| The session read-only setting is applied **and read back** at connection start, in that order, once each; failure of either refuses the connection with `78` | `FR-SRV-008` … `FR-SRV-010` | `architecture`, `security` |
+| The session read-only setting is applied **and read back** at connection start, in that order, once each; the read-back names `@@session.tx_read_only` and no other spelling of it, which is the only one present on all four series; failure of either refuses the connection with `78` | `FR-SRV-008` … `FR-SRV-010`; `FR-SRV-038`, difference 12 | `architecture`, `security` |
 | No flag, key or environment condition disables any of it | `FR-SRV-011` | `security` |
-| Verification is from **outside the process**, on the server: the statements it receives, the connections it accepts | `FR-SRV-012` … `FR-SRV-014`, `BR-SRV-003` | `verification` |
+| Verification is from **outside the process**, on the server: the statements it receives, the connections it accepts. The read-back test runs against **every** series, because exactly one of the four discriminates the variable's spelling | `FR-SRV-012` … `FR-SRV-014`, `BR-SRV-003` | `verification` |
 | The newer-than-window path is verified through the in-process seam of `FR-ERR-031`, asserting that the read completes without error and that `standing` is `newer_than_supported`; `BR-SRV-003` states in its own text that it does not reach this requirement | `FR-SRV-035`, `BR-SRV-003` | `verification` (the residual of `OD-21`) |
-| Eleven observed differences bound the reader's assumptions; one does **not** separate `10.11` from the rest, so tests must not model the window as one old server and three modern ones | `FR-SRV-038`, difference 8 | `verification` |
+| Twelve observed differences bound the reader's assumptions; one does **not** separate `10.11` from the rest, so tests must not model the window as one old server and three modern ones | `FR-SRV-038`, difference 8 | `verification` |
 
 ---
 
@@ -429,9 +429,9 @@ identifier is the authority and the wording here is a summary.
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | Six **requirements of form** constrain the design from the first commit: query count independent of object count for a full read and for a single object, no connection on a cache hit, at most one connection, nothing at all for four commands, no connection for any command needing no catalogue | `NFR-PERF-001` … `NFR-PERF-006` | `quality-attributes`, `architecture` |
-| Each is verified from **outside the process** — statements, connections, files opened — never by reading the source | `NFR-PERF-007`, `BR-SRV-003` | `verification` (the residual of `OD-22`) |
+| Each is verified from **outside the process**, never by reading the source, by **four** named instruments — the statements a server receives, the connections it accepts, a syscall trace, and a differential run — each usable only on the targets its row names: the trace on the two Linux targets, the other three on all four | `NFR-PERF-007`, `NFR-PERF-018`, `BR-SRV-003` | `verification` |
 | The query count must be observable from the diagnostic stream, which makes one diagnostic line structurally load-bearing although stderr is not contract | `NFR-PERF-008`, `FR-GLOB-017` | `operations`, `verification` (`OD-17`) |
-| Exactly four targets; Linux is `musl`, statically linked; no target is second class | `NFR-PERF-018` | `operations` |
+| Exactly four targets; Linux is `musl`, statically linked; no target is second class. The parity is of **results**, not of instruments: one instrument of `NFR-PERF-007` exists on two targets only | `NFR-PERF-018` | `operations`, `verification` |
 | Nine budgets, one normative, five needing a server; a measurement names its target **and its server series** | `NFR-PERF-012`, `NFR-PERF-014` | `quality-attributes` |
 | The measurement protocol is normative: 200-run median, 20 warmups, no shell, idle host, first run of a fresh binary discarded, RSD ≤ 5% | `NFR-PERF-009` … `NFR-PERF-011` | `quality-attributes` |
 | Provisional figures are not limits; the ratification gate has four conditions and moves the figure to `BENCHMARKS.md` | `NFR-PERF-019`, `NFR-PERF-020`, `BR-PERF-006` | `quality-attributes` |

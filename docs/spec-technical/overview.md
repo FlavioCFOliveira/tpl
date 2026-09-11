@@ -51,7 +51,7 @@ for nothing in this folder, and the wording is the functional owner's to settle.
 
 | Property | How the built system holds it | Forced by |
 |---|---|---|
-| Read-only over the database | Only the statements of the closed list are ever sent, whatever the server would permit; the session setting is defence in depth, confirmed by a read-back before any catalogue read, and its failure stops the read; no flag, key or environment condition disables either half | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001`, `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `FR-SRV-011`, `BR-SRV-002` |
+| Read-only over the database | Only the statements of the closed list are ever sent, whatever the server would permit; the session setting is defence in depth, confirmed before any catalogue read by a read of `@@session.tx_read_only`, and its failure stops the read; no flag, key or environment condition disables either half | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001`, `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `FR-SRV-011`, `BR-SRV-002` |
 | One render per invocation | An invocation yields one result, so the design questions a multi-object render would force are not questions this artefact has to answer | `FR-RND-002` |
 | No file-writing surface | The rendered result goes to stdout and nowhere else, and no destination flag exists; every write the process makes is inside `.tpl`, with one enumerated exception; a read command's only write is the cache | `FR-RND-028`, `BR-RND-003`, `FR-PROJ-024`, `BR-PROJ-002` |
 

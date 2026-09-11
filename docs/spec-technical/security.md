@@ -144,8 +144,7 @@ path. Three consequences for the design, none of them a restatement of it:
   category, in the table above. A design in which a formatted message could be
   emitted would leave the property true only until someone wrote one.
 - **The register of mandated tests, the harness and the container arrangement
-  are `verification.md`'s**, waiting on the residual of
-  [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate).
+  are `verification.md`'s.**
 
 **Recorded discrepancy — the sentinel property and the directed key read.**
 `BR-SEC-003` asserts that the sentinel appears in no byte written by any
@@ -322,7 +321,7 @@ belongs here is which half does what, and where each sits.
 | Part | What it is in the build | What it does | Forced by |
 |---|---|---|---|
 | The closed statement list | Every statement `mariadb/` can send is written into the crate; no component composes one elsewhere, and no external process is run to read structure | **Prevents.** Nothing outside the list leaves the process, whatever grants the session carries | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001` |
-| The read-only session | Stages 2 and 3 of the connection lifecycle: applied once at connection start, confirmed immediately, and a failure of either half refuses the connection before any catalogue statement | **Detects.** Defence in depth over the first part, which is what `BR-SRV-002` states it is and all it states it is | `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `BR-SRV-002` |
+| The read-only session | Stages 2 and 3 of the connection lifecycle: applied once at connection start, confirmed immediately by reading `@@session.tx_read_only` and no other spelling of it, and a failure of either half refuses the connection before any catalogue statement | **Detects.** Defence in depth over the first part, which is what `BR-SRV-002` states it is and all it states it is | `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `BR-SRV-002` |
 
 Neither half is disableable by a flag, a configuration key or an environment
 condition (`FR-SRV-011`), which is why no such switch exists to be reviewed. The

@@ -98,7 +98,10 @@ not by dispatch, which is [Lazy initialisation](#lazy-initialisation) below.
 turns that exemption into the skipping of steps 2 and 3. `NFR-PERF-005` makes
 the exemption observable from outside the process — no `stat` of an ancestor,
 no open of the configuration file, no socket — and `NFR-PERF-007` forbids
-verifying it by reading the source.
+verifying it by reading the source. Which instrument establishes which clause,
+and on which of the four targets, is
+[verification.md](verification.md#the-nine-observations-made-outside-the-process)'s;
+the design owes the same absence on all four either way.
 
 | Exempt | Why, per `FR-PROJ-025` |
 |---|---|
@@ -182,7 +185,7 @@ sends a statement.
 |---|---|---|---|
 | 1 | Open | Opened late — when the reader is about to read, never at dispatch | `NFR-PERF-006`, `NFR-PERF-003`, [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
 | 2 | Set the session read-only | Once, at connection start | `FR-SRV-008` |
-| 3 | Read the session state back | Once, immediately after stage 2, reading nothing else; a failure of either half refuses the connection and reads no catalogue | `FR-SRV-009`, `FR-SRV-010` |
+| 3 | Read the session state back | Once, immediately after stage 2, reading `@@session.tx_read_only` and nothing else — the spelling `transaction_read_only` does not exist on `10.11`; a failure of either half refuses the connection and reads no catalogue | `FR-SRV-009`, `FR-SRV-010`; `FR-SRV-038`, difference 12 |
 | 4 | Probe the product and version | Before any statement other than stages 2 and 3; the series is derived from it and decides the treatment of every known difference | `FR-SRV-002`, `FR-SRV-034`, `FR-SRV-040`, `FR-SRV-022` |
 | 5 | Read, then close | Closed as soon as the read ends | `CLAUDE.md`, *Desempenho e Eficiência*; `NFR-PERF-004` |
 
@@ -415,7 +418,9 @@ it observable rather than reviewable.
 Each row is verified by an observation made outside the process and never by
 reading the source (`NFR-PERF-007`), which is why laziness is placed at a module
 boundary in every row: the absence of a socket, of an open file and of a thread
-is observable, while the absence of a code path is not.
+can be observed from outside, while the absence of a code path cannot. Which of
+the four instruments reaches which absence, and on which targets, is
+[verification.md](verification.md#the-nine-observations-made-outside-the-process)'s.
 
 ## The synchronous process, and the runtime boundary
 

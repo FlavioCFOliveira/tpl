@@ -28,10 +28,11 @@ would produce a technical statement with no trace, which this folder does not
 admit. A document listed as *unblocked* has no entry against it and has simply
 not been written.
 
-As of 2026-09-11 every entry of `open-decisions.md` is settled, so seven of the
-nine unwritten documents below are unblocked. Two still wait, on the two halves
-of the one residual that is work rather than a decision: `OD-22`'s fixture
-certificate and its container harness.
+As of 2026-09-11 every entry of `open-decisions.md` is settled and **no document
+waits**. The one residual that was work rather than a decision — `OD-22`'s
+fixture certificate and its container harness — was discharged the same day by
+tasks #15 and #25, and `operations.md` and `verification.md` were written against
+what those tasks produced.
 
 ## The four sources of truth
 
@@ -85,9 +86,9 @@ requirements.
 | `interfaces.md` | The contracts crossing a component boundary, and how each external contract is realised | unblocked |
 | `data-model.md` | The model in memory and everything persisted: `.tpl/.cfg`, `.tpl/.cache/`, `meta.json`, versions, migration | unblocked |
 | `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | unblocked |
-| `operations.md` | Build, target matrix, packaging, release gates, observability | waiting on the residual of `OD-22` — the fixture certificate |
+| `operations.md` | Build, target matrix, packaging, release gates, observability | written |
 | `quality-attributes.md` | Performance and reliability targets, and how each is measured | unblocked |
-| `verification.md` | Test strategy, harness, fixture, the mandated-test register, the test seams | waiting on the residual of `OD-22` — the harness |
+| `verification.md` | Test strategy, harness, fixture, the mandated-test register, the test seams | written |
 | `decisions.md` | Retired. The register and its index live at [`docs/adr/`](../adr/README.md) | n/a |
 
 `glossary.md` is **not** proposed. `specification/glossary.md` fixes the
@@ -217,8 +218,9 @@ is `verification.md`.
 
 **Answers.** The register of mandated tests, each traced to the requirement
 that mandates it. The published test vectors that are specification and test at
-once. The properties verified from outside the process. Container
-orchestration across four series. The reduced-privilege reader and the three
+once. The properties verified from outside the process, the four instruments
+that verify them and the targets each is used on. Container orchestration
+across four series and the fifth container that is not a fifth series. The reduced-privilege reader and the three
 shapes of absence it produces. The fixture's stated gaps and what they bound.
 The two test seams that must not reach the published surface. Help snapshots at
 every depth. The dump round-trip. The twelve end-to-end flows. Test naming by

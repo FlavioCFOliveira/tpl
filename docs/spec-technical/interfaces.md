@@ -97,8 +97,10 @@ a difference treatment under `FR-SRV-022`, and hands the three fields of the
 MariaDB is `78` (`FR-SRV-003`); a series below the window is `78`
 (`FR-SRV-020`, `FR-SRV-030`); one above it is a marked read (`FR-SRV-031`,
 `FR-SRV-032`). The read-only session is set and read back before any catalogue
-statement, and a failure of either half refuses the connection (`FR-SRV-008`,
-`FR-SRV-009`, `FR-SRV-010`, `FR-SRV-011`).
+statement — the read-back names `@@session.tx_read_only`, the only spelling
+present on all four series (`FR-SRV-038`, difference 12) — and a failure of
+either half refuses the connection (`FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`,
+`FR-SRV-011`).
 
 **One invariant is checked over an assembled table, not over a query result.**
 `FR-CAT-044` forbids any key — primary, unique, index, or either direction of a
