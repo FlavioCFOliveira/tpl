@@ -175,8 +175,10 @@ standing rule.
 | async — as shipped (TLS) | 61.937 ± 4.105 ms | 46.045 | 62.393 | 1.75 MiB | 1 652 816 B |
 | async — TLS disabled | 1.236 ± 0.075 ms | 1.069 | 1.223 | 1.12 MiB | 1 652 816 B |
 
-The 61.9 ms figure is real, reproducible, and **not understood**. See
-[The musl anomaly](#the-musl-anomaly) below before drawing anything from it.
+The 61.9 ms figure is real and reproducible, and its mechanism was unknown when
+this entry was written. It was established afterwards; see
+[The musl anomaly](#the-musl-anomaly--resolved-on-2026-09-11) below before
+drawing anything from it.
 
 ### Peak RSS method
 
@@ -234,7 +236,7 @@ then timed.
 | darwin | 0.281 ± 0.057 ms — 6.3% of the invocation | 8 of 8 |
 | musl | 0.079 ± 0.038 ms | 8 of 8 |
 
-### The musl anomaly
+### The musl anomaly — resolved on 2026-09-11
 
 **Recorded, not buried.** `sqlx` with TLS over direct Linux loopback takes
 61.937 ms, of which `connect_with` alone accounts for **44.18 ms**. The query is
@@ -244,16 +246,25 @@ During those 44 ms the process is at **0% CPU with 9 voluntary context
 switches** — it is blocked, not computing.
 
 Nagle's algorithm was the obvious suspect, the ~40 ms magnitude matching a
-delayed ACK almost exactly. It was **tested and refuted**: disabling it on the
-sync driver (`tcp_nodelay(false)`) gave 3.85 ms against 3.83 ms — unchanged.
+delayed ACK almost exactly, and this entry originally recorded it as *tested and
+refuted*: toggling it on the sync driver (`tcp_nodelay(false)`) gave 3.85 ms
+against 3.83 ms — unchanged. **That test refuted nothing.** It exercised Nagle
+in isolation, on a driver that does not reproduce the stall, and the stall
+requires two ingredients at once.
 
-**The mechanism is unexplained.** It is tracked as roadmap task `#8`. The
-anomaly is absent on the macOS host, where the same path crosses Docker
-Desktop's port proxy instead of raw loopback.
+**The mechanism was established on 2026-09-11 under roadmap task `#8`, and the
+account is [the 2026-09-11 entry](#2026-09-11--the-tls-connect-stall-on-linux-loopback),
+which supersedes this section.** In short: `sqlx-core` 0.9.0 never sets
+`TCP_NODELAY`, and its `StdSocket` inherits a `write_vectored` that writes only
+the first buffer, so the TLS client flight leaves split and Nagle holds the
+`Finished` record for one Linux delayed ACK. The anomaly's absence on the macOS
+host, where the path crosses Docker Desktop's port proxy instead of raw
+loopback, is confirmed there; its cause on that path is not separated, and that
+entry says so.
 
-Nothing in the decision rests on this row: the async candidate wins the musl
-comparison on the plaintext pair, and the anomaly is a defect to be understood
-before TLS-over-loopback is relied upon, not a property of the driver choice.
+Nothing in this entry's decision rested on this row, and nothing in it changes:
+the async candidate wins the musl comparison on the plaintext pair, and the
+anomaly was a defect in the driver, not a property of the driver choice.
 
 ### Caveats
 
@@ -316,3 +327,245 @@ The TLS confounder is confirmed by diffing `Ssl_accepts` on the server across an
 invocation, with a control invocation known to add zero. The `prefer_socket`
 probe is confirmed by toggling the option and watching `SELECT @@socket` appear
 in and disappear from the server's statement log.
+
+---
+
+## 2026-09-11 — The TLS connect stall on Linux loopback
+
+*Sprint 4, task `#8`. This entry establishes the mechanism behind the anomaly the
+2026-09-10 entry recorded as unexplained, and supersedes that entry's account of
+it. Target of record: `aarch64` Linux, every figure taken inside a container
+under Docker Desktop's Linux VM, on an `aarch64-apple-darwin` host; one figure
+taken on `aarch64-apple-darwin` itself and labelled as such. Servers of record:
+MariaDB `10.11`, `11.4`, `11.8` and `12.3`. This is a defect investigation, not a
+budget: no figure here is a baseline for `tpl`.*
+
+### What was established
+
+`sqlx` 0.9.0's TLS connect stalls for ~40 ms because the client's last handshake
+flight is **blocked**, not because any part of it is expensive. It is **not a
+cost**, and it needs **two ingredients at the same time** — which is why task
+`#7`'s test of Nagle in isolation refuted nothing.
+
+1. **Nagle stays on.** `sqlx-core` 0.9.0 never calls `set_nodelay`. The string
+   `nodelay` occurs zero times in the crate, and no `setsockopt` appears
+   anywhere in the syscall trace of a connect.
+2. **The TLS 1.3 client flight leaves split across separate segments.**
+   `rustls` always calls `write_vectored` with all pending records at once, but
+   `sqlx_core::net::tls::util::StdSocket` implements `io::Write` with `write`
+   and `flush` only. It therefore inherits `std`'s default `write_vectored`,
+   **which writes only the first buffer**. The gather never happens.
+
+Chained, they produce the stall:
+
+- the 6-byte `ChangeCipherSpec` record goes out alone;
+- the `Finished` record queued behind it is held by Nagle, because there is
+  small unacknowledged data in flight;
+- the server has nothing to send until it sees that `Finished`, so it answers
+  only with Linux's delayed ACK — `TCP_DELACK_MIN` is `HZ/25`, i.e. **40 ms**;
+- that ACK releases Nagle, and everything accumulated leaves at once.
+
+**Plaintext never stalls** because the MySQL protocol in clear is strict
+ping-pong: it never issues two writes without a read between them, so there is
+never unacknowledged small data in flight to hold the next write back.
+
+### Wire evidence
+
+`tcpdump -i lo -n -ttt`, run inside the server container's own network
+namespace. The second column is the inter-packet delta:
+
+```
+ 0.000122  client > 3306: [P.], seq 255:261, length 6     <- 14 03 03 00 01 01  ChangeCipherSpec
+ 0.042147  3306 > client: [.],  ack 261,     length 0     <- DELAYED ACK, +42.147 ms
+ 0.000007  client > 3306: [P.], seq 261:463, length 202   <- Finished (82) + HandshakeResponse (120)
+```
+
+`strace` agrees, and shows that nothing is computing meanwhile: three `sendto`
+calls of the client's own, then `epoll_pwait(...) = 1 <0.040814>`.
+
+### Workload, candidates and protocol
+
+Three harnesses, each isolating a different thing.
+
+**1. A 2x2 factorial**, purpose-built: blocking `std` sockets driving `rustls`'
+synchronous API against a real MariaDB server, with **no `tokio` in the binary at
+all**. The two factors are `TCP_NODELAY` and whether the client's records are
+written split or coalesced. Measured: the client segment lengths seen on the
+wire, and the time from the start of the flight to the first server response.
+
+**2. The untouched `sqlx` binary**, with `TCP_NODELAY` forced on by an
+`LD_PRELOAD` shim rather than by any change to the crate. Measured:
+`connect_with`, five repeats per state.
+
+**3. Real `sqlx-core` 0.9.0 carrying the candidate fixes**, applied through
+`[patch.crates-io]`, each fix switchable at runtime so that one binary produces
+all four cells. Measured: `connect_with`, seven repeats per variant, plus a
+phase breakdown instrumented identically to task `#7`'s.
+
+### Resolution of the instrument
+
+No A/A twin was run for this entry, and none was needed: the effect is roughly
+**30x the spread of the repeats within any cell**. Every result below is
+therefore printed as its raw repeats rather than as a mean, so that the spread
+is visible without a summary statistic standing between the reader and it.
+
+### Results — the 2x2 factorial
+
+| `TCP_NODELAY` | writes | client segments | time to first response |
+|---|---|---|---|
+| off | split | `[218, 6, 82, 122]` | **43.7 – 45.2 ms** |
+| off | coalesced | `[218, 88, 122]` | 0.105 – 0.132 ms |
+| on | split | `[218, 6, 82, 122]` | 0.101 – 0.109 ms |
+| on | coalesced | `[218, 88, 122]` | 0.088 – 0.103 ms |
+
+Only the cell that reproduces `sqlx`'s configuration stalls. **Removing either
+ingredient removes the stall**, which is what makes the mechanism a conjunction
+rather than a single cause. Because this binary links no `tokio`, the async
+runtime is exonerated.
+
+### Results — the untouched `sqlx` binary under the `LD_PRELOAD` shim
+
+`connect_with`, five repeats:
+
+| state | `connect_with` (ms) |
+|---|---|
+| as published | 42.9  41.7  41.9  41.5  41.9 |
+| `TCP_NODELAY` forced on by the shim | 1.34  1.39  1.28  1.34  1.29 |
+
+The crate is byte-identical across the two rows; only the socket option differs.
+
+### Results — candidate fixes patched into `sqlx-core` 0.9.0
+
+`connect_with`, seven repeats:
+
+| variant | `connect_with` (ms) |
+|---|---|
+| both off (= published 0.9.0) | 49.9  42.9  42.6  46.7  42.6  43.4  41.9 |
+| `set_nodelay(true)` (the upstream fix) | 1.22  1.36  1.38  1.36  1.37  1.31  1.34 |
+| `write_vectored` on `StdSocket` only | 1.28  1.31  1.27  1.34  1.47  1.39  1.27 |
+| both | 1.55  1.49  1.40  1.28  1.25  1.26  1.39 |
+
+Either change alone removes the stall, and the two together are not measurably
+better than either alone on this path. **Whether `tpl` adopts a workaround, and
+which, is an architecture decision that this entry does not make**; it is raised
+as roadmap task `#38`. What is recorded here is the measured effect of each
+option, and nothing beyond it.
+
+### Results — phase instrumentation
+
+Instrumented identically to task `#7`'s phase breakdown:
+
+| variant | connect | set session | query |
+|---|---|---|---|
+| TLS `verify-identity`, published 0.9.0 | **42.27 ms** | 0.22 ms | 0.28 ms |
+| TLS `verify-identity`, with `set_nodelay` | **1.38 ms** | 0.11 ms | 0.17 ms |
+| no TLS (`disabled`) | 0.46 ms | 0.10 ms | 0.11 ms |
+| server started `--skip-ssl` | 0.59 ms | 0.10 ms | 0.13 ms |
+
+The cost is entirely in connection establishment; the phases after it are
+unaffected in every variant.
+
+### Independent of server series and of network interface
+
+All four supported series stall: `10.11`, `11.4`, `11.8` and `12.3` all land in
+**41–52 ms**, and all drop to **~1.3 ms** with `TCP_NODELAY` forced. It is not a
+property of one server series.
+
+It is not a property of loopback either: it reproduces over the docker bridge
+veth path at **41.7 – 45.1 ms**.
+
+It is absent in exactly one measured place — the macOS host reaching Docker
+Desktop's published port, at **2.2 – 2.9 ms** (`aarch64-apple-darwin`; by the
+standing rule, not comparable with the Linux figures above). There a userland
+TCP proxy terminates the connection. **The writes are still split there**, so
+the absence is a property of that path, not of the client.
+
+### Whose defect it is, and its status upstream
+
+It is `sqlx`'s, and it is a **regression in a published version**:
+
+| version | `set_nodelay` |
+|---|---|
+| `sqlx-core` 0.7.4 | present |
+| `sqlx-core` 0.8.0 | present |
+| `sqlx-core` 0.8.6 | present |
+| **`sqlx-core` 0.9.0**, published 2026-05-21 | **zero occurrences** |
+| `main` | present again |
+
+Chronology, in the repository `https://github.com/transact-rs/sqlx`:
+
+- originally fixed by issue **#3043** → PR **#3055**, merged 2024-02-16;
+- dropped by the runtime rewrite, commits `6b828e698f` (PR **#3791**) and
+  `66526d9c56` (PR **#4022**), both 2025-09-08;
+- re-reported by a third party as issue **#4335** on 2026-07-10, with an
+  identical symptom — "41-43ms", against MariaDB/MySQL, `runtime-tokio` with
+  `tls-rustls`;
+- fixed on `main` by PR **#4336**, merged 2026-08-17.
+
+**No release carries the fix. 0.9.0 is still the latest on crates.io.**
+
+### What is not reported upstream
+
+`StdSocket` still lacks a `write_vectored` implementation on `main`, so every
+`rustls` flight still leaves split. That is benign once Nagle is off — which is
+why the upstream fix is sufficient — but it is the reason a missing
+`TCP_NODELAY` costs 40 ms here rather than costing nothing.
+
+### What was not measured — stated, not implied
+
+- **No bare-metal Linux host was available.** This host is
+  `aarch64-apple-darwin`, and every Linux figure above was taken inside Docker
+  Desktop's Linux VM. The bare-metal case is **untested**, not inferred.
+- **Why the macOS host path does not stall was not separated** between Docker
+  Desktop's userland proxy and Darwin's own Nagle and delayed-ACK behaviour.
+  Both remain candidate explanations.
+- **Task `#7`'s synchronous candidate was not rebuilt.** The explanation that it
+  coalesces because `std::net::TcpStream` implements `write_vectored` is
+  **inference from the factorial**, not a measurement of that crate.
+- **Figures from different harnesses are not compared number to number.** The
+  1.38 ms connect above and the 4.03 ms connect from task `#7`'s phase breakdown
+  come from different harnesses; so do the 42.27 ms above and the 44.18 ms
+  recorded in the 2026-09-10 entry. Each is read against the other figures of
+  its own harness.
+
+### Standing relative to the normative protocol
+
+This entry is a **defect investigation**, not a ratified budget under
+`NFR-PERF-020`, and no figure in it supersedes a provisional budget in
+[`specification/performance-requirements.md`](specification/performance-requirements.md).
+It departs from that file's measurement protocol further than the 2026-09-10
+entry does, and deliberately: a handful of repeats rather than pooled hundreds,
+no warmups, no A/A twin, a host that was not idle against `NFR-PERF-010`, and a
+server in the loop, which `NFR-PERF-013` keeps every normative budget away from.
+The quantity under measurement is a 40 ms block against a ~1.3 ms baseline, and
+the instrument does not need to be sharper than this to settle it. **Do not
+model a budget entry on this one.**
+
+### Reproduction
+
+```sh
+# Wire evidence: capture inside the server container's own network namespace,
+# so that loopback is the loopback the client actually writes to.
+docker run --rm -it --network container:<server> --cap-add NET_ADMIN \
+  <image-with-tcpdump> tcpdump -i lo -n -ttt 'tcp port 3306'
+
+# Syscall evidence: three sendto calls of the client's own, then the wait.
+strace -f -tt -T -e trace=network,epoll_pwait <sqlx-binary>
+
+# The crate itself: the option is simply never set in 0.9.0.
+grep -rn nodelay <sqlx-core 0.9.0 source>          # no hits
+
+# Toggling the option without touching the crate: an LD_PRELOAD shim that
+# intercepts connect(2) and sets TCP_NODELAY on the socket.
+
+# Toggling the fixes inside the crate: vendor sqlx-core 0.9.0 and redirect to it,
+#   [patch.crates-io]
+#   sqlx-core = { path = "<vendored sqlx-core>" }
+# with set_nodelay(true) and StdSocket::write_vectored each behind a runtime flag,
+# so that one binary produces all four cells.
+```
+
+The 2x2 factorial is a standalone binary: blocking `std::net::TcpStream`,
+`rustls`' synchronous `ClientConnection`, no `tokio`. The "split" arm writes each
+record with a separate `write`; the "coalesced" arm gathers them into a single
+write. Segment lengths are read off the same `tcpdump` capture.

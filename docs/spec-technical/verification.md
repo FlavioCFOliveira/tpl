@@ -22,18 +22,16 @@ figure is `BENCHMARKS.md`'s. **No build command appears here.** The pipeline
 that runs the suite, the gates a release passes and the fixture's operational
 standing are [operations.md](operations.md#the-mandatory-validation-pipeline).
 
-**One section is not written, because nobody has run it.**
-[The container harness](#the-container-harness--not-yet-established) states what
-the harness must achieve and marks plainly what is not established: the entry
-point, the gating mechanism, and the instrumentation for each outside-the-process
-observation. That is the harness half of
-[`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)'s
-residual, and recording an arrangement nobody has run is exactly what the
-residual exists to prevent.
+**The harness exists; the tests do not.**
+[The container harness](#the-container-harness) records what
+`scripts/mariadb/` supplies as of 2026-09-11, which discharged the harness half
+of [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)'s
+residual, and what remains unestablished beside it.
 
-**Nothing in this document has been executed.** No test named here exists, and
-no container has been driven by anything this project owns. What is recorded is
-the obligation and its trace, never an outcome.
+**No test named in this document exists.** The harness has been run and its
+instruments were established against a substitute client; nothing this project
+owns has yet been tested through them. What is recorded of a test is its
+obligation and its trace, never an outcome.
 
 ## The four kinds of test, and what each needs
 
@@ -91,12 +89,12 @@ produce the behaviour, on the same footing as the behaviour itself.
 | 7 | The dump round-trip | A render over a dump fed back through `--context` is byte-identical to the same render against a live read | Server | `BR-SCH-004` |
 | 8 | The sentinel | A known sentinel password appears in no byte of either stream, from any command of the tree, at maximum verbosity | Integration; the commands that reach a server need one | `BR-SEC-003` |
 | 9 | The closed statement list | The server receives the four kinds of statement of `FR-SRV-006` and no fifth, with the three connection-start statements issued once each in that order | Server, observed on the server | `FR-SRV-012` |
-| 10 | The read-only read-back | Both outcomes: the session setting taking effect, and failing to take effect | Server | `FR-SRV-013` |
+| 10 | The read-only read-back | Both outcomes of the read of `@@session.tx_read_only`: the session setting taking effect, and failing to take effect | Server, **every series** — exactly one of the four discriminates the spelling | `FR-SRV-013`, `FR-SRV-009` |
 | 11 | The connection count | At most one connection per invocation, counted on the server | Server, observed on the server | `FR-SRV-014`, `NFR-PERF-004` |
 | 12 | Cross-series equivalence | Byte-identical documents from identical DDL, on every series of `FR-SRV-015`, with the three exceptions | Server, four containers | `FR-SRV-029` (1), `FR-SRV-026` |
 | 13 | The refusal | A series outside the window is refused with `78` and no catalogue is read | Server, one container outside the window | `FR-SRV-029` (2), `FR-SRV-020` |
 | 14 | The newer-than-window read | The read completes without error and `standing` is `newer_than_supported` | Unit | `FR-SRV-035` |
-| 15 | The six requirements of form | Each observed from outside the process, never by reading the source | Server or integration, per row | `NFR-PERF-007` |
+| 15 | The six requirements of form | Each observed from outside the process, never by reading the source, by the four instruments of `NFR-PERF-007` and each only on the targets its row admits | Server or integration, per row | `NFR-PERF-007`, `NFR-PERF-018` |
 | 16 | The word list | The eight rows of the published table | Vector | `FR-ENV-032`, `FR-ENV-030`, `FR-ENV-031` |
 | 17 | The five naming filters | The forty cells of the published table | Vector | `FR-ENV-033` |
 | 18 | The seven tests | The answer of each test, and the disjointness of the three families | Vector | `FR-ENV-041`, `FR-ENV-042` |
@@ -168,17 +166,51 @@ and `BR-SRV-003` says why: a promise about what a process sends that can only be
 checked by reading that process's own source is not a promise a caller can rely
 on. Nine requirements are held to that standard.
 
+**Four instruments, and each is bound to the targets it exists on.**
+`NFR-PERF-007` names them and `NFR-PERF-018` supplies the target set; the
+binding is part of the rule, not a property of the machine a run happens on.
+
+| Instrument | What it observes | Targets |
+|---|---|---|
+| The server's statement record | The statements the server receives | all four |
+| The server's connection record | The connections the server accepts | all four |
+| A syscall trace of the process | The files the process opens | the two Linux targets |
+| A differential run | The invocation's own outcome — exit code, stdout bytes, artefacts left on disk — under an arrangement the operation, had it been performed, would not have survived | all four |
+
+Where both the trace and the differential run exist, the trace establishes a
+clause stated as a syscall and the differential run corroborates it; where only
+the differential run exists, it is the whole of the evidence. The order is
+`NFR-PERF-007`'s and is not this document's to vary.
+
 | # | Requirement | The property | What is observed |
 |---|---|---|---|
 | 1 | `NFR-PERF-001` | No query per object on a full read | The catalogue queries the server receives, over two workloads of different size |
 | 2 | `NFR-PERF-002` | Reading one named object does not scale with the database | The same, for a named-object read |
 | 3 | `NFR-PERF-003` | A cache hit opens no connection and issues no query | The connections the server accepts, and the queries it receives: none of either |
 | 4 | `NFR-PERF-004` | At most one connection per invocation | The connections the server accepts |
-| 5 | `NFR-PERF-005` | The four commands of `FR-PROJ-025` touch nothing | The files the process opens: no `stat` of an ancestor, no open of `.tpl/.cfg`, no socket |
+| 5 | `NFR-PERF-005` | The commands of `FR-PROJ-025` touch nothing | Per clause, per target — see below |
 | 6 | `NFR-PERF-006` | A command needing no catalogue opens no connection | The connections the server accepts |
 | 7 | `FR-SRV-012` | The closed statement list | The statements the server receives: four kinds, no fifth, three of them once each in order |
-| 8 | `FR-SRV-013` | The read-only read-back, in both outcomes | The statements the server receives, and what the session reports |
+| 8 | `FR-SRV-013` | The read-back of `@@session.tx_read_only`, in both outcomes | The statements the server receives, and what the session reports |
 | 9 | `FR-SRV-014` | The connection count | The connections the server accepts |
+
+**Row 5 is the only row whose evidence differs by target**, and `NFR-PERF-005`
+states the split in its own text rather than leaving it to the harness.
+
+| Clause of `NFR-PERF-005` | Evidence | On which targets |
+|---|---|---|
+| Opens no connection | The server's connection record | all four |
+| Performs no project discovery | A differential run: `tpl init` inside a subdirectory of an existing project, which `FR-PROJ-012` and `FR-PROJ-013` make create a project there and report no ancestor | all four |
+| Reads no configuration file | A differential run: a command of `FR-PROJ-025` inside a project whose `.tpl/.cfg` would fail `FR-CONF-034`, asserting exit `0` and stdout byte-identical to the same command run outside any project | all four |
+| The two clauses above, as syscalls | A syscall trace: no `stat` of an ancestor, no open of `.tpl/.cfg` | **the two Linux targets only** |
+
+A Linux observation **may not be credited to either Darwin target**, which
+`NFR-PERF-005` forbids in terms and for the reason `FR-ERR-031` already gave:
+the artefact observed would not be the artefact distributed. The fixture's
+`observe.sh` traces inside a Linux container when the host has no `strace`, and
+that trace is evidence for the Linux targets alone. What the two Darwin targets
+consequently do not catch is named by the requirement: a build that opened
+`.tpl/.cfg`, read it and discarded what it read.
 
 Rows 1 and 2 are the only two that need a **second, larger** database to be
 conclusive, which is `WL-001` and therefore `seed-bench.sql`
@@ -193,11 +225,8 @@ the token and on nothing after it is
 and 9 name the same property: `FR-SRV-014` fixes the connection count *as
 `NFR-PERF-004` fixes it* and adds that it shall be verifiable from the server
 side. One observation of the connections a server accepts discharges both. The
-nine is a count of requirements, which is how
-[`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)
-uses it; the harness therefore instruments fewer observations than there are
-requirements, and the mapping from one to the other is part of the work it
-still owes.
+nine is a count of requirements, and the instruments are four, so neither number
+counts the observations a run makes.
 
 **Recorded reading — which requirements `NFR-PERF-007` reaches.** It reads
 *"each requirement of this section"*, and the section it sits in also contains
@@ -335,7 +364,7 @@ and are not restated; what belongs here is what the tests must not assume.
 
 | Caution | Source |
 |---|---|
-| A difference may fall **anywhere** in the window. Ten of the eleven observed differences separate `10.11` from the rest or `12.3` from the rest; difference 8 puts `10.11` and `11.4` on one side. A test that models the window as one old server and three modern ones is right ten times out of eleven | `FR-SRV-038`, difference 8 |
+| A difference may fall **anywhere** in the window. Eleven of the twelve observed differences separate `10.11` from the rest or `12.3` from the rest; difference 8 puts `10.11` and `11.4` on one side. A test that models the window as one old server and three modern ones is right eleven times out of twelve | `FR-SRV-038`, difference 8 |
 | A statement naming a fixed `INFORMATION_SCHEMA` column list must be common to all four series or selected per series. Naming an absent column is a hard `ERROR 1054`, not a `NULL` and not a warning | `FR-SRV-037`; differences 5, 6, 7 |
 | A field that differs between series without a row in the register is a **failure** of `FR-SRV-026`, not an instance of its exception | `FR-SRV-027`, `FR-SRV-036`, `FR-SRV-039` |
 | The catalogue comparison already recorded under `FR-SRV-038` is evidence, not the test: it compares catalogue material, and `FR-SRV-026` compares the document `tpl` emits | `FR-SRV-038`, `FR-SRV-029` |
@@ -359,7 +388,19 @@ series, and names none outside the window. Both readings are recorded:
   a test it also declines to provision.
 
 Nothing is corrected in either file. What the refusal test runs against is **not
-established**, and it belongs to the harness work below.
+established**, and it is named among what the harness does not supply below.
+
+**Recorded gap — one observed difference has no row in `FR-SRV-038`.** The
+harness observed that the version a server sends in its initial handshake
+greeting carries a `5.5.5-` prefix on `10.11` and on no other series, while
+`SELECT VERSION()` answers without it everywhere
+(`scripts/mariadb/README.md`, difference 9). `FR-SRV-038` obliges every
+difference observed between the series to be recorded in its own section, and
+the twelve recorded there do not include it. No test named here rests on it —
+`FR-SRV-002` determines the version by the probe, not by the greeting — and a
+test that reads a greeting must not assume the two agree. It is reported to the
+functional owner; this folder does not record a difference on the corpus's
+behalf.
 
 ## The reduced-privilege reader and the three shapes of absence
 
@@ -407,12 +448,12 @@ asserting the common case of a database with no triggers.
 ## The fixture's stated gaps, and what they bound
 
 The fixture is the only database any validation may use — no mock, no stub, no
-external instance — and its standing as an operational asset, including the
-unsatisfied certificate obligation of `FR-CONF-038`, is
-[operations.md](operations.md#the-fixture-as-an-operational-asset)'s. The one
-consequence that reaches this register: **every server-reaching test named here
-must set `tls` away from its default**, and the default mode of `FR-CONF-013`
-has no acceptance test until that obligation is met.
+external instance — and its standing as an operational asset is
+[operations.md](operations.md#the-fixture-as-an-operational-asset)'s. Since task
+#15 the certificate obligation of `FR-CONF-038` is met, so a server-reaching
+test named here may be written at the `verify-identity` default of
+`FR-CONF-013`, and the fifth container is what gives the mode table its
+server offering no TLS.
 
 `FR-SRV-038` names three gaps so that they are not mistaken for observations.
 
@@ -430,13 +471,13 @@ rather than a series difference (`FR-CAT-034`); and the `utf8mb4_uca1400_*`
 collations, which are the default on three of the four and would make a declared
 collation indistinguishable from an inherited one.
 
-Two files the fixture still owes bound what can be measured rather than what can
+One file the fixture still owes bounds what can be measured rather than what can
 be asserted: `seed-bench.sql`, which `WL-001` needs and which
 [`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001) schedules for the
-sprint that implements the catalogue reader, and the certificate above. Rows 1
-and 2 of [the nine observations](#the-nine-observations-made-outside-the-process)
-are the tests that wait on the first, because a query count that does not scale
-cannot be demonstrated against ten tables.
+sprint that implements the catalogue reader. Rows 1 and 2 of
+[the nine observations](#the-nine-observations-made-outside-the-process) wait on
+it, because a query count that does not scale cannot be demonstrated against ten
+tables.
 
 ## The twelve end-to-end flows
 
@@ -467,48 +508,44 @@ only flow that must run where **no project exists**, which is what makes
 `UC-011` is the only flow whose expected outcome is a **wrong answer with exit
 `0`**: the test asserts the documented failure mode, not its absence.
 
-## The container harness — not yet established
+## The container harness
 
-**This section is the one part of this document that changes when the harness
-work lands.** It is the harness half of
+**The harness exists.** Task #25 discharged the harness half of
 [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)'s
-residual, and that residual exists precisely to stop an arrangement nobody has
-run from being recorded as though it were the state of the system.
+residual by running it rather than describing it, and `scripts/mariadb/README.md`
+is its record: the scripts, their output, and the observations each instrument
+actually produced. That file is not restated here. What belongs here is which
+obligation each part discharges, and what a test suite still has to decide.
 
-### What the harness must achieve
+### What the harness must achieve, and what discharges it
 
-These are obligations, each traced, and none of them describes a mechanism.
+| Obligation | Source | Discharged by |
+|---|---|---|
+| Every validation that needs a database uses the containers of `scripts/mariadb/` — never a mock, never a stub, never an external instance | `CLAUDE.md`, *Testes contra MariaDB* | The fixture is the only database; nothing else is provisioned |
+| Containers are launched before a run and stopped after it; **no container is left running** | `scripts/mariadb/README.md` | `up.sh` and `down.sh`, the latter asking the daemon what is left rather than asserting it |
+| All four series run **side by side**, each with its own image, container and published port, so that a cross-series comparison is one run rather than four | `FR-SRV-029`, `FR-SRV-015` | Four images, four containers, four ports — **and a fifth container that is not a fifth series**: the `--skip-ssl` server `FR-CONF-038` obliges, on a fifth port |
+| A container is confirmed to have initialised cleanly before any test runs against it, because a failure inside the init directory leaves the schema incomplete while the container still reports itself up | `scripts/mariadb/README.md` | `up.sh` checks each server twice — the published port answering, and the log and object count — and removes a server it cannot make healthy |
+| A server-dependent test can ask whether the fixture is up, without a client installed | `scripts/mariadb/README.md` | `status.sh`, whose exit code distinguishes **no** fixture from **half** a fixture |
+| A container of a series **outside** the window is available for the refusal test | `FR-SRV-029`, `FR-SRV-020` — and see the contradiction recorded above | **Nothing.** The fixture defines no such container |
+| The reduced-privilege reader is reachable beside the privileged one, on every series | `FR-PRIV-018`, `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019` | `tpl_reader`, with the three shapes of absence observed identically on all four series |
+| The statements a server receives, and the connections it accepts, are observable **from the server side** | `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-014`, `BR-SRV-003` | `observe.sh statements` and `observe.sh connections`, each established against a substitute client and each with its own observer baseline measured rather than assumed |
+| The files a process opens are observable from outside it | `NFR-PERF-005`, `NFR-PERF-007` | `observe.sh opens`, on a Linux host. See the target limit below |
+| Every command of the tree can be run at maximum verbosity with both streams captured whole | `BR-SEC-003` | The fixture supplies the servers the commands that reach one need; capturing both streams whole is the suite's, and the suite does not exist |
 
-| Obligation | Source |
-|---|---|
-| Every validation that needs a database uses the containers of `scripts/mariadb/` — never a mock, never a stub, never an external instance | `CLAUDE.md`, *Testes contra MariaDB* |
-| Containers are launched before a run and stopped after it; **no container is left running** | `scripts/mariadb/README.md` |
-| All four series run **side by side**, each with its own image, container and published port, so that a cross-series comparison is one run rather than four | `FR-SRV-029`, `FR-SRV-015`; the arrangement is `scripts/mariadb/README.md`'s |
-| A container is confirmed to have initialised cleanly before any test runs against it, because a failure inside the init directory leaves the schema incomplete while the container still reports itself up | `scripts/mariadb/README.md` |
-| A container of a series **outside** the window is available for the refusal test | `FR-SRV-029`, `FR-SRV-020` — and see the contradiction recorded above |
-| The reduced-privilege reader is reachable beside the privileged one, on every series | `FR-PRIV-018`, `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019` |
-| The statements a server receives, and the connections it accepts, are observable **from the server side** | `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-014`, `BR-SRV-003` |
-| The files a process opens are observable from outside it | `NFR-PERF-005`, `NFR-PERF-007` |
-| Every command of the tree can be run at maximum verbosity with both streams captured whole | `BR-SEC-003` |
-| A server-reaching test sets `tls` explicitly, for as long as the certificate obligation is unmet | `FR-CONF-038`; [operations.md](operations.md#the-fixture-as-an-operational-asset) |
+**The instruments were established against a substitute client**, because `tpl`
+does not exist. That is the correct order for an instrument whose whole purpose
+is to observe from outside the process under test: what was established is that
+the instrument sees what a client sends, not what any particular client sends.
 
 ### What is not established
 
-**The harness's concrete arrangement is not established.** No entry point
-exists, no gating mechanism has been chosen, and no instrumentation has been
-selected for any of the nine observations. Nobody has run any of it. Three
-questions are open and are named so that they are not answered here by
-invention:
-
 | Open | Why it is not answered here |
 |---|---|
-| **The entry point** — what drives the four containers up, what tears them down, and what guarantees teardown after a failed run | Every candidate arrangement is a file and a command nobody has executed. Recording one would put a description of something imaginary in a folder whose discipline is to describe what is true today |
-| **Whether server-dependent tests are gated**, and by what — so that a contributor with no container runs the vector, unit and integration kinds and is told plainly why the server kind did not run | The choice interacts with the test suite as it is actually invoked, which is [operations.md](operations.md#the-mandatory-validation-pipeline)'s, and with what a skipped test may report without a caller mistaking it for a pass. Neither is settled |
-| **The instrumentation command for each of the nine observations** — how the statements a server receives are captured, how the connections it accepts are counted, and how the files a process opens are listed | Each must be verified against the tool that performs it, on **both** operating systems `NFR-PERF-018` makes first class, and no such verification has been made. The stake is unusual: `NFR-PERF-007` makes the instrument *the* verification, so an instrument that turns out not to observe from outside the process leaves the requirement unverified rather than merely awkwardly tested |
-
-This section is **superseded when the harness work lands**. Nothing else in this
-document depends on its outcome: every obligation above is already traced, and
-what changes is only how each is discharged.
+| **The fourth instrument of `NFR-PERF-007` is not in the harness.** `observe.sh` carries three — statements, connections, files opened — and the differential run is carried by none of them | The eleventh edition of `/specification` added it after the harness was built. It needs no container and no privilege, so it is a property of the test suite rather than of the fixture, and the suite does not exist |
+| **The file-open instrument does not exist on either Darwin target.** On a host with no `strace` the harness traces a Linux build inside a container and says so; `NFR-PERF-005` forbids crediting that observation to macOS | The limit is the platform's, recorded by `NFR-PERF-005` with the three commands that established it. What would lift it is named there, and is not this folder's to take |
+| **Whether server-dependent tests are gated, and how a skip is reported.** `status.sh` supplies the gate and its three-valued exit code; what the suite does with each value is undecided | The choice interacts with the test suite as it is actually invoked, which is [operations.md](operations.md#the-mandatory-validation-pipeline)'s, and with what a skipped test may report without a caller mistaking it for a pass. Neither is settled |
+| **What the refusal test of `FR-SRV-029` runs against** | The contradiction is recorded under [cross-series equivalence](#cross-series-equivalence-across-four-series) and is the functional owner's; the fixture provisions no container outside the window |
+| **Two observations the fixture could not produce**: the failing outcome of `FR-SRV-013`, and rows 1 and 2 conclusively | The first needs a server that accepts the read-only statement and does not apply it, which no real MariaDB does — a fault-injection seam in `tpl`, not a container, and no such seam is decided. The second waits on `WL-001` ([`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001)) |
 
 ## What this document defers, and to what
 
@@ -516,8 +553,9 @@ what changes is only how each is discharged.
 |---|---|
 | Every budget, its standing, the measurement protocol and the three workloads | [quality-attributes.md](quality-attributes.md) |
 | Every measured figure and every recorded baseline | `BENCHMARKS.md` |
-| The validation pipeline, the release gates, the fixture's operational standing and the certificate gap | [operations.md](operations.md) |
-| The fixture's contents, its credentials, its deliberate omissions and the differences observed between the series | `scripts/mariadb/README.md` |
+| The validation pipeline, the release gates and the fixture's operational standing | [operations.md](operations.md) |
+| The fixture's contents, its credentials, its deliberate omissions, the harness scripts and their recorded output | `scripts/mariadb/README.md` |
+| The record of every difference observed between the series — twelve | `FR-SRV-038` |
 | The privilege detections as built, the diagnostic renderer, the emitter and the help surface | [interfaces.md](interfaces.md) |
 | The engine construction the seams and the vectors run against | [architecture.md](architecture.md) |
 | What a mandated test asserts **about**, requirement by requirement | `/specification`, cited here by identifier and never reproduced |

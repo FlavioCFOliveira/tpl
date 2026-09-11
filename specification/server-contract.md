@@ -1,7 +1,7 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md]
 ---
 
@@ -37,7 +37,9 @@ Out of scope: which fields are read, which belongs to
 returns less than it should, which belongs to
 [privileges-and-completeness.md](privileges-and-completeness.md); connection
 settings and TLS, which belong to
-[configuration-model.md](configuration-model.md); and the text of any statement.
+[configuration-model.md](configuration-model.md); and the text of any
+statement, save for the one variable the read-back of `FR-SRV-009` must name,
+which `FR-SRV-006` records and explains.
 
 Also out of scope, and for a reason worth stating rather than assuming: **what
 any particular series' catalogue actually returns.** That belongs to
@@ -48,7 +50,7 @@ detection mechanism, the form of the version string, and the contract the
 model owes a difference. Which differences exist among the four supported
 series was `OQ-045`, now listed under [Closed](open-questions.md#closed). The
 fixture of `scripts/mariadb/` exists, the four series have been observed
-against it twice, and what was found is recorded in *Differences observed
+against it three times, and what was found is recorded in *Differences observed
 between the series* below, per `FR-SRV-038`. A difference that is not in that
 record has not been observed, and SHALL NOT be written down.
 
@@ -731,8 +733,8 @@ satisfies only the last of the three cases below.
 
   *State of the register.* The register held nothing through the sixth
   edition and now holds two rows, both created by `FR-SRV-039`. Of the
-  **eleven** differences observed between the series, two reach a field the
-  model carries; the other nine reach the reader, the fixture, or a
+  **twelve** differences observed between the series, two reach a field the
+  model carries; the other ten reach the reader, the fixture, or a
   requirement, and produce no row here. No entry may be written from a
   changelog, from a release note, or from knowledge of MySQL.
 
@@ -757,11 +759,12 @@ Every difference the model accommodates under `FR-SRV-024`, `FR-SRV-004`, or
 rows.** The four series were stood up from the fixture of `scripts/mariadb/`
 on 2026-09-10, the `freight` catalogue was dumped from each and compared field
 by field, `INFORMATION_SCHEMA` itself was compared table by table, and a
-second pass recorded the field lists themselves. Eleven differences were
-found, and the two rows below are the two that reach a field the model
-carries. Both arrived by the same route — the servers' own default collations
-differ — and both are accommodated by `FR-SRV-039` rather than by any of the
-three treatments the sixth edition had.
+second pass recorded the field lists themselves; a third pass, on 2026-09-11,
+read the session read-only state under each of its two spellings. Twelve
+differences were found, and the two rows below are the two that reach a field
+the model carries. Both arrived by the same route — the servers' own default
+collations differ — and both are accommodated by `FR-SRV-039` rather than by
+any of the three treatments the sixth edition had.
 
 | Field | Treatment | Observed on `12.3` / `11.8` / `11.4` / `10.11` |
 |---|---|---|
@@ -826,22 +829,25 @@ that requirement.
 
   *Rationale.* `FR-SRV-027` records only what the model **accommodates**, which
   is the right scope for a normative register and the wrong scope for an
-  observation. Nine of the eleven differences below reach the reader, the
+  observation. Ten of the twelve differences below reach the reader, the
   fixture, or a requirement rather than the document, and each of them
   constrains work that has not been done yet: without a home they would be
   rediscovered, or worse, contradicted. Keeping the two apart also keeps the
-  register honest — two rows in the register beside eleven in the observation
+  register honest — two rows in the register beside twelve in the observation
   record says *we looked, and this is the part the document carries*, which is
   a much stronger statement than either table alone.
 
 **Method and date.** The four images were built from `scripts/mariadb/` and run
 side by side on 2026-09-10; server versions `12.3.3`, `11.8.9`, `11.4.13` and
-`10.11.19`. Two passes were made. The first dumped the `freight` catalogue from
-each and compared them field by field, and compared `INFORMATION_SCHEMA` table
-by table; it found seven differences. The second recorded the **field lists
-themselves**, verbatim, for the twenty entries of
+`10.11.19`. Three passes were made. The first dumped the `freight` catalogue
+from each and compared them field by field, and compared `INFORMATION_SCHEMA`
+table by table; it found seven differences. The second recorded the **field
+lists themselves**, verbatim, for the twenty entries of
 [open-questions.md](open-questions.md) that asked for them; it found four
-more, taking the total to **eleven**.
+more, taking the total to eleven. The third ran the same four images on
+2026-09-11 and read the session read-only state under each of its two
+spellings, each spelling in its own statement; it found one more, taking the
+total to **twelve**.
 
 | # | Observed | `12.3` | `11.8` | `11.4` | `10.11` | What it obliges |
 |---|---|---|---|---|---|---|
@@ -856,6 +862,7 @@ more, taking the total to **eleven**.
 | 9 | Declared width of the trigger table's event column | `varchar(20)` | `varchar(6)` | `varchar(6)` | `varchar(6)` | Nothing. The values returned are `INSERT`, `UPDATE`, `DELETE` on all four, and the column is present on all four, so `FR-SRV-037` is not engaged |
 | 10 | Index cardinality **over identical data** | an estimate | the same estimate as `11.8`'s neighbours | agrees with `11.8` and `12.3` | **differs** | Nothing. `FR-CAT-024` excludes it as volatile, and its amendment states why an estimate is not passed through under `FR-SRV-039` |
 | 11 | The schema catalogue's default collation, for a database that declares none | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_general_ci` | Passed through, `FR-SRV-039`. Registered under `FR-SRV-036`. Same root cause as difference 1 |
+| 12 | The session read-only state under the spelling `transaction_read_only`; the spelling `tx_read_only` is present on all four | present, `0` | present, `0` | present, `0` | absent, `ERROR 1193 (HY000)` | Fixes the spelling of the read-back at `tx_read_only`, in the fourth entry of `FR-SRV-006` and in `FR-SRV-009`. Reaches no field of the model, so no row in the register of `FR-SRV-036`. Does not engage `FR-SRV-037` — see below |
 
 **Difference 1 is the one that would have falsified `FR-SRV-026`, and it is
 now the one `FR-SRV-039` accommodates.** The four servers were given identical
@@ -871,7 +878,7 @@ reaching the schema's own collation, and it is registered beside it.
 
 **Difference 8 is the only split in this record that does not fall after
 `10.11`, and it is recorded for that reason as much as for its content.**
-Ten of the eleven separate `10.11` from the other three, or `12.3` from the
+Eleven of the twelve separate `10.11` from the other three, or `12.3` from the
 other three; this one puts `10.11` and `11.4` on one side and `11.8` and
 `12.3` on the other. Nothing structural follows — `FR-SRV-022` already selects
 a treatment from the resolved series rather than from a two-way split, and no
@@ -879,11 +886,31 @@ requirement in this corpus is written as *`10.11` against the rest*. What
 follows is a caution for the reader, the fixture, and the test of
 `FR-SRV-029`: **a difference may fall anywhere in the window**, and code or
 tests that model the four series as one old server and three modern ones will
-be right ten times out of eleven and wrong once.
+be right eleven times out of twelve and wrong once.
 
 **Differences 8 and 9 do not engage `FR-SRV-037`.** Both change a column's
 declared type and neither changes a table's width, so a statement naming a
 fixed column list runs unmodified on all four.
+
+**Difference 12 does not engage `FR-SRV-037` either, and the reason is written
+down rather than left to be inferred.** `FR-SRV-037` governs the column list
+of a statement against `INFORMATION_SCHEMA`, and the read-back names no column
+and reads no catalogue table, so the prohibition does not reach it by its
+terms. The principle behind it does reach it: name only what every series has.
+That is where the two stop agreeing. `FR-SRV-037` offers two answers, and only
+its second is available here: the list may be selected from the resolved
+series, or restricted to what all four share, and a per-series selection is
+shut out because the read-back is one entry of a closed list issued
+unconditionally on every connection, and an entry that takes a different form
+per server is not one entry. The second answer is also sufficient, which is
+why nothing is lost: `tx_read_only` is present on all four series and agrees
+with the longer spelling wherever both exist. `FR-SRV-037` is therefore left
+as it stands, governing catalogue column lists, and the obligation this
+difference creates is discharged inside `FR-SRV-006` and `FR-SRV-009`, which
+name the variable. Widening `FR-SRV-037` to cover it was considered and
+rejected: it would import a licence to select per series into the one
+statement that must be identical on every server, and would make one
+requirement say two things.
 
 **One further difference was observed and is not a difference between the
 series.** A routine's creation and alteration timestamps and a trigger's
@@ -947,7 +974,7 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   | `SELECT` against `INFORMATION_SCHEMA.*` | Reading the catalogue, and the privilege probe of `FR-CFG-044` | As the command requires |
   | The server version probe | `FR-SRV-002` | Once, at connection start |
   | The read-only session statement | `FR-SRV-008` | Once, at connection start |
-  | One read of the session read-only state, reading nothing else | The read-back of `FR-SRV-009` | Once, at connection start, immediately after the statement above |
+  | One read of the session variable `@@session.tx_read_only`, reading nothing else | The read-back of `FR-SRV-009` | Once, at connection start, immediately after the statement above |
 
   *Amended in the fifth edition.* The fourth entry is new, and closes
   `OQ-046`. `FR-SRV-009` has required a read-back since the second edition and
@@ -974,6 +1001,60 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   in which `FR-SRV-010` had not yet decided and `FR-ERR-006` could not place
   the check.
 
+  *Amended in the tenth edition: the fourth entry names the variable it reads.*
+  The entry said "the session read-only state" and named nothing, and the
+  session read-only state has two spellings on MariaDB which are not
+  interchangeable across the window. `10.11` has `tx_read_only` and does not
+  have `transaction_read_only`; the other three series have both. An
+  implementer who chose `transaction_read_only` would fail on one of the four
+  supported series, at connection start, on the statement that confirms the
+  strongest guarantee this tool makes — and would not be warned by testing,
+  because three of the four series accept it. A closed list whose entry admits
+  two spellings, one of which cannot run on a supported server, is not closed.
+  The variable is named here and in `FR-SRV-009`; the rest of the statement's
+  text remains out of scope, and `FR-SRV-007` already bars the listing form of
+  the read, so the read-back reads the variable itself.
+
+  *Observed.* Each spelling was read in its own statement, so that a failure
+  of one could not mask the other, as `root` over each container's Unix socket,
+  on the four series of `FR-SRV-015`, on 2026-09-11:
+
+  ```text
+  series  @@session.transaction_read_only  @@session.tx_read_only
+  10.11   ERROR 1193 (HY000)               0
+  11.4    0                                0
+  11.8    0                                0
+  12.3    0                                0
+  ```
+
+  The server's own message, taken from the diagnostics area so that it
+  carries no client decoration, is
+  `Unknown system variable 'transaction_read_only'`, with error number `1193`
+  and SQLSTATE `HY000`.
+  **The two spellings agree wherever both exist, and not only at the default
+  value**: read in one session before and after the session was set read
+  only, `11.4`, `11.8` and `12.3` returned `0` and then `1` under both
+  spellings, and `10.11` returned `0` and then `1` under `tx_read_only` and
+  has no other. The session variable listing corroborates it — `10.11`
+  exposes `tx_read_only` alone, and the other three expose both. Recorded as
+  difference 12 of `FR-SRV-038`.
+
+  *Bounded claim.* One patch release of each series was read — `10.11.19`,
+  `11.4.13`, `11.8.9` and `12.3.3`, the versions `FR-SRV-040` records — and
+  the two spellings were compared at the two values a session read-only flag
+  takes. Nothing was observed about any other release of `10.11`, and
+  nothing about a server outside the window of `FR-SRV-015`. The choice is a
+  property of the window rather than of MariaDB: it is `10.11`, and only
+  `10.11`, that makes it.
+
+  *Rejected.* Selecting the spelling from the series resolved by `FR-SRV-022`,
+  in the manner `FR-SRV-037` licenses for a catalogue column list. It is
+  unnecessary — `tx_read_only` is present on all four series and, where both
+  exist, the two report the same value — and it would give one entry of a
+  closed list two forms on different servers, which is the opposite of what a
+  closed list is for. Also rejected: issuing `transaction_read_only` and
+  falling back on `1193`, which `FR-SRV-023` forbids in terms.
+
 - **FR-SRV-007**: The system SHALL NOT issue any other statement. It SHALL issue
   no DDL, no DML, no `SHOW`, no statement against any schema other than
   `INFORMATION_SCHEMA`, and SHALL NOT invoke an external process such as a dump
@@ -988,8 +1069,17 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 - **FR-SRV-008**: The system SHALL additionally set the session read-only at the
   engine level on every connection it opens.
 
-- **FR-SRV-009**: The system SHALL read the session state back and SHALL confirm
-  that the setting took effect.
+- **FR-SRV-009**: The system SHALL read `@@session.tx_read_only` back and SHALL
+  confirm that the setting took effect. It SHALL read that variable and no
+  other spelling of it.
+
+  *Amended in the tenth edition: the variable is named.* The requirement read
+  "the session state" and left the spelling to the implementer, which is not a
+  free choice: `tx_read_only` is the only spelling present on every series of
+  `FR-SRV-015`. The evidence, the bound on it, and the alternatives rejected
+  are recorded under the fourth entry of `FR-SRV-006`, which is the statement
+  this requirement commands, and the observation is difference 12 of
+  `FR-SRV-038`.
 
 - **FR-SRV-010**: IF the setting cannot be applied, or the read-back does not
   confirm it, THEN the system SHALL exit `78` and SHALL NOT read the catalogue.
@@ -1025,7 +1115,16 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 
 - **FR-SRV-013**: The read-back of `FR-SRV-009` SHALL be verified by an
   integration test that exercises both outcomes: the setting taking effect, and
-  the setting failing to take effect.
+  the setting failing to take effect. The test SHALL be executed against every
+  series of `FR-SRV-015`.
+
+  *Amended in the tenth edition: the test is bound to every series.* The
+  requirement named no server, and on this requirement the series is the whole
+  of what is at risk: the spelling `FR-SRV-009` names is discriminated by
+  exactly one series of the window, and a test that runs anywhere else passes
+  under either spelling. A verification that cannot fail on the defect it
+  exists to catch is not a verification. The binding is the one `FR-SRV-029`
+  already states for the equivalence test, in the same words.
 
 - **FR-SRV-014**: The connection count of an invocation SHALL be as fixed by
   `NFR-PERF-004`, and SHALL be verifiable from the server side.
@@ -1111,6 +1210,16 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   distinction is the one this rule already draws: a claim about what is sent is
   checkable on the server, and a claim about what is emitted is checkable in
   the bytes, and neither is checkable by reading the source.
+
+  *The platform gap of the eleventh edition does not reach this rule, checked
+  and recorded so that it is not re-opened.* Both instruments this rule relies
+  on are server-side — the statements the server receives and the connections
+  it accepts — and `NFR-PERF-007` marks both available on all four targets of
+  `NFR-PERF-018`. What the eleventh edition found missing on macOS is the third
+  instrument of that rule, the syscall trace that records the files a process
+  opens, and none of `FR-SRV-012` through `FR-SRV-014` depends on it: the three
+  are promises about statements and connections, not about files. The three
+  requirements are unchanged, and so is this rule.
 
 ## Dependencies
 

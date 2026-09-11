@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in nine editions. All are in force; each
+The specification has been written in eleven editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -218,7 +218,8 @@ already in force to be wrong, corrects it.
   as an absence of one. `FR-SRV-038` records all seven, because six of them
   constrain the reader, the fixture, or an open question rather than the
   document, and `FR-SRV-027` records only what the model accommodates. The
-  seventh edition took the record to eleven and the register to two rows.
+  seventh edition took the record to eleven and the register to two rows, and
+  the tenth took the record to twelve.
 - **`OQ-041`, how an unreadable view is reported** —
   [privileges-and-completeness.md](privileges-and-completeness.md), and it is
   the correction described below.
@@ -512,6 +513,122 @@ stated.
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Tenth edition — the read-back names its variable
+
+Reading this corpus once more before any code is written against it reached a
+statement it requires on **every** connection and describes without naming.
+The fourth entry of the closed list of `FR-SRV-006` read "one read of the
+session read-only state", and the session read-only state has two spellings on
+MariaDB. They are not interchangeable across the window: `10.11` has
+`tx_read_only` and does not have `transaction_read_only`, which it refuses
+with `ERROR 1193 (HY000)`. The other three series have both. An implementer
+who chose the longer spelling would be told it works by three servers out of
+four and would fail outright on the fourth, at connection start, on the
+statement that confirms the strongest guarantee this tool makes.
+
+**Nothing is decided here; a reading is written down.** The four containers of
+`scripts/mariadb/` were run again on 2026-09-11 and each spelling was read in
+its own statement on each series, so that a failure of one could not mask the
+other. **No requirement changes what `tpl` does**: two name the variable they
+already commanded, one verification is bound to the servers that can falsify
+it, and one difference joins the observation record.
+
+- **The variable is named, in both places that command it** —
+  [server-contract.md](server-contract.md). The fourth entry of `FR-SRV-006`
+  now reads `@@session.tx_read_only`, and `FR-SRV-009` names the same variable
+  and forbids the other spelling. The evidence, its bound, and the rejected
+  alternatives sit under `FR-SRV-006`: selecting the spelling per series, which
+  `FR-SRV-037` licenses for a catalogue column list, is refused because an
+  entry of a closed list that takes a different form per server is not one
+  entry, and because the two spellings agree wherever both exist, so the
+  spelling every series has costs nothing to prefer.
+- **The verification is bound to every series** — `FR-SRV-013`. The test that
+  exercises the read-back named no server, and exactly one series of the window
+  discriminates the two spellings, so a test that runs anywhere else passes
+  under either. It now runs against every series of `FR-SRV-015`, in the words
+  `FR-SRV-029` already used.
+- **The record of differences grows from eleven to twelve** — `FR-SRV-038`.
+  The presence of `transaction_read_only` is difference 12. It reaches no
+  field of the model, so the register of `FR-SRV-036` keeps its two rows; and
+  it does not engage `FR-SRV-037`, whose subject is the column list of a
+  catalogue read. A note beside the table says why, and why widening
+  `FR-SRV-037` to cover it was rejected, so that the next reader does not
+  re-open it. `FR-CAT-029`'s count follows it, and that list is still empty.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
+### Eleventh edition — the verification names its platforms
+
+`NFR-PERF-018` makes all four build targets first class, and one of the
+verifications this corpus requires could not be performed on two of them. The
+gap is not in what `tpl` does: it is in the evidence. `NFR-PERF-005` promises
+that `tpl init`, every form of `help` and every form of `version` perform no
+discovery, read no configuration file and open no connection, and
+`NFR-PERF-007` requires each such promise to be verified from **outside** the
+process and never by reading the source. Two of those three clauses rest on
+seeing the files the process opens, and on macOS nothing can see them: `strace`
+does not exist there, `dtruss` is refused while `csrutil` reports System
+Integrity Protection enabled, and `fs_usage` asks for a password. The
+observation was made on 2026-09-11, on Darwin, and it establishes an absence.
+
+Until now the consequence went unstated, and the observation was in practice
+made against the Linux build inside a container — an artefact no macOS user
+runs. **No requirement changes what `tpl` does.** One requirement now says on
+which targets its observation is made and on which it is not, one names its
+instruments and binds each to the targets it exists on, one has its parity
+clause reconciled with the gap rather than left to contradict it, and one rule
+in another file is checked against the same gap and recorded as unaffected.
+
+- **The file-open observation is Linux-only, and says so** —
+  [performance-requirements.md](performance-requirements.md). `NFR-PERF-005`
+  carries the limit in its own text: the connection clause is verified on all
+  four targets from the server side; the discovery and configuration clauses
+  are verified on all four by a differential run; and the file-open observation
+  is made on the two Linux targets only, and may not be inferred from a Linux
+  build observed in a container. The *Observed* note names `strace`, `dtruss`
+  with `csrutil`, and `fs_usage`, so the constraint is not rediscovered; the
+  *Consequence* note says what the two macOS targets therefore do not catch —
+  a read whose result is discarded; and the *What would change this* note names
+  the two things that would lift the limit.
+- **The instruments are named and bound to their targets** — `NFR-PERF-007`.
+  The rule listed three instruments in a parenthesis and bound none to a
+  platform, which read as a promise that all three exist everywhere. It now
+  lists four in a table with the targets each is used on, and adds the
+  **differential run** — an invocation made in a state the operation under test
+  would not have survived, compared against one that has nothing for it to
+  find. It is outside the process, needs no privilege on any platform, and is
+  available on all four targets, so the two macOS targets are not left with
+  nothing. Where both it and the trace exist, the trace establishes the clause
+  and the differential run corroborates it.
+- **Parity is reconciled, not weakened** — `NFR-PERF-018`. The rule's parity
+  clause is about **results**, and a note now says so: it never claimed every
+  instrument exists on every target. Precisely because no target is second
+  class, the Linux observation may not be credited to macOS, which is what
+  `NFR-PERF-005` now forbids. Every requirement of that file is still verified
+  on all four targets; two clauses of one are verified on two of them by a
+  weaker instrument, and that requirement says which and why.
+- **`BR-SRV-003` is checked and is unaffected** —
+  [server-contract.md](server-contract.md). Both instruments that rule relies
+  on are server-side, and `FR-SRV-012` through `FR-SRV-014` are promises about
+  statements and connections, not about files. A note records the check so that
+  the next reader does not repeat it. The rule and the three requirements are
+  unchanged.
+
+Three outcomes were open and one was taken. Moving the verification inside the
+process was rejected against `NFR-PERF-007`: the eighth edition's licence for
+`FR-ERR-031` to do exactly that opened only because every outside mechanism
+collided with a requirement in force, and here two remain. A privileged path on
+macOS was rejected as outside this specification's authority — disabling System
+Integrity Protection is a configuration of a contributor's machine and a
+password prompt cannot be automated — and it is recorded in *What would change
+this* as a decision the project may still take, rather than one taken here.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -647,6 +764,17 @@ because they constrain the whole module rather than one interaction.
   the limit. Three requirements are written this way — `FR-SRV-041`,
   `FR-PRIV-020` and `FR-CONF-039` — and each cites the other two, so that
   three honest limits read as one pattern rather than three accidents.
+- **Where a verification stops, rather than a guarantee, the same note shapes
+  are used and the three-way family stays three.** The family above is limits
+  on what `tpl` guarantees about a server, a table, or a trust store, and its
+  members cite each other. A limit on the **evidence** for a guarantee — the
+  observation that cannot be made, rather than the promise that cannot be kept
+  — takes the same note shapes, as many of them as it has content for, without
+  joining that family, because it qualifies a different kind of claim. Two
+  requirements are written this way:
+  `FR-ERR-031`, where no invocation of the distributed binary is observed
+  returning `70`, and `NFR-PERF-005`, where the file-open observation is made
+  on the Linux targets and not on the macOS ones.
 
 ## Status legend
 
@@ -743,6 +871,20 @@ amended and the profile that document states no longer contradict each other.
 
 The ninth edition adds no obligation of either kind. Its four changes are
 corrections of wording, each stated beside the requirement it changed.
+
+The tenth edition adds no obligation of either kind either. It names a variable
+that two requirements had left to the implementer, records a twelfth difference
+between the series, and widens one verification that was already owed —
+`FR-SRV-013`, which like every test this corpus mandates is blocked only by
+`tpl` not existing.
+
+The eleventh edition adds no obligation of either kind. It records a limit on
+where one observation can be made, adds an instrument that closes the resulting
+gap on every target, and leaves the requirement it qualifies saying what that
+instrument does not establish. One obligation outside this corpus is narrowed
+rather than created: the file-open observation of `NFR-PERF-005` is owed on the
+two Linux targets and is owed on neither macOS target, so a verification suite
+that skips it there is conforming and not incomplete.
 
 Five items previously recorded here have been discharged.
 

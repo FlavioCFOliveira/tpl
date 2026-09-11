@@ -535,4 +535,4 @@ cargo test --all-features
 cargo audit
 ```
 
-Tests that need a live database use the container defined in `scripts/mariadb/Dockerfile`, seeded from `setup.sql` and `seed.sql`. External database instances are not used, and neither are mocks standing in for a real engine.
+Tests that need a live database use the containers defined in `scripts/mariadb/`: one server per supported MariaDB series, seeded from `setup.sql` and `seed.sql` and presenting the fixture's own TLS certificate, and one further server offering no TLS at all. What the directory holds, how to bring it up and how to verify it are described in [`scripts/mariadb/README.md`](scripts/mariadb/README.md). External database instances are not used, and neither are mocks standing in for a real engine.

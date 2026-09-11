@@ -23,13 +23,6 @@ choices and the dependency budget are
 [technology-stack.md](technology-stack.md); the tests themselves, and the
 harness that drives the containers, are `verification.md`.
 
-**One section is provisional by construction.**
-[The fixture as an operational asset](#the-fixture-as-an-operational-asset)
-describes `scripts/mariadb/` as it stands on 2026-09-11, with one requirement
-on it unsatisfied. It is the one part of this document that changes when the
-fixture half of [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)
-lands.
-
 ## The four targets, and what the linkage obliges
 
 `NFR-PERF-018` fixes the set at exactly four and makes none of them second
@@ -445,51 +438,41 @@ validation run. It is an operational asset because three obligations rest on
 it — `FR-SRV-029`'s cross-series test, `FR-SRV-026`'s byte-identity across the
 four series, and `FR-PROJ-021`'s example template.
 
-**This section describes the fixture as it is on 2026-09-11.** The
-arrangement — one image definition parameterised by series, one image, one
-container and one published port per series of `FR-SRV-015`, and the schema and
-seed the entrypoint runs — is recorded in `scripts/mariadb/README.md` and is
-not repeated here.
+**This section describes the fixture as it stands on 2026-09-11**, after tasks
+#15 and #25. The arrangement — one image definition parameterised by series,
+the schema and seed the entrypoint runs, the credentials, and the commands that
+build, start and stop it — is recorded in `scripts/mariadb/README.md` and is not
+repeated here. What belongs here is the count of servers an operator must
+account for, and the obligation each discharges.
 
-**`FR-CONF-038`'s certificate obligation is not satisfied.** The requirement
-obliges the fixture to be able to present, at each series of `FR-SRV-015`, a
-server whose certificate names the host by which the project's tests reach it,
-and to retain a server that offers no TLS. What is missing, named exactly:
+| Servers | What they are | Why the count matters operationally |
+|---|---|---|
+| Four | One per series of `FR-SRV-015`, each with its own image tag, container and published port, all offering TLS with the fixture's own certificate | `FR-SRV-029` and `FR-SRV-026` compare across the series in **one** run, so the four stand side by side rather than in sequence |
+| One | `tpl-mariadb-notls`, a fifth container on a fifth port running the `10.11` image with `--skip-ssl`. It is **not** a fifth series | It is the right-hand column of `FR-CONF-038`'s mode table — a server offering no TLS — and a cross-series comparison must not count it as a series |
 
-| Missing | What the fixture has today |
-|---|---|
-| A certificate naming the reachable host, on the three TLS-capable series | The self-signed certificate MariaDB generates automatically, which `FR-CONF-038` observed to carry no `subjectAltName` |
-| Any TLS at all on `10.11` | `have_ssl=DISABLED`; a MariaDB client of a later series reaches it over TCP only with `--skip-ssl` |
-| A server offering no TLS, retained beside the TLS-capable ones | `10.11` alone offers none, and it is the one series that cannot supply the row above |
+**`FR-CONF-038`'s certificate obligation is satisfied.** The fixture carries its
+own trust material, committed so that a fresh clone needs no preparatory step,
+and the certificate names the three spellings of the loopback a test may write.
+All four series report `have_ssl=YES` and accept a connection under the
+`verify-identity` default of `FR-CONF-013`, `10.11` included. Three operational
+consequences follow, and each is a limit on how a run is set up rather than a
+plan.
 
-Three consequences follow, and each is a limit on what may be claimed today
-rather than a plan.
+- **The default TLS mode is now exercisable.** It was the one cell of
+  `FR-CONF-038`'s ten-cell table the fixture could not reach, and a
+  server-reaching test no longer has to set `tls` away from its default to
+  reach the fixture at all.
+- **`require_secure_transport` is deliberately unset**, because two cells of
+  `FR-CONF-038`'s table expect a plaintext connection to a TLS-offering server
+  to be accepted.
+- **Regenerating the material is a rebuild and a fresh container**, since the
+  image carries it; and it is not byte-reproducible, only meaning-reproducible.
 
-- **The default TLS mode has no acceptance test.** The default of
-  `FR-CONF-013` is the one cell of `FR-CONF-038`'s ten-cell table the fixture
-  cannot exercise, and it is the mode every caller meets without asking for
-  it.
-- **Every server-reaching test must set `tls` away from its default**, which is
-  precisely the cost the eighth edition refused to leave standing as a
-  consequence and made a requirement instead.
-- **Nothing here describes how the gap is closed.** `FR-CONF-038` hands the
-  generation of the certificate, where the fixture keeps it, and how the no-TLS
-  server is retained beside it to the fixture's own work, and
-  [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)
-  records why no arrangement is written down before it has been run: a
-  description of something imaginary is what that residual exists to prevent,
-  and it is the same ground
-  [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) gives for prescribing
-  no continuous-integration pipeline.
-
-**A second file is owed and is not this document's.** `seed-bench.sql`, which
+**One file is owed and is not this document's.** `seed-bench.sql`, which
 `WL-001` needs, does not exist; `BR-PERF-007` counts what cannot be realised
 without it, and
 [`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001) settles when it is
 written. `DIV-036` is the correction owed to the root documents for it.
-
-**This section is superseded when the fixture work lands**, and nothing else in
-this document is affected by it.
 
 ## No continuous integration is prescribed
 
@@ -512,11 +495,12 @@ difference between two runs over unchanged inputs a defect rather than noise.
 |---|---|
 | Every measured figure and every recorded baseline | `BENCHMARKS.md` |
 | Every budget, its standing, and the protocol that ratifies one | [quality-attributes.md](quality-attributes.md) |
-| The harness that drives the four containers, the mandated tests, and the two in-process seams | `verification.md` |
+| The harness that drives the five containers, the mandated tests, and the two in-process seams | `verification.md` |
 | Crate versions, features, and the dependency budget | [technology-stack.md](technology-stack.md) |
 | The module map, the invocation pipeline, and lazy initialisation | [architecture.md](architecture.md) |
 | The diagnostic renderer, the emitter, and the help surface | [interfaces.md](interfaces.md) |
 | The four numbers themselves, and everything `.tpl` holds | [data-model.md](data-model.md) |
 | The six untrusted inputs, credentials, and transport | [security.md](security.md) |
-| The fixture's contents, its deliberate omissions, and the seven differences observed between the series | `scripts/mariadb/README.md` |
+| The fixture's contents, its deliberate omissions, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
+| The record of every difference observed between the series — twelve | `FR-SRV-038` |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

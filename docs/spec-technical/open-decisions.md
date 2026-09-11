@@ -13,18 +13,17 @@ Twenty-eight entries, each a decision the repository could not settle on its
 own. **All twenty-eight are settled. None is open.** Nineteen were settled by
 the product owner in the interview of 2026-09-10, by the establishment of the
 decision register, and by the eighth edition of `/specification`; the remaining
-nine were settled on 2026-09-11, together with four of the five residuals the
-eighth edition left inside settled entries. The fifth, `OD-22`'s, is work
-rather than a decision, and is restated below as belonging to two named
-documents.
+nine were settled on 2026-09-11, together with all five residuals the eighth
+edition left inside settled entries. The fifth, `OD-22`'s, was work rather than
+a decision: it was executed on 2026-09-11 by tasks #15 and #25, and the entry
+records what each produced.
 
-Two obligations survive the settlement, and each is named in its own entry
-rather than left to be inferred:
+One obligation survives the settlement, and it is named in its own entry rather
+than left to be inferred:
 
 | Entry | What is owed | To whom |
 |---|---|---|
 | `OD-14` | An observation about a **defined** `null` under `UndefinedBehavior::Strict`, unverified against the engine pin | `technical-writer` |
-| `OD-22` | Two halves of fixture and harness work that `FR-CONF-038` hands out explicitly, each already assigned to a document | `technical-writer` |
 
 **Two further obligations were discharged by the ninth edition of
 `/specification`**, at commit `4ad5e8c` of 2026-09-11: `OD-28`'s amendment to
@@ -58,7 +57,7 @@ the register itself rather than a record.
 | Status | Meaning |
 |---|---|
 | **Settled** | Decided. The rationale and the rejected options are recorded in the entry, or — where a record holds them — in the architecture decision record the entry's status line names |
-| **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it |
+| **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it. **No entry carries this status today**: `OD-22`'s residual was discharged on 2026-09-11 |
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
 | **Open** | Not decided. The entry names the options and the owner. **No entry carries this status today** |
@@ -89,7 +88,7 @@ the register itself rather than a record.
 | [OD-19](#od-19--whether-the-two-embeddings-are-materialised) | Whether the two embeddings are materialised | Settled | — |
 | [OD-20](#od-20--edit-distance-and-the-other-small-algorithms) | Edit distance, and the other small algorithms | Settled | — |
 | [OD-21](#od-21--two-test-seams-that-must-not-be-on-the-published-surface) | Two test seams that must not be on the published surface | Settled | — |
-| [OD-22](#od-22--the-test-harness-and-the-fixture-certificate) | The test harness, and the fixture certificate | Settled, with a residual | `technical-writer` |
+| [OD-22](#od-22--the-test-harness-and-the-fixture-certificate) | The test harness, and the fixture certificate | Settled | — |
 | [OD-23](#od-23--packaging-artefacts-and-the-musl-build-path) | Packaging, artefacts, and the musl build path | Settled | — |
 | [OD-24](#od-24--the-discovery-boundary-and-the-process-uid) | The discovery boundary, and the process uid | Settled | — |
 | [OD-25](#od-25--the-clock-source-for-now) | The clock source for `now` | Settled | — |
@@ -97,8 +96,8 @@ the register itself rather than a record.
 | [OD-27](#od-27--seed-benchsql-and-wl-001) | `seed-bench.sql` and `WL-001` | Settled | — |
 | [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Settled | — |
 
-Twenty-six entries are settled outright; `OD-14` carries an observation owed
-and `OD-22` a residual. Twenty-six and two are the whole of the twenty-eight.
+Twenty-seven entries are settled outright; `OD-14` alone carries an observation
+owed. Twenty-seven and one are the whole of the twenty-eight.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
@@ -677,7 +676,8 @@ as `Error::Io`, point 3 fails and `FR-ERR-034` row `69` cannot be met as
 written; that is then a defect owed to `specification-manager`, naming
 `FR-ERR-034`. The test that decides it belongs to `verification` and runs
 against the fixture, whose obligation under `FR-CONF-038` already provides all
-three failure modes. See the residual of `OD-22`.
+three failure modes, all three of which the fixture now presents — see
+[`OD-22`](#od-22--the-test-harness-and-the-fixture-certificate).
 
 **One consequence recorded for `architecture`.** `tokio::net::lookup_host` is
 gated behind tokio's `net` feature (docs.rs `tokio::net::lookup_host`, tokio
@@ -1124,13 +1124,13 @@ invents — and the naming of both by requirement identifier.
 
 ## OD-22 — The test harness, and the fixture certificate
 
-**Status: settled by the eighth edition, with a residual that is work rather
-than a decision. Owner of the residual: `technical-writer`.**
+**Status: settled by the eighth edition. The residual was discharged on
+2026-09-11 by tasks #15 and #25.**
 
 **What the conflict was.** `FR-CONF-013` defaults `tls` to `verify-identity`,
-and `FR-CONF-038` recorded that `tpl` with default configuration cannot reach
-the fixture of `scripts/mariadb/` over TCP on any series. The default mode was
-therefore the one cell of a ten-cell table with no acceptance test, and the
+and `FR-CONF-038` recorded that `tpl` with default configuration could not then
+reach the fixture of `scripts/mariadb/` over TCP on any series. The default mode
+was therefore the one cell of a ten-cell table with no acceptance test, and the
 fixture could not supply one.
 
 **The resolution.** `FR-CONF-038` now states the fixture obligation as a
@@ -1145,42 +1145,39 @@ supported until 2028-02-16. None of the ten cells changed, and
 `verify-identity` is not relaxed: a certificate naming the host is what the
 mode always required.
 
-**What the requirement hands to this folder.** `FR-CONF-038` states that how
-the certificate is generated, where the fixture keeps it, and how the no-TLS
-server is retained beside it "are the fixture's own work and are not specified
-here". The distance to be covered is recorded in the fixture's own
-documentation: `scripts/mariadb/README.md` gives four images, four containers,
-four host ports and one build per series, records that `10.11` reports
-`have_ssl=DISABLED` and needs `--skip-ssl` over TCP, and that the other three
-present the self-signed certificate MariaDB generates automatically — which
-`FR-CONF-038` observed to carry no `subjectAltName`.
+**The residual was work, and the work was run.** `FR-CONF-038` handed both
+halves to the fixture in its own text — how the certificate is generated, where
+the fixture keeps it, and how the no-TLS server is retained beside it "are the
+fixture's own work and are not specified here" — and this entry refused to
+record an arrangement of files and commands nobody had executed. Both were then
+executed, and `scripts/mariadb/README.md` is their record. What follows names
+what landed; the arrangement itself is not restated here.
 
-**What the harness must still serve, unchanged by the resolution.**
+| Half | Discharged by | What it produced |
+|---|---|---|
+| The fixture certificate | Task #15, commit `4bce12e` | `scripts/mariadb/tls/`: a root whose private key is destroyed at generation, a leaf naming `DNS:localhost`, `IP:127.0.0.1` and `IP:::1`, the `ssl_ca`/`ssl_cert`/`ssl_key` settings that put it into service, and `generate.sh` to reproduce it. All four series report `have_ssl=YES` and accept a `verify-identity` connection; the no-TLS server survives as a fifth container started `--skip-ssl` |
+| The harness | Task #25, commit `de7ed1e` | `up.sh`, `down.sh`, `status.sh` — the three-valued gate — `observe.sh`, `series.env`, `probe-session.sql` and `observer.Dockerfile`, each established against a substitute client because `tpl` does not exist yet |
+
+**Both halves of `FR-CONF-038` are therefore satisfied**, and no passage of this
+folder may still describe the fixture as unable to present a named certificate
+or `tpl` as unable to reach it by default. What the discharge did **not**
+establish is recorded by the fixture with what was tried in each case: the
+failing outcome of `FR-SRV-013`, which no real MariaDB produces; `NFR-PERF-001`
+and `NFR-PERF-002` conclusively, which wait on `WL-001` and therefore on
+[`OD-27`](#od-27--seed-benchsql-and-wl-001); and the file-open observation on
+either Darwin target, which `NFR-PERF-005` now bars from being inferred from a
+Linux build traced in a container.
+
+**What the harness must serve, unchanged by the resolution.**
 
 - `CLAUDE.md`: validation needing a database uses the containers of `scripts/mariadb/` — never mocks, never external instances — launched before and stopped after; `scripts/mariadb/README.md` adds "Leave no container running after a validation run."
 - `FR-SRV-029`: the cross-series equivalence test runs against every series, and the refusal test against at least one series outside the window.
-- `NFR-PERF-007` and `BR-SRV-003`: nine properties are verified from **outside** the process — the statements the server receives, the connections it accepts, the files the process opens.
+- `NFR-PERF-007` and `BR-SRV-003`: nine requirements are verified from **outside** the process, by the four instruments `NFR-PERF-007` names, each on the targets of `NFR-PERF-018` its row admits.
 - `FR-SRV-012`: the closed statement list is checked by observing what the server actually receives, expecting four kinds and no fifth, with the three connection-start statements issued once each in the stated order.
 - `BR-SEC-003`: the sentinel test runs every command of the tree at maximum verbosity and asserts the sentinel appears in no byte of either stream.
 
-**Residual, restated 2026-09-11 as belonging to two named documents. It is
-work, not a choice.** `FR-CONF-038` hands both halves out in its own text —
-how the certificate is generated, where the fixture keeps it, and how the
-no-TLS server is retained beside it "are the fixture's own work and are not
-specified here" — and neither half admits a decision this register could take
-without the containers in front of it. Recording an arrangement of files and
-commands that nobody has run would put a description of something imaginary in
-a specification whose discipline is to describe what is true today, which is
-the ground [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) gives for
-prescribing no continuous-integration pipeline (`OD-23`).
-
-| Half | Belongs to | What it must produce |
-|---|---|---|
-| The fixture certificate | `operations` | For each series of `FR-SRV-015`, a server presenting a certificate that names the host the project's tests reach it by, and a server beside it offering no TLS. `scripts/mariadb/README.md` records the distance to be covered: `10.11` reports `have_ssl=DISABLED` and needs `--skip-ssl` over TCP, and the other three present the self-signed certificate MariaDB generates, which `FR-CONF-038` observed to carry no `subjectAltName` |
-| The harness | `verification` | How the four containers are driven and stopped, whether server-dependent tests are gated, and how each of the nine outside-the-process observations above is instrumented |
-
-**Unblocks nothing yet.** `operations` and `verification` wait on this residual,
-and on nothing else in this register.
+**Unblocks.** `operations` and `verification`, which waited on this residual and
+on nothing else in this register.
 
 ---
 
@@ -1456,13 +1453,15 @@ left hunting for an open defect.
 ## What remains
 
 No entry is open, so there is no order of work over the register. What remains
-are two obligations, and neither blocks a document of this folder except where
-the row says so.
+is one obligation, and it blocks one sentence of one document.
 
 | Order | What | Owner | Blocks |
 |---|---|---|---|
 | 1 | `OD-14`'s owed observation — that a **defined** `null` interpolates as the empty string under `UndefinedBehavior::Strict`. It is unverified, and `FR-SEM-010` and `FR-SEM-011` are contradicted outright if it does not hold | `technical-writer` | `architecture` may not assert the behaviour until it is verified |
-| 2 | `OD-22`'s residual — the fixture certificate, and the harness that drives four containers | `technical-writer` | `operations`, `verification` |
+
+`OD-22`'s residual — the fixture certificate and the harness — was discharged on
+2026-09-11 by tasks #15 and #25, and `operations` and `verification` no longer
+wait on it.
 
 The two obligations this table carried for `specification-manager` are
 discharged: the ninth edition amended `FR-ERR-030` (`OD-28`) and gave
