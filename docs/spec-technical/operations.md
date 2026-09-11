@@ -502,5 +502,5 @@ difference between two runs over unchanged inputs a defect rather than noise.
 | The four numbers themselves, and everything `.tpl` holds | [data-model.md](data-model.md) |
 | The six untrusted inputs, credentials, and transport | [security.md](security.md) |
 | The fixture's contents, its deliberate omissions, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
-| The record of every difference observed between the series — twelve | `FR-SRV-038` |
+| The record of every difference observed between the series — fourteen | `FR-SRV-038` |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

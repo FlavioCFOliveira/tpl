@@ -404,7 +404,7 @@ identifier is the authority and the wording here is a summary.
 | No flag, key or environment condition disables any of it | `FR-SRV-011` | `security` |
 | Verification is from **outside the process**, on the server: the statements it receives, the connections it accepts. The read-back test runs against **every** series, because exactly one of the four discriminates the variable's spelling | `FR-SRV-012` … `FR-SRV-014`, `BR-SRV-003` | `verification` |
 | The newer-than-window path is verified through the in-process seam of `FR-ERR-031`, asserting that the read completes without error and that `standing` is `newer_than_supported`; `BR-SRV-003` states in its own text that it does not reach this requirement | `FR-SRV-035`, `BR-SRV-003` | `verification` (the residual of `OD-21`) |
-| Twelve observed differences bound the reader's assumptions; one does **not** separate `10.11` from the rest, so tests must not model the window as one old server and three modern ones | `FR-SRV-038`, difference 8 | `verification` |
+| Fourteen observed differences bound the reader's assumptions; three of them — 2, 8 and 14 — do **not** separate `10.11` from the rest, so tests must not model the window as one old server and three modern ones | `FR-SRV-038`, differences 2, 8, 14 | `verification` |
 
 ---
 
