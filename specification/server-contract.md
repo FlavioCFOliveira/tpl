@@ -220,7 +220,10 @@ record has not been observed, and SHALL NOT be written down.
 
   The suffix is the distribution the image was built on and is a property of
   the **build**, not of the series: three of the four carry `ubu2404` and one
-  carries `ubu2204`. Two further readings return the same string on all four —
+  carries `ubu2204`. It differs across the window and is not a difference
+  between the series, so it is recorded below the table of `FR-SRV-038` with
+  the two readings named further down. Two further readings return the same
+  string on all four —
   the session version variable and its global counterpart — and the global
   variables table of `INFORMATION_SCHEMA` carries the same value under the
   variable name `VERSION`, which matters because that reading is a `SELECT`
@@ -236,6 +239,19 @@ record has not been observed, and SHALL NOT be written down.
   other three. Both are properties of the build. A malloc-library variable was
   requested and **no row came back on any of the four**, so no such variable
   exists on these servers.
+
+  *Amended in the eighteenth edition: the two readings are classified where
+  the observations live, not here.* They were recorded here as properties of
+  the build and given no home in the record of `FR-SRV-038`, which that
+  requirement's first sentence obliged, and the classification was asserted
+  rather than grounded — no two servers of one series had been compared for
+  either. Both are now recorded below the table of `FR-SRV-038`, with the
+  suffix above, on the ground the fourth validation rule of the
+  [README](README.md#maintenance-debt) supplies; the source revision is
+  settled there by *per build* in the sentence above, and the SSL library
+  string carries its bound and the observation that would settle it. The
+  readings themselves are unchanged, and this requirement still derives
+  `series` from `<major>.<minor>` and from nothing else.
 
   *Checked in the twelfth edition against difference 13 of `FR-SRV-038`, and
   unchanged.* A server also announces a version when the connection opens, and
@@ -848,10 +864,16 @@ that requirement.
   model, naming what was observed on each series and what the difference
   obliges. A difference recorded here that reaches the model SHALL also
   produce a row in the register of `FR-SRV-036`; a difference that does not
-  reach the model SHALL NOT produce one. An observation that differs between
-  two servers **of the same series** is not a difference between the series
-  and SHALL NOT be given a row, but SHALL be recorded below the table so that
-  it is not counted as one.
+  reach the model SHALL NOT produce one. A row SHALL be given only where the
+  observation is **established** as a difference between the series, and SHALL
+  name what each of them returned. Every other observation that differs across
+  the servers read SHALL be recorded **below the table**, so that it is not
+  counted as a difference between the series, and three grounds place it
+  there: that it was observed to differ between two servers **of the same
+  series**; that it is a property of the **build**, which this project's
+  fixture selects and does not pin; or that its entailment by the series is
+  **not established**, in which case the record SHALL state the bound and
+  SHALL name the observation that would settle it.
 
   *Rationale.* `FR-SRV-027` records only what the model **accommodates**, which
   is the right scope for a normative register and the wrong scope for an
@@ -863,6 +885,38 @@ that requirement.
   record says *we looked, and this is the part the document carries*, which is
   a much stronger statement than either table alone.
 
+  *Amended in the eighteenth edition: the second home is stated over what it
+  actually holds.* The rule offered an observation two homes and named one
+  test between them — a row if it is a difference between the series, a line
+  below the table if it was observed to differ between two servers of the same
+  series — and an observation can fail both. Three readings of the **build**
+  did: the distribution each image was built on, the build's source revision,
+  and the SSL library string, all three recorded under `FR-SRV-040` since the
+  seventh edition and none of them in this section at all. They differ across
+  the four servers, so the first sentence of this requirement obliged this
+  section to hold them; no two servers of one series had been compared for any
+  of them, so the sentence that places the routine and trigger timestamps below
+  the table did not reach them either. The ground that decides them is the one
+  the fourteenth edition wrote for difference 3 and the
+  [README](README.md#maintenance-debt) states as its fourth validation rule: a
+  reading this project's own fixture can move is not credited to the series
+  until the condition is varied. The fixture names a series and not a patch
+  release, so the build behind it is exactly such a condition, and the three
+  readings are recorded below the table on that ground.
+
+  *Rejected.* Giving the three rows, which is what an observation that differs
+  across the window looks like from outside. It fails twice over. This record
+  holds no reading for any series for two of the three — only that the four
+  servers differ — so four columns of each row could not be filled from
+  anything this corpus holds; and a row asserts an entailment by the series
+  that the fourth provenance of the [README](README.md#provenance) forbids
+  writing down unobserved. Also rejected: leaving all three where they were
+  until the observation is taken. That would leave this requirement's own first
+  sentence unsatisfied for as long as nobody takes it, and would knowingly
+  repeat the defect the thirteenth edition's third validation rule was written
+  from — an observation recorded in the requirement whose decision it drove
+  rather than in the record that owns it, where two recounts passed over it.
+
 **Method and date.** The four images were built from `scripts/mariadb/` and run
 side by side on 2026-09-10; server versions `12.3.3`, `11.8.9`, `11.4.13` and
 `10.11.19`. Five observation occasions are recorded here: four comparison
@@ -872,7 +926,10 @@ field by field, and compared `INFORMATION_SCHEMA` table by table; it found
 seven differences. The second recorded the **field lists themselves**,
 verbatim, for the twenty entries of
 [open-questions.md](open-questions.md) that asked for them; it found four
-more, taking the total to eleven. The third ran the same four images on
+more, taking the total to eleven, and took with the version readings of
+`FR-SRV-040` three readings of the **build**, which are recorded below the
+table rather than in it because none of them is a difference between the
+series. The third ran the same four images on
 2026-09-11 and read the session read-only state under each of its two
 spellings, each spelling in its own statement; it found one more, taking the
 total to twelve. The fourth, the same day and on the same four images, read
@@ -895,7 +952,10 @@ turns on it.** The fixture carried no TLS material of its own when the first
 two passes ran, and carried it by the fourth, whose bounded claim records that
 the four servers offer TLS. Difference 3 is the only row whose reading any
 setting of the fixture can move — which is checked below the table — and it
-names the condition it was taken under. No other row needs one.
+names the condition it was taken under. No other row needs one. The three
+readings of the build recorded below the table are moved by the fixture too,
+and not by a setting: it selects the build and does not pin it, which is the
+ground on which they are placed there.
 
 | # | Observed | `12.3` | `11.8` | `11.4` | `10.11` | What it obliges |
 |---|---|---|---|---|---|---|
@@ -1169,16 +1229,130 @@ a server outside the window of `FR-SRV-015`, and nothing about which release
 first accepted the type — the record states which of the four supported series
 accept it, which is what was seen.
 
-**One further difference was observed and is not a difference between the
-series.** A routine's creation and alteration timestamps and a trigger's
-creation timestamp are wall-clock times recording when each container ran its
-initialisation scripts, and they differ between the four captures for that
-reason alone — two servers of the **same** series would differ in the same
-way. It is listed here so that a reader comparing the four captures does not
-count it as a twelfth series difference. Its consequence is real and is
-carried elsewhere: `FR-CAT-024` excludes all three fields, because a document
-carrying any of them could never satisfy `FR-SRV-026` against any pair of
-servers.
+**The routine and trigger timestamps were observed to differ, and are not a
+difference between the series.** A routine's creation and alteration
+timestamps and a trigger's creation timestamp are wall-clock times recording
+when each container ran its initialisation scripts, and they differ between
+the four captures for that reason alone — two servers of the **same** series
+would differ in the same way. They are listed here so that a reader comparing
+the four captures does not count them as a fifteenth series difference. Their
+consequence is real and is carried elsewhere: `FR-CAT-024` excludes all three
+fields, because a document carrying any of them could never satisfy
+`FR-SRV-026` against any pair of servers.
+
+*Amended in the eighteenth edition: the count this paragraph guards against was
+stale.* It read *a twelfth series difference*, which was right when the record
+held eleven rows and has been wrong since the tenth edition added the twelfth.
+The number a reader would wrongly reach is one past the rows the table holds,
+so it moves with them; it is stated against fourteen now and is recomputed with
+the counts beside difference 8. Nothing else in the paragraph changes, and the
+observation it records is untouched.
+
+**"A property of the build" is said of nine rows above and of three readings
+below, and it does not mean the same thing twice.** The check of the thirteen
+rows calls differences 2, 4, 5, 6, 7, 8, 9, 12 and 13 properties of the server
+build, and it says so to establish that no setting of the fixture can move
+them: the width of a catalogue table is compiled in, and a configuration file
+does not add a column to `INFORMATION_SCHEMA`. Those nine are also **entailed
+by the series** — every build of `10.11` carries the 22 columns difference 5
+records, because that is what the series' own source declares — which is why
+each of them is a row. The three readings below are properties of the build in
+a second sense: the build carries them and the series does not fix them, so a
+second build of the same series may carry others. The first sense makes a row
+immune to the fixture; the second keeps a reading out of the table. A reading
+is placed by which of the two senses it falls under, and that is settled by the
+question `FR-SRV-038` asks — would two servers of the same series differ? The
+answer decides where a reading goes, and the phrase decides nothing.
+
+**Three readings of the build were observed, and none of them is a difference
+between the series.** They were taken on the second pass, with the version
+readings `FR-SRV-040` records, and are recorded under that requirement. They
+are named here because this is where an observation that differs across the
+four servers and is not a difference between them belongs, per `FR-SRV-038`:
+
+| Reading | How it varied across the four servers |
+|---|---|
+| The distribution each image was built on, carried as the version string's suffix | `ubu2404` on `12.3`, `11.8` and `11.4`; `ubu2204` on `10.11` |
+| The build's source revision, a 40-character hash | a distinct hash on each of the four |
+| The SSL library string | one reading on `12.3`, `11.8` and `11.4`; a different one on `10.11` |
+
+**None of the three can be given a row, and for two of them the reason comes
+before any classification.** A row of the table above names what each series
+returned, which `FR-SRV-038` requires of it. The observation recorded that the
+four servers differ in the source revision and in the SSL library string; it
+did not record what any of the four returned. Four columns of each row could
+not be filled from anything this corpus holds, and filling them from a second
+reading would be recording that reading rather than this one.
+
+**The build is the thing that varies, and for the first two readings that is
+settled.** The suffix names a distribution and not a MariaDB fact, and
+`FR-SRV-040` has classified it as a property of the build since the seventh
+edition and bars it from deriving anything. The source revision is, in that
+requirement's own words, *a distinct 40-character hash per build* — and a
+series is not a build. The fixture names a series and not a patch release:
+`scripts/mariadb/` builds each image from the upstream tag that names the
+series, and the four patch releases `FR-SRV-040` records are what those tags
+resolved to on the day, which is why every bounded claim in this section states
+them as a bound. Two servers of one series at two patch releases are two
+builds, and their source revisions differ by what a source revision is.
+
+**The SSL library string splits the four along a line that already has an
+explanation, and the explanation is not the series.** It divides `10.11` from
+the other three exactly where the distribution each image was built on divides
+them, and that distribution is the first reading in the table above —
+classified as a property of the build by the requirement that records both.
+Two explanations fit the four readings without remainder, the series and the
+distribution, and nothing observed separates them, because no two builds of one
+series have been compared for this reading. The fourth validation rule of the
+[README](README.md#maintenance-debt) decides which way that uncertainty falls:
+an observation of what a server reports must record the conditions it was taken
+under wherever this project's own fixture can change them, and the fixture
+selects the build without pinning it. A reading whose split is coextensive with
+a condition of observation the fixture selects is **not established** as a
+difference between the series, so it is not counted as one. That is the weaker
+of the two claims available and the only one this evidence carries; the
+stronger one — that the series fixes it — is what a row would assert.
+
+*Bounded claim.* One server of each series was read, at the four patch releases
+`FR-SRV-040` records, on the occasion that recorded those releases. For the
+source revision and the SSL library string the record holds that the four
+servers differ and holds no reading for any of them. No two servers of one
+series have been compared for any of the three: the fifth listener of the fixture is the
+same `10.11` image and therefore the same build, so it establishes nothing
+here, and it is not a fifth series. Nothing was observed about a server outside
+the window of `FR-SRV-015`, and nothing about any other build of the same four
+series.
+
+*What would change this, for the SSL library string alone.* Reading it from two
+builds of one series that were built on different distributions — the `10.11`
+image as the fixture stands and any `10.11` build carrying the other suffix, or
+the same image once its upstream tag has moved to one. Two readings that agree
+would establish the series as the thing that fixes it, earning it a row whose
+four series columns that same observation would fill; two that differ would
+settle it as a property of the build and leave this passage as it stands.
+Neither requirement names the server variable either reading was taken from,
+and nothing in `scripts/mariadb/` takes them, so this is an ad-hoc read whose
+first step is recovering those two names. **Nothing in this corpus waits on
+it.** No requirement reads any of the three, so it is not an open question and
+no entry is opened for it; the index of
+[open-questions.md](open-questions.md) stays empty.
+
+**This passage takes the note shapes of a stopped verification and joins
+neither family the [README](README.md#writing-conventions) names.** The two
+that file names — `FR-ERR-031` and `NFR-PERF-005` — are limits on an
+observation that **cannot** be made on the surface available. This one is an
+observation that can be made and has not been, which is a weaker thing and is
+recorded as one, so that the count of two is not read later as a miscount.
+
+**The counts beside difference 8 do not move.** Nothing enters the table: it
+holds fourteen rows, nine of them isolating `10.11`, two isolating `12.3`, and
+three splitting the window between `11.4` and `11.8`. Two of the three readings
+above have the shape that isolates `10.11`, so promoting either would move the
+first of those counts and the closing one; neither is promoted, and this is
+recorded so that a later reader can see what a promotion would cost.
+`FR-CAT-029` is checked with them and does not move either, because none of the
+three is a catalogue field and so none can be a field whose meaning two series
+disagree about.
 
 **Everything else matched exactly**, on all four: all 301 columns and every
 field of them — types, nullability, defaults, generation expressions,

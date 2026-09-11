@@ -1041,6 +1041,15 @@ that is not written down is an omission.
   what its catalogue reports, so there is no field for two series to disagree
   about, and the list stays empty for the reason it has always been empty.
 
+  *Checked in the eighteenth edition, and the count does not move.* That
+  edition records three readings of the **build** that differ across the window
+  — the distribution each image was built on, the build's source revision and
+  the SSL library string — below the table of `FR-SRV-038` rather than in it,
+  because none of them is established as a difference between the series. No
+  row enters the table, so the count above stands at fourteen; and none of the
+  three is a catalogue field at all, so none could be a field whose meaning two
+  series disagree about however it were classified.
+
   The last column names the row of the divergence register of `FR-SRV-036` that
   records the observation. An entry here without a row there is a defect: the
   exclusion is normative here and the evidence for it lives there.

@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventeen editions. All are in force;
+The specification has been written in eighteen editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -224,7 +224,10 @@ already in force to be wrong, corrects it.
   document, and `FR-SRV-027` records only what the model accommodates. The
   seventh edition took the record to eleven and the register to two rows, the
   tenth took the record to twelve, and the twelfth to thirteen; the thirteenth
-  took it to fourteen, with a difference observed before any of them.
+  took it to fourteen, with a difference observed before any of them. The
+  eighteenth added no row and records three readings of the build below the
+  table, where an observation that differs across the window without being a
+  difference between the series belongs.
 - **`OQ-041`, how an unreadable view is reported** —
   [privileges-and-completeness.md](privileges-and-completeness.md), and it is
   the correction described below.
@@ -784,14 +787,18 @@ occasions and enumerates five.
 **One defect was found by the sweep this edition ran and is not corrected in
 it.** Two further readings that differ across the window — the build's source
 revision and the SSL library string — are recorded under `FR-SRV-040` and
-classified there as properties of the build. `FR-SRV-038` offers an observation
-two homes and no third: a row in its table if it is a difference between the
-series, or a line below the table if it is not, so that it is not counted as
-one. Neither reading has either. It is recorded under
+classified there as properties of the build. `FR-SRV-038` then offered an
+observation two homes and no third: a row in its table if it is a difference
+between the series, or a line below the table if it was observed to differ
+between two servers of the same series, so that it is not counted as one.
+Neither reading had either. It is recorded under
 *[Maintenance debt](#maintenance-debt)* for a correction of its own, because
 the correction is a decision rather than an editorial tidy — the timestamps
 recorded below that table were observed to differ between two servers of the
-**same** series, and the SSL library string was not.
+**same** series, and the SSL library string was not. The eighteenth edition
+settles it, on a rule in force rather than on a decision from outside this
+corpus, and finds a third reading of the same shape that this edition's sweep
+did not name.
 
 **No requirement is withdrawn, no identifier is retired, and no open question
 is raised or reopened.** The index of
@@ -1325,6 +1332,115 @@ no entry is added to the register.** The index of
 edited: this corpus does not hold the pen on those two files, and judging that
 a passage needs no correction is not making one.
 
+### Eighteenth edition — two readings with no home, and a phrase doing two jobs
+
+`FR-SRV-038` obliges every difference observed between the series to be
+recorded in its own section, and offered an observation two homes: a row in
+its table, or a line below the table if it was observed to differ between two
+servers of the same series, so that it is not counted as one. The thirteenth edition's sweep found two
+readings with neither — the build's source revision and the SSL library string,
+both recorded under `FR-SRV-040` and classified there as properties of the
+build — and left the correction for a task of its own, because it is a decision
+and not an editorial tidy: the routine and trigger timestamps earn their line
+below that table by what a wall-clock time is, and no two servers of one series
+had ever been compared for the SSL library string. This edition settles it, and
+finds beside it a third reading of the same shape and one phrase doing two
+jobs.
+
+**Nothing here changes what `tpl` does, and no requirement is withdrawn.** One
+requirement is amended, the observation record gains a passage, one stale count
+is corrected, and no row enters the table.
+
+- **The second home is stated over what it actually holds** —
+  [server-contract.md](server-contract.md). `FR-SRV-038` named one
+  disqualifying test — observed to differ between two servers of the same
+  series — and an observation can fail both that test and the test for a row.
+  The requirement now states what a row requires, and three grounds for the
+  line below the table: an observation that differs within a series, a property
+  of the **build**, which the fixture selects and does not pin, and an
+  observation whose entailment by the series is not established, which must
+  state its bound and name the observation that would settle it. The third
+  ground is what the two readings needed, and the record had no way to say it.
+- **Three readings are recorded, not two.** The version string's suffix — the
+  distribution each image was built on — differs between `10.11` and the other
+  three exactly as the SSL library string does, is classified in the same
+  sentence of `FR-SRV-040`, and had no home either. It is also what makes the
+  SSL library string's classification legible, so recording the two without it
+  would have recorded the weaker half of the finding. This is the thirteenth
+  edition's third validation rule again, applied to the sweep that edition ran:
+  a record is assembled from every place an observation was made, and its own
+  list of what it lacks is not that place.
+- **The classification is settled on a rule in force, not handed back.** The
+  fourth validation rule decides it — a reading this project's own fixture can
+  move is not credited to the series until the condition is varied — and the
+  fixture names a series and not a patch release, so the build behind it is
+  exactly such a condition. For the suffix and the source revision the ground
+  is stronger and needs no rule: a distribution is not a MariaDB fact, and
+  `FR-SRV-040` already calls the revision *a distinct hash per build*, where a
+  series holds many builds. For the SSL library string the ground carries only
+  as far as **not established** — its split is coextensive with the split of
+  the distribution, and nothing observed separates the two explanations — which
+  is exactly what a line below the table claims and what a row would exceed.
+  The passage states the bound and names the observation that would settle it.
+- **A row was impossible in any case, for a reason prior to the
+  classification.** A row names what each series returned. The observation
+  recorded that the four servers differ in the source revision and in the SSL
+  library string, and did not record what any of the four returned, so four
+  columns of each row could not be filled from anything this corpus holds. The
+  outcome that would have produced new evidence was therefore not the only one
+  that needed it: a row needs a new observation too, and a different one.
+- **One phrase was doing two jobs, and the record now separates them** —
+  `FR-SRV-038`. The fourteenth edition's sweep calls nine rows of the table
+  properties of the server build, to establish that no setting of the fixture
+  can move them. The three readings below the table are properties of the build
+  in a second sense: the build carries them and the series does not fix them.
+  The first sense makes a row immune to the fixture; the second keeps a reading
+  out of the table. Left unseparated, the record would have called the same
+  phrase a difference between the series in nine places and not a difference in
+  three.
+- **One stale count is corrected, and a second is checked and does not move.**
+  The paragraph guarding the timestamps warned a reader not to count them as a
+  *twelfth* series difference, which was right when the record held eleven rows
+  and has been wrong since the tenth edition; it reads fifteenth now, because
+  the number a reader would wrongly reach is one past the rows the table holds
+  and moves with them. `FR-CAT-029` in
+  [catalogue-coverage.md](catalogue-coverage.md) is the second, and it does not
+  move at all, because no row enters the table; the check is recorded there all
+  the same, since a count that did not move is worth only as much as the reader
+  can see of it having been recomputed.
+
+**Why this is an edition, and not an amendment folded into the seventeenth.**
+The test the sixteenth and seventeenth editions settled between them is whether
+this corpus learned anything, and the seventeenth's answer turned on its having
+changed no requirement: what it added was a judgement. This edition **amends a
+requirement in force**. `FR-SRV-038` admitted two homes and an observation
+could fail the test for both, which is a defect in the rule and not in the rows
+kept under it; the requirement now states what a row requires and what the home
+below the table holds, and three readings enter that home. The thirteenth
+edition, which found the defect, deliberately did not fix it and said why — the
+correction was a decision — so what was outstanding here was neither an entry
+nor a writing-down but the decision itself and the ground for it. An edition is
+what records that.
+
+**Two editorial corrections, both of one shape: a narrative of what an earlier
+edition did, written in the present tense and overtaken.** The thirteenth
+edition's account above described `FR-SRV-038` as offering two homes, and this
+edition gives the requirement a third; it now says *then offered*, and states
+the second home as that edition read it. And five paragraphs of
+*[Maintenance debt](#maintenance-debt)* — the thirteenth edition's and the four
+that follow it — said that the item each of them left alone *is* or *remains*
+outstanding, which was each edition's own true report and is false of the item
+now; each says what it did, in the tense it did it in. The fourteenth edition
+made the same correction on the same ground, to the eighth edition's *the
+fixture provides none*.
+
+**No open question is raised, and none could be.** No requirement of this
+corpus reads any of the three readings, so nothing waits on the observation the
+passage names; an entry would sit in an index whose emptiness means that
+nothing is waiting. The index of [open-questions.md](open-questions.md) stays
+empty, and the last item of *[Maintenance debt](#maintenance-debt)* is
+discharged.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -1532,8 +1648,9 @@ Every requirement in this specification derives from one of three sources:
 
 ## Maintenance debt
 
-**One item is outstanding**, recorded by the thirteenth edition and stated
-below. The item this section carried through the sixth
+**No item is outstanding.** The last, recorded by the thirteenth edition and
+discharged by the eighteenth, is listed below with the others. The item this
+section carried through the sixth
 edition — twenty catalogue field lists that no observation had recorded — was
 discharged by the seventh: the fixture was read against all four series of
 `FR-SRV-015` on 2026-09-10, every field list was recorded verbatim, and each
@@ -1597,14 +1714,15 @@ The thirteenth edition adds no obligation of either kind either. It records a
 difference `FR-SRV-038` already obliged this corpus to hold, recomputes the
 counts that follow it, checks the twelfth edition's classification of the
 thirteen against the rows, and adds no row to the register of `FR-SRV-036`. It
-does record one item of debt, and that item is outstanding.
+does record one item of debt, and that item stood outstanding until the
+eighteenth edition discharged it.
 
 The fourteenth edition adds no obligation of either kind, and discharges one
 recorded outside this corpus by the eighth. It corrects one row of the record
 of `FR-SRV-038`, which was true of servers nobody had configured and false of
 the servers the fixture now runs, checks the other thirteen rows against the
 same defect and finds none, and amends one note of `FR-CONF-038` for the same
-reason. The item below is untouched by it and remains outstanding.
+reason. The item below was untouched by it and stayed outstanding.
 
 The fifteenth edition adds no obligation of either kind, and records none as
 discharged. It classifies all forty-five entries of
@@ -1615,8 +1733,8 @@ requirement. It does confirm one obligation already recorded outside this
 corpus and narrow another: `seed-bench.sql` is still absent from
 `scripts/mariadb/` under `DIV-036`, and the project-tree half of that entry is
 discharged, because the tree's fixture line now describes what the directory
-holds instead of listing its files. The item below is untouched and remains
-outstanding.
+holds instead of listing its files. The item below was untouched by it and
+stayed outstanding.
 
 The sixteenth edition adds no obligation of either kind, and records none as
 discharged. It adds seven entries to
@@ -1641,8 +1759,8 @@ shape — *Plataformas Suportadas* calls Linux and macOS "suportados e
 verificados" where nothing has been verified on any target — and whether that
 asserts a state or names a class is a judgement for a reading of that section.
 It is an observation about a file this corpus does not own, so it is debt only
-in the sense `DIV-036` is, and it blocks nothing here. The item below is
-untouched and remains outstanding.
+in the sense `DIV-036` is, and it blocks nothing here. The item below was
+untouched by it and stayed outstanding.
 
 The seventeenth edition adds no obligation of either kind, adds no entry to
 [upstream-divergences.md](upstream-divergences.md), and changes no
@@ -1659,26 +1777,21 @@ the adjective it leaves behind; and one observation is named and not acted on,
 that the section's sentence naming Linux and macOS states coarsely what
 `NFR-PERF-018` fixes exactly. Both are about a file this corpus does not own,
 so neither is debt here in any other sense than `DIV-036` is. The item below
-is untouched and remains outstanding.
+was untouched by it and stayed outstanding.
 
-**Outstanding — two readings that differ across the window and sit under
-neither of `FR-SRV-038`'s two headings.** `FR-SRV-040` reports that the build's
-source revision differs between all four servers and that the SSL library
-string differs between `10.11` and the other three, and classifies both as
-properties of the build. `FR-SRV-038` gives an observation two homes and no
-third: a row in its table if it is a difference between the series, or a line
-below the table if it is not, so that it is not counted as one. Neither reading
-has either, so the record is incomplete however they are classified. The
-classification is also weaker than the one it stands beside: the routine and
-trigger timestamps recorded below that table were **observed** to differ
-between two containers of the same series, while no two servers of one series
-have been compared for the SSL library string — one server of each series was
-read, which is the bound every observation in this corpus carries. The
-correction is therefore a decision and not an editorial tidy — a row, a line
-below the table, or an observation that settles which — and it is left for a
-task of its own.
+The eighteenth edition adds no obligation of either kind, and discharges the
+one item this section still carried. It amends `FR-SRV-038` to state what the
+home below its table actually holds, records three readings of the build there,
+corrects one stale count and checks a second that does not move, and adds no
+row and no register entry. It records no obligation outside this corpus
+either: the observation its passage names would
+settle a classification that nothing in this corpus reads, so no requirement
+waits on it and no test is owed for it.
 
-Six items previously recorded here have been discharged.
+The section therefore carries nothing outstanding, and the seven items it has
+held are all accounted for below.
+
+Seven items previously recorded here have been discharged.
 
 - **The catalogue field lists.** Twenty entries, blocked first by the absence
   of a container and then by the absence of a recorded observation. Both are
@@ -1714,6 +1827,23 @@ Six items previously recorded here have been discharged.
   thirteenth edition recomputed all three over fourteen rows when it added
   difference 14. Nothing about `tpl` turned on it: no requirement rested on the
   claim.
+- **The two readings with no home under `FR-SRV-038`.** Recorded by the
+  thirteenth edition, whose sweep found that `FR-SRV-040` reports a source
+  revision differing between all four servers and an SSL library string
+  differing between `10.11` and the other three, classifies both as properties
+  of the build, and that the record of `FR-SRV-038` held neither a row for them
+  nor a line below its table. It was left for a task of its own because the
+  correction was a decision and not an editorial tidy: the classification
+  beside theirs rested on an observation and this one did not. Discharged by
+  the eighteenth edition —
+  [server-contract.md](server-contract.md), *Differences observed between the
+  series*. Three readings are recorded below the table rather than two, the
+  requirement states the ground that admits them, and the one classification
+  that is not settled says so, states its bound, and names the observation that
+  would settle it. It was settled on the fourth validation rule below and not
+  referred back: the fixture names a series and not a patch release, so the
+  build is a condition of observation this project's own fixture moves. Nothing
+  about `tpl` turned on it either: no requirement reads any of the three.
 
 A reference check must verify the **target** of a cross-reference, not merely
 that the identifier exists. The first edition was validated as having no dead
