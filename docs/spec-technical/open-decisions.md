@@ -75,6 +75,20 @@ dependency question `technology-stack` owns, and `OD-27` records that `DIV-036`
 file two lines naming `scripts/mariadb/seed-bench.sql`, which does not yet
 exist.
 
+**A second sweep, for quotations rather than claims**, ran on 2026-09-11 over
+the whole folder: every quoted span, every cited section name and every
+Portuguese fragment attributed to a root document was tested against
+`CLAUDE.md` at commit `c6356df` and against the root `README.md` at commit
+`87dd6e3`, the last to touch each. **`OD-02` was the only stale quotation**,
+and is corrected in its own entry. Two passages quote the graph's former row —
+[`OD-26`](#od-26--the-boundary-against-the-knowledge-graph) and
+[README.md](README.md#the-four-sources-of-truth) — each explicitly as the text
+`c6356df` replaced, which was confirmed against that commit. No passage of this
+folder quotes the root `README.md`. This sweep is a different check from the
+one above: a claim that a correction is owed says what this folder will do, and
+a quotation says what another file contains, so a register can be clean of the
+first while carrying the second.
+
 The re-reading is now a convention of this folder rather than an occasion, for
 the reason [README.md](README.md#conventions) gives.
 
@@ -172,8 +186,17 @@ rule R3 of that document.
 
 **Status: settled. Recorded in [`ADR-007`](../adr/adr-007-msrv.md).**
 
-**Decision.** The MSRV is the floor `ADR-007` states, and `CLAUDE.md`'s
-deferral — "MSRV a fixar no `Cargo.toml`" — is settled by it.
+**Decision.** The MSRV is the floor `ADR-007` states.
+
+**The deferral this entry answered is discharged, and the entry no longer
+quotes it.** `CLAUDE.md` left the figure to be fixed in the `Cargo.toml` until
+commit `50153d6` of 2026-09-11 reduced that row to a citation of `ADR-007`,
+while this entry went on reproducing the deferral verbatim. A quotation of a
+file this folder neither owns nor may edit decays when its owner edits it, and
+no check the folder runs on itself detects that; the relation between the two
+documents is recorded here instead, and the text of neither is reproduced. That
+is the reason [README.md](README.md#conventions) gives for re-reading against
+the target file, and it governs a quotation as much as a correction owed.
 
 **The number this entry carried is superseded.** It stated a floor under an
 explicit "not verified" caveat over the dependency floors. Those floors have
