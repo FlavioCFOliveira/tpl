@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md]
 ---
 
@@ -169,12 +169,13 @@ module, `BR-SEC-003` excepted.
   command injection with the caller as the interpreter.
 
 - **FR-SEC-020**: C0 control characters SHALL be escaped in every value the
-  system prints or interpolates, whatever its source, under two rules that
-  differ in one character:
+  system prints or interpolates, whatever its source. Two requirements own the
+  rule, and they differ in their treatment of one character:
 
   | Where | Rule | Owner |
   |---|---|---|
-  | The `text` and `json` output of a read command | C0 escaped, tab excepted | `FR-OUT-018` |
+  | The `text` output of a read command | C0 escaped, tab excepted | `FR-OUT-018` |
+  | The `json` output of a read command | C0 escaped, tab included as the escape JSON defines for it | `FR-OUT-018` |
   | Any diagnostic message | C0 escaped, tab included | `FR-ERR-024` |
 
   Two outputs are excluded and are emitted byte for byte: the result of
@@ -190,6 +191,13 @@ module, `BR-SEC-003` excepted.
   contradicted `FR-ERR-024`. `tpl template show` joins `tpl render` in the
   exclusion, per the amendment to `FR-OUT-019`; the credential-dump path that
   motivated escaping it is closed by `FR-SEC-017` instead.
+
+  *Amended in the ninth edition.* The first row covered `text` and `json`
+  together and said "tab excepted" of both, which no JSON document can honour.
+  The row is split, per the amendment to `FR-OUT-018`: the exception belongs to
+  `text`, where a tab is column layout, and in `json` a tab arrives as the
+  escape the format defines, so no value reaches a consumer as a raw tab on
+  either path. The threat this requirement closes is unchanged.
 
 ## Transport
 

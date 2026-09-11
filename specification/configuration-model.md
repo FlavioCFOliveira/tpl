@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -84,19 +84,42 @@ tls      = "verify-identity"
   `/etc`.
 
 - **FR-CONF-004**: The system SHALL resolve each phase deadline from the
-  `[core]` key for that phase, or from the built-in default declared for that
-  key in `FR-CONF-002` where the key is absent. `--timeout` SHALL NOT
-  participate in this resolution; it is an overall bound that composes with the
-  result, per `FR-GLOB-011` and `FR-GLOB-012`.
+  `[core]` key `FR-CONF-005` names for that phase, or from the built-in default
+  declared for that key in `FR-CONF-002` where the key is absent. `--timeout`
+  SHALL NOT participate in this resolution; it is an overall bound that
+  composes with the result, per `FR-GLOB-011` and `FR-GLOB-012`.
 
   *Amended in the third edition.* The first edition put `--timeout` at the head
   of this precedence, which made the four `[core]` timeout keys unreachable
   because `FR-GLOB-001` gave the flag a default. The flag now has no default
   and is not a layer of this rule.
 
+  *Amended in the ninth edition.* The rule said "the `[core]` key for that
+  phase" against six phases and four keys, which left three phases with no
+  referent. The mapping is now stated, once, in `FR-CONF-005`, and this rule
+  points at it rather than implying a key per phase.
+
 - **FR-CONF-005**: The system SHALL apply a deadline to every blocking phase:
   DNS resolution, TCP connect, TLS handshake, catalogue query,
-  `password_command`, and render.
+  `password_command`, and render. Each phase SHALL take its deadline from the
+  key named beside it:
+
+  | Phase | Key of `FR-CONF-002` |
+  |---|---|
+  | DNS resolution | `core.connect_timeout` |
+  | TCP connect | `core.connect_timeout` |
+  | TLS handshake | `core.connect_timeout` |
+  | Catalogue query | `core.query_timeout` |
+  | `password_command` | `core.password_timeout` |
+  | Render | `core.render_timeout` |
+
+  The three connection phases SHALL share **one** budget of the resolved value
+  of `core.connect_timeout`, measured from the start of the first of them that
+  runs and consumed by them in the order they run. The system SHALL NOT give
+  each of the three a budget of that value. The other three phases each have a
+  budget of their own. IF the shared budget expires, THEN the system SHALL
+  report the failure against the phase that was in progress when it expired,
+  per `FR-ERR-034`.
 
   *Note added in the fifth edition.* The DNS phase is the one phase whose
   behaviour depends on how the binary was linked. The Linux targets of
@@ -106,6 +129,22 @@ tls      = "verify-identity"
   outcome are unchanged — the phase fails and `FR-ERR-027` routes it to `69` —
   but the `cause` line owes the caller the distinction, per `FR-ERR-034`: a
   name that did not resolve is not a host that refused a connection.
+
+  *Amended in the ninth edition: the six phases are mapped onto the four keys,
+  because three of them had no referent.* `FR-CONF-004` resolves each phase
+  deadline from "the `[core]` key for that phase" and `FR-CONF-002` declares
+  four timeout keys against these six phases, so DNS resolution, TCP connect
+  and TLS handshake were left with no key of their own and one candidate
+  between them. Two readings were available: three independent deadlines of
+  `core.connect_timeout`, whose sum is three times the value the caller set; or
+  one budget of that value shared by the three. This corpus takes the second,
+  and now says so in its own text. It is what the key's name states — a caller
+  who writes `connect_timeout = 10` is stating how long connecting may take —
+  and under the first reading the configured value could not bound the thing it
+  is named after. Nothing about which phases exist, which of them can fail, or
+  which code a failure produces changes, and the obligation that no phase run
+  unbounded held under either reading. `FR-GLOB-012` composes the shared budget
+  with `--timeout` exactly as it composes the other three.
 
 ## Strictness of the file
 
