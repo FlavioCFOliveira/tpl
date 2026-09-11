@@ -1211,6 +1211,16 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   checkable on the server, and a claim about what is emitted is checkable in
   the bytes, and neither is checkable by reading the source.
 
+  *The platform gap of the eleventh edition does not reach this rule, checked
+  and recorded so that it is not re-opened.* Both instruments this rule relies
+  on are server-side — the statements the server receives and the connections
+  it accepts — and `NFR-PERF-007` marks both available on all four targets of
+  `NFR-PERF-018`. What the eleventh edition found missing on macOS is the third
+  instrument of that rule, the syscall trace that records the files a process
+  opens, and none of `FR-SRV-012` through `FR-SRV-014` depends on it: the three
+  are promises about statements and connections, not about files. The three
+  requirements are unchanged, and so is this rule.
+
 ## Dependencies
 
 - [catalogue-coverage.md](catalogue-coverage.md) — the fields whose absence

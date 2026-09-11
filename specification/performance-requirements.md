@@ -1,8 +1,8 @@
 ---
 title: Performance Requirements
 status: approved
-last-reviewed: 2026-09-10
-related: [server-contract.md, cache-documents.md, global-flags.md, catalogue-coverage.md]
+last-reviewed: 2026-09-11
+related: [server-contract.md, cache-documents.md, global-flags.md, catalogue-coverage.md, project-and-discovery.md]
 ---
 
 # Performance Requirements
@@ -79,6 +79,14 @@ would satisfy a budget.
   connection. Those commands are `tpl init`, every form of `help`, and every
   form of `version`.
 
+  The connection clause SHALL be verified on every target of `NFR-PERF-018`,
+  from the server side. The discovery clause and the configuration clause SHALL
+  be verified on every target of `NFR-PERF-018` by the differential run of
+  `NFR-PERF-007`, and SHALL additionally be verified by the file-open
+  observation of `NFR-PERF-007` **on the two Linux targets only**. On the two
+  macOS targets the file-open observation SHALL NOT be made, and SHALL NOT be
+  inferred from a Linux build observed in a container.
+
   *Amended in the third edition.* The first edition covered the two version
   forms only and left the help forms and `tpl init` unsettled, which was
   recorded as an open question. `FR-PROJ-025` now names the set functionally,
@@ -86,15 +94,133 @@ would satisfy a budget.
   the process per `NFR-PERF-007`: no `stat` of an ancestor directory, no open
   of `.tpl/.cfg`, no socket.
 
+  *Amended in the eleventh edition: the verification names its platforms.* The
+  third edition's note said the requirement is verified from outside the
+  process and named what would be seen there, and it named no platform. One of
+  the three things it names — the open of `.tpl/.cfg` — cannot be seen on
+  either macOS target, and saying so is the whole of this amendment. Nothing
+  about what `tpl` does changes: the three clauses are the same three clauses,
+  and each still holds on all four targets. What changes is that the evidence
+  for two of them is now stated per target instead of being read as uniform.
+
+  *Observed, 2026-09-11, on Darwin 25.6.0, while the fixture work of the tenth
+  edition was in hand.* `strace` does not exist on macOS. `dtruss` refuses,
+  reporting that DTrace requires additional privileges, while `csrutil status`
+  reports System Integrity Protection `enabled`. `sudo -n fs_usage` refuses,
+  reporting that a password is required. No instrument that records the files a
+  process opens is therefore reachable on a macOS host under the protection
+  that host ships with: of the three that exist, one is absent, one is withheld
+  by `csrutil`, and one is interactive. This is an observation of an **absence**
+  and it is not repeated: it was made once, on the platform, and what would
+  overturn it is named below rather than another run of the same three
+  commands.
+
+  *Consequence, stated plainly, because the evidence is weaker on two targets
+  than the requirement's wording suggests.* On `x86_64-apple-darwin` and
+  `aarch64-apple-darwin` nothing records the syscalls these commands make. A
+  build that opened `.tpl/.cfg`, read it, and discarded what it read would
+  satisfy every observation available there, and would be caught only on a
+  Linux target. What the two macOS targets do establish is the property a
+  caller depends on — that no configuration file and no ancestor directory
+  reaches the outcome, and that a project these commands would have tripped
+  over does not fail them — and that is the differential run, not the trace.
+  The startup budgets of `NFR-PERF-014` would also register a read that took
+  measurable time, but they are budgets and not observations of this
+  requirement, and a discarded read need not be measurable.
+
+  *Rejected.* Crediting the Linux observation to the two macOS targets, which
+  is what happens today: the observation is made against the Linux build inside
+  a container, and that build is not the binary a macOS user runs. The corpus
+  has already refused this exact step once — `FR-ERR-031` rejects a candidate
+  trigger for `70` on the ground that the artefact verified would not be the
+  artefact distributed, and cites `NFR-PERF-018` for it.
+
+  *Rejected.* Re-expressing the property so that it is verified from inside the
+  process. `NFR-PERF-007` requires an observation made outside the process and
+  forbids verification by reading the source. The eighth edition did let one
+  verification move in-process, in `FR-ERR-031`, but the licence it recorded
+  opened only because **every** mechanism outside the process collided with a
+  requirement in force, candidate by candidate. That test is not met here: two
+  outside instruments remain, and one of them — the differential run — is
+  available on all four targets.
+
+  *Rejected.* A privileged path on macOS. Both instruments the platform still
+  has cost a contributor something the specification cannot ask for: `dtruss`
+  needs System Integrity Protection disabled, which is a configuration of the
+  contributor's own machine, and `fs_usage` needs a password answered at each
+  run, which no automated run can supply. Neither is this specification's to
+  impose — it states what `tpl` does, not how a contributor's machine is set up,
+  which is the boundary the [README](README.md#still-out-of-scope) draws. It is
+  also not an alternative to what is written here: adopting it would add an
+  instrument on some macOS hosts and would not remove the need for one that
+  every target has.
+
+  *What would change this.* Either an instrument on macOS that records the
+  files a process opens without a privilege the platform withholds, which is a
+  fact about the platform that this project does not set; or a project decision
+  to accept the privileged path above and to state in this requirement what it
+  costs a contributor. The first would let the file-open observation be
+  required on all four targets. The second is a decision this specification
+  does not make on its own, and taking it is an amendment to this requirement
+  and to `NFR-PERF-007` together.
+
 - **NFR-PERF-006**: A command that requires no catalogue data SHALL open no
   connection. This covers every `template` subcommand, every `cfg` subcommand
   except `database test`, `help`, `version`, `init`, and any `tpl render`
   invoked with `--context`.
 
 - **NFR-PERF-007**: Each requirement of this section SHALL be verified by an
-  observation made outside the process — the statements the server receives, the
-  connections it accepts, or the files the process opens — and SHALL NOT be
-  verified by reading the source.
+  observation made outside the process, and SHALL NOT be verified by reading
+  the source. The instruments SHALL be exactly the following four, and each
+  SHALL be used only on the targets of `NFR-PERF-018` its row names:
+
+  | Instrument | What it observes | Targets |
+  |---|---|---|
+  | The server's statement record | The statements the server receives | all four |
+  | The server's connection record | The connections the server accepts | all four |
+  | A syscall trace of the process | The files the process opens | the two Linux targets |
+  | A differential run | The observable outcome of the invocation — its exit code, the bytes on stdout, and the artefacts it leaves on disk — under an arrangement in which the operation, had it been performed, would have changed that outcome | all four |
+
+  A **differential run** is an invocation made in a state that the operation
+  under test would not have survived, compared against the same invocation made
+  in a state that has nothing for it to find. For the discovery clause of
+  `NFR-PERF-005` the arrangement is `tpl init` invoked inside a subdirectory of
+  an existing project, which per `FR-PROJ-012` and `FR-PROJ-013` creates a
+  project in that subdirectory and does not report the ancestor. For the
+  configuration clause it is any command of `FR-PROJ-025` invoked inside a
+  project whose `.tpl/.cfg` would fail the validation of `FR-CONF-034`,
+  asserting exit `0` and stdout byte-identical to the same command invoked
+  outside any project.
+
+  On a target where both the third instrument and the fourth are available, the
+  third SHALL be what establishes a clause stated as a syscall, and the fourth
+  SHALL corroborate it. On a target where only the fourth is available, it
+  SHALL be the whole of the evidence, and the requirement it serves SHALL say
+  so in its own text.
+
+  *Amended in the eleventh edition: the instruments are named, and each is
+  bound to the targets it exists on.* The rule named three instruments in a
+  parenthesis and bound none of them to a platform, which read as a promise
+  that all three are available everywhere. One is not: no instrument that
+  records the files a process opens is reachable on a macOS host under its
+  default protection, which `NFR-PERF-005` records with the date and the three
+  commands that established it.
+
+  *Why a fourth instrument rather than a relaxed third.* Dropping the file-open
+  clause would leave the two macOS targets with nothing at all for two of the
+  three clauses of `NFR-PERF-005`, and `NFR-PERF-018` forbids a target being
+  second class. The differential run is outside the process as this rule
+  requires — it reads an exit code and a stream of bytes, and reads no source —
+  it needs no privilege on any platform, and it establishes the property a
+  caller depends on. It establishes **less** than a trace, which is why the
+  order of the two is fixed above and why `NFR-PERF-005` states the difference
+  rather than leaving it to be inferred.
+
+  *Rejected.* Allowing an in-process observation where no outside instrument
+  exists. That is the licence the eighth edition gave `FR-ERR-031`, and it
+  opened only because every mechanism outside the process collided with a
+  requirement in force. Here two remain, one of them on every target, so the
+  condition that would open it is not met.
 
 - **NFR-PERF-008**: The catalogue-query count SHALL be observable from the
   diagnostic stream, per `FR-GLOB-017`, which requires one line per catalogue
@@ -162,6 +288,19 @@ would satisfy a budget.
 
   No target of this set SHALL be second class: a result that fails on one of
   the four fails, whichever it is.
+
+  *What the parity clause reaches, and what it does not, stated in the eleventh
+  edition.* It reaches **results**: a result that fails on one of the four
+  fails. It is not a claim that every **instrument** exists on every target, and
+  the eleventh edition found one that does not — the syscall trace of
+  `NFR-PERF-007`, which no macOS host affords under its default protection. The
+  parity clause is unchanged by that, and it is the reason the gap had to be
+  written down rather than papered over: precisely because no target is second
+  class, the Linux observation may not be credited to the two macOS targets,
+  which is what `NFR-PERF-005` now forbids in its own text. Every requirement
+  of this file is still verified on all four targets. Two clauses of one
+  requirement are verified on two of them by a weaker instrument, and that
+  requirement says which two and why.
 
   *Rationale.* `NFR-PERF-012` already forbade comparing measurements across
   targets and `BR-PERF-003` already counted them, but nothing in this corpus
@@ -409,7 +548,11 @@ would satisfy a budget.
   and therefore what a query count is a count of.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `FR-ERR-027` and
   `FR-ERR-034`, which govern the DNS outcome the `musl` linkage of
-  `NFR-PERF-018` makes reachable.
+  `NFR-PERF-018` makes reachable; and `FR-ERR-031`, which rejected a
+  verification mechanism on the ground `NFR-PERF-005` rejects one on.
+- [project-and-discovery.md](project-and-discovery.md) — `FR-PROJ-025`, the
+  commands `NFR-PERF-005` constrains, and `FR-PROJ-012` and `FR-PROJ-013`,
+  which make the differential run of `NFR-PERF-007` possible for `tpl init`.
 
 ## Open questions
 
