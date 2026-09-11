@@ -10,13 +10,23 @@ related: [README.md, template-environment.md, server-contract.md, performance-re
 ## Overview
 
 This specification is the single source of functional truth. The root
-`README.md` and the root `CLAUDE.md` currently state functional content that
-this edition either contradicts or now owns. Each divergence is recorded here
-with what the file says, what this specification says, and the correction owed.
+`README.md` and the root `CLAUDE.md` have stated functional content that this
+specification either contradicts or now owns. Each divergence is recorded here
+with what the file said, what this specification says, the correction owed, and
+whether it is still owed.
 
 **This file does not authorise a change to either document, and the
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
+
+**Forty-five entries are recorded. As of 2026-09-11, ten are due in full,
+fourteen are discharged, and twenty-one are partly discharged.** Thirty-one
+entries still owe something: twenty-eight owe it to `README.md`, four owe it to
+`CLAUDE.md`, and `DIV-037` is in both counts because it owes a different thing
+to each. The asymmetry has one cause. `CLAUDE.md` was reduced to agent
+coordination in a single commit, `0ea5624`, which discharged twelve entries
+outright and one half of nineteen more; `README.md` has been edited four times
+since this file was opened, each time in one line or one paragraph.
 
 Two kinds of entry appear:
 
@@ -25,59 +35,162 @@ Two kinds of entry appear:
 - **Migration** — the file states something this specification now owns.
   Leaving it creates two sources for one truth.
 
+## How an entry is read
+
+Four things carry an entry, and each answers a different question.
+
+- **Target** names the files the entry was raised against, and is the authority
+  on where to look when the entry is re-checked.
+- **Kind** is one of the two above.
+- **Status** says what is still owed, and where, as of the date it names. It is
+  the only part of an entry that speaks about the files as they now stand.
+- The *Says* clause is a **quotation of the target file as it stood when the
+  entry was written**. It is not a claim about the file today, and a discharged
+  entry commonly carries one whose words are no longer in the file. **Status**
+  is what settles whether the clause is still there; the quotation is kept
+  because it is the evidence the entry was raised on, and removing it would
+  leave the entry unfalsifiable.
+
+A **Status** takes one of three values.
+
+- **Due** — the target file still states what the entry records, and the
+  correction is owed in full.
+- **Discharged** — the target file no longer states it. The status names the
+  commit that removed it, so that the entry says *when* it stopped being owed
+  and not merely that it is not owed. Nothing remains.
+- **Partly discharged** — the correction has separable parts, some made and
+  some not. This is the ordinary outcome for an entry whose **Target** is
+  `both`: the two files are edited under separate authorisations and almost
+  never in the same commit, so an entry against both is discharged in halves.
+  Such a status names, part by part, what was discharged and by which commit,
+  and what remains owed. **An entry is never recorded as discharged while any
+  part of it stands**, because an entry reduced to its last clause is still a
+  correction somebody has to make.
+
+## A discharged entry is kept, not removed
+
+A discharged entry keeps its heading and its identifier, in place, and carries
+a status saying what discharged it. It is not deleted, and it is not moved.
+This is the rule [README.md](README.md#identifier-scheme) already states for a
+withdrawn requirement, applied for the same reason: a reference written before
+the discharge must resolve to an explanation rather than to nothing. `DIV-045`
+has been written this way since the ninth edition, so the rule was already in
+force in this file before it was stated here.
+
+**Rejected: the *Closed* table of [open-questions.md](open-questions.md).** A
+closed open question leaves the index and becomes a row in a table at the foot
+of its file, and that was the obvious alternative, since a divergence closes
+the way an open question closes rather than standing in force the way a
+requirement stands. It was rejected on two grounds. First, entries here cite
+each other — `DIV-029` cites `DIV-020`, `DIV-038` cites `DIV-014`, `DIV-040`
+cites `DIV-015`, `DIV-043` cites `DIV-013` — and a citation whose target has
+been lifted out of its section resolves to a row instead of to the reasoning
+the citing entry depends on. Second, `DIV-045` already carries the in-place
+form, so adopting the table would put two treatments of one event in one file,
+which is the defect this specification records against the root documents.
+
+## When this file is re-read
+
+The classification below was made against `CLAUDE.md` and `README.md` as they
+stood on 2026-09-11, at `87dd6e3` — the last commit to touch either. **It stops
+being true the moment either file is edited**, and until this edition nothing
+in the file said so. That is how `DIV-031` came to ask, through four editions
+and one amendment of its own, for the removal of a clause that had been gone
+since `0ea5624`.
+
+The obligation that replaces the presumption is recorded in
+[README.md](README.md#maintenance-debt) as the fifth validation rule of this
+corpus: **a register of corrections owed to a file this specification does not
+own is re-read against that file whenever the file changes**, and an entry
+found discharged records the commit that discharged it. The trigger is the
+edit, not the edition. A register whose entries are true only of a state
+nobody has checked since is worse than no register, because it sends a reader
+to correct what is already correct and spends the standing of the entries that
+are still owed.
+
+## The commits named below
+
+Seven commits are named in the statuses, and each is named by its short hash
+alone after this table.
+
+| Commit | Date | Subject |
+|---|---|---|
+| `3f65b5f` | 2026-09-09 | docs: describe the tpl CLI and its project conventions |
+| `1352a2d` | 2026-09-09 | docs(specification): specify the complete CLI surface |
+| `011c059` | 2026-09-10 | docs(specification): support a window of MariaDB series, not a floor |
+| `0ea5624` | 2026-09-10 | docs: restructure CLAUDE.md around the specification |
+| `50153d6` | 2026-09-11 | docs(claude): reduce four passages to citations of the records |
+| `26e1739` | 2026-09-11 | docs(readme): name the five TLS modes and the default in force |
+| `87dd6e3` | 2026-09-11 | docs: describe the repository the coordination documents actually have |
+
+`3f65b5f` wrote both root documents and is the state every entry of the first
+edition was raised against. `0ea5624` reduced `CLAUDE.md` to agent
+coordination; it is the commit behind twelve discharges and nineteen half
+discharges, and it is the reason this file's remaining work is almost entirely
+`README.md`'s.
+
 ## Index
 
-| Id | Target | Kind | Subject |
-|---|---|---|---|
-| [DIV-001](#div-001) | both | Migration | All CLI-surface content moves here |
-| [DIV-002](#div-002) | `CLAUDE.md` | Contradiction | "No command accepts a password in argv" |
-| [DIV-003](#div-003) | `README.md` | Contradiction | The `--password` / `-p` flag |
-| [DIV-004](#div-004) | both | Contradiction | `--output`, `--output-dir` and the file-writing surface |
-| [DIV-005](#div-005) | `CLAUDE.md` | Contradiction | Only `init` and `cfg` write inside `.tpl/` |
-| [DIV-006](#div-006) | `CLAUDE.md` | Contradiction | Configuration printing always redacts |
-| [DIV-007](#div-007) | both | Contradiction | `EPIPE` always exits `0` |
-| [DIV-008](#div-008) | `CLAUDE.md` | Contradiction | `${VAR}` expands in any string value |
-| [DIV-009](#div-009) | both | Contradiction | `schema dump` equals the render context |
-| [DIV-010](#div-010) | `README.md` | Contradiction | TTY-dependent `--format` default |
-| [DIV-011](#div-011) | `CLAUDE.md` | Contradiction | Positional render target |
-| [DIV-012](#div-012) | `CLAUDE.md` | Contradiction | `tpl init` takes no argument |
-| [DIV-013](#div-013) | `README.md` | Contradiction | `password_command` is a shell command |
-| [DIV-014](#div-014) | `README.md` | Contradiction | Aliases `procs` and `proc` |
-| [DIV-015](#div-015) | both | Contradiction | The `database` and `config` command groups |
-| [DIV-016](#div-016) | both | Contradiction | `--no-color` and `NO_COLOR` |
-| [DIV-017](#div-017) | both | Contradiction | `TPL_DIR` and `TPL_DATABASE` |
-| [DIV-018](#div-018) | `README.md` | Contradiction | Three TLS modes, defaulting to `preferred` |
-| [DIV-019](#div-019) | both | Contradiction | `--all-tables` and `--pattern` on `render` |
-| [DIV-020](#div-020) | both | Contradiction | The `.tpl/` layout omits `.cache/` |
-| [DIV-021](#div-021) | `README.md` | Contradiction | `template check` lints |
-| [DIV-022](#div-022) | `README.md` | Contradiction | `--pattern` follows the server collation |
-| [DIV-023](#div-023) | both | Migration | Global flag tables are wrong in three ways |
-| [DIV-024](#div-024) | `CLAUDE.md` | Migration | Project discovery lacks its boundary and checks |
-| [DIV-025](#div-025) | `CLAUDE.md` | Migration | The "specification does not exist yet" note |
-| [DIV-026](#div-026) | both | Contradiction | The `rust_type` and `go_type` filters |
-| [DIV-027](#div-027) | both | Contradiction | The `plural` and `singular` filters |
-| [DIV-028](#div-028) | both | Contradiction | Auto-escaping keyed on the file extension |
-| [DIV-029](#div-029) | both | Contradiction | `tpl init` creates four artefacts |
-| [DIV-030](#div-030) | `CLAUDE.md` | Contradiction | The read-only session presented as prevention |
-| [DIV-031](#div-031) | `CLAUDE.md` | Contradiction | `SHOW` as a permitted way to read the catalogue |
-| [DIV-032](#div-032) | `CLAUDE.md` | Contradiction | `model/` as the documented public surface |
-| [DIV-033](#div-033) | `CLAUDE.md` | Contradiction | The whole `Environment` surface as contract |
-| [DIV-034](#div-034) | both | Contradiction | The `table` and `column` field lists |
-| [DIV-035](#div-035) | `CLAUDE.md` | Migration | The performance budget table |
-| [DIV-036](#div-036) | `CLAUDE.md` | Migration | `scripts/mariadb/` lacks the benchmark fixture `seed-bench.sql` |
-| [DIV-037](#div-037) | both | Contradiction | A withdrawn MariaDB floor, no ceiling, and no refusal of MySQL |
-| [DIV-038](#div-038) | both | Migration | Routine naming has no disambiguator |
-| [DIV-039](#div-039) | both | Contradiction | Determinism stated over all output |
-| [DIV-040](#div-040) | `CLAUDE.md` | Contradiction | `tpl cache` is absent, and the auxiliary set is closed |
-| [DIV-041](#div-041) | `CLAUDE.md` | Migration | The target matrix is deferred; this specification now fixes it, and Linux is `musl` |
-| [DIV-042](#div-042) | `README.md` | Contradiction | The JSON error envelope, the `kind` field, and `did_you_mean` |
-| [DIV-043](#div-043) | `README.md` | Contradiction | The `.cfg` is now read strictly; an unrecognised key is fatal |
-| [DIV-044](#div-044) | `README.md` | Contradiction | The four fields of `tpl schema info` |
-| [DIV-045](#div-045) | `CLAUDE.md` | Contradiction | The release profile aborts on panic; discharged in the ninth edition, nothing is owed |
+| Id | Target | Kind | Status | Subject |
+|---|---|---|---|---|
+| [DIV-001](#div-001) | both | Migration | Partly, `README.md` | All CLI-surface content moves here |
+| [DIV-002](#div-002) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | "No command accepts a password in argv" |
+| [DIV-003](#div-003) | `README.md` | Contradiction | Due | The `--password` / `-p` flag |
+| [DIV-004](#div-004) | both | Contradiction | Partly, `README.md` | `--output`, `--output-dir` and the file-writing surface |
+| [DIV-005](#div-005) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | Only `init` and `cfg` write inside `.tpl/` |
+| [DIV-006](#div-006) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | Configuration printing always redacts |
+| [DIV-007](#div-007) | both | Contradiction | Partly, `README.md` | `EPIPE` always exits `0` |
+| [DIV-008](#div-008) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | `${VAR}` expands in any string value |
+| [DIV-009](#div-009) | both | Contradiction | Partly, `README.md` | `schema dump` equals the render context |
+| [DIV-010](#div-010) | `README.md` | Contradiction | Due | TTY-dependent `--format` default |
+| [DIV-011](#div-011) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | Positional render target |
+| [DIV-012](#div-012) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | `tpl init` takes no argument |
+| [DIV-013](#div-013) | both | Contradiction | Partly, `README.md` | `password_command` is a shell command |
+| [DIV-014](#div-014) | `README.md` | Contradiction | Due | Aliases `procs` and `proc` |
+| [DIV-015](#div-015) | both | Contradiction | Partly, `README.md` | The `database` and `config` command groups |
+| [DIV-016](#div-016) | both | Contradiction | Partly, `README.md` | `--no-color` and `NO_COLOR` |
+| [DIV-017](#div-017) | both | Contradiction | Partly, `README.md` | `TPL_DIR` and `TPL_DATABASE` |
+| [DIV-018](#div-018) | `README.md` | Contradiction | Partly, `README.md` | Three TLS modes, defaulting to `preferred` |
+| [DIV-019](#div-019) | both | Contradiction | Partly, `README.md` | `--all-tables` and `--pattern` on `render` |
+| [DIV-020](#div-020) | both | Contradiction | Partly, `README.md` | The `.tpl/` layout omits `.cache/` |
+| [DIV-021](#div-021) | `README.md` | Contradiction | Due | `template check` lints |
+| [DIV-022](#div-022) | `README.md` | Contradiction | Due | `--pattern` follows the server collation |
+| [DIV-023](#div-023) | both | Migration | Partly, `README.md` | Global flag tables are wrong in three ways |
+| [DIV-024](#div-024) | `CLAUDE.md` | Migration | Discharged, `0ea5624` | Project discovery lacks its boundary and checks |
+| [DIV-025](#div-025) | `CLAUDE.md` | Migration | Discharged, never owed | The "specification does not exist yet" note |
+| [DIV-026](#div-026) | both | Contradiction | Partly, `README.md` | The `rust_type` and `go_type` filters |
+| [DIV-027](#div-027) | both | Contradiction | Partly, `README.md` | The `plural` and `singular` filters |
+| [DIV-028](#div-028) | both | Contradiction | Partly, `README.md` | Auto-escaping keyed on the file extension |
+| [DIV-029](#div-029) | both | Contradiction | Partly, `README.md` | `tpl init` creates four artefacts |
+| [DIV-030](#div-030) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | The read-only session presented as prevention |
+| [DIV-031](#div-031) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | `SHOW` as a permitted way to read the catalogue |
+| [DIV-032](#div-032) | `CLAUDE.md` | Contradiction | Due | `model/` as the documented public surface |
+| [DIV-033](#div-033) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | The whole `Environment` surface as contract |
+| [DIV-034](#div-034) | both | Contradiction | Partly, `README.md` | The `table` and `column` field lists |
+| [DIV-035](#div-035) | `CLAUDE.md` | Migration | Discharged, `0ea5624` | The performance budget table |
+| [DIV-036](#div-036) | `CLAUDE.md` | Migration | Partly, `CLAUDE.md` | `scripts/mariadb/` lacks the benchmark fixture `seed-bench.sql` |
+| [DIV-037](#div-037) | both | Contradiction | Partly, both | A withdrawn MariaDB floor, no ceiling, and no refusal of MySQL |
+| [DIV-038](#div-038) | both | Migration | Partly, `README.md` | Routine naming has no disambiguator |
+| [DIV-039](#div-039) | both | Contradiction | Partly, `README.md` | Determinism stated over all output |
+| [DIV-040](#div-040) | `CLAUDE.md` | Contradiction | Discharged, `0ea5624` | `tpl cache` is absent, and the auxiliary set is closed |
+| [DIV-041](#div-041) | `CLAUDE.md` | Migration | Due | The target matrix is deferred; this specification now fixes it, and Linux is `musl` |
+| [DIV-042](#div-042) | `README.md` | Contradiction | Due | The JSON error envelope, the `kind` field, and `did_you_mean` |
+| [DIV-043](#div-043) | `README.md` | Contradiction | Due | The `.cfg` is now read strictly; an unrecognised key is fatal |
+| [DIV-044](#div-044) | `README.md` | Contradiction | Due | The four fields of `tpl schema info` |
+| [DIV-045](#div-045) | `CLAUDE.md` | Contradiction | Discharged, ninth edition | The release profile aborts on panic |
 
 ## DIV-001
 
 **Target**: both. **Kind**: migration.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`: that file no longer describes the three arms, the CLI
+surface, the `.tpl` project, the exit codes or the error-message format, and
+defers each to a named file of this folder. The `README.md` half is due in
+full — its command reference, configuration reference, exit code table and
+error-message section all stand.
+
+
 
 The root documents are the two places the CLI surface was described before this
 specification existed. Both must now be reduced.
@@ -99,6 +212,11 @@ the MariaDB container discipline — is untouched by this entry.
 
 **Target**: `CLAUDE.md`, CLI design rules. **Kind**: contradiction.
 
+**Status**: discharged by `0ea5624`, which removed the sentence quoted below
+with the CLI design rules that carried it. Nothing is owed.
+
+
+
 *Says*: "Nenhum comando aceita password em `argv`."
 *Specification*: `FR-CFG-030` removes the flag, but `FR-CFG-031` and
 `FR-CFG-032` keep two documented paths open — `--dsn` and `tpl cfg set` — with a
@@ -110,6 +228,11 @@ and that two documented paths remain open.
 
 **Target**: `README.md`, the flag tables of `database add` and `update` and of
 `render`. **Kind**: contradiction.
+
+**Status**: due, checked on 2026-09-11. `README.md` still carries the
+`--password` row and all four short forms.
+
+
 
 *Says*: `--password`, short `-p`, "Password, written to `.cfg`"; and short
 forms `-H` for `--host`, `-P` for `--port`, `-u` for `--user`, and `-s` for
@@ -135,6 +258,14 @@ worked example of why the whole one-letter space is reserved.
 
 **Target**: both. **Kind**: contradiction.
 
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed the output flags and the exit code
+table that attached `73` and `74` to a destination. The `README.md` half is
+due: all five flags, the atomic-write paragraph and the "console by default"
+framing stand.
+
+
+
 *Says*: `README.md` presents `--output`, `--output-dir`, `--output-name`,
 `--no-clobber`, and `--dry-run`, with a paragraph on atomic writes;
 `CLAUDE.md` presents `--output` and `--output-dir` as the explicit way to save a
@@ -149,6 +280,11 @@ code tables.
 
 **Target**: `CLAUDE.md`, the `.tpl` project section. **Kind**: contradiction.
 
+**Status**: discharged by `0ea5624`, which removed the `.tpl` project section.
+Nothing is owed.
+
+
+
 *Says*: `tpl init`, `tpl database …` and `tpl config …` are the only commands
 that write in `.tpl/`; all others treat it as read-only.
 *Specification*: `FR-PROJ-023` — `tpl cache load` and every cached read command
@@ -159,6 +295,11 @@ also write to `.tpl/.cache/` on a miss.
 
 **Target**: `CLAUDE.md`, secrets and versioning. **Kind**: contradiction.
 
+**Status**: discharged by `0ea5624`, which removed the secrets and versioning
+section. Nothing is owed.
+
+
+
 *Says*: any command that prints configuration always redacts passwords.
 *Specification*: `FR-CFG-021` redacts in `cfg list` and `cfg database show`;
 `FR-CFG-006` and `BR-CFG-002` make `tpl cfg get` a deliberate exception.
@@ -167,6 +308,13 @@ also write to `.tpl/.cache/` on a miss.
 ## DIV-007
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed the exit code section that stated the
+flat rule. The `README.md` half is due: the sentence stands under its exit
+code table.
+
+
 
 *Says*: `EPIPE` on stdout exits `0` silently, in every case.
 *Specification*: `FR-ERR-025` keeps `0` for the ordinary case, and `FR-ERR-026`
@@ -177,6 +325,11 @@ returns `74` when the pipe closes part-way through a JSON document.
 
 **Target**: `CLAUDE.md`, secrets and versioning. **Kind**: contradiction.
 
+**Status**: discharged by `0ea5624`, which removed the secrets and versioning
+section. Nothing is owed.
+
+
+
 *Says*: `${VAR}` is substituted "em qualquer valor string".
 *Specification*: `FR-CONF-015` limits expansion to six fields, and
 `FR-CONF-016` and `FR-CONF-017` forbid it in `tls` and `password_command`.
@@ -185,6 +338,12 @@ returns `74` when the pipe closes part-way through a JSON document.
 ## DIV-009
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`. The `README.md` half is due, and stands twice: under
+`tpl schema dump` and again in *Rendering without a database*.
+
+
 
 *Says*: `tpl schema dump` produces exactly the JSON the render receives as
 context.
@@ -198,6 +357,11 @@ part of the context", in both files.
 
 **Target**: `README.md`, global flags. **Kind**: contradiction.
 
+**Status**: due, checked on 2026-09-11. The TTY clause stands in the global
+flag table.
+
+
+
 *Says*: `--format` "Defaults to `text` on a TTY, `json` otherwise".
 *Specification*: `FR-OUT-001` and `FR-OUT-002` — the default is `text`, fixed,
 with no terminal detection anywhere.
@@ -206,6 +370,11 @@ with no terminal detection anywhere.
 ## DIV-011
 
 **Target**: `CLAUDE.md`, porcelain commands. **Kind**: contradiction.
+
+**Status**: discharged by `0ea5624`, which removed the porcelain command list.
+Nothing is owed.
+
+
 
 *Says*: `tpl render <template> [alvo] [flags]` — a positional render target.
 *Specification*: `FR-RND-003` — the target is always a flag, and the template
@@ -216,6 +385,11 @@ name is the only positional.
 
 **Target**: `CLAUDE.md`, porcelain commands. **Kind**: contradiction.
 
+**Status**: discharged by `0ea5624`, which removed the porcelain command list.
+Nothing is owed.
+
+
+
 *Says*: `tpl init` with no argument.
 *Specification*: `FR-PROJ-012` — an optional positional path, defaulting to the
 current directory.
@@ -224,6 +398,14 @@ current directory.
 ## DIV-013
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half,
+recorded as discharged by the fifth edition, was discharged by `0ea5624`,
+which removed the `.cfg` example; the commit is named here because the edition
+that closed the half did not name it. The `README.md` half is due: the word
+"shell" and the string form of `password_command` both stand.
+
+
 
 *Says*: `README.md` describes `password_command` as a "shell command whose
 trimmed stdout is used as the password"; the `.cfg` example in `CLAUDE.md`
@@ -249,6 +431,10 @@ reduced to agent coordination, so only `README.md` is left to correct.
 
 **Target**: `README.md`, alias table. **Kind**: contradiction.
 
+**Status**: due, checked on 2026-09-11. Both alias rows stand.
+
+
+
 *Says*: `routines` aliases to `procs`, `routine` to `proc`.
 *Specification*: `FR-CLI-011` — `rtns` and `rtn`, because a routine is a
 procedure or a function.
@@ -257,6 +443,12 @@ procedure or a function.
 ## DIV-015
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`. The `README.md` half is due: the `database` and
+`config` groups and `tpl database test` in the quick start all stand.
+
+
 
 *Says*: a top-level `tpl database …` group with alias `db`, a separate
 `tpl config …` group, and `tpl database test` in the quick start.
@@ -268,6 +460,12 @@ procedure or a function.
 
 **Target**: both. **Kind**: contradiction.
 
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`. The `README.md` half is due: the flag row and the
+variable both stand.
+
+
+
 *Says*: a `--no-color` global flag, colour implied off when stdout is not a TTY
 or `NO_COLOR` is set.
 *Specification*: `NFR-DET-004` — no colour anywhere, so the flag does not exist
@@ -277,6 +475,12 @@ and the variable is not read.
 ## DIV-017
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`. The `README.md` half is due: both variables and the
+three-layer precedence sentence stand.
+
+
 
 *Says*: environment variables `TPL_DIR` and `TPL_DATABASE`, with `-d` overriding
 `TPL_DATABASE`, which overrides `core.database`.
@@ -291,6 +495,15 @@ files.
 **Target**: `README.md`, TLS flag and the `.cfg` example. **Kind**:
 contradiction.
 
+**Status**: partly discharged, checked on 2026-09-11. The flag row is
+discharged by `26e1739`, which replaced the three-mode enumeration and
+`preferred`. **The `.cfg`-example half is due**: the example carries neither
+`ca_file` nor `ca_path`. The `CLAUDE.md` illustration this entry also names is
+moot — it went with the help-text rules in `0ea5624` — but `CLAUDE.md` is not
+this entry's **Target** and nothing is owed there.
+
+
+
 *Says*: `--tls <mode>` is one of `disabled`, `preferred`, `required`, defaulting
 to `preferred`. `CLAUDE.md` carries the same three-mode enumeration, as the
 illustration of an enumerated flag value in its help-text rules.
@@ -303,6 +516,13 @@ a flag whose value set this specification does not fix.
 ## DIV-019
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed the performance budget that measured
+`render --all-tables`. The `README.md` half is due: the two flags and the
+multi-render examples stand.
+
+
 
 *Says*: `README.md` documents `--all-tables`, `--pattern` on `render`, and
 repeatable object flags, with examples that concatenate many renders;
@@ -318,6 +538,13 @@ needs a different unit of measure.
 
 **Target**: both. **Kind**: contradiction.
 
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed the `.tpl` tree. The `README.md` half
+is due: the tree omits `.cache/` and the `.gitignore` is still shown with one
+line.
+
+
+
 *Says*: the `.tpl/` tree contains `.cfg`, `.gitignore`, and `templates/`, and
 the generated `.gitignore` holds one line.
 *Specification*: `FR-PROJ-002` and `FR-PROJ-017` — the tree also contains
@@ -327,6 +554,11 @@ the generated `.gitignore` holds one line.
 ## DIV-021
 
 **Target**: `README.md`, second arm. **Kind**: contradiction.
+
+**Status**: due, checked on 2026-09-11. The word "lint" and the required
+argument both stand, and `tpl template path` is still shown without one.
+
+
 
 *Says*: `tpl template check <name>` "Parse and lint a template", with a required
 name.
@@ -340,6 +572,11 @@ applies to `tpl template path`, which also takes an optional name per
 
 **Target**: `README.md`, `--pattern`. **Kind**: contradiction.
 
+**Status**: due, checked on 2026-09-11. The sentence stands under the alias
+table.
+
+
+
 *Says*: "Case sensitivity follows the server collation."
 *Specification*: `FR-SCH-013` and `FR-SCH-014` — evaluated locally, ASCII
 case-insensitive, independent of the server.
@@ -348,6 +585,12 @@ case-insensitive, independent of the server.
 ## DIV-023
 
 **Target**: both. **Kind**: migration.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed its global flag table. The `README.md`
+half is due: its table is wrong in the same three ways it was.
+
+
 
 Both global flag tables are wrong in three ways at once: they list `--output`,
 `--format`, and `--no-color` as global; they omit `--timeout`; and they do not
@@ -360,6 +603,12 @@ which lists the four local flags and the commands that declare each.
 ## DIV-024
 
 **Target**: `CLAUDE.md`, project discovery. **Kind**: migration.
+
+**Status**: discharged by `0ea5624`, which replaced the description of the
+walk with a pointer to [project-and-discovery.md](project-and-discovery.md) —
+the correction this entry asked for, made as it asked for it. Nothing is owed.
+
+
 
 *Says*: the walk climbs until a `.tpl/` folder is found, and `TPL_DIR` skips
 discovery.
@@ -378,6 +627,17 @@ owed to `CLAUDE.md` is unchanged in kind and shorter by one clause.
 
 **Target**: `CLAUDE.md`, functional specification section. **Kind**: migration.
 
+**Status**: discharged, and no commit discharged it. The clause quoted below
+is not in `CLAUDE.md` today and is in no committed state of it: searching the
+history for the quoted words finds one occurrence in the repository, in this
+file, at `1352a2d`, where this entry was written. The subsection it asks to
+remove therefore never existed in the file, and nothing is owed. Recorded
+rather than deleted, because an entry raised against an unverified reading of
+a target is the same defect as an entry left standing after the reading went
+stale, and the identifier must resolve to that explanation.
+
+
+
 *Says*: "A pasta `/specification` ainda não existe neste repositório", with an
 instruction to remove the subsection once the bootstrap is done.
 *Specification*: the folder now exists, and this file is part of it.
@@ -386,6 +646,12 @@ instruction to remove the subsection once the bootstrap is done.
 ## DIV-026
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`. The `README.md` half is due: the filter table names
+both filters and two examples call `rust_type`.
+
+
 
 *Says*: `CLAUDE.md` lists `rust_type` among the SQL and code filters;
 `README.md` lists `rust_type` and `go_type` in its filter table and uses
@@ -401,6 +667,12 @@ encodes belongs to the project.
 
 **Target**: both. **Kind**: contradiction.
 
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`. The `README.md` half is due: the row stands in the
+filter table.
+
+
+
 *Says*: both files list `plural` and `singular` as naming filters.
 *Specification*: `FR-ENV-012` and `FR-ENV-013` — neither exists. Correct English
 inflection is a project in itself, and a wrong plural on a table name that is
@@ -410,6 +682,13 @@ not English is guaranteed noise in generated code.
 ## DIV-028
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`. The `README.md` half is due: the extension rule and
+the sentence that frames it as one of two differences from stock Jinja2 both
+stand.
+
+
 
 *Says*: `CLAUDE.md` requires auto-escaping to be enabled by extension for
 `.html`, `.xml`, and `.htm`; `README.md` states that auto-escaping is off "for
@@ -425,6 +704,13 @@ the preserved trailing newline of `FR-SEM-003`, not auto-escaping.
 
 **Target**: both. **Kind**: contradiction.
 
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed the artefact table and the tree. The
+`README.md` half is due: four artefacts are listed and the fifth is absent
+from both the table and the tree.
+
+
+
 *Says*: both files present `tpl init` as creating four artefacts, and list them.
 *Specification*: `FR-PROJ-017`, as amended — five artefacts. The fifth is
 `.tpl/templates/rust/_types.jinja`.
@@ -435,6 +721,13 @@ line, which `DIV-020` already corrects to two.
 ## DIV-030
 
 **Target**: `CLAUDE.md`, project invariant 1. **Kind**: contradiction.
+
+**Status**: discharged by `0ea5624`. The promise survives in `CLAUDE.md`, but
+the session statement no longer follows it: the detail is deferred to
+[server-contract.md](server-contract.md), which is the correction this entry
+asked for. Nothing is owed.
+
+
 
 *Says*: "O `tpl` **nunca** emite DDL, DML ou qualquer statement de escrita",
 followed immediately by the read-only session statement, presenting the session
@@ -452,6 +745,15 @@ failure, and the absence of a flag to disable any of it, are unchanged.
 ## DIV-031
 
 **Target**: `CLAUDE.md`, project invariant 1. **Kind**: contradiction.
+
+**Status**: discharged by `0ea5624`. **This is the entry that showed the
+register was unsafe to presume current.** The `SHOW` clause was removed
+several sprints before the eleventh edition amended this entry for a miscount,
+and the amendment revisited the count without checking whether the clause it
+corrected was still in the file. Nothing is owed, and nothing was owed then
+either.
+
+
 
 *Says*: the catalogue is read exclusively through `INFORMATION_SCHEMA` "e,
 quando estritamente necessário, `SHOW`".
@@ -475,6 +777,11 @@ is the one stated above and nothing more.
 
 **Target**: `CLAUDE.md`, project structure. **Kind**: contradiction.
 
+**Status**: due, checked on 2026-09-11. The sentence stands, unchanged since
+`3f65b5f`, below the project tree.
+
+
+
 *Says*: "as suas structs são a superfície pública documentada", of the `model/`
 module.
 *Specification*: only the JSON document and the command line are contract. The
@@ -491,6 +798,13 @@ an architecture decision record.
 
 **Target**: `CLAUDE.md`, render context. **Kind**: contradiction.
 
+**Status**: discharged by `0ea5624`, which removed the render context section
+and replaced it with a pointer to
+[template-environment.md](template-environment.md) — one of the two
+corrections this entry offered. Nothing is owed.
+
+
+
 *Says*: "Filtros, testes e funções registados no `Environment` são superfície
 pública: acrescentar é permitido, renomear ou remover é uma quebra de
 compatibilidade."
@@ -505,6 +819,13 @@ nobody.
 ## DIV-034
 
 **Target**: both. **Kind**: contradiction.
+
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed the render context table. The
+`README.md` half is due in full, including the three further corrections the
+seventh edition added and the exclusion count the eighth corrected.
+
+
 
 *Says*: `README.md` states that a `table` carries `name`, `comment`, `engine`,
 `charset`, `collation`, `columns`, `primary_key`, `indexes`, and
@@ -546,6 +867,14 @@ two now agree.
 
 **Target**: `CLAUDE.md`, non-functional requirements. **Kind**: migration.
 
+**Status**: discharged by `0ea5624`, which replaced the budget table with the
+statement that the numeric targets do not live in that file and a pointer to
+[performance-requirements.md](performance-requirements.md). The fifth
+edition's requirement that `CLAUDE.md` keep no figure at all is met. Nothing
+is owed.
+
+
+
 *Says*: a table of four performance budgets with figures in milliseconds, a
 peak-memory figure in MiB, and a set of rules derived from them.
 *Specification*: [performance-requirements.md](performance-requirements.md) —
@@ -576,6 +905,17 @@ from `CLAUDE.md` loses nothing.
 
 **Target**: `CLAUDE.md`, project structure and the MariaDB testing section.
 **Kind**: migration.
+
+**Status**: partly discharged, checked on 2026-09-11. The project-tree half is
+discharged by `87dd6e3`: the tree's fixture line now describes what
+`scripts/mariadb/` holds instead of enumerating its files, so there is no list
+for `seed-bench.sql` to be missing from. **Two parts are due**, and neither is
+a correction to prose alone: the coverage paragraph of the testing section
+still names `setup.sql` and `seed.sql` and no third script, and
+`scripts/mariadb/` holds no `seed-bench.sql`. The five budgets of `WL-001`
+wait on the file, not on the sentence.
+
+
 
 *Says*: `scripts/mariadb/` holds a `Dockerfile`, `setup.sql`, and `seed.sql`,
 and the two SQL scripts must cover the read surface exhaustively.
@@ -612,6 +952,21 @@ the testing section, and the `seed-bench.sql` file itself.
 
 **Target**: both. **Kind**: contradiction.
 
+**Status**: partly discharged, checked on 2026-09-11, and both targets owe
+something. The `README.md` version row is discharged by `011c059`, which
+replaced `MariaDB 10.6 or later` with the three families and a citation of
+`FR-SRV-001` — the form `BR-SRV-005` requires, and not a second copy of the
+table. `CLAUDE.md`'s silence on the window is discharged by `0ea5624`, which
+defers the supported series to [server-contract.md](server-contract.md). **Two
+parts are due.** `README.md` still says the generated example template renders
+without error against any table of any MariaDB database, which claims a server
+this specification refuses. And `CLAUDE.md` still observes that MariaDB and
+MySQL diverge in the catalogue without saying that a server which is not
+MariaDB is refused with `78`, which is the half of this entry that was never
+about a version number.
+
+
+
 *Says*: `README.md` states, in its requirements table, `MariaDB 10.6 or later`,
 and states that the generated example template "renders without error against
 any table of any MariaDB database". `CLAUDE.md` states no version at all, and
@@ -645,6 +1000,13 @@ floor.
 
 **Target**: both. **Kind**: migration.
 
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed the command list. The `README.md` half
+is due: `tpl schema routine`, `tpl render --routine` and the exit-code
+discussion are all as written.
+
+
+
 *Says*: `README.md` documents `tpl schema routine <name>` and the repeatable
 `--routine <name>` flag with a bare name; `CLAUDE.md` does the same in its
 command list.
@@ -661,6 +1023,13 @@ corrects the aliases of the same commands, applies to the same rows.
 
 **Target**: both. **Kind**: contradiction.
 
+**Status**: partly discharged, checked on 2026-09-11. The `CLAUDE.md` half is
+discharged by `0ea5624`, which removed the determinism section. The
+`README.md` half is due: the unqualified sentence stands under *Built for
+coding agents*.
+
+
+
 *Says*: "The same invocation against the same database produces byte-identical
 output", without qualification, in `README.md`; `CLAUDE.md` states the same rule
 in its determinism section.
@@ -675,6 +1044,13 @@ exception stated in both files is unaffected and remains correct.
 
 **Target**: `CLAUDE.md`, the three arms and the porcelain command list.
 **Kind**: contradiction.
+
+**Status**: discharged by `0ea5624`, which removed the three arms and the
+porcelain command list together. `tpl cache` is absent from `CLAUDE.md` still,
+but so is every other command, and the sentence that closed the auxiliary set
+with "apenas" is gone. Nothing is owed.
+
+
 
 *Says*: "Fora dos três braços existe apenas a gestão do projecto (`tpl init`,
 `tpl database …`, `tpl config …`)" — and the porcelain command list names no
@@ -694,6 +1070,14 @@ sentence.
 ## DIV-041
 
 **Target**: `CLAUDE.md`, supported platforms. **Kind**: migration.
+
+**Status**: due, checked on 2026-09-11. The deferral stands verbatim under
+*Plataformas Suportadas*, added by `0ea5624` itself — the commit that
+discharged twelve other entries outright wrote this one's subject in. The two
+rules beside it also still restate what `NFR-PERF-018` and `NFR-PERF-012`
+carry.
+
+
 
 *Says*: "A matriz concreta de alvos — target triples, escolha de libc,
 linkagem e forma de empacotar o binário — é decisão de arquitectura em curso e
@@ -734,6 +1118,12 @@ edits `CLAUDE.md` should not present the linkage as a pure packaging decision.
 **Target**: `README.md`, the exit codes and error messages section. **Kind**:
 contradiction.
 
+**Status**: due, checked on 2026-09-11. The sentence, the JSON block and the
+sentence about `kind` all stand. The *Note on scope* below is confirmed: the
+envelope is in `README.md` alone.
+
+
+
 *Says*: "Under `--format json`, errors are JSON too", followed by the envelope
 verbatim —
 `{"error":{"exit":66,"code":"EX_NOINPUT","kind":"table_not_found", … ,"did_you_mean":["orders"]}}`
@@ -763,6 +1153,12 @@ entry is written against the files as they now stand.
 ## DIV-043
 
 **Target**: `README.md`, the configuration section. **Kind**: contradiction.
+
+**Status**: due, checked on 2026-09-11. The `.cfg` example is unchanged since
+`3f65b5f`, and neither of the two statements the correction asks for has been
+added.
+
+
 
 *Says*: a `.tpl/.cfg` example, and prose describing the file, written at a time
 when an unrecognised key had no stated outcome.
@@ -795,6 +1191,11 @@ outright — `password_command` as a string — and applies to the same block.
 **Target**: `README.md`, the command-surface listing. **Kind**:
 contradiction.
 
+**Status**: due, checked on 2026-09-11. The line stands in the command-surface
+listing.
+
+
+
 *Says*: `tpl schema info` reports "Database metadata: name, version, charset,
 collation".
 
@@ -816,6 +1217,15 @@ caller looks for the shape of that document.
 ## DIV-045
 
 **Target**: `CLAUDE.md`, the release profile. **Kind**: contradiction.
+
+**Status**: discharged in the ninth edition, by amendment rather than by an
+edit to `CLAUDE.md`: nothing was ever owed, so no commit could discharge it.
+Recorded here for completeness, and with one observation the re-check turned
+up: the profile table this entry quotes is itself gone, reduced to a citation
+of `ADR-004` by `50153d6`. The *Says* clause below therefore no longer matches
+the file, which changes nothing about an entry that owes nothing.
+
+
 
 *Says*: the release profile is tuned in `Cargo.toml` with `lto = "fat"`,
 `codegen-units = 1`, `panic = "abort"`, `strip = true`, and `opt-level = 3`.

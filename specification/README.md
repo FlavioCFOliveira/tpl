@@ -16,11 +16,13 @@ defers to another document for its meaning.
 functional requirements. Where either still repeats functional content that this
 specification now owns, the divergence is recorded in
 [upstream-divergences.md](upstream-divergences.md) and the duplicate must be
-removed from those files.
+removed from those files. That register is re-read against both files whenever
+either of them changes, and every entry records whether the correction is still
+owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fourteen editions. All are in force; each
+The specification has been written in fifteen editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -851,6 +853,97 @@ edition found; it now says *provided*, which is what it meant.
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Fifteenth edition — a register nobody re-read
+
+[upstream-divergences.md](upstream-divergences.md) records forty-five
+corrections owed to the root `README.md` and the root `CLAUDE.md`, and no
+edition had re-read it against those files since the files changed. `DIV-031`
+asks for the removal of the clause that admitted `SHOW` as a way to read the
+catalogue — "e, quando estritamente necessário, `SHOW`" — which `0ea5624`
+removed several sprints before the
+eleventh edition amended that very entry for a miscount. The amendment
+recounted the list and did not check whether the sentence it corrected was
+still in the file. One entry reclaiming work already done destroys the
+presumption that the other forty-four are current, so this edition classifies
+every one of them and writes down the obligation that was missing.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.** No
+root document is edited either: this corpus does not hold the pen on those two
+files, and discharging an entry by making its correction is not what this
+edition did.
+
+- **Every entry carries a Status, and the index carries a Status column** —
+  [upstream-divergences.md](upstream-divergences.md). Each of the forty-five is
+  classified against the current text of the file its **Target** names, as that
+  file stood at `87dd6e3`: **ten are due in full, fourteen are discharged, and
+  twenty-one are partly discharged**. Thirty-one entries still owe something,
+  twenty-eight of them to `README.md`.
+- **A discharged entry names the commit that discharged it.** Twelve were
+  discharged outright by `0ea5624`, which reduced `CLAUDE.md` to agent
+  coordination, and that same commit discharged one half of nineteen more; one
+  by `26e1739`, one by `011c059` and one by `87dd6e3`, each in part. An entry
+  that says when it stopped being owed can be audited; an entry that merely
+  says it is not owed has to be re-derived by the next reader.
+- **A discharged entry is kept in place, with its identifier** —
+  [upstream-divergences.md](upstream-divergences.md). This is the rule the
+  *[Identifier scheme](#identifier-scheme)* above states for a withdrawn
+  requirement, and `DIV-045` has carried the in-place form since the ninth
+  edition. The alternative considered and rejected was the *Closed* table of
+  [open-questions.md](open-questions.md): entries of the register cite each
+  other, and a citation whose target has been moved to a row resolves to a row
+  rather than to the reasoning.
+- **The partly discharged case is given a treatment, because it is the
+  ordinary case and not the exception.** Nineteen entries name both files, and
+  the two are edited under separate authorisations, so such an entry is
+  discharged in halves. **No entry is recorded as discharged while any part of
+  it stands**, and a partial status names, part by part, what was discharged
+  and by which commit. `DIV-018` is the first to carry it: `26e1739` replaced
+  the three TLS modes in the flag row of `README.md` and the `.cfg` example in
+  the same file still shows neither `ca_file` nor `ca_path`.
+- **The index and one entry are brought back into agreement** —
+  `DIV-013`. The index said `README.md` and the entry said `both`, because the
+  fifth edition discharged the `CLAUDE.md` half and narrowed the index row
+  without narrowing the field. The field is authoritative and the row now
+  matches it; what is owed, and to which file, is the Status column's job.
+- **One entry is discharged that no commit discharged, and the finding is
+  recorded rather than deleted** — `DIV-025`. Its *Says* clause quotes a
+  sentence saying `/specification` does not yet exist. Searching the history
+  for those words finds one occurrence in the whole repository, in the register
+  itself, at `1352a2d`. The subsection it asks to be removed was never in
+  `CLAUDE.md`. An entry raised against an unverified reading of a target is the
+  same defect as an entry left standing after the reading went stale, and the
+  identifier must resolve to that explanation.
+- **Two statements about `CLAUDE.md` made outside the register are corrected
+  with it** — [performance-requirements.md](performance-requirements.md). The
+  provenance note of `NFR-PERF-018` said that file's matrix *still names* the
+  `gnu` triples; it named them from `a8c5390` until `0ea5624` removed the
+  matrix, and what stands there now is the deferral `DIV-041` quotes. The
+  provenance note of `NFR-PERF-014` said a correction is owed to that file
+  under `DIV-035`; `0ea5624` removed the budget table and the entry is
+  discharged. Both notes keep what they record — where five provisional
+  figures and four targets came from — and lose only the present-tense claim
+  about a file that has moved on. A register is not the only place this corpus
+  says something about a document it does not own, which is why the fifth rule
+  is written over registers **and** over any such statement.
+
+**One observation is recorded in passing and owes nothing.** `DIV-045`, which
+the ninth edition discharged by amendment, quotes a release-profile table that
+`50153d6` has since reduced to a citation of `ADR-004`. Its *Says* clause no
+longer matches the file, which changes nothing about an entry that owes
+nothing. Every discharged entry now carries a quotation that outlived its
+source; this one is worth naming because the entry had already been closed, so
+nothing would have brought a reader back to it.
+
+**The rule this edition adds is the fifth of its kind**, and it is stated under
+*[Maintenance debt](#maintenance-debt)* with the other four. A register is not
+a requirement: it describes a file this corpus does not own, so it decays
+whenever somebody else edits that file, and no reference check, recount or
+sweep of this corpus can see it happen.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -900,7 +993,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [cache-documents.md](cache-documents.md) | `CDOC` | Cache versions, completeness records, and the `source` field |
 | [performance-requirements.md](performance-requirements.md) | `PERF` | Requirements of form, reference workloads, measurement protocol |
 | [open-questions.md](open-questions.md) | `OQ` | Points this specification cannot yet fix |
-| [upstream-divergences.md](upstream-divergences.md) | `DIV` | Corrections owed to the root `CLAUDE.md` and `README.md` |
+| [upstream-divergences.md](upstream-divergences.md) | `DIV` | Corrections owed to the root `CLAUDE.md` and `README.md`, and what discharged each |
 
 ## Identifier scheme
 
@@ -1132,6 +1225,18 @@ the servers the fixture now runs, checks the other thirteen rows against the
 same defect and finds none, and amends one note of `FR-CONF-038` for the same
 reason. The item below is untouched by it and remains outstanding.
 
+The fifteenth edition adds no obligation of either kind, and records none as
+discharged. It classifies all forty-five entries of
+[upstream-divergences.md](upstream-divergences.md) against the two root
+documents as they stand, fixes what becomes of a discharged entry and of a
+partly discharged one, and adds the fifth validation rule below. It changes no
+requirement. It does confirm one obligation already recorded outside this
+corpus and narrow another: `seed-bench.sql` is still absent from
+`scripts/mariadb/` under `DIV-036`, and the project-tree half of that entry is
+discharged, because the tree's fixture line now describes what the directory
+holds instead of listing its files. The item below is untouched and remains
+outstanding.
+
 **Outstanding — two readings that differ across the window and sit under
 neither of `FR-SRV-038`'s two headings.** `FR-SRV-040` reports that the build's
 source revision differs between all four servers and that the SSL library
@@ -1228,3 +1333,27 @@ of this shape: the row was internally coherent, cited correctly, and counted
 right. What finds it is reading the record against what has since been done to
 the thing observed, which is how this one was found — from the technical
 specification, read against this corpus rather than from within it.
+
+The fifteenth edition adds a fifth rule, learned from a register that asked for
+work done several sprints earlier. **A register of corrections owed to a file
+this specification does not own must be re-read against that file whenever the
+file changes, and an entry found discharged must record the commit that
+discharged it. The obligation is over every statement this corpus makes about
+such a file and not over a register alone**: the fifteenth edition found two
+outside the register, in the provenance notes of `NFR-PERF-014` and
+`NFR-PERF-018`, each describing a passage of `CLAUDE.md` that `0ea5624` had
+removed. `DIV-031` asked for the removal of a clause `0ea5624` had
+already removed, and the eleventh edition amended that entry — recounting a
+list inside it — without checking whether the sentence the entry corrects was
+still in the file. The four rules above are all checks this corpus can run on
+itself: a reference resolves or it does not, a requirement matches an
+observation or it does not, a record is complete against the corpus or it is
+not, a row names its conditions or it does not. This one cannot be run on this
+corpus at all, because what decays is outside it and decays when somebody else
+edits it. The trigger is therefore the edit and not the edition, and the
+evidence is the commit: an entry that says *when* it stopped being owed can be
+audited, while an entry that merely stops being listed leaves the next reader
+to re-derive it. A register whose entries are true only of a state nobody has
+checked since is worse than no register — it sends a reader to correct what is
+already correct, and it spends the standing of the entries that are still
+owed.
