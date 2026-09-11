@@ -1,7 +1,7 @@
 ---
 title: Architecture Decision Records
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [../spec-technical/README.md, ../spec-technical/open-decisions.md]
 ---
 
@@ -23,6 +23,14 @@ to hold:
 Both cite this register **by role and not by address**. Neither names a path, a
 filename, or a record number, and neither ever will. That is deliberate, and
 rule R1 below is what preserves it.
+
+A third requirement delegates in a weaker form. `FR-ERR-030`
+(`specification/errors-and-exit-codes.md`) states that which mechanism produces
+the `70` outcome "is an architecture decision, and this corpus names none". It
+hands the fact out of the corpus without naming this register as its home, so it
+is not a delegation R1 constrains — but it is the delegation `ADR-004` answers,
+and a reader arriving from that requirement resolves it through the index
+below.
 
 ## This is not a fifth source of truth
 
@@ -190,6 +198,17 @@ specification, which is how a fourth place starts drifting.
 |---|---|---|---|---|
 | [ADR-001](adr-001-template-engine-pin.md) | The template engine and its version pin | Accepted 2026-09-10 | `FR-ENV-003` | — |
 | [ADR-002](adr-002-tls-mode-mapping.md) | The TLS mode mapping onto the database driver | Accepted 2026-09-10 | `FR-CONF-038` | — |
+| [ADR-003](adr-003-database-driver.md) | The database driver | Accepted 2026-09-10 | `FR-CONF-036`, `FR-CONF-038` | — |
+| [ADR-004](adr-004-release-profile-and-panic-path.md) | The release profile and the panic path | Accepted 2026-09-11 | `FR-ERR-030`, `FR-ERR-032`, `FR-ERR-034` | — |
+| [ADR-005](adr-005-async-runtime-scope.md) | The scope of the async runtime | Accepted 2026-09-10 | `NFR-PERF-005`, `NFR-PERF-007` | — |
+| [ADR-006](adr-006-package-layout.md) | The package layout | Accepted 2026-09-10 | `FR-ERR-031`, `NFR-PERF-018` | — |
+| [ADR-007](adr-007-msrv.md) | The minimum supported Rust version | Accepted 2026-09-11 | — | — |
+| [ADR-008](adr-008-packaging-and-build-path.md) | Packaging and the build path for the four targets | Accepted 2026-09-10 | `NFR-PERF-018`, `NFR-PERF-012` | — |
+| [ADR-009](adr-009-foreign-key-embedding-representation.md) | The in-memory representation of the two foreign-key embeddings | Accepted 2026-09-10 | `FR-CTX-006` … `FR-CTX-010`, `FR-SCH-022` | — |
+
+The `Serves` column names the requirements a reader is most likely to arrive
+from. The complete list per record is its `requirements:` field, which is the
+machine-derivable one; `ADR-007` serves none, and says why in its own Context.
 
 ## Conventions
 

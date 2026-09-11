@@ -41,20 +41,23 @@ first: the ninth edition amended `FR-ERR-030` before any implementation was
 written against it, which is the order an implementation choice may never
 invert when a contractual code is at stake.
 
-Each settled entry records the decision, its rationale, and **the options
-rejected**, for the reason [`docs/adr/README.md`](../adr/README.md) gives for
-the same section in a record.
+Each settled entry records the decision, and with it either its rationale and
+**the options rejected** or a citation of the record that carries them, for the
+reason [`docs/adr/README.md`](../adr/README.md) gives for the same section in a
+record.
 
 The architecture decision record register now exists (`OD-01`). A settled
 entry's rationale belongs there where rule R4 of
 [`docs/adr/README.md`](../adr/README.md) admits it, and this file cites it by
-`ADR-NNN`; everything R4 does not admit is carried here.
+`ADR-NNN`; everything R4 does not admit is carried here. **Eight entries are so
+reduced today**, each naming its record in its own status line; `OD-01` cites
+the register itself rather than a record.
 
 ## Status legend
 
 | Status | Meaning |
 |---|---|
-| **Settled** | Decided. The rationale and the rejected options are recorded in the entry |
+| **Settled** | Decided. The rationale and the rejected options are recorded in the entry, or — where a record holds them — in the architecture decision record the entry's status line names |
 | **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it |
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
@@ -110,6 +113,11 @@ verified on: **2026-09-10** for the nineteen entries settled that day,
 **2026-09-11** for everything added since. Anything not verified says so in its
 own text. No claim rests on recollection.
 
+**An entry reduced to a citation carries no source of its own**, and neither
+its sources nor its unverified points are restated here: both live in the
+record its status line names, under the same rule. `OD-02` is the case that
+matters, because the record it cites moved the number this entry carried.
+
 The three entries the eighth edition settled — `OD-21`, `OD-22`, `OD-24` —
 were re-read against the corpus at commit `9efa791` on **2026-09-11**,
 requirement by requirement. Every identifier they cite was confirmed to exist in
@@ -137,26 +145,21 @@ rule R3 of that document.
 
 ## OD-02 — The MSRV
 
-**Status: settled.**
+**Status: settled. Recorded in [`ADR-007`](../adr/adr-007-msrv.md).**
 
-**Decision.** **MSRV = 1.85.0.** The measured toolchain, rustc/cargo 1.98.0,
-remains the development toolchain and is not the pin.
+**Decision.** The MSRV is the floor `ADR-007` states, and `CLAUDE.md`'s
+deferral — "MSRV a fixar no `Cargo.toml`" — is settled by it.
 
-**Rationale.** 1.85.0 is the release that stabilised edition 2024 (Rust Edition
-Guide, *Rust 2024*, verified 2026-09-10), which `CLAUDE.md` fixes as the
-edition. It is therefore the hard floor, and pinning to the floor is the widest
-compatibility the edition permits. `CLAUDE.md` deferred the number explicitly —
-"MSRV a fixar no `Cargo.toml`" — and this settles it.
+**The number this entry carried is superseded.** It stated a floor under an
+explicit "not verified" caveat over the dependency floors. Those floors have
+since been read from the crate index and one of them exceeds it, so the rule
+this entry already stated — the pin rises to it — applies, and `ADR-007`
+carries the result.
 
-**Rejected.** Pinning to the measured 1.98.0, which would forbid every
-toolchain between the floor and today for no stated gain; and following stable,
-which is not a pin at all and would make the floor a fact nobody records.
-
-**Not verified.** The MSRV each dependency declares. minijinja states `1.63+`
-(docs.rs, minijinja 2.24.0), which is below the floor and therefore not
-binding; the floors of `clap` 4.6.6, `sqlx` 0.9.0, `tokio` 1.53.1, `toml`
-1.1.5 and `toml_edit` 0.25.13 were not checked. If one of them exceeds 1.85.0
-the pin rises to it, and the entry is amended with the source.
+The number, the rule that yields it, the verified floors, the options rejected,
+and the one point that remains unverified are recorded in `ADR-007` and are
+**not restated here**, per rule R3 of
+[`docs/adr/README.md`](../adr/README.md).
 
 ---
 
@@ -196,47 +199,16 @@ affects only the other."
 
 ## OD-04 — One package, or a workspace
 
-**Status: settled.** The residual the eighth edition left is settled below.
+**Status: settled. Recorded in [`ADR-006`](../adr/adr-006-package-layout.md).**
 
-**Decision.** **One Cargo package**, carrying a library and a binary. The logic
-lives in the library and is testable without launching a process; the binary
-parses, dispatches, and maps the error to an exit code.
+**Decision.** One Cargo package, carrying a library and a binary, and no
+package of its own for `benches/`.
 
-**Rationale.** It is what `CLAUDE.md` *Estrutura do Projecto* describes — one
-manifest at the root, `src/` beneath it — and what *Organização* requires of
-the split. `DIV-032` removes the usual reason to split further: the library
-carries no compatibility guarantee, so there is no published crate boundary to
-protect.
-
-**Rejected.** A workspace of several crates, which buys a boundary nothing
-consumes and multiplies the manifests that must agree on the release profile
-and the MSRV.
-
-**Residual, settled 2026-09-11. `benches/` needs no package of its own.**
-`criterion` and `dhat` are dev-dependencies, and the question the residual
-raised is answered by naming the command that answers it rather than by a
-second manifest. `cargo tree`'s default is `normal,build,dev`, which is why an
-unfiltered listing shows a dev-dependency; the shipped graph is what
-`cargo tree --edges normal,build` prints, which is "a mostly equivalent
-overview of what `cargo build` does" (Cargo Book, *cargo-tree*, `--edges`,
-verified 2026-09-11). Nothing a dev-dependency drags in is compiled into the
-release artefact, so a second package would move nothing out of a graph it was
-never in.
-
-**Rejected.** A `benches` package, or a workspace member for it, which adds a
-manifest that must agree with the first on the release profile and the MSRV —
-the reason this entry already rejected a workspace — and changes nothing about
-what `cargo build --release` compiles.
-
-**One caveat, and it belongs to `operations`.** `dhat` profiles the process it
-is linked into: "for heap profiling, enable the global allocator by adding this
-code to your program" (docs.rs `dhat` 0.3.3, verified 2026-09-11). Heap
-profiling of the **binary** therefore needs `dhat` as an optional normal
-dependency behind a feature that installs a global allocator, which is not a
-dev-dependency and does enter the graph of the build that carries it. That
-build is not distributed, and `NFR-PERF-018` reaches distributed artefacts.
-Whether the project takes that path is a build question for `operations`, and
-nothing in this entry depends on the answer.
+The rationale, the options rejected, the `cargo tree` invocation that answers
+the dev-dependency question, and the `dhat` caveat that belongs to `operations`
+are recorded in `ADR-006` and are **not restated here**, per rule R3 of
+[`docs/adr/README.md`](../adr/README.md). The residual this entry carried was
+settled on 2026-09-11 and is part of the decision that record holds.
 
 ---
 
@@ -587,32 +559,17 @@ outer shape.
 
 ## OD-11 — The scope of the async runtime
 
-**Status: settled.**
+**Status: settled. Recorded in [`ADR-005`](../adr/adr-005-async-runtime-scope.md).**
 
-**Decision.** **The process is synchronous.** The current-thread `tokio`
-runtime is built **lazily inside `mariadb/`**, with `block_on` at that
-boundary. Nothing outside that module is async.
+**Decision.** The process is synchronous, and the runtime is confined to the
+boundary `ADR-005` names.
 
-**Rationale.** `NFR-PERF-005` requires four commands — `tpl init`, every form
-of `help`, every form of `version` — to perform no discovery, read no
-configuration file and open no connection, and requires it to be verified from
-**outside** the process: no `stat` of an ancestor, no open of `.tpl/.cfg`, no
-socket. A runtime built for every invocation is startup work that the invoked
-command did not need, which is what `CLAUDE.md` forbids under "Inicialização
-preguiçosa por defeito". Confining the runtime to the one module that needs it
-also keeps `NFR-PERF-004` — at most one connection — local to the component
-that opens it.
-
-**Rejected.** A `#[tokio::main(flavor = "current_thread")]` attribute over the
-whole entrypoint. It starts a runtime for `tpl --version` too, and cannot
-satisfy `NFR-PERF-005`'s outside-the-process observation as directly: the
-absence of runtime setup then has to be argued rather than observed.
-
-**Composition.** The driver decision is unchanged and rests on measurement:
-`sqlx` 0.9.0 with `tokio` 1.53.1 on a current-thread runtime, `mysql` 28.0.2
-rejected, per `FR-CONF-036` and `BENCHMARKS.md` (2026-09-10). `BENCHMARKS.md`
-also records an unexplained 44 ms blocking cost in `connect_with` on musl over
-raw loopback, tracked as roadmap task `#8`; it bears on `OD-12`.
+The rationale, the requirements it serves, and the options rejected are
+recorded in `ADR-005` and are **not restated here**, per rule R3 of
+[`docs/adr/README.md`](../adr/README.md). The driver decision this entry
+composed with is [`ADR-003`](../adr/adr-003-database-driver.md), which also
+records the unexplained musl blocking cost this entry mentioned; it bears on
+`OD-12`.
 
 ---
 
@@ -1029,31 +986,14 @@ It is not an emitting-path transformation and does not belong to `output/`.
 
 ## OD-19 — Whether the two embeddings are materialised
 
-**Status: settled.**
+**Status: settled. Recorded in [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md).**
 
-**Decision.** **Materialise them.** The object graph **is** the document.
+**Decision.** Materialise both embeddings: the object graph is the document.
 
-**Rationale.** `FR-CTX-006` embeds the referenced table one level deep with its
-columns, indexes and primary key in full, and `FR-CTX-010` embeds the
-referencing table to the same depth; `FR-CTX-009` cuts both at the first hop,
-so no traversal can fail to terminate. A model whose shape is the document's
-shape has one representation to get right, and `FR-SCH-022`'s round-trip —
-dump, feed back through `--context`, render byte-identically — is a property of
-that one representation rather than of an emitter that reconstructs it.
-
-**The consequence, stated openly.** Peak resident memory scales with the
-quadrupled column volume: `BR-CTX-001` records that `FR-CTX-006` alone "roughly
-doubles the column volume" over 200 tables with 180 foreign keys, and
-`FR-CTX-010` records that it "doubles it again". The provisional `< 32 MiB`
-figure of `NFR-PERF-014` over `WL-001` is therefore **the figure most likely to
-be superseded upward by the first real measurement** — exactly as `FR-CTX-010`
-anticipates, and exactly what `NFR-PERF-019` exists to permit without the
-figure having been a limit in the meantime.
-
-**Rejected.**
-
-- **Emit by reference** at serialisation time, keeping one owned copy of each table. The bytes would be identical and the memory lower, at the price of an emitter that has to reproduce a one-hop cut correctly in both directions, including the self-reference and cycle cases `FR-CTX-009` enumerates. A defect there is a wrong document at exit `0`.
-- **Streaming the dump**, so that peak memory tracks the largest table rather than the whole document. `FR-SCH-016` makes the dump one document and `FR-CTX-023` promises referential integrity over it, so the whole model has to be in hand before the first byte can be trusted.
+The rationale, the memory consequence, and the two options rejected — emitting
+by reference at serialisation time, and streaming the dump — are recorded in
+`ADR-009` and are **not restated here**, per rule R3 of
+[`docs/adr/README.md`](../adr/README.md).
 
 ---
 
@@ -1231,8 +1171,8 @@ specified here" — and neither half admits a decision this register could take
 without the containers in front of it. Recording an arrangement of files and
 commands that nobody has run would put a description of something imaginary in
 a specification whose discipline is to describe what is true today, which is
-the ground `OD-23` already gave for prescribing no continuous-integration
-pipeline.
+the ground [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) gives for
+prescribing no continuous-integration pipeline (`OD-23`).
 
 | Half | Belongs to | What it must produce |
 |---|---|---|
@@ -1246,33 +1186,15 @@ and on nothing else in this register.
 
 ## OD-23 — Packaging, artefacts, and the musl build path
 
-**Status: settled.**
+**Status: settled. Recorded in [`ADR-008`](../adr/adr-008-packaging-and-build-path.md).**
 
-**Decision.** **`cargo-zigbuild` for the two `musl` targets, native builds for
-the two Darwin targets** — reproducing what `BENCHMARKS.md` measured. **No
-continuous integration for now**: the targets and the toolchain are described,
-no pipeline is prescribed, and CI's absence is recorded as future work.
+**Decision.** `cargo-zigbuild` for the two `musl` targets, native builds for the
+two Darwin targets, and no continuous integration prescribed.
 
-**Rationale.** `NFR-PERF-018` fixes the four targets and the static `musl`
-linkage; `DIV-041` records that the `gnu` triples are not targets.
-`BENCHMARKS.md` names the reason a cross toolchain is needed at all — "the
-Apple linker cannot emit ELF" — and records the combination that produced the
-measured artefacts: `cargo-zigbuild` 0.23.4 with zig 0.16.0. Reproducing the
-measured path means a later measurement is comparable with the recorded one,
-which `NFR-PERF-012` requires of every baseline. Prescribing a pipeline before
-one exists would put a description of something imaginary in a specification
-whose whole discipline is to describe what is true today.
-
-**Rejected.** `cross` or a container build, either of which may be right later
-but neither of which produced the recorded figures; and prescribing a CI
-pipeline now, which would be aspiration rather than specification.
-
-**Recorded as future work.** There is no CI. Four consequences follow and each
-is currently carried by whoever runs the pipeline by hand: `CLAUDE.md`'s
-five-command validation sequence, `NFR-PERF-018`'s "no target is second class"
-across four targets, `NFR-PERF-017`'s no-regression rule, and `FR-SRV-019`'s
-release gate on the supported-series table. The release artefact itself — bare
-binary, archive, checksums, signature — is not fixed by this entry.
+The rationale, the options rejected, the four obligations carried by hand while
+there is no pipeline, and the two targets that have never been measured are
+recorded in `ADR-008` and are **not restated here**, per rule R3 of
+[`docs/adr/README.md`](../adr/README.md).
 
 ---
 
@@ -1489,94 +1411,28 @@ project-structure tree and one of the testing section naming the file.
 
 ## OD-28 — The release profile against the caught-panic condition of `70`
 
-**Status: settled.** The amendment it owed `specification-manager` landed in
-the ninth edition of `/specification`, at commit `4ad5e8c` of 2026-09-11.
+**Status: settled. Recorded in [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md).**
 
-**Verdict. The profile stands.** `panic = "abort"` is kept, with the four
-settings beside it, and the process installs a **panic hook** that writes the
-four labelled lines of `FR-ERR-008` to stderr and terminates the process with
-status `70`. The observable behaviour `FR-ERR-032` and `FR-ERR-001` require is
-therefore present in the distributed binary, and no code of `FR-ERR-001` is
-unreachable.
+**Decision.** The profile stands, and the process installs a panic hook that
+produces the outcome `FR-ERR-030` requires.
 
-**The three facts this rests on, each verified 2026-09-11.**
+The five profile settings, the hook, what the `cause` line carries and what it
+withholds, the options rejected, and the reasoned step over `strip = true` are
+recorded in `ADR-004` and are **not restated here**, per rule R3 of
+[`docs/adr/README.md`](../adr/README.md).
 
-| Fact | Source |
-|---|---|
-| The hook runs before the panic runtime, and "the hook will run with both the aborting and unwinding runtimes" | `std::panic::set_hook`, Rust standard library documentation |
-| `PanicHookInfo` carries the payload and "the source code location from which the panic originated" | `std::panic::PanicHookInfo`, same |
-| `std::process::exit` will "immediately terminate the current process", passing the code "through to the underlying OS", and "no destructors on the current stack or any other thread's stack will be run" | `std::process::exit`, same |
+**What this entry settled beyond the decision, and which stays here.** The
+amendment it owed `specification-manager` landed in the ninth edition of
+`/specification`, at commit `4ad5e8c` of 2026-09-11: `FR-ERR-030` now states the
+outcome a caller observes rather than a mechanism, `FR-ERR-034`'s `70` row loses
+the same word, and the code table of `FR-ERR-001` is unchanged. `DIV-045` is
+discharged with nothing owed to `CLAUDE.md` under it. The order was not
+interchangeable: the requirement moved first, before any implementation was
+written against it.
 
-The hook therefore has both what `FR-ERR-034` row `70` obliges the `cause` line
-to name — that a panic occurred at the top level, and **where** — and the means
-to leave the process with the status `FR-ERR-001` fixes, before the aborting
-runtime is reached.
-
-**What the hook writes, and what it does not.** The `cause` line carries the
-panic's **location** and not its payload. `FR-ERR-034` row `70` requires the
-location and does not require the payload; a payload is arbitrary text composed
-at the panic site, and keeping it out of the stream is the structural way to
-keep `FR-GLOB-018` true on a path nobody reviews. The cost is stated rather
-than hidden: a maintainer reading a bug report sees the site and not the
-message. `FR-ERR-032`'s `hint` already tells the caller the condition is a
-defect in `tpl` and not theirs to correct, so nothing the caller can act on is
-lost.
-
-**The amendment owed, and the order, which was not interchangeable.**
-`FR-ERR-030` said `70` was produced by "a panic **caught** at the top level of
-the process". Under an aborting runtime nothing is caught: no unwinding occurs,
-no frame is resumed, and no code downstream of the panic site runs. The hook
-**reports** the panic and exits; it does not catch it. The requirement's wording
-and the mechanism therefore differed, and the requirement moved first, as it had
-to: `specification-manager` amended `FR-ERR-030`, and only then may an
-implementation be written against the amended wording.
-
-**What landed, and it is narrower than either form `DIV-045` anticipated.** The
-condition survives with its wording changed rather than being dropped:
-`FR-ERR-030` now states the outcome a caller observes — the message of
-`FR-ERR-032` and exit `70` — names no mechanism, and leaves both producing
-conditions in the distributed binary; `FR-ERR-034`'s `70` row loses the same
-word; and the code table of `FR-ERR-001` is unchanged. The hook above is one
-mechanism that produces the outcome, and the corpus no longer names any.
-
-**The premise of `DIV-045` that this entry contradicted, reported and not acted
-upon, and since corrected by its owner.** `DIV-045` stated that under
-`panic = "abort"` "a panic terminates the process abnormally, the caller
-receives no code of `FR-ERR-001`, and no message is written". That is true of
-the **default** hook and not of a hook the process installs. `DIV-045` lives in
-`/specification` and is `specification-manager`'s; this entry reported both
-readings and changed neither, per the rule
-[README.md](README.md#conventions) states for a contradiction. The ninth edition
-corrected the clause, and `DIV-045` is discharged with nothing owed to
-`CLAUDE.md` under it.
-
-**Rejected — switching the profile to `panic = "unwind"` with `catch_unwind` at
-the top level.** It is the literal reading of `FR-ERR-030` and needs no
-amendment, and it was still refused, for three reasons that compose:
-
-- **The trade cannot be evaluated.** `DIV-045` admits keeping the profile "for its size and its speed", and no recorded figure separates the two profiles: `BENCHMARKS.md` states one release profile, "identical in all four crates", with `panic = "abort"` among its five settings, so every figure it holds was taken under the aborting profile. Changing the profile to buy a wording that a hook already satisfies would be a trade made blind in both directions.
-- **It costs the comparability of every recorded baseline.** `NFR-PERF-012` makes a measurement meaningful only against one stated target, and `NFR-PERF-017` fails a change that regresses against a baseline. A profile change makes every existing figure incomparable with every later one, so all four targets of `NFR-PERF-018` would have to be re-measured before any later number meant anything — to obtain a behaviour that is already obtainable.
-- **It buys nothing observable.** `catch_unwind` and the hook produce the same four lines and the same exit status. What unwinding adds is the running of destructors on the way out, and the process is exiting: the one destructor whose absence a caller could detect is the flush of a buffered stdout, and `FR-ERR-033` requires stdout to be **empty** on an error path while `FR-RND-034` already admits at most one incomplete result.
-
-**Also rejected — leaving both statements standing**, which `DIV-045` refused
-outright and which this entry did not do: the profile is kept *and* the
-amendment was requested, which the ninth edition made.
-
-**Two facts recorded so that nobody re-derives them.**
-
-- The cost of unwinding is **unmeasured**, per the first rejection above. No figure in this repository separates the two profiles, and none is asserted here.
-- `FR-ERR-031`'s in-process trigger exercises the **other** producing condition of `70`, the detected invariant violation, so `BR-ERR-001`'s exception is independent of this entry. See `OD-21`.
-
-**One reasoned step, marked because it is reasoned.** `strip = true` remains in
-the profile, and `core::panic::Location` is `&'static` data the compiler emits
-rather than debug information, so stripping leaves the file, line and column
-available to the hook. That composition is reasoned from the two definitions
-and is **not** a sentence either document states; it is verified when the first
-`70` is exercised through `FR-ERR-031`'s trigger.
-
-**Consequence for the coordination document.** None. The profile table is
-unchanged, so the architecture decision that file requires before a change to
-it is not triggered.
+**Consequence for the coordination document.** Its release-profile bullet cites
+`ADR-004` rather than listing the five settings, per rule R3. No setting
+changes.
 
 **Unblocks.** `architecture`, `technology-stack`, `operations`.
 

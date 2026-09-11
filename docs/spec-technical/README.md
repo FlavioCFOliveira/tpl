@@ -78,7 +78,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: twenty-eight settled entries with their rejected options, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: twenty-eight settled entries, each carrying its rejected options or citing the record that holds them, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. `OD-14`'s owed observation bounds one sentence: the behaviour of a **defined** `null` under `UndefinedBehavior::Strict` may not be asserted until it is verified |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
