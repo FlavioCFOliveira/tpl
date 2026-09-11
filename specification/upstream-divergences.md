@@ -2,7 +2,7 @@
 title: Upstream Divergences
 status: approved
 last-reviewed: 2026-09-11
-related: [README.md, template-environment.md, server-contract.md, performance-requirements.md]
+related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
 # Upstream Divergences
@@ -11,29 +11,41 @@ related: [README.md, template-environment.md, server-contract.md, performance-re
 
 This specification is the single source of functional truth. The root
 `README.md` and the root `CLAUDE.md` have stated functional content that this
-specification either contradicts or now owns. Each divergence is recorded here
-with what the file said, what this specification says, the correction owed, and
+specification either contradicts or now owns, and they have stated as present
+things the repository does not yet contain. Each divergence is recorded here
+with what the file said, what is in force against it, the correction owed, and
 whether it is still owed.
 
 **This file does not authorise a change to either document, and the
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Forty-five entries are recorded. As of 2026-09-11, ten are due in full,
-fourteen are discharged, and twenty-one are partly discharged.** Thirty-one
-entries still owe something: twenty-eight owe it to `README.md`, four owe it to
-`CLAUDE.md`, and `DIV-037` is in both counts because it owes a different thing
-to each. The asymmetry has one cause. `CLAUDE.md` was reduced to agent
-coordination in a single commit, `0ea5624`, which discharged twelve entries
-outright and one half of nineteen more; `README.md` has been edited four times
-since this file was opened, each time in one line or one paragraph.
+**Forty-nine entries are recorded. As of 2026-09-11, fourteen are due in
+full, fourteen are discharged, and twenty-one are partly discharged.**
+Thirty-five entries still owe something: thirty-two owe it to `README.md`, four
+owe it to `CLAUDE.md`, and `DIV-037` is in both counts because it owes a
+different thing to each. The asymmetry has one cause. `CLAUDE.md` was reduced
+to agent coordination in a single commit, `0ea5624`, which discharged twelve
+entries outright and one half of nineteen more; `README.md` has been edited
+four times since this file was opened, each time in one line or one paragraph.
 
-Two kinds of entry appear:
+Three kinds of entry appear:
 
 - **Contradiction** — the file states something this specification contradicts.
   Leaving it is a defect.
 - **Migration** — the file states something this specification now owns.
   Leaving it creates two sources for one truth.
+- **Overstatement** — the file states as present something the repository does
+  not contain. Nothing is owed to this folder and no requirement is
+  contradicted; what is wrong is that a reader who acts on the passage fails.
+  Leaving it spends the credit of everything else the file says.
+
+*The third kind is added in the sixteenth edition*, with `DIV-046`, the only
+entry that carries it. The two kinds above were written when every entry
+described the relation between a root document and this corpus. An entry that
+describes the relation between a root document and the repository has no home
+among them, and labelling it a contradiction would have named a requirement
+that does not exist.
 
 ## How an entry is read
 
@@ -41,7 +53,7 @@ Four things carry an entry, and each answers a different question.
 
 - **Target** names the files the entry was raised against, and is the authority
   on where to look when the entry is re-checked.
-- **Kind** is one of the two above.
+- **Kind** is one of the three above.
 - **Status** says what is still owed, and where, as of the date it names. It is
   the only part of an entry that speaks about the files as they now stand.
 - The *Says* clause is a **quotation of the target file as it stood when the
@@ -178,6 +190,10 @@ discharges, and it is the reason this file's remaining work is almost entirely
 | [DIV-043](#div-043) | `README.md` | Contradiction | Due | The `.cfg` is now read strictly; an unrecognised key is fatal |
 | [DIV-044](#div-044) | `README.md` | Contradiction | Due | The four fields of `tpl schema info` |
 | [DIV-045](#div-045) | `CLAUDE.md` | Contradiction | Discharged, ninth edition | The release profile aborts on panic |
+| [DIV-046](#div-046) | `README.md` | Overstatement | Due | The build sequences, in a repository with no crate |
+| [DIV-047](#div-047) | `README.md` | Contradiction | Due | The `render` flag table omits `--direct` and `--no-cache` |
+| [DIV-048](#div-048) | `README.md` | Contradiction | Due | The entry flag is `--database`, which is the global flag's name |
+| [DIV-049](#div-049) | `README.md` | Contradiction | Due | The entry flag table omits `--ca-file` and `--ca-path` |
 
 ## DIV-001
 
@@ -1273,3 +1289,143 @@ entry refused to leave standing together no longer conflict. Nothing is owed to
 `CLAUDE.md` under this entry. The identifier is retained rather than removed,
 so that a reference written before the ninth edition resolves to this
 explanation.
+
+## DIV-046
+
+**Target**: `README.md`, *Installation* and *Development*. **Kind**:
+overstatement.
+
+**Status**: due, checked on 2026-09-11. Both sequences stand, and the
+repository holds no crate: a search of the working tree finds no `Cargo.toml`
+and no `Cargo.lock`, and none of `src/`, `tests/` or `benches/`.
+
+
+
+*Says*: *Installation* gives `git clone`, `cd tpl`, and `cargo build
+--release`, and states that "the binary is produced at `target/release/tpl`".
+*Development* gives `cargo build`, `cargo run -- --help` and `cargo test`,
+followed by the five-command validation pipeline that opens with `cargo fmt`.
+*Specification*: none, and that is what the third kind records. No requirement
+of this corpus is contradicted and nothing is owed to this folder: `DIV-001`
+leaves *Installation* to `README.md` as part of its role as the entry door, so
+the section belongs where it is and only its content is false. It is false of
+the repository rather than of a requirement — `cargo build --release` fails
+for want of a manifest, and every command of *Development* fails with it.
+*Correction*: say that the crate does not exist yet, at the head of both
+sequences or in place of them. The document-scope banner at the top of the file
+does not do it. That banner says no command described below is implemented yet,
+which a reader takes to mean the binary builds and the commands are not
+finished; it does not say there is nothing to build. *Installation* is the
+first instruction in the file a reader acts on, so it is the first place the
+file spends its credit, and *Development* is where a contributor goes next.
+
+*Why this entry names two sections.* The survey that raised it named
+*Installation* alone. *Development* states the same thing about the same file
+under a second heading, and an entry that corrected one would leave a reader
+running `cargo fmt --all -- --check` against a directory with no manifest. The
+two are one correction and are recorded as one.
+
+*One observation that this entry does not own.* The project-structure tree of
+`CLAUDE.md` also names `Cargo.toml`, `src/`, `tests/`, `benches/`,
+`templates/` and `examples/`, none of which the repository has. `CLAUDE.md` is
+not this entry's **Target**, nothing is owed there under it, and the
+divergence needs an entry of its own raised against that file. It is named
+here so that whoever discharges this one knows the same sentence is written
+twice.
+
+## DIV-047
+
+**Target**: `README.md`, the flag table of `render`. **Kind**: contradiction.
+
+**Status**: due, checked on 2026-09-11. The table stands with twelve rows, and
+neither flag is among them.
+
+
+
+*Says*: the flags of `tpl render` are `--table`, `--view`, `--routine`,
+`--all-tables`, `--pattern`, `--set`, `--context`, `--output`, `--output-dir`,
+`--output-name`, `--no-clobber` and `--dry-run`.
+*Specification*: `FR-GLOB-021` — `--direct` and `--no-cache` are declared by
+`render`, by the eight `schema` subcommands and by `cache load` — and
+`FR-GLOB-022`, which requires each declaring command to list both in its own
+help and in its `options` array in the JSON command tree. A table that
+presents itself as the flag list of one command and omits two flags that
+command declares tells a reader those two would be rejected there under
+`FR-CLI-019`. They are declared, so they are accepted; what the omission costs
+is a caller who never reaches for them.
+*Correction*: add a row for `--direct` and one for `--no-cache`, or replace the
+table with a pointer to [global-flags.md](global-flags.md) and
+[render-command.md](render-command.md). Seven of the twelve rows are removed
+outright by `DIV-004` and `DIV-019`, so the table is being rewritten in any
+case.
+
+*Not covered by `DIV-023`.* That entry records the same two flags as missing,
+but from the **global** flag tables, and its correction replaces those tables
+with a pointer to [global-flags.md](global-flags.md). Applied exactly as
+written it leaves this table untouched and still silent: a pointer put where
+the global table stood says nothing about a local table further down the file,
+and the reader who consults a command's own flag list is the one this entry is
+about.
+
+## DIV-048
+
+**Target**: `README.md`, the flag table of `database add` and `update`.
+**Kind**: contradiction.
+
+**Status**: due, checked on 2026-09-11. The row stands, spelled `--database`.
+
+
+
+*Says*: `--database`, "Database name on the server", among the flags of
+`database add` and `database update`. The group is spelled `tpl database …`
+there rather than `tpl cfg database …`, which is `DIV-015`'s subject and not
+this entry's.
+*Specification*: `FR-CFG-027` names that flag `--schema`, and `FR-CFG-028`
+records it as the only flag of the tool whose name differs from the key it
+writes — `database.<name>.database` — and gives the reason. The name the table
+uses is already taken and means something else: `FR-GLOB-001` declares
+`-d/--database` as one of the seven global flags, and `FR-GLOB-004` gives it
+the `.cfg` entry label, not the database on the server. `FR-GLOB-002` makes
+every global flag acceptable at every node, so the two definitions meet on the
+very two commands this table describes, and `FR-CFG-028` states in as many
+words that they cannot coexist at one node.
+*Correction*: rename the row to `--schema` and keep its description, which is
+right. This is not a synonym a reader may pick either way. `tpl cfg database
+add shop --database shop` written from this table is accepted, because the
+global flag is declared at that node, and `FR-GLOB-004` reads the value as an
+entry label — so the invocation silently fails to write the key the table
+promised, and writes nothing wrong enough to be refused.
+
+## DIV-049
+
+**Target**: `README.md`, the flag table of `database add` and `update`.
+**Kind**: contradiction.
+
+**Status**: due, checked on 2026-09-11. The table stands with eight rows, and
+neither flag is among them.
+
+
+
+*Says*: the flags of `add` and `update` are `--dsn`, `--host`, `--port`,
+`--user`, `--password`, `--password-command`, `--database` and `--tls`.
+*Specification*: `FR-CFG-027` declares nine flags for those two commands, and
+the two the table has no row for are `--ca-file`, writing
+`database.<name>.ca_file`, and `--ca-path`, writing `database.<name>.ca_path`.
+The fifth edition added the last three rows of that mapping to close `OQ-017`,
+on the ground that registering an entry against a private certificate
+authority otherwise took three invocations where the mapping promised one; the
+table carries the first of the three and neither of the others. `FR-CFG-047`
+adds that none of the three carries a short form.
+*Correction*: add a row for `--ca-file` and one for `--ca-path`. The table's
+own `--tls` row makes the omission cost more than it looks: that row already
+names `verify-ca` and `verify-identity`, and `FR-CONF-014` makes those the two
+modes the trust material serves, so the table sends a reader to a mode and
+withholds the flags that configure it.
+
+*Not covered by `DIV-003` or `DIV-018`.* `DIV-003`'s correction does name
+`--ca-file` and `--ca-path`, among "the other flags of those two commands",
+but it names them only to say that none of them carries a short form and asks
+for nothing to be added. `DIV-018` asks for `ca_file` and `ca_path` to be
+added to the `.cfg` example, which is the configuration file and not this
+table; that half of `DIV-018` is still due, and discharging it in full would
+leave this entry standing.

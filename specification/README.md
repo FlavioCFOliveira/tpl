@@ -14,15 +14,17 @@ defers to another document for its meaning.
 `README.md` at the repository root is the entry door to the repository.
 `CLAUDE.md` at the repository root is agent coordination. Neither carries
 functional requirements. Where either still repeats functional content that this
-specification now owns, the divergence is recorded in
-[upstream-divergences.md](upstream-divergences.md) and the duplicate must be
-removed from those files. That register is re-read against both files whenever
-either of them changes, and every entry records whether the correction is still
-owed and, where it is not, the commit that discharged it.
+specification now owns, contradicts it, or states as present something the
+repository does not contain, the divergence is recorded in
+[upstream-divergences.md](upstream-divergences.md) and the passage must be
+corrected in those files. That register is re-read against both files whenever
+either of them changes — for entries the files have discharged and for
+divergences it does not yet hold — and every entry records whether the
+correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifteen editions. All are in force; each
+The specification has been written in sixteen editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -855,7 +857,7 @@ is raised or reopened.** The index of
 
 ### Fifteenth edition — a register nobody re-read
 
-[upstream-divergences.md](upstream-divergences.md) records forty-five
+[upstream-divergences.md](upstream-divergences.md) recorded forty-five
 corrections owed to the root `README.md` and the root `CLAUDE.md`, and no
 edition had re-read it against those files since the files changed. `DIV-031`
 asks for the removal of the clause that admitted `SHOW` as a way to read the
@@ -873,11 +875,12 @@ files, and discharging an entry by making its correction is not what this
 edition did.
 
 - **Every entry carries a Status, and the index carries a Status column** —
-  [upstream-divergences.md](upstream-divergences.md). Each of the forty-five is
-  classified against the current text of the file its **Target** names, as that
-  file stood at `87dd6e3`: **ten are due in full, fourteen are discharged, and
-  twenty-one are partly discharged**. Thirty-one entries still owe something,
-  twenty-eight of them to `README.md`.
+  [upstream-divergences.md](upstream-divergences.md). Each of the forty-five
+  was classified against the current text of the file its **Target** names, as
+  that file stood at `87dd6e3`: **ten were due in full, fourteen discharged,
+  and twenty-one partly discharged**. Thirty-one entries still owed something,
+  twenty-eight of them to `README.md`. The sixteenth edition adds four entries
+  and those figures are its own; the register's own count is in its Overview.
 - **A discharged entry names the commit that discharged it.** Twelve were
   discharged outright by `0ea5624`, which reduced `CLAUDE.md` to agent
   coordination, and that same commit discharged one half of nineteen more; one
@@ -939,6 +942,100 @@ nothing would have brought a reader back to it.
 a requirement: it describes a file this corpus does not own, so it decays
 whenever somebody else edits that file, and no reference check, recount or
 sweep of this corpus can see it happen.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
+### Sixteenth edition — the entries a swept register did not hold
+
+The fifteenth edition re-read every entry of
+[upstream-divergences.md](upstream-divergences.md) against the two root
+documents and classified all forty-five. It did not ask whether forty-five was
+all of them. A reading of the root `README.md` against this corpus, made for
+another purpose, found four divergences that no entry asks for, and the first
+of them is the first instruction in that file a reader acts on. This edition
+records the four and writes down the check that would have found them.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.** No
+root document is edited either, for the reason the fifteenth edition gave: this
+corpus does not hold the pen on those two files, and recording a correction is
+not making it.
+
+- **Four entries are added, and all four are due** — `DIV-046` through
+  `DIV-049`, each checked against `README.md` at `87dd6e3`, which is still the
+  last commit to touch either root document and so the same state the fifteenth
+  edition classified the other forty-five against. The register now holds
+  forty-nine entries: **fourteen due in full, fourteen discharged, twenty-one
+  partly discharged**, and thirty-five still owe something, thirty-two of them
+  to `README.md`.
+  - `DIV-046` — *Installation* tells a reader to run `cargo build --release`
+    and *Development* four more `cargo` commands, in a repository that has no
+    `Cargo.toml`. The document-scope banner says no command described below is
+    implemented yet; it does not say the crate does not exist, so a reader who
+    takes the banner at its word expects the build to work and the commands to
+    be unfinished.
+  - `DIV-047` — the flag table of `render` omits `--direct` and `--no-cache`,
+    which `FR-GLOB-021` declares on that command and `FR-GLOB-022` requires it
+    to list.
+  - `DIV-048` — the entry flag is spelled `--database`, where `FR-CFG-027`
+    names it `--schema`. The name the file uses is the global flag of
+    `FR-GLOB-001`, which `FR-GLOB-002` makes acceptable at that very node and
+    `FR-GLOB-004` gives a different meaning, so the invocation the table
+    teaches is accepted and writes the wrong key.
+  - `DIV-049` — the same table omits `--ca-file` and `--ca-path`, which
+    `FR-CFG-027` has declared since the fifth edition, while its `--tls` row
+    already names the two modes that `FR-CONF-014` says the trust material
+    serves.
+- **The register gains a third kind of entry** —
+  [upstream-divergences.md](upstream-divergences.md). **Contradiction** and
+  **Migration** both describe the relation between a root document and this
+  corpus. `DIV-046` describes the relation between a root document and the
+  repository: it contradicts no requirement, nothing is owed to this folder,
+  and acting on it fails anyway. **Overstatement** names that, and `DIV-046` is
+  the only entry carrying it. Forcing it into **Contradiction** was rejected,
+  because it would have obliged a *Specification* clause to cite a requirement
+  that does not exist.
+- **Each new entry names the existing entry it was checked against, where one
+  looks as though it covers the ground.** `DIV-023` records the same two flags
+  as missing from the **global** tables and replaces those tables with a
+  pointer; applied exactly as written it leaves the `render` table silent,
+  which is `DIV-047`'s subject. `DIV-003` names `--ca-file` and `--ca-path`,
+  but only to say that neither carries a short form, and `DIV-018` asks for
+  `ca_file` and `ca_path` in the `.cfg` example rather than in the flag table;
+  neither reaches `DIV-049`. An entry that looks covered and is not is how the
+  four came to be missing, so the check is written into the entries rather than
+  left to the next reader.
+
+**One divergence is recorded and owes nothing under these entries.** The
+project-structure tree of `CLAUDE.md` names `Cargo.toml`, `src/`, `tests/`,
+`benches/`, `templates/` and `examples/`, and the repository has none of them
+— the same divergence as `DIV-046`, in the other root document. `DIV-046`'s
+**Target** is `README.md`, and an entry is not widened to a file the survey
+that raised it did not read, so the correction needs an entry of its own. It is
+named in `DIV-046` and here so that it is not lost between them.
+
+**The fifth validation rule is extended rather than joined by a sixth**, and
+the extension is stated under *[Maintenance debt](#maintenance-debt)* beside
+it. As written, the rule obliges a register to be re-read against its target
+whenever the target changes, and an entry found discharged to record the commit
+that discharged it. That is a rule about entries that have gone stale, and it
+is silent about the divergence nobody ever wrote down. Both are the same
+obligation seen from each end — the register is true of the file or it is not
+— so the rule states both rather than splitting one obligation across two
+numbers. The extension is the third rule's lesson carried across: a record is
+assembled from every place an observation was made, not from the entries it
+already holds, and no amount of care in classifying forty-five entries
+establishes that there are forty-five.
+
+**One editorial correction to the edition above.** The fifteenth edition's
+account of itself was written in the present tense — the register *records*
+forty-five corrections, thirty-one entries *still owe* something — which was
+true of the register when that edition closed and is not true now. The figures
+are that edition's finding and are kept; the tense is put in the past, so that
+a reader does not take an edition's account of what it found for a statement
+about the register today. The register's own count is in its Overview, which is
+the one place obliged to be current.
 
 **No requirement is withdrawn, no identifier is retired, and no open question
 is raised or reopened.** The index of
@@ -1237,6 +1334,18 @@ discharged, because the tree's fixture line now describes what the directory
 holds instead of listing its files. The item below is untouched and remains
 outstanding.
 
+The sixteenth edition adds no obligation of either kind, and records none as
+discharged. It adds four entries to
+[upstream-divergences.md](upstream-divergences.md), all due and all owed to the
+root `README.md`, gives that register a third kind of entry for the one of them
+that contradicts the repository rather than a requirement, and extends the
+fifth validation rule below to cover the divergence a register does not yet
+hold. It changes no requirement. One finding is recorded rather than acted on:
+the project-structure tree of `CLAUDE.md` names a crate and five directories
+the repository does not have, which is the same divergence as `DIV-046` in the
+other root document and needs an entry of its own. The item below is untouched
+and remains outstanding.
+
 **Outstanding — two readings that differ across the window and sit under
 neither of `FR-SRV-038`'s two headings.** `FR-SRV-040` reports that the build's
 source revision differs between all four servers and that the SSL library
@@ -1337,9 +1446,11 @@ specification, read against this corpus rather than from within it.
 The fifteenth edition adds a fifth rule, learned from a register that asked for
 work done several sprints earlier. **A register of corrections owed to a file
 this specification does not own must be re-read against that file whenever the
-file changes, and an entry found discharged must record the commit that
-discharged it. The obligation is over every statement this corpus makes about
-such a file and not over a register alone**: the fifteenth edition found two
+file changes — both for the entries the file has discharged and for the
+divergences the register does not yet hold — and an entry found discharged must
+record the commit that discharged it. The obligation is over every statement
+this corpus makes about such a file and not over a register alone**: the
+fifteenth edition found two
 outside the register, in the provenance notes of `NFR-PERF-014` and
 `NFR-PERF-018`, each describing a passage of `CLAUDE.md` that `0ea5624` had
 removed. `DIV-031` asked for the removal of a clause `0ea5624` had
@@ -1357,3 +1468,15 @@ to re-derive it. A register whose entries are true only of a state nobody has
 checked since is worse than no register — it sends a reader to correct what is
 already correct, and it spends the standing of the entries that are still
 owed.
+
+*Extended in the sixteenth edition.* The rule was written over one half of the
+sweep. It obliged the register to be re-read for entries the target file had
+discharged, and said nothing about the divergence that had never been recorded
+at all, so a register could satisfy it in full and still be incomplete — which
+is what the fifteenth edition left behind. Four divergences of the root
+`README.md` had no entry, and the reading that found them was made for another
+purpose and could as easily not have been made. The clause now names both
+directions. This is the third rule's lesson in a second setting: counting a
+record's own rows correctly, or classifying a register's own entries
+correctly, establishes nothing about whether either is complete against the
+thing it describes.
