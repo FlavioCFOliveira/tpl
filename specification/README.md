@@ -24,10 +24,10 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixteen editions. All are in force; each
-adds to the ones before it and amends them in place, and every amendment
-carries an *Amended in the nth edition* note beside the requirement it
-changes.
+The specification has been written in seventeen editions. All are in force;
+each adds to the ones before it and amends them in place, and every
+amendment carries an *Amended in the nth edition* note beside the
+requirement it changes.
 
 ### First edition — the command-line surface
 
@@ -1222,6 +1222,109 @@ Nothing in `DIV-046` changes: the entry itself never carried the wrong figure.
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Seventeenth edition — the candidate that was policy and not state
+
+The sixteenth edition swept `CLAUDE.md` for passages that state as present
+something the repository does not contain, registered four of them, and named
+one candidate it did not register: *Plataformas Suportadas* calls Linux and
+macOS "suportados e **verificados**" and says of the other Unixes that they do
+not run in validation, where nothing has been run on any target. It left the
+judgement to a reading of that section, and said in as many words that the seam
+was therefore not closed. **This edition is that reading. It registers nothing,
+and that is its result.**
+
+**The passage declares an intention; it does not assert a state.** The reading
+and its four grounds are recorded at *[A candidate read, and not
+recorded](upstream-divergences.md#a-candidate-read-and-not-recorded)*, at the
+foot of the register, and the grounds are these. The section says two
+paragraphs below the adjective that the concrete matrix of targets is an
+architecture decision still open, and a section that declines to name the
+triples cannot earlier be reporting that artefacts were verified on them. The
+presupposition sits inside a three-part rule whose payload is its third
+part — a problem seen only on an unsupported Unix does not fail a change —
+which is deontic throughout. The section states in its first sentence that its
+job is to bound what the code may assume, and every other sentence in it does
+that job. And this corpus states verification in the same mode in the very
+requirement the passage would be measured against: `NFR-PERF-005` says of a
+clause of itself that it "SHALL be verified on every target of
+`NFR-PERF-018`", and the eleventh edition's note
+under `NFR-PERF-018` says every requirement of that file is verified on all
+four targets — written when nothing had been run, and true today, because what
+it states is the reach of an obligation and not a history of runs. A corpus
+cannot record as an overstatement, in a document it does not own, a mode of
+statement it uses itself in force.
+
+**The decision record was the strongest argument the other way, and it does not
+carry.** `ADR-008` records that no `musl` artefact has been run outside a
+container and marks that expectation unverified, so if `CLAUDE.md` asserted a
+verification the two would contradict each other on a matter of fact. That
+record does not read the file that way: it calls the five-command sequence one
+the root coordination document **mandates** and lists the no-second-class rule
+among four obligations **carried by hand** until a pipeline exists. What it
+marks unverified is also narrower than the passage, and both halves of it are
+claims about baselines under `NFR-PERF-012`, which is a different section of
+`CLAUDE.md` and one `DIV-041` has already read and found correct.
+
+**Nothing is registered, and the register says so where a reader will find
+it.** The finding is recorded in three places in
+[upstream-divergences.md](upstream-divergences.md), because a conclusion that
+nothing is owed leaves no trace otherwise and is re-opened from scratch by the
+next reader: a paragraph in the Overview beside the definition of the third
+kind, a line under the Index where the absent row would be, and a forward link
+at the foot of `DIV-052`, which is the entry that named the candidate. The
+alternative — an entry with a **Status** of *due* for a correction nobody can
+make — was rejected, because it would weaken the four entries that stand by
+putting a manufactured fifth beside them.
+
+**One caution is owed to `DIV-041`, which targets that section on other
+grounds.** That entry is a migration about the deferral of the target matrix,
+and its correction replaces the deferral with a pointer to `NFR-PERF-018`.
+Making it removes the first of this reading's four grounds, so whoever holds
+the pen re-reads the adjective in the section the correction leaves behind: a
+sentence calling four named triples *verificados* is a stronger claim than the
+one read here. One observation is named and not acted on for the same entry —
+the sentence naming Linux and macOS on two architectures states coarsely what
+`NFR-PERF-018` now fixes exactly, and whether that is two sources for one truth
+is a question about `DIV-041`'s target and kind rather than about this reading.
+
+**The class is exhausted in `CLAUDE.md`, and the claim is verified rather than
+inherited.** The whole file was swept again instead of the sixteenth edition's
+answer being trusted, on the rule that edition acted on — a claim that a class
+is exhausted is worth only the sweep behind it, and the sixteenth edition's own
+sweep is what found the entries the fifteenth had missed. Every path, file and
+artefact the document names was tested against the working tree at `87dd6e3`,
+still the last commit to touch either root document, and all exist but those
+already recorded under `DIV-050`, `DIV-051` and `DIV-052`. Two
+further passages were read on their own and are not of the kind: the workflow
+step and the language rule that name a `CHANGELOG` the repository has not got,
+which are directions rather than claims and which the technical specification
+already records as prescribed and not yet observable; and the routing sentence
+of *Desempenho e Eficiência*, which names `BENCHMARKS.md` and describes it as
+that file describes itself. **So the seam is shut**: four passages registered
+in `CLAUDE.md`, one in the root `README.md` under `DIV-046`, and the candidate
+read and dismissed with its reason.
+
+**Why this is an edition and not an addition to the sixteenth.** Three entries
+were added to that edition after it was written — `DIV-050`, `DIV-051` and
+`DIV-052` — each on the ground that what was outstanding was the entry alone:
+the finding, the kind and the placement had all been settled there, and an
+edition whose whole content was *write down what the edition before it had
+already found* would turn the edition record into a log of working sessions.
+That ground does not reach this reading, and it argues the other way. The
+sixteenth edition did not make this finding; it recorded that it could not, and
+deferred the judgement to a reading it had not made. What this edition adds is
+that judgement, the criterion that produced it — a passage that directs is not
+a passage that asserts, and the test of the third kind is whether a reader who
+acts on it fails — and a completeness claim the edition before it declined to
+make. An edition records what this corpus learned, and this corpus did not know
+any of the three.
+
+**No requirement is added, amended or withdrawn, no identifier is retired, and
+no entry is added to the register.** The index of
+[open-questions.md](open-questions.md) stays empty, and no root document is
+edited: this corpus does not hold the pen on those two files, and judging that
+a passage needs no correction is not making one.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -1540,6 +1643,23 @@ asserts a state or names a class is a judgement for a reading of that section.
 It is an observation about a file this corpus does not own, so it is debt only
 in the sense `DIV-036` is, and it blocks nothing here. The item below is
 untouched and remains outstanding.
+
+The seventeenth edition adds no obligation of either kind, adds no entry to
+[upstream-divergences.md](upstream-divergences.md), and changes no
+requirement. It **discharges the observation the sixteenth edition named and
+could not judge**: the reading of *Plataformas Suportadas* finds that
+"suportados e verificados" declares a policy rather than asserting a state, so
+nothing is owed for it and no entry is opened; the reading, its four grounds
+and the sweep that closes the **Overstatement** class in `CLAUDE.md` are at
+*[A candidate read, and not
+recorded](upstream-divergences.md#a-candidate-read-and-not-recorded)*. One
+caution is left with `DIV-041`, whose correction to that same section removes
+the first of those grounds and therefore obliges whoever makes it to re-read
+the adjective it leaves behind; and one observation is named and not acted on,
+that the section's sentence naming Linux and macOS states coarsely what
+`NFR-PERF-018` fixes exactly. Both are about a file this corpus does not own,
+so neither is debt here in any other sense than `DIV-036` is. The item below
+is untouched and remains outstanding.
 
 **Outstanding — two readings that differ across the window and sit under
 neither of `FR-SRV-038`'s two headings.** `FR-SRV-040` reports that the build's

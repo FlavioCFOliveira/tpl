@@ -52,6 +52,14 @@ headings that are each other's translation, once in each root document.
 in the directory its passage names, and the fixture they are said to run
 against is itself incomplete, which is what `DIV-036` still owes.
 
+*The seventeenth edition closes that kind in `CLAUDE.md`* and adds no entry to
+it. The sixteenth edition's sweep left one candidate in that file unjudged —
+the *verificados* of *Plataformas Suportadas* — and the reading of that section
+finds that it declares a policy rather than asserting a state, so nothing is
+owed for it. That reading, and the sweep establishing that no other passage of
+the kind is left in the file, are at *[A candidate read, and not
+recorded](#a-candidate-read-and-not-recorded)*.
+
 The two kinds above were written when every entry described the relation
 between a root document and this corpus. An entry that describes the relation
 between a root document and the repository has no home among them, and
@@ -208,6 +216,12 @@ discharges, and it is the reason this file's remaining work is almost entirely
 | [DIV-050](#div-050) | `CLAUDE.md` | Overstatement | Due | The project tree, in a repository with no crate |
 | [DIV-051](#div-051) | `CLAUDE.md` | Overstatement | Due | The eight `cargo` commands, in a repository with no crate |
 | [DIV-052](#div-052) | `CLAUDE.md` | Overstatement | Due | The benchmark directory, in a repository with no benchmarks |
+
+One passage of `CLAUDE.md` was read and found not to be a divergence, so it
+has no entry and no row above. The reading and its grounds are at
+*[A candidate read, and not recorded](#a-candidate-read-and-not-recorded)*,
+at the foot of this file, with the sweep that closes the **Overstatement**
+class in that file.
 
 ## DIV-001
 
@@ -1871,3 +1885,179 @@ grounds, for its deferral of the target matrix, and does not reach. It is named
 here and not recorded, on the rule the three entries before this one each kept.
 **So the class is not closed in this file by this entry**: four of its passages
 are recorded, and one candidate is left for a reading of its own.
+
+*That reading was made in the seventeenth edition* and is recorded at
+*[A candidate read, and not recorded](#a-candidate-read-and-not-recorded)*.
+It finds the candidate declares a policy rather than asserting a state, so no
+entry is owed for it, and it closes the class in this file by a sweep of its
+own rather than by this entry.
+
+## A candidate read, and not recorded
+
+The sixteenth edition's sweep of `CLAUDE.md` named one passage and did not
+record it, on the ground that the judgement it needed was a reading of the
+section it sits in. This is that reading, made in the seventeenth edition.
+**It finds that the passage declares an intention rather than asserting a
+state, so there is no entry to open.** The finding is written here, beside the
+entries, because a conclusion that nothing is owed leaves no trace otherwise
+and the question is re-opened from scratch by the next reader — which is the
+failure the fifth validation rule of [README.md](README.md#maintenance-debt)
+was written against, seen from its other end.
+
+*The passage.* *Plataformas Suportadas* states that "Os sistemas suportados e
+**verificados** são o **Linux** e o **macOS**, nas arquitecturas **arm64** e
+**amd64**", and says of the other Unixes that they "devem funcionar ... mas
+**não são testados nem garantidos**: não entram na matriz, não correm em
+validação, e um problema que só neles se manifeste não reprova uma alteração."
+The second clause presupposes that the four targets do enter the matrix and do
+run in validation. **Nothing has been run on any target.** The validation that
+would do it is the five-command pipeline `DIV-051` records as unable to run at
+all for want of a manifest, and `docs/adr/adr-008-packaging-and-build-path.md`
+records separately that no `musl` artefact has been run outside a container and
+marks that expectation **unverified**.
+
+*The judgement rests on four grounds.*
+
+**First, the section says two paragraphs later that the matrix is not
+decided.** "A matriz concreta de alvos — target triples, escolha de libc,
+linkagem e forma de empacotar o binário — é decisão de arquitectura em curso e
+**não se fixa aqui**." A verification is of an artefact on a target, and a
+target is a triple with a libc and a linkage. A section that declines to name
+the triples cannot, earlier in itself, be reporting that artefacts were
+verified on them. The state reading makes the section contradict itself; the
+policy reading makes it coherent.
+
+**Second, the presupposition sits inside a rule, and the rule's payload is its
+third limb.** "Não entram na matriz, não correm em validação, e um problema que
+só neles se manifeste não reprova uma alteração" is one thought in three parts,
+and the third states what fails a change. A statement of what gates a change is
+deontic throughout; the two limbs before it state the policy that yields the
+third, not a history of runs.
+
+**Third, the section says in its first sentence what it is for**, and it is not
+reporting: "É essa a família de sistemas para que se escreve, e é a fronteira
+que delimita o que o código pode assumir." Every other sentence does that job —
+Windows is out of scope, the BSDs are not guaranteed, the triples are
+deferred — and the subsection under it is six rules in the deontic. So does the
+adjective: it marks the four as the systems that carry the project's
+undertaking of verification, against the Unixes that carry none, which is the
+contrast the sentence is built on. Read as a report it would be a report naming
+no target, no date, no artefact and no result, which is not a report.
+
+**Fourth, this corpus states verification in the same mode, in the requirement
+the passage would be measured against.** `NFR-PERF-005` in
+[performance-requirements.md](performance-requirements.md) says of a clause
+of itself that it "SHALL be verified on every target of `NFR-PERF-018`", and
+the eleventh-edition note
+under `NFR-PERF-018` states that "every requirement of this file is still
+verified on all four targets" — written when nothing had been run, and true
+today for the same reason, because what it states is the reach of the
+verification obligation and not a history of runs. This corpus cannot record as
+an overstatement in a document it does not own a mode of statement it uses
+itself, in force, in the requirement that document's sentence would be checked
+against.
+
+*Why the decision record does not carry the other way.* `ADR-008` marks the
+expectation unverified, and if `CLAUDE.md` asserted a verification the two
+would contradict each other on a matter of fact. That record does not read the
+file that way. It calls the five-command sequence one that the root
+coordination document **mandates**, and lists the no-second-class rule of
+`NFR-PERF-018` among four obligations **carried by hand** until a pipeline
+exists — the deontic reading, taken by the record best placed to take it. What
+it marks unverified is also narrower than the passage: that no `musl` artefact
+has run outside a container, and that the two `x86_64` targets have never been
+measured. Both are claims about baselines under `NFR-PERF-012`, and the
+sentence of `CLAUDE.md` that carries that rule is in another section, where
+`DIV-041` has already read it and found it correct.
+
+*What this kind is, and why the passage is not of it.* The **Overstatement**
+kind states its own test in the Overview: nothing is owed to this folder, no
+requirement is contradicted, and what is wrong is that **a reader who acts on
+the passage fails**. The four entries that carry the kind each name something
+to act on — a build sequence that fails, a tree of paths that open onto
+nothing, eight commands that cannot run, a directory that is not there. This
+passage names no path, no command and no artefact. There is nothing in it to
+act on, and what a state reading of it would produce is a false belief rather
+than a failed action. Manufacturing an entry for it would put a **Status** of
+*due* on a correction nobody can make and weaken the four that stand.
+
+*The relation to `DIV-041`, which targets the same section.* That entry is a
+**migration** and its subject is the deferral of the target matrix: its *Says*
+quotes the deferral sentence and the two rules beside it, its correction
+replaces the deferral with a pointer to `NFR-PERF-018`, and nothing in it turns
+on whether verification has happened. It does not reach the adjective, and the
+adjective does not reach it. **What this reading owes `DIV-041` is one
+caution.** The correction that entry asks for fixes the matrix in the section,
+which removes the first of the four grounds above; whoever makes it re-reads
+the adjective in the section it leaves behind, because a sentence calling four
+named triples *verificados* is a stronger claim than the one read here, and it
+would be read against a repository in which the pipeline may by then run on
+some targets and not others.
+
+*One observation this reading does not own.* The sentence naming Linux and
+macOS on two architectures states, coarsely, what `NFR-PERF-018` now fixes
+exactly, and `DIV-041`'s correction names the deferral and the two rules beside
+it rather than that sentence. Whether a coarse statement of the supported
+systems left standing beside a pointer to `NFR-PERF-018` is two sources for one
+truth is a question about that entry's **Target** and **Kind**, not about this
+one: this reading was authorised over the adjective and over the sweep below,
+and reaching past its own reading is the defect the four entries of the kind
+each keep clear of. It is named here so that it is not lost.
+
+*The class is exhausted in `CLAUDE.md`, and this is the sweep behind the
+claim.* The whole file was read again against the question rather than the
+sixteenth edition's answer taken on trust, for the reason that edition gave:
+a claim that a class is exhausted is worth only the sweep behind it, and the
+sixteenth edition's own sweep is what found the candidate the fifteenth had
+missed. Every path, file and artefact `CLAUDE.md` names was tested against the
+working tree as it stands at `87dd6e3`, still the last commit to touch either
+root document. All exist but the ones already recorded: the twenty-four files
+of this folder its subject table points to, the `README.md` of this folder it
+starts from, `BENCHMARKS.md`, `knowledge-model.md`, `docs/adr/`, the `OD-09`,
+`OD-17` and `OD-24` of `docs/spec-technical/open-decisions.md` that its Stack
+table cites, and `scripts/mariadb/` with its Dockerfile, `setup.sql`,
+`seed.sql` and TLS material. What is absent is `Cargo.toml`, `src/` and its
+seven children, `templates/`, `tests/`, `benches/` and `examples/` —
+`DIV-050` for the tree and for the paragraph under it that speaks of `model/`
+in the present indicative, which that entry's *Says* already names, `DIV-051`
+for the eight commands, and `DIV-052` for the benchmark directory. `DIV-032`
+reads the same paragraph on other grounds, where it calls the structs of
+`model/` the documented public surface. The passages stating
+`#![forbid(unsafe_code)]`, `#![warn(missing_docs)]`, the release profile, the
+module conventions and the separation of library from binary direct how code is
+to be written and assert nothing about the working tree, which is the reading
+`DIV-050` gives the lines of the tree it leaves alone.
+
+**Two further passages were read on their own and are not of the kind.**
+
+- **The changelog.** Step 4 of *Fluxo de Trabalho* says to update "README, doc
+  comments e CHANGELOG", and *Documentação* names a `CHANGELOG` among the
+  documents written in English. The repository holds no `CHANGELOG.md`. Both
+  passages are directions rather than claims: step 4 is reached only after step
+  2 has written code, and the other is a rule about the language all project
+  documentation is written in. Neither sends a reader to a path. The record
+  outside this corpus reads them the same way — `OD-03` of
+  `docs/spec-technical/open-decisions.md` says `CLAUDE.md` "names one in its
+  workflow" and settles only its format, and
+  `docs/spec-technical/data-model.md` records that neither `Cargo.toml` nor
+  `CHANGELOG.md` exists at this commit and that the rows resting on them are
+  prescribed and not yet observable.
+- **The routing sentence of *Desempenho e Eficiência*.** It states that the
+  required properties live in
+  [performance-requirements.md](performance-requirements.md) and that "as
+  baselines efectivamente medidas vivem em `BENCHMARKS.md`". It lies outside
+  the subsection `DIV-052` targets and was therefore read on its own. It names
+  a file that exists and describes it as that file describes itself — the
+  register of measured baselines for `tpl`, carrying only what was actually
+  measured — so it sends a reader somewhere real and tells them truly what is
+  there. That no figure in it is yet a baseline for `tpl` is that file's own
+  statement, made entry by entry; the sentence of `CLAUDE.md` that does assert
+  benchmarks exist is in the *Disciplina de medição* subsection below it, and
+  is `DIV-052`'s.
+
+**So the class is closed in `CLAUDE.md`**: four passages are recorded there,
+`DIV-046` holds the one in the root `README.md`, and the candidate the
+sixteenth edition left is read here and is not one. The claim is true of the
+file at `87dd6e3` and of no later state of it: by the fifth validation rule it
+stops being true the moment the file is edited, and the sweep is owed again
+then.
