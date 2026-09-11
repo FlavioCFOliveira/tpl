@@ -964,13 +964,13 @@ root document is edited either, for the reason the fifteenth edition gave: this
 corpus does not hold the pen on those two files, and recording a correction is
 not making it.
 
-- **Six entries are added, and all six are due** — `DIV-046` through
-  `DIV-051`, each checked against its target file at `87dd6e3`, which is still
+- **Seven entries are added, and all seven are due** — `DIV-046` through
+  `DIV-052`, each checked against its target file at `87dd6e3`, which is still
   the last commit to touch either root document and so the same state the
   fifteenth edition classified the other forty-five against. The register now
-  holds fifty-one entries: **sixteen due in full, fourteen discharged,
-  twenty-one partly discharged**, and thirty-seven still owe something,
-  thirty-two of them to `README.md` and six to `CLAUDE.md`.
+  holds fifty-two entries: **seventeen due in full, fourteen discharged,
+  twenty-one partly discharged**, and thirty-eight still owe something,
+  thirty-two of them to `README.md` and seven to `CLAUDE.md`.
   - `DIV-046` — *Installation* tells a reader to run `cargo build --release`,
     and *Development* gives eight `cargo` commands, in a repository that has no
     `Cargo.toml`. The document-scope banner says no command described below is
@@ -1003,16 +1003,24 @@ not making it.
     records of the other file's *Development*, and `DIV-001` leaves the
     pipeline with `CLAUDE.md`, so what is owed is a qualifier on the two blocks
     and not the removal of a command.
+  - `DIV-052` — the *Disciplina de medição* subsection of `CLAUDE.md` states
+    that the benchmarks live in `benches/` and run against the containers'
+    dataset, in a repository with no such directory and no benchmark of any
+    kind. The measurement discipline stated beside it is in force and is
+    stated correctly, so what is owed is a qualifier on one clause. It is the
+    third of this edition's entries against that file, and the only one of the
+    four that needs a second fact besides the missing crate: the fixture the
+    sentence invokes is in part what `DIV-036` still owes.
 - **The register gains a third kind of entry** —
   [upstream-divergences.md](upstream-divergences.md). **Contradiction** and
   **Migration** both describe the relation between a root document and this
   corpus. `DIV-046` describes the relation between a root document and the
   repository: it contradicts no requirement, nothing is owed to this folder,
-  and acting on it fails anyway. **Overstatement** names that, and three
-  entries carry it — `DIV-046` against the root `README.md`, and `DIV-050` and
-  `DIV-051` against `CLAUDE.md`. Forcing them into **Contradiction** was
-  rejected, because it would have obliged a *Specification* clause to cite a
-  requirement that does not exist.
+  and acting on it fails anyway. **Overstatement** names that, and four
+  entries carry it — `DIV-046` against the root `README.md`, and `DIV-050`,
+  `DIV-051` and `DIV-052` against `CLAUDE.md`. Forcing them into
+  **Contradiction** was rejected, because it would have obliged a
+  *Specification* clause to cite a requirement that does not exist.
 - **Each new entry names the existing entry it was checked against, where one
   looks as though it covers the ground.** `DIV-023` records the same two flags
   as missing from the **global** tables and replaces those tables with a
@@ -1104,18 +1112,80 @@ findings the edition before it had already made* would turn the edition record
 into a log of working sessions, and doing it twice from one edition's backlog
 would make the point twice over.
 
-**One finding is recorded rather than acted on in turn.** The *Disciplina de
-medição* subsection of `CLAUDE.md` states that the benchmarks live in
-`benches/` and run against the dataset of the MariaDB containers. `benches/` is
-one of the six paths `DIV-050` records as absent and there are no benchmarks to
-live in it, so the sentence is the same class of claim as the two command
-blocks, in the present indicative with nothing around it to carry a tense. No
-entry covers it: `DIV-035` was the performance budget table and is discharged,
-and `DIV-036` targets the project tree and the MariaDB testing section, where
-what it still owes is `seed-bench.sql` and the sentence that ought to name it.
-It is named in `DIV-051`, was not recorded under it because the reading that
-raised that entry was authorised over the eight commands, and needs an entry of
-its own.
+**The third divergence this edition recorded rather than acted on now has an
+entry too.** `DIV-051` named, and did not record, the *Disciplina de medição*
+subsection of `CLAUDE.md`, which states that the benchmarks live in `benches/`
+and run against the dataset of the MariaDB containers. The repository has no
+such directory and no benchmark of any kind, and `BENCHMARKS.md` does not stand
+in for them: its two campaigns measured probe binaries this repository does not
+hold, and it says of itself that no figure in it is a baseline for `tpl`.
+`DIV-052` is the entry that sentence needed.
+
+**It is the third of this edition's entries against `CLAUDE.md`, and the
+criterion that placed it is the one `DIV-051` settled**: the shape of the
+correction decides where an entry goes, not the proximity of the passages. Here that criterion cuts against
+proximity rather than with it. *Disciplina de medição* sits some fifty lines
+below the head of *Desenvolvimento*, in the very next top-level section, so
+nearness argues for a merge as loudly as distance argued against one in
+`DIV-046`; what decides is that no one correction serves both. A qualifier at
+the head of *Desenvolvimento* does not reach a subsection of *Desempenho e
+Eficiência*, and the two discharge on different conditions: `DIV-051`'s eight
+commands run unchanged the moment the manifest exists, while this sentence does
+not become true with a manifest, because a benchmark has to be written and what
+it is said to run against is not complete. The passages are also edited apart,
+which `87dd6e3` demonstrates for both — it rewrote the project tree and touched
+neither.
+
+**The correction preserves the measurement discipline.** No performance claim
+without numbers, the baseline recorded in `BENCHMARKS.md` against a named
+target, and a regression failing the change are obligations in force today, and
+they governed both campaigns that file already holds; `NFR-PERF-009` through
+`NFR-PERF-013` and `NFR-PERF-017` carry the same rules in this corpus, and
+`DIV-035` left the discipline with `CLAUDE.md` when it took the figures out.
+What is wrong is the assertion of state in front of it, so `DIV-052` asks for a
+qualifier on one clause and says in as many words that neither the discipline
+nor the location is to be removed. An entry read as *drop the benchmark rule*
+would take the project's only statement of what fails a change out of the file
+every agent reads first.
+
+**The relation to `DIV-036` is written in both directions, and neither covers
+the other.** That entry is partly discharged and still owes
+`scripts/mariadb/seed-bench.sql` with the two lines that name it; `WL-001` is
+realised by that file, and `BR-PERF-007` records that the budgets over it
+cannot be measured until it exists. So the dataset the sentence promises
+reproducibility against is in part what `DIV-036` owes. But `DIV-036` is a
+**migration** whose correction is an addition, and applied exactly as written
+it leaves the sentence standing; `DIV-052` is an **overstatement** whose
+correction is a qualifier, and it produces no fixture.
+
+**This entry is added to this edition rather than opening a seventeenth**, for
+the reason `DIV-050` and `DIV-051` were, and the reason is stronger the third
+time. What was outstanding was the entry alone: the finding, the kind, the file
+it is owed to, the entries checked against it, and the fact that it needed an
+entry of its own were all recorded here and in `DIV-051` when this edition was
+written, and its placement was settled by applying a rule this edition had
+already stated three times. An edition records what this corpus learned;
+opening one to hold the last of three findings the edition before it had
+already made would turn the edition record into a log of working sessions.
+
+**Whether any passage of this class is left in `CLAUDE.md` was checked, and one
+candidate stands.** The whole file was read against the question rather than
+trusted to the previous reading, because a claim that a class is exhausted is
+worth only the sweep behind it. Every other path, file and artefact that
+document names exists, and its passages on `#![forbid(unsafe_code)]`,
+`#![warn(missing_docs)]`, the release profile and the module conventions direct
+how code is to be written rather than assert what the tree holds. One passage
+is not settled by that reading: *Plataformas Suportadas* calls Linux and macOS
+"suportados e verificados" and says of the other Unixes that they do not run in
+validation, which presupposes that the four targets do, where the validation
+that would do it is the pipeline `DIV-051` records as unable to run at all. It
+is an adjective inside a declaration of policy rather than a block a reader
+executes, and whether it asserts a state or names a class is a judgement for a
+reading of that section, which `DIV-041` targets on other grounds and does not
+reach. **It is named and not recorded**, on the rule all four entries keep: an
+entry does not reach past the reading that raised it. So the seam is not
+declared closed — four passages of the class are registered, and one candidate
+is left for a reading of its own.
 
 **The fifth validation rule is extended rather than joined by a sixth**, and
 the extension is stated under *[Maintenance debt](#maintenance-debt)* beside
@@ -1446,25 +1516,30 @@ holds instead of listing its files. The item below is untouched and remains
 outstanding.
 
 The sixteenth edition adds no obligation of either kind, and records none as
-discharged. It adds six entries to
+discharged. It adds seven entries to
 [upstream-divergences.md](upstream-divergences.md), all due — four owed to the
-root `README.md` and two to `CLAUDE.md` — gives that register a third kind of
-entry for the three of them that contradict the repository rather than a
+root `README.md` and three to `CLAUDE.md` — gives that register a third kind of
+entry for the four of them that contradict the repository rather than a
 requirement, and extends the fifth validation rule below to cover the
-divergence a register does not yet hold. It changes no requirement. Both
+divergence a register does not yet hold. It changes no requirement. All three
 findings it first recorded rather than acted on have been acted on. The
 project-structure tree of `CLAUDE.md` names a crate and five directories the
 repository does not have, and `DIV-050` is the entry that divergence needed;
 the eight `cargo` commands of that file's *Desenvolvimento* section and of the
 validation pipeline under it fail in this repository for the reason `DIV-046`
-records of *Development* in the other file, and `DIV-051` is theirs. The two
-are recorded apart because the corrections differ and the passages are edited
-apart, which is set out above. One finding is recorded rather than acted on in
-turn — the *Disciplina de medição* subsection of the same file, which says the
-benchmarks live in `benches/`, a directory the repository has not got, and
-where no benchmark exists to live. It is named in `DIV-051`, which was raised
-over the eight commands and does not reach it, and it needs an entry of its
-own. The item below is untouched and remains outstanding.
+records of *Development* in the other file, and `DIV-051` is theirs; the
+*Disciplina de medição* subsection of the same file says the benchmarks live in
+`benches/`, a directory the repository has not got and where no benchmark
+exists to live, and `DIV-052` is its. The three are recorded apart because the
+corrections differ and the passages are edited apart, which is set out above.
+One observation is named and not recorded: the sweep that asked whether any
+passage of that class is left in `CLAUDE.md` found one candidate of a different
+shape — *Plataformas Suportadas* calls Linux and macOS "suportados e
+verificados" where nothing has been verified on any target — and whether that
+asserts a state or names a class is a judgement for a reading of that section.
+It is an observation about a file this corpus does not own, so it is debt only
+in the sense `DIV-036` is, and it blocks nothing here. The item below is
+untouched and remains outstanding.
 
 **Outstanding — two readings that differ across the window and sit under
 neither of `FR-SRV-038`'s two headings.** `FR-SRV-040` reports that the build's
