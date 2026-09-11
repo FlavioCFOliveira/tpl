@@ -890,11 +890,18 @@ four running servers **report**, and this difference is in what each server
 **accepts**, which is settled before any server can be compared with another.
 It is difference 14 below, and it takes the total to **fourteen**.
 
+**One condition of observation changed between the occasions, and one row
+turns on it.** The fixture carried no TLS material of its own when the first
+two passes ran, and carried it by the fourth, whose bounded claim records that
+the four servers offer TLS. Difference 3 is the only row whose reading any
+setting of the fixture can move — which is checked below the table — and it
+names the condition it was taken under. No other row needs one.
+
 | # | Observed | `12.3` | `11.8` | `11.4` | `10.11` | What it obliges |
 |---|---|---|---|---|---|---|
 | 1 | Default server collation, which propagates into the session collation recorded against every view, routine and trigger | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_uca1400_ai_ci` | `utf8mb4_general_ci` | Passed through verbatim, `FR-SRV-039`; excepted from `FR-SRV-026`. Registered under `FR-SRV-036`. Carried by `FR-CAT-047`, `FR-CAT-048`, `FR-CAT-050` |
 | 2 | Position of `INVISIBLE` in `SHOW CREATE TABLE`; `INFORMATION_SCHEMA.COLUMNS.EXTRA` is `INVISIBLE` on all four | after the default | after the default | before the default | before the default | Nothing. `FR-SRV-007` bars `SHOW`, so the difference cannot reach `tpl` |
-| 3 | `have_ssl` | `YES` | `YES` | `YES` | `DISABLED` | A supported series may offer no TLS at all. `FR-CONF-038` |
+| 3 | `have_ssl`, on a server **left to itself**, with no TLS material configured for it | `YES` | `YES` | `YES` | `DISABLED` | A supported series may offer no TLS at all. `FR-CONF-038`, which states that condition and obliges the fixture to configure a certificate at every series — see below |
 | 4 | A temporary table in `INFORMATION_SCHEMA.TABLES` after `CREATE TEMPORARY TABLE` | one row, `TABLE_TYPE='TEMPORARY'` | one row | one row | no row | Fixes the set of `table_type` values a server can emit. `FR-CAT-031`, `FR-CAT-032` |
 | 5 | Width of `INFORMATION_SCHEMA.COLUMNS` | 24 | 24 | 24 | 22 | `FR-SRV-037`. The two extra columns are `IS_SYSTEM_TIME_PERIOD_START` and `IS_SYSTEM_TIME_PERIOD_END` |
 | 6 | Width of `INFORMATION_SCHEMA.PARAMETERS` | 17 | 16 | 16 | 16 | `FR-SRV-037`. The extra column is `PARAMETER_DEFAULT`, and `FR-CAT-049` does not carry it: it was SQL `NULL` on every parameter of the fixture on the one series that has it |
@@ -918,6 +925,66 @@ taxonomy of `BR-SRV-006` and barred the field from the model while
 is admitted, its value is carried exactly as the server returns it under
 `FR-SRV-039`, and `FR-SRV-026` excepts it. Difference 11 is the same cause
 reaching the schema's own collation, and it is registered beside it.
+
+**Difference 3 records the four servers left to themselves, and the fixture
+does not leave them that way.** `have_ssl` reports whether a server has TLS
+material to offer, and on `10.11` there is none until an administrator
+supplies it, where the other three generate a certificate of their own at
+every start — both readings are recorded under `FR-CONF-038`. That is the
+condition the row was read under, and the same requirement that states it
+obliges the fixture of `scripts/mariadb/` to present, at every series of
+`FR-SRV-015`, a server whose certificate names the host the project's tests
+reach it by. The fixture carries that material and configures it at all four
+series, so the row and the fixture describe the same servers in two different
+states. The row is the state nothing has configured, which is the state in
+which the series differ at all; what the fixture reports under the obligation
+is the fixture's own record and is not restated here.
+
+*Bounded claim.* One server of each series was read, at the four patch
+releases `FR-SRV-040` records, with no TLS material supplied to any of them by
+an administrator or by the fixture — the three that report `YES` do so on a
+certificate they generate themselves — and the reading is of `have_ssl` alone.
+Nothing was observed about a server outside the window of `FR-SRV-015`, and
+nothing here records what a server reports once a certificate is configured
+for it, which is the fixture's own state and is recorded with the fixture. The
+fifth listener of the fixture, the same `10.11` image started without TLS, is
+not a fifth series and is not counted as one.
+
+*Amended in the fourteenth edition: the row names the condition it was read
+under.* It read `have_ssl`, unqualified, against a reading taken on
+2026-09-10, before the fixture carried TLS material of its own. `FR-CONF-038`
+had stated the condition since the eighth edition and this record did not cite
+it, so a reader consulting the table for the fixture's state — which is what
+an observation record is consulted for — was told the opposite of what that
+fixture does. Nothing about the difference itself changes: `10.11` still
+offers no TLS until something configures it, and that is the whole of what
+makes it a difference between the series. What changes is that the row can no
+longer be read as a reading of the fixture as it now stands.
+
+**The other thirteen rows were checked for the same defect and none has it.**
+The check is not a re-reading of the rows against each other, which would have
+found nothing, but a reading of each row against what the fixture actually
+configures: `scripts/mariadb/` gives a server three TLS settings in one
+configuration file, the two initialisation scripts, a root password and a
+published port, and sets no other server variable on any series; one further
+listener, which is not a series, is started with TLS disabled. A row is
+exposed to this defect only where something in that list can move the value it
+records, and only `have_ssl` is in it. Differences 2, 4, 5, 6, 7, 8, 9, 12 and
+13 are properties of the server build — the text a server emits for `SHOW
+CREATE TABLE`, the width of a catalogue table, the presence of one, a declared
+type, the treatment of a temporary table, the spelling of a session variable,
+and the greeting sent before any statement — and no setting in a configuration
+file adds a column to `INFORMATION_SCHEMA` or changes what a server announces
+on connect. Differences 1 and 11 are the servers' own default collation, which
+is visible precisely because the fixture sets no character set and no
+collation anywhere; the note above records the cause, and neither row is a
+reading of anything the fixture chose. Difference 10 is a statistic over the
+fixture's own data, and its row already states the condition it was read under
+— identical data — while the fixture sets no variable governing statistics or
+query planning. Difference 14 is not a reading at all: it is what a server
+accepted at DDL time. The result is a clean negative, and it is recorded with
+its method because a sweep that finds nothing is worth only as much as the
+reader can see of how far it went.
 
 **Difference 8 splits the window in the middle rather than at one of its
 ends, and it is one of three differences in this record that do. It is recorded

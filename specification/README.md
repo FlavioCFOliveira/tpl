@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in thirteen editions. All are in force; each
+The specification has been written in fourteen editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -429,7 +429,7 @@ same pass.
   its own text, that `tpl` with default configuration cannot reach the fixture
   of `scripts/mariadb/` over TCP on any series, and that an acceptance test
   for the default mode needs a certificate that names the host. The fixture
-  provides none, so the default of `FR-CONF-013` was the one cell of a
+  provided none, so the default of `FR-CONF-013` was the one cell of a
   ten-cell table with no test. The obligation is now a requirement: the
   fixture presents, at each series of `FR-SRV-015`, a server whose certificate
   names the host, and retains a server offering no TLS for the right-hand
@@ -793,6 +793,64 @@ recorded below that table were observed to differ between two servers of the
 is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Fourteenth edition — an observation of servers nobody had configured
+
+`FR-SRV-038` records what four servers were observed to report, and one of its
+fourteen rows recorded a reading taken before this project's own fixture
+changed the thing it read. `have_ssl` is `DISABLED` on `10.11` until an
+administrator configures a certificate; `FR-CONF-038` has said so since the
+eighth edition, and it now obliges the fixture to configure one at every
+series. The row said `DISABLED` and said nothing else, so an observation record
+contradicted the fixture the observation was taken from. This edition puts the
+condition in the row and checks the other thirteen rows for the same defect.
+
+**Nothing here changes what `tpl` does, and no requirement is amended.**
+
+- **Difference 3 names the condition it was read under** —
+  [server-contract.md](server-contract.md). The row now reads `have_ssl`, on a
+  server left to itself, with no TLS material configured for it, and cites
+  `FR-CONF-038` for that condition and for the fixture obligation that lifts
+  it, rather than restating either. The difference itself is unchanged:
+  `10.11` offers no TLS until something configures it, and that is the whole
+  of what makes it a difference between the series. The row also gains a
+  bounded claim, in the form differences 13 and 14 already carry.
+- **The other thirteen rows are checked against the same defect, and none has
+  it** — `FR-SRV-038`. The check reads each row against what the fixture
+  configures rather than against the other rows: three TLS settings in one
+  file, two initialisation scripts, a root password and a published port, and
+  no other server variable on any series. Nine rows are properties of the
+  server build, two are the servers' own default collation, which the fixture
+  leaves untouched and which is visible for that reason, one is a statistic
+  over identical data and already states that condition, and one is not a
+  reading at all. Only `have_ssl` is a value the fixture sets. The negative is
+  recorded with its method, because a sweep that finds nothing is worth only
+  as much as the reader can see of how far it went.
+- **The record says which of its occasions the fixture had TLS material for**
+  — `FR-SRV-038`, *Method and date*. The first two passes ran before it and
+  the fourth after it, and difference 13's bounded claim had already recorded
+  the later state. One condition of observation was therefore not constant
+  across the five occasions, and the record now says so instead of leaving
+  each row to be read as though it were.
+- **`FR-CONF-038`'s consequence note says when it was true** —
+  [configuration-model.md](configuration-model.md). It stated in the present
+  tense that `tpl` with default configuration cannot reach the fixture over
+  TCP on any series, which the fixture's own certificate has since made false.
+  The observation and its date are unchanged; the note now bounds the claim to
+  the fixture as it then stood and records the discharge. The note that states
+  the condition cites difference 3 in return, so the two point at each other.
+- **The eighth edition's fixture obligation is recorded as discharged** —
+  *[Maintenance debt](#maintenance-debt)*. It was the one obligation that
+  edition placed outside this corpus, and `scripts/mariadb/` now carries the
+  material it asked for.
+
+**One editorial correction.** The eighth edition's entry above said *the
+fixture provides none*, in the present tense, inside a narrative of what that
+edition found; it now says *provided*, which is what it meant.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -1030,9 +1088,12 @@ series of `FR-SRV-015`, a server whose certificate names the host, without
 which the default TLS mode of `FR-CONF-013` has no acceptance test. Like
 `seed-bench.sql` under `DIV-036` it is fixture work with an owner and a
 trigger, not an open question, and no requirement of this corpus is waiting on
-it. `DIV-045`, recorded in the same edition, was a correction owed to the root
-coordination document; the ninth edition discharges it, because `FR-ERR-030` as
-amended and the profile that document states no longer contradict each other.
+it. **It is discharged**: `scripts/mariadb/` carries TLS material of its own
+and configures it at every series, and the fourteenth edition records what
+that changes for the observation record of `FR-SRV-038`. `DIV-045`, recorded
+in the same edition, was a correction owed to the root coordination document;
+the ninth edition discharges it, because `FR-ERR-030` as amended and the
+profile that document states no longer contradict each other.
 
 The ninth edition adds no obligation of either kind. Its four changes are
 corrections of wording, each stated beside the requirement it changed.
@@ -1063,6 +1124,13 @@ difference `FR-SRV-038` already obliged this corpus to hold, recomputes the
 counts that follow it, checks the twelfth edition's classification of the
 thirteen against the rows, and adds no row to the register of `FR-SRV-036`. It
 does record one item of debt, and that item is outstanding.
+
+The fourteenth edition adds no obligation of either kind, and discharges one
+recorded outside this corpus by the eighth. It corrects one row of the record
+of `FR-SRV-038`, which was true of servers nobody had configured and false of
+the servers the fixture now runs, checks the other thirteen rows against the
+same defect and finds none, and amends one note of `FR-CONF-038` for the same
+reason. The item below is untouched by it and remains outstanding.
 
 **Outstanding — two readings that differ across the window and sit under
 neither of `FR-SRV-038`'s two headings.** `FR-SRV-040` reports that the build's
@@ -1148,3 +1216,15 @@ this shape is a sweep of the corpus for observations recorded outside the
 record that owns them — every *Observed* note, every passage naming a series,
 and every statement that a server accepted or refused something — and it is
 what this edition ran.
+
+The fourteenth edition adds a fourth rule, learned from a row that was accurate
+on the day it was written. **An observation of what a server reports must
+record the conditions it was taken under wherever this project's own fixture
+can change them, and the record must be re-read whenever the fixture does
+change.** Difference 3 of `FR-SRV-038` was true of four servers nobody had
+configured and false of the four the fixture now runs, and nothing in the row
+said which it described. No reference check and no recount could find a defect
+of this shape: the row was internally coherent, cited correctly, and counted
+right. What finds it is reading the record against what has since been done to
+the thing observed, which is how this one was found — from the technical
+specification, read against this corpus rather than from within it.
