@@ -255,3 +255,18 @@ rejected options as well as the choice.
 - A contradiction between this folder and the code, or between this folder and
   `/specification`, is reported with both readings. It is never closed by
   revising this folder to match.
+- **A correction this folder records as owed to a file it does not own is
+  re-read against that file whenever that file changes, and an entry found
+  discharged records the date and the commit that discharged it.** Adopted
+  2026-09-11 from the fifth validation rule of
+  [`specification/README.md`](../../specification/README.md), unchanged in
+  substance. The reason is that
+  [open-decisions.md](open-decisions.md#corrections-owed-to-claudemd) is the
+  same kind of register and decayed the same way: three entries still asked for
+  a correction to `CLAUDE.md` that commit `ee7363d` had applied earlier the
+  same day. The trigger is the **edit to the target file**, never an edition of
+  this folder — what decays is outside this folder and decays when somebody
+  else edits it, so no check this folder can run on itself would find it. The
+  commit is the evidence: an entry that says *when* it stopped being owed can
+  be audited, where one that merely stops being listed leaves the next reader
+  to re-derive it.
