@@ -327,7 +327,7 @@ Flags for `add` and `update`:
 | `--password` | `-p` | Password, written to `.cfg`. See [What to version, and what not to](#what-to-version-and-what-not-to). |
 | `--password-command` | | Shell command whose trimmed stdout is used as the password. |
 | `--database` | | Database name on the server. |
-| `--tls <mode>` | | `disabled`, `preferred`, or `required`. Defaults to `preferred`. |
+| `--tls <mode>` | | One of `disabled`, `preferred`, `required`, `verify-ca`, or `verify-identity`. Defaults to `verify-identity`, which validates the certificate chain and the hostname. See [`FR-CONF-013`](specification/configuration-model.md). |
 
 The entry name is a label local to the project; it need not match the database name on the server.
 
