@@ -12,7 +12,8 @@ related: [README.md, traceability.md, open-decisions.md, overview.md, architectu
 How the artefact is produced, validated, released and observed: the four
 targets and what their linkage obliges, the pipeline every change passes, the
 gates a release passes, where each of the four version numbers is bumped, what
-a new project receives, and what the container fixture supplies today.
+a new project receives, what the development host has installed, and what the
+container fixture supplies today.
 
 **No measured figure and no budget appears here.** Every figure is
 `BENCHMARKS.md`'s, which `BR-PERF-006` requires; every budget, the standing of
@@ -102,7 +103,10 @@ medição*). Which measurement is valid, and when a figure becomes a limit, are
 `NFR-PERF-018` makes none of the four second class, so passing on the
 development host is not passing. Covering the other three is the second of the
 four obligations [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) records
-as carried by hand while no pipeline exists.
+as carried by hand while no pipeline exists. All four target standard libraries
+are installed on the development host
+([below](#msrv-the-development-toolchain-and-the-cross-build-path)), so what the
+obligation costs is four runs rather than a provisioning step.
 
 **Observation — `--all-features` decides what a cargo feature costs here.**
 The flag is documented as "Activate all available features of all selected
@@ -165,9 +169,55 @@ bump is also an MSRV question; and that record carries an obligation to re-run
 its rule over the shipped graph the first time the graph resolves, because only
 the direct dependencies have been read.
 
-**The development toolchain is not the pin.** It is above the floor, and it is
-the toolchain the driver selection was measured under, recorded in
-`BENCHMARKS.md` ([`ADR-007`](../adr/adr-007-msrv.md)).
+**The development toolchain is not the pin, and it is not the measured one
+either.** Three toolchain figures are distinct, all three are true at once, and
+each has exactly one home.
+
+| Figure | Where it lives | What it is |
+|---|---|---|
+| The floor | [`ADR-007`](../adr/adr-007-msrv.md), cited above and not restated | The figure the MSRV rule yields, written into `rust-version`. Below it the package does not build |
+| The current development toolchain | **Here**, in the inventory below | What the development host has installed and active today. Above the floor, and it moves whenever the host is updated |
+| The toolchain a measurement was taken under | `BENCHMARKS.md`, cited and not restated | Part of the environment of one recorded result. It does not follow the host forward |
+
+**The second and the third have already parted**: the host is one patch release
+ahead of the toolchain `BENCHMARKS.md` records for the driver selection. That is
+not a defect and it invalidates nothing —
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md) makes the build path part
+of the evidence, so a recorded figure stays attached to the environment that
+record names for it, and a re-measurement under a newer toolchain is a new
+record rather than a correction of the old. It does mean the driver measurement
+cannot be reproduced exactly on this host as it stands: the toolchain it was
+taken under is not among those installed.
+
+**What the development host has installed.** The `aarch64-apple-darwin` machine
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md) records as the host of
+record, observed on 2026-09-11 with `rustup show`, `rustc --version --verbose`
+and `cargo --version --verbose`. It is a snapshot of one machine on one date —
+not a pin, not a requirement, and re-taken rather than assumed.
+
+| Component | Observed on 2026-09-11 |
+|---|---|
+| `rustc` | 1.98.1 (`48a229cea`, 2026-09-01), LLVM 22.1.8 |
+| `cargo` | 1.98.1 (`797e8a9bc`, 2026-08-05) |
+| `rustfmt`, which command 1 runs | 1.9.0-stable |
+| `clippy`, which command 2 runs | 0.1.98 |
+| Toolchains installed | `stable`, which is both the default and the active one; `nightly-aarch64-apple-darwin`; `nightly-x86_64-unknown-linux-gnu`; `1.87.0-aarch64-apple-darwin` |
+| Targets installed | The four of `NFR-PERF-018`, all four present, and no other |
+| Components beyond the default set | `llvm-tools` |
+
+**All four targets being installed removes provisioning from the hand-carried
+obligation, and nothing else.** Covering the three non-host targets is a matter
+of running the pipeline against each, not of adding a target first; the
+obligation itself is unchanged and is still carried by a person
+([`ADR-008`](../adr/adr-008-packaging-and-build-path.md)).
+
+**The `1.87.0` toolchain is installed and is below the floor.** It is not the
+active one, no path in this document selects it, and the floor
+[`ADR-007`](../adr/adr-007-msrv.md) yields forbids building the package with
+it. It is recorded so that its presence is not read as support for it.
+
+**Neither nightly toolchain has a role here.** No requirement, no record and no
+command of the five names a nightly toolchain or a nightly-only feature.
 
 **The cross-build path is
 [`ADR-008`](../adr/adr-008-packaging-and-build-path.md)'s**: the two `musl`
@@ -175,20 +225,62 @@ targets are built through a zig-based linker driver at the versions that record
 names, and the two Darwin targets are built natively. The versions are the
 record's and are not repeated, because they are part of the evidence — they are
 the path that produced the artefacts `BENCHMARKS.md` measured, and a different
-path makes a later figure incomparable with the recorded one.
+path makes a later figure incomparable with the recorded one. The host carries
+both tools at exactly the two versions that record names, so the recorded path
+is the path that is installed.
 
-| Tool | Role | Source |
-|---|---|---|
-| The Rust toolchain | Compiles the four targets; above the floor | [`ADR-007`](../adr/adr-007-msrv.md) |
-| The zig-based linker driver | The `musl` cross-link from a Darwin host, which the Apple linker cannot perform | [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) |
-| `cargo fmt`, `cargo clippy`, `cargo audit` | The validation pipeline above | `CLAUDE.md`, *Desenvolvimento* |
-| `hyperfine`, `criterion`, `dhat-rs`, `samply` / `cargo flamegraph`, `cargo bloat` | The measurement toolchain, one tool per question | `CLAUDE.md`, *Disciplina de medição* |
-| Docker | Runs the four fixture containers | `scripts/mariadb/README.md` |
+| Tool | Role | Installed on 2026-09-11 | Role fixed by |
+|---|---|---|---|
+| The Rust toolchain | Compiles the four targets; above the floor | The inventory above | [`ADR-007`](../adr/adr-007-msrv.md) |
+| The zig-based linker driver | The `musl` cross-link from a Darwin host, which the Apple linker cannot perform | `cargo-zigbuild` and `zig`, at the two versions that record names | [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) |
+| `cargo fmt`, `cargo clippy`, `cargo audit` | The validation pipeline above | The first two ship with the toolchain above; `cargo-audit`, on the terms below | `CLAUDE.md`, *Desenvolvimento* |
+| `hyperfine`, `samply` / `cargo flamegraph`, `cargo bloat` | Wall time, CPU attribution and binary size, one tool per question | `hyperfine` 1.20.0; `samply` 0.13.1; `flamegraph` 0.6.14, which provides `cargo flamegraph`; `cargo-bloat` 0.12.1 | `CLAUDE.md`, *Disciplina de medição* |
+| `criterion`, `dhat-rs` | Micro-benchmarks and heap profile | Neither is an installed binary; see below | `CLAUDE.md`, *Disciplina de medição* |
+| Docker | Runs the four fixture containers | 29.7.2 | `scripts/mariadb/README.md` |
+
+The third column is `cargo install --list` for the cargo-installed binaries and
+the host's own report for `hyperfine` and Docker, all on 2026-09-11.
 
 The measurement toolchain is listed, not specified: what each tool is used to
 decide is `CLAUDE.md`'s table, the protocol that makes a result valid is
 [quality-attributes.md](quality-attributes.md#the-measurement-protocol), and
 every result is `BENCHMARKS.md`'s.
+
+**Three tools this document names were absent from the host until 2026-09-11**,
+when they were installed: `cargo-audit`, which is command 5 of the mandatory
+pipeline, and `cargo-bloat` and `cargo flamegraph`, which answer two of the five
+measurement questions. Nothing recorded rests on their having been present
+earlier — the pipeline cannot run at this commit for want of a manifest, and the
+one recorded measurement used `hyperfine`, which was installed. The installed
+`cargo-audit` is at the same version as the documentation command 5's row was
+consulted against, so that citation is now reproducible on this host.
+
+**Seven things installed on the host belong to no path this document
+prescribes** (`cargo install --list` and `rustup show`, 2026-09-11):
+`cargo-vet` 0.10.2, `cargo-llvm-cov` 0.8.7, `cargo-fuzz` 0.13.1, `cargo-pgo`
+0.3.0, `cargo-show-asm` 0.2.59, `cross` 0.2.5, and the `llvm-tools` component.
+None is named by a requirement, by a record, by the validation pipeline or by
+the measurement table, and this document invents no role for a tool the corpus
+does not use. They are listed because an unlisted tool on the host is one a
+later reader mistakes for part of the path.
+
+`cross` is the one of the seven with a standing entry:
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md) rejected it on evidence
+rather than on merit, and having it installed does not readmit it — that
+rejection expires only when all four targets are re-measured under a new path.
+
+**Two of the measurement instruments are crates, not installed binaries.**
+`criterion` and `dhat-rs` enter as dev-dependencies, outside the shipped graph
+and outside the dependency budget
+([`ADR-006`](../adr/adr-006-package-layout.md),
+[technology-stack.md](technology-stack.md#the-dependency-budget)). No manifest
+exists at this commit, so there is nothing installed to observe and no version
+is recorded for either.
+
+**No MariaDB or MySQL client is installed, and the fixture requires none**: its
+readiness gate is the published port and its query path is `docker exec` into
+the container, both `scripts/mariadb/README.md`'s. Nothing else this document,
+`CLAUDE.md`'s two tables or any record names is missing from the host.
 
 ## The release gates
 

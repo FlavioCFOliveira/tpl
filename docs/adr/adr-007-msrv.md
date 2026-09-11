@@ -69,9 +69,13 @@ dependency of this project. The second column carries the maximum stable release
 at the date consulted except where it cites a record; **this record pins no
 crate version**, only the toolchain floor the versions imply.
 
-**The development toolchain is not the pin.** The toolchain the driver selection
-was measured under, recorded in `BENCHMARKS.md`, remains the development
-toolchain and is above this floor.
+**The development toolchain is not the pin, and neither is the toolchain a
+measurement was taken under.** They are two figures and not one, and neither is
+this record's to hold: what the development host has installed is recorded in
+`docs/spec-technical/operations.md`, and the toolchain the driver selection was
+measured under is recorded in `BENCHMARKS.md`. This record cites both and
+restates neither. Both stand above this floor, and the floor follows neither of
+them.
 
 **Moving the floor is an edit to this record** with a new `decided` date, in the
 sense `docs/adr/README.md` distinguishes: the decision — take the highest of the
@@ -98,8 +102,9 @@ two floors — does not change when the number does, and only its parameter move
   trade nothing in the corpus asks for: no requirement names a toolchain
   version at all.
 
-- **Pinning to the measured development toolchain.** Refused: it forbids every
-  toolchain between the floor and today, for no stated gain.
+- **Pinning to the development toolchain, or to the toolchain a measurement was
+  taken under.** Refused: either forbids every toolchain between the floor and
+  today, for no stated gain.
 
 - **Following stable.** Refused: it is not a pin at all, and it makes the floor
   a fact nobody records — the precise gap this record closes.
@@ -156,3 +161,4 @@ this record.
 | The floors of the **transitive** graph | **Unverified.** No manifest and no lockfile exist yet, so the graph cannot be resolved | — |
 | The engine `ADR-001` pins declares 1.70 on the crate index; neither it nor the 1.63 read from its own documentation on 2026-09-10 — **not re-verified here** — reaches the edition floor | crates.io crate index, `minijinja` and `minijinja-contrib` | 2026-09-11 |
 | Edition 2024, with the MSRV deferred to `Cargo.toml` | `CLAUDE.md`, *Stack* | 2026-09-11 |
+| The development toolchain and the toolchain the driver selection was measured under are two distinct figures, and both stand above the floor | `docs/spec-technical/operations.md`, *MSRV, the development toolchain, and the cross-build path*, whose inventory is `rustup show`, `rustc --version --verbose` and `cargo --version --verbose` taken on the development host; and `BENCHMARKS.md`, "2026-09-10 — MariaDB driver selection", *Environment* | 2026-09-11 |

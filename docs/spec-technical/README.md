@@ -190,13 +190,15 @@ owning requirement, as `BR-SEC-001` requires of the functional file it mirrors.
 
 **Answers.** The four targets, the static `musl` linkage and its observable
 consequence. The mandatory validation pipeline. The release profile. MSRV, the
-development toolchain, and the cross-build path for the musl targets. The
-release gates. The four version numbers and what a breaking change is.
-Observability. The content `tpl init` ships. The fixture as an operational
-asset. That no continuous-integration pipeline is prescribed.
+toolchain and tools as installed on the development host, and the cross-build
+path for the musl targets. The release gates. The four version numbers and what
+a breaking change is. Observability. The content `tpl init` ships. The fixture
+as an operational asset. That no continuous-integration pipeline is prescribed.
 
-**Must not contain.** Measured figures, which are `BENCHMARKS.md`; budgets,
-which are `quality-attributes.md`.
+**Must not contain.** Measured figures, which are `BENCHMARKS.md` — including
+the toolchain a measurement was taken under, which is part of that record's
+environment and is not the development toolchain; budgets, which are
+`quality-attributes.md`.
 
 ### `quality-attributes.md`
 
