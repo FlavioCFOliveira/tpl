@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -20,7 +20,7 @@ removed from those files.
 
 ## Scope
 
-The specification has been written in seven editions. All are in force; each
+The specification has been written in nine editions. All are in force; each
 adds to the ones before it and amends them in place, and every amendment
 carries an *Amended in the nth edition* note beside the requirement it
 changes.
@@ -381,6 +381,137 @@ evidence that will not arrive. **The index of
 is complete**: no requirement of it is waiting on a decision, a measurement,
 or an observation.
 
+### Eighth edition — three contradictions between requirements in force
+
+Harvesting the seventh edition for the technical design read requirement
+against requirement rather than requirement against evidence, and found three
+places where two requirements **both in force** could not both be satisfied.
+None was a gap and none needed a decision from outside the corpus: in each
+case one of the two was an invariant of the whole surface and the other a rule
+of one module, so the resolution was to name the requirement that yields and
+to write the reason into its own text. Two stale entries were corrected in the
+same pass.
+
+- **A boundary that read the environment** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-005` stopped
+  project discovery at the user's home directory, which can only be located
+  from `HOME`. `FR-CLI-021` reads no environment variable to determine the
+  location of the project and `FR-CLI-023` names the single exception, so the
+  boundary was an environment read this corpus prohibits — and it made two
+  identical command lines in two shells discover two different projects, which
+  is `BR-CLI-002` failing in its own terms. `FR-PROJ-005` yields: the home
+  boundary is dropped, the mount point remains, and the trust checks of
+  `FR-PROJ-009` through `FR-PROJ-011` are named as what actually refuses a
+  planted project. `BR-CLI-002` gains the clause it was missing — nothing a
+  shell can set decides which project is discovered, which entry is selected,
+  or which server is reached — and `FR-SEC-013` follows.
+- **Two test seams that could appear on no surface** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and
+  [server-contract.md](server-contract.md). `FR-ERR-031` required a deliberate
+  trigger for `70`, and `FR-SRV-035` a seam presenting the reader with a
+  series above its own window. Every mechanism reachable from outside the
+  process collides with a requirement in force: a command or a flag with
+  `FR-CLI-002` and `FR-HELP-021`, an environment variable with `FR-CLI-021`
+  and `NFR-DET-001`, and a feature-selected build with the property that the
+  artefact verified is the artefact distributed. Both seams therefore move
+  **inside the process**, reachable from nothing a caller can write, and none
+  of those four requirements yields. What yields is `BR-ERR-001`, for `70`
+  alone and in its own text, and `FR-SRV-035`'s assertion on the exit code.
+  Both requirements state the composition that stands in — the guard is
+  observed in process, and the step from an error condition to an exit status
+  is observed by the nine other codes — and both state plainly that the
+  composition is reasoned rather than executed.
+- **An acceptance test with no fixture** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-038` recorded, in
+  its own text, that `tpl` with default configuration cannot reach the fixture
+  of `scripts/mariadb/` over TCP on any series, and that an acceptance test
+  for the default mode needs a certificate that names the host. The fixture
+  provides none, so the default of `FR-CONF-013` was the one cell of a
+  ten-cell table with no test. The obligation is now a requirement: the
+  fixture presents, at each series of `FR-SRV-015`, a server whose certificate
+  names the host, and retains a server offering no TLS for the right-hand
+  column. Dropping the test with the cost stated was rejected, because a
+  default that nothing exercises end to end is the case a caller meets first.
+
+**Two editorial corrections.** The glossary's *DSN* form still ended
+`[?params]`, which `FR-CONF-009` removed when `FR-CONF-011` admitted no
+parameter. And `DIV-034` said "thirteen" excluded catalogue fields in one
+clause while its own seventh-edition note said sixteen; the table of
+`FR-CAT-024` carries sixteen rows, so the clause was wrong and is corrected.
+
+**One divergence is recorded rather than resolved.** `FR-ERR-030` makes a
+caught top-level panic a producing condition of `70`, and the release profile
+the root coordination document states aborts on panic, under which that
+condition cannot exist in the distributed binary. The requirement is
+unchanged, because the specification precedes the implementation, and the
+correction owed is `DIV-045`. It is not an open question: nothing in this
+corpus waits on it, and the choice it names belongs to an architecture
+decision. The ninth edition closes it, and closes it narrower than either
+option this edition named: the requirement is amended to state an outcome
+rather than a mechanism, the profile stands, and `DIV-045` is discharged.
+
+**No open question is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty. Each resolution above
+rests on an invariant this corpus already held, and where a choice remained
+the requirement records the option rejected and why.
+
+### Ninth edition — four defects the technical design found in the wording
+
+Settling the project's technical specification read this corpus against the
+design that has to satisfy it, and found four places where the wording says
+something no implementation can do, or says nothing where an implementation
+needs a referent. **None of the four changes what `tpl` does**:
+three correct wording that had drifted from the behaviour the corpus intends,
+and the fourth writes down a mapping the corpus always implied and had never
+stated.
+
+- **A panic is reported, not caught** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-030` made "a
+  panic **caught** at the top level of the process" a producing condition of
+  `70`, which obliges the process to resume execution above the panic site. The
+  release profile recorded outside this corpus terminates the process on a
+  panic, so nothing is caught and the condition could not exist in the
+  distributed binary — the defect `DIV-045` recorded. The requirement now
+  states the outcome instead: a panic is reported in the four labelled lines of
+  `FR-ERR-008` and the process exits `70`, which a process can do from the
+  panic site itself, before the panic ends it. Both producing conditions
+  survive, the code table of `FR-ERR-001` is unchanged, and the mechanism is an
+  architecture decision this corpus does not name. `FR-ERR-034`'s `70` row
+  loses the same word.
+- **`DIV-045` is discharged, and its premise was too strong** —
+  [upstream-divergences.md](upstream-divergences.md). The entry stated without
+  qualification that under an aborting profile the caller receives no code of
+  `FR-ERR-001` and no message. That is the **default** behaviour of such a
+  profile, not the whole of what it admits: a process that handles the panic
+  itself reports it and exits with the status it chooses. The clause is
+  corrected, and with `FR-ERR-030` amended the two statements no longer
+  conflict, so nothing is owed to the root coordination document under this
+  entry.
+- **Six phases, four keys** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-005` requires a
+  deadline on six phases while `FR-CONF-002` declares four timeout keys, so
+  `FR-CONF-004`'s "the `[core]` key for that phase" had no referent for DNS
+  resolution, TCP connect and TLS handshake. `FR-CONF-005` now maps every phase
+  onto its key and states that the three connection phases share **one** budget
+  of `core.connect_timeout` rather than taking one each. That is the reading
+  the key's name already carried, and the only one under which the configured
+  value bounds the thing it is named after; a deadline expiring inside the
+  shared budget is still reported against the phase in progress, per
+  `FR-ERR-034`.
+- **A tab in a format that admits none** —
+  [output-formats.md](output-formats.md). `FR-OUT-018` excepted tab from C0
+  escaping across `text` and `json` alike, and no JSON document can honour
+  that: the format admits no raw control character inside a string, so a
+  document carrying one would not be JSON, which `FR-OUT-024` makes contract.
+  The exception is now confined to `text`, where the aligned columns of
+  `FR-OUT-006` need it, and the `json` path states what satisfies the rule
+  there — the escape the format defines. `FR-SEC-020`'s summary table is split
+  the same way. No emitted byte changes.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -599,6 +730,19 @@ mistaken for either: `FR-SRV-019` requires the table of `FR-SRV-015` to be
 re-verified against MariaDB's maintenance policy before every release. It
 decays on a schedule this project does not set, and the earliest date on which
 it is known to be wrong is 2028-02-16.
+
+The eighth edition adds one obligation outside this corpus and none inside it.
+`FR-CONF-038` requires the fixture of `scripts/mariadb/` to present, at each
+series of `FR-SRV-015`, a server whose certificate names the host, without
+which the default TLS mode of `FR-CONF-013` has no acceptance test. Like
+`seed-bench.sql` under `DIV-036` it is fixture work with an owner and a
+trigger, not an open question, and no requirement of this corpus is waiting on
+it. `DIV-045`, recorded in the same edition, was a correction owed to the root
+coordination document; the ninth edition discharges it, because `FR-ERR-030` as
+amended and the profile that document states no longer contradict each other.
+
+The ninth edition adds no obligation of either kind. Its four changes are
+corrections of wording, each stated beside the requirement it changed.
 
 Five items previously recorded here have been discharged.
 

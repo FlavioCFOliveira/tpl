@@ -251,7 +251,18 @@ tpl
 
 - **BR-CLI-002**: An invocation is fully described by what is visible of it. Two
   identical command lines run in two different shells, against the same project
-  state, cannot read different databases.
+  state, cannot read different databases. Nothing a shell can set may decide
+  which project is discovered, which database entry is selected, or which
+  server is reached.
+
+  *Amended in the eighth edition.* The third sentence is new, and it is the
+  clause this rule was missing. Project discovery stopped at the home
+  directory of `FR-PROJ-005`, which could only be located from `HOME`, so a
+  shell exporting a different `HOME` made two identical command lines discover
+  two different projects — this rule failing in its own terms while every
+  requirement it relied on stood. `FR-PROJ-005` is amended to drop that
+  boundary, and this rule now states what a shell may not decide rather than
+  leaving it to be inferred from whichever requirements happen to exist.
 
 ## Behavioural invariants
 

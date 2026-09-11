@@ -1,8 +1,9 @@
 # MariaDB test fixtures
 
-The containers `tpl` is validated against. Every statement in this directory has
-been executed against all four supported MariaDB series; nothing here is
-described from documentation alone.
+The containers `tpl` is validated against, and the harness that drives and
+instruments them. Every claim in this directory was produced by a command that
+was run, and nothing here is described from documentation alone; where an
+observation was made against one series rather than all four, it says which.
 
 ## Contents
 
@@ -11,12 +12,29 @@ described from documentation alone.
 | `Dockerfile` | One image definition, parameterised by release series |
 | `setup.sql` | The `freight` schema: DDL only |
 | `seed.sql` | The data, plus the statements that make the triggers, the sequence and the system-versioned table actually fire |
+| `tls/generate.sh` | Regenerates the TLS material below |
+| `tls/openssl.cnf` | The certificate profile: what the certificate says, including the names it carries |
+| `tls/ca.pem` | The fixture's root certificate, and the file to pass as `ca_file` |
+| `tls/server-cert.pem` | The certificate the server presents |
+| `tls/server-key.pem` | Its private key |
+| `tls/server-tls.cnf` | The three server settings that put the material into service |
+| `up.sh` | Starts every server and does not return until each is listening and verified |
+| `down.sh` | Stops and removes them, and proves nothing of the fixture is left |
+| `status.sh` | The gate: whether the fixture is up, answered without a client |
+| `observe.sh` | The three instruments the nine outside-the-process observations use |
+| `series.env` | The inventory — one record per server — and the helpers the scripts share |
+| `probe-session.sql` | The connection-start sequence of `FR-SRV-006`, for a substitute client |
+| `observer.Dockerfile` | The tracer image `observe.sh opens` falls back to |
 | `README.md` | This file |
 
 The Dockerfile copies `setup.sql` to `/docker-entrypoint-initdb.d/01-setup.sql`
 and `seed.sql` to `02-seed.sql`. The rename is load-bearing: the official
 entrypoint runs that directory in collation order, and `seed.sql` sorts before
 `setup.sql`.
+
+It copies the three `tls/` certificate files to `/etc/mysql/tls/` and
+`tls/server-tls.cnf` to `/etc/mysql/conf.d/90-tls.cnf`, which
+`/etc/mysql/my.cnf` includes last. See [TLS](#tls).
 
 ## Supported series
 
@@ -30,6 +48,10 @@ all four can run side by side.
 | `11.4` | `tpl-mariadb:11.4` | `tpl-mariadb-11.4` | `13307` |
 | `11.8` | `tpl-mariadb:11.8` | `tpl-mariadb-11.8` | `13308` |
 | `12.3` | `tpl-mariadb:12.3` | `tpl-mariadb-12.3` | `13309` |
+
+Port `13310` is reserved for a fifth container that is not a fifth series: the
+server offering no TLS, described under [TLS](#tls). It runs the `10.11` image
+with one extra flag.
 
 The upstream `mariadb:<series>` tags all publish a `linux/arm64` image as well
 as `linux/amd64`, so the fixtures run unmodified on both supported
@@ -54,13 +76,28 @@ Editing `setup.sql` or `seed.sql` requires a rebuild **and** a fresh container:
 the entrypoint runs the init directory only when the data directory is empty, so
 an existing container will not pick the change up.
 
+No preparatory step is needed: the TLS material the build copies in is
+committed. Changing it is a rebuild too — see [TLS](#tls).
+
 ## Running
+
+`./up.sh` starts all of it and `./down.sh` stops all of it; see
+[The harness](#the-harness). The commands below are what those two scripts run,
+and are here because a fixture whose only documentation is a script is a fixture
+nobody can check.
 
 ```sh
 docker run -d --name tpl-mariadb-10.11 -e MARIADB_ROOT_PASSWORD=tpl-root -p 13306:3306 tpl-mariadb:10.11
 docker run -d --name tpl-mariadb-11.4  -e MARIADB_ROOT_PASSWORD=tpl-root -p 13307:3306 tpl-mariadb:11.4
 docker run -d --name tpl-mariadb-11.8  -e MARIADB_ROOT_PASSWORD=tpl-root -p 13308:3306 tpl-mariadb:11.8
 docker run -d --name tpl-mariadb-12.3  -e MARIADB_ROOT_PASSWORD=tpl-root -p 13309:3306 tpl-mariadb:12.3
+```
+
+Every one of those four offers TLS, with the certificate described under
+[TLS](#tls). The fifth container is the one that offers none:
+
+```sh
+docker run -d --name tpl-mariadb-notls -e MARIADB_ROOT_PASSWORD=tpl-root -p 13310:3306 tpl-mariadb:10.11 --skip-ssl
 ```
 
 First start takes a few seconds longer than later ones, because the entrypoint
@@ -93,13 +130,233 @@ start on all four series; both come from the container runtime's kernel. On
 `10.11` alone the log also carries `[Warning] You need to use --log-bin to make
 --expire-logs-days ... work.` None of them indicates a problem with the fixture.
 
+## The harness
+
+Seven files drive the fixture and instrument it. They exist because `NFR-PERF-007`
+makes the instrument *the* verification: a requirement of form is checked by an
+observation made outside the process and never by reading the source, so each
+observation has to be a command somebody can run and an output somebody can
+read. Everything below was run against this fixture, and every output shown is
+the output it produced.
+
+| File | What it is |
+|---|---|
+| `series.env` | The inventory and the shared helpers. Sourced, never run |
+| `up.sh` | Starts the servers and verifies each one |
+| `down.sh` | Removes them and proves nothing is left |
+| `status.sh` | The gate |
+| `observe.sh` | The three instruments |
+| `probe-session.sql` | The connection-start sequence of `FR-SRV-006`, for a substitute client |
+| `observer.Dockerfile` | The tracer image the third instrument falls back to |
+
+`series.env` carries the inventory the table under [Supported
+series](#supported-series) states in prose — four series, one `--skip-ssl`
+server, a container and a published port each — in the form the scripts read.
+The scripts read nothing else, so a port changes in one executable place; the
+prose table is the second copy, and it has to be changed with it.
+
+### Bringing it up
+
+```sh
+cd scripts/mariadb
+./up.sh                # all five
+./up.sh 11.8 notls     # only the named servers
+```
+
+It is idempotent: it builds an image only when it is missing and starts a
+container only when it is not already running. From nothing:
+
+```
+10.11
+  image   tpl-mariadb:10.11 already built
+  server  tpl-mariadb-10.11 started on :13306
+  listen  tpl-mariadb-10.11 answers on :13306 as 5.5.5-10.11.19-MariaDB-ubu2204
+  ready   tpl-mariadb-10.11: 23 catalogue objects in freight, no [ERROR] in log
+11.4
+  image   tpl-mariadb:11.4 already built
+  server  tpl-mariadb-11.4 started on :13307
+  listen  tpl-mariadb-11.4 answers on :13307 as 11.4.13-MariaDB-ubu2404
+  ready   tpl-mariadb-11.4: 23 catalogue objects in freight, no [ERROR] in log
+11.8
+  image   tpl-mariadb:11.8 already built
+  server  tpl-mariadb-11.8 started on :13308
+  listen  tpl-mariadb-11.8 answers on :13308 as 11.8.9-MariaDB-ubu2404
+  ready   tpl-mariadb-11.8: 23 catalogue objects in freight, no [ERROR] in log
+12.3
+  image   tpl-mariadb:12.3 already built
+  server  tpl-mariadb-12.3 started on :13309
+  listen  tpl-mariadb-12.3 answers on :13309 as 12.3.3-MariaDB-ubu2404
+  ready   tpl-mariadb-12.3: 23 catalogue objects in freight, no [ERROR] in log
+notls
+  image   tpl-mariadb:10.11 already built
+  server  tpl-mariadb-notls started on :13310 (--skip-ssl)
+  listen  tpl-mariadb-notls answers on :13310 as 5.5.5-10.11.19-MariaDB-ubu2204
+  ready   tpl-mariadb-notls: 23 catalogue objects in freight, no [ERROR] in log
+```
+
+19.7 seconds on an Apple Silicon host with the four images already built.
+
+Each server is checked twice, because neither check alone is the check. The
+`listen` line is the published port answering; the `ready` line is the log
+carrying no `[ERROR]` and the schema holding its 23 catalogue objects, which is
+what a failure inside `/docker-entrypoint-initdb.d` would break while the
+container still reported itself up.
+
+**Readiness is the published port, never a client inside the container.** The
+official entrypoint runs a temporary server with `--skip-networking` while the
+init scripts execute: it answers `SELECT 1` over the Unix socket, and it then
+goes away to be replaced by the real one. A `docker exec` readiness check
+therefore returns true in the middle of initialisation and hands the caller a
+server about to restart — observed here as
+
+```
+ERROR 2002 (HY000): Can't connect to local server through socket '/run/mysqld/mysqld.sock' (2)
+```
+
+from the step that ran immediately after it. The published port is up only when
+the server under test is, so that is what `up.sh` waits for, and it waits for it
+from outside every container.
+
+**A server that cannot be made healthy is removed, not left behind.** `up.sh`
+prints the container's last 30 log lines and then removes it: a failed run is
+still a run, and the rule that a run leaves nothing running does not have an
+exception for the runs that went wrong.
+
+### Taking it down
+
+```sh
+./down.sh              # all five
+./down.sh 11.8         # only the named servers
+./down.sh --images     # ...and drop the four images too
+```
+
+```
+  removed   tpl-mariadb-10.11
+  removed   tpl-mariadb-11.4
+  removed   tpl-mariadb-11.8
+  removed   tpl-mariadb-12.3
+  removed   tpl-mariadb-notls
+
+removed 5 container(s); docker ps lists no tpl-mariadb container
+```
+
+The last line is not an intention. `down.sh` asks the daemon what is left of the
+fixture and fails if the answer is not nothing:
+
+```sh
+docker ps --filter 'name=tpl-mariadb' --format '{{.Names}}' | wc -l
+```
+```
+0
+```
+
+It removes exactly the containers `series.env` names, because the host may be
+running containers that belong to other projects, and it removes the anonymous
+volume each one created with it: the entrypoint populates a data directory only
+when it is empty, so a volume that outlives its container is a stale schema
+waiting to be mistaken for a fresh one. It is safe to run when nothing is up and
+safe to run twice.
+
+### The gate
+
+`status.sh` answers the question a server-dependent test has to ask before it
+runs. It probes each published port the way a test reaches it — from the host,
+over TCP — and needs **no client installed**, which is the point: a contributor
+may have none and must still be able to ask.
+
+The mechanism is the MariaDB handshake. A server sends its greeting the moment
+the socket opens, and the greeting carries the version, so what is reported is
+"a MariaDB of this series answered here", not "something is listening". Bash's
+`/dev/tcp` opens the socket, one byte is read with a timeout to bound a port
+that accepts and then says nothing, and the version is taken from the greeting.
+
+```sh
+./status.sh
+```
+```
+SERVER  PORT    TLS   STATE VERSION
+10.11   13306   yes   up    5.5.5-10.11.19-MariaDB-ubu2204
+11.4    13307   yes   up    11.4.13-MariaDB-ubu2404
+11.8    13308   yes   up    11.8.9-MariaDB-ubu2404
+12.3    13309   yes   up    12.3.3-MariaDB-ubu2404
+notls   13310   no    up    5.5.5-10.11.19-MariaDB-ubu2204
+```
+
+The exit code is the gate, and it has three values rather than two:
+
+| Exit | Meaning | What a test runner does |
+|---|---|---|
+| `0` | Every requested server answered | Run the server tests |
+| `1` | None answered | Skip them, and say why |
+| `2` | Some answered and some did not | A broken fixture, not an absent one. Do **not** skip |
+
+All three were observed. With nothing running:
+
+```
+SERVER  PORT    TLS   STATE VERSION
+10.11   13306   yes   down  -
+11.4    13307   yes   down  -
+11.8    13308   yes   down  -
+12.3    13309   yes   down  -
+notls   13310   no    down  -
+exit=1
+```
+
+and with one of the five stopped:
+
+```
+10.11   13306   yes   up    5.5.5-10.11.19-MariaDB-ubu2204
+11.4    13307   yes   down  -
+11.8    13308   yes   up    11.8.9-MariaDB-ubu2404
+12.3    13309   yes   up    12.3.3-MariaDB-ubu2404
+notls   13310   no    up    5.5.5-10.11.19-MariaDB-ubu2204
+exit=2
+```
+
+The third value is the one that earns its keep. A runner that treats "no
+fixture" and "half a fixture" alike either skips silently over a real failure or
+fails the build of every contributor who has no Docker.
+
+For a runner that needs the answer as data rather than as an exit code:
+
+```sh
+eval "$(./status.sh --export)"
+```
+```
+TPL_MARIADB_10_11=127.0.0.1:13306; export TPL_MARIADB_10_11
+TPL_MARIADB_11_4=127.0.0.1:13307; export TPL_MARIADB_11_4
+TPL_MARIADB_11_8=127.0.0.1:13308; export TPL_MARIADB_11_8
+TPL_MARIADB_12_3=127.0.0.1:13309; export TPL_MARIADB_12_3
+TPL_MARIADB_NOTLS=127.0.0.1:13310; export TPL_MARIADB_NOTLS
+TPL_MARIADB_READY=all; export TPL_MARIADB_READY
+```
+
+`TPL_MARIADB_READY` is `all`, `none` or `partial`, matching the three exit
+codes. `./status.sh --quiet` prints nothing and exits with the code alone.
+
+**The gate is visible on the server, and a test that counts connections must
+know it.** One `status.sh` run adds 1 to `Connections` and 1 to
+`Aborted_connects` on each server it probes, because it opens a TCP connection,
+reads the greeting and closes without authenticating. Measured on `12.3` around
+one run, with the other four deltas accounted for by the observer's own
+connections:
+
+```
+before:  Aborted_connects 3   Connections 24
+after:   Aborted_connects 4   Connections 28
+```
+
+The general log is not affected: an unauthenticated probe produces no `Connect`
+row, so the log-based connection count is immune to the gate while the status
+counter is not. Take the counter baseline **after** the gate, not before it.
+
 ## Connecting
 
 ### Through `docker exec`
 
 The client inside the container connects over the Unix socket, which sidesteps
-the TLS difference described below. This is the recommended way to interrogate a
-fixture by hand.
+every TLS question. This is the recommended way to interrogate a fixture by
+hand.
 
 ```sh
 docker exec -it tpl-mariadb-11.4 mariadb -uroot -ptpl-root freight
@@ -109,30 +366,582 @@ docker exec -i  tpl-mariadb-11.4 mariadb -uroot -ptpl-root freight < some-query.
 ### Over TCP from the host
 
 ```sh
-mariadb -h 127.0.0.1 -P 13307 -u tpl_reader -ptpl-reader-pw freight
+mariadb -h 127.0.0.1 -P 13307 -u tpl_reader -ptpl-reader-pw \
+  --ssl-ca=tls/ca.pem --ssl-verify-server-cert freight
 ```
 
-**The `10.11` fixture needs `--skip-ssl`.** MariaDB 11.4 introduced automatic
-generation of a self-signed certificate on first start; 10.11 has none, and
-reports `have_ssl=DISABLED`. The refusal is the **MariaDB client's default TLS
-mode**, not a property of modern clients in general. An `11.4` MariaDB client
-and a `12.3` MariaDB client both fail against `10.11` over TCP with:
+Run it from this directory, so that `tls/ca.pem` resolves. That is the full
+check — chain and host name — and it succeeds on all four series, by
+`127.0.0.1` and by `localhost` alike. What happens when the two flags are
+dropped depends on the client, and is the subject of the rest of this section.
+
+**A modern MariaDB client with no flags at all fails against `10.11`.** It
+succeeds against the other three. The message is:
 
 ```
-ERROR 2026 (HY000): TLS/SSL error: SSL is required, but the server does not support it
+ERROR 2026 (HY000): TLS/SSL error: Certificate verification failure: The certificate is NOT trusted.
 ```
 
-Both succeed with `--skip-ssl`. A `10.11` MariaDB client reaches a `12.3` server
-unmodified, and a MySQL client connects to `10.11` over TCP with no flags at
-all.
+Observed with the `11.4` and the `12.3` client, against the `10.11` fixture,
+and not against `11.4`, `11.8` or `12.3`. What the flagless client is missing
+is a way to establish trust without being given the certificate authority, and
+what it uses on the other three arrives **after authentication**: with a wrong
+password every series answers `ERROR 1045`, and only with the right one does
+`10.11` answer `NOT trusted`. Whatever the mechanism is called, `10.11` does
+not have it and the three later series do.
 
-So, for 10.11 only:
+Three flags get such a client through to `10.11`: `--ssl-ca` together with
+`--ssl-verify-server-cert`, as above, which is also the only one of the three
+that verifies anything; `--disable-ssl-verify-server-cert`, which encrypts and
+trusts blindly; and `--skip-ssl`, which does neither.
+
+A `10.11` MariaDB client reaches all four servers with no flags and an
+encrypted session, because it does not verify by default, and reaches the
+no-TLS server in plaintext. A MySQL client reaches all four with
+`--ssl-mode=VERIFY_IDENTITY --ssl-ca=tls/ca.pem`, and refuses the no-TLS server
+with `SSL is required but the server doesn't support it`.
+
+## TLS
+
+`FR-CONF-038`, in `specification/configuration-model.md`, obliges this fixture
+to present, at each supported series, a server whose certificate names the host
+the project's tests reach it by, and to keep a server that offers none. The
+first is what an acceptance test for `verify-identity` — the default `tls` mode
+of `FR-CONF-013` — needs; the second is the right-hand column of that
+requirement's mode table.
+
+Nothing the servers produce by themselves satisfies the first. `10.11` offers
+no TLS at all unless a certificate is configured. `11.4` and later generate one
+when none is, and it names nothing: `CN=MariaDB Server`, self-signed, serial
+`0`, **zero X509v3 extensions** and therefore no `subjectAltName` for any host
+name to match. It is also regenerated on every start — two consecutive starts
+of the same container served two different SHA-256 fingerprints. The fixture
+therefore carries its own certificate.
+
+### The certificate
+
+| | |
+|---|---|
+| Names | `DNS:localhost`, `IP:127.0.0.1`, `IP:::1` |
+| Subject | `O=tpl MariaDB test fixture, CN=localhost` |
+| Issuer | `O=tpl MariaDB test fixture, CN=tpl fixture root CA`, in `tls/ca.pem` |
+| Key | RSA 2048, signed with SHA-256 |
+| Validity | 3650 days from generation |
+
+The three names are the three spellings of the loopback a test can write, so
+the certificate matches whichever one it uses. `tls/ca.pem` is the file to pass
+as `ca_file` (`FR-CONF-014`); it is the only trust material needed, and the
+private key that signed it was destroyed at generation time and is not in this
+repository.
+
+The material is committed, so a fresh clone can build and run the fixture with
+no preparatory step. It is not secret: the fixture's passwords are in this
+directory too, and a certificate that names `localhost` is worth nothing
+anywhere else.
+
+### In the image
+
+```
+/etc/mysql/tls/ca.pem              0644 root:root
+/etc/mysql/tls/server-cert.pem     0644 root:root
+/etc/mysql/tls/server-key.pem      owned by mysql, which is the user the server runs as
+/etc/mysql/conf.d/90-tls.cnf       ssl_ca, ssl_cert, ssl_key
+```
+
+`/etc/mysql/my.cnf` includes `conf.d` last, so those three settings win over
+the packaged `50-server.cnf`, where they ship commented out. The group name is
+`[server]`, which every series reads: `10.11` keeps its own settings under
+`[mysqld]` and `12.3` under `[mariadbd]`, so neither of those is portable.
+
+All four series then report `have_ssl=YES`, `10.11` included:
 
 ```sh
-mariadb -h 127.0.0.1 -P 13306 -u tpl_reader -ptpl-reader-pw --skip-ssl freight
+docker exec tpl-mariadb-10.11 mariadb -uroot -ptpl-root \
+  -e "SHOW VARIABLES WHERE Variable_name IN ('have_ssl','ssl_cert')"
 ```
 
-The other three accept a TLS connection without further configuration.
+`require_secure_transport` is deliberately **not** set. Two cells of the
+`FR-CONF-038` table — `disabled` and `preferred` against a server offering TLS
+— expect a plaintext connection to be accepted, and requiring transport
+security here would turn both into failures.
+
+### The server that offers no TLS
+
+`--skip-ssl`, passed to the container as a server argument, disables TLS
+whatever `90-tls.cnf` says. `have_ssl` then reads `DISABLED` while `ssl_cert`
+and `ssl_key` still show the configured paths.
+
+```sh
+docker run -d --name tpl-mariadb-notls -e MARIADB_ROOT_PASSWORD=tpl-root \
+  -p 13310:3306 tpl-mariadb:10.11 --skip-ssl
+```
+
+Observed on `10.11` and on `11.4`, where it also suppresses the automatically
+generated certificate. `10.11` is the canonical one, because it is the series
+that has no TLS of its own. The schema is the same 23 tables; only the
+transport differs.
+
+Clearing the paths instead of using `--skip-ssl` does not work, and does not
+fail the same way on every series. `--ssl-cert= --ssl-key= --ssl-ca=` makes
+`10.11` refuse to start:
+
+```
+SSL error: Unable to get certificate from ''
+[ERROR] Failed to setup SSL
+[ERROR] Aborting
+```
+
+while `11.4` starts, ignores the empty values and falls back to its own
+generated certificate, reporting `have_ssl=YES` with `ssl_cert` empty. Neither
+is the no-TLS server, and `--skip-ssl` is the only spelling that is.
+
+### Regenerating
+
+```sh
+cd scripts/mariadb
+tls/generate.sh
+docker build --build-arg MARIADB_SERIES=10.11 -t tpl-mariadb:10.11 .   # and the other three
+```
+
+`tls/generate.sh` needs `openssl` and nothing else. It takes everything the
+certificate says from `tls/openssl.cnf` — change the names there, not in the
+script — makes a root, signs the leaf with it, and destroys the root's private
+key. Two consequences follow from that last step: the material cannot be
+extended later without regenerating all of it, and nobody can mint a second
+certificate that the committed `ca.pem` would vouch for.
+
+Regeneration is not byte-reproducible; each run makes fresh keys, a fresh root
+and fresh dates. What this directory reproduces is the material's meaning — the
+same names, the same key type, the same extensions, every run.
+
+The images carry the material, so a regeneration takes effect only after a
+rebuild and a new container started from the rebuilt image.
+
+### Verifying it
+
+Chain and host name, from the host, with `openssl`:
+
+```sh
+cd scripts/mariadb/tls
+openssl s_client -starttls mysql -connect 127.0.0.1:13306 \
+  -CAfile ca.pem -verify_return_error -verify_hostname localhost -brief </dev/null
+```
+
+A healthy answer contains `Verification: OK` and `Verified peername:
+localhost`. Two controls are worth running alongside it, because they are what
+prove the check is real: `-verify_hostname something.else` fails with
+`hostname mismatch`, and omitting `-CAfile` fails with `self-signed certificate
+in certificate chain`.
+
+The same check with each series' own client, over TCP, inside the container:
+
+```sh
+docker exec tpl-mariadb-10.11 mariadb --ssl-ca=/etc/mysql/tls/ca.pem \
+  --ssl-verify-server-cert -h 127.0.0.1 -P 3306 -u tpl_reader -ptpl-reader-pw \
+  -e "SHOW SESSION STATUS LIKE 'Ssl_cipher'"
+```
+
+`Ssl_cipher` is read from the live session, so a non-empty value is the
+session's own evidence that it is encrypted, rather than a restatement of what
+was asked for. Against the no-TLS server the same variable comes back empty.
+
+#### Recorded run
+
+Both halves of `FR-CONF-038` — a server whose certificate names the host at
+every series, and a server offering none beside it — observed in one pass, with
+the fixture up.
+
+Full verification from the host, chain and host name, against all four published
+ports:
+
+```sh
+cd scripts/mariadb/tls
+for p in 13306 13307 13308 13309; do
+  openssl s_client -starttls mysql -connect 127.0.0.1:$p \
+    -CAfile ca.pem -verify_return_error -verify_hostname localhost -brief </dev/null
+done
+```
+```
+=== port 13306 ===
+CONNECTION ESTABLISHED
+Protocol version: TLSv1.3
+Verification: OK
+Verified peername: localhost
+```
+
+and `13307`, `13308` and `13309` answered with those same four lines.
+
+The two controls that prove the check is real. A wrong host name:
+
+```
+verify error:num=62:hostname mismatch
+error:0A000086:SSL routines:tls_post_process_server_certificate:certificate verify failed
+```
+
+and the same command against the `--skip-ssl` server on `13310`:
+
+```
+Connecting to 127.0.0.1
+MySQL server does not support SSL.
+```
+
+The same check with each series' own client, over TCP, reading the cipher back
+from the live session:
+
+```sh
+docker exec tpl-mariadb-<series> mariadb --ssl-ca=/etc/mysql/tls/ca.pem \
+  --ssl-verify-server-cert -h 127.0.0.1 -P 3306 -u tpl_reader -ptpl-reader-pw \
+  -N -B -e "SELECT CONCAT(VERSION(), '  Ssl_cipher=', (SELECT VARIABLE_VALUE
+       FROM information_schema.SESSION_STATUS WHERE VARIABLE_NAME='SSL_CIPHER'))"
+```
+```
+10.11  10.11.19-MariaDB-ubu2204  Ssl_cipher=TLS_AES_256_GCM_SHA384
+11.4   11.4.13-MariaDB-ubu2404   Ssl_cipher=TLS_AES_256_GCM_SHA384
+11.8   11.8.9-MariaDB-ubu2404    Ssl_cipher=TLS_AES_256_GCM_SHA384
+12.3   12.3.3-MariaDB-ubu2404    Ssl_cipher=TLS_AES_256_GCM_SHA384
+```
+
+And the server beside them that offers none, reachable over TCP in plaintext,
+carrying the same schema:
+
+```sh
+docker exec tpl-mariadb-notls mariadb --skip-ssl -h 127.0.0.1 -P 3306 \
+  -u tpl_reader -ptpl-reader-pw -N -B -e "..."
+```
+```
+10.11.19-MariaDB-ubu2204  have_ssl=DISABLED  Ssl_cipher=[]  freight objects=23
+```
+
+## The nine observations made outside the process
+
+`NFR-PERF-007` forbids verifying a requirement of form by reading the source,
+and `BR-SRV-003` says why: a promise about what a process sends that can only be
+checked by reading that process's own source is not a promise a caller can rely
+on. Nine requirements are held to that standard, and three instruments cover all
+nine.
+
+| # | Requirement | The property | Instrument |
+|---|---|---|---|
+| 1 | `NFR-PERF-001` | No query per object on a full read | [statements](#the-statements-a-server-receives) |
+| 2 | `NFR-PERF-002` | Reading one named object does not scale with the database | [statements](#the-statements-a-server-receives) |
+| 3 | `NFR-PERF-003` | A cache hit opens no connection and issues no query | [connections](#the-connections-a-server-accepts) and [statements](#the-statements-a-server-receives) |
+| 4 | `NFR-PERF-004` | At most one connection per invocation | [connections](#the-connections-a-server-accepts) |
+| 5 | `NFR-PERF-005` | The commands of `FR-PROJ-025` touch nothing | [files opened](#the-files-a-process-opens) |
+| 6 | `NFR-PERF-006` | A command needing no catalogue opens no connection | [connections](#the-connections-a-server-accepts) |
+| 7 | `FR-SRV-012` | The closed statement list of `FR-SRV-006` | [statements](#the-statements-a-server-receives) |
+| 8 | `FR-SRV-013` | The read-only read-back, in both outcomes | [statements](#the-statements-a-server-receives), and the value the session reports |
+| 9 | `FR-SRV-014` | The connection count, from the server side | [connections](#the-connections-a-server-accepts) |
+
+Rows 4 and 9 name one property between them, so the nine requirements need
+fewer than nine distinct observations. Rows 1 and 2 are the only two that need a
+second and larger database to be conclusive; see [what could not be
+instrumented](#what-could-not-be-instrumented).
+
+`tpl` does not exist yet. Every observation below was therefore made against a
+**substitute client** — the `mariadb` client of the series being observed, or
+the one in the observer image — and that is deliberate: what is being
+established is the instrument, not the behaviour of a binary nobody has written.
+When `tpl` exists the instrument stays and the client changes.
+
+### The statements a server receives
+
+The instrument is the server's own general log, directed to a table so that it
+can be queried rather than parsed.
+
+```sh
+./observe.sh statements on   11.8     # log_output=TABLE, empty the log, general_log=ON
+./observe.sh statements off  11.8
+./observe.sh statements dump 11.8
+```
+
+`on` empties the log before enabling it, so a dump covers exactly the window
+under test. `mysql.general_log` is a `CSV` table whose `event_time` is
+`timestamp(6)` on all four series and on the `--skip-ssl` server, so the dump
+orders by microsecond and the order it prints is the order the server received.
+
+**It demonstrably shows what a client sent.** A known statement, sent through
+the substitute client and then found:
+
+```sh
+./observe.sh statements on 11.8
+docker exec -i tpl-mariadb-11.8 mariadb --ssl-ca=/etc/mysql/tls/ca.pem \
+  --ssl-verify-server-cert -h 127.0.0.1 -P 3306 -u tpl_reader -ptpl-reader-pw \
+  -N -B -e "SELECT 'KNOWN-STATEMENT-MARKER-9f3a'; SHOW DATABASES"
+./observe.sh statements off 11.8
+./observe.sh statements dump 11.8
+```
+```
+thread_id	command_type	statement
+18	Connect	tpl_reader@127.0.0.1 on  using SSL/TLS
+18	Query	SELECT 'KNOWN-STATEMENT-MARKER-9f3a'
+18	Query	SHOW DATABASES
+18	Quit
+```
+
+The marker is there, and so is the `SHOW`, which `FR-SRV-007` forbids: a
+statement outside the closed list shows up as a statement outside the closed
+list. That is the second half of what the instrument has to do, and the half a
+test for "four kinds and no fifth" depends on.
+
+**`FR-SRV-012`, end to end.** `probe-session.sql` issues the connection-start
+sequence of `FR-SRV-006` — the version probe, the read-only session statement,
+the read-back, then a catalogue read — and stands in for `tpl`:
+
+```sh
+./observe.sh statements on 11.8
+docker exec -i tpl-mariadb-11.8 mariadb --ssl-ca=/etc/mysql/tls/ca.pem \
+  --ssl-verify-server-cert -h 127.0.0.1 -P 3306 \
+  -u tpl_reader -ptpl-reader-pw < probe-session.sql
+./observe.sh statements off 11.8
+./observe.sh statements dump 11.8
+```
+```
+thread_id	command_type	statement
+11	Connect	tpl_reader@127.0.0.1 on  using SSL/TLS
+11	Query	SELECT VERSION()
+11	Query	SET SESSION TRANSACTION READ ONLY
+11	Query	SELECT @@session.tx_read_only
+11	Query	SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'freight'
+11	Quit
+```
+
+Four kinds and no fifth; the three connection-start statements once each, in the
+order the list states; and one connection. **Identical on all four series and on
+the `--skip-ssl` server** apart from the thread id — the same run against all
+five, reduced to the row count and the statements:
+
+```
+  10.11  rows=6  SELECT VERSION() | SET SESSION TRANSACTION READ O... | SELECT @@session.tx_read_only | SELECT COUNT(*) FROM INFORMATI...
+  11.4   rows=6  SELECT VERSION() | SET SESSION TRANSACTION READ O... | SELECT @@session.tx_read_only | SELECT COUNT(*) FROM INFORMATI...
+  11.8   rows=6  SELECT VERSION() | SET SESSION TRANSACTION READ O... | SELECT @@session.tx_read_only | SELECT COUNT(*) FROM INFORMATI...
+  12.3   rows=6  SELECT VERSION() | SET SESSION TRANSACTION READ O... | SELECT @@session.tx_read_only | SELECT COUNT(*) FROM INFORMATI...
+  notls  rows=6  SELECT VERSION() | SET SESSION TRANSACTION READ O... | SELECT @@session.tx_read_only | SELECT COUNT(*) FROM INFORMATI...
+```
+
+The six rows are the `Connect`, the four `Query` rows and the `Quit`. The client adds nothing of its own, which is worth
+knowing because it means a stray row in this dump would be the client under
+test, not the harness.
+
+The read-back answered `1` on all four, which is `FR-SRV-013`'s confirming
+outcome observed twice over: in the statement the server received, and in the
+value the session reported. That the setting bites was checked separately, on
+`11.8`:
+
+```sh
+docker exec tpl-mariadb-11.8 mariadb -uroot -ptpl-root \
+  -e "SET SESSION TRANSACTION READ ONLY; CREATE TABLE freight.x_probe (i INT);"
+```
+```
+ERROR 1792 (25006) at line 1: Cannot execute statement in a READ ONLY transaction
+```
+
+**Counting catalogue queries**, which is rows 1 and 2:
+
+```sh
+./observe.sh statements dump 11.4 --catalogue --count
+```
+
+`--catalogue` keeps the `Query` rows naming `INFORMATION_SCHEMA`; `--count`
+prints the number alone. Three fixed catalogue queries were sent against two
+schemas of different size, and the instrument reported the count that matters
+rather than the size of the schema:
+
+```
+  schema=freight    objects=23   catalogue queries the server received=3
+  schema=mysql      objects=31   catalogue queries the server received=3
+```
+
+The other filters are `--queries`, `--kind <command_type>`, `--user <user>` and
+`--all`.
+
+**The observer is a client too.** `observe.sh` reaches the server over the
+container's Unix socket, and its own connection is logged like any other, the
+dump query included. `dump` therefore drops connections made over the socket by
+default, which is how this script and `up.sh` reach the server and is not how
+anything under test reaches it; `--all` keeps them.
+
+**The `Connect` row carries the transport.** It reads `using SSL/TLS` against
+the four servers presenting the fixture certificate and `using TCP/IP` against
+the `--skip-ssl` one:
+
+```
+13	Connect	tpl_reader@127.0.0.1 on  using TCP/IP
+13	Query	SELECT 'MARKER-notls'
+13	Quit
+```
+
+So the instrument also answers, per connection and from the server side, whether
+the session was encrypted — which is what the mode table of `FR-CONF-038` asks
+about.
+
+### The connections a server accepts
+
+```sh
+./observe.sh connections 12.3
+```
+```
+Variable_name	Value
+Aborted_connects	3
+Connections	16
+Max_used_connections	1
+Threads_connected	1
+```
+
+`Connections` is monotonic and counts every connection the server accepted since
+it started, so a test brackets the invocation under test with two readings and
+subtracts. `--value` prints `Connections` alone, for arithmetic.
+
+**The observer's baseline is 1, measured rather than assumed.** Two consecutive
+readings with nothing between them, on each of the five servers:
+
+```
+  10.11  two readings 10 -> 11, baseline delta=1
+  11.4   two readings 5 -> 6,   baseline delta=1
+  11.8   two readings 14 -> 15, baseline delta=1
+  12.3   two readings 10 -> 11, baseline delta=1
+  notls  two readings 10 -> 11, baseline delta=1
+```
+
+The 1 is the second reading's own connection. With three client connections
+between the two readings:
+
+```
+a=19 b=23 delta=4 observed_baseline=1 => connections attributable to the client: 3
+```
+
+That subtraction is the whole of rows 4 and 9. Rows 3 and 6 are its zero case: a
+command that must reach no server, bracketed the same way, with the statement
+log checked alongside.
+
+```sh
+./observe.sh statements on 11.4
+a=$(./observe.sh connections 11.4 --value)
+docker run --rm tpl-mariadb-observer 'mariadb --version'
+b=$(./observe.sh connections 11.4 --value)
+./observe.sh statements off 11.4
+./observe.sh statements dump 11.4 --count
+```
+```
+Connections: 22 -> 23, delta=1, observer baseline=1 => attributable to the command: 0
+statements the server received from anything but the observer: 0
+```
+
+The general log gives a second, independent count of the same thing: one
+`Connect` row per connection the server accepted, carrying the user, the source
+address and the transport. It differs from the counter in one respect that
+matters — an unauthenticated connection, such as the gate's own probe, raises
+`Connections` but produces no `Connect` row.
+
+### The files a process opens
+
+This is row 5, and it is the one instrument the server cannot provide.
+
+**On Linux, `strace` on the host**, which observes the real process:
+
+```sh
+./observe.sh opens -- <command...>
+```
+
+**On macOS there is no equivalent that runs here**, and the attempts are
+recorded rather than hidden:
+
+| Tried | Result |
+|---|---|
+| `strace` | Not a macOS tool; `command -v strace` finds nothing |
+| `dtruss /bin/echo hello` | `dtrace: system integrity protection is on, some features will not be available` / `dtrace: failed to initialize dtrace: DTrace requires additional privileges` |
+| `sudo -n fs_usage -w -f filesys` | `sudo: a password is required` |
+| `csrutil status` | `System Integrity Protection status: enabled.` |
+
+So on a macOS host the traced process runs inside a Linux container instead,
+which observes a Linux build of it — a supported target of this project in its
+own right, but **not** the Darwin one. `observe.sh opens` selects that backend
+automatically when the host has no `strace`, and says which backend it used.
+
+```sh
+./observe.sh opens --server 11.8 -- mariadb --ssl-ca=/tls/ca.pem \
+  --ssl-verify-server-cert -h 127.0.0.1 -P 3306 \
+  -u tpl_reader -ptpl-reader-pw -N -B -e 'SELECT 1'
+```
+```
+observe.sh: tracing inside tpl-mariadb-observer (network namespace of 11.8)
+9  execve("/usr/bin/mariadb", ["mariadb", "--ssl-ca=/tls/ca.pem", ...]) = 0
+9  newfstatat(AT_FDCWD, "/etc/my.cnf", {st_mode=S_IFREG|0644, st_size=333, ...}, 0) = 0
+9  openat(AT_FDCWD, "/etc/my.cnf", O_RDONLY|O_LARGEFILE|O_CLOEXEC) = 3
+9  openat(AT_FDCWD, "/etc/my.cnf.d/", O_RDONLY|O_LARGEFILE|O_CLOEXEC|O_DIRECTORY) = 4
+9  newfstatat(AT_FDCWD, "/etc/mysql/my.cnf", 0xffffed9255d0, 0) = -1 ENOENT (No such file or directory)
+9  newfstatat(AT_FDCWD, "/root/.my.cnf", 0xffffed9255d0, 0) = -1 ENOENT (No such file or directory)
+9  socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) = 3
+9  connect(3, {sa_family=AF_INET, sin_port=htons(3306), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS
+9  recvfrom(3, "Z\0\0\0\n11.8.9-MariaDB-ubu2404\0\37\0\0\0"..., 16384, MSG_DONTWAIT, NULL, NULL) = 94
+9  openat(AT_FDCWD, "/tls/ca.pem", O_RDONLY|O_LARGEFILE) = 4
+```
+
+Everything `NFR-PERF-005` names is in there: each file opened, each path
+`stat`ed — including the ones that were **not** found, which is how an upward
+walk through ancestor directories would show itself — and the socket, with the
+address and port it was connected to.
+
+`--server <name>` joins the traced process to that server's network namespace,
+so `127.0.0.1:3306` inside the container is the server and the fixture
+certificate, which names `127.0.0.1`, matches. `tls/` is mounted at `/tls`.
+Without `--server` the process is traced with no server in reach, which is the
+shape of the `NFR-PERF-005` test itself:
+
+```sh
+./observe.sh opens -- mariadb --version > trace
+grep -cE '\b(socket|connect)\(' trace
+grep -E 'openat\(.*\) = [0-9]+$' trace | sed -E 's/.*openat\(AT_FDCWD, "([^"]+)".*/  \1/'
+```
+```
+0
+  /usr/lib/libssl.so.3
+  /usr/lib/libcrypto.so.3
+  /usr/lib/libz.so.1
+  /usr/lib/libncursesw.so.6
+  /usr/lib/libstdc++.so.6
+  /usr/lib/libgcc_s.so.1
+  /etc/my.cnf
+  /etc/my.cnf.d/
+  /etc/my.cnf.d/mariadb-server.cnf
+```
+
+Zero sockets, and a list of every file the process opened. `observer.Dockerfile`
+builds the image `observe.sh` uses; it is `alpine:3.24` with `strace` and
+`mariadb-client`, and the container is run with `--cap-add=SYS_PTRACE` and
+`--security-opt seccomp=unconfined`, without which `ptrace` is refused.
+
+### What could not be instrumented
+
+Three things, recorded here rather than left to be discovered later.
+
+**The failing outcome of `FR-SRV-013`.** The requirement asks for both outcomes
+of the read-back: the setting taking effect, and the setting failing to take
+effect. The first is observed above. The second could not be produced by any
+server in this fixture, and these are the attempts:
+
+| Tried | What happened |
+|---|---|
+| `START TRANSACTION; SET SESSION TRANSACTION READ ONLY;` | Accepted on all four series, and the read-back still answers `1`. MariaDB does not reject it the way MySQL does |
+| The same as `tpl_reader`, the reduced-privilege user | Accepted; read-back `1` |
+| A server already `read_only` | `@@global.read_only` is `0` on the fixture, and setting it changes the global state, not whether a **session** setting takes effect |
+
+A server that accepts the statement and does not apply it is exactly the case
+`FR-SRV-009` exists to catch, and no real MariaDB behaves that way. Producing it
+needs a fault-injection seam in `tpl`, not a container. What the fixture
+establishes is the instrument: the statement is visible in the log and the value
+is readable from the session, so whichever outcome occurs is observable.
+
+**Rows 1 and 2 conclusively.** The instrument counts catalogue queries and the
+count above is real, but `NFR-PERF-001` compares a count over `WL-001` with a
+count over `WL-003`, and `WL-001` is to be realised by `scripts/mariadb/seed-bench.sql`,
+which does not exist. Until it does, the count can be observed but the
+comparison the requirement asks for cannot be made. The `freight`-versus-`mysql`
+pair above stands in for the shape of the comparison, not for its content.
+
+**Row 5 on Darwin.** The trace above is of a Linux process. macOS offers no
+tracer that runs without root or without System Integrity Protection disabled,
+as the table above records, so on a macOS host `NFR-PERF-005` is currently
+verified against the Linux build only.
 
 ## Credentials
 
@@ -243,7 +1052,8 @@ later reader does not mistake one for the other.
 
 The `freight` catalogue was dumped from all four servers and compared field by
 field, and `INFORMATION_SCHEMA` itself was compared table by table. Seven
-differences were found.
+differences were found. The harness later found two more, from outside the
+process rather than in the catalogue, and they are numbered 8 and 9.
 
 1. **Default server collation.** `10.11` runs `utf8mb4_general_ci`; `11.4`,
    `11.8` and `12.3` run `utf8mb4_uca1400_ai_ci`. The character set is `utf8mb4`
@@ -258,14 +1068,31 @@ differences were found.
    reader that goes through `INFORMATION_SCHEMA` is unaffected and one that
    parses `SHOW CREATE TABLE` is not.
 
-3. **TLS availability.** `10.11` reports `have_ssl=DISABLED`; the other three
-   report `have_ssl=YES`, from the self-signed certificate MariaDB began
-   generating automatically at first start in 11.4. Consequences: a **MariaDB**
-   client of 11.4 or later cannot reach the `10.11` fixture over TCP without
-   `--skip-ssl`, while a `10.11` MariaDB client reaches a `12.3` server
-   unmodified and a MySQL client reaches `10.11` with no flags at all.
-   Connections made through `docker exec` use the Unix socket and are
-   unaffected.
+3. **TLS.** Left to themselves the four do not agree: `10.11` offers none and
+   reports `have_ssl=DISABLED`, while `11.4` and later generate a nameless
+   self-signed certificate at every start and report `have_ssl=YES`. The
+   fixture now configures its own certificate on all four, so all four report
+   `have_ssl=YES` and present the same one — see [TLS](#tls) — and what is left
+   of the divergence is three narrower observations:
+
+   - A **MariaDB** client of 11.4 or later, given no flags, reaches `11.4`,
+     `11.8` and `12.3` but fails against `10.11` with `Certificate
+     verification failure: The certificate is NOT trusted.` The trust it uses
+     on the three is established after authentication — a wrong password gives
+     `ERROR 1045` on every series, and only the right one gets as far as `NOT
+     trusted` on `10.11` — and `10.11` does not implement it. A `10.11`
+     MariaDB client verifies nothing by default and reaches all four
+     unmodified.
+   - `--skip-ssl` given to the **server** disables TLS on every series tried,
+     overriding a configured certificate. Clearing the paths instead —
+     `--ssl-cert= --ssl-key= --ssl-ca=` — makes `10.11` abort at startup with
+     `SSL error: Unable to get certificate from ''`, while `11.4` starts and
+     silently falls back to its own generated certificate.
+   - Connections made through `docker exec` over the Unix socket are still
+     unaffected by all of this, with one exception worth knowing: an `11.4`
+     client talking to an `11.4` server that was started `--skip-ssl` is
+     refused over the socket too, with `SSL is required, but the server does
+     not support it`, and needs `--skip-ssl` itself.
 
 4. **Temporary tables in `INFORMATION_SCHEMA.TABLES`.** After a `CREATE
    TEMPORARY TABLE`, `10.11` returns no row for it at all; `11.4`, `11.8` and
@@ -311,17 +1138,46 @@ all four series, and then reported as `RESTRICT`** in
 DDL keeps it because that silent downgrade is itself the behaviour worth
 observing.
 
+### Two more, found by the harness
+
+Neither is a difference in the catalogue, which is why the comparison above
+did not reach them. Both were observed from outside the process, and both
+bear on a statement `tpl` must issue.
+
+8. **`@@session.transaction_read_only` does not exist on `10.11`.** Reading it
+   there fails with `ERROR 1193 (HY000): Unknown system variable
+   'transaction_read_only'`, while `11.4`, `11.8` and `12.3` accept it.
+   `@@session.tx_read_only` exists on all four and answers identically, so it is
+   the only spelling a read-back can use across the supported set. This matters
+   to the fourth entry of the closed list of `FR-SRV-006` — the read-back of
+   `FR-SRV-009` — which is a statement `tpl` must issue on every connection:
+   written with the later spelling it would fail on a quarter of the servers
+   `tpl` claims to support, and fail with an error rather than with a wrong
+   answer. `probe-session.sql` uses `tx_read_only` for that reason.
+
+9. **The `5.5.5-` prefix in the handshake greeting, on `10.11` only.** The
+   version a server sends in its initial handshake packet is
+   `5.5.5-10.11.19-MariaDB-ubu2204` on `10.11` and `11.4.13-MariaDB-ubu2404`,
+   `11.8.9-MariaDB-ubu2404`, `12.3.3-MariaDB-ubu2404` on the other three, with
+   no prefix. `SELECT VERSION()` answers without the prefix on all four,
+   `10.11` included, so the two readings of the version disagree on exactly one
+   series. Observed with the gate's own probe, which reads the greeting and
+   nothing else; see [The gate](#the-gate).
+
 ## Stopping and removing
 
+`./down.sh` does all of this and then proves nothing is left; see [Taking it
+down](#taking-it-down). By hand:
+
 ```sh
-docker stop tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3
-docker rm   tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3
+docker stop tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3 tpl-mariadb-notls
+docker rm   tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3 tpl-mariadb-notls
 ```
 
 Or in one step, discarding the anonymous volume the entrypoint created with it:
 
 ```sh
-docker rm -f -v tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3
+docker rm -f -v tpl-mariadb-10.11 tpl-mariadb-11.4 tpl-mariadb-11.8 tpl-mariadb-12.3 tpl-mariadb-notls
 ```
 
 Leave no container running after a validation run. To drop the images too:

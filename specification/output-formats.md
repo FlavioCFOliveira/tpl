@@ -1,7 +1,7 @@
 ---
 title: Output Formats
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [cli-contract.md, schema-commands.md, errors-and-exit-codes.md, help-and-version.md]
 ---
 
@@ -263,14 +263,19 @@ owns the shape of its `data`.
   server holds, and a template generating code from a comment receives U+FFFD
   rather than the original byte — which was not representable anyway.
 
-- **FR-OUT-018**: The system SHALL escape C0 control characters, tab excepted,
-  in the `text` and `json` output of the read commands — `schema`, `template`,
-  `cfg`, and `cache`.
+- **FR-OUT-018**: The system SHALL escape C0 control characters in the `text`
+  and `json` output of the read commands — `schema`, `template`, `cfg`, and
+  `cache`. Tab is excepted in `text` output alone. In `json` output there is no
+  exception to make: the format admits no raw control character inside a
+  string, so a tab SHALL be emitted as the escape JSON defines for it, which is
+  how this requirement is satisfied there.
 
   *Rationale.* No catalogue byte may reach the terminal uninterpreted. An escape
   character in a column comment must not be able to rewrite what the user sees.
   Tab is excepted because the `text` listings of `FR-OUT-006` are laid out in
-  aligned columns and a tab is layout there rather than content.
+  aligned columns and a tab is layout there rather than content. A JSON
+  document has no columns to align, and nothing to except: the format itself
+  keeps the byte from reaching a consumer raw.
 
   *Amended in the third edition.* The first edition extended this rule to
   "every diagnostic message", where it contradicted `FR-ERR-024`: that
@@ -279,6 +284,17 @@ owns the shape of its `data`.
   four-line `error:` / `cause:` / `hint:` / `exit:` format has no columns to
   align and a tab inside an interpolated catalogue name can only misalign the
   labels a caller reads on.
+
+  *Amended in the ninth edition: the exception is confined to the output that
+  needs it.* The rule read "tab excepted" across `text` and `json` alike, and
+  no JSON document can honour that. JSON admits no raw control character inside
+  a string, so a document with an unescaped tab in one is not JSON, and
+  `FR-OUT-024` makes the document contract. Read literally the rule obliged an
+  invalid document; read for its purpose it obliged nothing on that path,
+  because the format already keeps the byte from arriving raw. The exception
+  now names the output it governs and the `json` path states what satisfies the
+  rule there. No emitted byte changes: this is the wording catching up with the
+  only behaviour either format ever admitted.
 
 - **FR-OUT-019**: The escaping of `FR-OUT-018` SHALL apply to every value
   interpolated into that output, whatever its source: the catalogue, a

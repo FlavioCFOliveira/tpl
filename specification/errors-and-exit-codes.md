@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md]
 ---
 
@@ -71,23 +71,95 @@ Out of scope: the wording of any individual message.
   `.tpl`.
 
 - **FR-ERR-030**: `70` (`EX_SOFTWARE`) SHALL be produced by exactly two
-  conditions, and by no other: a panic caught at the top level of the process,
-  and a violated internal invariant the system detects and declines to
-  continue past.
+  conditions, and by no other: a panic in the process, and a violated internal
+  invariant the system detects and declines to continue past. WHEN a panic
+  occurs, the system SHALL write the message `FR-ERR-032` requires and SHALL
+  terminate the process with exit `70`.
 
   *Rationale.* It was the only code in the table of `FR-ERR-001` for which no
   requirement stated a producing condition, so nothing could confirm that the
   binary is able to return it at all.
 
+  *Amended in the ninth edition: the first condition states an outcome, and no
+  longer a mechanism.* It read "a panic **caught** at the top level of the
+  process", which obliged the process to resume execution at a frame above the
+  panic site. That is one way to reach the outcome and not the only one, and it
+  is not one the release profile recorded outside this corpus admits at all:
+  under a profile that terminates on a panic, no frame above the panic site
+  runs and nothing is caught — the defect `DIV-045` recorded. What this corpus
+  makes contract is the outcome a caller observes — the four labelled lines of
+  `FR-ERR-008` and the code — and a process can produce both from the panic
+  site itself, before the panic ends it. The condition therefore survives with
+  its wording changed rather than being dropped: `70` keeps the two producing
+  conditions it had, both exist in the distributed binary, and the code table
+  of `FR-ERR-001` is unchanged. Which mechanism produces the outcome is an
+  architecture decision, and this corpus names none, per the boundary the
+  [README](README.md#still-out-of-scope) draws.
+
+  *Rejected.* Dropping the first condition and stating the resulting limit in
+  its own text — that a defect depriving the process of control is not reported
+  as `70` and carries no message — which is the form `DIV-045` anticipated. The
+  limit is not real: the outcome is obtainable under the profile as it stands,
+  and a corpus that records a limit it does not have would send a caller
+  branching away from a code the binary does return. Also rejected: leaving the
+  requirement as written and obliging the profile to yield. The profile is not
+  this corpus's to set, and what the requirement exists to guarantee — the
+  caller receives the code and the message — is met without changing it.
+
 - **FR-ERR-031**: The system SHALL provide a deliberate trigger for `70`, so
-  that the test `BR-ERR-001` mandates for it can exist. The trigger SHALL NOT
-  appear in any help text, in the JSON command tree of `FR-HELP-016`, or in the
-  command tree of `FR-CLI-002`.
+  that the test `BR-ERR-001` mandates for it can exist. The trigger SHALL be
+  reachable only from within the system's own test configuration, SHALL NOT be
+  reachable from any invocation of the binary the project distributes, and
+  SHALL NOT appear in any help text, in the JSON command tree of
+  `FR-HELP-016`, or in the command tree of `FR-CLI-002`.
 
   *Rationale.* A code with no test is a code nobody has confirmed the binary
   can return, and `70` cannot be reached from a correct invocation by
   definition. Keeping the trigger out of the published surface keeps the tree
   closed, per `FR-CLI-002`, and keeps it out of the caller's context window.
+
+  *Amended in the eighth edition: the mechanism is named, because every
+  mechanism reachable from outside the process collides with a requirement in
+  force.* The first form of this requirement said where the trigger must not
+  appear and left open what it is. Each of the three candidates fails against
+  a requirement this corpus holds:
+
+  | Candidate | The requirement it collides with |
+  |---|---|
+  | A command or a flag, hidden or declared | `FR-CLI-002` closes the tree, and `FR-HELP-021` derives the JSON tree by introspecting the very tree the parser accepts — so a node the parser accepts is in the document this requirement bars it from |
+  | An environment variable | `FR-CLI-021` reads none, `FR-CLI-023` names the one exception, and `NFR-DET-001` promises byte-identical stdout for one invocation against one state |
+  | A build selected by a feature | The artefact verified would not be the artefact distributed, and `NFR-PERF-018` makes every distributed artefact first class |
+
+  The trigger is therefore inside the process and reachable from nothing a
+  caller can write. Nothing on the published surface changes, and none of the
+  four requirements above yields.
+
+  *The exception, stated against the requirement it excepts from.*
+  `BR-ERR-001` requires an **integration** test per exit code. `70` alone is
+  excepted, and `BR-ERR-001` says so in its own text. What replaces it is a
+  composition rather than a lesser test: the guard that detects a violated
+  internal invariant is exercised in process and observed to produce the
+  condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires, and
+  the step from that condition to the process exit status is the same step
+  every other code of `FR-ERR-001` travels — and each of those nine does have
+  the integration test `BR-ERR-001` mandates.
+
+  *Consequence, stated plainly.* No invocation of the distributed binary is
+  observed returning `70`. What is observed is the guard, and separately the
+  step from an error condition to an exit status; the composition of the two
+  is reasoned rather than executed. That is weaker than the nine other rows of
+  `FR-ERR-001`, and it is the price of the trigger being unreachable — which
+  is the property `FR-ERR-030` needs, because a `70` a caller could provoke
+  would not be a defect in `tpl`.
+
+  *Rejected.* Dropping the trigger and leaving `70` with no test of any kind,
+  which is the state the third edition closed in `OQ-067` and would restore.
+  Also rejected: provoking the invariant from an input a caller controls — a
+  hand-written cache document, a `--context` document, a `.cfg` value — which
+  would make `70` reachable from bad input and would then tell the caller that
+  a file they can delete is a defect they cannot fix. That contradicts
+  `FR-ERR-032` and diagnoses the wrong fault, which is the error
+  `FR-CONF-033` rejects in the same shape.
 
 - **FR-ERR-032**: A `70` SHALL follow the message format of `FR-ERR-008`, and
   its `hint` SHALL say that the condition is a defect in `tpl` and is not
@@ -95,8 +167,21 @@ Out of scope: the wording of any individual message.
 
 - **BR-ERR-001**: Exit codes are contract. Each code SHALL have at least one
   integration test that exercises it, and that test is part of the definition of
-  done for the feature that can produce it. `70` is exercised through the
-  trigger of `FR-ERR-031`.
+  done for the feature that can produce it. `70` is the one exception, stated
+  here rather than left to be inferred: neither of its producing conditions in
+  `FR-ERR-030` can be reached deliberately from an invocation of the
+  distributed binary, so it is exercised in process through the trigger of
+  `FR-ERR-031`, and not by an integration test.
+
+  *Amended in the eighth edition.* The rule required an integration test for
+  every code while also saying that `70` "is exercised through the trigger of
+  `FR-ERR-031`", and no trigger satisfying both existed: every mechanism
+  reachable from outside the process collides with `FR-CLI-002`,
+  `FR-CLI-021`, `FR-HELP-021` or `NFR-PERF-018`, which `FR-ERR-031` now
+  records candidate by candidate. This rule yields, for `70` alone. The other
+  nine codes are unchanged, and the composition that stands in for the missing
+  test — together with what it does not establish — is stated in
+  `FR-ERR-031`.
 
 ## No database entry versus a missing entry
 
@@ -185,7 +270,7 @@ Out of scope: the wording of any individual message.
   | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or the structural rule of [context-document.md](context-document.md) it failed. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012` |
   | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, or the key space of `FR-CONF-002` |
   | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, or catalogue query — the host and port attempted, and what that phase returned |
-  | `70` | The invariant that was violated, or that a panic was caught at the top level, and where |
+  | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
   | `74` | The path or stream that failed, the operation attempted on it, and what the filesystem or the stream returned |
   | `77` | For authentication, the user and the host the server refused, and that the refusal came from the server. For privileges, which property of which object could not be read, per `FR-PRIV-013` |
@@ -212,6 +297,12 @@ Out of scope: the wording of any individual message.
   value, and `FR-ERR-013` and `FR-SEC-005` still bar every credential.
   Precision never licenses echoing a secret, and never licenses reproducing a
   name `FR-ERR-023` refuses.
+
+  *Amended in the ninth edition.* The `70` row said that a panic was "caught at
+  the top level". The word goes with the same word in `FR-ERR-030`, and what
+  the row obliges is otherwise unchanged: the fact — an invariant or a panic —
+  and where it happened. "Where" is the location the condition arose at, not
+  the text a panic carried.
 
 - **FR-ERR-011**: A template error SHALL carry the template name, the line, the
   column, and the chain of underlying template-engine errors.
@@ -337,7 +428,7 @@ Out of scope: the wording of any individual message.
   character in every value it interpolates into a message — catalogue names,
   comments, defaults, `--context` values, and the argument vector. This
   requirement owns escaping in a diagnostic message; `FR-OUT-018` owns
-  escaping in the output of a read command, where tab is excepted.
+  escaping in the output of a read command, where tab is excepted in `text`.
 
   *Rationale.* Escaping newlines separately protects the line-oriented
   `error:` / `cause:` / `hint:` / `exit:` format from having a whole diagnostic

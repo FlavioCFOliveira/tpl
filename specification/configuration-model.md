@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -84,19 +84,42 @@ tls      = "verify-identity"
   `/etc`.
 
 - **FR-CONF-004**: The system SHALL resolve each phase deadline from the
-  `[core]` key for that phase, or from the built-in default declared for that
-  key in `FR-CONF-002` where the key is absent. `--timeout` SHALL NOT
-  participate in this resolution; it is an overall bound that composes with the
-  result, per `FR-GLOB-011` and `FR-GLOB-012`.
+  `[core]` key `FR-CONF-005` names for that phase, or from the built-in default
+  declared for that key in `FR-CONF-002` where the key is absent. `--timeout`
+  SHALL NOT participate in this resolution; it is an overall bound that
+  composes with the result, per `FR-GLOB-011` and `FR-GLOB-012`.
 
   *Amended in the third edition.* The first edition put `--timeout` at the head
   of this precedence, which made the four `[core]` timeout keys unreachable
   because `FR-GLOB-001` gave the flag a default. The flag now has no default
   and is not a layer of this rule.
 
+  *Amended in the ninth edition.* The rule said "the `[core]` key for that
+  phase" against six phases and four keys, which left three phases with no
+  referent. The mapping is now stated, once, in `FR-CONF-005`, and this rule
+  points at it rather than implying a key per phase.
+
 - **FR-CONF-005**: The system SHALL apply a deadline to every blocking phase:
   DNS resolution, TCP connect, TLS handshake, catalogue query,
-  `password_command`, and render.
+  `password_command`, and render. Each phase SHALL take its deadline from the
+  key named beside it:
+
+  | Phase | Key of `FR-CONF-002` |
+  |---|---|
+  | DNS resolution | `core.connect_timeout` |
+  | TCP connect | `core.connect_timeout` |
+  | TLS handshake | `core.connect_timeout` |
+  | Catalogue query | `core.query_timeout` |
+  | `password_command` | `core.password_timeout` |
+  | Render | `core.render_timeout` |
+
+  The three connection phases SHALL share **one** budget of the resolved value
+  of `core.connect_timeout`, measured from the start of the first of them that
+  runs and consumed by them in the order they run. The system SHALL NOT give
+  each of the three a budget of that value. The other three phases each have a
+  budget of their own. IF the shared budget expires, THEN the system SHALL
+  report the failure against the phase that was in progress when it expired,
+  per `FR-ERR-034`.
 
   *Note added in the fifth edition.* The DNS phase is the one phase whose
   behaviour depends on how the binary was linked. The Linux targets of
@@ -106,6 +129,22 @@ tls      = "verify-identity"
   outcome are unchanged — the phase fails and `FR-ERR-027` routes it to `69` —
   but the `cause` line owes the caller the distinction, per `FR-ERR-034`: a
   name that did not resolve is not a host that refused a connection.
+
+  *Amended in the ninth edition: the six phases are mapped onto the four keys,
+  because three of them had no referent.* `FR-CONF-004` resolves each phase
+  deadline from "the `[core]` key for that phase" and `FR-CONF-002` declares
+  four timeout keys against these six phases, so DNS resolution, TCP connect
+  and TLS handshake were left with no key of their own and one candidate
+  between them. Two readings were available: three independent deadlines of
+  `core.connect_timeout`, whose sum is three times the value the caller set; or
+  one budget of that value shared by the three. This corpus takes the second,
+  and now says so in its own text. It is what the key's name states — a caller
+  who writes `connect_timeout = 10` is stating how long connecting may take —
+  and under the first reading the configured value could not bound the thing it
+  is named after. Nothing about which phases exist, which of them can fail, or
+  which code a failure produces changes, and the obligation that no phase run
+  unbounded held under either reading. `FR-GLOB-012` composes the shared budget
+  with `--timeout` exactly as it composes the other three.
 
 ## Strictness of the file
 
@@ -327,6 +366,41 @@ tls      = "verify-identity"
   | `verify-ca` | encrypted, chain validated against the trust material of `FR-CONF-014` | `69` |
   | `verify-identity` | encrypted, chain and hostname validated | `69` |
 
+  The fixture of `scripts/mariadb/` SHALL be able to present, at each series
+  of `FR-SRV-015`, a server whose certificate names the host by which the
+  project's tests reach it, and SHALL retain a server that offers no TLS. The
+  first is what an acceptance test for the default mode of `FR-CONF-013`
+  requires; the second is the right-hand column of the table above.
+
+  *Amended in the eighth edition: the fixture obligation is a requirement
+  rather than a consequence.* The *Observed* note below records that `tpl`
+  with default configuration cannot reach the fixture over TCP on any series,
+  because `10.11` offers no TLS and the certificate the other three generate
+  automatically carries no `subjectAltName`. Left as a consequence, that made
+  the success cell of `verify-identity` — the default of `FR-CONF-013`, and
+  therefore the mode every caller meets first — the one cell of the table with
+  no test, and it obliged every other test that reaches a server to set `tls`
+  away from its default. The obligation is the fixture's, so it is stated
+  here, in the requirement whose cells it makes demonstrable.
+
+  *Rejected.* Dropping the acceptance test for the default mode and stating
+  the cost. The cost is not one this corpus can state and keep its own rule
+  that a requirement which cannot be tested or demonstrated is not a
+  requirement: `FR-CONF-036` makes the five modes normative over the driver
+  precisely so that each is distinguishable, and a default that nothing
+  exercises end to end is the one a caller reaches without asking for it.
+  Also rejected: configuring the certificate on the three TLS-capable series
+  alone, which leaves `10.11` — supported until 2028-02-16 — unable to run an
+  acceptance test that `FR-SRV-029` requires against every series.
+
+  *What this obligation is not.* It is not a change to any of the ten cells,
+  which stand exactly as observed, and it is not a relaxation of
+  `verify-identity`: a certificate that names the host is what the mode has
+  always required, and supplying one makes the requirement demonstrable rather
+  than weaker. How the certificate is generated, where the fixture keeps it,
+  and how the no-TLS server is retained alongside it are the fixture's own
+  work and are not specified here.
+
   *Observed.* Each cell was verified against two running servers of
   `FR-SRV-015` — one reporting `have_ssl=YES` and one reporting
   `have_ssl=DISABLED` — and encryption was read from the live session rather
@@ -346,10 +420,11 @@ tls      = "verify-identity"
   separates `verify-identity` from `verify-ca` in the observation and is why
   the two are distinct rather than collapsed; what it does not do is
   demonstrate the success cell, which needs a server certificate carrying a
-  name. **Consequence for the project's own tests:** `tpl` with default
-  configuration cannot connect to the fixture of `scripts/mariadb/` over TCP
-  on any series, and an acceptance test for the default mode needs TLS
-  configured in that fixture with a certificate that names the host.
+  name. **Consequence for the project's own tests, now an obligation in the
+  text above:** `tpl` with default configuration cannot connect to the fixture
+  of `scripts/mariadb/` over TCP on any series, and an acceptance test for the
+  default mode needs TLS configured in that fixture with a certificate that
+  names the host.
 
   *A supported series may offer no TLS at all*, so the right-hand column is
   not hypothetical: `10.11` reports `have_ssl=DISABLED` unless an

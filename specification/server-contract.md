@@ -1049,12 +1049,14 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   for `FR-SRV-026` and not the verification `FR-SRV-026` requires. That test
   cannot be written until `tpl` can emit a document.
 
-- **FR-SRV-035**: The marked read of `FR-SRV-031` SHALL be verified by an
-  integration test that presents the reader with a series above its own window,
-  and that asserts the exit code is `0` and that `standing` is
-  `newer_than_supported`. The seam by which the test does so SHALL NOT appear in
-  any help text, in the JSON command tree of `FR-HELP-016`, or in the command
-  tree of `FR-CLI-002`.
+- **FR-SRV-035**: The marked read of `FR-SRV-031` SHALL be verified by a test
+  that presents the reader with a series above its own window, and that asserts
+  that the read completes without error and that `standing` is
+  `newer_than_supported`. The seam by which the test narrows the window SHALL
+  be the seam of `FR-ERR-031`: reachable only from within the system's own test
+  configuration, and reachable from no invocation of the binary the project
+  distributes. It SHALL NOT appear in any help text, in the JSON command tree
+  of `FR-HELP-016`, or in the command tree of `FR-CLI-002`.
 
   *Rationale.* No such server exists to point the test at — by construction, the
   window contains the newest one there is — so the test must narrow the reader's
@@ -1064,10 +1066,51 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   the command line is a flag, and `FR-SRV-020` rejected a flag that overrides
   the window.
 
+  *Amended in the eighth edition: the seam is the one `FR-ERR-031` names, and
+  the assertion on the exit code is what yields.* This requirement called for
+  an integration test asserting exit `0`, which only a test that runs the
+  binary can observe, while its own rationale ruled out every seam such a test
+  could reach. The two halves could not both stand. The rationale is the half
+  that survives, because it is the argument `FR-SRV-020` had already made: the
+  seam moves inside the process, and what the test asserts is that the read
+  completes without error and that the document carries
+  `standing: newer_than_supported`. The step from a read that completes to
+  exit `0` is `BR-CLI-004`, and it is observed by the integration test of
+  every successful command; nothing is left unobserved but the composition of
+  the two, which `FR-ERR-031` states plainly for `70` and which is the same
+  limit here.
+
+  *What this does not except from.* `BR-SRV-003` requires an observation made
+  outside the process, on the server, and it names `FR-SRV-012` through
+  `FR-SRV-014` — the three promises about what the process **sends**. This
+  requirement is not among them and takes no exception to it: what is verified
+  here is what the reader **emits** into the document, and narrowing the window
+  changes neither the statements of `FR-SRV-006` nor their count. The one
+  exception taken is `BR-ERR-001`'s, and it is taken once, in `FR-ERR-031`.
+
+  *Rejected.* A server, or a stand-in for one, reporting a series above the
+  window. `FR-SRV-041` states that a server determined to pass as MariaDB will
+  pass, so such a stand-in is possible in principle and would make this an
+  outside observation. It was rejected because it obliges the project to build
+  and maintain an impostor of the MariaDB wire protocol for one assertion, and
+  because what it would establish — that the reader believes the version the
+  server reports — is `FR-SRV-040`, already verified against four real
+  servers.
+
 - **BR-SRV-003**: All three of `FR-SRV-012` through `FR-SRV-014` are
   observations made from outside the process, on the server. A promise about what
   a process sends that can only be checked by reading that process's own source
   is not a promise a caller can rely on.
+
+  *What this rule reaches, stated in the eighth edition.* It reaches the three
+  requirements it names, which are promises about the statements `tpl` sends
+  and the connections it opens. It does not reach `FR-SRV-035`, which is a
+  promise about what the reader emits into the document and which is verified
+  through the in-process seam of `FR-ERR-031`, because no arrangement outside
+  the process can present the reader with a series above its own window. The
+  distinction is the one this rule already draws: a claim about what is sent is
+  checkable on the server, and a claim about what is emitted is checkable in
+  the bytes, and neither is checkable by reading the source.
 
 ## Dependencies
 

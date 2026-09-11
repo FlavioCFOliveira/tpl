@@ -295,9 +295,10 @@ Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tab
 | Templates | `minijinja` + `minijinja-contrib` | Runtime, sempre |
 | Acesso MariaDB | `sqlx` 0.9 + `tokio` 1, runtime *current-thread* | `mysql` rejeitado; ver `BENCHMARKS.md` |
 | Serialização | `serde` + `serde_json` | O contexto de render é `serde`-serializável |
-| Configuração | `toml` + `serde` | |
+| Configuração | `toml` + `serde` na leitura; `toml_edit` na escrita | A escrita preserva comentários e ordem; `OD-09`, em `docs/spec-technical/open-decisions.md` |
 | Erros | `thiserror` na biblioteca, `anyhow` no binário | |
-| Logging | `tracing` + `tracing-subscriber` | Controlado pela flag de verbosidade |
+| Logging | Diagnósticos próprios, sem subscriber instalado | Sem `tracing` nem `tracing-subscriber`; controlado pela flag de verbosidade; `OD-17`, em `docs/spec-technical/open-decisions.md` |
+| uid do processo | `rustix`, `default-features = false`, `features = ["process"]` | `getuid` seguro; via `libc` exigiria `unsafe`; `OD-24`, em `docs/spec-technical/open-decisions.md` |
 
 > **Decisão fechada — driver MariaDB.** A escolha recaiu sobre o `sqlx` com o `tokio` num runtime *current-thread*; o `mysql` foi rejeitado. Quem decidiu foi `FR-CONF-036`, em `specification/configuration-model.md`: o candidato síncrono não exprime os cinco modos de TLS de forma distinta, e reduzir o conjunto de modos para o acomodar está vedado. A medição concordou — e desmentiu a suspeita que aqui estava escrita: o runtime assíncrono não penalizou arranque, tamanho de binário nem memória residente, ficou à frente nos três. Os números, o protocolo e as ressalvas estão em `BENCHMARKS.md`.
 

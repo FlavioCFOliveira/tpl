@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-11
 related: [README.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
@@ -73,6 +73,7 @@ Two kinds of entry appear:
 | [DIV-042](#div-042) | `README.md` | Contradiction | The JSON error envelope, the `kind` field, and `did_you_mean` |
 | [DIV-043](#div-043) | `README.md` | Contradiction | The `.cfg` is now read strictly; an unrecognised key is fatal |
 | [DIV-044](#div-044) | `README.md` | Contradiction | The four fields of `tpl schema info` |
+| [DIV-045](#div-045) | `CLAUDE.md` | Contradiction | The release profile aborts on panic; discharged in the ninth edition, nothing is owed |
 
 ## DIV-001
 
@@ -362,11 +363,16 @@ which lists the four local flags and the commands that declare each.
 
 *Says*: the walk climbs until a `.tpl/` folder is found, and `TPL_DIR` skips
 discovery.
-*Specification*: `FR-PROJ-005` adds the boundary at the home directory and the
-mount point; `FR-PROJ-009` through `FR-PROJ-011` add canonicalisation and the
-ownership and mode checks; `FR-GLOB-009` replaces `TPL_DIR` with `--tpl-dir`.
+*Specification*: `FR-PROJ-005` adds the boundary at the mount point;
+`FR-PROJ-009` through `FR-PROJ-011` add canonicalisation and the ownership and
+mode checks; `FR-GLOB-009` replaces `TPL_DIR` with `--tpl-dir`.
 *Correction*: the description is incomplete rather than wrong; replace it with a
 pointer to [project-and-discovery.md](project-and-discovery.md).
+
+*Amended in the eighth edition.* This entry named a boundary at the home
+directory beside the mount point. `FR-PROJ-005` drops it, because locating it
+required reading `HOME` and `FR-CLI-021` admits no such read. The correction
+owed to `CLAUDE.md` is unchanged in kind and shorter by one clause.
 
 ## DIV-025
 
@@ -501,7 +507,7 @@ table also carries `table_type` per `FR-CAT-002`, `referenced_by` per
 `FR-CAT-015`. A column's `default` is a discriminated structure per
 `FR-CTX-012`, not a value; its type is `column_type` plus eight decomposed parts
 per `FR-CTX-015`, not "the raw catalogue attributes"; and it carries
-`table_name` per `FR-CTX-019`. Thirteen volatile catalogue fields are excluded
+`table_name` per `FR-CTX-019`. Sixteen volatile catalogue fields are excluded
 outright by `FR-CAT-024`.
 *Correction*: replace both descriptions with a pointer to
 [catalogue-coverage.md](catalogue-coverage.md) and
@@ -518,8 +524,13 @@ wrongly rather than incompletely: a table carries **no character set**, only
 a collation, per `FR-SCH-009` as amended; a column's `default` has **three**
 `kind` values and not four, per `FR-CTX-013`; and a table's comment for a
 **view** is the literal string `VIEW`, which `FR-CAT-040` keeps out of the
-model. Sixteen volatile fields are now excluded by `FR-CAT-024`, not
-thirteen.
+model. The exclusion list of `FR-CAT-024` grew from thirteen fields to
+sixteen in the same edition.
+
+*Amended in the eighth edition.* The *Specification* clause above still said
+thirteen while the note beside it said sixteen. `FR-CAT-024` carries sixteen
+rows, counted in its own table on 2026-09-10; the clause is corrected and the
+two now agree.
 
 ## DIV-035
 
@@ -791,3 +802,54 @@ that reads it.
 either drop `version` or replace it with a pointer to the `server` object of
 [context-document.md](context-document.md). The listing is the first place a
 caller looks for the shape of that document.
+
+## DIV-045
+
+**Target**: `CLAUDE.md`, the release profile. **Kind**: contradiction.
+
+*Says*: the release profile is tuned in `Cargo.toml` with `lto = "fat"`,
+`codegen-units = 1`, `panic = "abort"`, `strip = true`, and `opt-level = 3`.
+
+*Specification*: `FR-ERR-030` — `70` (`EX_SOFTWARE`) is produced by exactly
+two conditions, one of which is **a panic in the process**; `FR-ERR-032`
+requires that `70` to carry the four labelled lines of `FR-ERR-008`; and
+`FR-ERR-001` makes the code table contract. What `panic = "abort"` settles is
+how a panic ends the process, not whether the process may report it first. By
+**default** it ends it abnormally: the caller receives no code of
+`FR-ERR-001` and no message, which removes one of the two producing conditions
+of a contractual code in the only artefact a caller ever runs. That default is
+not the whole of what the setting admits. A process that installs its own
+handler for a panic writes the message and exits with the status it chooses,
+before the aborting runtime is reached, and the requirement is then met under
+the profile exactly as written.
+
+*Correction*: none is owed to the profile table. The five settings stand as
+written, and `FR-ERR-030` as amended in the ninth edition obliges the process
+to report a panic and exit `70` without obliging the panic path to be
+catchable.
+
+*Why this was recorded rather than resolved, and how it closed.* The eighth
+edition reconciled three contradictions **within** this corpus, and this one
+was not within it: nothing in `/specification` states a release profile, and
+the choice between an unwinding profile and a narrower promise for `70` was an
+architecture decision with a cost this corpus cannot weigh. The decision came
+back narrower than either option — the profile stands and the requirement
+states an outcome rather than a mechanism — and the ninth edition writes the
+amendment in.
+
+*Amended in the ninth edition, and this entry is discharged.* The
+*Specification* clause rested on a premise that was too strong. It said without
+qualification that under `panic = "abort"` "a panic terminates the process
+abnormally, the caller receives no code of `FR-ERR-001`, and no message is
+written"; that is true of the **default** behaviour of such a profile and not
+of a process that handles the panic itself. The clause is corrected and now
+separates the two. The *Correction* clause is corrected with it: it required
+the profile to leave the panic path catchable, and offered as its alternative
+that `FR-ERR-030` drop the caught-panic condition and state the resulting
+limit. Neither is what happened. `FR-ERR-030` keeps both producing conditions
+and states the first as the outcome a caller observes — the message and the
+code — which the profile as written can produce, so the two statements this
+entry refused to leave standing together no longer conflict. Nothing is owed to
+`CLAUDE.md` under this entry. The identifier is retained rather than removed,
+so that a reference written before the ninth edition resolves to this
+explanation.

@@ -1,0 +1,474 @@
+---
+title: Architecture
+status: draft
+last-reviewed: 2026-09-11
+related: [README.md, traceability.md, open-decisions.md, overview.md, interfaces.md, data-model.md, quality-attributes.md]
+---
+
+# Architecture
+
+## What this document is
+
+The components of `tpl`, what each owns, and the order an invocation runs
+through them. Every statement cites the requirement that forces it or the
+settled entry that decided it; no requirement text, no command-line syntax and
+no JSON syntax is reproduced.
+
+The components named here are the modules of
+[`OD-05`](open-decisions.md#od-05--the-module-decomposition), and they are the
+same names [interfaces.md](interfaces.md#the-contracts) puts on both sides of
+every contract. Versions and crate rationale are `technology-stack.md`; the
+contracts themselves are [interfaces.md](interfaces.md); every persisted shape
+is [data-model.md](data-model.md).
+
+## The module map
+
+[`OD-05`](open-decisions.md#od-05--the-module-decomposition) settles eleven
+modules under `src/`, plus the crate root, and it settles the visibility rule.
+Its rationale, the seven placements it argued and the homes it rejected are
+recorded there and are not restated.
+
+```
+src/
+├── main.rs        parse, dispatch, map the error to an exit status, and nothing else
+├── lib.rs         the crate root and its deliberate re-exports
+├── cli/           the parser tree, one module per porcelain command, and the help renderer
+├── project/       discovery, the trust checks, and the configuration reader and writer
+├── mariadb/       the connection, the catalogue reader, and the privilege cross-checks
+├── model/         the model read from the catalogue — the published surface
+├── cache/         the read-through cache and its on-disk arrangement
+├── render/        the engine, the loader, and the registered template surface
+├── output/        the envelope, the JSON emitter, the text layouts, escaping, the writer
+├── diagnostics/   the four-line renderer, the suggestion machinery, the verbosity gate
+├── deadline.rs    the phase clock and the timer thread of OD-12
+└── error.rs       the error type and the exit-code derivation
+```
+
+Three sub-modules are named by
+[`OD-05`](open-decisions.md#od-05--the-module-decomposition)'s placement table
+and are load-bearing for a boundary in [interfaces.md](interfaces.md#the-contracts):
+`cli/help.rs`, `project/config.rs` and `mariadb/privileges.rs`.
+
+**`cli/` delegates; it does not do the work.** Each porcelain command validates
+its own arguments, calls the library, and hands the result to `output/`; the
+work lives in the module that owns the subject. That is what makes
+`NFR-PERF-005` an observation rather than an argument, and it is why a subject
+reached by four commands — a table is read by a listing, by the dump, by a
+render and by a cache load — exists once.
+
+### Layout conventions
+
+These are the project's own rules, recorded in `CLAUDE.md` (*Convenções de
+Código Rust*, *Regras Inegociáveis*), and they bind this map.
+
+| Convention | Consequence for the map above |
+|---|---|
+| One file-module style: `foo.rs` beside a `foo/` directory, never `mod.rs` | Every directory above has a sibling `.rs` file of the same name |
+| Module names in `snake_case`, no obscure abbreviation, no repetition of the parent | `diagnostics/`, not `diag/`; `mariadb::reader`, not `mariadb::mariadb_reader` |
+| Visibility minimal: private by default, `pub(crate)` for what crosses a module, `pub` for `model/` and `error.rs` alone; `lib.rs` re-exports those two and no module whole | [`OD-05`](open-decisions.md#od-05--the-module-decomposition) |
+| The library holds the logic; the binary parses, dispatches and maps | `main.rs` performs no classification of its own ([interfaces.md](interfaces.md#the-error-type-and-the-exit-code)) |
+| `#![forbid(unsafe_code)]` stays at the top of the crate | It is what forces a safe wrapper for the one value `std` does not supply in the trust checks ([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid)) |
+
+## The invocation pipeline
+
+`FR-ERR-006` fixes eight conditions in one order and `FR-ERR-007` makes that
+order decide which code wins when more than one is unsatisfied. The order is
+therefore the shape of the process, not a convention of the error module.
+
+| # | Step | Component | Code if it fails |
+|---|---|---|---|
+| 1 | Parse the invocation | `cli/` | `64` |
+| 2 | Discover the project and apply the trust checks | `project/` | `78` |
+| 3 | Read and validate the configuration file | `project/config.rs` | `78` |
+| 4 | Resolve the database entry | `project/config.rs` | `78` or `66` |
+| 5 | Consult the cache; open a connection if it does not answer | `cache/`, then `mariadb/` | `69`, `77` or `78` |
+| 6 | Resolve the named catalogue object | `mariadb/` or `cache/` | `66` |
+| 7 | Resolve the template | `render/` | `66` |
+| 8 | Render | `render/` | `65` |
+
+Two properties of the order are architectural rather than diagnostic. Step 1
+runs for every command without exception, so a malformed invocation is rejected
+before anything is read from the filesystem (`FR-ERR-006`). And no step may be
+reached by a command that does not need it: steps 5 to 8 are entered by need,
+not by dispatch, which is [Lazy initialisation](#lazy-initialisation) below.
+
+### The four commands that skip steps 2 and 3
+
+`FR-PROJ-025` exempts four entries from project discovery, and `FR-ERR-006`
+turns that exemption into the skipping of steps 2 and 3. `NFR-PERF-005` makes
+the exemption observable from outside the process — no `stat` of an ancestor,
+no open of the configuration file, no socket — and `NFR-PERF-007` forbids
+verifying it by reading the source.
+
+| Exempt | Why, per `FR-PROJ-025` |
+|---|---|
+| `tpl init` | It creates the project folder, so it cannot require one to be found |
+| The three `help` command forms | The command tree is derived from the binary (`FR-HELP-021`) |
+| The help flag at any node of the tree | It is byte-identical to the help command at that node (`FR-HELP-002`) |
+| `tpl version` and the version flag | It prints a constant (`FR-HELP-005`) |
+
+**The classification happens in `cli/`, on the parsed invocation, before any
+filesystem access.** It cannot be a check inside `project/`, because reaching
+`project/` to ask the question is already the `stat` that `NFR-PERF-005`
+forbids.
+
+**Recorded reading — how the exempt set is counted.**
+[README.md](README.md#architecturemd) fixes this document's scope as "the four
+commands that skip two of them", which is the row count of `FR-PROJ-025`;
+`NFR-PERF-005` states the same set as three, because it groups the help command
+and the help flag together. The two describe one set, and nothing in the built
+system turns on the count. The table above follows `FR-PROJ-025`.
+
+## Project discovery and the trust checks
+
+`project/` owns the walk and the checks; nothing else in the crate locates a
+project.
+
+| Step | Rule | Forced by |
+|---|---|---|
+| Start | The current directory, unless the invocation names a `.tpl` folder explicitly — which suppresses the walk and exempts nothing from the checks | `FR-PROJ-004`, `FR-PROJ-008` |
+| Walk | Upward, stopping at the first directory that holds a `.tpl` folder | `FR-PROJ-001`, `FR-PROJ-004` |
+| Boundary | The mount point of the filesystem the walk starts on, determined without reading any environment variable | `FR-PROJ-005`, `FR-CLI-021`, `BR-CLI-002`, `FR-SEC-013` |
+| Failure | No fallback anywhere outside the project: a walk that reaches the boundary without finding one fails | `FR-PROJ-006`, `FR-PROJ-007` |
+| Check 1 | Canonicalise the resolved path **before** any check, so a symlinked folder is verified at its target | `FR-PROJ-009`, `FR-SEC-015` |
+| Check 2 | The configuration file is owned by the current user | `FR-PROJ-010` |
+| Check 3 | The configuration file carries no group and no other access bits | `FR-PROJ-011` |
+
+**The boundary is a comparison, not a lookup.** It is decided by comparing a
+directory's filesystem device identifier with its parent's, which is why no
+home directory is located and no environment variable is read on this path
+([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid),
+which also settles how the process's own user identifier is obtained for check
+2, and states the accepted cost `FR-PROJ-005` carries).
+
+**Checks 2 and 3 are a precondition of reading, not a validation of what was
+read**, so they run before the configuration file is opened
+([interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)).
+Containment of template paths under the project root is a different boundary,
+enforced at one point in `render/` and owned as a subject by `security.md`.
+
+## Configuration resolution
+
+`FR-CONF-029` gives the resolver exactly three inputs and `FR-CONF-030` denies
+it a fourth: the flag layer, the configuration file, and the built-in default
+declared for the key. Two components supply them and neither owns the rule.
+
+| Layer | Supplied by | Forced by |
+|---|---|---|
+| The flag | `cli/`, from the parsed invocation | `FR-CONF-029`, `FR-GLOB-001` |
+| The file | `project/config.rs`, after the trust checks | `FR-CONF-029` |
+| The built-in default | The declared key space, in `project/config.rs` | `FR-CONF-029`, `FR-CONF-002` |
+| **No environment layer** | — | `FR-CONF-030`, `FR-CLI-021`, `BR-CLI-002` |
+
+`${VAR}` expansion inside the file is not a fourth layer: it supplies the value
+of a key the file already carries (`FR-CONF-030`, `FR-CONF-015`), and it is the
+single point at which the environment reaches an invocation at all
+([overview.md](overview.md#what-tpl-is-not)). What the reader owes each caller,
+and the three distinct read paths over the one file, are
+[interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)'s; the
+key space and the file's shape are [data-model.md](data-model.md#tplcfg)'s.
+
+## The connection lifecycle
+
+One connection at most, per invocation (`NFR-PERF-004`). There is no pool: the
+process is ephemeral and issues a handful of queries, which is the root
+coordination document's rule (`CLAUDE.md`, *Desempenho e Eficiência*) and also
+what `NFR-PERF-004` makes verifiable from the server side (`FR-SRV-014`).
+
+The lifecycle is five ordered stages inside `mariadb/`, and no other module
+sends a statement.
+
+| # | Stage | Rule | Forced by |
+|---|---|---|---|
+| 1 | Open | Opened late — when the reader is about to read, never at dispatch | `NFR-PERF-006`, `NFR-PERF-003`, [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
+| 2 | Set the session read-only | Once, at connection start | `FR-SRV-008` |
+| 3 | Read the session state back | Once, immediately after stage 2, reading nothing else; a failure of either half refuses the connection and reads no catalogue | `FR-SRV-009`, `FR-SRV-010` |
+| 4 | Probe the product and version | Before any statement other than stages 2 and 3; the series is derived from it and decides the treatment of every known difference | `FR-SRV-002`, `FR-SRV-034`, `FR-SRV-040`, `FR-SRV-022` |
+| 5 | Read, then close | Closed as soon as the read ends | `CLAUDE.md`, *Desempenho e Eficiência*; `NFR-PERF-004` |
+
+Stages 2 and 3 are not disableable by any flag, key or environment condition
+(`FR-SRV-011`), and they detect rather than prevent: only the closed statement
+list of `FR-SRV-006` prevents, which is
+[overview.md](overview.md#the-three-properties-that-bound-the-artefact)'s first
+property and `security.md`'s subject. The verdicts stages 4 and 5 produce — an
+unsupported product, a series below the window, a series above it — are
+[interfaces.md](interfaces.md#the-catalogue-reader)'s.
+
+**Recorded discrepancy — the order of stages 2 to 4.**
+[README.md](README.md#architecturemd) summarises the lifecycle as *"probe then
+read-only set then read-back"*. `FR-SRV-002` admits both orders: it requires the
+product and version to be determined before any statement **other than** the
+read-only pair, which is exactly the permission for that pair to run first.
+`FR-CFG-024` then fixes four steps that the connectivity command SHALL perform
+*"in this order"*, and its step 2 is enforcing and confirming the read-only
+session while its step 3 is verifying the series — the reverse of the summary.
+Both readings are recorded. The table above takes the order that satisfies every
+requirement literally rather than only one of them, and it costs nothing: the
+read-only pair is the one thing `FR-SRV-002` allows before the probe, and
+`FR-SRV-010` stops the connection before any catalogue statement either way. The
+index's wording is this folder's to correct, in its own pass and not here.
+
+## The catalogue reader and the query-count invariants
+
+`mariadb/` holds two entry points and a fixed statement repertoire. The reader's
+surface and its obligations are
+[interfaces.md](interfaces.md#the-catalogue-reader)'s; what belongs here is
+where the two entry points sit and what bounds the number of statements.
+
+| Entry point | Shape | Invariant | Forced by |
+|---|---|---|---|
+| The full read | One statement per object **kind**, each returning every object of that kind | The count does not grow with the number of objects, and is equal over the smallest and the largest reference workload | `NFR-PERF-001` |
+| The named-object read | A second path in which the name restricts the statement the server receives | The count does not grow with the number of objects in the database | `NFR-PERF-002` |
+
+Both invariants are properties of form rather than figures, and the decision
+each forces is recorded once, in
+[quality-attributes.md](quality-attributes.md#the-six-requirements-of-form).
+Two consequences are architectural:
+
+- **A per-object query is a defect of the reader, not of a caller's pattern.**
+  Coverage is applied by the reader before any filtering, to the object read and
+  to the column read alike (`FR-CAT-052`, `FR-CAT-028`), and the pattern is
+  matched in memory afterwards and never sent to the server (`FR-SCH-012`,
+  `FR-SCH-015`).
+- **The count is observable without reading the source.** One diagnostic line
+  per catalogue query carries a fixed leading token (`FR-GLOB-017`,
+  `NFR-PERF-008`), which is what lets `NFR-PERF-007` be satisfied from outside
+  the process. Observability as a subject is `operations.md`, settled in
+  [`OD-17`](open-decisions.md#od-17--observability).
+
+The three privilege detections read the shape of the rows the server returned
+and are `mariadb/privileges.rs`'s, running on every read that presents the
+property they guard (`FR-PRIV-012`); their outcomes cross two different
+boundaries, which is
+[interfaces.md](interfaces.md#the-three-privilege-detections)'s.
+
+## The cache as a read-through layer
+
+`cache/` sits **in front of** the reader, not beside it. Every `schema`
+subcommand reads through it, and so does a render that has no supplied context
+(`FR-SCH-025`, `FR-CACHE-009`).
+
+| Path | What happens | Forced by |
+|---|---|---|
+| Hit | Served from disk; no connection opened, no catalogue query issued | `FR-CACHE-006`, `NFR-PERF-003` |
+| Miss | The server is read, the result is written, **then** the answer is produced | `FR-CACHE-007` |
+| Unreadable file, or a version the binary does not know | A **silent** miss: read from the server, rewrite, report nothing | `FR-CACHE-033`, `FR-CDOC-004` |
+| The write fails | A **silent** success: the answer stands, the exit code and stdout are unchanged | `FR-CACHE-036` |
+
+The layer has two independently suppressible halves — consulting and populating
+— selected by the two cache flags, and the form in which neither runs is the one
+that touches no file at all (`FR-CACHE-013`, `FR-CACHE-014`, `FR-CACHE-015`,
+`FR-CACHE-016`, `BR-SCH-003`). A marked object is never written and a collection
+holding one is never recorded whole (`FR-CACHE-037`). Which of the two catalogue
+values of the `source` discriminant a document carries is decided here, because
+this is the component that knows which served the read
+([interfaces.md](interfaces.md#the-document-emitter)).
+
+Everything the layer puts on disk — the location, the keying, the encoding, the
+filenames, the atomic write, the two independent versions — is
+[data-model.md](data-model.md#tplcache)'s and is not repeated.
+
+## The model: one junction, three producers, three consumers
+
+A live read, a cached read and a supplied context document must present the same
+objects and the same fields, so `model/` is the single junction of the corpus
+(`specification/catalogue-coverage.md` *Overview*; `BR-SCH-001`, `FR-SCH-022`).
+
+| Producers | Consumers |
+|---|---|
+| `mariadb/`, on a server read | The `text` layouts, in `output/` |
+| `cache/`, on a cached read | The JSON emitter, in `output/` |
+| `cli/`, from a supplied context document | The render, in `render/` |
+
+Two design consequences follow from the junction being single.
+
+- **An invariant over an assembled model is checked by each of the three
+  producers and not on the emitting path**, because `render/` consumes the same
+  model without passing through `output/` (`FR-CAT-044`;
+  [interfaces.md](interfaces.md#the-catalogue-reader)).
+- **The lossy conversion of catalogue bytes to text happens at the `mariadb/`
+  boundary and nowhere else**, so all three consumers inherit one substitution
+  (`FR-OUT-017`; [interfaces.md](interfaces.md#the-catalogue-reader)).
+
+The model's own shape, what it materialises and what it refuses to materialise,
+are [data-model.md](data-model.md#the-model-in-memory)'s. That the library API
+carrying it is not a public surface is
+[overview.md](overview.md#the-library-api-is-not-a-public-surface)'s.
+
+## The render component
+
+`render/` builds the engine, owns the one template-name resolution in the crate,
+and registers the template surface. The surface as published is
+[interfaces.md](interfaces.md#the-template-surface)'s; the engine's identity and
+its pin are [`ADR-001`](../adr/adr-001-template-engine-pin.md) and
+`technology-stack.md`. What belongs here is what construction fixes.
+
+| Construction step | What it fixes | Forced by |
+|---|---|---|
+| The engine is built lazily | No engine exists for an invocation that does not render | `NFR-PERF-006`, `CLAUDE.md` *Desempenho e Eficiência* |
+| Templates are loaded and compiled at render time from disk | A template changes without the binary being rebuilt | `CLAUDE.md`, *Invariantes de Implementação*; `FR-TMPL-004` |
+| The loader closure calls the one resolution function | The three `template` subcommands that resolve without the engine call the same function, so one boundary is enforced once | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023` … `FR-TMPL-026` |
+| Undefined behaviour is set to the strict variant | Reading a field that does not exist fails the render | [`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with), `FR-SEM-012`, `FR-SEM-013` |
+| Auto-escaping is set explicitly, to off, and is never left at the engine's default | No property of a template's name can turn escaping on; escaping happens only where a template asks for it | `FR-ENV-026`, `FR-ENV-027`, `FR-ENV-028` |
+| Each template is compiled once per process and reused | A loop in a template does not reparse it | `CLAUDE.md`, *Desempenho e Eficiência* |
+
+**One observation is owed against the engine pin and is asserted nowhere.**
+Whether a **defined** `null` interpolates as the empty string under the strict
+variant, rather than failing, is **not confirmed in the engine's official
+documentation** for the pinned line, and if it does not hold it contradicts
+`FR-SEM-010` and `FR-SEM-011` outright — the observation
+[`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with)
+owes is what decides it, and until it is made no passage of this folder may rely
+on either answer.
+
+**Parsing is separable from rendering.** The check command performs syntax
+analysis only — no expression evaluated, no filter called, no connection opened
+— so the parse step is reachable without the render step (`FR-TMPL-017`,
+`BR-TMPL-001`, `FR-SEC-018`).
+
+### Context assembly
+
+`cli/` assembles the context from four sources and hands it to `render/`
+(`FR-RND-023`). Three of the five variables are **always** injected and a value
+supplied for them in a context document is ignored (`FR-RND-024`), which is what
+keeps the context's shape independent of where the model came from.
+
+| Source | Supplied by |
+|---|---|
+| The context source — a catalogue read or a supplied document | `cache/` or `mariadb/`, or `cli/` |
+| The caller's variables | `cli/`, from this invocation |
+| The binary's own object | The binary |
+| The render time | The clock, read once per invocation |
+
+The render time is the single documented source of non-reproducibility
+(`NFR-DET-005`, `FR-CTX-028`, `FR-CTX-029`); the clock, the conversion and the
+one grammar used in both directions are
+[`OD-25`](open-decisions.md#od-25--the-clock-source-for-now). Supplying a
+context document opens no connection and touches no cache (`FR-RND-022`), and
+two of the registered tests reach back into the assembled context rather than
+answering from their operand, which is
+[interfaces.md](interfaces.md#context-access-from-a-filter-or-a-test)'s.
+
+## The six phase deadlines
+
+`FR-SEC-022` requires a deadline on every blocking phase, because a hung process
+is the failure the never-interactive invariant exists to prevent (`BR-CLI-003`).
+`FR-CONF-005` names six phases and maps each onto one of four keys. The
+mechanism for each, and the rejected alternatives, are
+[`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and are
+not restated.
+
+| # | Phase | Budget | Bounded by | Imposed by |
+|---|---|---|---|---|
+| 1 | DNS resolution | The shared connection budget | The runtime's own timer, around a resolution `tpl` performs itself | `FR-CONF-005`, `FR-ERR-027` |
+| 2 | TCP connect | What remains of the same budget | The runtime's own timer, around the driver's connect call | `FR-CONF-005`, `FR-ERR-027` |
+| 3 | TLS handshake | What remains of the same budget | The same timer and the same call; the phase is separated in the **report**, from the driver's own discriminant | `FR-CONF-005`, `FR-ERR-027` |
+| 4 | Catalogue query | The query budget, per query | The runtime's own timer | `FR-CONF-005`, `FR-ERR-027` |
+| 5 | `password_command` | The password budget | A timer thread that kills the child while the parent reports the expiry | `FR-CONF-005`, `FR-CONF-028` |
+| 6 | Render | The render budget | A timer thread that writes the diagnostic and terminates the process | `FR-CONF-005`, `FR-RND-033` |
+
+Four rules bind the table.
+
+- **Phases 1 to 3 share one budget**, measured from the start of the first of
+  them that runs and consumed in the order they run; they are not given one
+  budget each (`FR-CONF-005`). `FR-CONF-004` resolves that budget, and the three
+  other budgets, from the declared key or its built-in default.
+- **Every phase deadline composes with the overall budget** measured from
+  process start, and a phase ends at the first of the two to expire
+  (`FR-GLOB-011`, `FR-GLOB-012`).
+- **The expiry is reported against the phase in progress**, which is why the
+  construct that applies a deadline carries the phase it was created for
+  (`FR-CONF-005`, `FR-GLOB-013`, `FR-ERR-027`).
+- **The DNS phase is separated because `tpl` performs the resolution itself**,
+  which is what lets the diagnostic say that a name did not resolve rather than
+  that a host refused a connection (`FR-CONF-005`, `NFR-PERF-018`,
+  `FR-ERR-034`). A deadline there bounds `tpl`'s wait and not the resolver's
+  work.
+
+**`deadline.rs` owns the construct and three modules use it** — the runtime
+inside `mariadb/`, the child process run from `project/config.rs`, and the
+render in `render/` — because a budget measured from process start and shared by
+three modules belongs to none of them
+([`OD-05`](open-decisions.md#od-05--the-module-decomposition),
+[interfaces.md](interfaces.md#the-shared-functions-and-the-phase-clock)).
+
+**A timer is not the speculative parallelism the project forbids.** It performs
+no work of the invocation and makes nothing faster; it is created only on the
+paths that need it, so the commands of `NFR-PERF-005` create no thread at all
+([`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)).
+
+## Lazy initialisation
+
+Nothing is initialised for a command that cannot use it. The rule is the root
+coordination document's — no heavy static initialisation, lazy initialisation by
+default (`CLAUDE.md`, *Desempenho e Eficiência*) — and three requirements make
+it observable rather than reviewable.
+
+| Nothing is built | Unless | Forced by |
+|---|---|---|
+| A discovery walk, a configuration read, a socket | The command is not one of the four `FR-PROJ-025` exempts | `NFR-PERF-005`, `FR-PROJ-025` |
+| A connection | The command needs catalogue data and the cache did not answer | `NFR-PERF-006`, `NFR-PERF-003`, `FR-CACHE-011`, `FR-RND-022` |
+| The template engine | The invocation renders | `NFR-PERF-006` |
+| The asynchronous runtime | `mariadb/` is reached | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
+| A timer thread | A phase that needs one is entered | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+
+Each row is verified by an observation made outside the process and never by
+reading the source (`NFR-PERF-007`), which is why laziness is placed at a module
+boundary in every row: the absence of a socket, of an open file and of a thread
+is observable, while the absence of a code path is not.
+
+## The synchronous process, and the runtime boundary
+
+The process is synchronous. Nothing outside `mariadb/` is asynchronous and no
+signature elsewhere in the crate returns a future; the runtime is built lazily
+inside `mariadb/`, is a current-thread runtime, and is entered at that one
+boundary. The decision, the requirements it serves and the three rejected shapes
+are [`ADR-005`](../adr/adr-005-async-runtime-scope.md), registered as
+[`OD-11`](open-decisions.md#od-11--the-scope-of-the-async-runtime), and are not
+restated.
+
+Two consequences bear on the rest of this document:
+
+- **The module that owns the runtime is the module `NFR-PERF-004` constrains**,
+  so at most one connection and exactly one runtime have one owner.
+- **The runtime's timers are available only inside the boundary**, which is what
+  divides the six deadlines of
+  [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) into
+  the four enforced with them and the two enforced with a timer thread. A
+  deadline mechanism that needed a runtime timer outside `mariadb/` would
+  contradict [`ADR-005`](../adr/adr-005-async-runtime-scope.md) and would be the
+  defect.
+
+## Two exits that do not return through `main.rs`
+
+`main.rs` reads the exit status from the error value and returns it, performing
+no classification of its own
+([interfaces.md](interfaces.md#the-error-type-and-the-exit-code)). Two paths
+end the process without reaching it, and both are settled:
+
+| Path | What it does | Settled in |
+|---|---|---|
+| The render deadline | The timer thread writes the four labelled lines for the render code and terminates the process with that status | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| A panic | The panic hook writes the four labelled lines, carrying the location and not the payload, and terminates the process with the internal-error status | [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md) |
+
+Both remain inside the stdout contract. `FR-RND-034` already admits that stdout
+carries at most one incomplete result when a render fails, and `FR-ERR-033`
+keeps stdout empty on the panic path; stderr is outside the contract in both
+cases (`NFR-DET-001`). Both producing conditions of the internal-error code
+exist in the distributed binary (`FR-ERR-030`, `FR-ERR-032`), and the release
+profile that makes the hook the whole of the reporting path is
+[`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md)'s.
+
+## What this document defers, and to what
+
+| Subject | Where |
+|---|---|
+| The invocation grammar, the command tree, the flags, and every requirement's text | `/specification`, cited throughout and reproduced nowhere |
+| Every contract crossing a boundary above, and every signature | [interfaces.md](interfaces.md) |
+| Every technology, its version, what was rejected, and the dependency budget | `technology-stack.md`, and [`docs/adr/`](../adr/README.md) |
+| The model's fields, the cache on disk, the configuration file, migration | [data-model.md](data-model.md) |
+| Trust boundaries as a subject, credentials, containment, transport, the injection surfaces | `security.md` |
+| The build, the targets, the release gates, observability, the content a new project ships | `operations.md` |
+| The budgets, determinism as a property, and how each is measured | [quality-attributes.md](quality-attributes.md) |
+| The tests over every component above, the harness, and the two in-process seams | `verification.md` |
+| Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

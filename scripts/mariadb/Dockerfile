@@ -24,3 +24,17 @@ LABEL org.opencontainers.image.title="tpl MariaDB fixture" \
 
 COPY setup.sql /docker-entrypoint-initdb.d/01-setup.sql
 COPY seed.sql  /docker-entrypoint-initdb.d/02-seed.sql
+
+# TLS. `FR-CONF-013` defaults `tls` to `verify-identity`, so the fixture has to
+# be able to present a certificate that names the host the tests reach it by.
+# The material is produced by tls/generate.sh and copied in here, which is what
+# makes it the same certificate on all four series: 10.11 offers no TLS at all
+# without it, and on 11.4 and later it replaces the certificate the server
+# generates by itself, which carries no subjectAltName and no name can match.
+#
+# The key is copied with an owner because COPY would otherwise land it as
+# root:root, and the server, which drops to the mysql user, could not read a
+# 0600 file it does not own. The two certificates are public and keep 0644.
+COPY tls/ca.pem tls/server-cert.pem /etc/mysql/tls/
+COPY --chown=mysql:mysql tls/server-key.pem /etc/mysql/tls/server-key.pem
+COPY tls/server-tls.cnf /etc/mysql/conf.d/90-tls.cnf

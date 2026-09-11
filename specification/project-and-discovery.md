@@ -63,13 +63,61 @@ maintain it.
   current directory until it finds a `.tpl` folder. The first one found is the
   project root, and the walk stops there.
 
-- **FR-PROJ-005**: The upward walk SHALL stop at the user's home directory and
-  at the filesystem mount point. A `.tpl` folder above either boundary SHALL NOT
-  be considered.
+- **FR-PROJ-005**: The upward walk SHALL stop at the mount point of the
+  filesystem that contains the directory the walk starts from. A `.tpl` folder
+  above that boundary SHALL NOT be considered. The boundary SHALL be
+  determined without reading any environment variable.
 
-  *Rationale.* A `.tpl` planted in a world-writable ancestor — `/tmp`,
-  `/var/tmp`, a mounted share — must not be able to supply the configuration.
-  The precedent is the `safe.directory` gate git added for CVE-2022-24765.
+  *Amended in the eighth edition, and this requirement is the one that
+  yields.* The boundary at the user's home directory is removed. It could only
+  be located from `HOME`, which is an environment variable read to determine
+  the location of the project — precisely what `FR-CLI-021` prohibits — and it
+  made the boundary a value a shell can set. Two identical command lines run
+  in two different shells could therefore discover two different projects and
+  read two different databases, which falsifies `BR-CLI-002` in its own terms.
+  One boundary of one walk yields to two invariants of the whole surface
+  rather than the reverse: `FR-CLI-021` admits exactly one environment read,
+  the `${VAR}` expansion of `FR-CLI-023`, and `BR-CLI-002` is the property
+  that makes an invocation reproducible between machines and in CI, per
+  `BR-PROJ-001`. The mount point needs no environment at all — it is a
+  comparison between a directory and its parent — so the boundary that
+  remains is the one that was already free of this defect.
+
+  *Rationale.* A `.tpl` in an ancestor `tpl` has no reason to trust must not
+  be able to supply the configuration. The mount point stops a walk that
+  begins inside a mounted share from climbing out of it. The precedent is the
+  `safe.directory` gate git added for CVE-2022-24765.
+
+  *What defends the rest, and it was never this boundary.* The first edition
+  named three examples, and a boundary of the walk reaches only one of them. A
+  `.tpl` in `/tmp` or in `/var/tmp` is reached by a walk that starts beneath it
+  long before that walk reaches any mount point, and the home directory never
+  lay between the two either. What refuses such a project is the trust checks:
+  `FR-PROJ-009` canonicalises the resolved path, `FR-PROJ-010` requires
+  `.tpl/.cfg` to be owned by the current user, and `FR-PROJ-011` requires it
+  to carry no group and no other access bits. All three apply to every project
+  without exemption, including one named by `--tpl-dir`, per `FR-PROJ-008`,
+  and together they give a planted `.cfg` a `78`.
+
+  *Rejected.* Keeping the home boundary and locating it from the system's own
+  account record for the invoking user rather than from `HOME`. That satisfies
+  `BR-CLI-002` and would have kept the boundary, and it was rejected because
+  the boundary would then sit wherever that record says, which need not be an
+  ancestor of the caller's working directory — so the rule would silently
+  never fire, and a rule that cannot be observed to fire is the defect
+  `FR-PRIV-011` was corrected for. Also rejected: excepting discovery from
+  `FR-CLI-021`, which leaves `BR-CLI-002` false and moves the contradiction
+  instead of resolving it.
+
+  *Accepted cost.* A `.tpl` folder above the caller's home directory and on
+  the same filesystem — at `/home`, at `/Users`, or at `/` — is now within
+  the walk, where the home boundary excluded it. Three things bound the cost.
+  Such a directory is not ordinarily writable by the caller, so a `.tpl` there
+  is either the caller's own or is refused by `FR-PROJ-010`. `tpl init` writes
+  a warning to stderr when it creates a project that shadows one above it, per
+  `FR-PROJ-016`. And `FR-PROJ-007` still admits no fallback: a walk that
+  reaches the boundary without finding a `.tpl` fails with `78`, per
+  `FR-PROJ-006`, rather than reading settings from anywhere else.
 
 - **FR-PROJ-006**: IF a command that requires a project finds no `.tpl` folder
   within the boundary, THEN the system SHALL exit `78` (`EX_CONFIG`) and the
