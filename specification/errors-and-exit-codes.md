@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-12
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md]
 ---
 
@@ -42,15 +42,27 @@ Out of scope: the wording of any individual message.
   | Code | Name | Condition | What the caller should do |
   |---|---|---|---|
   | `0` | `EX_OK` | Success | Continue |
-  | `64` | `EX_USAGE` | Unknown command or flag, missing required argument, mutually exclusive flags, malformed flag value, unknown configuration key | Fix the invocation; consult `--help` |
+  | `64` | `EX_USAGE` | Unknown command or flag, missing required argument, mutually exclusive flags, malformed flag value, unknown configuration key, per `FR-ERR-035` | Fix the invocation; consult `--help` |
   | `65` | `EX_DATAERR` | Template syntax error, render failure, malformed `--context` document, render deadline exceeded, template path escaping the root | Fix the template or the context |
-  | `66` | `EX_NOINPUT` | A named object does not exist: table, view, routine, template, database entry, configuration key | List what exists and choose another name |
+  | `66` | `EX_NOINPUT` | A named object does not exist: table, view, routine, template, database entry, configuration key, per `FR-ERR-035` | List what exists and choose another name |
   | `69` | `EX_UNAVAILABLE` | Server unreachable: DNS, connection refused, network deadline exceeded, TLS failure | Check host and network; the operation is read-only and therefore repeatable |
   | `70` | `EX_SOFTWARE` | Internal error — a defect in `tpl` | Report it; not fixable by the caller |
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
   | `74` | `EX_IOERR` | I/O failure reading `.tpl`, or writing to stdout, including a pipe closed mid-document in JSON | Check permissions and free space |
   | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue | Fix the credentials, or request read access |
-  | `78` | `EX_CONFIG` | No `.tpl` found; unsafe `.cfg` ownership or mode; malformed `.cfg`; a key outside the enumerated space; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
+  | `78` | `EX_CONFIG` | No `.tpl` found; unsafe `.cfg` ownership or mode; malformed `.cfg`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
+
+  The codes are a closed set and the *Condition* column is not. *And no
+  others* above fixes the list of codes; each *Condition* cell characterises
+  the class of fault its code reports, so that the table alone tells a caller
+  what a code means, and it does not enumerate the conditions that produce
+  that code. A condition is therefore neither absent, nor misfiled, nor
+  ungoverned because no cell names it: every condition is stated by the
+  requirement that owns the behaviour, in the module that owns it, and
+  `FR-ERR-002` obliges that requirement to carry a code of this table. The
+  producing conditions of a code are read in the modules the file index of the
+  [README](README.md#file-index) lists, and are never assembled from this
+  column.
 
   *Amended in the fifth edition.* The `78` row gains five conditions, all of
   them from decisions written into
@@ -60,6 +72,51 @@ Out of scope: the wording of any individual message.
   (`FR-CONF-031`), and a non-zero exit from that child (`FR-CONF-033`). The
   code is unchanged for all five: each is the configuration failing to describe
   a usable connection, which is what `78` means.
+
+  *Amended in the nineteenth edition: the table says which of its two columns
+  is exhaustive.* The paragraph above is new, and nothing about `tpl` changes —
+  the ten codes, their names, their conditions and the caller's next step are
+  as the fifth edition left them. What changed is that the table now says how
+  it is to be read. Deriving an error type from this file forced a reading the
+  file never states: whether a condition no cell names is a condition this
+  specification does not have. The two answers build different programs — one
+  models the cells and treats anything else as a defect in this corpus, the
+  other models the requirements and treats the cells as headings — and the
+  second is right. Two requirements elsewhere had already read the table that
+  way without the table saying so: `FR-CFG-043`'s rationale declines a fourth
+  outcome because "`FR-ERR-001` fixes the code set", which closes the codes and
+  not the conditions, and `FR-OUT-033`'s rationale reads the `66` cell as what
+  that code is *reserved for* rather than as a list of what reaches it.
+
+  *Observed, and bounded.* Six conditions in force carry a code of this table
+  and appear in no cell of it: a single-value flag given twice (`FR-CLI-014`),
+  a flag value beginning with `-` supplied as a separate token (`FR-CLI-018`),
+  a bare routine name matching both a procedure and a function (`FR-SCH-010`),
+  `tpl cfg database add` naming an entry that already exists (`FR-CFG-017`),
+  and an unresolved segment of a help path (`FR-HELP-028`), all `64`; and an
+  unclosed `${VAR` (`FR-CONF-021`), which is `78` where the cell names only an
+  undefined `${VAR}`. They were found by one reading of this file, made to
+  derive an error type from it, and not by a sweep, so they are the examples
+  that reading produced and not the remainder. The scale of the remainder was
+  measured instead, on 2026-09-12, by a textual sweep of the twenty module
+  files of the file index: one hundred and twelve requirements outside this
+  file name a code of this table. That figure bounds nothing exactly — a
+  requirement may state two conditions, as `FR-SCH-010` does, and may name a
+  code in a rationale without producing it — and it does not need to. It is
+  far past what a table cell can carry, which is the whole of what it is
+  needed for.
+
+  *Rejected.* Closing the *Condition* column, by enumerating in each cell every
+  condition that produces its code. It would put each of those requirements in
+  two places, and the second copy is the one nobody edits — the fifth
+  validation rule of the [README](README.md#maintenance-debt) was written for
+  exactly that decay in a register, and a register at least has a target it can
+  be re-read against, where a column of this table would have a hundred and
+  twelve. Also rejected: leaving the column unstated and correcting the six
+  cells found to be short. That answers this reading and not the next one: the
+  six are the six one reader happened to need, and a column complete only
+  against the last implementer to check it is the state this amendment exists
+  to end.
 
 - **FR-ERR-002**: Each distinct condition SHALL have its own code. The system
   SHALL NOT collapse two conditions onto one code where the caller's next step
@@ -200,6 +257,61 @@ Out of scope: the wording of any individual message.
   *Amended in the fifth edition.* The last clause said "only in the `kind`
   field". `FR-ERR-015` withdraws that field; the argument is unchanged and now
   names the line that actually carries the distinction.
+
+## Which code a configuration key produces
+
+- **FR-ERR-035**: Three codes of `FR-ERR-001` name a configuration key, and
+  which of the three applies follows from where the key was met and what was
+  asked of it, not from the key itself. The system SHALL produce:
+
+  | Where the key was met | Code | Stated by |
+  |---|---|---|
+  | Named on the invocation of `tpl cfg set`, and outside the enumerated key space of `FR-CONF-002` | `64` | `FR-CFG-009`, and `FR-CFG-010` where the key is in that space and the value does not conform to the type declared for it |
+  | Named on the invocation of `tpl cfg get`, or of `tpl cfg unset` as a key or as a block, and absent from `.tpl/.cfg` | `66` | `FR-CFG-007`, `FR-CFG-012` |
+  | Carried by `.tpl/.cfg`, anywhere in the file, and outside the enumerated key space of `FR-CONF-002` | `78` | `FR-CONF-034` |
+
+  The three cannot collide, and the order of `FR-ERR-006` is why. The file is
+  read and validated at step 3, and no `cfg` subcommand is among the commands
+  `FR-PROJ-025` excuses from it, so a `.tpl/.cfg` carrying a key outside the
+  key space is refused with `78` before any command resolves a key of its own
+  at step 4 or later. A key that reaches a `cfg` subcommand is therefore met in
+  a file that carries only keys the space admits, and the remaining question is
+  the one its own command asks: whether the key is in the space, for `set`, or
+  whether it is in this file, for `get` and `unset`. One consequence is worth
+  stating because it is easy to implement backwards: `tpl cfg set` given a key
+  outside the space, against a file that already carries one, exits `78` and
+  not `64`, per `FR-ERR-007`.
+
+  *Rationale.* The three are three faults with three next steps, which is what
+  `FR-ERR-002` requires three codes for. A key no space admits is a token the
+  caller wrote and can rewrite, so `64` sends them to `--help`. A key the file
+  does not carry is a named object that does not exist, exactly as a missing
+  table is; `FR-ERR-005` reaches the same answer for a database entry on the
+  same ground, and `FR-ERR-034` already names the key space of `FR-CONF-002` as
+  one of the populations a `66` `cause` reports a name missing from. A key the
+  file carries and the space refuses is the configuration failing to describe a
+  usable connection, which is what `78` means and what the fifth edition's note
+  under `FR-ERR-001` says of the five conditions it added there.
+
+  *This requirement routes; it does not restate.* Each of the three conditions
+  belongs to the module that owns the command or the file, and the three
+  requirements cited keep their own wording, their suggestions and their hints.
+  What this file owes a reader is the answer to the question its own table
+  raises — three cells name a configuration key and no cell says which — and
+  that answer is a routing table, in the terms `FR-ERR-001` now states for the
+  whole column.
+
+  *Rejected.* Carrying the discriminator in the three cells of `FR-ERR-001`.
+  Those cells would become the only ones in the table that enumerate, against
+  what that requirement now says of the column, and the routing would live in
+  three places that are edited apart. Also rejected: leaving the separation to
+  be recovered from [cfg-commands.md](cfg-commands.md) and
+  [configuration-model.md](configuration-model.md). It is recoverable there,
+  and only there — separating the three from this file alone was attempted and
+  could not be done, which is the reading that produced this edition. A caller
+  branches on an exit code and reads this file to know what one means; a file
+  that names a configuration key in three cells and separates them in none
+  of the three sends that reader to two other files to find out which it got.
 
 ## Validation order
 

@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-12
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighteen editions. All are in force;
+The specification has been written in nineteen editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1441,6 +1441,79 @@ nothing is waiting. The index of [open-questions.md](open-questions.md) stays
 empty, and the last item of *[Maintenance debt](#maintenance-debt)* is
 discharged.
 
+### Nineteenth edition — a table that did not say how to read itself
+
+`FR-ERR-001` fixes ten exit codes and, beside each, a *Condition* cell. It has
+never said whether that cell enumerates the conditions that produce the code or
+characterises the class they belong to, and the two readings build different
+programs from the same requirement. Deriving the project's error type from this
+corpus forced the choice twice: once on the column as a whole, and once on
+three cells that each name a configuration key — `64` for an unknown one, `66`
+for a configuration key among the named objects that do not exist, and `78` for
+a key outside the enumerated space — with nothing in the file separating them.
+**Both readings were taken correctly**, and neither was taken from the file
+that raises the question: the three were separated by following citations into
+[cfg-commands.md](cfg-commands.md) and
+[configuration-model.md](configuration-model.md), and the column was read as a
+characterisation because the alternative collides with requirements in force
+elsewhere. This edition writes both answers where the question is asked.
+
+**Nothing here changes what `tpl` does, and no requirement is withdrawn.** The
+ten codes, their names, their conditions and the caller's next step are
+unchanged. One requirement is amended to say how its own table is read, and one
+is added that routes a configuration key to the code it already produced.
+
+- **The codes are closed and the *Condition* column is not** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-001` now says
+  so in its own text, and says what follows from it: a condition is neither
+  absent nor misfiled because no cell names it, every condition is stated by
+  the requirement that owns the behaviour, and `FR-ERR-002` is what obliges
+  that requirement to carry a code. Two requirements had already read the table
+  that way without the table saying so — `FR-CFG-043`, which declines a fourth
+  outcome because `FR-ERR-001` "fixes the code set", and `FR-OUT-033`, which
+  reads the `66` cell as what that code is reserved for — so the amendment
+  states a reading the corpus already used rather than choosing between two.
+- **Six conditions are recorded as examples, and the remainder is measured
+  rather than listed** — the same file. `FR-CLI-014`, `FR-CLI-018`,
+  `FR-SCH-010`, `FR-CFG-017` and `FR-HELP-028` carry `64`, and `FR-CONF-021`
+  carries `78`, and none appears in any cell. They were found by one reading
+  made for another purpose, not by a sweep, and the amendment says so; what was
+  measured instead is the scale, by a textual sweep of the twenty module files
+  on 2026-09-12 — one hundred and twelve requirements outside that file name a
+  code of the table. Closing the column was rejected on the fifth validation
+  rule's ground in a new setting, that the second copy is the one nobody edits;
+  correcting the six cells found to be short was rejected because it answers
+  this reading and not the next one.
+- **Three codes for one configuration key, separated where a caller reads** —
+  the same file. `FR-ERR-035` routes a key by where it was met and what was
+  asked of it: named to `tpl cfg set` and outside the key space is `64`, named
+  to `tpl cfg get` or `tpl cfg unset` and absent from the file is `66`, and
+  carried by the file and outside the key space is `78`. It cites
+  `FR-CFG-009`, `FR-CFG-007` with `FR-CFG-012`, and `FR-CONF-034`, and restates
+  none of them, because each belongs to the module that owns the command or the
+  file. It also states why the three cannot collide, which was derivable from
+  that file all along and had never been derived: the file is validated at step
+  3 of `FR-ERR-006` and no `cfg` subcommand is excused from it by
+  `FR-PROJ-025`, so a `.cfg` carrying a key outside the space is refused before
+  any command resolves a key of its own — and `tpl cfg set` given a bad key
+  against such a file exits `78` and not `64`, per `FR-ERR-007`.
+
+**The lesson is of a shape the five validation rules do not cover, and it is
+recorded here rather than made a sixth.** Each of those rules is about a
+statement decaying — against a later observation, a later row, a changed
+fixture, an edited file — and nothing decayed here. The table has been silent
+on this point since the first edition and is silent in the same way today. What
+found it was the first attempt to derive an implementation from this corpus,
+which is a reader it had not had, and that same reading found the three cells.
+Whether the lesson generalises — whether every table here that
+characterises rather than enumerates should say which it does — is a question
+about the corpus and not about one file, and it is named and left for a reading
+that covers the corpus rather than settled from a single instance.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -1787,6 +1860,18 @@ row and no register entry. It records no obligation outside this corpus
 either: the observation its passage names would
 settle a classification that nothing in this corpus reads, so no requirement
 waits on it and no test is owed for it.
+
+The nineteenth edition adds no obligation of either kind, and records none as
+discharged. It amends `FR-ERR-001` to say which of its two columns is
+exhaustive, adds `FR-ERR-035` to route a configuration key to the code it
+already produced, and changes nothing about `tpl`. One question is named and
+not settled — whether every table in this corpus that characterises rather than
+enumerates should say which it does — and it is not debt in any sense the five
+rules use: nothing waits on it, no requirement is ambiguous because of it, and
+the instance that raised it is closed. It is left for a reading that covers the
+corpus, on the ground the sixteenth edition used when it named a candidate it
+could not judge from the reading it had made — the seventeenth edition then
+made the reading, and judged.
 
 The section therefore carries nothing outstanding, and the seven items it has
 held are all accounted for below.
