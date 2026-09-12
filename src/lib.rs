@@ -7,22 +7,29 @@
 //! error to an exit status.
 //!
 //! At this commit the library carries no command. [`run`] is the single entry
-//! point the binary calls; the parser tree, the catalogue reader, the render
-//! environment and the error taxonomy are added by the tasks that follow.
+//! point the binary calls, and [`Error`] is the value every module will report
+//! failure through; the parser tree, the catalogue reader and the render
+//! environment are added by the tasks that follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use std::process::ExitCode;
+pub mod error;
 
-/// Runs `tpl` and yields the process's exit status.
+pub use error::Error;
+
+/// Runs `tpl`.
 ///
-/// The status is the library's to decide, never the binary's: `OD-06` puts the
-/// exit-code derivation beside the error type so that the assignment is made in
-/// one exhaustive match inside this crate. Until that type exists there is no
-/// condition to classify, and the function succeeds without reading or writing
-/// anything.
-#[must_use]
-pub fn run() -> ExitCode {
-    ExitCode::SUCCESS
+/// The exit status is the library's to decide, never the binary's: `OD-06`
+/// puts the derivation on [`Error::exit_code`] so that the assignment is made
+/// in one exhaustive match inside this crate, and `main` returns what that
+/// yields without classifying anything of its own.
+///
+/// # Errors
+///
+/// Returns the [`Error`] of the first condition that fails, in the order
+/// `FR-ERR-006` fixes. At this commit no command is wired up, so no condition
+/// can arise and the function succeeds without reading or writing anything.
+pub fn run() -> Result<(), Error> {
+    Ok(())
 }

@@ -9,5 +9,8 @@
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    tpl::run()
+    match tpl::run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => ExitCode::from(error.exit_code()),
+    }
 }
