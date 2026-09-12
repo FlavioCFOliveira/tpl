@@ -37,13 +37,43 @@ option on the `_rt-async-io` paths, a feature this package does not enable, and
 
 ### Licence files
 
-`LICENSE-APACHE` and `LICENSE-MIT` are preserved byte for byte as published. In
-the published artefact each is a 17- and a 14-byte file whose whole content is
-the relative path `../LICENSE-APACHE` and `../LICENSE-MIT`: upstream keeps them
-as symbolic links into its own workspace root, and the packaged crate carries
-the link text rather than the licence text. That is what "as published" is, and
-`ADR-010` forbids moving this source onto other terms — so the stubs stay as
-they are. The terms are the ones the manifest declares: `MIT OR Apache-2.0`.
+`LICENSE-APACHE` and `LICENSE-MIT` inside `sqlx-core-0.9.0/` are preserved byte
+for byte as published. In the published artefact each is a 17- and a 14-byte
+file whose whole content is the relative path `../LICENSE-APACHE` and
+`../LICENSE-MIT`: upstream keeps them as symbolic links into its own workspace
+root, and the packaged crate carries the link text rather than the licence
+text. That is what "as published" is, and `ADR-010` forbids moving this source
+onto other terms — so the stubs stay as they are. The terms are the ones the
+manifest declares: `MIT OR Apache-2.0`.
+
+Preserving them is not the whole of the obligation, and `ADR-010` says so: the
+repository must also **carry the terms those files name**. Both offers require
+it — Apache-2.0 §4(a) obliges a redistributor to give any other recipient of
+the work a copy of the License, and the MIT permission notice obliges the
+copyright notice and the permission notice to travel in all copies — and this
+repository redistributes `sqlx-core` 0.9.0. The two texts therefore sit beside
+the crate directory, in this one:
+
+| File | Bytes | sha256 |
+|---|---|---|
+| `LICENSE-APACHE` | 10297 | `c8f5453612253e8ea8bad241617fe74c4a6d5d592ba64ff881668c211b50ac99` |
+| `LICENSE-MIT` | 1109 | `5abbdd842310c8f1650fcde3a5a51a3e09412b9e5a6eea87519e0db9e32b339d` |
+
+Both are taken from `transact-rs/sqlx` at revision
+`003b698e99e024f3621b8043a2426fde5b741171` — the one the crate's own
+`.cargo_vcs_info.json` names — and not from a licence index. `ADR-010`
+requires that provenance for a reason: upstream's `LICENSE-MIT` opens on
+`Copyright (C) SQLx Contributors` and `Portions of this work Copyright (C)
+LaunchBadge, LLC`, and that is the notice the MIT permission notice requires to
+travel. No generic copy of either licence supplies it.
+
+The placement is load-bearing rather than tidy. `../LICENSE-APACHE` resolves,
+from `sqlx-core-0.9.0/`, to exactly `vendor/LICENSE-APACHE`, and
+`../LICENSE-MIT` to `vendor/LICENSE-MIT`: the stubs stop dangling, and this
+directory reproduces upstream's own layout instead of diverging from it.
+Adding the texts inside the crate directory would have been a second
+divergence from the published source, in the very diff `ADR-010` keeps cheap
+to run.
 
 ### When this directory goes
 
