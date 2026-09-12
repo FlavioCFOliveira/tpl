@@ -1,3 +1,11 @@
+# `vendor/sqlx-core-0.9.0` is third-party source, not a workspace member: Cargo
+# would otherwise make every path inside the workspace directory one, and the
+# mandatory validation pipeline would run `-D warnings` over code this project
+# does not own. See `ADR-010`; the one-package decision of `ADR-006` is
+# unchanged by this table.
+[workspace]
+exclude = ["vendor/sqlx-core-0.9.0"]
+
 [package]
 name = "tpl"
 version = "0.1.0"
@@ -27,6 +35,15 @@ thiserror = "2.0.20"
 tokio = { version = "~1.53.1", features = ["rt", "time", "net"] }
 toml = "1.1.6"
 toml_edit = "0.25.15"
+
+# `sqlx-core` 0.9.0 never calls `set_nodelay`, which costs ~40 ms on every
+# connection that negotiates TLS. The vendored copy adds the one statement
+# upstream added in PR #4336; `vendor/README.md` holds its provenance. This
+# table is deleted, with the directory it points at, on the first `sqlx`
+# release that carries the fix. See `ADR-010`; the pin of `ADR-003` is
+# unchanged.
+[patch.crates-io]
+sqlx-core = { path = "vendor/sqlx-core-0.9.0" }
 
 [profile.release]
 opt-level = 3
