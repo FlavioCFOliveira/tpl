@@ -3,7 +3,7 @@ id: ADR-010
 title: The TLS connect stall in the pinned driver
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-12
 requirements: [FR-CONF-013, FR-CONF-036, NFR-PERF-012, NFR-PERF-014, NFR-PERF-017]
 supersedes: []
 superseded-by: null
@@ -25,6 +25,19 @@ closed by the same user on 2026-09-11**, from three options put to them. The
 decision below did not change; the parameter it was missing was supplied. That
 makes this an edit in place under this register's own rule rather than a
 successor record, and the two halves are meant to read as one decision.
+
+**The two checks this record left for the sprint that creates the manifest were
+made on 2026-09-12, and that sprint returned a third fact this record had
+assumed away.** All three are recorded below — two in Consequences, and one in
+the Decision, where the question was left open. One of them — that
+`cargo audit` no longer reports on the patched crate — obliges this record to
+say something it did not say before; another — that the upstream licence files
+are not licence texts — changes what the vendored tree must carry. Neither
+touches the decision, its form, or its expiry, which is why `decided` is
+unchanged and only `last-reviewed` moves; the gap between the two dates is the
+re-check, not an amendment nobody dated. **The retiring condition
+was re-checked in the same pass and has not been met**: `sqlx` 0.9.0 is still
+the maximum stable release, so no release yet carries PR `#4336`.
 
 ## Context
 
@@ -74,9 +87,12 @@ the canonical loop of 200 invocations — against provisional figures stated in
 milliseconds. `NFR-PERF-012` and `NFR-PERF-017` make the identity of the built
 artefact material to every baseline taken against it.
 
-**Nothing is built yet.** There is no `Cargo.toml` and no `src/`. This record
-prescribes what the sprint that creates the manifest must put in it; it
-describes nothing that exists.
+**What this record prescribed now exists.** It was written before there was a
+`Cargo.toml`, to prescribe what the sprint that creates the manifest must put
+in it. The manifest landed at commit `d8e7e8a` and the patch at `be16e30`: the
+vendored tree, the `[patch.crates-io]` entry and the workspace exclusion are in
+the repository, and the Consequences below describe them rather than anticipate
+them.
 
 ## Decision
 
@@ -140,11 +156,15 @@ form was chosen for.
 every path dependency residing in the workspace directory a workspace member
 automatically, and `exclude` is what prevents it. Whether a `[patch.crates-io]`
 entry whose source is a path inside the workspace is itself caught by that rule
-is not established here; the exclusion costs one line and makes the question
-moot. Without it the mandatory validation pipeline — `cargo fmt --all`, `cargo
-clippy --all-targets --all-features -- -D warnings`, `cargo test --all-features`
-— would run over third-party source this project does not own and cannot fix,
-and `-D warnings` is not negotiable here. The exclusion adds a `[workspace]`
+was open when this record was written and was settled on 2026-09-12: it is
+not — with the `[workspace]` table removed, `cargo metadata --no-deps` still
+listed one member. That is one cargo's observed behaviour and not a documented
+guarantee, so the exclusion stays and stays prescribed defensively: it costs
+one line and makes the question moot at every later cargo. Without it the
+mandatory validation pipeline — `cargo fmt --all`, `cargo clippy --all-targets
+--all-features -- -D warnings`, `cargo test --all-features` — would run over
+third-party source this project does not own and cannot fix, and `-D warnings`
+is not negotiable here. The exclusion adds a `[workspace]`
 table to the one manifest of `ADR-006`; it adds no second manifest, and that
 record's decision is untouched.
 
@@ -156,9 +176,12 @@ is `ADR-007`; the build path and the four targets are `ADR-008`.
 
 ## Alternatives rejected
 
-The first three refusals answer *whether and how to patch*; the last two answer
-*where the patched source lives*. Each was put to the user with its merits, and
-each was refused by the user.
+The first three refusals answer *whether and how to patch*; the next two answer
+*where the patched source lives*; the last two answer the two questions the
+manifest sprint sent back. The first five were each put to the user with their
+merits and refused by the user. The last two are refusals this record makes
+under obligations it already carried, on evidence that did not exist when the
+choice was made; either is the user's to overturn.
 
 - **Implementing `write_vectored` on `StdSocket` instead.** It removes the same
   stall, and `BENCHMARKS.md` records the two as equivalent at the point they
@@ -230,13 +253,56 @@ each was refused by the user.
   closing one sprint by opening a hole in the next. The question was answerable
   now; nothing was waiting on evidence that did not yet exist.
 
+- **Leaving the licence stubs as the whole of the obligation, or putting the
+  texts inside the crate directory.** The first is what "exactly as published"
+  literally yields, and it was the right thing for the executing sprint to do:
+  nobody working under this record had authority to substitute two files for
+  the ones upstream shipped. It is refused as the end of the matter because the
+  obligation's own stated ground is that vendoring does not move source onto
+  new terms, and two dangling relative paths carry no terms — the obligation
+  would be met in form and empty in substance. The second puts the texts where
+  a reader of the crate expects them, and is refused on the ground this record
+  already gave when it placed the provenance beside the tree rather than inside
+  it: any file added under `vendor/sqlx-core-0.9.0/` is a second divergence
+  from the published source, and it would show in the one diff this decision
+  makes cheap to run. A third form — the two licences taken from a licence
+  index rather than from upstream — is refused because upstream's MIT file
+  carries its own copyright notice, which is exactly the part the permission
+  notice requires to travel.
+
+- **Leaving the `cargo audit` gap uncovered, or covering it by amending the
+  pipeline or the lockfile.** Leaving it uncovered rests on a bound that is
+  true and is not disputed here — the tree is `sqlx-core` 0.9.0 and one
+  statement is the whole divergence, so anyone who wants to know whether an
+  advisory applies can work it out unaided. It is refused because it names
+  nobody and no moment: the pipeline's fifth command exists so that this class
+  of fact arrives without being sought, under the patch it stops arriving for
+  one crate, and a record that states the gap and assigns no one to look has
+  documented a silence rather than covered it. Auditing a lockfile with the
+  `source` line restored is the mechanically exact restoration, since the
+  `source` field alone re-arms matching, and it stays available as a fallback
+  when a lookup raises something and the whole transitive graph has to be
+  re-examined; it is refused as the standing control because it feeds command 5
+  a lockfile naming a registry source for a crate this project does not build
+  from the registry — the artefact audited would not be the artefact built,
+  which is the property `NFR-PERF-012` exists to protect — and because a
+  mutated lockfile is one `git add` away from being committed. A sixth pipeline
+  command is refused under R2: the pipeline is prescribed in
+  `docs/spec-technical/operations.md`, this register is subordinate and cannot
+  amend it, and a permanent command would long outlive the defect that
+  prompted it.
+
 ## Consequences
 
-**An obligation lands on the sprint that creates the manifest**, which is the
-next one, and it is now fully specified. The `[patch.crates-io]` entry, the
-vendored tree it points at, and the workspace exclusion are part of the
-manifest's first version, not a later addition. Nothing about this decision is
-left for that sprint to settle.
+**The obligation this record laid on the sprint that creates the manifest is
+discharged.** The `[patch.crates-io]` entry, the vendored tree it points at and
+the workspace exclusion were prescribed as part of the manifest's first version
+rather than a later addition; they landed at commit `be16e30`, and the tree was
+verified against the published release artefact rather than assumed to match
+it. Nothing about this decision was left for that sprint to settle, and nothing
+about it was settled differently. What that sprint sent back is three facts
+this record did not have: two of them are below, and the third settled the
+question the Decision left open about the workspace exclusion.
 
 **No artefact built under the patch is the published crate.** A baseline
 taken against it names an artefact that differs from `sqlx-core` 0.9.0 by one
@@ -265,7 +331,10 @@ of "the code in this project" have to treat that directory as what it is. Three
 obligations follow, and none of them existed under the fork form:
 
 - The copy SHALL preserve the upstream licence and notice files exactly as
-  published. Vendoring moves source; it does not move it onto new terms.
+  published, **and the repository SHALL carry the terms those files name.**
+  Vendoring moves source; it does not move it onto new terms. The two halves
+  are one obligation and the first does not discharge the second — see *The
+  licence files are not licence texts* below.
 - The prohibition on `unsafe` is a property of this project's own crate and does
   not reach the vendored tree. That source is the same third-party code it was
   when Cargo fetched it from the registry, and a copy of it sitting in the tree
@@ -274,23 +343,62 @@ obligations follow, and none of them existed under the fork form:
   dependency budget as one. The dependency is still `sqlx` 0.9.0 under
   `ADR-003`; only where one of its crates is read from has changed.
 
+**The licence files are not licence texts, and preserving them is not enough.**
+Upstream keeps `LICENSE-APACHE` and `LICENSE-MIT` in `sqlx-core/` as symbolic
+links into its own workspace root, and the packaged artefact carries the link
+text: two regular files of 17 and 14 bytes whose entire content is
+`../LICENSE-APACHE` and `../LICENSE-MIT`. Preserved exactly as published, which
+is what this record required and what was done, they are two dangling stubs,
+and the vendored tree carries no terms at all. The crate's own manifest
+declares `MIT OR Apache-2.0`, so the offer is identified; the texts of the two
+offers are absent, and each of them requires otherwise of whoever redistributes
+the source — Apache-2.0 obliges a redistributor to give recipients a copy of
+the License, and the MIT permission notice obliges the copyright notice and the
+permission notice to travel in all copies. This repository redistributes
+`sqlx-core` 0.9.0.
+
+**The terms go beside the tree, at `vendor/`, and the crate directory stays
+byte-identical to the published artefact.** `vendor/LICENSE-APACHE` and
+`vendor/LICENSE-MIT` SHALL carry the two files as they stand at the upstream
+revision the crate was published from, which the artefact's own
+`.cargo_vcs_info.json` names — not a generic copy of either licence, because
+upstream's MIT file carries the copyright notice that the permission notice
+requires to travel and no generic copy supplies it. The placement is not a
+compromise: `../LICENSE-APACHE` resolves, from `vendor/sqlx-core-0.9.0/`, to
+exactly that path, so the stubs stop dangling and this repository reproduces
+upstream's own layout instead of diverging from it. It is also where this
+record already put the provenance, for the same reason — a file added inside
+the crate directory would be a second divergence from the published source, in
+the very diff this decision makes cheap to run.
+
 Whether the knowledge graph covers the vendored tree, and on what terms, is a
 question for the owner of that graph. It is raised here, not answered.
 
-**One thing the manifest must confirm and this record cannot.** `cargo audit`,
-command 5 of the mandatory validation pipeline, audits `Cargo.lock`. Whether it
-resolves advisories through a `[patch.crates-io]` source is not established
-anywhere in this repository, and the vendored form sharpens that question rather
-than settling it: what the check must establish is whether the patched
-`sqlx-core` reaches the audit at all, and if it does, under which identity, the
-crate being read from a path rather than from the registry. It remains
-unverifiable today for the reason it was unverifiable when this record was
-written — there is no `Cargo.toml`, so there is no lockfile to look at — and it
-stays marked unverified below rather than asserted either way. The sprint that
-writes the manifest owes the check against a real lockfile. Whatever it finds,
-the exposure is bounded and knowable without the tool: the vendored tree is
-`sqlx-core` 0.9.0, an advisory against that version applies to it unchanged, and
-the one added statement is the whole of the divergence.
+**`cargo audit` does not report an advisory against `sqlx-core` 0.9.0 while
+this patch stands.** Command 5 of the mandatory validation pipeline audits
+`Cargo.lock`, and the patch's whole effect on that file is the deletion of two
+lines from the `sqlx-core` package — its `source` and its `checksum`. The crate
+is still counted; it is never matched. The gate is the `source` field alone:
+restore it and the advisory fires, remove it and it does not, and the
+`checksum` does not enter into it. So from `be16e30` an advisory published
+against `sqlx-core` 0.9.0 passes command 5 in silence. The bound this record
+stated when it was written is unchanged and is not weakened here — the vendored
+tree *is* `sqlx-core` 0.9.0, an advisory against that version applies to it
+unchanged, and the one added statement is the whole of the divergence — but a
+bounded exposure that nothing detects is *knowable*, not *watched*, and the
+bound does not close the gap.
+
+**It warrants a compensating control, and the control is one lookup owed at
+each dependency review.** While the patch stands, `sqlx-core` SHALL be checked
+directly against the RustSec advisory database — the `crates/sqlx-core`
+directory of the advisory repository, rendered per crate at `rustsec.org` — at
+every review of this record and at every dependency review, which is the same
+visit at which the retiring condition is checked. One crate, one fixed version,
+one lookup, and it ends when the patch does. The check was exercised on
+2026-09-12 and the database records no advisory for `sqlx-core`. The gap
+reaches that crate and no other: every remaining package in the lockfile keeps
+its `source`, `sqlx` itself included, and command 5 matches them exactly as it
+did before the patch.
 
 **`ADR-003`'s open defect is closed by this record.** That record carried the
 anomaly as unexplained, tracked as task `#8`, and described it as a property of
@@ -321,7 +429,7 @@ not by this register.
 | The floor is paid on all four supported server series, over loopback and over the docker bridge path, and is absent only on the macOS host path, where a userland proxy terminates the connection | same entry, *Independent of server series and of network interface* | 2026-09-11 |
 | The regression chronology: present in 0.7.4 through 0.8.6, zero occurrences in 0.9.0, present again on `main`; dropped by the runtime rewrite; re-reported as issue `#4335` on 2026-07-10; fixed on `main` by PR `#4336`, merged 2026-08-17. Repository `https://github.com/transact-rs/sqlx` | same entry, *Whose defect it is, and its status upstream* | 2026-09-11 |
 | `StdSocket` still lacks a `write_vectored` implementation on `main`, so the `rustls` flight still leaves split upstream | same entry, *What is not reported upstream* | 2026-09-11 |
-| `sqlx` 0.9.0, published 2026-05-21, is still the maximum stable release; 0.8.6 was published 2025-05-19. No release carries PR `#4336` | crates.io index API, crate `sqlx`, `max_stable_version` and version list | 2026-09-11 |
+| `sqlx` 0.9.0, published 2026-05-21, is still the maximum stable release; 0.8.6 was published 2025-05-19. No release carries PR `#4336`, so the retiring condition has not been met | crates.io index API, crate `sqlx`, `max_stable_version` and version list | 2026-09-11, re-checked 2026-09-12 |
 | `sqlx::mysql::MySqlSslMode` declares the same five variants — `Disabled`, `Preferred`, `Required`, `VerifyCa`, `VerifyIdentity` — at 0.8.6 and at 0.9.0 | docs.rs, `sqlx` 0.8.6 and `sqlx` 0.9.0, `sqlx::mysql::MySqlSslMode` | 2026-09-11 |
 | The cell-by-cell behaviour of the five modes was established against running servers on 2026-09-10, against the version `ADR-003` pins and against no other; the failure this guards against is silent and is not visible from an API listing | `ADR-002`, *Context*; `ADR-003`, *Alternatives rejected* | 2026-09-11 |
 | The toolchain floor of 1.94.0 is declared by the crate at the version `ADR-003` pins, and moves with it | `ADR-007`, *Decision* | 2026-09-11 |
@@ -329,5 +437,10 @@ not by this register.
 | All `path` dependencies residing in the workspace directory automatically become workspace members, and the `exclude` key prevents a path from being included | The Cargo Book, *Workspaces*, the `members` and `exclude` fields | 2026-09-11 |
 | The measured candidate fixes were produced by vendoring `sqlx-core` 0.9.0 and redirecting to it with `[patch.crates-io]` and a `path` — the form this record prescribes | `BENCHMARKS.md`, "2026-09-11 — The TLS connect stall on Linux loopback", *Reproduction* | 2026-09-11 |
 | `cargo audit`, command 5 of the mandatory validation pipeline, audits `Cargo.lock` | `docs/spec-technical/operations.md`, the pipeline table, row 5, which cites the crates.io index and rustsec.org for `cargo-audit` 0.22.2 | 2026-09-11 |
-| Whether `cargo audit` resolves advisories through a `[patch.crates-io]` source, and under which identity a path-sourced crate reaches it | **Unverified.** Nothing in this repository establishes it, and no claim is made either way. It cannot be settled while there is no `Cargo.toml` and therefore no lockfile; the sprint that writes the manifest owes the check | — |
-| Whether a `[patch.crates-io]` entry whose source is a path inside the workspace directory is itself made a workspace member by the rule above | **Unverified.** The Cargo Book states that rule for `path` dependencies and says nothing about patch entries; the workspace exclusion this record prescribes makes the question moot | — |
+| `cargo audit` matches advisories only for a lockfile package carrying a `source`, so the path-patched `sqlx-core` is counted and never matched; the `source` field alone gates it and the `checksum` is irrelevant | Three runs of `cargo audit` against a probe advisory database — over this repository's `Cargo.lock` at `be16e30`, over `git show HEAD:Cargo.lock` at the same commit, and over the working lock with `source` restored and `checksum` still absent — recorded in full on task `#67` | 2026-09-12 |
+| A `[patch.crates-io]` entry whose source is a path inside the workspace directory is **not** made a workspace member: with the `[workspace]` table removed, one member is still listed. Cargo 1.98.1, observed behaviour rather than a documented guarantee | `cargo metadata --no-deps` over this repository at `be16e30`, run with and without the exclusion; recorded on task `#67` | 2026-09-12 |
+| The vendored tree is the published release artefact of `sqlx-core` 0.9.0 — its sha256 equal to the checksum `Cargo.lock` carried at `d8e7e8a` — plus the first hunk of PR `#4336` and nothing else | `vendor/README.md`, and the tree-wide diff against the release artefact recorded on task `#67` | 2026-09-12 |
+| `LICENSE-APACHE` and `LICENSE-MIT` in the published artefact are 17- and 14-byte files whose entire content is `../LICENSE-APACHE` and `../LICENSE-MIT`; upstream keeps them as symbolic links into its workspace root. The declared offer is `MIT OR Apache-2.0` | `vendor/sqlx-core-0.9.0/LICENSE-APACHE`, `LICENSE-MIT` and `Cargo.toml`, read directly | 2026-09-12 |
+| The texts those stubs point at exist at the repository root of the revision the crate was published from, `003b698e99e024f3621b8043a2426fde5b741171`: `LICENSE-MIT`, 1109 bytes, sha256 `5abbdd84…32b339d`, carrying the copyright notice; `LICENSE-APACHE`, 10297 bytes, sha256 `c8f54536…1b50ac99` | `transact-rs/sqlx` at that revision, which `vendor/sqlx-core-0.9.0/.cargo_vcs_info.json` names | 2026-09-12 |
+| A redistributor must give any other recipient of the work a copy of the Apache License; and the MIT copyright notice and permission notice must be included in all copies or substantial portions of the software | Apache License 2.0, section 4(a), and the MIT permission notice, read from the two files above | 2026-09-12 |
+| The RustSec advisory database records no advisory for `sqlx-core` | `rustsec/advisory-db`, the absence of a `crates/sqlx-core` directory, cross-checked against the per-crate page on `rustsec.org` | 2026-09-12 |
