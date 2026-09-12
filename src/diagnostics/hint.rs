@@ -1,0 +1,360 @@
+//! The `hint` line: the generic hint for each variant, and the character set
+//! that decides whether a name may enter a runnable command.
+//!
+//! `FR-ERR-009` asks for a concrete, runnable command wherever one exists, and
+//! `FR-ERR-012` forbids vague advice — the key, the file and the expected value
+//! are named rather than the caller being told to check their configuration.
+//! `FR-ERR-032` obliges the hint of a `70` to say that the condition is a
+//! defect in `tpl` and is not correctable by the caller.
+//!
+//! `FR-ERR-022` builds a runnable command "only from literals and from names
+//! matching `[A-Za-z0-9_]{1,64}`", and `FR-ERR-023` drops a name outside that
+//! set entirely rather than presenting it. [`admits`] is that filter: a name
+//! it refuses is replaced by a placeholder, and the command stays runnable
+//! without the caller's shell ever interpreting a catalogue byte.
+//!
+//! The nearest-match half of a hint — "did you mean 'orders'?" — is not built
+//! here. `FR-ERR-019` through `FR-ERR-021` select candidates from a population
+//! each component owns, and this module emits the **generic** hint that
+//! `FR-ERR-023` says stands alone when no candidate qualifies.
+
+use std::borrow::Cow;
+
+use crate::error::{
+    CatalogueObjectKind, ContextFault, DeadlineBound, Error, NetworkPhase, ReadOnlyFault,
+};
+
+/// The longest name `FR-ERR-022` admits into a runnable command.
+const MAX_NAME: usize = 64;
+
+/// The content of the `hint` line for `error`, without its label.
+///
+/// The match is exhaustive and carries no wildcard arm, so a variant added to
+/// [`Error`] does not compile until it is given a hint.
+pub(super) fn hint(error: &Error) -> Cow<'static, str> {
+    match error {
+        // ------------------------------------------------------------ 64 ---
+        Error::UnknownCommand { .. } => Cow::Borrowed("list the commands with: tpl help"),
+        Error::UnknownFlag { .. } => {
+            Cow::Borrowed("list the flags a command declares with: tpl help <command>")
+        }
+        Error::MissingArgument { command, .. } => {
+            if admits_path(command) {
+                Cow::Owned(format!("show the usage with: tpl help {command}"))
+            } else {
+                Cow::Borrowed("show the usage with: tpl help <command>")
+            }
+        }
+        // Neither flag enters a runnable command, so FR-ERR-022 is not engaged
+        // and both are named as prose, escaped on the way out.
+        Error::MutuallyExclusiveFlags { first, second } => {
+            Cow::Owned(format!("give '{first}' or '{second}', and not both"))
+        }
+        Error::MalformedValue { .. } => {
+            Cow::Borrowed("show what the command accepts with: tpl help <command>")
+        }
+        Error::UnknownConfigurationKey { .. } => {
+            Cow::Borrowed("show what tpl cfg set accepts with: tpl help cfg set")
+        }
+
+        // ------------------------------------------------------------ 65 ---
+        Error::TemplateSyntax { .. } => {
+            Cow::Borrowed("parse the project's templates with: tpl template check")
+        }
+        // `tpl template check` performs syntax analysis alone, per FR-TMPL-017,
+        // so it would not reproduce an evaluation failure; the source is what
+        // locates the line and column named above.
+        Error::RenderFailed { .. } => {
+            Cow::Borrowed("print the template's source with: tpl template show <template>")
+        }
+        Error::TemplateOutsideRoot { .. } => {
+            Cow::Borrowed("print the template root with: tpl template path")
+        }
+        Error::ContextDocumentMalformed { fault, .. } => match fault {
+            ContextFault::NotJson(_) => {
+                Cow::Borrowed("produce a well-formed context document with: tpl schema dump")
+            }
+            ContextFault::Structure { .. } => {
+                Cow::Borrowed("produce a document that matches the contract with: tpl schema dump")
+            }
+        },
+        Error::RenderDeadlineExceeded { bound, .. } => match bound {
+            DeadlineBound::Phase => Cow::Borrowed(
+                "raise the render deadline with: tpl cfg set core.render_timeout <seconds>",
+            ),
+            DeadlineBound::Overall => Cow::Borrowed(
+                "raise the overall budget with: tpl --timeout <seconds> render <template>",
+            ),
+        },
+
+        // ------------------------------------------------------------ 66 ---
+        Error::CatalogueObjectNotFound { kind, entry, .. } => {
+            let listing = listing(*kind);
+            if admits(entry) {
+                Cow::Owned(format!(
+                    "list the available {listing} with: tpl -d {entry} schema {listing}"
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "list the available {listing} with: tpl schema {listing}"
+                ))
+            }
+        }
+        Error::TemplateNotFound { .. } => {
+            Cow::Borrowed("list the project's templates with: tpl template list")
+        }
+        Error::DatabaseEntryNotFound { .. } => {
+            Cow::Borrowed("list the entries with: tpl cfg database list")
+        }
+        Error::ConfigurationKeyNotFound { .. } => {
+            Cow::Borrowed("list the keys that are set with: tpl cfg list")
+        }
+
+        // ------------------------------------------------------------ 69 ---
+        Error::NameNotResolved { .. } => Cow::Borrowed(
+            "check the name, or repoint the entry with: tpl cfg database update <entry> \
+             --host <host>",
+        ),
+        Error::ConnectionRefused { .. } => Cow::Borrowed(
+            "check that the server is listening, or repoint the entry with: tpl cfg database \
+             update <entry> --port <port>",
+        ),
+        Error::TlsHandshakeFailed { .. } => Cow::Borrowed(
+            "check the server's TLS, or state the mode with: tpl cfg set database.<entry>.tls \
+             <mode>",
+        ),
+        Error::NetworkDeadlineExceeded { phase, bound, .. } => match bound {
+            DeadlineBound::Phase => Cow::Owned(format!(
+                "raise the deadline with: tpl cfg set {} <seconds>",
+                deadline_key(*phase)
+            )),
+            DeadlineBound::Overall => {
+                Cow::Borrowed("raise the overall budget with: tpl --timeout <seconds> <command>")
+            }
+        },
+
+        // ------------------------------------------------------------ 70 ---
+        // FR-ERR-032: the hint of a 70 says the condition is a defect in tpl
+        // and is not correctable by the caller.
+        Error::InternalInvariant { .. } => Cow::Borrowed(
+            "this is a defect in tpl and is not correctable by the caller; report it with the \
+             command you ran and the output of: tpl version",
+        ),
+
+        // ------------------------------------------------------------ 73 ---
+        Error::ProjectAlreadyExists { .. } => Cow::Borrowed(
+            "use the project that is already here, or create one elsewhere with: tpl init <path>",
+        ),
+        Error::ProjectNotCreated { .. } => Cow::Borrowed(
+            "create the project where the invoking user may write, with: tpl init <path>",
+        ),
+
+        // ------------------------------------------------------------ 74 ---
+        Error::ProjectFileUnreadable { .. } => Cow::Borrowed(
+            "make .tpl and its contents readable by the invoking user, then run the command again",
+        ),
+        Error::StdoutUnwritable { .. } => Cow::Borrowed(
+            "free space on the destination, or send the output elsewhere, then run the command \
+             again",
+        ),
+        Error::StdoutClosedMidDocument => Cow::Borrowed(
+            "write the document to a file rather than into a consumer that may close early, then \
+             read it from there",
+        ),
+
+        // ------------------------------------------------------------ 77 ---
+        Error::AuthenticationRefused { .. } => Cow::Borrowed(
+            "correct the credentials with: tpl cfg database update <entry> --user <user>",
+        ),
+        Error::PropertyNotReadable { .. } => Cow::Borrowed(
+            "request read access to the catalogue for this user, then run the command again",
+        ),
+
+        // ------------------------------------------------------------ 78 ---
+        // FR-PROJ-006 obliges this hint to suggest `tpl init`.
+        Error::ProjectNotFound { .. } => Cow::Borrowed("create a project here with: tpl init"),
+        Error::ConfigurationNotOwned { .. } => Cow::Borrowed("chown \"$(id -un)\" .tpl/.cfg"),
+        // FR-PROJ-011 states this hint itself.
+        Error::ConfigurationUnsafeMode { .. } => Cow::Borrowed("chmod 600 .tpl/.cfg"),
+        Error::ConfigurationMalformed { .. } => Cow::Borrowed(
+            "correct the TOML at the line and column named above, then run the command again",
+        ),
+        Error::ConfigurationKeyOutsideSpace { .. } => Cow::Borrowed(
+            "remove the key from .tpl/.cfg, or show what tpl cfg set accepts with: tpl help cfg set",
+        ),
+        // FR-CONF-035 obliges the hint to show the array form, and states this
+        // example itself.
+        Error::PasswordCommandNotAnArray { .. } => Cow::Borrowed(
+            "write it as an array: password_command = [\"security\", \"find-generic-password\", \
+             \"-s\", \"tpl-shop\", \"-w\"]",
+        ),
+        Error::ConflictingEntryKeys { .. } => {
+            Cow::Borrowed("keep one of the two and remove the other with: tpl cfg unset <key>")
+        }
+        // FR-CONF-011 points the hint at `tpl cfg database add` with the
+        // discrete flags. The DSN itself is barred by BR-ERR-003 and is not
+        // carried by the error value at all.
+        Error::DsnQueryParameter { .. } => Cow::Borrowed(
+            "state each option as its own key: tpl cfg database add <entry> --host <host> \
+             --port <port> --user <user>",
+        ),
+        Error::UndefinedVariable { name, .. } => {
+            if admits(name) {
+                Cow::Owned(format!("define it with: export {name}=<value>"))
+            } else {
+                Cow::Borrowed(
+                    "define the environment variable named above, then run the command again",
+                )
+            }
+        }
+        Error::PasswordCommandDeadlineExceeded { bound, .. } => match bound {
+            DeadlineBound::Phase => Cow::Borrowed(
+                "raise the deadline with: tpl cfg set core.password_timeout <seconds>",
+            ),
+            DeadlineBound::Overall => {
+                Cow::Borrowed("raise the overall budget with: tpl --timeout <seconds> <command>")
+            }
+        },
+        Error::PasswordCommandOutputCapExceeded { .. } => {
+            Cow::Borrowed("make password_command write the password and nothing else")
+        }
+        // FR-CONF-032 records the remedy: the child's own standard error is
+        // visible when the command is run directly, and nowhere else.
+        Error::PasswordCommandFailed { .. } => Cow::Borrowed(
+            "run the command directly to see why it failed; tpl sends its standard error to the \
+             null device",
+        ),
+        Error::ReadOnlySessionNotEnforced { entry, fault } => {
+            let remedy = match fault {
+                ReadOnlyFault::NotApplied => "accepts a read-only session",
+                ReadOnlyFault::ReadBackDisagreed => "reports the read-only session it accepted",
+            };
+            Cow::Owned(format!(
+                "repoint the entry at a server that {remedy}: {}",
+                update_entry(entry)
+            ))
+        }
+        Error::NoDatabaseEntrySelected { .. } => Cow::Borrowed(
+            "select an entry with -d, or set a default with: tpl cfg set core.database <entry>",
+        ),
+        Error::ServerNotMariaDb { entry, .. } => Cow::Owned(format!(
+            "repoint the entry at a MariaDB server: {}",
+            update_entry(entry)
+        )),
+        // FR-SRV-030 obliges this hint to carry `tpl cfg database update` with
+        // the entry name filled in.
+        Error::SeriesNotSupported { entry, .. } => Cow::Owned(format!(
+            "repoint the entry at a supported server: {}",
+            update_entry(entry)
+        )),
+    }
+}
+
+/// The `tpl cfg database update` command that repoints an entry.
+///
+/// The entry name is filled in only where `FR-ERR-022` admits it into a
+/// runnable command; otherwise the placeholder stands, per `FR-ERR-023`.
+fn update_entry(entry: &str) -> Cow<'static, str> {
+    if admits(entry) {
+        Cow::Owned(format!("tpl cfg database update {entry} --host <host>"))
+    } else {
+        Cow::Borrowed("tpl cfg database update <entry> --host <host>")
+    }
+}
+
+/// Whether `name` may be interpolated into a runnable command.
+///
+/// `FR-ERR-022` admits `[A-Za-z0-9_]{1,64}` and nothing else. A catalogue name
+/// is free text in MariaDB and can carry a semicolon, a quotation mark or a
+/// newline, so formatting one straight into a suggested command would be
+/// command injection with the caller as the interpreter.
+fn admits(name: &str) -> bool {
+    // Every admitted byte is ASCII, so the byte length is the character count.
+    !name.is_empty()
+        && name.len() <= MAX_NAME
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+/// Whether every segment of a space-separated command path is admitted.
+///
+/// A path such as `schema table` is built from two names, and `FR-ERR-022`
+/// admits a *name*; the separator is a literal of the command line.
+fn admits_path(path: &str) -> bool {
+    !path.is_empty() && path.split(' ').all(admits)
+}
+
+/// The subcommand that lists the population a catalogue object was sought in.
+const fn listing(kind: CatalogueObjectKind) -> &'static str {
+    match kind {
+        CatalogueObjectKind::Table => "tables",
+        CatalogueObjectKind::View => "views",
+        CatalogueObjectKind::Routine => "routines",
+    }
+}
+
+/// The `[core]` key that resolves the deadline of a network phase.
+///
+/// `FR-CONF-005` maps every blocking phase to a key of `FR-CONF-002`, and
+/// `FR-ERR-012` obliges the hint to name that key rather than tell the caller
+/// to check their configuration.
+const fn deadline_key(phase: NetworkPhase) -> &'static str {
+    match phase {
+        NetworkPhase::DnsResolution | NetworkPhase::TcpConnect | NetworkPhase::TlsHandshake => {
+            "core.connect_timeout"
+        }
+        NetworkPhase::CatalogueQuery => "core.query_timeout",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_NAME, admits, admits_path, update_entry};
+
+    #[test]
+    fn the_admitted_set_is_the_one_fr_err_022_states() {
+        assert!(admits("orders"));
+        assert!(admits("order_lines_2026"));
+        assert!(admits("A9"));
+
+        assert!(!admits(""), "an empty name is outside {{1,64}}");
+        assert!(!admits("order lines"), "a space is outside [A-Za-z0-9_]");
+        assert!(
+            !admits("orders;drop"),
+            "a semicolon is outside [A-Za-z0-9_]"
+        );
+        assert!(
+            !admits("orders\nrm -rf /"),
+            "a newline is outside [A-Za-z0-9_]"
+        );
+        assert!(!admits("core.database"), "a dot is outside [A-Za-z0-9_]");
+        assert!(!admits("encomendas_pag\u{e1}s"), "the set is ASCII");
+    }
+
+    #[test]
+    fn a_name_of_more_than_sixty_four_characters_is_refused() {
+        assert!(admits(&"a".repeat(MAX_NAME)));
+        assert!(!admits(&"a".repeat(MAX_NAME + 1)));
+    }
+
+    #[test]
+    fn a_command_path_is_admitted_segment_by_segment() {
+        assert!(admits_path("schema"));
+        assert!(admits_path("cfg database add"));
+        assert!(!admits_path(""));
+        assert!(!admits_path("cfg database add; rm"));
+    }
+
+    #[test]
+    fn a_refused_entry_name_leaves_the_placeholder_standing() {
+        assert_eq!(
+            update_entry("shop"),
+            "tpl cfg database update shop --host <host>"
+        );
+        assert_eq!(
+            update_entry("shop; rm -rf /"),
+            "tpl cfg database update <entry> --host <host>"
+        );
+    }
+}
