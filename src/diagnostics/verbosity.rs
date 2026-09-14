@@ -44,9 +44,19 @@ impl Level {
     /// `FR-CLI-016` counts to three and saturates above; `quiet` is whether
     /// `-q/--quiet` was supplied.
     ///
-    /// Where both are supplied, `quiet` decides. The specification declares
-    /// the two neither exclusive nor ordered, and the narrower outcome is the
-    /// one a caller can recover from by dropping a flag.
+    /// The two flags are mutually exclusive, so `quiet && verbose > 0` cannot
+    /// reach this function: `FR-CLI-015` refuses the pair with exit `64`
+    /// (`EX_USAGE`) while the arguments are parsed, before any level is
+    /// resolved, and `FR-GLOB-015` names that refusal where both flags are
+    /// declared. No precedence between the two is encoded here, because the
+    /// corpus has none to encode.
+    ///
+    /// The function is nevertheless total, and does not panic in any build
+    /// profile. The pair the parser refuses resolves to [`Level::Warnings`] —
+    /// the level of a run that supplied neither flag, and this enum's default
+    /// — which is the one outcome that favours neither flag. It is the same
+    /// degradation [`Level::from_repr`] applies to a discriminant that cannot
+    /// arise.
     #[allow(
         dead_code,
         reason = "the flags that supply these two arguments belong to `cli/`, a later \
@@ -54,16 +64,18 @@ impl Level {
                   resolution"
     )]
     pub(crate) const fn resolve(verbose: u8, quiet: bool) -> Self {
-        if quiet {
-            return Self::Errors;
-        }
-
-        match verbose {
-            0 => Self::Warnings,
-            1 => Self::Info,
-            2 => Self::Debug,
+        match (verbose, quiet) {
+            // FR-GLOB-015.
+            (0, true) => Self::Errors,
+            (0, false) => Self::Warnings,
+            (1, false) => Self::Info,
+            (2, false) => Self::Debug,
             // FR-GLOB-014: further occurrences saturate at TRACE without error.
-            _ => Self::Trace,
+            (_, false) => Self::Trace,
+            // Unreachable per FR-CLI-015, and resolved in neither flag's
+            // favour: the default, which `Default::default` cannot yield in a
+            // `const fn`.
+            (_, true) => Self::Warnings,
         }
     }
 
@@ -138,7 +150,16 @@ mod tests {
     fn quiet_lowers_the_level_to_errors_only() {
         // FR-GLOB-015.
         assert_eq!(Level::resolve(0, true), Level::Errors);
-        assert_eq!(Level::resolve(9, true), Level::Errors);
+    }
+
+    /// `FR-CLI-015` exits `64` on `-q` with `-v`, so the pair never reaches
+    /// `resolve`. The function is total regardless, and neither flag wins.
+    #[test]
+    fn the_pair_the_parser_refuses_favours_neither_flag() {
+        for verbose in 1u8..=u8::MAX {
+            assert_eq!(Level::resolve(verbose, true), Level::default());
+        }
+        assert_eq!(Level::default(), Level::Warnings);
     }
 
     #[test]
