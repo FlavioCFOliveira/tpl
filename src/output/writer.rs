@@ -46,6 +46,16 @@
 //! the process terminated by `SIGPIPE` instead, neither requirement could be
 //! satisfied at all: there would be no frame left to decide between `0` and
 //! `74`.
+//!
+//! **A classified failure seals the stream**, which is what keeps `FR-ERR-033`
+//! true on the way out. A write that fails leaves the bytes it had not yet
+//! emitted inside the buffer, and a buffer flushes itself when it is dropped —
+//! so the truncated remainder of a document whose outcome is already an error
+//! would reach stdout after the failure had been reported, on a path the
+//! requirement obliges to leave stdout empty. [`Tracked::seal`] closes that:
+//! once [`Writer::classify`] has decided the outcome, the tracked stream
+//! absorbs what the buffer hands it instead of forwarding it, and the drop
+//! empties the buffer into nothing.
 
 use std::io::{self, BufWriter, Write};
 
@@ -87,6 +97,9 @@ struct Tracked<W> {
     stream: W,
     /// Whether `stream` has accepted a byte of the current document.
     emitted: bool,
+    /// Whether the outcome has been classified and the stream closed to
+    /// anything further.
+    sealed: bool,
 }
 
 impl<W> Tracked<W> {
@@ -95,6 +108,7 @@ impl<W> Tracked<W> {
         Self {
             stream,
             emitted: false,
+            sealed: false,
         }
     }
 
@@ -107,10 +121,30 @@ impl<W> Tracked<W> {
     const fn emitted(&self) -> bool {
         self.emitted
     }
+
+    /// Closes the stream to everything the buffer still holds.
+    ///
+    /// Called once the outcome of a write has been classified. What the buffer
+    /// holds at that moment is the part of a document that never reached the
+    /// consumer, and emitting it afterwards would put a truncated document on
+    /// stdout on a path `FR-ERR-033` obliges to leave stdout empty — which is
+    /// what a buffer's own drop would otherwise do.
+    fn seal(&mut self) {
+        self.sealed = true;
+    }
 }
 
 impl<W: Write> Write for Tracked<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // A sealed stream reports the write as accepted without making it, so
+        // the buffer above empties into nothing rather than retrying a stream
+        // whose outcome is already settled. Reporting a refusal instead would
+        // leave the same bytes in the buffer for the next attempt; this is the
+        // behaviour of `io::Sink`, applied to a stream that is finished with.
+        if self.sealed {
+            return Ok(buf.len());
+        }
+
         // A partial write followed by a failure still emitted bytes, and the
         // consumer holds them: the flag is set from what the stream accepted,
         // before the failure is propagated on the next call.
@@ -121,6 +155,10 @@ impl<W: Write> Write for Tracked<W> {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        if self.sealed {
+            return Ok(());
+        }
+
         self.stream.flush()
     }
 }
@@ -247,8 +285,16 @@ impl<W: Write> Writer<W> {
     /// it. What separates `FR-ERR-025` from `FR-ERR-026` is `cut` — the kind of
     /// output in flight — and, where that kind can be truncated, the one fact
     /// [`Tracked`] holds.
+    ///
+    /// The stream is sealed **before** the outcome is decided, and for every
+    /// outcome alike: the bytes the buffer still holds belong to output that
+    /// failed, and none of the three outcomes wants them emitted afterwards.
+    /// Sealing here rather than in the caller is what makes that hold for the
+    /// drop as well as for the return, because the drop is the only writer left
+    /// once this function has run.
     fn classify(&mut self, refused: io::Error, cut: Cut) -> Result<(), Error> {
         self.finished = true;
+        self.inner.get_mut().seal();
 
         if refused.kind() != io::ErrorKind::BrokenPipe {
             return Err(Error::StdoutUnwritable { returned: refused });
@@ -271,6 +317,8 @@ mod tests {
     use crate::output::envelope::{Collection, Document, Source};
     use crate::output::json::Form;
     use crate::output::text::{Order, Table};
+    use serde::ser::{Error as _, SerializeStruct as _};
+    use serde::{Serialize, Serializer};
     use std::io::{self, Write};
 
     /// A stream that accepts a fixed number of bytes and then refuses.
@@ -520,5 +568,139 @@ mod tests {
             "{document}"
         );
         assert!(document.ends_with("}\n"), "{document}");
+    }
+
+    // ------------------------------- what a failure leaves on stdout ---
+
+    /// A payload that serialises two fields and then refuses.
+    ///
+    /// `FR-OUT-027` leaves the shape of `data` to the module that owns each
+    /// command, so a payload with a `Serialize` of its own is admissible and
+    /// `Collection` is already one. This is such a payload failing part-way,
+    /// which is the condition `json::write_document` reports as
+    /// [`io::ErrorKind::InvalidData`].
+    struct FailsPartWay;
+
+    impl Serialize for FailsPartWay {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let mut payload = serializer.serialize_struct("FailsPartWay", 3)?;
+            payload.serialize_field("tables", &["orders", "customers"])?;
+            payload.serialize_field("count", &2_u32)?;
+
+            Err(S::Error::custom("the payload could not be serialised"))
+        }
+    }
+
+    /// A stream that refuses the write crossing `fails_at` once, and accepts
+    /// every write before and after it.
+    ///
+    /// This is a consumer that returned `EAGAIN` on a descriptor it had put in
+    /// non-blocking mode and then drained: the first write is refused, and a
+    /// later one would succeed.
+    struct Recovering {
+        accepted: Vec<u8>,
+        fails_at: usize,
+        refused: bool,
+    }
+
+    impl Recovering {
+        const fn new(fails_at: usize) -> Self {
+            Self {
+                accepted: Vec::new(),
+                fails_at,
+                refused: false,
+            }
+        }
+    }
+
+    impl Write for Recovering {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if !self.refused && self.accepted.len() + buf.len() > self.fails_at {
+                self.refused = true;
+                return Err(io::Error::from(io::ErrorKind::WouldBlock));
+            }
+
+            self.accepted.extend_from_slice(buf);
+
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_payload_that_fails_part_way_leaves_stdout_empty() {
+        // FR-ERR-033: the outcome is an error, so stdout is left empty. The
+        // part of the document the encoder had composed is still inside the
+        // buffer when the failure is classified, and the buffer's own drop
+        // would emit it — after the failure had been reported, as a truncated
+        // document no consumer can tell is incomplete.
+        let mut emitted = Vec::new();
+        let document = Document::new(Source::Server, FailsPartWay);
+
+        let refused = Writer::new(&mut emitted)
+            .document(&document, Form::Compact)
+            .expect_err("a payload that refuses is not a success");
+
+        assert!(
+            matches!(refused, Error::StdoutUnwritable { .. }),
+            "{refused:?} is not the condition of the 74 row"
+        );
+        assert_eq!(refused.exit_code(), 74);
+        assert!(
+            emitted.is_empty(),
+            "a truncated document reached stdout: {:?}",
+            String::from_utf8_lossy(&emitted)
+        );
+    }
+
+    #[test]
+    fn a_stream_that_recovers_receives_nothing_after_the_failure() {
+        // The same rule where the refusal is the stream's rather than the
+        // payload's, and the stream would accept the retry: nothing of the
+        // document may follow the failure that was already reported.
+        let members: Vec<String> = (0..2_000).map(|at| format!("table_{at:06}")).collect();
+        let large = Document::new(Source::Server, Collection::new("tables", &members));
+        let mut stream = Recovering::new(9_000);
+
+        let refused = Writer::new(&mut stream)
+            .document(&large, Form::Compact)
+            .expect_err("a stream that refuses the write is not a success");
+
+        assert!(
+            matches!(refused, Error::StdoutUnwritable { .. }),
+            "{refused:?} is not the condition of the 74 row"
+        );
+
+        let held = stream.accepted.len();
+        assert!(held <= 9_000, "the stream accepted more than it admitted");
+        assert!(
+            !stream.accepted.ends_with(b"}\n"),
+            "the document cannot have been completed on a refused stream"
+        );
+    }
+
+    #[test]
+    fn a_listing_refused_part_way_leaves_nothing_further_on_stdout() {
+        // A listing is the silent 0 of FR-ERR-025 when the consumer closes,
+        // and FR-ERR-033's empty stdout when the stream refuses for another
+        // reason. Neither wants the remainder of the buffer afterwards.
+        let mut stream = Recovering::new(4);
+
+        let refused = Writer::new(&mut stream)
+            .table(&listing())
+            .expect_err("a refusal that is not a close is unwritable");
+
+        assert!(
+            matches!(refused, Error::StdoutUnwritable { .. }),
+            "{refused:?}"
+        );
+        assert!(
+            stream.accepted.len() <= 4,
+            "the buffer reached the stream after the failure: {:?}",
+            String::from_utf8_lossy(&stream.accepted)
+        );
     }
 }

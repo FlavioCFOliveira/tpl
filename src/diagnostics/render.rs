@@ -878,11 +878,22 @@ mod tests {
 
     // --------------------------------------------------- the whole variant set ---
 
-    /// One value of every variant of [`Error`], carrying a hostile payload
-    /// wherever the variant has a field that can hold one.
+    /// One value of every variant of [`Error`], carrying [`HOSTILE`] wherever
+    /// the variant has a field that can hold one.
     fn samples() -> Vec<Error> {
-        let hostile = || HOSTILE.to_owned();
-        let hostile_path = || PathBuf::from(HOSTILE);
+        samples_carrying(HOSTILE)
+    }
+
+    /// One value of every variant of [`Error`], carrying `payload` wherever the
+    /// variant has a field that can hold one.
+    ///
+    /// The payload is a parameter because two properties are checked over the
+    /// same set with different values: that a control character is escaped,
+    /// which [`HOSTILE`] demonstrates, and that a value `FR-ERR-022` governs
+    /// never reaches a `hint` line, which [`UNGATED`] demonstrates.
+    fn samples_carrying(payload: &str) -> Vec<Error> {
+        let hostile = || payload.to_owned();
+        let hostile_path = || PathBuf::from(payload);
 
         vec![
             Error::UnknownCommand { token: hostile() },
@@ -1128,5 +1139,91 @@ mod tests {
             let rendered = render(&error);
             assert!(!rendered.contains('\u{1b}'), "{rendered:?}");
         }
+    }
+
+    // ---------------------------------------- the character set of FR-ERR-022 ---
+
+    /// A payload made only of characters no `hint` of [`super::hint`] holds.
+    ///
+    /// Every one of them is outside `[A-Za-z0-9_]`, so `FR-ERR-022` governs a
+    /// value carrying them and `FR-ERR-023` keeps it off the line. None appears
+    /// in any literal the module holds, so one on a `hint` line is proof that a
+    /// value reached it ungated rather than evidence of a literal.
+    const UNGATED: &str = "%!@^|&*?~`\\ \u{1b}[31m";
+
+    /// The characters of [`UNGATED`] the assertion looks for.
+    ///
+    /// The space and the `[31m` of the escape sequence are left out because a
+    /// literal may hold either. The backslash covers two cases at once: it is
+    /// one of the characters, and it is also what `FR-ERR-024` puts in front of
+    /// an escaped control, so a control that reached the line is caught by it
+    /// even in its escaped form.
+    const NEVER_IN_A_HINT: &[char] = &[
+        '%', '!', '@', '^', '|', '&', '*', '?', '~', '`', '\\', '\u{1b}',
+    ];
+
+    #[test]
+    fn no_hint_line_carries_a_value_the_character_set_governs() {
+        // FR-ERR-022 and FR-ERR-023, over every variant at once: a hint is
+        // built from literals and from names matching `[A-Za-z0-9_]{1,64}`, so
+        // a value outside the set reaches no hint line in any form — neither as
+        // a runnable command nor as prose.
+        for error in samples_carrying(UNGATED) {
+            let rendered = render(&error);
+            let hint = line(&rendered, Label::Hint);
+
+            assert!(
+                !hint.contains(NEVER_IN_A_HINT),
+                "a value FR-ERR-022 governs reached the hint line: {hint:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_name_the_character_set_admits_still_reaches_its_hint() {
+        // The control that makes the test above mean something: the gate lets
+        // an admissible name through, so a hint that carried nothing at all
+        // would not pass for a hint that refused a hostile name.
+        let rendered = render(&Error::CatalogueObjectNotFound {
+            kind: CatalogueObjectKind::Table,
+            name: "ordrs".to_owned(),
+            entry: "shop".to_owned(),
+            database: "shop".to_owned(),
+        });
+
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "list the available tables with: tpl -d shop schema tables"
+        );
+    }
+
+    #[test]
+    fn a_flag_outside_the_spelling_the_corpus_enumerates_is_not_reproduced() {
+        // The pair of a mutually exclusive refusal is prose rather than a
+        // runnable command, so FR-ERR-022 does not demand the test; it is the
+        // same defensive assertion `admits_path` is for the command path. A
+        // token that is not a flag this corpus enumerates came from somewhere
+        // other than the flag table, and the hint names neither member.
+        let refused = render(&Error::MutuallyExclusiveFlags {
+            first: "--host; rm -rf /".to_owned(),
+            second: "--dsn".to_owned(),
+        });
+
+        assert_eq!(
+            line(&refused, Label::Hint),
+            "give one of the two flags named above, and not both"
+        );
+
+        // The ordinary pair, which the flag table does produce, is named in
+        // full: both spellings of this corpus pass the test, hyphen included.
+        let named = render(&Error::MutuallyExclusiveFlags {
+            first: "--dsn".to_owned(),
+            second: "--ca-file".to_owned(),
+        });
+
+        assert_eq!(
+            line(&named, Label::Hint),
+            "give '--dsn' or '--ca-file', and not both"
+        );
     }
 }

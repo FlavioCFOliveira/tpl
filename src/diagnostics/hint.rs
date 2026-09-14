@@ -70,9 +70,16 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             }
         }
         // Neither flag enters a runnable command, so FR-ERR-022 is not engaged
-        // and both are named as prose, escaped on the way out.
+        // and both are named as prose, escaped on the way out. The pair is
+        // nonetheless tested, as a defensive assertion: a flag is a spelling
+        // this corpus enumerates, so a token that fails the test came from
+        // somewhere other than the flag table and is not reproduced.
         Error::MutuallyExclusiveFlags { first, second } => {
-            Cow::Owned(format!("give '{first}' or '{second}', and not both"))
+            if admits_flag(first) && admits_flag(second) {
+                Cow::Owned(format!("give '{first}' or '{second}', and not both"))
+            } else {
+                Cow::Borrowed("give one of the two flags named above, and not both")
+            }
         }
         Error::MalformedValue { .. } => {
             Cow::Borrowed("show what the command accepts with: tpl help <command>")
@@ -319,6 +326,27 @@ pub(super) fn admits_path(path: &str) -> bool {
     !path.is_empty() && path.split(' ').all(admits)
 }
 
+/// Whether every segment of a flag is admitted.
+///
+/// The `-` or `--` that introduces the flag is a literal, per `FR-ERR-022`, and
+/// so is the `-` inside the five flags of this corpus that carry one —
+/// `--tpl-dir`, `--no-cache`, `--ca-file`, `--ca-path` and `--password-command`
+/// — because a flag is a spelling this specification enumerates.
+///
+/// This is the third of the three spelling tests, and it lives beside the other
+/// two because one rule stated in two places is a rule that drifts: [`hint`]
+/// applies it to the pair of a mutually exclusive refusal and
+/// [`super::suggest`] applies it to a nearest-match candidate, and both are the
+/// same defensive assertion over the same enumerated population.
+pub(super) fn admits_flag(flag: &str) -> bool {
+    let name = flag
+        .strip_prefix("--")
+        .or_else(|| flag.strip_prefix('-'))
+        .unwrap_or(flag);
+
+    !name.is_empty() && name.split('-').all(admits)
+}
+
 /// The subcommand that lists the population a catalogue object was sought in.
 const fn listing(kind: CatalogueObjectKind) -> &'static str {
     match kind {
@@ -344,7 +372,7 @@ const fn deadline_key(phase: NetworkPhase) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_NAME, admits, admits_path, update_entry};
+    use super::{MAX_NAME, admits, admits_flag, admits_path, update_entry};
 
     #[test]
     fn the_admitted_set_is_the_one_fr_err_022_states() {
@@ -381,6 +409,23 @@ mod tests {
         assert!(admits_path("cfg database add"));
         assert!(!admits_path(""));
         assert!(!admits_path("cfg database add; rm"));
+    }
+
+    #[test]
+    fn a_flag_is_admitted_segment_by_segment() {
+        // FR-ERR-022: the `-` or `--` that introduces a flag is a literal, and
+        // so is the `-` inside the five flags of this corpus that carry one.
+        assert!(admits_flag("-d"));
+        assert!(admits_flag("--host"));
+        assert!(admits_flag("--ca-file"));
+        assert!(admits_flag("--password-command"));
+
+        assert!(!admits_flag(""), "a flag with no name");
+        assert!(!admits_flag("--"), "a flag that is only its introducer");
+        assert!(!admits_flag("--ca-"), "an empty trailing segment");
+        assert!(!admits_flag("---rf"), "an empty leading segment");
+        assert!(!admits_flag("--host; rm -rf /"), "a semicolon and a space");
+        assert!(!admits_flag("--host\nrm"), "a newline");
     }
 
     #[test]

@@ -96,27 +96,11 @@ impl Population {
     fn admits(self, candidate: &str) -> bool {
         match self {
             Self::Commands => hint::admits_path(candidate),
-            Self::Flags => admits_flag(candidate),
+            Self::Flags => hint::admits_flag(candidate),
             Self::ConfigurationKeys => admits_key(candidate),
             Self::Names => hint::admits(candidate),
         }
     }
-}
-
-/// Whether every segment of a flag is admitted.
-///
-/// The `-` or `--` that introduces the flag is a literal, per `FR-ERR-022`,
-/// and so is the `-` inside the five flags of this corpus that carry one —
-/// `--tpl-dir`, `--no-cache`, `--ca-file`, `--ca-path` and
-/// `--password-command` — because a flag is a spelling this specification
-/// enumerates.
-fn admits_flag(flag: &str) -> bool {
-    let name = flag
-        .strip_prefix("--")
-        .or_else(|| flag.strip_prefix('-'))
-        .unwrap_or(flag);
-
-    !name.is_empty() && name.split('-').all(hint::admits)
 }
 
 /// Whether every segment of a configuration key is admitted.
