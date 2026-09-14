@@ -3,7 +3,7 @@ id: ADR-007
 title: The minimum supported Rust version
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-12
 requirements: []
 supersedes: []
 superseded-by: null
@@ -15,7 +15,9 @@ superseded-by: null
 
 Accepted, 2026-09-11. The **rule** below was settled on 2026-09-10; the floor it
 yields was established by verifying every direct dependency on 2026-09-11, and
-is higher than the figure the project carried before that verification.
+is higher than the figure the project carried before that verification. The
+rule was re-run over the resolved graph on 2026-09-12 and the floor did not
+move, which is why the `decided` date above is unchanged.
 
 ## Context
 
@@ -44,10 +46,10 @@ number moves under it:**
 2. the highest floor **declared by any dependency in the shipped graph**, which
    is `cargo tree -e normal,build` under `ADR-006`.
 
-**Applying the rule on 2026-09-11, the MSRV is `1.94.0`**, and
-`rust-version = "1.94.0"` goes in `Cargo.toml`. It is set by the driver crate
-`ADR-003` pins, which declares that floor; every other direct dependency
-declares a floor at or below the edition floor:
+**Applying the rule on 2026-09-12, over the resolved graph, the MSRV is
+`1.94.0`**, and `rust-version = "1.94.0"` goes in `Cargo.toml`. It is set by the
+driver crate `ADR-003` pins, which declares that floor; every other direct
+dependency declares a floor at or below the edition floor:
 
 | Crate | Version consulted | Declared floor |
 |---|---|---|
@@ -131,13 +133,30 @@ crate index declares 1.70 for the engine `ADR-001` pins, where a reading taken
 from its own documentation on 2026-09-10 gave 1.63. Both are below the edition
 floor, so neither binds and the difference changes no outcome.
 
-**Only the direct dependencies have been read, and the rule reaches further
-than that.** A transitive crate declaring a higher floor raises this one just as
-a direct one does, and the graph cannot be enumerated before a manifest and a
-lockfile exist. This is the record's one **unverified** point, and it carries an
-obligation: re-run the rule over `cargo tree -e normal,build` the first time the
-graph resolves, and amend this record if the floor moves. It can only move
-upward.
+**The rule has been run over the whole shipped graph, and the floor did not
+move.** `cargo tree -e normal,build` prints 137 crates, `tpl` among them; of the
+136 dependencies, **116 declare a `rust-version` and 20 declare none** — and a
+crate that declares none declares no floor, so it constrains nothing. The
+highest declared floor is **1.94.0**, declared by the driver's own five crates —
+`sqlx`, `sqlx-core`, `sqlx-mysql`, `sqlx-macros`, `sqlx-macros-core` — and by no
+other crate in the graph. No transitive crate raises the floor, so the record's
+one unverified point is discharged and `Cargo.toml` needs no edit. The reading
+was taken for each of the four targets `ADR-008` names, which differ by exactly
+one crate: `linux-raw-sys` 0.12.1 on the two Linux targets, in place of `errno`
+on the two macOS ones, declaring 1.63. Two direct dependencies have moved since
+the table above was read, without moving their floor: `toml` resolves at 1.1.6
+and `toml_edit` at 0.25.15, and both still declare 1.85.
+
+**The vendored copy of `ADR-010` does not reach this floor.** `sqlx-core` is
+read from `vendor/sqlx-core-0.9.0/` rather than from the crate index, and the
+vendored manifest carries the published `rust-version = "1.94.0"` unchanged.
+Editing that manifest would be an MSRV question exactly as a dependency bump is,
+and deleting the patch returns the reading to the index copy at the same figure.
+
+**Only the driver's subtree declares above the edition floor.** After 1.94.0 the
+next floors in the graph are 1.88, declared by the seven `icu` crates, and 1.86,
+declared by `idna_adapter`; all eight reach the graph through `url`, which
+nothing but the driver pulls in. Every remaining crate declares 1.85 or less.
 
 **Dev-dependencies are outside the rule.** The floor above is the floor of the
 shipped graph, per `ADR-006`. A dev-dependency that demanded a higher toolchain
@@ -158,7 +177,7 @@ this record.
 | Rust 1.85.0 is the release that stabilised the 2024 edition | The Rust Edition Guide, *Rust 2024* | 2026-09-11 |
 | The driver crate `ADR-003` pins declares `rust-version = "1.94.0"`, and is the maximum stable release of that crate | crates.io crate index, `sqlx`, version 0.9.0 | 2026-09-11 |
 | Declared floors: `clap` 4.6.6 → 1.85; `toml` 1.1.5 → 1.85; `toml_edit` 0.25.13 → 1.85; `tokio` 1.53.1 → 1.71; `serde_json` 1.0.151 → 1.71; `thiserror` 2.0.20 → 1.71; `anyhow` 1.0.104 → 1.68; `rustix` 1.1.4 → 1.63; `serde` 1.0.229 → 1.56 | crates.io crate index, one request per crate | 2026-09-11 |
-| The floors of the **transitive** graph | **Unverified.** No manifest and no lockfile exist yet, so the graph cannot be resolved | — |
+| The composition of the shipped graph, and the floor declared by every crate in it | `cargo tree -e normal,build` and `cargo metadata`, resolved against this repository's `Cargo.lock` at commit `be16e30` and run once per target `ADR-008` names; the `sqlx-core` figure is read from `vendor/sqlx-core-0.9.0/Cargo.toml`, which the `ADR-010` patch substitutes for the index copy | 2026-09-12 |
 | The engine `ADR-001` pins declares 1.70 on the crate index; neither it nor the 1.63 read from its own documentation on 2026-09-10 — **not re-verified here** — reaches the edition floor | crates.io crate index, `minijinja` and `minijinja-contrib` | 2026-09-11 |
 | Edition 2024, with the MSRV deferred to `Cargo.toml` | `CLAUDE.md`, *Stack* | 2026-09-11 |
 | The development toolchain and the toolchain the driver selection was measured under are two distinct figures, and both stand above the floor | `docs/spec-technical/operations.md`, *MSRV, the development toolchain, and the cross-build path*, whose inventory is `rustup show`, `rustc --version --verbose` and `cargo --version --verbose` taken on the development host; and `BENCHMARKS.md`, "2026-09-10 — MariaDB driver selection", *Environment* | 2026-09-11 |

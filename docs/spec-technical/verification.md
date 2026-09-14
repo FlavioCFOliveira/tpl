@@ -22,16 +22,20 @@ figure is `BENCHMARKS.md`'s. **No build command appears here.** The pipeline
 that runs the suite, the gates a release passes and the fixture's operational
 standing are [operations.md](operations.md#the-mandatory-validation-pipeline).
 
-**The harness exists; the tests do not.**
+**The harness exists, and so does one test of the register below.**
 [The container harness](#the-container-harness) records what
 `scripts/mariadb/` supplies as of 2026-09-11, which discharged the harness half
 of [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)'s
 residual, and what remains unestablished beside it.
 
-**No test named in this document exists.** The harness has been run and its
-instruments were established against a substitute client; nothing this project
-owns has yet been tested through them. What is recorded of a test is its
-obligation and its trace, never an outcome.
+**One test of the register below is written — row 2, the `70` trigger — and
+every other row is obligation alone.** It is a unit test over the seam
+`FR-ERR-031` requires, and it asserts what that row asserts: the guard produces
+the condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires.
+Nothing this project owns has been tested through the harness: its instruments
+were established against a substitute client, and no test named here has reached
+a container. What is recorded of a test is its obligation and its trace, never
+an outcome.
 
 ## The four kinds of test, and what each needs
 
@@ -349,8 +353,9 @@ to the result of the same render against a live read of the same database.
 
 It is a **server** test on both halves: the dump and the live read must come
 from the same database in the same state. `BR-SCH-004`'s own note records that
-the container it needs now exists at all four series and that the test is
-blocked only by `tpl` not existing.
+the container it needs now exists at all four series, and attributes the
+remaining block to `tpl` not existing; the binary exists at this commit, and
+what blocks the test is the two commands it runs, neither of which is written.
 
 ## Cross-series equivalence across four series
 
@@ -533,18 +538,19 @@ obligation each part discharges, and what a test suite still has to decide.
 | The reduced-privilege reader is reachable beside the privileged one, on every series | `FR-PRIV-018`, `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019` | `tpl_reader`, with the three shapes of absence observed identically on all four series |
 | The statements a server receives, and the connections it accepts, are observable **from the server side** | `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-014`, `BR-SRV-003` | `observe.sh statements` and `observe.sh connections`, each established against a substitute client and each with its own observer baseline measured rather than assumed |
 | The files a process opens are observable from outside it | `NFR-PERF-005`, `NFR-PERF-007` | `observe.sh opens`, on a Linux host. See the target limit below |
-| Every command of the tree can be run at maximum verbosity with both streams captured whole | `BR-SEC-003` | The fixture supplies the servers the commands that reach one need; capturing both streams whole is the suite's, and the suite does not exist |
+| Every command of the tree can be run at maximum verbosity with both streams captured whole | `BR-SEC-003` | The fixture supplies the servers the commands that reach one need; capturing both streams whole is the suite's, and no test in the suite launches the binary |
 
-**The instruments were established against a substitute client**, because `tpl`
-does not exist. That is the correct order for an instrument whose whole purpose
-is to observe from outside the process under test: what was established is that
-the instrument sees what a client sends, not what any particular client sends.
+**The instruments were established against a substitute client**, `tpl` having
+no catalogue reader to send a statement with. That is the correct order for an
+instrument whose whole purpose is to observe from outside the process under
+test: what was established is that the instrument sees what a client sends, not
+what any particular client sends.
 
 ### What is not established
 
 | Open | Why it is not answered here |
 |---|---|
-| **The fourth instrument of `NFR-PERF-007` is not in the harness.** `observe.sh` carries three — statements, connections, files opened — and the differential run is carried by none of them | The eleventh edition of `/specification` added it after the harness was built. It needs no container and no privilege, so it is a property of the test suite rather than of the fixture, and the suite does not exist |
+| **The fourth instrument of `NFR-PERF-007` is not in the harness.** `observe.sh` carries three — statements, connections, files opened — and the differential run is carried by none of them | The eleventh edition of `/specification` added it after the harness was built. It needs no container and no privilege, so it is a property of the test suite rather than of the fixture, and no test in the suite launches the binary |
 | **The file-open instrument does not exist on either Darwin target.** On a host with no `strace` the harness traces a Linux build inside a container and says so; `NFR-PERF-005` forbids crediting that observation to macOS | The limit is the platform's, recorded by `NFR-PERF-005` with the three commands that established it. What would lift it is named there, and is not this folder's to take |
 | **Whether server-dependent tests are gated, and how a skip is reported.** `status.sh` supplies the gate and its three-valued exit code; what the suite does with each value is undecided | The choice interacts with the test suite as it is actually invoked, which is [operations.md](operations.md#the-mandatory-validation-pipeline)'s, and with what a skipped test may report without a caller mistaking it for a pass. Neither is settled |
 | **What the refusal test of `FR-SRV-029` runs against** | The contradiction is recorded under [cross-series equivalence](#cross-series-equivalence-across-four-series) and is the functional owner's; the fixture provisions no container outside the window |

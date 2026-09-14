@@ -1,0 +1,53 @@
+# `vendor/sqlx-core-0.9.0` is third-party source, not a workspace member: Cargo
+# would otherwise make every path inside the workspace directory one, and the
+# mandatory validation pipeline would run `-D warnings` over code this project
+# does not own. See `ADR-010`; the one-package decision of `ADR-006` is
+# unchanged by this table.
+[workspace]
+exclude = ["vendor/sqlx-core-0.9.0"]
+
+[package]
+name = "tpl"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94.0"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.6", default-features = false, features = [
+    "std",
+    "help",
+    "usage",
+    "error-context",
+    "derive",
+] }
+minijinja = "~2.24.0"
+minijinja-contrib = "~2.24.0"
+rustix = { version = "1.1.4", default-features = false, features = ["process"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sqlx = { version = "0.9.0", features = [
+    "mysql",
+    "runtime-tokio",
+    "tls-rustls-ring-webpki",
+] }
+thiserror = "2.0.20"
+tokio = { version = "~1.53.1", features = ["rt", "time", "net"] }
+toml = "1.1.6"
+toml_edit = "0.25.15"
+
+# `sqlx-core` 0.9.0 never calls `set_nodelay`, which costs ~40 ms on every
+# connection that negotiates TLS. The vendored copy adds the one statement
+# upstream added in PR #4336; `vendor/README.md` holds its provenance. This
+# table is deleted, with the directory it points at, on the first `sqlx`
+# release that carries the fix. See `ADR-010`; the pin of `ADR-003` is
+# unchanged.
+[patch.crates-io]
+sqlx-core = { path = "vendor/sqlx-core-0.9.0" }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

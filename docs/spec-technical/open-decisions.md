@@ -277,6 +277,12 @@ are recorded in `ADR-006` and are **not restated here**, per rule R3 of
 [`docs/adr/README.md`](../adr/README.md). The residual this entry carried was
 settled on 2026-09-11 and is part of the decision that record holds.
 
+**The manifest carries a `[workspace]` table, and it does not reopen this
+entry.** The table exists to exclude the vendored directory
+[`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) places in the
+repository; that record states that it adds no second package and leaves
+`ADR-006`'s decision untouched.
+
 ---
 
 ## OD-05 — The module decomposition
@@ -1231,7 +1237,7 @@ what landed; the arrangement itself is not restated here.
 | Half | Discharged by | What it produced |
 |---|---|---|
 | The fixture certificate | Task #15, commit `4bce12e` | `scripts/mariadb/tls/`: a root whose private key is destroyed at generation, a leaf naming `DNS:localhost`, `IP:127.0.0.1` and `IP:::1`, the `ssl_ca`/`ssl_cert`/`ssl_key` settings that put it into service, and `generate.sh` to reproduce it. All four series report `have_ssl=YES` and accept a `verify-identity` connection; the no-TLS server survives as a fifth container started `--skip-ssl` |
-| The harness | Task #25, commit `de7ed1e` | `up.sh`, `down.sh`, `status.sh` — the three-valued gate — `observe.sh`, `series.env`, `probe-session.sql` and `observer.Dockerfile`, each established against a substitute client because `tpl` does not exist yet |
+| The harness | Task #25, commit `de7ed1e` | `up.sh`, `down.sh`, `status.sh` — the three-valued gate — `observe.sh`, `series.env`, `probe-session.sql` and `observer.Dockerfile`, each established against a substitute client, `tpl` having no catalogue reader to send a statement with |
 
 **Both halves of `FR-CONF-038` are therefore satisfied**, and no passage of this
 folder may still describe the fixture as unable to present a named certificate

@@ -1,7 +1,7 @@
 ---
 title: CLI Contract
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-14
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
 
@@ -362,12 +362,46 @@ tpl
   detection to decide output format, colour, pagination, or content.
 
 - **NFR-DET-004**: The system SHALL emit no colour and no ANSI escape sequence,
-  on stdout or on stderr, under any circumstances.
+  on stdout or on stderr, under any circumstances. This requirement governs
+  what the system itself composes for presentation. It does not govern a byte
+  the system carries from elsewhere — a catalogue value, a rendered template, a
+  `--context` value, or the argument vector — which is content and not
+  decoration; what may reach a reader from such a value is fixed by
+  `FR-ERR-024` in a diagnostic message, by `FR-OUT-018` in the output of a read
+  command, and by `FR-OUT-019`, which emits the result of `tpl render` and the
+  source printed by `tpl template show` byte for byte.
 
   *Rationale.* Colour on stdout would put escape sequences inside the result an
   agent parses; colour on stderr alone would keep a flag, an environment
   variable, and a terminal check alive purely for decoration. Removing it also
   lets the argument parser be built without its colour support.
+
+  *Amended in the twentieth edition: the requirement says whose bytes it
+  governs.* "Under any circumstances" was read against a catalogue name
+  carrying `U+009B`, the single-character CSI: `FR-ERR-024` escapes the C0
+  range, and therefore `ESC`, and does not escape `U+009B`, so a terminal that
+  honours 8-bit controls could read a control sequence out of a name the system
+  printed. Deriving the diagnostic renderer from this corpus forced the choice,
+  and the answer is that this requirement is not about that byte. Read as
+  reaching content, it would forbid `tpl render` to emit a template that writes
+  an escape sequence deliberately — which `FR-OUT-019` guarantees byte for byte
+  — so it would need an exception carved into a requirement whose subject is
+  colour, to protect a behaviour another requirement already fixes; and it
+  would become a third owner of escaping, with a third exception list, over the
+  values `FR-ERR-024` and `FR-OUT-018` already own, which is the second copy
+  nobody edits. Its subject is colour and terminal decoration, as every clause
+  of its rationale says: a flag, an environment variable, a terminal check, and
+  the argument parser's colour support.
+
+  *Rejected.* Reading it as reaching every byte except the two outputs
+  `FR-OUT-019` excepts, and widening the escape set of `FR-ERR-024` and
+  `FR-OUT-018` to the C1 range on this requirement's authority. It is coherent,
+  and it decides from here a question that belongs to the two requirements that
+  own escaping, each of which has its own ground and its own exceptions. One
+  consequence stands and is not closed here: a value escaped over the C0 range
+  alone can still carry a C1 control to a terminal that honours it. That is a
+  question for those two requirements, and it is recorded as an item in the
+  [README](README.md#maintenance-debt).
 
 - **NFR-DET-005**: The `now` render variable is the single documented source of
   non-reproducibility. A template that uses it produces output that differs

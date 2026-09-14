@@ -1,7 +1,7 @@
 ---
 title: Global Flags
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-14
 related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md]
 ---
 
@@ -139,7 +139,25 @@ which belongs to that command's module.
   stderr. One occurrence is `INFO`, two `DEBUG`, three `TRACE`; further
   occurrences saturate at `TRACE` without error.
 
-- **FR-GLOB-015**: `-q/--quiet` SHALL lower the diagnostic level to errors only.
+- **FR-GLOB-015**: `-q/--quiet` SHALL lower the diagnostic level to errors
+  only. IF `-v/--verbose` is given in the same invocation, THEN the system
+  SHALL exit `64` (`EX_USAGE`), per `FR-CLI-015`.
+
+  *Amended in the twentieth edition: the pair is named where both flags are
+  declared.* `FR-CLI-015` has refused `-q` together with `-v` with `64` since
+  the first edition, among the parsing rules of
+  [cli-contract.md](cli-contract.md). This file declares both flags, and until
+  now declared neither against the other; it is where an implementer resolving
+  `-v -q` reads: one did, found neither an order nor an exclusion here, and
+  resolved the pair by choosing — letting quiet win — which is a behaviour this
+  corpus does not have and has never had. The clause is a cross-reference and
+  not a second rule. `FR-CLI-015` owns the refusal, as the parsing rule it is,
+  and nothing about `tpl` changes.
+
+  *Rejected.* Stating a precedence here — quiet over verbose, or last-wins.
+  Either would contradict a requirement in force rather than settle anything,
+  and the ground `FR-CLI-014` gives for refusing a repeated single-value flag
+  is exactly the ground here: a result that depends on how a script grew.
 
 - **FR-GLOB-016**: Neither `-v/--verbose` nor `-q/--quiet` SHALL alter stdout in
   any way.

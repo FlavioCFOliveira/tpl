@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-14
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighteen editions. All are in force;
+The specification has been written in twenty editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1441,6 +1441,185 @@ nothing is waiting. The index of [open-questions.md](open-questions.md) stays
 empty, and the last item of *[Maintenance debt](#maintenance-debt)* is
 discharged.
 
+### Nineteenth edition — a table that did not say how to read itself
+
+`FR-ERR-001` fixes ten exit codes and, beside each, a *Condition* cell. It has
+never said whether that cell enumerates the conditions that produce the code or
+characterises the class they belong to, and the two readings build different
+programs from the same requirement. Deriving the project's error type from this
+corpus forced the choice twice: once on the column as a whole, and once on
+three cells that each name a configuration key — `64` for an unknown one, `66`
+for a configuration key among the named objects that do not exist, and `78` for
+a key outside the enumerated space — with nothing in the file separating them.
+**Both readings were taken correctly**, and neither was taken from the file
+that raises the question: the three were separated by following citations into
+[cfg-commands.md](cfg-commands.md) and
+[configuration-model.md](configuration-model.md), and the column was read as a
+characterisation because the alternative collides with requirements in force
+elsewhere. This edition writes both answers where the question is asked.
+
+**Nothing here changes what `tpl` does, and no requirement is withdrawn.** The
+ten codes, their names, their conditions and the caller's next step are
+unchanged. One requirement is amended to say how its own table is read, and one
+is added that routes a configuration key to the code it already produced.
+
+- **The codes are closed and the *Condition* column is not** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-001` now says
+  so in its own text, and says what follows from it: a condition is neither
+  absent nor misfiled because no cell names it, every condition is stated by
+  the requirement that owns the behaviour, and `FR-ERR-002` is what obliges
+  that requirement to carry a code. Two requirements had already read the table
+  that way without the table saying so — `FR-CFG-043`, which declines a fourth
+  outcome because `FR-ERR-001` "fixes the code set", and `FR-OUT-033`, which
+  reads the `66` cell as what that code is reserved for — so the amendment
+  states a reading the corpus already used rather than choosing between two.
+- **Six conditions are recorded as examples, and the remainder is measured
+  rather than listed** — the same file. `FR-CLI-014`, `FR-CLI-018`,
+  `FR-SCH-010`, `FR-CFG-017` and `FR-HELP-028` carry `64`, and `FR-CONF-021`
+  carries `78`, and none appears in any cell. They were found by one reading
+  made for another purpose, not by a sweep, and the amendment says so; what was
+  measured instead is the scale, by a textual sweep of the twenty module files
+  on 2026-09-12 — one hundred and twelve requirements outside that file name a
+  code of the table. Closing the column was rejected on the fifth validation
+  rule's ground in a new setting, that the second copy is the one nobody edits;
+  correcting the six cells found to be short was rejected because it answers
+  this reading and not the next one.
+- **Three codes for one configuration key, separated where a caller reads** —
+  the same file. `FR-ERR-035` routes a key by where it was met and what was
+  asked of it: named to `tpl cfg set` and outside the key space is `64`, named
+  to `tpl cfg get` or `tpl cfg unset` and absent from the file is `66`, and
+  carried by the file and outside the key space is `78`. It cites
+  `FR-CFG-009`, `FR-CFG-007` with `FR-CFG-012`, and `FR-CONF-034`, and restates
+  none of them, because each belongs to the module that owns the command or the
+  file. It also states why the three cannot collide, which was derivable from
+  that file all along and had never been derived: the file is validated at step
+  3 of `FR-ERR-006` and no `cfg` subcommand is excused from it by
+  `FR-PROJ-025`, so a `.cfg` carrying a key outside the space is refused before
+  any command resolves a key of its own — and `tpl cfg set` given a bad key
+  against such a file exits `78` and not `64`, per `FR-ERR-007`.
+
+**The lesson is of a shape the five validation rules do not cover, and it is
+recorded here rather than made a sixth.** Each of those rules is about a
+statement decaying — against a later observation, a later row, a changed
+fixture, an edited file — and nothing decayed here. The table has been silent
+on this point since the first edition and is silent in the same way today. What
+found it was the first attempt to derive an implementation from this corpus,
+which is a reader it had not had, and that same reading found the three cells.
+Whether the lesson generalises — whether every table here that
+characterises rather than enumerates should say which it does — is a question
+about the corpus and not about one file, and it is named and left for a reading
+that covers the corpus rather than settled from a single instance.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
+### Twentieth edition — four absolutes stated wider than their ground, and a rule its reader could not find
+
+Deriving the error type and the diagnostic renderer from this corpus produced
+five statements an implementer could not apply without choosing what they
+meant. Four are of one shape: an absolute stated wider than the ground the
+requirement itself gives for it. *Each distinct condition SHALL have its own
+code*, against ten codes. *Names matching `[A-Za-z0-9_]{1,64}`*, against a
+suggestion population that includes every configuration key and five hyphenated
+flags. *SHALL NOT restate the `error` line*, against a row of `FR-ERR-034` that
+obliges the `cause` of a `65` to name what the `error` line has just named. *No
+ANSI escape sequence, under any circumstances*, against a catalogue name
+carrying the single-character CSI. Each was written to carry a purpose this
+corpus states exactly beside it, and each says something wider than that
+purpose, which a reader implementing it has no way to narrow. The fifth is not
+of that shape: `-v` with `-q` was resolved by choosing, and the corpus had
+decided it in the first edition, in the file the reader was not reading.
+
+**One of the five changes what `tpl` does, and the edition says which.** A
+suggestion may now name a configuration key and a hyphenated flag, which the
+character set as written admitted in no form. The other four state what was
+already in force: the codes, their names, their conditions and the caller's
+next step are untouched, no requirement is withdrawn, and no identifier is
+added or retired.
+
+- **What a closed set of ten codes can promise** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-002` now
+  obliges every condition that ends an invocation in failure to carry exactly
+  one code of `FR-ERR-001`, named by the requirement that owns the condition.
+  Its prohibition is unchanged and undiminished — two conditions never share a
+  code where the caller's next step differs — and it is the whole of what the
+  first sentence was reaching for. As written, the first sentence was refuted
+  by `FR-ERR-006`, which routes every parsing fault to `64` by design, by the
+  hundred and twelve requirements the nineteenth edition counted, and by
+  `FR-ERR-035`, which routes one configuration key to three codes *because*
+  three next steps differ. The *Overview* repeated the overstatement in prose
+  and now agrees with the requirement. Deleting the sentence was rejected:
+  `FR-ERR-001` cites this requirement for the obligation that makes its
+  *Condition* column safe to read as a characterisation.
+- **What the hint character set governs** — the same file. `FR-ERR-022` now
+  distinguishes a spelling this specification enumerates, which is a literal —
+  a command or alias of the command tree, a flag a node declares, a key of
+  `FR-CONF-002` — from every other value, whatever its source, which is what
+  the character set tests: a table, a view, a routine, a template, a database
+  entry, the entry name inside a `database.<name>` key, and the name of an
+  environment variable among them. Values are tested one at a time and the
+  separators that join them are literals, so a dotted key and a command path
+  are each admissible exactly as far as their own segments are.
+  `FR-ERR-021` and `FR-ERR-022` contradicted each other outright: no key of
+  `FR-CONF-002` matches the set, because all fifteen key forms contain a dot,
+  and `FR-ERR-023` drops a candidate outside the set in every form, prose
+  included. Two of the eight populations `FR-ERR-021` names could therefore
+  never be suggested, and commands escaped only by accident of spelling.
+  Widening the set was rejected — it answers this reading and not the next, and
+  every widening is paid for by every untrusted name — and so was removing the
+  two populations from `FR-ERR-021`, which withdraws the suggestion where it is
+  safest. `FR-ERR-023` and `FR-SEC-019` in [security.md](security.md) carry the
+  same distinction, the second because the threat rests on it.
+- **Which requirement governs where a `cause` repeats its `error` line** — the
+  same file. `FR-ERR-010` now states that a `cause` restates the `error` line
+  when it adds nothing to it, and that where a row of `FR-ERR-034` obliges a
+  fact the `error` line also carries, the row governs. The example of
+  `FR-ERR-008` is this file's own model of a correct message and its `cause`
+  repeats both names from the line above it, so the reading was already in use
+  where the question is asked. Resolving it the other way was rejected: a
+  `cause` that subtracted whatever the `error` line happened to say would make
+  a testable obligation depend on the wording of an individual message, which
+  this file puts out of scope.
+- **The subject of `NFR-DET-004`** — [cli-contract.md](cli-contract.md). It
+  governs what the system composes for presentation, and not a byte carried
+  from the catalogue, a template, a `--context` value or the argument vector;
+  `FR-ERR-024`, `FR-OUT-018` and `FR-OUT-019` own those, as they already did.
+  A reading that reached content would forbid `tpl render` the byte-for-byte
+  output `FR-OUT-019` guarantees it, and would make a requirement about colour
+  a third owner of escaping with a third exception list. That reading was
+  stated and rejected in the requirement, because the question comes back
+  otherwise. One consequence stands: a value escaped over the C0 range alone
+  can still carry a C1 control to a terminal that honours it. It is a question
+  for the two requirements that own escaping, it is recorded as the one item of
+  *[Maintenance debt](#maintenance-debt)*, and `FR-ERR-024` says so where a
+  reader meets the gap.
+- **`-v` with `-q` was never undefined** — [global-flags.md](global-flags.md).
+  `FR-CLI-015` refuses the pair with `64`, and has since the first edition.
+  This file declares both flags, and until now declared neither against the
+  other; it is where an implementer resolving the pair reads, and `FR-GLOB-015`
+  now names the refusal at the point of declaration. Stating a precedence here
+  — quiet over verbose, or last-wins — was rejected as a contradiction with a
+  requirement in force, and on the ground `FR-CLI-014` already gives: a result
+  that depends on how a script grew.
+
+**The lesson is the nineteenth edition's question, with four more instances.**
+That edition named one and left it for a reading that covers the corpus:
+whether every table here that characterises rather than enumerates should say
+which it does. Four of these five are the same question about a sentence rather
+than a table — whether an absolute is stated wider than the ground this corpus
+gives for it — and they were found the same way, by the first reader obliged
+to turn this corpus into a program. It is still not a sixth validation rule:
+each of the five rules is about a statement decaying, and nothing here decayed.
+These sentences were exactly this wide in the edition that wrote them, and it
+took a reader who could not ask a question to find out. The question is now
+recorded as recurring rather than isolated, and it is still left for a reading
+that covers the corpus rather than settled from five instances.
+
+**No requirement is withdrawn, no identifier is retired or assigned, and no
+open question is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -1648,14 +1827,14 @@ Every requirement in this specification derives from one of three sources:
 
 ## Maintenance debt
 
-**No item is outstanding.** The last, recorded by the thirteenth edition and
-discharged by the eighteenth, is listed below with the others. The item this
-section carried through the sixth
-edition — twenty catalogue field lists that no observation had recorded — was
-discharged by the seventh: the fixture was read against all four series of
-`FR-SRV-015` on 2026-09-10, every field list was recorded verbatim, and each
-is now a requirement in
-[catalogue-coverage.md](catalogue-coverage.md) or
+**One item is outstanding**, recorded by the twentieth edition and listed
+below. The seven items this section held before it are all discharged; the last
+of those was recorded by the thirteenth edition and discharged by the
+eighteenth. The item this section carried through the sixth edition — twenty
+catalogue field lists that no observation had recorded — was discharged by the
+seventh: the fixture was read against all four series of `FR-SRV-015` on
+2026-09-10, every field list was recorded verbatim, and each is now a
+requirement in [catalogue-coverage.md](catalogue-coverage.md) or
 [context-document.md](context-document.md). The document shapes and the field
 lists are frozen, and implementation is no longer blocked on them.
 
@@ -1788,8 +1967,56 @@ either: the observation its passage names would
 settle a classification that nothing in this corpus reads, so no requirement
 waits on it and no test is owed for it.
 
-The section therefore carries nothing outstanding, and the seven items it has
-held are all accounted for below.
+The nineteenth edition adds no obligation of either kind, and records none as
+discharged. It amends `FR-ERR-001` to say which of its two columns is
+exhaustive, adds `FR-ERR-035` to route a configuration key to the code it
+already produced, and changes nothing about `tpl`. One question is named and
+not settled — whether every table in this corpus that characterises rather than
+enumerates should say which it does — and it is not debt in any sense the five
+rules use: nothing waits on it, no requirement is ambiguous because of it, and
+the instance that raised it is closed. It is left for a reading that covers the
+corpus, on the ground the sixteenth edition used when it named a candidate it
+could not judge from the reading it had made — the seventeenth edition then
+made the reading, and judged.
+
+The twentieth edition adds one obligation inside this corpus and none outside
+it, and records none as discharged. It settles five statements a derivation of
+the error type and the diagnostic renderer could not apply without choosing:
+`FR-ERR-002` now states an obligation ten codes can satisfy, `FR-ERR-022` says
+what its character set governs and stops contradicting `FR-ERR-021`,
+`FR-ERR-010` says which requirement governs where a `cause` repeats its `error`
+line, `NFR-DET-004` says whose bytes it governs, and `FR-GLOB-015` names the
+refusal `FR-CLI-015` has carried since the first edition. One of the five
+changes what `tpl` does — a suggestion may now name a configuration key and a
+hyphenated flag — and the other four state what was already in force. The
+obligation it records is below: the decision `NFR-DET-004` deliberately did not
+take from its own side.
+
+The section therefore carries the one item the twentieth edition recorded, and
+the seven it has held before are all accounted for below.
+
+One item is outstanding.
+
+- **Escaping stops at C0, and a C1 control can still reach a terminal.**
+  Recorded by the twentieth edition. `FR-ERR-024` escapes `\n`, `\r`, `\t`
+  and the C0 range in every value interpolated into a diagnostic message, and
+  `FR-OUT-018` escapes the C0 range in the `text` and `json` output of the read
+  commands. Neither reaches `U+009B`, the single-character CSI, nor any other
+  C1 control, so a catalogue name carrying one is printed as it stands and a
+  terminal that honours 8-bit controls reads a control sequence out of it. The
+  twentieth edition settled that `NFR-DET-004` does not decide this — its
+  subject is the decoration the system composes, not a byte carried from the
+  catalogue — and deliberately did not decide it from that side, because the
+  two requirements that own escaping have their own ground and their own
+  exception lists and are edited together. What is owed is a decision over both
+  of them: whether a composed message and a composed listing should escape the
+  C1 range as they escape the C0 range, and what that means for the tab
+  exception in `text` and for the byte-for-byte outputs of `FR-OUT-019`, which
+  are the product and stay untouched either way. It is a decision and not an
+  editorial tidy, which is why it is a task of its own, on the ground the
+  thirteenth edition used for the two readings with no home. Nothing in this
+  corpus is ambiguous while it stands: both requirements say exactly what they
+  escape, and a reader of either is told where the gap is.
 
 Seven items previously recorded here have been discharged.
 

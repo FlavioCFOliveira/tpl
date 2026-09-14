@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-14
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md]
 ---
 
@@ -161,12 +161,26 @@ module, `BR-SEC-003` excepted.
 
 - **FR-SEC-019**: A `hint` carrying a runnable command SHALL be built only from
   literals and from names matching `[A-Za-z0-9_]{1,64}`; a nearest-match
-  candidate outside that set is not presented at all, and the generic hint is
-  emitted alone. See `FR-ERR-022` and `FR-ERR-023`.
+  candidate subject to that set and outside it is not presented at all, and the
+  generic hint is emitted alone. A spelling this specification enumerates — a
+  command, a flag, a key of `FR-CONF-002` — is a literal; every other value is
+  governed by the set, whatever its source, among them a table, a view, a
+  routine, a template, a database entry, the entry name inside a
+  `database.<name>` key, and the name of an environment variable. See
+  `FR-ERR-022` and `FR-ERR-023`.
 
   *Threat closed.* A table name is free text on the server and can contain
   semicolons, quotes, and newlines; formatting one into a suggested command is
   command injection with the caller as the interpreter.
+
+  *Amended in the twentieth edition.* This rule restated the character set as
+  governing every candidate, per `FR-ERR-022` as it then read. It now carries
+  that requirement's distinction, because the threat rests on it: what a
+  suggested command may not carry is a name someone outside this project
+  chooses, and a spelling fixed in this corpus is not one. Every name the set
+  governs is governed exactly as before; what the correction admits is the
+  spelling of a command, a flag and a key, none of which a server, a file or a
+  caller can influence.
 
 - **FR-SEC-020**: C0 control characters SHALL be escaped in every value the
   system prints or interpolates, whatever its source. Two requirements own the
