@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-14
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md]
 ---
 
@@ -10,10 +10,11 @@ related: [cli-contract.md, output-formats.md, security.md, global-flags.md]
 ## Overview
 
 The exit code is the most reliable channel a calling agent has for knowing what
-happened. Each distinct condition therefore has its own code, and the code alone
-must be enough to choose the next step. This file defines the codes, the order
-in which conditions are evaluated, the shape of an error message, and the rules
-that keep a suggested command safe to run.
+happened. Every condition that ends an invocation in failure therefore carries
+one of these codes, two conditions share one only where the caller's next step
+is the same, and the code alone must be enough to choose the next step. This
+file defines the codes, the order in which conditions are evaluated, the shape
+of an error message, and the rules that keep a suggested command safe to run.
 
 The exit code is also the *only* machine-comparable channel. No error is ever
 emitted as JSON, per `FR-ERR-033`, so the four-line text message is an error's
@@ -118,9 +119,36 @@ Out of scope: the wording of any individual message.
   against the last implementer to check it is the state this amendment exists
   to end.
 
-- **FR-ERR-002**: Each distinct condition SHALL have its own code. The system
-  SHALL NOT collapse two conditions onto one code where the caller's next step
-  would differ.
+- **FR-ERR-002**: Every condition that ends an invocation in failure SHALL
+  carry exactly one code of `FR-ERR-001`, named by the requirement that owns
+  the condition. The system SHALL NOT collapse two conditions onto one code
+  where the caller's next step would differ.
+
+  *Amended in the twentieth edition: the first sentence states an obligation
+  ten codes can satisfy.* It read "Each distinct condition SHALL have its own
+  code", which a closed set of ten codes cannot meet and which this corpus has
+  never met. `FR-ERR-006` routes whole classes of condition onto one code by
+  design — every parsing fault to `64`, every name that does not resolve to
+  `66` — and the nineteenth edition measured one hundred and twelve
+  requirements outside this file naming a code of the table. Read literally,
+  the sentence made this corpus self-contradictory at every one of them, and
+  made `FR-ERR-035` — which routes one configuration key to three codes
+  because three next steps differ — a violation rather than an application of
+  it. The obligation it was reaching for is the second sentence, which is
+  unchanged and undiminished: a code is shared only where the caller's next
+  step is the same. The first sentence now carries the other obligation this
+  corpus rests on, and which `FR-ERR-001` cites this requirement for — that no
+  condition is ungoverned, and that its code is stated where its behaviour is.
+
+  *Rejected.* Deleting the first sentence and leaving the prohibition alone.
+  `FR-ERR-001` cites this requirement for the rule that every condition carries
+  a code of its table, which is what makes its *Condition* column safe to read
+  as a characterisation; with the sentence gone, that citation resolves to
+  nothing and the nineteenth edition's amendment loses the support it names.
+  Also rejected: reading "distinct" as "distinct in the caller's next step",
+  which makes the first sentence true only by making it the second one, and
+  leaves every reader to discover for themselves that the two sentences are
+  one.
 
 - **FR-ERR-003**: `73` SHALL be produced only by `tpl init`.
 
@@ -368,7 +396,35 @@ Out of scope: the wording of any individual message.
   one that gives the most in return.
 
 - **FR-ERR-010**: `cause` SHALL be factual and specific, and SHALL NOT restate
-  the `error` line.
+  the `error` line. A `cause` restates the `error` line when it adds nothing to
+  it. WHERE a row of `FR-ERR-034` obliges the `cause` to name a fact the
+  `error` line also carries, the row governs and the `cause` SHALL name it.
+
+  *Amended in the twentieth edition: what "restate" prohibits is stated,
+  because two requirements in force pulled against each other on `65`.* The
+  `65` row of `FR-ERR-034` obliges the `cause` of a template failure to name
+  the template, the line, the column and the chain of engine errors;
+  `FR-ERR-011` obliges a template error to carry all four and does not say on
+  which line, so a message that names the template and its position on the
+  `error` line — which is where `FR-ERR-008` puts what failed — repeats them on
+  the `cause` line to satisfy the row. Read as forbidding overlap, this
+  requirement subtracts from that row; read as forbidding a `cause` that adds
+  nothing, the two compose and the `65` cause carries all four. The second
+  reading is the one this corpus already uses: the example of `FR-ERR-008`
+  names `'ordrs'` and `'shop'` on the `error` line and names both again on the
+  `cause` line, and that example is this file's own model of a correct message.
+  What its `cause` adds is the population searched, which is what the `66` row
+  obliges; the overlap is how the reader knows the two lines are about the same
+  thing.
+
+  *Rejected.* Resolving it the other way, by excepting from a row of
+  `FR-ERR-034` whatever the `error` line already carries. It makes a testable
+  obligation untestable — the test would have to read both lines and know which
+  of the four facts the wording of the first had used — and the wording of an
+  individual message is out of this file's scope, so the content of a `cause`
+  would come to depend on a thing this corpus does not fix. It also removes
+  from the line that carries it the detail a caller needs most, on the path
+  where `FR-ERR-033` has left the text as the only channel of detail there is.
 
 - **FR-ERR-034**: The `cause` line SHALL state the specific fact that failed,
   and SHALL name an instance wherever one is available rather than the category
@@ -509,11 +565,55 @@ Out of scope: the wording of any individual message.
 ## Safe hints
 
 - **FR-ERR-022**: A `hint` that contains a runnable command SHALL be built only
-  from literals and from names matching `[A-Za-z0-9_]{1,64}`.
+  from literals and from names matching `[A-Za-z0-9_]{1,64}`. A spelling this
+  specification enumerates is a literal of this requirement: a command or alias
+  of the command tree of [cli-contract.md](cli-contract.md), a flag a node
+  declares, and a key of the enumerated space of `FR-CONF-002`. Every other
+  value is subject to the character set, whatever its source; the values this
+  specification names are a table, a view, a routine, a template, a database
+  entry, the `<name>` segment of a `database.<name>` key, and the name of an
+  environment variable. Each such value SHALL be tested on its own, and the
+  separators that join names into a command or into a key are literals — the
+  space between command-path segments, the `-` or `--` that introduces a flag,
+  and the `.` between key segments.
 
-- **FR-ERR-023**: IF a nearest-match candidate falls outside that character
-  set, THEN the system SHALL NOT present that candidate at all — neither as an
-  executable suggestion nor as prose — and SHALL emit the generic hint alone.
+  *Amended in the twentieth edition: the requirement says what the character
+  set governs, because as written it governed everything and admitted two of
+  the eight populations of `FR-ERR-021` nowhere.* No key of `FR-CONF-002`
+  matches `[A-Za-z0-9_]{1,64}`, because all fifteen key forms contain a dot;
+  five flags of this corpus carry a hyphen inside the name — `--tpl-dir`,
+  `--no-cache`, `--ca-file`, `--ca-path` and `--password-command`; and
+  `FR-ERR-023` drops a candidate outside the set in every form, prose included.
+  Those two populations could therefore never be suggested at all, and a third
+  — commands — survived only because no command or alias happens to carry a
+  character outside the set. Those three are exactly the populations this
+  specification enumerates itself, which is what makes them literals: a server,
+  a file and a caller can each influence a table name, a template name and an
+  entry name, and none of them can influence the spelling of
+  `cfg database add`, of `--ca-file`, or of `core.render_timeout`. The
+  character set was never a bound on what a hint may say; it is the test
+  applied to a value this corpus does not fix, which is the whole of what the
+  rationale of `FR-ERR-023` argues.
+
+  *Rejected.* Widening the character set, to admit the dot, or the dot and the
+  hyphen. It answers this reading and not the next one — the next enumerated
+  spelling carrying a character outside the set reopens it — and every widening
+  is paid for by every untrusted name, which is the population the set exists
+  to bound. Also rejected: removing configuration keys and flags from
+  `FR-ERR-021`, which withdraws the suggestion where it is safest and most
+  useful, over two closed spaces fixed in this corpus, and leaves the caller
+  who mistypes `core.databse` with a generic hint for want of a dot.
+
+  *Consequence.* A `database.<name>` key is admissible exactly as far as its
+  entry name is: `FR-CONF-008` fixes no character set for that name, so
+  `database.reporting.host` may be built into a runnable command and a key
+  naming an entry outside the set is dropped by `FR-ERR-023`, exactly as that
+  entry name would be dropped as a candidate in its own right.
+
+- **FR-ERR-023**: IF a nearest-match candidate is subject to that character set
+  and falls outside it, THEN the system SHALL NOT present that candidate at all
+  — neither as an executable suggestion nor as prose — and SHALL emit the
+  generic hint alone.
 
   *Rationale.* The declared purpose of `hint` is that the caller copies it and
   runs it. A table name is free text in MariaDB and can contain semicolons,
@@ -526,6 +626,13 @@ Out of scope: the wording of any individual message.
   gone and the name now goes nowhere. Only the machine-readable
   `did_you_mean` array is withdrawn; nearest-match suggestion itself survives
   in the text `hint` line, for every candidate the character set admits.
+
+  *Amended in the twentieth edition.* The condition read "falls outside that
+  character set", of every candidate alike, which dropped every configuration
+  key and every hyphenated flag this corpus enumerates. `FR-ERR-022` now says
+  which candidates the set governs, and this rule drops those and no others;
+  what it does to a candidate it governs is unchanged, and so is the ground
+  for it.
 
   *Accepted cost.* A caller that mistypes the name of an object whose real name
   contains a character outside `[A-Za-z0-9_]` receives no suggestion, only the
@@ -554,6 +661,21 @@ Out of scope: the wording of any individual message.
   while excepting tab, which contradicted this requirement outright. The
   contradiction is resolved in favour of escaping tab in messages; `FR-OUT-018`
   no longer reaches them.
+
+  *Read against `NFR-DET-004` in the twentieth edition, and unchanged.* The C0
+  range covers `ESC` and therefore the two-character form of an ANSI escape
+  sequence; it does not cover `U+009B`, the single-character CSI that some
+  terminals honour, so an interpolated catalogue name carrying that byte
+  reaches a reader as this rule leaves it. `NFR-DET-004` forbids an ANSI escape
+  sequence "under any circumstances", and whether it reached a byte of the
+  catalogue was the question: it does not, and the twentieth edition states so
+  in that requirement's own text, because a reading that reached content would
+  forbid `tpl render` the byte-for-byte output `FR-OUT-019` guarantees it.
+  Nothing here widens on that account. Whether this rule should widen on its
+  own ground — the ground being that a composed, line-oriented message is not
+  pass-through — is a question about this requirement and `FR-OUT-018`
+  together, and it is recorded as an item in the
+  [README](README.md#maintenance-debt) rather than settled from one side of it.
 
 ## `EPIPE`
 
