@@ -682,6 +682,70 @@ pub enum Error {
     },
 }
 
+/// Checks an internal invariant, and reports `FR-ERR-030` where it does not
+/// hold.
+///
+/// This is the guard `FR-ERR-031` speaks of: the one place that decides a
+/// violated invariant is a `70` and the one that names where it was detected.
+/// `#[track_caller]` is what makes the location the **call site's** rather than
+/// this function's, which is the "where" the `70` row of `FR-ERR-034` obliges.
+///
+/// The guard is not an assertion: it returns the condition rather than raising
+/// one, so a caller declines to continue past it through the same `?` every
+/// other condition of `FR-ERR-006` travels, and the status is derived once, by
+/// [`Error::exit_code`].
+///
+/// # Errors
+///
+/// Returns [`Error::InternalInvariant`] naming `invariant` and the call site
+/// when `holds` is `false`.
+#[track_caller]
+#[allow(
+    dead_code,
+    reason = "the components whose invariants this guards are later sprints; the guard is \
+              written here because FR-ERR-030 requires the condition to exist in the \
+              distributed binary and OD-06 places the taxonomy in this module"
+)]
+pub(crate) fn ensure_invariant(holds: bool, invariant: &'static str) -> Result<(), Error> {
+    if holds {
+        Ok(())
+    } else {
+        Err(Error::InternalInvariant {
+            invariant,
+            location: Location::caller(),
+        })
+    }
+}
+
+/// The deliberate trigger for `70` that `FR-ERR-031` requires.
+///
+/// `70` cannot be reached from a correct invocation by definition, so without a
+/// trigger it is a code nobody has confirmed the binary can return. The
+/// requirement rejects by name every mechanism that would reach it from outside
+/// the process — a command or a flag, an environment variable, a build selected
+/// by a feature — so the trigger is inside the process and reachable from
+/// nothing a caller can write.
+///
+/// `#[cfg(test)]` is that reachability rule, per `OD-21`: the item is not
+/// compiled into the artefact `cargo build` produces, and an integration test
+/// links the library compiled without that configuration and cannot see it
+/// either. Its test is therefore a unit test in this crate, which is the
+/// composition `BR-ERR-001` admits for `70` alone.
+///
+/// The invariant it violates is its own and guards nothing: a trigger that
+/// broke a real one would report a defect the caller might actually have.
+///
+/// # Errors
+///
+/// Always. That is what it is for.
+#[cfg(test)]
+pub(crate) fn trigger_internal_invariant() -> Result<(), Error> {
+    // Written as `false` rather than as an expression a reader must evaluate:
+    // the invariant of the trigger is that the trigger never fires, and the
+    // trigger exists to falsify it.
+    ensure_invariant(false, "the deliberate trigger of FR-ERR-031 never fires")
+}
+
 impl Error {
     /// The process exit status this condition produces, per `FR-ERR-001`.
     ///
@@ -773,7 +837,7 @@ impl Error {
 mod tests {
     use super::{
         CatalogueObjectKind, ContextFault, DeadlineBound, Error, NetworkPhase, Position,
-        ReadOnlyFault,
+        ReadOnlyFault, ensure_invariant, trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -1225,6 +1289,47 @@ mod tests {
                 assert_eq!(variant_name(&error), "InternalInvariant");
             }
         }
+    }
+
+    #[test]
+    fn the_guard_passes_an_invariant_that_holds() {
+        assert!(ensure_invariant(true, "a sample invariant").is_ok());
+    }
+
+    #[test]
+    fn the_guard_reports_a_violated_invariant_at_its_call_site() {
+        // FR-ERR-034, the 70 row: the invariant, and where it was detected.
+        // `#[track_caller]` is what makes "where" this line and not the guard.
+        let here = Location::caller();
+        let error = ensure_invariant(false, "a sample invariant")
+            .expect_err("the guard reports an invariant that does not hold");
+
+        let Error::InternalInvariant {
+            invariant,
+            location,
+        } = error
+        else {
+            panic!("the guard produced {error:?}, not the condition of FR-ERR-030");
+        };
+
+        assert_eq!(invariant, "a sample invariant");
+        assert_eq!(location.file(), here.file());
+        assert_eq!(
+            location.line(),
+            here.line() + 1,
+            "the location is the call site, not a frame inside the guard"
+        );
+    }
+
+    #[test]
+    fn the_trigger_of_fr_err_031_always_fires() {
+        // FR-ERR-031: the trigger exists so that the condition can be exercised
+        // in process, and it is reachable from nothing a caller can write.
+        let error =
+            trigger_internal_invariant().expect_err("the trigger exists to produce the condition");
+
+        assert_eq!(error.exit_code(), 70);
+        assert_eq!(variant_name(&error), "InternalInvariant");
     }
 
     #[test]

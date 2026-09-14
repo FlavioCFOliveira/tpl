@@ -19,6 +19,13 @@
 //! a whole**, per `OD-06`, so an interpolation nobody remembered to escape
 //! cannot forge a fifth line.
 //!
+//! Two conditions reach this module, because `FR-ERR-030` gives `70` two
+//! producing conditions. [`report`] serves every [`Error`] value; [`report_panic`]
+//! serves the panic, which `ADR-004` reports from the panic site and which
+//! therefore has no [`Error`] to be rendered from. Both compose through
+//! [`push_labelled`], so neither can emit a fifth line, a different order, or an
+//! unescaped one.
+//!
 //! The level of `FR-GLOB-014` and `FR-GLOB-015` is not consulted: `-q` lowers
 //! the stream to errors **only**, so an error is emitted at every level, and
 //! `FR-ERR-013` bars a credential from the message at every level too.
@@ -27,6 +34,7 @@
 //! ANSI escape sequence, and no terminal property consulted.
 
 use std::io::Write as _;
+use std::panic::Location;
 
 use super::{cause, escape, hint};
 use crate::error::Error;
@@ -65,6 +73,16 @@ const BLOCK_CAPACITY: usize = 512;
 /// A generous first guess at the size of one composed line, in bytes.
 const LINE_CAPACITY: usize = 192;
 
+/// The code of `FR-ERR-001` that both producing conditions of `FR-ERR-030`
+/// carry.
+///
+/// [`Error::exit_code`] assigns it to the invariant violation, which is the one
+/// condition that is an error *value*. The panic path has no value to derive it
+/// from, so it is named once here and read by the `exit` line this module
+/// composes and by the status [`super::panic`] terminates with — the two cannot
+/// disagree.
+pub(super) const SOFTWARE: u8 = 70;
+
 /// Writes the four labelled lines of `FR-ERR-008` for `error` to stderr.
 ///
 /// This is the whole of what a caller receives on a failure: `FR-ERR-033`
@@ -75,8 +93,30 @@ const LINE_CAPACITY: usize = 192;
 /// further to say on a stream that will not carry a diagnostic, and the exit
 /// code reaches the caller regardless.
 pub(crate) fn report(error: &Error) {
-    let rendered = render(error);
+    write_block(&render(error));
+}
 
+/// Writes the four labelled lines of `FR-ERR-008` for a panic to stderr.
+///
+/// This is the other producing condition of `FR-ERR-030`, and the one that
+/// reaches the caller from a path where no [`Error`] exists: `ADR-004` composes
+/// the message at the panic site rather than at a frame above it, because the
+/// release profile aborts and no such frame runs. It goes through
+/// [`push_labelled`] like every other diagnostic, so the four lines, their
+/// order and their escaping are the same by construction and not by review.
+///
+/// `location` is what [`std::panic::PanicHookInfo::location`] yielded. The
+/// panic's **payload** is deliberately absent: `FR-ERR-034`'s `70` row obliges
+/// the `cause` line to name that a panic occurred and where, and requires
+/// nothing of the text a panic carried, which is arbitrary and composed at a
+/// site no reviewer reads before it runs. Withholding it is how `FR-GLOB-018`
+/// stays true here structurally rather than vigilantly.
+pub(super) fn report_panic(location: Option<&Location<'_>>) {
+    write_block(&render_panic(location));
+}
+
+/// Writes one composed block to stderr in a single locked call.
+fn write_block(rendered: &str) {
     // One locked write of the whole block. Stderr is unbuffered, so the
     // composed `String` is the buffer `OD-17` asks for: the four lines reach
     // the stream in one call and cannot be interleaved with another writer's.
@@ -101,6 +141,53 @@ fn render(error: &Error) -> String {
     );
 
     out
+}
+
+/// Composes the four labelled lines for a panic, each terminated by a newline.
+fn render_panic(location: Option<&Location<'_>>) -> String {
+    let mut out = String::with_capacity(BLOCK_CAPACITY);
+    let mut composed = String::with_capacity(LINE_CAPACITY);
+
+    push_labelled(
+        &mut out,
+        &mut composed,
+        Label::Error,
+        "tpl stopped on an internal defect",
+    );
+    push_labelled(
+        &mut out,
+        &mut composed,
+        Label::Cause,
+        &panic_cause(location),
+    );
+    push_labelled(&mut out, &mut composed, Label::Hint, hint::SOFTWARE_DEFECT);
+    push_labelled(
+        &mut out,
+        &mut composed,
+        Label::Exit,
+        &exit_content(SOFTWARE),
+    );
+
+    out
+}
+
+/// The content of the `cause` line for a panic: that one occurred, and where.
+///
+/// The `70` row of `FR-ERR-034` obliges both facts, and the ninth edition reads
+/// "where" as the location the condition arose at. A panic runtime that yields
+/// no location leaves the second fact unavailable, and the line says so: that
+/// is the one wording the ban on naming a category rather than an instance
+/// cannot reach, because no instance existed to name.
+fn panic_cause(location: Option<&Location<'_>>) -> String {
+    match location {
+        Some(location) => format!(
+            "a panic occurred at {}:{}:{}",
+            location.file(),
+            location.line(),
+            location.column()
+        ),
+        None => "a panic occurred; the panic runtime reported no location for it".to_owned(),
+    }
 }
 
 /// Composes one labelled line into `composed`, escapes it as a whole, and
@@ -151,10 +238,10 @@ const fn sysexits_name(code: u8) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Label, render, sysexits_name};
+    use super::{Label, SOFTWARE, exit_content, render, render_panic, sysexits_name};
     use crate::error::{
         CatalogueObjectKind, ContextFault, DeadlineBound, Error, NetworkPhase, Position,
-        ReadOnlyFault,
+        ReadOnlyFault, trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -400,6 +487,140 @@ mod tests {
                 location.column()
             )
         );
+        assert!(hint.contains("a defect in tpl"), "{hint}");
+        assert!(hint.contains("not correctable by the caller"), "{hint}");
+        assert_eq!(line(&rendered, Label::Exit), "70 (EX_SOFTWARE)");
+    }
+
+    // ------------------------------- the other producing condition of 70 ---
+
+    #[test]
+    fn a_panic_is_reported_as_the_four_lines_and_names_where_it_arose() {
+        // FR-ERR-030 and ADR-004: the panic path produces the same outcome as
+        // the invariant violation, from a site where no Error exists.
+        // FR-ERR-034, the 70 row, obliges that a panic occurred and where.
+        let location = Location::caller();
+        let rendered = render_panic(Some(location));
+        let lines: Vec<&str> = rendered.lines().collect();
+
+        assert_eq!(lines.len(), 4, "a diagnostic is four lines and no more");
+        assert!(lines[0].starts_with("error: "));
+        assert!(lines[1].starts_with("cause: "));
+        assert!(lines[2].starts_with("hint:  "));
+        assert!(lines[3].starts_with("exit:  "));
+
+        let cause = line(&rendered, Label::Cause);
+        assert_eq!(
+            cause,
+            format!(
+                "a panic occurred at {}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column()
+            )
+        );
+        assert_eq!(line(&rendered, Label::Exit), "70 (EX_SOFTWARE)");
+    }
+
+    #[test]
+    fn a_panic_carries_the_hint_fr_err_032_requires() {
+        let hint = line(&render_panic(Some(Location::caller())), Label::Hint);
+
+        assert!(hint.contains("a defect in tpl"), "{hint}");
+        assert!(hint.contains("not correctable by the caller"), "{hint}");
+        assert_eq!(
+            hint,
+            line(
+                &render(&Error::InternalInvariant {
+                    invariant: "the key column has no column",
+                    location: Location::caller(),
+                }),
+                Label::Hint
+            ),
+            "the two producing conditions of FR-ERR-030 carry one hint"
+        );
+    }
+
+    #[test]
+    fn a_panic_carries_no_payload() {
+        // ADR-004 withholds the payload on FR-GLOB-018: nothing composed at the
+        // panic site reaches the stream, only the location the runtime yields.
+        let rendered = render_panic(Some(Location::caller()));
+
+        assert!(!rendered.contains("panicked at"), "{rendered}");
+        assert_eq!(
+            rendered.lines().count(),
+            4,
+            "a payload could only arrive as a fifth line: {rendered}"
+        );
+    }
+
+    #[test]
+    fn a_panic_without_a_location_says_so_rather_than_naming_a_category() {
+        // FR-ERR-034 bans a cause that would read identically for a different
+        // failure. Where the runtime yields no location, the absence is the
+        // fact, and stating it is not naming a category over an instance.
+        let cause = line(&render_panic(None), Label::Cause);
+
+        assert_eq!(
+            cause,
+            "a panic occurred; the panic runtime reported no location for it"
+        );
+        assert_eq!(line(&render_panic(None), Label::Exit), "70 (EX_SOFTWARE)");
+    }
+
+    #[test]
+    fn the_constant_the_panic_path_exits_with_is_the_code_it_prints() {
+        // The `exit` line and the process status cannot disagree, because
+        // `panic::install` terminates with this same constant.
+        assert_eq!(SOFTWARE, 70);
+        assert_eq!(exit_content(SOFTWARE), "70 (EX_SOFTWARE)");
+        assert_eq!(
+            Error::InternalInvariant {
+                invariant: "sample",
+                location: Location::caller(),
+            }
+            .exit_code(),
+            SOFTWARE
+        );
+    }
+
+    #[test]
+    fn the_trigger_of_fr_err_031_produces_the_condition_of_fr_err_030() {
+        // The composition OD-21 admits for 70, and the whole of what is
+        // executed: the guard is exercised in process and observed to produce
+        // the condition of FR-ERR-030 carrying the message FR-ERR-032 requires.
+        let error = trigger_internal_invariant()
+            .expect_err("the trigger of FR-ERR-031 exists to produce the condition");
+
+        assert_eq!(error.exit_code(), 70);
+
+        let Error::InternalInvariant {
+            invariant,
+            location,
+        } = error
+        else {
+            panic!("the trigger produced {error:?}, not the condition of FR-ERR-030");
+        };
+
+        // The guard is `#[track_caller]`, so the location is the trigger's own
+        // call site and not a frame inside the guard.
+        assert!(!location.file().is_empty());
+        assert!(location.line() > 0 && location.column() > 0);
+
+        let rendered = render(&error);
+        assert_eq!(rendered.lines().count(), 4);
+        assert_eq!(
+            line(&rendered, Label::Cause),
+            format!(
+                "the invariant '{invariant}' was found violated at {}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column()
+            )
+        );
+
+        let hint = line(&rendered, Label::Hint);
         assert!(hint.contains("a defect in tpl"), "{hint}");
         assert!(hint.contains("not correctable by the caller"), "{hint}");
         assert_eq!(line(&rendered, Label::Exit), "70 (EX_SOFTWARE)");

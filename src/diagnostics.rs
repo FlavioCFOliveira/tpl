@@ -21,6 +21,7 @@
 //! | [`hint`] | The generic `hint` line, and the character set a runnable command admits | `FR-ERR-009`, `FR-ERR-012`, `FR-ERR-022`, `FR-ERR-032` |
 //! | [`suggest`] | The nearest-match selection, and the composed `hint` line | `FR-ERR-019` … `FR-ERR-023`, `OD-20` |
 //! | [`render`] | The four lines, their order, and the only writer of them | `FR-ERR-008`, `FR-ERR-033` |
+//! | [`panic`] | The panic hook, and the process exit it terminates with | `FR-ERR-030`, `FR-ERR-032`, `ADR-004` |
 //! | [`verbosity`] | The level, resolved once and shared | `FR-GLOB-014`, `FR-GLOB-015`, `OD-17` |
 //! | [`emit`] | The closed set of typed emission functions | `FR-GLOB-017`, `FR-GLOB-018`, `OD-17` |
 //!
@@ -41,6 +42,7 @@ mod hint;
 mod render;
 
 pub(crate) mod emit;
+pub(crate) mod panic;
 pub(crate) mod suggest;
 pub(crate) mod verbosity;
 

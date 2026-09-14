@@ -40,6 +40,17 @@ use crate::error::{
 /// The longest a name the character set of `FR-ERR-022` governs may be.
 const MAX_NAME: usize = 64;
 
+/// The `hint` line of a `70`, whose content `FR-ERR-032` fixes.
+///
+/// `FR-ERR-030` gives `70` two producing conditions and `ADR-004` reaches the
+/// second from the panic site, where no [`Error`] exists to match on. The text
+/// is a constant rather than a literal inside the match arm so that the two
+/// conditions cannot drift apart: [`hint`] serves the invariant violation and
+/// [`super::render`] serves the panic, and both read this.
+pub(super) const SOFTWARE_DEFECT: &str = "this is a defect in tpl and is not correctable by the \
+                                          caller; report it with the command you ran and the \
+                                          output of: tpl version";
+
 /// The content of the `hint` line for `error`, without its label.
 ///
 /// The match is exhaustive and carries no wildcard arm, so a variant added to
@@ -148,11 +159,9 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
 
         // ------------------------------------------------------------ 70 ---
         // FR-ERR-032: the hint of a 70 says the condition is a defect in tpl
-        // and is not correctable by the caller.
-        Error::InternalInvariant { .. } => Cow::Borrowed(
-            "this is a defect in tpl and is not correctable by the caller; report it with the \
-             command you ran and the output of: tpl version",
-        ),
+        // and is not correctable by the caller. The panic path reads the same
+        // constant, per ADR-004.
+        Error::InternalInvariant { .. } => Cow::Borrowed(SOFTWARE_DEFECT),
 
         // ------------------------------------------------------------ 73 ---
         Error::ProjectAlreadyExists { .. } => Cow::Borrowed(

@@ -6,12 +6,12 @@
 //! and the binary parses the invocation, dispatches, and maps the resulting
 //! error to an exit status.
 //!
-//! At this commit the library carries no command. [`run`] is the single entry
-//! point the binary calls, [`Error`] is the value every module will report
-//! failure through, and `diagnostics` writes the four labelled lines of
-//! `FR-ERR-008` that a failure reaches the caller as; the parser tree, the
-//! catalogue reader and the render environment are added by the tasks that
-//! follow.
+//! At this commit the library carries no command. [`run`] is the entry point
+//! the binary calls, [`install_panic_hook`] is the process setup it performs
+//! first, [`Error`] is the value every module will report failure through, and
+//! `diagnostics` writes the four labelled lines of `FR-ERR-008` that a failure
+//! reaches the caller as; the parser tree, the catalogue reader and the render
+//! environment are added by the tasks that follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -21,6 +21,26 @@ pub mod error;
 pub(crate) mod diagnostics;
 
 pub use error::Error;
+
+/// Installs the panic hook of `ADR-004`.
+///
+/// `FR-ERR-030` gives `70` two producing conditions, and this is the one that
+/// is not an [`Error`] value: WHEN a panic occurs, the process writes the four
+/// labelled lines of `FR-ERR-008` — with the `hint` of `FR-ERR-032` and a
+/// `cause` naming where the panic arose — and terminates with `70`, leaving
+/// stdout empty as `FR-ERR-033` requires.
+///
+/// The binary calls this once, before anything else, and it is the binary's to
+/// call rather than [`run`]'s: a panic hook is process-wide state, and a
+/// library function that installed one as a side effect would impose it on
+/// every caller of [`run`], including a test binary that must be free to panic.
+///
+/// Calling it twice replaces the hook with an equivalent one. Not calling it
+/// leaves the standard library's default hook in place, which prints the panic
+/// payload `FR-GLOB-018` bars and exits by aborting rather than with `70`.
+pub fn install_panic_hook() {
+    diagnostics::panic::install();
+}
 
 /// Runs `tpl`.
 ///
