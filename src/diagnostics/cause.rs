@@ -28,6 +28,15 @@ const CHAIN_SEPARATOR: &str = ": caused by ";
 /// What the `cause` line says when the engine supplied no chain at all.
 const EMPTY_CHAIN: &str = "the engine reported no further detail";
 
+/// The separator between adjacent members of a list, except before the last.
+const LIST_SEPARATOR: &str = ", ";
+
+/// The separator before the last member of a list.
+const LIST_CONJUNCTION: &str = " and ";
+
+/// What the `cause` line says when the supported window arrives empty.
+const EMPTY_WINDOW: &str = "no series";
+
 /// The content of the `cause` line for `error`, without its label.
 ///
 /// The match is exhaustive and carries no wildcard arm, so a variant added to
@@ -265,8 +274,13 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              key is refused and never ignored",
             file.display()
         )),
-        Error::PasswordCommandNotAnArray { key, file, found } => Cow::Owned(format!(
-            "{} declares {key} as a {found}; this key takes an array of strings",
+        Error::PasswordCommandNotAnArray {
+            key,
+            file,
+            position,
+            found,
+        } => Cow::Owned(format!(
+            "{} at {position} declares {key} as a {found}; this key takes an array of strings",
             file.display()
         )),
         Error::ConflictingEntryKeys {
@@ -336,9 +350,33 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "database entry '{entry}' reached a server that connected and authenticated and \
              reports '{product}'; tpl reads the catalogue of MariaDB alone"
         )),
-        Error::SeriesNotSupported { entry, series } => Cow::Owned(format!(
+        Error::SeriesNotSupported {
+            entry,
+            series,
+            supported,
+        } => Cow::Owned(format!(
             "database entry '{entry}' connected and authenticated, and the server reports series \
-             '{series}', which is outside the window of series tpl supports"
+             '{series}', which is outside the supported window; tpl supports {}",
+            listed(supported)
+        )),
+    }
+}
+
+/// Punctuates a list of series in the form `FR-SRV-030` shows: the members
+/// separated by commas, with `and` before the last.
+///
+/// Nothing here names a series. `BR-SRV-005` states the supported set exactly
+/// once and elsewhere, so the window arrives on the value and this function
+/// only punctuates what it is handed. The empty arm is unreachable from a
+/// window that satisfies `FR-SRV-015`; it is written because the slice type
+/// admits one and the match carries no wildcard.
+fn listed(series: &[&'static str]) -> Cow<'static, str> {
+    match series {
+        [] => Cow::Borrowed(EMPTY_WINDOW),
+        [only] => Cow::Borrowed(only),
+        [rest @ .., last] => Cow::Owned(format!(
+            "{}{LIST_CONJUNCTION}{last}",
+            rest.join(LIST_SEPARATOR)
         )),
     }
 }
@@ -354,7 +392,7 @@ fn joined(chain: &[String]) -> Cow<'_, str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CHAIN_SEPARATOR, EMPTY_CHAIN, joined};
+    use super::{CHAIN_SEPARATOR, EMPTY_CHAIN, EMPTY_WINDOW, joined, listed};
 
     #[test]
     fn an_empty_chain_says_so_rather_than_rendering_nothing() {
@@ -371,5 +409,29 @@ mod tests {
     fn a_chain_is_joined_outermost_first() {
         let chain = [String::from("outer"), String::from("inner")];
         assert_eq!(joined(&chain), format!("outer{CHAIN_SEPARATOR}inner"));
+    }
+
+    #[test]
+    fn an_empty_window_says_so_rather_than_rendering_nothing() {
+        assert_eq!(listed(&[]), EMPTY_WINDOW);
+    }
+
+    #[test]
+    fn a_window_of_one_is_the_series_itself() {
+        assert_eq!(listed(&["Z.9"]), "Z.9");
+    }
+
+    #[test]
+    fn a_window_of_two_is_joined_by_the_conjunction_alone() {
+        assert_eq!(listed(&["Z.9", "Z.8"]), "Z.9 and Z.8");
+    }
+
+    #[test]
+    fn a_longer_window_separates_by_comma_and_conjoins_the_last() {
+        // The form FR-SRV-030 shows.
+        assert_eq!(
+            listed(&["Z.9", "Z.8", "Z.7", "Z.6"]),
+            "Z.9, Z.8, Z.7 and Z.6"
+        );
     }
 }

@@ -547,6 +547,10 @@ pub enum Error {
         key: String,
         /// The file that declares it.
         file: PathBuf,
+        /// Where in that file the declaration is. `FR-CONF-035` names a line
+        /// in its own `cause`, and one file may declare this key for several
+        /// entries, so the position is what locates the declaration at fault.
+        position: Position,
         /// The TOML type found, against the array of `FR-CONF-023` expected.
         found: &'static str,
     },
@@ -664,6 +668,17 @@ pub enum Error {
         entry: String,
         /// The series found, as the server reported it.
         series: String,
+        /// The series that are supported, as the caller that raised this
+        /// condition holds them.
+        ///
+        /// `FR-SRV-030` obliges the `cause` line to list them and
+        /// `BR-SRV-005` states that set exactly once, elsewhere, so neither
+        /// this module nor the renderer may keep a copy: the window travels on
+        /// the value and the renderer prints what it is handed. The `'static`
+        /// bound is deliberate. `FR-SRV-020` rejects a flag or a configuration
+        /// key that overrides the window, so the only admissible source is a
+        /// table compiled into the binary, and the type admits no other.
+        supported: &'static [&'static str],
     },
 }
 
@@ -777,6 +792,14 @@ mod tests {
     fn position() -> Position {
         Position { line: 7, column: 3 }
     }
+
+    /// A supported window for a sample.
+    ///
+    /// It is deliberately not the table of `FR-SRV-015`. `BR-SRV-005` states
+    /// that set once and forbids a second copy, and the point of carrying the
+    /// window on the variant is that this module never holds one: a sample
+    /// needs a window of the right *shape*, not the right contents.
+    const WINDOW: &[&str] = &["Z.9", "Z.8"];
 
     /// One value of every variant, beside the code its row of `FR-ERR-001`
     /// fixes.
@@ -1017,6 +1040,7 @@ mod tests {
                 Error::PasswordCommandNotAnArray {
                     key: "database.shop.password_command".to_owned(),
                     file: path(),
+                    position: position(),
                     found: "string",
                 },
                 78,
@@ -1086,6 +1110,7 @@ mod tests {
                 Error::SeriesNotSupported {
                     entry: "shop".to_owned(),
                     series: "10.6".to_owned(),
+                    supported: WINDOW,
                 },
                 78,
             ),
@@ -1231,6 +1256,7 @@ mod tests {
             Error::PasswordCommandNotAnArray {
                 key: "database.shop.password_command".to_owned(),
                 file: path(),
+                position: position(),
                 found: "string",
             }
             .to_string(),
@@ -1242,6 +1268,7 @@ mod tests {
             Error::SeriesNotSupported {
                 entry: "shop".to_owned(),
                 series: "10.6".to_owned(),
+                supported: WINDOW,
             }
             .to_string(),
             "server series '10.6' is not supported, for database entry 'shop'"

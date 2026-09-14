@@ -177,6 +177,14 @@ mod tests {
         Position { line: 7, column: 3 }
     }
 
+    /// A supported window for a sample.
+    ///
+    /// It is deliberately not the table of `FR-SRV-015`. `BR-SRV-005` states
+    /// that set once and forbids a second copy, and the property under test is
+    /// that the renderer prints the window it is handed — which a window of
+    /// this file's own invention demonstrates and the real one would not.
+    const WINDOW: &[&str] = &["Z.9", "Z.8", "Z.7"];
+
     /// The content of one labelled line of a rendered diagnostic.
     fn line(rendered: &str, label: Label) -> String {
         let wanted = label.as_str();
@@ -481,14 +489,18 @@ mod tests {
         let rendered = render(&Error::PasswordCommandNotAnArray {
             key: "database.shop.password_command".to_owned(),
             file: path(),
+            position: position(),
             found: "string",
         });
 
+        // FR-CONF-035's illustrative cause names a line of the file; the row
+        // obliges the key and the file, and the position is what separates two
+        // declarations of the same key in one file.
         assert_eq!(
             rendered,
             "error: database.shop.password_command is not an array\n\
-             cause: .tpl/.cfg declares database.shop.password_command as a string; this key takes \
-             an array of strings\n\
+             cause: .tpl/.cfg at line 7, column 3 declares database.shop.password_command as a \
+             string; this key takes an array of strings\n\
              hint:  write it as an array: password_command = [\"security\", \
              \"find-generic-password\", \"-s\", \"tpl-shop\", \"-w\"]\n\
              exit:  78 (EX_CONFIG)\n"
@@ -526,8 +538,17 @@ mod tests {
         let series = render(&Error::SeriesNotSupported {
             entry: "shop".to_owned(),
             series: "10.6".to_owned(),
+            supported: WINDOW,
         });
-        assert!(line(&series, Label::Cause).contains("series '10.6'"));
+        let series_cause = line(&series, Label::Cause);
+        assert!(series_cause.contains("series '10.6'"), "{series_cause}");
+        // FR-SRV-030 obliges the cause to list the series that are supported.
+        // BR-SRV-005 keeps that list out of this crate, so the assertion is
+        // that the window handed in is the window rendered.
+        assert!(
+            series_cause.ends_with("tpl supports Z.9, Z.8 and Z.7"),
+            "{series_cause}"
+        );
         // FR-SRV-030 obliges the entry name to be filled in.
         assert_eq!(
             line(&series, Label::Hint),
@@ -771,6 +792,7 @@ mod tests {
             Error::PasswordCommandNotAnArray {
                 key: hostile(),
                 file: hostile_path(),
+                position: position(),
                 found: "string",
             },
             Error::ConflictingEntryKeys {
@@ -815,6 +837,7 @@ mod tests {
             Error::SeriesNotSupported {
                 entry: hostile(),
                 series: hostile(),
+                supported: &[HOSTILE],
             },
         ]
     }
