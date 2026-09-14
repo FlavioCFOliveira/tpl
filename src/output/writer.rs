@@ -9,6 +9,14 @@
 //! | Before a byte of a document was emitted | Exit `0`, silently (`FR-ERR-025`) | `tpl … \| head -1` is not an error, and the consumer holds nothing it could misread |
 //! | After a byte of a document was emitted | Exit `74` (`FR-ERR-026`) | The consumer holds truncated JSON and cannot tell that it is incomplete |
 //!
+//! A `text` listing is the third row, and it is not in the table because the
+//! fact above does not decide it: `FR-ERR-026` names a **JSON document** and
+//! nothing else, and the ground `FR-ERR-025` gives is this case outright — "in
+//! `text`, a cut listing is exactly what `head` asked for". A listing is
+//! therefore the silent `0` however much of it the consumer holds, which is
+//! what [`Cut`] carries into the classification. Both paths share the buffer
+//! all the same: the aggregation is required of every write, not of one format.
+//!
 //! So the writer records **whether any byte of the current document has been
 //! accepted by the stream**, which is what `OD-18` places here rather than in
 //! the encoder: it is a property of the writer, and `FR-OUT-021` and the
@@ -45,7 +53,27 @@ use serde::Serialize;
 
 use super::envelope::Document;
 use super::json::{self, Form};
+use super::text::{self, Table};
 use crate::error::Error;
+
+/// What a consumer's close part-way through means for the output in flight.
+///
+/// `FR-ERR-025` and `FR-ERR-026` divide on the kind of output, not only on the
+/// moment: `FR-ERR-026` names a **JSON document** and nothing else, and the
+/// ground `FR-ERR-025` gives for the other half names the other kind outright —
+/// "in `text`, a cut listing is exactly what `head` asked for". A listing has no
+/// outer shape a consumer could be misled about the completeness of; a document
+/// does, and a truncated one parses as nothing at all or, worse, as less than it
+/// is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Cut {
+    /// A JSON document: a consumer that holds part of one cannot tell, so a
+    /// close after the first byte is `74` (`FR-ERR-026`).
+    Truncates,
+    /// A `text` listing: a close is the silent `0` of `FR-ERR-025` however much
+    /// of the listing the consumer holds.
+    Harmless,
+}
 
 /// A stream that records whether it has accepted a byte since the last
 /// [`Tracked::begin`].
@@ -97,16 +125,17 @@ impl<W: Write> Write for Tracked<W> {
     }
 }
 
-/// The writer every JSON result is emitted through.
+/// The writer every result is emitted through, in either format.
 ///
-/// It owns one buffer, so a document reaches the stream in as few writes as the
+/// It owns one buffer, so a result reaches the stream in as few writes as the
 /// buffer allows rather than one per line — the aggregation `FR-OUT-021` and
 /// the project's own I/O rule require. The capacity is the standard library's
 /// default: no measurement supports another number, and this project does not
 /// tune without one.
 ///
-/// [`Writer::document`] flushes before it returns, so the writer holds nothing
-/// between documents and there is no pending byte for a drop to lose. That is
+/// [`Writer::document`] and [`Writer::table`] flush before they return, so the
+/// writer holds nothing between results and there is no pending byte for a drop
+/// to lose. That is
 /// also what makes the flag of [`Tracked`] exact: a document's bytes have
 /// either reached the stream or produced the failure being classified.
 pub(super) struct Writer<W: Write> {
@@ -152,7 +181,45 @@ impl<W: Write> Writer<W> {
 
         match self.write(document, form) {
             Ok(()) => Ok(()),
-            Err(refused) => self.classify(refused),
+            Err(refused) => self.classify(refused, Cut::Truncates),
+        }
+    }
+
+    /// Writes one `text` listing, in the layout of `FR-OUT-006`, and flushes
+    /// it.
+    ///
+    /// It is written through the same buffer a document is, for the same
+    /// reason: `FR-OUT-021` and the project's own rule require the bytes to be
+    /// aggregated rather than emitted a line at a time. What differs is the
+    /// classification of a consumer that goes away, which is [`Cut`].
+    ///
+    /// A stream a previous call found closed is not written to again.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::StdoutUnwritable`] where the stream refused the write
+    /// for a reason other than a close. A close is not an error on this path at
+    /// all: `FR-ERR-025` makes a cut listing the silent success its own
+    /// rationale names, so this returns `Ok(())` whatever had been emitted.
+    pub(super) fn table<C, const COLUMNS: usize>(
+        &mut self,
+        table: &Table<'_, C, COLUMNS>,
+    ) -> Result<(), Error>
+    where
+        C: AsRef<str>,
+    {
+        if self.finished {
+            return Ok(());
+        }
+
+        // Nothing on this path reads the flag, but the flag describes whatever
+        // the writer is emitting and a stale one would describe the last
+        // document instead.
+        self.inner.get_mut().begin();
+
+        match self.write_table(table) {
+            Ok(()) => Ok(()),
+            Err(refused) => self.classify(refused, Cut::Harmless),
         }
     }
 
@@ -162,25 +229,38 @@ impl<W: Write> Writer<W> {
         self.inner.flush()
     }
 
+    /// Writes one listing and empties the buffer into the stream.
+    fn write_table<C, const COLUMNS: usize>(
+        &mut self,
+        table: &Table<'_, C, COLUMNS>,
+    ) -> io::Result<()>
+    where
+        C: AsRef<str>,
+    {
+        text::write_table(&mut self.inner, table)?;
+        self.inner.flush()
+    }
+
     /// Decides which of the two outcomes a refused write is.
     ///
     /// The stream is finished either way, so nothing further is attempted on
-    /// it. What separates `FR-ERR-025` from `FR-ERR-026` is the one fact
+    /// it. What separates `FR-ERR-025` from `FR-ERR-026` is `cut` — the kind of
+    /// output in flight — and, where that kind can be truncated, the one fact
     /// [`Tracked`] holds.
-    fn classify(&mut self, refused: io::Error) -> Result<(), Error> {
+    fn classify(&mut self, refused: io::Error, cut: Cut) -> Result<(), Error> {
         self.finished = true;
 
         if refused.kind() != io::ErrorKind::BrokenPipe {
             return Err(Error::StdoutUnwritable { returned: refused });
         }
 
-        if self.inner.get_ref().emitted() {
+        match cut {
             // FR-ERR-026: the consumer holds truncated JSON.
-            return Err(Error::StdoutClosedMidDocument);
+            Cut::Truncates if self.inner.get_ref().emitted() => Err(Error::StdoutClosedMidDocument),
+            // FR-ERR-025: nothing of the document reached the consumer, or the
+            // output was a listing, which a consumer may cut where it likes.
+            Cut::Truncates | Cut::Harmless => Ok(()),
         }
-
-        // FR-ERR-025: nothing of the document reached the consumer.
-        Ok(())
     }
 }
 
@@ -190,6 +270,7 @@ mod tests {
     use crate::error::Error;
     use crate::output::envelope::{Collection, Document, Source};
     use crate::output::json::Form;
+    use crate::output::text::{Order, Table};
     use std::io::{self, Write};
 
     /// A stream that accepts a fixed number of bytes and then refuses.
@@ -235,6 +316,14 @@ mod tests {
     /// A document with one member, for a stream to accept or refuse.
     fn sample() -> Document<Collection<'static, &'static str>> {
         Document::new(Source::Server, Collection::new("tables", &["orders"]))
+    }
+
+    /// The rows of the sample listing.
+    const LISTING: [[&str; 2]; 2] = [["orders", "InnoDB"], ["customers", "InnoDB"]];
+
+    /// A listing of two rows, for a stream to accept or refuse.
+    fn listing() -> Table<'static, &'static str, 2> {
+        Table::new(["NAME", "ENGINE"], &LISTING, Order::ByName)
     }
 
     #[test]
@@ -359,6 +448,60 @@ mod tests {
         }
 
         assert!(stream.accepted.is_empty());
+    }
+
+    #[test]
+    fn a_listing_reaches_the_stream_whole() {
+        // FR-OUT-006, FR-OUT-020: the `text` result goes to stdout through the
+        // same buffer the JSON result does.
+        let mut emitted = Vec::new();
+        Writer::new(&mut emitted)
+            .table(&listing())
+            .expect("a buffer accepts every write");
+
+        assert_eq!(
+            String::from_utf8(emitted).expect("the layout emits UTF-8"),
+            "NAME       ENGINE\ncustomers  InnoDB\norders     InnoDB\n"
+        );
+    }
+
+    #[test]
+    fn a_listing_cut_by_the_consumer_is_the_silent_success() {
+        // FR-ERR-025, against the same stream state that makes a JSON document
+        // the 74 of FR-ERR-026: the requirement names a *document*, and its own
+        // ground names this case — "in `text`, a cut listing is exactly what
+        // `head` asked for".
+        let mut stream = Refusing::new(12, io::ErrorKind::BrokenPipe);
+
+        let outcome = Writer::new(&mut stream).table(&listing());
+
+        assert!(outcome.is_ok(), "a cut listing is exit 0, not 74");
+        assert_eq!(stream.accepted.len(), 12, "the consumer holds part of it");
+    }
+
+    #[test]
+    fn a_listing_into_a_stream_closed_before_the_first_byte_is_a_silent_success_too() {
+        let mut stream = Refusing::new(0, io::ErrorKind::BrokenPipe);
+
+        assert!(Writer::new(&mut stream).table(&listing()).is_ok());
+        assert!(stream.accepted.is_empty(), "no byte was emitted");
+    }
+
+    #[test]
+    fn a_listing_refused_for_another_reason_is_unwritable() {
+        // The 74 row of FR-ERR-001 reaches the `text` path unchanged: only a
+        // *close* is excused, and only because the consumer asked for it.
+        let mut stream = Refusing::new(12, io::ErrorKind::StorageFull);
+
+        let refused = Writer::new(&mut stream)
+            .table(&listing())
+            .expect_err("a stream that refuses the write is 74");
+
+        assert!(
+            matches!(refused, Error::StdoutUnwritable { .. }),
+            "{refused:?} is not the condition of the 74 row"
+        );
+        assert_eq!(refused.exit_code(), 74);
     }
 
     #[test]

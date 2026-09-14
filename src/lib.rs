@@ -10,9 +10,10 @@
 //! the binary calls, [`install_panic_hook`] is the process setup it performs
 //! first, [`Error`] is the value every module will report failure through,
 //! `diagnostics` writes the four labelled lines of `FR-ERR-008` that a failure
-//! reaches the caller as, and `output` holds the envelope of `FR-OUT-024` that
-//! every result reaches the caller through; the parser tree, the catalogue
-//! reader and the render environment are added by the tasks that follow.
+//! reaches the caller as, and `output` holds the two formats every result
+//! reaches the caller through — the envelope of `FR-OUT-024` and the aligned
+//! columns of `FR-OUT-006`; the parser tree, the catalogue reader and the
+//! render environment are added by the tasks that follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -21,15 +22,16 @@ pub mod error;
 
 pub(crate) mod diagnostics;
 
-// Nothing emits a result yet: `OD-05` places the envelope, the emitter and the
-// writer in this module, and the commands that reach them are later sprints.
-// One fact explains every constructor and enumerated value the lint names, so
-// it is stated once here rather than once per item, and the attribute goes with
-// the first command that emits.
+// Nothing emits a result yet: `OD-05` places the envelope, the emitter, the
+// `text` layout and the writer in this module, and the commands that reach them
+// are later sprints. One fact explains every constructor and enumerated value
+// the lint names, so it is stated once here rather than once per item, and the
+// attribute goes with the first command that emits.
 #[allow(
     dead_code,
     reason = "the commands that emit a result are later sprints; OD-05 places the envelope, the \
-              emitter and the writer here, and every one of those commands depends on them"
+              emitter, the text layout and the writer here, and every one of those commands \
+              depends on them"
 )]
 pub(crate) mod output;
 

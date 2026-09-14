@@ -20,6 +20,8 @@
 //! |---|---|---|
 //! | [`envelope`] | The three keys, the four values of `source`, and the collection shape | `FR-OUT-024` … `FR-OUT-032`, `FR-OUT-035` |
 //! | [`json`] | The two forms, and the only call into `serde_json` | `FR-OUT-007`, `FR-OUT-008`, `FR-OUT-013`, `OD-18` |
+//! | [`text`] | The aligned columns under a header row, and the ordering applied to them | `FR-OUT-004`, `FR-OUT-006`, `FR-OUT-034`, `NFR-DET-002` |
+//! | [`escape`] | The C0 rule of the `text` path, tab excepted | `FR-OUT-018`, `FR-OUT-019` |
 //! | [`writer`] | The buffered writer, and the `0`-or-`74` distinction | `FR-ERR-025`, `FR-ERR-026`, `FR-OUT-020`, `FR-OUT-021` |
 //!
 //! Key order is stated in the types and nowhere else. `OD-18` settles
@@ -31,16 +33,28 @@
 //! `diagnostics/` is the deliberate neighbour, not the same module. It writes
 //! to stderr, which `NFR-DET-001` puts outside the contract, and it escapes tab
 //! in every message; this module writes to stdout, which is byte-identical
-//! under the same requirement, and on the `json` path the escape JSON itself
-//! defines is what satisfies `FR-OUT-018`. `OD-05` keeps the two apart for
-//! exactly that reason.
+//! under the same requirement, and excepts tab in [`text`] because the aligned
+//! columns of `FR-OUT-006` are laid out with spacing — while on the `json` path
+//! the escape JSON itself defines is what satisfies `FR-OUT-018`. `OD-05` keeps
+//! the two apart for exactly that reason, and [`escape`] states in one place
+//! why it is not `diagnostics::escape`.
+//!
+//! The two paths meet at [`writer`], which owns the one buffer both are
+//! aggregated through, and part there again on what a consumer's close means: a
+//! truncated document is `74` and a cut listing is the silent `0` its own
+//! requirement names.
 //!
 //! What is **not** here: the seventeen payload shapes, each owned by the module
-//! that owns its command per `BR-OUT-002`; and the `text` layouts of
-//! `FR-OUT-006` with the escaping rule that is theirs alone.
+//! that owns its command per `BR-OUT-002`; the columns and headers of any
+//! particular listing, which belong to the same module for the same reason; and
+//! the two outputs `FR-OUT-019` exempts from escaping altogether — the result of
+//! `tpl render` and the source printed by `tpl template show`, both emitted byte
+//! for byte and neither reaching [`text`].
 
 mod envelope;
+mod escape;
 mod json;
+mod text;
 mod writer;
 
 use serde::Serialize;
@@ -58,6 +72,14 @@ use writer::Writer;
 )]
 pub(crate) use envelope::{Collection, Document, Source};
 pub(crate) use json::Form;
+
+// The same fact, for the same reason: `FR-OUT-006` gives every read command a
+// `text` layout, and the first of those commands is a later sprint.
+#[allow(
+    unused_imports,
+    reason = "no command lays out a listing yet; the re-export is the path those commands will use"
+)]
+pub(crate) use text::{Order, Table};
 
 /// Writes one document to standard output, in `form`.
 ///
@@ -81,4 +103,35 @@ pub(crate) use json::Form;
 /// `Ok(())`.
 pub(crate) fn emit<T: Serialize>(document: &Document<T>, form: Form) -> Result<(), Error> {
     Writer::new(std::io::stdout().lock()).document(document, form)
+}
+
+/// Writes one `text` listing to standard output.
+///
+/// This is the `text` half of `FR-OUT-001`'s two formats and the other route a
+/// result takes to stdout, per `FR-OUT-020`. What it writes is explicitly not a
+/// contract (`FR-OUT-004`): the columns are laid out for a person, and anything
+/// that parses uses [`emit`] with `--format json` instead.
+///
+/// Every cell is escaped on the way out, per `FR-OUT-018` and `FR-OUT-019`, and
+/// tab alone is excepted. An empty listing writes its header row and nothing
+/// beneath it, per `FR-OUT-034`.
+///
+/// The stream is locked for the whole listing and the bytes are aggregated
+/// behind one buffer, so a listing reaches the consumer in as few writes as the
+/// buffer allows rather than one per line.
+///
+/// # Errors
+///
+/// Returns [`Error::StdoutUnwritable`] where the stream refused the write for a
+/// reason other than a close. A consumer that closed stdout is not a failure on
+/// this path at all: `FR-ERR-025` makes a cut listing a silent success — "in
+/// `text`, a cut listing is exactly what `head` asked for" — and this returns
+/// `Ok(())`.
+pub(crate) fn emit_table<C, const COLUMNS: usize>(
+    table: &Table<'_, C, COLUMNS>,
+) -> Result<(), Error>
+where
+    C: AsRef<str>,
+{
+    Writer::new(std::io::stdout().lock()).table(table)
 }
