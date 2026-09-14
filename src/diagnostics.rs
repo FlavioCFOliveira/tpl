@@ -19,14 +19,16 @@
 //! | [`escape`] | Escaping a composed line as a whole | `FR-ERR-024`, `OD-06` |
 //! | [`cause`] | The `cause` line, per variant | `FR-ERR-010`, `FR-ERR-034` |
 //! | [`hint`] | The generic `hint` line, and the character set a runnable command admits | `FR-ERR-009`, `FR-ERR-012`, `FR-ERR-022`, `FR-ERR-032` |
+//! | [`suggest`] | The nearest-match selection, and the composed `hint` line | `FR-ERR-019` … `FR-ERR-023`, `OD-20` |
 //! | [`render`] | The four lines, their order, and the only writer of them | `FR-ERR-008`, `FR-ERR-033` |
 //! | [`verbosity`] | The level, resolved once and shared | `FR-GLOB-014`, `FR-GLOB-015`, `OD-17` |
 //! | [`emit`] | The closed set of typed emission functions | `FR-GLOB-017`, `FR-GLOB-018`, `OD-17` |
 //!
-//! What is **not** here yet: the nearest-match suggestions of `FR-ERR-019`
-//! through `FR-ERR-021` and the candidate populations they select over. This
-//! module emits the generic hint that `FR-ERR-023` says stands alone when no
-//! candidate qualifies, and the selection is added beside it.
+//! What is **not** here, and will not be: the eight candidate populations of
+//! `FR-ERR-021`. Each belongs to the component that owns it — object names to
+//! `mariadb/`, template names to `render/`, entry and key names to
+//! `project/config.rs`, command and flag names to `cli/` — and [`suggest`] owns
+//! the selection made over one of them and nothing else.
 //!
 //! `output/` is the deliberate neighbour, not the same module: `FR-OUT-018`
 //! excepts tab in `text` read output and `FR-ERR-024` escapes it in every
@@ -39,6 +41,7 @@ mod hint;
 mod render;
 
 pub(crate) mod emit;
+pub(crate) mod suggest;
 pub(crate) mod verbosity;
 
 pub(crate) use render::report;

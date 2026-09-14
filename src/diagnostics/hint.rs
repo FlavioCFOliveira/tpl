@@ -8,15 +8,28 @@
 //! defect in `tpl` and is not correctable by the caller.
 //!
 //! `FR-ERR-022` builds a runnable command "only from literals and from names
-//! matching `[A-Za-z0-9_]{1,64}`", and `FR-ERR-023` drops a name outside that
-//! set entirely rather than presenting it. [`admits`] is that filter: a name
-//! it refuses is replaced by a placeholder, and the command stays runnable
-//! without the caller's shell ever interpreting a catalogue byte.
+//! matching `[A-Za-z0-9_]{1,64}`", and the twentieth edition says which of the
+//! two a value is. A spelling this specification enumerates is a **literal**
+//! and the character set does not govern it: a command or an alias of the
+//! command tree, a flag a node declares, a key of `FR-CONF-002`. Every other
+//! value is governed by the set, whatever its source — a table, a view, a
+//! routine, a template, a database entry, the `<name>` segment of a
+//! `database.<name>` key, the name of an environment variable — and is tested
+//! on its own, the separators that join names into a command or into a key
+//! being literals themselves.
+//!
+//! [`admits`] is that test, applied here to the two kinds of value this module
+//! interpolates that the set governs: a database entry name and an
+//! environment-variable name. A value it refuses is replaced by a placeholder,
+//! and the command stays runnable without the caller's shell ever interpreting
+//! a catalogue byte. `FR-ERR-023` carries the rule the other way, over a
+//! nearest-match candidate, and [`super::suggest`] is where it is applied.
 //!
 //! The nearest-match half of a hint — "did you mean 'orders'?" — is not built
 //! here. `FR-ERR-019` through `FR-ERR-021` select candidates from a population
-//! each component owns, and this module emits the **generic** hint that
-//! `FR-ERR-023` says stands alone when no candidate qualifies.
+//! each component owns, [`super::suggest`] owns that selection and the line it
+//! composes, and this module emits the **generic** hint that `FR-ERR-023` says
+//! stands alone when no candidate qualifies.
 
 use std::borrow::Cow;
 
@@ -24,7 +37,7 @@ use crate::error::{
     CatalogueObjectKind, ContextFault, DeadlineBound, Error, NetworkPhase, ReadOnlyFault,
 };
 
-/// The longest name `FR-ERR-022` admits into a runnable command.
+/// The longest a name the character set of `FR-ERR-022` governs may be.
 const MAX_NAME: usize = 64;
 
 /// The content of the `hint` line for `error`, without its label.
@@ -262,13 +275,21 @@ fn update_entry(entry: &str) -> Cow<'static, str> {
     }
 }
 
-/// Whether `name` may be interpolated into a runnable command.
+/// Whether a name this corpus does not fix may be interpolated into a runnable
+/// command.
 ///
-/// `FR-ERR-022` admits `[A-Za-z0-9_]{1,64}` and nothing else. A catalogue name
-/// is free text in MariaDB and can carry a semicolon, a quotation mark or a
-/// newline, so formatting one straight into a suggested command would be
-/// command injection with the caller as the interpreter.
-fn admits(name: &str) -> bool {
+/// `[A-Za-z0-9_]{1,64}` is the set `FR-ERR-022` applies to a value chosen
+/// outside this specification — a table, a view, a routine, a template, a
+/// database entry, the `<name>` segment of a `database.<name>` key, an
+/// environment variable — and to no other kind of value: a spelling this
+/// specification enumerates is a literal, and the twentieth edition says so
+/// because no key of `FR-CONF-002` and five flags of this corpus would
+/// otherwise be admissible anywhere.
+///
+/// A catalogue name is free text in MariaDB and can carry a semicolon, a
+/// quotation mark or a newline, so formatting one straight into a suggested
+/// command would be command injection with the caller as the interpreter.
+pub(super) fn admits(name: &str) -> bool {
     // Every admitted byte is ASCII, so the byte length is the character count.
     !name.is_empty()
         && name.len() <= MAX_NAME
@@ -279,9 +300,13 @@ fn admits(name: &str) -> bool {
 
 /// Whether every segment of a space-separated command path is admitted.
 ///
-/// A path such as `schema table` is built from two names, and `FR-ERR-022`
-/// admits a *name*; the separator is a literal of the command line.
-fn admits_path(path: &str) -> bool {
+/// A command path is a spelling this specification enumerates, so `FR-ERR-022`
+/// makes it a literal in its entirety and does not demand this test; the space
+/// between its segments is a literal too. The test is kept as a **defensive
+/// assertion**: every command and alias of the tree passes it, so a path that
+/// fails came from somewhere other than the command tree and no runnable
+/// command is built from it.
+pub(super) fn admits_path(path: &str) -> bool {
     !path.is_empty() && path.split(' ').all(admits)
 }
 
@@ -328,6 +353,9 @@ mod tests {
             !admits("orders\nrm -rf /"),
             "a newline is outside [A-Za-z0-9_]"
         );
+        // A dot is outside the set. `core.database` is nonetheless suggestible,
+        // because a key is a literal tested segment by segment; that is
+        // `suggest`'s business and not this predicate's.
         assert!(!admits("core.database"), "a dot is outside [A-Za-z0-9_]");
         assert!(!admits("encomendas_pag\u{e1}s"), "the set is ASCII");
     }
