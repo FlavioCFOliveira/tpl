@@ -427,10 +427,12 @@ Three properties bind the built system:
 Where a bump is enacted in a release, and what a release gate checks, are
 `operations.md`.
 
-**Note on the state of the repository.** Neither `Cargo.toml` nor
-`CHANGELOG.md` exists at this commit, so the binary-version row and the
-changelog row are prescribed and not yet observable. No production code exists
-to contradict any of the four.
+**Note on the state of the repository.** Two of the four numbers have a site in
+the repository and two do not. The binary version is the manifest's `version`
+field, and `schema_version` is the one constant `output/` writes into the
+envelope; each carries the starting value above. `cache_format` waits on
+`cache/` and the changelog on `CHANGELOG.md`, so those two rows are prescription
+alone. Nothing built contradicts any of the four.
 
 ## Migration
 

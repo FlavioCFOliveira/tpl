@@ -122,10 +122,9 @@ question this document is handed and does not answer.
   — belongs to the register. What is recorded is the constraint that decides
   it.
 
-**The pipeline cannot be run at this commit.** No manifest exists, which
-[technology-stack.md](technology-stack.md#how-to-read-an-entry) and
-[data-model.md](data-model.md#the-four-version-numbers) both record, so there
-is no lockfile for command 5 and nothing for the other four to compile.
+**The pipeline has a package to run against.** The manifest and the resolved
+`Cargo.lock` are both in the repository: command 5 has the lockfile it audits,
+and the other four have a crate to compile.
 
 ## The release profile
 
@@ -156,11 +155,11 @@ panic path to be catchable.
 
 **The MSRV is a rule and the figure it yields**, both
 [`ADR-007`](../adr/adr-007-msrv.md)'s, registered as
-[`OD-02`](open-decisions.md#od-02--the-msrv) and cited rather than restated. Two
-consequences are operational: the floor is set by a dependency, so a dependency
-bump is also an MSRV question; and that record carries an obligation to re-run
-its rule over the shipped graph the first time the graph resolves, because only
-the direct dependencies have been read.
+[`OD-02`](open-decisions.md#od-02--the-msrv) and cited rather than restated. One
+consequence is operational: the floor is set by a dependency, so a dependency
+bump is also an MSRV question. The obligation that record carried to re-run its
+rule over the shipped graph once the graph resolved is discharged inside the
+record, and the figure the rule yields is the figure `rust-version` carries.
 
 **The development toolchain is not the pin, and it is not the measured one
 either.** Three toolchain figures are distinct, all three are true at once, and
@@ -243,10 +242,10 @@ every result is `BENCHMARKS.md`'s.
 when they were installed: `cargo-audit`, which is command 5 of the mandatory
 pipeline, and `cargo-bloat` and `cargo flamegraph`, which answer two of the five
 measurement questions. Nothing recorded rests on their having been present
-earlier — the pipeline cannot run at this commit for want of a manifest, and the
-one recorded measurement used `hyperfine`, which was installed. The installed
-`cargo-audit` is at the same version as the documentation command 5's row was
-consulted against, so that citation is now reproducible on this host.
+earlier — the package the pipeline compiles was not created until 2026-09-12,
+and the one recorded measurement used `hyperfine`, which was installed. The
+installed `cargo-audit` is at the same version as the documentation command 5's
+row was consulted against, so that citation is now reproducible on this host.
 
 **Seven things installed on the host belong to no path this document
 prescribes** (`cargo install --list` and `rustup show`, 2026-09-11):
@@ -266,9 +265,11 @@ rejection expires only when all four targets are re-measured under a new path.
 `criterion` and `dhat-rs` enter as dev-dependencies, outside the shipped graph
 and outside the dependency budget
 ([`ADR-006`](../adr/adr-006-package-layout.md),
-[technology-stack.md](technology-stack.md#the-dependency-budget)). No manifest
-exists at this commit, so there is nothing installed to observe and no version
-is recorded for either.
+[technology-stack.md](technology-stack.md#the-dependency-budget)). The manifest
+declares no dev-dependency, so neither crate is resolved and no version is
+recorded for either. A version for either is the manifest's and never the
+host's: neither is installed as a binary, so `cargo install --list` says nothing
+about them.
 
 **No MariaDB or MySQL client is installed, and the fixture requires none**: its
 readiness gate is the published port and its query path is `docker exec` into
@@ -325,9 +326,9 @@ Cargo Book, *Environment variables Cargo sets for crates*, consulted
 and `FR-CTX-027` cannot disagree. The same property is prescribed for the other
 two: each is one constant, never a literal at a second site.
 
-**Nothing here is observable yet.** Neither the manifest nor the changelog
-exists at this commit, which
-[data-model.md](data-model.md#the-four-version-numbers) already records.
+**Which of the four sites exist in the repository** is
+[data-model.md](data-model.md#the-four-version-numbers)'s note. This section
+prescribes where a bump is written, whichever of them exists.
 
 ## What a breaking change is
 
@@ -408,8 +409,8 @@ the fixture, so it is re-checked whenever the series set changes under
 `FR-SRV-019` and whenever the example changes. The test is `verification.md`'s.
 
 **Neither shipped template exists at this commit.** `CLAUDE.md` (*Estrutura do
-Projecto*) names a root `templates/` directory for them; there is no such
-directory, and no source tree beside it.
+Projecto*) names a root `templates/` directory for them; the repository has no
+such directory, and no command that would ship their content.
 
 **Recorded reading — the runtime-loading invariant and the init payload.**
 `CLAUDE.md` (*Invariantes de Implementação*) and `FR-TMPL-004` put templates on

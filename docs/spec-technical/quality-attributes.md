@@ -134,7 +134,7 @@ target (`NFR-PERF-016`).
 **Why five of the nine cannot be measured yet.** Budgets 4, 6, 8 and 9 are
 measured over `WL-001` and budget 5 over `WL-003`, and neither workload can be
 realised until the fixture is complete (`BR-PERF-007`, `OD-27`). Budgets 1, 2, 3 and 7
-need neither fixture nor server and are measurable as soon as there is a binary.
+need neither fixture nor server; each waits only on the command it measures.
 Of the five that need the fixture, three also need a server — 4, 8 and 9 — and
 those three can never be normative, which is exactly what `NFR-PERF-013`
 requires.

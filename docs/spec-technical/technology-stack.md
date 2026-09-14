@@ -32,12 +32,13 @@ the first rule requires, and it is how this folder already cites
 ([interfaces.md](interfaces.md#context-access-from-a-filter-or-a-test)); the pin
 itself remains the record's.
 
-**No manifest exists at this commit**, which [data-model.md](data-model.md#the-four-version-numbers)
-records for the binary's own version as well. The versions below are therefore
-the releases this document records, not requirements already written into a
-`Cargo.toml`; whether that manifest will state an exact or a caret requirement
-is settled by no entry of [open-decisions.md](open-decisions.md) and is a
-decision for the register.
+**A bare version below is a release read from the source beside it on the date
+beside it, never the requirement the package declares.** Where the column cites
+a record instead, the pin is that record's
+([`ADR-001`](../adr/adr-001-template-engine-pin.md),
+[`ADR-003`](../adr/adr-003-database-driver.md)). In both forms the requirement
+the package resolves against is the manifest's, and it is read there and not
+here.
 
 ## The language, the toolchain, and the package
 
@@ -190,6 +191,14 @@ The driver, the rule that settled it and the candidate it disqualified are
 is restated. What belongs here is the criterion as a property of this stack, and
 the feature selection that realises the two records.
 
+**One crate of the driver is read from inside this repository rather than from
+the index.** A `[patch.crates-io]` entry redirects `sqlx-core` to a vendored
+copy, on the terms [`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) sets:
+that record holds the defect, the patch, the obligations the vendored tree
+carries and the condition that retires it, and it states that the copy is not a
+new dependency and does not enter the budget below. The pin is unchanged and
+remains [`ADR-003`](../adr/adr-003-database-driver.md)'s.
+
 **`FR-CONF-036` is an admission criterion, not a preference.** A driver that
 cannot express all five modes of `FR-CONF-013` distinctly is disqualified, and
 the choice may not be settled by reducing the mode set to fit a candidate. A
@@ -273,16 +282,15 @@ file's shape, mode and rewrite discipline are
 [data-model.md](data-model.md#tplcfg); the reader's and the writer's obligations
 are [interfaces.md](interfaces.md#the-configuration-reader-and-the-writer).
 
-**Recorded discrepancy — two crate versions, two readings, both dated
-2026-09-11.** [`ADR-007`](../adr/adr-007-msrv.md)'s floor table records `toml`
-1.1.5 and `toml_edit` 0.25.13 as the maximum stable releases at the date it was
-consulted; the crate index returns 1.1.6+spec-1.1.0 and 0.25.15+spec-1.1.0 to
-the reading taken for this document on the same date. A patch published between
-the two readings explains it without either being wrong, and nothing here turns
-on which is later. Both readings are recorded and neither file is amended:
-whether the newer patches move the toolchain floor is
-[`ADR-007`](../adr/adr-007-msrv.md)'s question, under the obligation that record
-already carries to re-run its rule when the graph first resolves.
+**Recorded discrepancy — closed.** This document and
+[`ADR-007`](../adr/adr-007-msrv.md) read `toml` and `toml_edit` on the same day
+and saw different patches, one having been published between the two readings.
+The only question that turned on the difference — whether the newer patches
+raise the toolchain floor — was that record's, and it settled the question by
+re-running its rule over the resolved graph: neither crate moves the floor. The
+floor itself is cited from that record and never repeated here, per rule R3 of
+[`docs/adr/README.md`](../adr/README.md). The versions in the table above remain
+this document's own reading, with the source and the date beside each.
 
 ## Serialisation
 
