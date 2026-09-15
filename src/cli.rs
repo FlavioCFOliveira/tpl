@@ -90,6 +90,17 @@
 mod cache;
 mod cfg;
 mod globals;
+// Nothing renders help yet: `OD-05` places the typed table of `FR-HELP-022` here, and the
+// renderer, the six forms and the JSON document that read it are the tasks that follow.
+// One fact explains every item the lint names, so it is stated once here rather than once
+// per item, and the attribute goes with the first consumer.
+#[allow(
+    dead_code,
+    reason = "the renderer, the help forms and the JSON command tree are later tasks; \
+              `OD-05` places the typed examples and exit-codes table of `FR-HELP-022` \
+              here, and every one of those consumers reads it"
+)]
+mod help;
 mod intercept;
 mod local;
 mod rules;
