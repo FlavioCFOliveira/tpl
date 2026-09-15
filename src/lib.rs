@@ -6,17 +6,19 @@
 //! and the binary parses the invocation, dispatches, and maps the resulting
 //! error to an exit status.
 //!
-//! At this commit the invocation is parsed and no command of the library acts.
-//! [`run`] is the entry point the binary calls, [`install_panic_hook`] is the
-//! process setup it performs first, [`Error`] is the value every module reports
-//! failure through, `cli` declares the closed command tree of `FR-CLI-002` and
-//! the seven global flags of `FR-GLOB-001` every node of it accepts and applies
-//! the parsing rules of `FR-CLI-014` through `FR-CLI-020`, `diagnostics` writes
-//! the four labelled lines of `FR-ERR-008` that a failure reaches the caller as,
-//! and `output` holds the two formats every result reaches the caller through
-//! — the envelope of `FR-OUT-024` and the aligned columns of `FR-OUT-006`; the
-//! catalogue reader and the render environment are added by the tasks that
-//! follow.
+//! At this commit the invocation is parsed and the command surface describes
+//! itself; no command that reads a database or a project acts yet. [`run`] is
+//! the entry point the binary calls, [`install_panic_hook`] is the process
+//! setup it performs first, [`Error`] is the value every module reports failure
+//! through, `cli` declares the closed command tree of `FR-CLI-002` and the
+//! seven global flags of `FR-GLOB-001` every node of it accepts, applies the
+//! parsing rules of `FR-CLI-014` through `FR-CLI-020`, and answers the six help
+//! and version forms of `FR-HELP-001` — including the JSON command tree of
+//! `FR-HELP-016` — `diagnostics` writes the four labelled lines of `FR-ERR-008`
+//! that a failure reaches the caller as, and `output` holds the two formats
+//! every result reaches the caller through — the envelope of `FR-OUT-024` and
+//! the aligned columns of `FR-OUT-006`; the catalogue reader and the render
+//! environment are added by the tasks that follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -27,14 +29,15 @@ pub(crate) mod cli;
 
 pub(crate) mod diagnostics;
 
-// Nothing emits a result yet: `OD-05` places the envelope, the emitter, the
-// `text` layout and the writer in this module, and the commands that reach them
-// are later sprints. One fact explains every constructor and enumerated value
-// the lint names, so it is stated once here rather than once per item, and the
-// attribute goes with the first command that emits.
+// `tpl help --format json` is the only command that emits a result so far, and
+// it emits a JSON document: the `text` layout of `FR-OUT-006`, the collection
+// shape of `FR-OUT-030` and the stdout route of `emit` are reached by commands
+// that are later sprints. One fact explains every constructor and enumerated
+// value the lint names, so it is stated once here rather than once per item,
+// and the attribute goes with the first command that reaches the rest.
 #[allow(
     dead_code,
-    reason = "the commands that emit a result are later sprints; OD-05 places the envelope, the \
+    reason = "the commands that emit a listing are later sprints; OD-05 places the envelope, the \
               emitter, the text layout and the writer here, and every one of those commands \
               depends on them"
 )]

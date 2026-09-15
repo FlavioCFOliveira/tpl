@@ -62,13 +62,13 @@ use serde::Serialize;
 use crate::error::Error;
 use writer::Writer;
 
-// `Document` is this module's own; the other two are what a command builds a
-// payload from, and the first of those commands is a later sprint. The
-// suppression is this one statement's, so a stale import anywhere else in the
-// module is still reported.
+// `tpl help --format json` is the one command that emits today, and it builds
+// a payload of its own rather than a collection: `FR-HELP-017` fixes four keys
+// for it, where `FR-OUT-030` gives a listing one. The suppression is this one
+// statement's, so a stale import anywhere else in the module is still reported.
 #[allow(
     unused_imports,
-    reason = "no command builds a payload yet; the re-export is the path those commands will use"
+    reason = "no command emits a listing yet; the re-export is the path those commands will use"
 )]
 pub(crate) use envelope::{Collection, Document, Source};
 pub(crate) use json::Form;
@@ -102,7 +102,30 @@ pub(crate) use text::{Order, Table};
 /// failure at all: `FR-ERR-025` makes it a silent success and this returns
 /// `Ok(())`.
 pub(crate) fn emit<T: Serialize>(document: &Document<T>, form: Form) -> Result<(), Error> {
-    Writer::new(std::io::stdout().lock()).document(document, form)
+    emit_to(std::io::stdout().lock(), document, form)
+}
+
+/// Writes one document to `stream`, in `form`.
+///
+/// It is [`emit`] with the stream supplied, and it exists for the same reason
+/// [`emit_help`] takes one: the caller is `cli`'s dispatch, which a test drives
+/// without a process. The process passes the locked standard output, through
+/// [`emit`].
+///
+/// Everything [`emit`] guarantees holds here, because [`emit`] is this function
+/// with one argument filled in: the parameter is a [`Document`] and nothing
+/// else, so `FR-OUT-032` holds on the way in, and the bytes are aggregated
+/// behind the one buffer of [`writer`].
+///
+/// # Errors
+///
+/// Returns what [`emit`] returns, for the same conditions.
+pub(crate) fn emit_to<W: std::io::Write, T: Serialize>(
+    stream: W,
+    document: &Document<T>,
+    form: Form,
+) -> Result<(), Error> {
+    Writer::new(stream).document(document, form)
 }
 
 /// Writes one help text to `stream`.

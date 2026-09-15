@@ -400,7 +400,11 @@ fn written(path: &[&str]) -> String {
 }
 
 /// One line of an example, as the caller would type it.
-fn shell(line: &Line) -> String {
+///
+/// It is `pub(super)` because the JSON command tree publishes the same line:
+/// `FR-HELP-022` makes the typed table the one source of `examples` for both
+/// consumers, so the line a caller copies is composed once, here.
+pub(super) fn shell(line: &Line) -> String {
     let mut spelled = String::from(line.prefix);
     spelled.push_str(&line.invocation.join(" "));
     spelled.push_str(line.suffix);
@@ -474,7 +478,11 @@ fn placeholder(argument: &Arg) -> String {
 }
 
 /// The name the tree gives an argument's value.
-fn value_name(argument: &Arg) -> &str {
+///
+/// It is `pub(super)` for the reason [`shell`] is: the JSON command tree states
+/// the same fact about the same argument, and introspecting it twice would be
+/// two readings of one declaration.
+pub(super) fn value_name(argument: &Arg) -> &str {
     argument
         .get_value_names()
         .and_then(<[clap::builder::Str]>::first)
@@ -525,9 +533,30 @@ fn kind(argument: &Arg) -> String {
         return format!("Type: one of {}.", names.join(", "));
     }
 
+    format!("Type: {}.", type_name(argument))
+}
+
+/// The type of an argument's value, named.
+///
+/// The type is read from the value parser the declaration produced, by the Rust
+/// type it yields, so a flag that changes type states the new one without
+/// anything here changing. A type this function does not name is a type the
+/// tree does not use, which a test asserts.
+///
+/// An argument whose values are enumerated is a **string** drawn from a closed
+/// set: the set is stated beside the type — as `one of …` by [`kind`] and as the
+/// `permitted` member by the JSON command tree — and not in place of it, so a
+/// consumer reads one type vocabulary for every argument of the tree.
+///
+/// It is `pub(super)` for the reason [`shell`] is.
+pub(super) fn type_name(argument: &Arg) -> &'static str {
+    if !argument.get_possible_values().is_empty() {
+        return "string";
+    }
+
     let produced = argument.get_value_parser().type_id();
 
-    let named = if produced == ValueParser::string().type_id() {
+    if produced == ValueParser::string().type_id() {
         "string"
     } else if produced == ValueParser::path_buf().type_id() {
         "path"
@@ -537,9 +566,7 @@ fn kind(argument: &Arg) -> String {
         "positive integer"
     } else {
         "value"
-    };
-
-    format!("Type: {named}.")
+    }
 }
 
 /// What an argument is worth when it is not given.

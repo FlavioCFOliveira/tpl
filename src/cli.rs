@@ -54,23 +54,38 @@
 //! so that it is not mistaken for finished work.
 //!
 //! **A leaf whose work is a later sprint reports `70`.** Every leaf of the tree
-//! parses today; none of them acts. [`route`] gives each one an arm that
-//! returns [`Error::InternalInvariant`] naming its command path, which
-//! `FR-ERR-001` makes exit `70` — the code for a condition the caller cannot
-//! have caused and cannot correct, which is exactly what a parsed command with
-//! no implementation is. The arrangement is an arm per leaf rather than one
-//! catch-all so that each later sprint replaces **its own** entry, and so that
-//! the arm it must replace is named by its path rather than found by reading.
+//! parses today and all but two of them act on nothing. [`route`] gives each
+//! such leaf an arm that returns [`Error::InternalInvariant`] naming its
+//! command path, which `FR-ERR-001` makes exit `70` — the code for a condition
+//! the caller cannot have caused and cannot correct, which is exactly what a
+//! parsed command with no implementation is. The arrangement is an arm per leaf
+//! rather than one catch-all so that each later sprint replaces **its own**
+//! entry, and so that the arm it must replace is named by its path rather than
+//! found by reading.
 //!
-//! Nothing else is provisional here. `FR-CLI-007` and `FR-HELP-025` require a
-//! group node invoked with no child to print exactly the text `tpl help <node>`
-//! would print, and to exit `0`: [`group_help`] renders that text through
-//! [`help::text`] and writes it through [`output`].
+//! Nothing else is provisional here.
+//!
+//! - `tpl help` and `tpl version` are the two leaves that act: [`help::command`]
+//!   resolves a command path of any depth and writes either the seven sections
+//!   of `FR-HELP-006` or the JSON command tree of `FR-HELP-016`, and [`version`]
+//!   writes the line of `FR-HELP-005`.
+//! - `FR-CLI-007` and `FR-HELP-025` require a group node invoked with no child
+//!   to print exactly the text `tpl help <node>` would print, and to exit `0`:
+//!   [`node_help`] renders that text through [`help::text`] and writes it
+//!   through [`output`].
+//! - `FR-GLOB-019` and `FR-GLOB-020` answer `-h/--help` and `-V/--version` at
+//!   whatever node they were given at, through those same two functions.
+//!
+//! **The six forms of `FR-HELP-001` therefore reach two functions between
+//! them**, which is what makes the three equivalences of `FR-HELP-002` hold by
+//! construction rather than by comparison. A test walks the tree and asserts
+//! the bytes all the same, because a property held by construction is one
+//! nobody notices losing.
 //!
 //! [`parse`] is the whole of the route from the process to the tree, and
 //! [`crate::run`] takes it: it builds the tree, hands it the vector, and turns
-//! whatever comes back into the one thing the caller reads — a [`Cli`], or an
-//! [`Error`] the four labelled lines of `FR-ERR-008` are composed from.
+//! whatever comes back into the one thing the caller reads — an [`Invocation`],
+//! or an [`Error`] the four labelled lines of `FR-ERR-008` are composed from.
 //!
 //! # The parsing rules
 //!
@@ -100,6 +115,7 @@ use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
 
+use clap::error::ErrorKind;
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
 
 use cache::Cache;
@@ -144,6 +160,57 @@ pub(crate) struct Cli {
     /// The command invoked, or [`None`] for a bare `tpl`.
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
+}
+
+/// What one parsed invocation resolved to: the seven global flags, and the
+/// form the rest of the vector names.
+///
+/// [`Cli`] is what the parser produces and this is what the process acts on.
+/// They differ because two of the six forms of `FR-HELP-001` carry no command
+/// at all: `-h/--help` and `-V/--version` are answered at whatever node they
+/// were given at, per `FR-GLOB-019` and `FR-GLOB-020`, and a node that declares
+/// a required operand has none to supply when the caller is asking for the help
+/// in order to learn what the operand is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Invocation {
+    /// The seven flags of `FR-GLOB-001`, wherever on the command line they
+    /// appeared.
+    pub(crate) globals: Globals,
+
+    /// What the invocation asks for.
+    pub(crate) form: Form,
+}
+
+/// The three things an invocation the parser accepted can be.
+///
+/// The first two are the flag forms of `FR-HELP-001`, and neither reaches a
+/// command: they are answered from the tree and the typed table alone, which is
+/// what `FR-PROJ-025` requires of them.
+// Exactly one value of this type exists per process, built once by `parse` and
+// read once by `route`, so the size difference between the two flag forms and
+// the command they are alternatives to is never multiplied by anything. Boxing
+// the command to level the variants would add a heap allocation and an
+// indirection to the path every ordinary invocation takes, against a saving of
+// a couple of hundred bytes of stack on a value that is constructed once — which
+// is the trade this project's own measurement rule refuses to make without
+// evidence.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "one value per process: levelling the variants would buy stack this process does \
+              not want and cost an allocation on the ordinary path"
+)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Form {
+    /// `-h/--help` was given: the canonical path of the node it was answered
+    /// at, as the segments below `tpl` (`FR-GLOB-019`).
+    Help(Vec<String>),
+
+    /// `-V/--version` was given (`FR-GLOB-020`).
+    Version,
+
+    /// Neither flag was given: the command the vector names, or [`None`] for a
+    /// bare `tpl`, which `FR-CLI-007` answers with the top-level help.
+    Command(Option<Command>),
 }
 
 /// The eight top-level commands of `FR-CLI-010`, and no others.
@@ -303,7 +370,7 @@ fn closed(command: clap::Command) -> clap::Command {
 /// fails, in the order [`rules`] states: what the parser itself refused, then
 /// the repetition of `FR-CLI-014`, then the pair of `FR-CLI-015`. Every one of
 /// them exits `64`.
-pub(crate) fn parse<I, T>(arguments: I) -> Result<Cli, Error>
+pub(crate) fn parse<I, T>(arguments: I) -> Result<Invocation, Error>
 where
     I: IntoIterator<Item = T>,
     T: Into<OsString>,
@@ -313,19 +380,164 @@ where
     // The tree is built once and kept: `intercept` reads the node an invocation
     // reached from it, and `rules` reads the declarations from it.
     let mut tree = tree();
-    let matches = match tree.try_get_matches_from_mut(&argv) {
-        Ok(matches) => matches,
-        Err(refused) => return Err(intercept::intercepted(&refused, &tree, &argv)),
+    let refused = match tree.try_get_matches_from_mut(&argv) {
+        Ok(matches) => return interpret(&tree, &matches, &argv),
+        Err(refused) => refused,
     };
 
-    rules::refuse_repetition(&tree, &matches)?;
+    if refused.kind() == ErrorKind::MissingRequiredArgument
+        && let Some(flagged) = flagged(&argv)?
+    {
+        return Ok(flagged);
+    }
 
-    let invocation = Cli::from_arg_matches(&matches)
-        .map_err(|refused| intercept::intercepted(&refused, &tree, &argv))?;
+    Err(intercept::intercepted(&refused, &tree, &argv))
+}
 
-    rules::refuse_both_verbosities(&invocation.globals)?;
+/// Applies the parsing rules to an accepted invocation and says what it is.
+///
+/// The three rules of [`rules`] run before the invocation is built, and in the
+/// order that module states, so `FR-ERR-006` step 1 is complete for every form
+/// alike — including the two that never reach a command.
+///
+/// # Errors
+///
+/// Returns the [`Error`] of the first rule that refuses, and the intercepted
+/// refusal where the matched vector does not satisfy the declarations.
+fn interpret(
+    tree: &clap::Command,
+    matches: &clap::ArgMatches,
+    argv: &[OsString],
+) -> Result<Invocation, Error> {
+    rules::refuse_repetition(tree, matches)?;
 
-    Ok(invocation)
+    let globals = Globals::from_arg_matches(matches)
+        .map_err(|refused| intercept::intercepted(&refused, tree, argv))?;
+
+    rules::refuse_both_verbosities(&globals)?;
+
+    if globals.help || globals.version {
+        return Ok(requested(globals, matches));
+    }
+
+    let Cli { globals, command } = Cli::from_arg_matches(matches)
+        .map_err(|refused| intercept::intercepted(&refused, tree, argv))?;
+
+    Ok(Invocation {
+        globals,
+        form: Form::Command(command),
+    })
+}
+
+/// The invocation `-h/--help` or `-V/--version` names, with help winning where
+/// both were given.
+///
+/// `FR-GLOB-019` and `FR-GLOB-020` give each flag an outcome and the corpus
+/// states no precedence between them, so one is chosen here: help, because it
+/// is the form that names the other and a caller that asked for both asked for
+/// the larger answer. A refusal of the pair was rejected — `FR-CLI-015` is the
+/// only pair this corpus refuses, and inventing a second would make an
+/// invocation fail that every requirement in force accepts.
+fn requested(globals: Globals, matches: &clap::ArgMatches) -> Invocation {
+    let form = if globals.help {
+        Form::Help(reached(matches))
+    } else {
+        Form::Version
+    };
+
+    Invocation { globals, form }
+}
+
+/// The help or version form a vector the parser refused for a missing argument
+/// nonetheless names, or [`None`] where it names neither.
+///
+/// `OD-07` turns the parser's own help flag off, so `-h`, `--help`, `-V` and
+/// `--version` are ordinary global arguments of [`globals`] and the parser
+/// validates **required arguments first**. At the thirteen leaves that declare
+/// one of the fourteen required operands of the tree, the strict parse
+/// therefore refuses `tpl <node> --help` before the flag is ever read, which
+/// contradicts `FR-HELP-002` — the three help forms are byte-identical at every
+/// depth — and `FR-GLOB-019` and `FR-GLOB-020`, which give both flags an
+/// outcome at every node.
+///
+/// The vector is parsed a second time, against **the same tree** with the
+/// requirement waived, and the result is honoured only where one of the two
+/// flags is present. Nothing else is decided by it: a vector that names neither
+/// flag falls through to the refusal the strict parse produced, with its
+/// message intact.
+///
+/// This is not the argument pre-scan `FR-ERR-017` and `FR-ERR-018` withdrew,
+/// and not the second set of rules `OD-08` rejects: it is the project's own
+/// parser, over the project's own tree, differing in one validation setting,
+/// and it runs on a path that has already failed.
+///
+/// # Errors
+///
+/// Returns the [`Error`] of the first rule of [`rules`] that refuses the
+/// vector, because step 1 of `FR-ERR-006` runs for every command without
+/// exception and a help form is no exception to it.
+fn flagged(argv: &[OsString]) -> Result<Option<Invocation>, Error> {
+    let mut waived = waived(tree());
+
+    // Either refusal below means the waiver did not turn the vector into a
+    // help form, so nothing here classifies it: the strict parse's own refusal
+    // is returned by the caller, which is the message the caller composed for
+    // exactly this vector.
+    let Ok(matches) = waived.try_get_matches_from_mut(argv) else {
+        return Ok(None);
+    };
+
+    let Ok(globals) = Globals::from_arg_matches(&matches) else {
+        return Ok(None);
+    };
+
+    if !globals.help && !globals.version {
+        return Ok(None);
+    }
+
+    rules::refuse_repetition(&waived, &matches)?;
+    rules::refuse_both_verbosities(&globals)?;
+
+    Ok(Some(requested(globals, &matches)))
+}
+
+/// `command`, and every node beneath it, with the requirement waived from every
+/// argument that declares one.
+///
+/// The waiver exists for [`flagged`] alone and reaches nothing a caller can
+/// observe: [`tree`] is unchanged, so `Arg::is_required_set` still reports the
+/// requirement to the help of `FR-HELP-013` and to the JSON command tree of
+/// `FR-HELP-021`, and a vector that supplies neither the operand nor one of the
+/// two flags is refused by the strict parse with the message it already had.
+fn waived(command: clap::Command) -> clap::Command {
+    let children: Vec<String> = command
+        .get_subcommands()
+        .map(|child| child.get_name().to_owned())
+        .collect();
+
+    children.into_iter().fold(
+        command.mut_args(|argument| argument.required(false)),
+        |command, name| command.mut_subcommand(name, waived),
+    )
+}
+
+/// The canonical path of the node a matched invocation reached, as the segments
+/// below `tpl`.
+///
+/// It is read from the matches rather than from the built [`Cli`], which is
+/// what lets a help form name its node without the node's own operands being
+/// present. The segments are the parser's own names, so an alias of
+/// `FR-CLI-011` has already resolved to the node it names, per `FR-HELP-027`.
+fn reached(matches: &clap::ArgMatches) -> Vec<String> {
+    let mut path = Vec::new();
+    let mut node = matches;
+
+    while let Some((name, inner)) = node.subcommand() {
+        path.push(name.to_owned());
+        node = inner;
+    }
+
+    path
 }
 
 /// The diagnostic level an invocation resolves to (`FR-GLOB-014`,
@@ -333,7 +545,7 @@ where
 ///
 /// `OD-17` resolves it once, during argument handling; the process fixes it for
 /// the rest of the run, and nothing else reads the two flags.
-pub(crate) fn level(invocation: &Cli) -> Level {
+pub(crate) fn level(invocation: &Invocation) -> Level {
     rules::level(&invocation.globals)
 }
 
@@ -358,36 +570,57 @@ where
     Cli::from_arg_matches(&matches)
 }
 
-/// Runs the node one parsed invocation names.
+/// Runs the form one parsed invocation names.
 ///
 /// # Errors
 ///
-/// Returns whatever the node reports. Until a node is implemented that is
+/// Returns whatever the form reports. Until a node is implemented that is
 /// [`Error::InternalInvariant`], per the interim arrangement this module's
 /// documentation states.
-pub(crate) fn dispatch(cli: &Cli) -> Result<(), Error> {
-    route(&mut std::io::stdout().lock(), cli)
+pub(crate) fn dispatch(invocation: &Invocation) -> Result<(), Error> {
+    route(&mut std::io::stdout().lock(), invocation)
 }
 
-/// The one match from a parsed invocation to the node's action.
+/// The one match from a parsed invocation to what it asks for.
 ///
-/// Every arm is either a group node, which prints its own help and succeeds per
-/// `FR-CLI-007`, or a leaf, which reports the interim `70` until the sprint
-/// that owns it replaces the arm.
+/// The two flag forms are answered first and by the same two functions every
+/// other form reaches them through, which is what makes the equivalences of
+/// `FR-HELP-002` hold by construction rather than by comparison: there is one
+/// help renderer and one version line, and `tpl help <path>`, `tpl <path>
+/// --help`, `tpl <path> -h` and a bare group node all arrive at the first,
+/// while `tpl version`, `tpl --version` and `tpl -V` all arrive at the second.
+///
+/// Below them every arm is either a group node, which prints its own help and
+/// succeeds per `FR-CLI-007`, or a leaf, which reports the interim `70` until
+/// the sprint that owns it replaces the arm.
 ///
 /// The writer is a parameter rather than standard output taken directly, so
-/// that what a group node prints is observable from a test without a process.
+/// that what a node prints is observable from a test without a process.
 ///
 /// # Errors
 ///
-/// Returns [`Error::InternalInvariant`] for a leaf with no implementation, and
-/// [`Error::StdoutUnwritable`] where a group node's help could not be written.
-fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
-    match &cli.command {
-        None => group_help(out, &[]),
+/// Returns [`Error::InternalInvariant`] for a leaf with no implementation,
+/// whatever `tpl help` reports for a path that names no node, and
+/// [`Error::StdoutUnwritable`] where the text could not be written.
+fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
+    let command = match &invocation.form {
+        // FR-GLOB-019 and FR-GLOB-020: both flags are answered at the node
+        // they were given at, whatever that node is, and neither reaches a
+        // command.
+        Form::Help(path) => {
+            let path: Vec<&str> = path.iter().map(String::as_str).collect();
+
+            return node_help(out, &path);
+        }
+        Form::Version => return version(out),
+        Form::Command(command) => command,
+    };
+
+    match command {
+        None => node_help(out, &[]),
 
         Some(Command::Schema(schema)) => match &schema.command {
-            None => group_help(out, &["schema"]),
+            None => node_help(out, &["schema"]),
             Some(schema::Command::Info { .. }) => not_yet_implemented!("tpl schema info"),
             Some(schema::Command::Tables { .. }) => not_yet_implemented!("tpl schema tables"),
             Some(schema::Command::Table { .. }) => not_yet_implemented!("tpl schema table"),
@@ -399,7 +632,7 @@ fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
         },
 
         Some(Command::Template(template)) => match &template.command {
-            None => group_help(out, &["template"]),
+            None => node_help(out, &["template"]),
             Some(template::Command::List { .. }) => not_yet_implemented!("tpl template list"),
             Some(template::Command::Show { .. }) => not_yet_implemented!("tpl template show"),
             Some(template::Command::Check { .. }) => not_yet_implemented!("tpl template check"),
@@ -409,20 +642,20 @@ fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
         Some(Command::Render { .. }) => not_yet_implemented!("tpl render"),
 
         Some(Command::Cache(cache)) => match &cache.command {
-            None => group_help(out, &["cache"]),
+            None => node_help(out, &["cache"]),
             Some(cache::Command::Load { .. }) => not_yet_implemented!("tpl cache load"),
             Some(cache::Command::Clean { .. }) => not_yet_implemented!("tpl cache clean"),
             Some(cache::Command::Status { .. }) => not_yet_implemented!("tpl cache status"),
         },
 
         Some(Command::Cfg(config)) => match &config.command {
-            None => group_help(out, &["cfg"]),
+            None => node_help(out, &["cfg"]),
             Some(cfg::Command::Get { .. }) => not_yet_implemented!("tpl cfg get"),
             Some(cfg::Command::Set { .. }) => not_yet_implemented!("tpl cfg set"),
             Some(cfg::Command::Unset { .. }) => not_yet_implemented!("tpl cfg unset"),
             Some(cfg::Command::List { .. }) => not_yet_implemented!("tpl cfg list"),
             Some(cfg::Command::Database(database)) => match &database.command {
-                None => group_help(out, &["cfg", "database"]),
+                None => node_help(out, &["cfg", "database"]),
                 Some(cfg::DatabaseCommand::Add { .. }) => {
                     not_yet_implemented!("tpl cfg database add")
                 }
@@ -445,18 +678,32 @@ fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
         },
 
         Some(Command::Init { .. }) => not_yet_implemented!("tpl init"),
-        Some(Command::Help { .. }) => not_yet_implemented!("tpl help"),
-        Some(Command::Version) => not_yet_implemented!("tpl version"),
+
+        // The two commands of the tree this sprint implements. Both reach the
+        // same two functions the flag forms above reach, which is the whole of
+        // why `FR-HELP-002` holds: one renderer, one version line, six forms.
+        Some(Command::Help {
+            command_path,
+            output,
+        }) => help::command(out, command_path, output),
+        Some(Command::Version) => version(out),
     }
 }
 
-/// Writes the help of a group node invoked with no child, per `FR-CLI-007` and
-/// `FR-HELP-025`.
+/// Writes the help of one node, for every form that reaches it by a path the
+/// tree has already resolved.
 ///
-/// `path` is the segments below `tpl`, and is empty for the root. The text is
-/// the one [`help::text`] composes, which is what `FR-HELP-025` requires:
-/// exactly the text `tpl help <node>` would print, from the one renderer both
-/// forms reach.
+/// Three of the six forms of `FR-HELP-001` arrive here: `-h/--help` at any
+/// node, per `FR-GLOB-019`; a group node invoked with no child, per
+/// `FR-CLI-007` and `FR-HELP-025`; and `tpl help <path>` in its `text` form,
+/// which [`help::command`] resolves and then hands on. The fourth,
+/// `tpl help <path> --format json`, is the same path resolved by the same
+/// resolver and rendered as the document of `FR-HELP-016` instead.
+///
+/// `path` is the canonical segments below `tpl`, and is empty for the root. The
+/// text is the one [`help::text`] composes, which is what `FR-HELP-002` and
+/// `FR-HELP-025` require: the one renderer, reached by every form, so the
+/// equivalences are a property of the code rather than of a comparison.
 ///
 /// It is written through [`output`], which is the route `FR-OUT-020`
 /// gives stdout and which aggregates the bytes behind one buffer.
@@ -470,15 +717,36 @@ fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
 /// entry of the table — a disagreement between the tree and the table, which is
 /// a defect in `tpl` rather than in the invocation and which a test of
 /// [`help`] pins.
-fn group_help<W: Write>(out: &mut W, path: &[&str]) -> Result<(), Error> {
+fn node_help<W: Write>(out: &mut W, path: &[&str]) -> Result<(), Error> {
     let Some(text) = help::text(path) else {
         return error::ensure_invariant(
             false,
-            "every group node of the tree carries an entry of the help table",
+            "every node of the tree carries an entry of the help table",
         );
     };
 
     output::emit_help(out, &text)
+}
+
+/// Writes the version line of `FR-HELP-005`.
+///
+/// Exactly `tpl <version>` and a single newline, and nothing else. The number
+/// is the package's own, read at compile time, so the line cannot disagree with
+/// the binary it came from and no second place records it.
+///
+/// Both forms of `FR-GLOB-020` and the `tpl version` command reach this one
+/// function, which is what makes the third equivalence of `FR-HELP-002` hold
+/// by construction.
+///
+/// It is written through [`output`] for the reason [`node_help`] gives: it is a
+/// legitimate stdout payload that is not a JSON document, so a consumer that
+/// cuts it short is the silent `0` of `FR-ERR-025`.
+///
+/// # Errors
+///
+/// Returns [`Error::StdoutUnwritable`] where the stream refused the write.
+fn version<W: Write>(out: &mut W) -> Result<(), Error> {
+    output::emit_help(out, concat!("tpl ", env!("CARGO_PKG_VERSION"), "\n"))
 }
 
 #[cfg(test)]
@@ -488,8 +756,8 @@ mod tests {
     use clap::error::ErrorKind;
 
     use super::{
-        Cli, Command, Error, Level, cfg, help, local, parse, parse_from, route, schema, template,
-        tree,
+        Cli, Command, Error, Form, Invocation, Level, cfg, help, local, parse, parse_from, route,
+        schema, template, tree,
     };
 
     /// Every leaf of the tree of `FR-CLI-002`, by the path a caller writes and
@@ -530,6 +798,14 @@ mod tests {
         (&["help"], &[]),
         (&["version"], &[]),
     ];
+
+    /// The leaves this sprint implements, which have left the interim `70`.
+    ///
+    /// `tpl help` prints the help of the node its path names, in either of the
+    /// two representations of `FR-HELP-001`, and `tpl version` prints the line
+    /// of `FR-HELP-005`. Every other leaf is still the arrangement this
+    /// module's own documentation describes.
+    const IMPLEMENTED: [&[&str]; 2] = [&["help"], &["version"]];
 
     /// The six group nodes of `FR-CLI-008`, by the path a caller writes. None
     /// of them declares an argument of its own, per `FR-CLI-009`.
@@ -668,9 +944,31 @@ mod tests {
         parse_from(argv(path, operands)).expect("the tree declares this node")
     }
 
+    /// The command one invocation names, for a test that reads it.
+    ///
+    /// Every vector these tests parse names a command rather than one of the
+    /// two flag forms of `FR-HELP-001`, so anything else is a failure of the
+    /// test's own premise rather than an outcome to assert on.
+    fn commanded(invocation: &Invocation) -> Option<&Command> {
+        match &invocation.form {
+            Form::Command(command) => command.as_ref(),
+            form => panic!("the vector named {form:?} rather than a command"),
+        }
+    }
+
+    /// The invocation `path` names, as the process would act on it.
+    fn invoked(path: &[&str], operands: &[&str]) -> Invocation {
+        let Cli { globals, command } = parsed(path, operands);
+
+        Invocation {
+            globals,
+            form: Form::Command(command),
+        }
+    }
+
     /// What the node `path` names does, and what it wrote while doing it.
     fn outcome(path: &[&str], operands: &[&str]) -> (Result<(), Error>, String) {
-        let invocation = parsed(path, operands);
+        let invocation = invoked(path, operands);
         let mut written = Vec::new();
         let result = route(&mut written, &invocation);
 
@@ -1014,11 +1312,17 @@ mod tests {
     }
 
     #[test]
-    fn every_leaf_reports_the_interim_seventy_naming_its_command_path() {
+    fn every_unimplemented_leaf_reports_the_interim_seventy_naming_its_command_path() {
         // The interim arrangement this module documents: a leaf parses, has no
         // implementation, and says so as FR-ERR-030 does — never as a success
-        // and never as a usage error the caller could act on.
+        // and never as a usage error the caller could act on. The two leaves
+        // of IMPLEMENTED have left it, and the test beneath this one holds
+        // them to what they do instead.
         for (path, operands) in LEAVES {
+            if IMPLEMENTED.contains(&path) {
+                continue;
+            }
+
             let (result, written) = outcome(path, operands);
             let reported = result.expect_err("no leaf is implemented yet");
 
@@ -1028,6 +1332,96 @@ mod tests {
                 "{path:?} is not named by: {reported}"
             );
             assert!(written.is_empty(), "{path:?} wrote {written:?}");
+        }
+    }
+
+    /// The form one vector parses to.
+    fn form(path: &[&str], trailing: &[&str]) -> Form {
+        parse(argv(path, trailing))
+            .unwrap_or_else(|error| panic!("{path:?} {trailing:?}: {error}"))
+            .form
+    }
+
+    /// The help form for one canonical path.
+    fn help_of(path: &[&str]) -> Form {
+        Form::Help(path.iter().map(|&segment| segment.to_owned()).collect())
+    }
+
+    #[test]
+    fn both_flag_forms_are_answered_at_the_node_the_vector_reached() {
+        // FR-GLOB-019 and FR-GLOB-020 give each flag an outcome at every node,
+        // and FR-CLI-024 frees its position. The node answered is therefore
+        // the node the vector reached, and the path it carries is canonical,
+        // per FR-HELP-027 — which is what lets the renderer be reached by the
+        // same path `tpl help <path>` resolves to.
+        assert_eq!(form(&[], &["-h"]), help_of(&[]));
+        assert_eq!(form(&[], &["--help"]), help_of(&[]));
+        assert_eq!(
+            form(&["schema", "tables"], &["--help"]),
+            help_of(&["schema", "tables"])
+        );
+
+        // A node with a required operand, which is the defect this effort
+        // resolves: the flag is answered although the operand is absent.
+        assert_eq!(
+            form(&["schema", "table"], &["-h"]),
+            help_of(&["schema", "table"])
+        );
+        assert_eq!(form(&["cfg", "set"], &["--help"]), help_of(&["cfg", "set"]));
+
+        // FR-CLI-024: written before the command, which is the same
+        // invocation.
+        assert_eq!(
+            form(&[], &["-h", "schema", "table"]),
+            help_of(&["schema", "table"])
+        );
+
+        // FR-HELP-027: an alias resolves to the node it names, on this path as
+        // on `tpl help`'s.
+        assert_eq!(
+            form(&["schema", "tbl"], &["--help"]),
+            help_of(&["schema", "table"])
+        );
+        assert_eq!(
+            form(&["cfg", "db", "add"], &["-h"]),
+            help_of(&["cfg", "database", "add"])
+        );
+
+        // FR-GLOB-020, at a node with an operand and at one without.
+        assert_eq!(form(&[], &["-V"]), Form::Version);
+        assert_eq!(form(&["version"], &["--version"]), Form::Version);
+        assert_eq!(form(&["cfg", "database", "add"], &["-V"]), Form::Version);
+
+        // Both flags together: help wins, whichever order they were written
+        // in. The corpus states no precedence, so the choice is `requested`'s
+        // and is pinned here rather than left to the order of a match.
+        assert_eq!(form(&[], &["--help", "--version"]), help_of(&[]));
+        assert_eq!(form(&[], &["--version", "--help"]), help_of(&[]));
+        assert_eq!(
+            form(&["schema", "table"], &["-V", "-h"]),
+            help_of(&["schema", "table"])
+        );
+    }
+
+    #[test]
+    fn the_waiver_reaches_the_two_flags_and_nothing_else() {
+        // The other half of the defect's resolution. A vector that supplies
+        // neither the operand nor one of the two flags is refused exactly as
+        // it was, with the message FR-ERR-034 row 64 obliges — so the waiver
+        // is a property of the two flags rather than a weakening of
+        // FR-SCH-005, FR-TMPL-016, FR-RND-001 or the cfg entry commands.
+        for (path, operands) in LEAVES {
+            if operands.is_empty() {
+                continue;
+            }
+
+            let refused = parse(argv(path, &[])).expect_err("the operand is required");
+
+            assert_eq!(refused.exit_code(), 64, "{path:?}");
+            assert!(
+                matches!(&refused, Error::MissingArgument { command, .. } if command == &path.join(" ")),
+                "{path:?}: {refused}"
+            );
         }
     }
 
@@ -1633,10 +2027,10 @@ mod tests {
         ))
         .expect("--set is repeatable");
 
-        let Some(Command::Render { set, .. }) = invocation.command else {
+        let Some(Command::Render { set, .. }) = commanded(&invocation) else {
             panic!("`render` did not parse to its own node");
         };
-        assert_eq!(set, ["a=1", "b=2"]);
+        assert_eq!(set, &["a=1", "b=2"]);
 
         parse(argv(&["template", "check"], &["a", "b", "c"])).expect("names is a sequence");
         parse(argv(&["help"], &["cfg", "database", "add"])).expect("the path is a sequence");
@@ -1724,7 +2118,7 @@ mod tests {
         // passes `-d` to the command as an argument and does not select a
         // database entry.
         let invocation = parse(argv(&["render"], &["--", "-d"])).expect("parses");
-        let Some(Command::Render { template, .. }) = &invocation.command else {
+        let Some(Command::Render { template, .. }) = commanded(&invocation) else {
             panic!("`render` did not parse to its own node");
         };
 
@@ -1736,7 +2130,7 @@ mod tests {
 
         let invocation =
             parse(argv(&["template", "check"], &["--", "-d", "--format"])).expect("parses");
-        let Some(Command::Template(read)) = &invocation.command else {
+        let Some(Command::Template(read)) = commanded(&invocation) else {
             panic!("`template` did not parse to its own node");
         };
         let Some(template::Command::Check { names }) = &read.command else {
@@ -1769,7 +2163,7 @@ mod tests {
 
         let invocation =
             parse(argv(&["cfg", "set"], &["core.database", "--", "-x"])).expect("parses");
-        let Some(Command::Cfg(config)) = &invocation.command else {
+        let Some(Command::Cfg(config)) = commanded(&invocation) else {
             panic!("`cfg` did not parse to its own node");
         };
         let Some(cfg::Command::Set { value, .. }) = &config.command else {
@@ -1816,8 +2210,10 @@ mod tests {
         {
             let through_rules =
                 parse(argv(path, operands)).unwrap_or_else(|error| panic!("{path:?}: {error}"));
+            let raw = parsed(path, operands);
 
-            assert_eq!(through_rules, parsed(path, operands), "{path:?}");
+            assert_eq!(through_rules.globals, raw.globals, "{path:?}");
+            assert_eq!(through_rules.form, Form::Command(raw.command), "{path:?}");
         }
     }
 }

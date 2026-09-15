@@ -16,11 +16,12 @@
 //! would read, and `NFR-DET-004` forbids colour "under any circumstances".
 //!
 //! The six group nodes are the paths used, because a group node invoked with no
-//! child prints its own help and exits `0`, per `FR-CLI-007` and `FR-HELP-025`.
-//! That is the whole of the help surface reachable from a command line at this
-//! commit: the six forms of `FR-HELP-001` are a later task, and the defect that
-//! makes `--help` unreachable at a leaf with a required positional argument
-//! belongs to it.
+//! child prints its own help and exits `0`, per `FR-CLI-007` and `FR-HELP-025`,
+//! and they are therefore the shortest vectors that reach the renderer. One
+//! renderer composes every help text, per `OD-07` and `FR-HELP-002`, so what
+//! holds of these six holds of every node: the equivalences and the reach of
+//! the six forms of `FR-HELP-001` are asserted in
+//! [`help_surface`](../help_surface/index.html), which walks the tree.
 
 use std::process::{Command, Output};
 

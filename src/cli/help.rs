@@ -90,13 +90,45 @@
 //!
 //! # Who reads the table
 //!
-//! [`render`] composes the seven sections of `FR-HELP-006` from this table and
-//! from the parser tree, and [`text`] is the whole of the route to it. The JSON
-//! command tree of `FR-HELP-016` is the second consumer and is a later task;
-//! [`entries`] is the entry point it reads the table through, in the order
-//! `FR-HELP-019` requires.
+//! The table has exactly two consumers, and they read the same entries from the
+//! same array:
+//!
+//! - [`render`] composes the seven sections of `FR-HELP-006` from this table and
+//!   from the parser tree. [`text`] is the whole of the route to it, and every
+//!   form of `FR-HELP-001` that prints help arrives there.
+//! - [`document`] composes the JSON command tree of `FR-HELP-016` from the same
+//!   two sources, reading the table whole through [`entries`], in the order
+//!   `FR-HELP-019` requires.
+//!
+//! `FR-HELP-022` is what makes that one array rather than two: `examples` and
+//! `exit_codes` feed the text help and the JSON document alike, and neither is
+//! ever recovered by parsing rendered help.
+//!
+//! # The path both consumers are reached by
+//!
+//! [`command`] is `tpl help` itself, and [`resolve`] is the one resolver under
+//! it. A command path of any depth is a sequence of positional arguments, each
+//! segment resolved against the children of the node the preceding segments
+//! reached: an alias of `FR-CLI-011` resolves to its canonical node and no
+//! segment is inferred from a prefix, per `FR-HELP-026`, `FR-HELP-027` and
+//! `FR-CLI-004`. A segment that names no child is `64` with a suggestion over
+//! **that node's children alone**, per `FR-HELP-028`.
+//!
+//! One resolver serves both representations, which is why `tpl help cfg db add`
+//! and `tpl help cfg database add` print the same bytes and why
+//! `tpl help cfg database --format json` reduces to the same subtree that
+//! `tpl help cfg database` describes.
 
+mod document;
 mod render;
+
+use std::io::Write;
+
+use crate::diagnostics::suggest::{self, Population};
+use crate::error::{self, Error};
+use crate::output::{self, Form};
+
+use super::local::{self, Format};
 
 /// One node of the tree, and the four things `FR-HELP-022` and `FR-HELP-019`
 /// require its help to carry beyond what the tree itself declares.
@@ -251,16 +283,130 @@ pub(crate) fn text(path: &[&str]) -> Option<String> {
 }
 
 /// The whole table, in the order `FR-HELP-019` requires.
-// The JSON command tree of `FR-HELP-016` is the consumer, and it is a later
-// task. The suppression is this one item's: every other item of the module is
-// read by the renderer, so a member that stops being read is still reported.
-#[allow(
-    dead_code,
-    reason = "the JSON command tree of FR-HELP-016 is a later task, and it is what reads the \
-              table whole; the text renderer reaches one entry at a time"
-)]
 pub(crate) const fn entries() -> &'static [Entry] {
     &ENTRIES
+}
+
+/// Runs `tpl help`, in whichever of its two representations was asked for.
+///
+/// `path` is the sequence of positional segments the caller wrote, of any
+/// depth, per `FR-HELP-026`. It is resolved once, by [`resolve`], and the two
+/// representations part only after that: `text` is the renderer of
+/// `FR-HELP-006` that every other help form reaches, and `json` is the command
+/// tree of `FR-HELP-016` reduced to the subtree that path roots, per
+/// `FR-HELP-029`. **One resolver serves both**, which is why a subtree and a
+/// help text are selected by the same rules and refused by the same message.
+///
+/// Nothing here discovers a project, reads a configuration file or opens a
+/// connection, which is what `FR-PROJ-025` requires of every form of this
+/// command: the only inputs are the parser tree and the typed table.
+///
+/// # Errors
+///
+/// Returns [`Error::UnknownCommandPathSegment`] for a segment that names no
+/// child of the node the preceding segments reached (`FR-HELP-028`),
+/// [`Error::StdoutUnwritable`] or [`Error::StdoutClosedMidDocument`] where the
+/// stream refused the write, and [`Error::InternalInvariant`] where the tree
+/// and the table disagree about which nodes exist.
+pub(crate) fn command<W: Write>(
+    out: &mut W,
+    path: &[String],
+    output: &local::Output,
+) -> Result<(), Error> {
+    let tree = super::tree();
+    let (node, canonical) = resolve(&tree, path)?;
+
+    // The vector carries at most one format once `FR-CLI-014` has been applied,
+    // and the declaration's own default occupies the place when the flag is
+    // absent, so the first entry is the format in force.
+    match output.format.first() {
+        Some(Format::Json) => document::emit(out, &tree, node, &canonical, form(output)),
+        Some(Format::Text) | None => {
+            let Some(text) = render::text(&tree, &canonical) else {
+                return error::ensure_invariant(
+                    false,
+                    "every node of the tree carries an entry of the help table",
+                );
+            };
+
+            output::emit_help(out, &text)
+        }
+    }
+}
+
+/// Which of the two forms of `FR-OUT-007` and `FR-OUT-008` a JSON document is
+/// written in.
+const fn form(output: &local::Output) -> Form {
+    if output.pretty.pretty {
+        Form::Indented
+    } else {
+        Form::Compact
+    }
+}
+
+/// The canonical path a sequence of segments names, or the refusal of
+/// `FR-HELP-028`.
+///
+/// Each segment is resolved against the children of the node the preceding
+/// segments reached, by the rules of the tree: an alias of `FR-CLI-011`
+/// resolves to the node it names and no segment is inferred from a prefix, per
+/// `FR-HELP-027` and `FR-CLI-004`. `tpl help cfg db add` therefore resolves to
+/// the same node as `tpl help cfg database add`, and both consumers of this
+/// function are handed the canonical spelling.
+///
+/// An empty sequence resolves to the root, which is the whole tree for
+/// [`document`] and the top-level help for the renderer.
+///
+/// The node itself is returned beside the path because [`document`] walks the
+/// subtree from it, and re-finding it from the path would be a second walk over
+/// the same segments.
+///
+/// # Errors
+///
+/// Returns [`Error::UnknownCommandPathSegment`] naming the segment that failed,
+/// the node it was looked for under, and the nearest matches **among that
+/// node's children alone** — which is what makes the suggestion short and right,
+/// per `FR-HELP-028`.
+fn resolve<'a>(
+    tree: &'a clap::Command,
+    path: &[String],
+) -> Result<(&'a clap::Command, Vec<&'a str>), Error> {
+    let mut node = tree;
+    let mut canonical: Vec<&str> = Vec::with_capacity(path.len());
+
+    for segment in path {
+        let Some(child) = node.find_subcommand(segment.as_str()) else {
+            return Err(Error::UnknownCommandPathSegment {
+                segment: segment.clone(),
+                node: canonical.join(" "),
+                nearest: nearest_child(node, segment),
+            });
+        };
+
+        canonical.push(child.get_name());
+        node = child;
+    }
+
+    Ok((node, canonical))
+}
+
+/// The nearest matches for `segment` among the children of `node`.
+///
+/// The population is that node's children and nothing else, per `FR-HELP-028`,
+/// and it carries each child's canonical name **and** the aliases of
+/// `FR-CLI-011`: `BR-CLI-001` routes a mistyped alias through the same
+/// nearest-match rule, so `tpl help cfg d` has `db` to propose as well as
+/// `database`.
+fn nearest_child(node: &clap::Command, segment: &str) -> Vec<String> {
+    let candidates: Vec<&str> = node
+        .get_subcommands()
+        .flat_map(|child| std::iter::once(child.get_name()).chain(child.get_all_aliases()))
+        .collect();
+
+    suggest::suggestions(segment, candidates, Population::Commands)
+        .names()
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 /// The entry for one command path, or [`None`] where the path names no node.
@@ -1788,8 +1934,14 @@ const ENTRIES: [Entry; 35] = [
 
 #[cfg(test)]
 mod tests {
-    use super::{Code, ENTRIES, Entry, entries, entry};
+    use super::{Code, ENTRIES, Entry, entries, entry, resolve};
     use crate::cli::{parse, tree};
+    use crate::error::Error;
+
+    /// The segments of a command path, as `tpl help` receives them.
+    fn segments(path: &[&str]) -> Vec<String> {
+        path.iter().map(|&segment| segment.to_owned()).collect()
+    }
 
     /// Applies `visitor` to every node of `command`, with the path it is
     /// reached by, in declaration order.
@@ -1849,6 +2001,131 @@ mod tests {
             .filter(|entry| entry.exit_codes.iter().any(|outcome| outcome.code == code))
             .map(|entry| written(entry.path))
             .collect()
+    }
+
+    #[test]
+    fn a_path_of_any_depth_resolves_to_the_node_it_names() {
+        // FR-HELP-026: the full path of any node, at any depth, as a sequence
+        // of positional arguments. Every node of the tree is handed back to
+        // the resolver by the path the walk reached it by, which is what
+        // FR-HELP-026's rationale means by a caller handing the path back.
+        let tree = tree();
+
+        for path in node_paths() {
+            let written: Vec<&str> = path.iter().map(String::as_str).collect();
+            let (node, canonical) =
+                resolve(&tree, &path).unwrap_or_else(|error| panic!("{path:?}: {error}"));
+
+            assert_eq!(canonical, written);
+            assert_eq!(
+                node.get_name(),
+                written.last().copied().unwrap_or("tpl"),
+                "{path:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_alias_resolves_to_the_canonical_node_and_a_prefix_resolves_to_none() {
+        // FR-HELP-027: an alias of FR-CLI-011 reaches the node it names, and
+        // no segment is inferred from a prefix, per FR-CLI-004. The seven
+        // aliases are read from the tree rather than listed, so an alias added
+        // to the tree is covered without anything here changing.
+        let tree = tree();
+
+        for (path, alias) in [
+            (&["schema", "tables"][..], "tbls"),
+            (&["schema", "table"][..], "tbl"),
+            (&["schema", "views"][..], "vws"),
+            (&["schema", "view"][..], "vw"),
+            (&["schema", "routines"][..], "rtns"),
+            (&["schema", "routine"][..], "rtn"),
+            (&["cfg", "database"][..], "db"),
+        ] {
+            let mut written = segments(path);
+            let last = written.len() - 1;
+            written[last] = alias.to_owned();
+
+            let (_, canonical) =
+                resolve(&tree, &written).unwrap_or_else(|error| panic!("{alias}: {error}"));
+
+            assert_eq!(canonical, path, "{alias} did not reach its canonical node");
+        }
+
+        // A prefix of a node's name names no node, whatever its depth.
+        for prefix in [
+            &["sch"][..],
+            &["cfg", "data"][..],
+            &["cfg", "database", "a"][..],
+        ] {
+            resolve(&tree, &segments(prefix)).expect_err("a prefix is not a segment");
+        }
+    }
+
+    #[test]
+    fn a_segment_that_names_no_child_names_the_segment_and_the_node_it_was_sought_under() {
+        // FR-HELP-028: exit 64, a nearest-match suggestion over the children
+        // of the node reached, and a cause naming both the segment and that
+        // node. The suggestion is asserted to be the short one the requirement
+        // asks for — `add` under `tpl cfg database`, not every node named
+        // `add` anywhere.
+        let tree = tree();
+        let refused = resolve(&tree, &segments(&["cfg", "database", "ad"]))
+            .expect_err("`ad` names no child of `tpl cfg database`");
+
+        assert_eq!(refused.exit_code(), 64);
+
+        let Error::UnknownCommandPathSegment {
+            segment,
+            node,
+            nearest,
+        } = &refused
+        else {
+            panic!("the refusal is not the one FR-HELP-028 names: {refused}");
+        };
+
+        assert_eq!(segment, "ad");
+        assert_eq!(node, "cfg database");
+        assert_eq!(nearest, &["add".to_owned()]);
+
+        // At the root the node is the empty path, which the diagnostic renders
+        // as `tpl` itself.
+        let refused =
+            resolve(&tree, &segments(&["schemas"])).expect_err("`schemas` names no top-level node");
+
+        let Error::UnknownCommandPathSegment { node, nearest, .. } = &refused else {
+            panic!("the refusal is not the one FR-HELP-028 names: {refused}");
+        };
+
+        assert!(node.is_empty());
+        assert_eq!(nearest, &["schema".to_owned()]);
+
+        // And a segment far from every child leaves the suggestion out
+        // altogether, per FR-ERR-020, rather than offering a poor one.
+        let refused = resolve(&tree, &segments(&["cfg", "zzzzzzzz"]))
+            .expect_err("`zzzzzzzz` names no child of `tpl cfg`");
+
+        let Error::UnknownCommandPathSegment { nearest, .. } = &refused else {
+            panic!("the refusal is not the one FR-HELP-028 names: {refused}");
+        };
+
+        assert!(nearest.is_empty(), "{nearest:?}");
+    }
+
+    #[test]
+    fn a_mistyped_alias_is_suggested_from_the_children_of_the_node_reached() {
+        // BR-CLI-001: a mistyped alias is resolved through the nearest-match
+        // rule, so an alias is a candidate beside a canonical name. `tpl help
+        // cfg d` has `db` one step away and `database` far off.
+        let tree = tree();
+        let refused =
+            resolve(&tree, &segments(&["cfg", "d"])).expect_err("`d` names no child of `tpl cfg`");
+
+        let Error::UnknownCommandPathSegment { nearest, .. } = &refused else {
+            panic!("the refusal is not the one FR-HELP-028 names: {refused}");
+        };
+
+        assert!(nearest.contains(&"db".to_owned()), "{nearest:?}");
     }
 
     #[test]

@@ -69,6 +69,16 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             let admitted = admitted(nearest, admits_path);
             suggest::hint_line(admitted.iter().copied(), "list the commands with: tpl help")
         }
+        // FR-HELP-028 draws the candidates from the children of the node the
+        // path reached, which `cli/help.rs` selects over; the generic half
+        // names that node, so the runnable command lists exactly the children
+        // the segment was measured against rather than the whole tree.
+        Error::UnknownCommandPathSegment { node, nearest, .. } => {
+            let admitted = admitted(nearest, admits_path);
+            let generic = children_of(node);
+
+            Cow::Owned(suggest::hint_line(admitted.iter().copied(), &generic).into_owned())
+        }
         Error::UnknownFlag { nearest, .. } => {
             let admitted = admitted(nearest, admits_flag);
             suggest::hint_line(
@@ -365,6 +375,24 @@ fn admitted(nearest: &[String], admits: fn(&str) -> bool) -> Vec<&str> {
         .map(String::as_str)
         .filter(|candidate| admits(candidate))
         .collect()
+}
+
+/// The `tpl help` command that lists the children of one node.
+///
+/// `node` is the command path below `tpl`, empty at the root, and it is a
+/// spelling this corpus enumerates — a literal of `FR-ERR-022`, like every
+/// other command path. The test beside it is the defensive assertion this
+/// module applies to every such value, and the root's empty path falls to the
+/// bare `tpl help` rather than to a placeholder, because that command lists
+/// exactly the children the root has.
+fn children_of(node: &str) -> Cow<'static, str> {
+    if node.is_empty() {
+        Cow::Borrowed("list the commands with: tpl help")
+    } else if admits_path(node) {
+        Cow::Owned(format!("list what it takes with: tpl help {node}"))
+    } else {
+        Cow::Borrowed("list what a command takes with: tpl help <command>")
+    }
 }
 
 /// The `tpl cfg database update` command that repoints an entry.

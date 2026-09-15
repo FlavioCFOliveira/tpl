@@ -60,6 +60,17 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{token}' is not a name in the command tree, which is closed; tpl matches a command \
              exactly and never by a prefix of one"
         )),
+        // FR-HELP-028 raises the row's floor for this one condition: the
+        // `cause` names the segment that failed **and** the node it was looked
+        // for under, because a segment names no command anywhere on its own —
+        // `add` is a child of `tpl cfg database` and of nothing else — so a
+        // line naming only the segment would read identically for a segment
+        // mistyped at any depth.
+        Error::UnknownCommandPathSegment { segment, node, .. } => Cow::Owned(format!(
+            "'{segment}' names no child of '{}', whose children are the whole of what the path may \
+             continue with; tpl matches a segment exactly and never by a prefix of one",
+            invoked(node)
+        )),
         Error::UnknownFlag { token, .. } => Cow::Owned(format!(
             "'{token}' is not a flag the invoked command declares; tpl matches a long flag exactly \
              and never by a prefix of one"

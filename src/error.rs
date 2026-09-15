@@ -202,6 +202,36 @@ pub enum Error {
         nearest: Vec<String>,
     },
 
+    /// A segment of a `tpl help` command path that names no child of the node
+    /// the preceding segments resolved to (`FR-HELP-028`).
+    ///
+    /// It is distinct from [`UnknownCommand`](Error::UnknownCommand), which is
+    /// `FR-CLI-003`'s condition — a token of the invocation that is not a
+    /// command — because the two oblige different `cause` lines under
+    /// `FR-ERR-034` and draw their suggestions from different populations.
+    /// `FR-HELP-028` requires the node the segment was looked for under to be
+    /// named, and requires the suggestion to be made over **that node's
+    /// children alone** rather than over the whole tree, so that
+    /// `tpl help cfg database ad` proposes `add` and not every node named `add`
+    /// anywhere. The node is therefore carried on the variant: without it the
+    /// message could not satisfy the row, and the two conditions would share a
+    /// wording that `FR-ERR-034` forbids.
+    #[error("unknown command '{segment}' under '{node}'")]
+    UnknownCommandPathSegment {
+        /// The segment as written, never normalised (`FR-CLI-020`).
+        segment: String,
+        /// The command path of the node the segment was looked for under,
+        /// without the program name, and empty at the root.
+        node: String,
+        /// The nearest matches among that node's children — their canonical
+        /// names and the aliases of `FR-CLI-011` alike, per `BR-CLI-001` —
+        /// selected by `FR-ERR-019` and ordered as it fixes.
+        ///
+        /// Empty where nothing qualified, which `FR-ERR-020` requires to leave
+        /// the generic hint standing alone.
+        nearest: Vec<String>,
+    },
+
     /// A flag the invoked node does not declare (`FR-CLI-005`, `FR-CLI-019`).
     #[error("unknown flag '{token}'")]
     UnknownFlag {
@@ -880,6 +910,7 @@ impl Error {
         match self {
             // 64 EX_USAGE
             Self::UnknownCommand { .. }
+            | Self::UnknownCommandPathSegment { .. }
             | Self::UnknownFlag { .. }
             | Self::UnexpectedArgument { .. }
             | Self::RepeatedValueFlag { .. }
@@ -961,7 +992,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 50;
+    const VARIANT_COUNT: usize = 51;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -988,6 +1019,14 @@ mod tests {
                 Error::UnknownCommand {
                     token: "sch".to_owned(),
                     nearest: vec!["schema".to_owned()],
+                },
+                64,
+            ),
+            (
+                Error::UnknownCommandPathSegment {
+                    segment: "ad".to_owned(),
+                    node: "cfg database".to_owned(),
+                    nearest: vec!["add".to_owned()],
                 },
                 64,
             ),
@@ -1351,6 +1390,7 @@ mod tests {
     fn variant_name(error: &Error) -> &'static str {
         match error {
             Error::UnknownCommand { .. } => "UnknownCommand",
+            Error::UnknownCommandPathSegment { .. } => "UnknownCommandPathSegment",
             Error::UnknownFlag { .. } => "UnknownFlag",
             Error::UnexpectedArgument { .. } => "UnexpectedArgument",
             Error::RepeatedValueFlag { .. } => "RepeatedValueFlag",
