@@ -193,6 +193,43 @@ pub enum Error {
     UnknownCommand {
         /// The token as written, never normalised (`FR-CLI-020`).
         token: String,
+        /// The nearest matches among the children of the node the token was
+        /// written at, selected by `FR-ERR-019` and ordered as it fixes.
+        ///
+        /// Empty where nothing qualified, which `FR-ERR-020` requires to leave
+        /// the generic hint standing alone. `FR-CLI-003` obliges the
+        /// suggestion, and `BR-CLI-001` routes a mistyped alias through it.
+        nearest: Vec<String>,
+    },
+
+    /// A segment of a `tpl help` command path that names no child of the node
+    /// the preceding segments resolved to (`FR-HELP-028`).
+    ///
+    /// It is distinct from [`UnknownCommand`](Error::UnknownCommand), which is
+    /// `FR-CLI-003`'s condition — a token of the invocation that is not a
+    /// command — because the two oblige different `cause` lines under
+    /// `FR-ERR-034` and draw their suggestions from different populations.
+    /// `FR-HELP-028` requires the node the segment was looked for under to be
+    /// named, and requires the suggestion to be made over **that node's
+    /// children alone** rather than over the whole tree, so that
+    /// `tpl help cfg database ad` proposes `add` and not every node named `add`
+    /// anywhere. The node is therefore carried on the variant: without it the
+    /// message could not satisfy the row, and the two conditions would share a
+    /// wording that `FR-ERR-034` forbids.
+    #[error("unknown command '{segment}' under '{node}'")]
+    UnknownCommandPathSegment {
+        /// The segment as written, never normalised (`FR-CLI-020`).
+        segment: String,
+        /// The command path of the node the segment was looked for under,
+        /// without the program name, and empty at the root.
+        node: String,
+        /// The nearest matches among that node's children — their canonical
+        /// names and the aliases of `FR-CLI-011` alike, per `BR-CLI-001` —
+        /// selected by `FR-ERR-019` and ordered as it fixes.
+        ///
+        /// Empty where nothing qualified, which `FR-ERR-020` requires to leave
+        /// the generic hint standing alone.
+        nearest: Vec<String>,
     },
 
     /// A flag the invoked node does not declare (`FR-CLI-005`, `FR-CLI-019`).
@@ -200,6 +237,109 @@ pub enum Error {
     UnknownFlag {
         /// The token as written.
         token: String,
+        /// The nearest matches among the flags the invoked node declares,
+        /// selected by `FR-ERR-019` and ordered as it fixes. Empty where
+        /// nothing qualified, per `FR-ERR-020`.
+        nearest: Vec<String>,
+    },
+
+    /// A token supplied where the invoked command takes no further argument
+    /// (`FR-ERR-001`, the `64` row).
+    ///
+    /// It is not an unknown flag: the token names no flag, either because it
+    /// carries no leading `-` or because `FR-CLI-017` already made it a
+    /// positional argument by putting it after `--`.
+    #[error("unexpected argument '{token}'")]
+    UnexpectedArgument {
+        /// The command path the token was supplied to, without the program
+        /// name, and empty at the root.
+        command: String,
+        /// The token as written.
+        token: String,
+    },
+
+    /// A flag that carries a single value was given more than once
+    /// (`FR-CLI-014`).
+    ///
+    /// Both values are carried because the requirement obliges the message to
+    /// name both. `OD-08` is why they are available at all: the flag is
+    /// declared with `ArgAction::Append` and the repetition is refused by
+    /// `cli/`, rather than by the parser, which would name the argument twice
+    /// and neither value.
+    #[error("the flag '{flag}' was given more than once")]
+    RepeatedValueFlag {
+        /// The flag, in the long form the tree declares it under.
+        flag: String,
+        /// The value of the first occurrence, as written (`FR-CLI-020`).
+        first: String,
+        /// The value of the second occurrence, as written.
+        second: String,
+    },
+
+    /// A flag that carries no value was given more than once.
+    ///
+    /// `FR-CLI-014` governs a flag that carries a single value and this one
+    /// carries none, so no value is named; the refusal itself is the parser's,
+    /// and this variant is what the caller reads it as.
+    #[error("the flag '{flag}' was given more than once")]
+    RepeatedFlag {
+        /// The flag, in the long form the tree declares it under.
+        flag: String,
+    },
+
+    /// A flag that carries a value was given without one.
+    #[error("the flag '{flag}' was given without a value")]
+    FlagValueMissing {
+        /// The flag, in the long form the tree declares it under.
+        flag: String,
+    },
+
+    /// A flag value beginning with `-` was supplied as a separate token
+    /// (`FR-CLI-018`).
+    ///
+    /// The same value is accepted in the `--flag=value` form, and as a
+    /// positional argument after `--`, which is what the hint of this
+    /// condition shows.
+    #[error("'{value}' was read as a flag rather than as the value of '{flag}'")]
+    SeparateTokenValue {
+        /// The flag the value was written after, in the long form the tree
+        /// declares it under.
+        flag: String,
+        /// The value as written.
+        value: String,
+    },
+
+    /// A value outside the set the flag it was given for enumerates
+    /// (`FR-ERR-001`, the `64` row).
+    ///
+    /// It is distinct from [`MalformedValue`](Error::MalformedValue) because
+    /// the type expected is a closed set of spellings rather than a type name,
+    /// and `FR-ERR-034` obliges the `cause` line to name it.
+    #[error("'{value}' is not a value '{flag}' accepts")]
+    ValueOutsideEnumeration {
+        /// The flag, in the long form the tree declares it under.
+        flag: String,
+        /// The value as written.
+        value: String,
+        /// The values the flag enumerates, in the order it declares them.
+        permitted: Vec<String>,
+    },
+
+    /// The argument parser refused the invocation for a condition this crate
+    /// does not classify further (`OD-08`).
+    ///
+    /// `clap::error::ErrorKind` and `clap::error::ContextKind` are both
+    /// `#[non_exhaustive]`, so the mapping carries a wildcard arm by force of
+    /// the language. That arm produces this variant, and this variant produces
+    /// `64` — never another code, so no unclassified refusal can move a caller
+    /// onto a different branch.
+    #[error("the invocation was rejected")]
+    InvocationRejected {
+        /// The token the parser named, where it named one. A refusal that
+        /// carries no token — a value that is not valid UTF-8 is the one this
+        /// tree can reach — leaves it [`None`], which is the one case
+        /// `FR-ERR-034`'s "wherever one is available" admits here.
+        token: Option<String>,
     },
 
     /// A required argument was not supplied (`FR-ERR-001`, the `64` row).
@@ -700,12 +840,6 @@ pub enum Error {
 /// Returns [`Error::InternalInvariant`] naming `invariant` and the call site
 /// when `holds` is `false`.
 #[track_caller]
-#[allow(
-    dead_code,
-    reason = "the components whose invariants this guards are later sprints; the guard is \
-              written here because FR-ERR-030 requires the condition to exist in the \
-              distributed binary and OD-06 places the taxonomy in this module"
-)]
 pub(crate) fn ensure_invariant(holds: bool, invariant: &'static str) -> Result<(), Error> {
     if holds {
         Ok(())
@@ -764,7 +898,10 @@ impl Error {
     /// ```
     /// use tpl::Error;
     ///
-    /// let error = Error::UnknownCommand { token: "sch".to_owned() };
+    /// let error = Error::UnknownCommand {
+    ///     token: "sch".to_owned(),
+    ///     nearest: Vec::new(),
+    /// };
     /// assert_eq!(error.exit_code(), 64);
     /// assert_eq!(error.to_string(), "unknown command 'sch'");
     /// ```
@@ -773,7 +910,15 @@ impl Error {
         match self {
             // 64 EX_USAGE
             Self::UnknownCommand { .. }
+            | Self::UnknownCommandPathSegment { .. }
             | Self::UnknownFlag { .. }
+            | Self::UnexpectedArgument { .. }
+            | Self::RepeatedValueFlag { .. }
+            | Self::RepeatedFlag { .. }
+            | Self::FlagValueMissing { .. }
+            | Self::SeparateTokenValue { .. }
+            | Self::ValueOutsideEnumeration { .. }
+            | Self::InvocationRejected { .. }
             | Self::MissingArgument { .. }
             | Self::MutuallyExclusiveFlags { .. }
             | Self::MalformedValue { .. }
@@ -847,7 +992,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 43;
+    const VARIANT_COUNT: usize = 51;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -873,12 +1018,70 @@ mod tests {
             (
                 Error::UnknownCommand {
                     token: "sch".to_owned(),
+                    nearest: vec!["schema".to_owned()],
+                },
+                64,
+            ),
+            (
+                Error::UnknownCommandPathSegment {
+                    segment: "ad".to_owned(),
+                    node: "cfg database".to_owned(),
+                    nearest: vec!["add".to_owned()],
                 },
                 64,
             ),
             (
                 Error::UnknownFlag {
                     token: "--data".to_owned(),
+                    nearest: vec!["--database".to_owned()],
+                },
+                64,
+            ),
+            (
+                Error::UnexpectedArgument {
+                    command: "version".to_owned(),
+                    token: "json".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::RepeatedValueFlag {
+                    flag: "--database".to_owned(),
+                    first: "a".to_owned(),
+                    second: "b".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::RepeatedFlag {
+                    flag: "--quiet".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::FlagValueMissing {
+                    flag: "--timeout".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::SeparateTokenValue {
+                    flag: "--database".to_owned(),
+                    value: "-x".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::ValueOutsideEnumeration {
+                    flag: "--format".to_owned(),
+                    value: "xml".to_owned(),
+                    permitted: vec!["text".to_owned(), "json".to_owned()],
+                },
+                64,
+            ),
+            (
+                Error::InvocationRejected {
+                    token: Some("-x".to_owned()),
                 },
                 64,
             ),
@@ -1187,7 +1390,15 @@ mod tests {
     fn variant_name(error: &Error) -> &'static str {
         match error {
             Error::UnknownCommand { .. } => "UnknownCommand",
+            Error::UnknownCommandPathSegment { .. } => "UnknownCommandPathSegment",
             Error::UnknownFlag { .. } => "UnknownFlag",
+            Error::UnexpectedArgument { .. } => "UnexpectedArgument",
+            Error::RepeatedValueFlag { .. } => "RepeatedValueFlag",
+            Error::RepeatedFlag { .. } => "RepeatedFlag",
+            Error::FlagValueMissing { .. } => "FlagValueMissing",
+            Error::SeparateTokenValue { .. } => "SeparateTokenValue",
+            Error::ValueOutsideEnumeration { .. } => "ValueOutsideEnumeration",
+            Error::InvocationRejected { .. } => "InvocationRejected",
             Error::MissingArgument { .. } => "MissingArgument",
             Error::MutuallyExclusiveFlags { .. } => "MutuallyExclusiveFlags",
             Error::MalformedValue { .. } => "MalformedValue",

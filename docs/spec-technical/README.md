@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-15
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -28,11 +28,14 @@ would produce a technical statement with no trace, which this folder does not
 admit. A document listed as *unblocked* has no entry against it and has simply
 not been written.
 
-As of 2026-09-11 every entry of `open-decisions.md` is settled and **no document
-waits**. The one residual that was work rather than a decision — `OD-22`'s
-fixture certificate and its container harness — was discharged the same day by
-tasks #15 and #25, and `operations.md` and `verification.md` were written against
-what those tasks produced.
+As of 2026-09-15 every entry of `open-decisions.md` is settled and **no document
+waits**. One entry is settled and **interim** — `OD-30`, which records an
+arrangement each later sprint removes one arm of — and it blocks nothing.
+
+The one residual that was work rather than a decision — `OD-22`'s fixture
+certificate and its container harness — was discharged on 2026-09-11 by tasks
+#15 and #25, and `operations.md` and `verification.md` were written against what
+those tasks produced.
 
 ## The four sources of truth
 
@@ -79,7 +82,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: twenty-eight settled entries, each carrying its rejected options or citing the record that holds them, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: thirty settled entries, each carrying its rejected options or citing the record that holds them, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. `OD-14`'s owed observation bounds one sentence: the behaviour of a **defined** `null` under `UndefinedBehavior::Strict` may not be asserted until it is verified |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
@@ -111,9 +114,10 @@ requirement text.
 ### `architecture.md`
 
 **Answers.** The eight ordered steps of the invocation pipeline and the four
-commands that skip two of them. Project discovery, its mount-point boundary,
-and the trust checks. Configuration resolution across two layers and a built-in
-default. The connection lifecycle: at most one, opened late, probe then
+commands that skip two of them. Step 1 in its three parts, and the division of
+`cli/` by subject rather than by command. Project discovery, its mount-point
+boundary, and the trust checks. Configuration resolution across two layers and
+a built-in default. The connection lifecycle: at most one, opened late, probe then
 read-only set then read-back, closed when the read ends. The catalogue reader
 and the query-count invariants. The cache as a read-through layer. The model as
 the single junction of three sources and three consumers. The render component:
@@ -149,10 +153,13 @@ the per-code obligation on the `cause` line. The diagnostic renderer, its
 escaping, and suggestion selection. The document emitter: one envelope,
 seventeen payload shapes, fixed key order, the two omissions, the compact and
 indented forms, C0 escaping, lossy UTF-8, the pipe state. The ordering rule and
-its six exceptions. The help surface and the runtime-introspected command tree.
-The template surface as registered. Context access from a filter or a test. The
-configuration reader and writer. The `password_command` child. The pattern
-matcher and the qualified-routine-name parser. The five library-shape questions
+its six exceptions. The help surface as built: the two sources the renderer
+reads, the five facts of a flag it introspects and the sixth it does not, the
+six forms that reach one renderer, and the runtime-introspected command tree
+with the two shapes of its document. The template surface as registered.
+Context access from a filter or a test. The configuration reader and writer. The
+`password_command` child. The pattern matcher and the qualified-routine-name
+parser. The five library-shape questions
 the functional specification hands to architecture.
 
 **Must not contain.** Command-line or JSON syntax, which `/specification` owns
@@ -223,8 +230,10 @@ that verify them and the targets each is used on. Container orchestration
 across four series and the fifth container that is not a fifth series. The reduced-privilege reader and the three
 shapes of absence it produces. The fixture's stated gaps and what they bound.
 The two test seams that must not reach the published surface. Help snapshots at
-every depth. The dump round-trip. The twelve end-to-end flows. Test naming by
-requirement identifier.
+every depth, and which tests of them exist. The parser mapping, one test per
+kind. The invocation surface observed on the process. The dump round-trip. The
+twelve end-to-end flows. Test naming by requirement identifier, and the suite's
+divergence from it.
 
 **Must not contain.** Targets or budgets, which are `quality-attributes.md`;
 the build pipeline, which is `operations.md`.

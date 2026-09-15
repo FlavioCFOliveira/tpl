@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-15
 related: [README.md, open-decisions.md]
 ---
 
@@ -32,6 +32,17 @@ in section 11, `output-formats.md` in section 13, `errors-and-exit-codes.md` in
 section 14, and `upstream-divergences.md` in section 26. Its amendments to
 `security.md` and to the index left sections 15 and 1 standing as written, and
 those two sections were re-read against it.
+
+**The twenty-first edition was harvested on 2026-09-15**, and it moved rows in
+two sections: section 4, where the shape of the JSON command tree was settled,
+and section 19, where the template surface was given its place in that document.
+Section 2 gains one row from the same work — a concern the corpus forces and no
+edition changed.
+
+**Recorded gap — editions ten to twenty have not been harvested.** What they
+changed is not reflected in the rows below. The gap is recorded rather than
+closed: harvesting eleven editions is work of its own, and this reconciliation
+was scoped to the command surface.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -71,6 +82,7 @@ identifier is the authority and the wording here is a summary.
 | A separate-token flag value beginning with `-` is `64` **with a corrected `--flag=value` hint** | `FR-CLI-018` | `interfaces` |
 | No environment variable may determine behaviour or the project location; `${VAR}` expansion inside `.cfg` is the single exception, and nothing a shell can set may decide which project, entry or server is reached | `FR-CLI-021`, `FR-CLI-023`, `BR-CLI-002` | `security`, `architecture` |
 | Group nodes have no action and print their own help at exit `0`: the dispatcher needs a node kind, not a fallthrough | `FR-CLI-007`, `FR-CLI-008`, `FR-CLI-009` | `architecture`, `interfaces` |
+| The published surface is derived from the tree that parses, so the tree is complete before the commands under it are: a node the parser accepts and no implementation backs needs an outcome of its own | `FR-CLI-002`, with `FR-HELP-021` and `BR-HELP-003` | `architecture` (`OD-30`) |
 | Never interactive: no prompt, no pager, no stdin read except `--context -` | `BR-CLI-003` | `architecture`, `security` |
 | Byte-identical **stdout** for one invocation against one state; stderr is explicitly outside the contract | `NFR-DET-001` | `quality-attributes`, `verification` |
 | Every collection is ordered explicitly, byte-wise by name, with six named exceptions — three of which the default rule would corrupt. The ordering must be applied by the emitter, not inherited from the server or the filesystem | `NFR-DET-002` | `interfaces`, `verification` |
@@ -104,6 +116,8 @@ identifier is the authority and the wording here is a summary.
 | `examples` and `exit_codes` come from a **typed table indexed by command path** feeding both text and JSON; never parsed out of help text | `FR-HELP-022` | `interfaces`, `data-model` |
 | Declaration order preserved throughout the document, and no unordered map on the emitting path | `FR-HELP-023`, `FR-OUT-013` | `interfaces` (`OD-18`) |
 | A nested command path resolves aliases and refuses prefixes; a bad segment is `64` with suggestions **over that node's children only** | `FR-HELP-026` … `FR-HELP-029` | `interfaces` |
+| `data` is an **open** set of keys whose fourth is `template_surface`, and `data.commands` is a **flat** array one entry per node below `tpl`, a subtree being a selection over it | `FR-HELP-017`, `FR-HELP-019`, `FR-HELP-016`, `FR-HELP-029` (twenty-first edition) | `interfaces` (`OD-29`) |
+| Disabling the parser's own help flag makes a required operand shadow the help and version flags, so reaching them at such a node is the implementation's problem to solve without weakening a declaration | `FR-HELP-002`, `FR-GLOB-019`, `FR-GLOB-020`, with `FR-HELP-013` and `FR-HELP-021` | `interfaces` (`OD-07`) |
 | Three tests are part of the contract: every node/alias/flag present, every command has an example, **every example parses through the parser itself** | `BR-HELP-003` | `verification` |
 | The version string is exactly `tpl <version>\n` and also appears as `tpl.version` in the context | `FR-HELP-005`, `FR-CTX-027` | `operations` (`OD-03`) |
 
@@ -353,7 +367,7 @@ identifier is the authority and the wording here is a summary.
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | Three contract groups, with group 2 guaranteed against a **pinned engine minor version** recorded in an ADR and cited from there | `FR-ENV-001` … `FR-ENV-003` | `technology-stack`; [`ADR-001`](../adr/adr-001-template-engine-pin.md) |
-| All three groups are published through `tpl help --format json` | `FR-ENV-005` | `interfaces` |
+| All three groups are published through `tpl help --format json`, as `data.template_surface`, each group carrying `guarantee`, `filters`, `tests` and `functions`; group 3 carries `null` arrays because it cannot be enumerated, and `registered` is derived from the registrations the environment performs | `FR-ENV-005`, `FR-HELP-017`, `FR-OUT-012` (twenty-first edition) | `interfaces` (`OD-29`) |
 | Eleven names are registered by `tpl`: five naming filters, six code filters | `FR-ENV-006`, `FR-ENV-007` | `interfaces` |
 | Two registered names — `indent` and `escape` — **collide with engine built-ins of different signatures**, so the registration must deliberately shadow them | `FR-ENV-007`, `FR-ENV-037`, `FR-ENV-044`; minijinja built-ins (verified) | `technology-stack`, `interfaces` (`OD-13`) |
 | The word-list tokeniser is a five-rule algorithm with a published eight-row test vector; all five naming filters are pure functions of it | `FR-ENV-030` … `FR-ENV-033` | `interfaces`, `verification` (`OD-20`) |

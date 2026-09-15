@@ -1,8 +1,8 @@
 ---
 title: Help and Version
 status: approved
-last-reviewed: 2026-09-10
-related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md]
+last-reviewed: 2026-09-15
+related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md]
 ---
 
 # Help and Version
@@ -18,7 +18,8 @@ at every level, and available as a single machine-readable document.
 
 In scope: the six help and version forms and their equivalences, the nested
 command path, the fixed help layout, the content obligations of each section,
-and the JSON command tree.
+and the JSON command tree — its envelope, the keys of its `data`, the shape of
+`data.commands`, and how a subtree of it is selected.
 
 Out of scope: the wording of any individual help text, which is written
 alongside the command it documents.
@@ -96,7 +97,9 @@ alongside the command it documents.
 
   *Rationale.* A subcommand is formally the node's first positional argument, so
   no eighth section is needed. The cost is that `ARGUMENTS` holds two kinds of
-  thing, which the JSON command tree separates anyway.
+  thing, which the JSON command tree separates anyway: there, a child is an
+  entry of `data.commands` of its own and is never a member of its parent's
+  `arguments`, per `FR-HELP-019`.
 
 - **FR-HELP-009**: Help text SHALL be laid out at a fixed width of 80 columns,
   with line breaks written into the text.
@@ -134,16 +137,33 @@ alongside the command it documents.
 
 - **FR-HELP-016**: `tpl help --format json` SHALL emit the entire command tree
   as a single JSON document. `tpl help <command path> --format json` SHALL emit
-  the subtree rooted at the node that path names, at any depth, per
-  `FR-HELP-029`.
+  the same document with `data.commands` reduced to the subtree rooted at the
+  node that path names — that node's own entry and the entry of every
+  descendant of it, and no other — at any depth, per `FR-HELP-029`.
+
+  *Amended in the twenty-first edition.* "The subtree rooted at" named a shape
+  as well as a selection, and the shape it named is the one `FR-HELP-019`
+  contradicts: a subtree is a tree, and every entry carries its full `path`.
+  `FR-HELP-019` now settles the shape — `data.commands` is flat — and a subtree
+  under it is a selection over that array rather than a nesting of it. What is
+  emitted is otherwise the same document: `FR-HELP-017` requires all four keys
+  of `data` in both forms, and `FR-HELP-029` states the selection.
 
 - **FR-HELP-017**: The document SHALL be the envelope of `FR-OUT-024`, with
   `source` set to `binary` per `FR-OUT-026`, and a `data` carrying
-  `tpl_version`, `global_flags`, and `commands`, in that order:
+  `tpl_version`, `global_flags`, `commands`, and `template_surface`, in that
+  order:
 
   ```json
-  {"schema_version":1,"source":"binary","data":{"tpl_version":"0.1.0","global_flags":[…],"commands":[…]}}
+  {"schema_version":1,"source":"binary","data":{"tpl_version":"0.1.0","global_flags":[…],"commands":[…],"template_surface":{…}}}
   ```
+
+  All four keys SHALL be present in every document of this form, whatever path
+  argument `FR-HELP-029` reduces `commands` by.
+
+  The `data` of this document SHALL be an **open** set of keys. A later edition
+  MAY add a key to it, and SHALL place the new key after the last, so that the
+  position of every key already present is unchanged.
 
   *Amended in the third edition.* The first edition put `schema_version` and
   `tpl_version` side by side as the document's first two keys, which made the
@@ -158,13 +178,72 @@ alongside the command it documents.
   which `FR-OUT-028` forbids: the envelope must not grow a key for the benefit
   of one command.
 
+  *Amended in the twenty-first edition.* `template_surface` is new, and so is
+  the statement that `data` is open. `FR-ENV-005` obliges this document to
+  enumerate all three groups of the template surface and named no place in it
+  for them; three keys listed "in that order", with nothing said beside them,
+  read as the whole of what `data` may carry; and `FR-OUT-028` bars a fourth
+  key beside `data` while saying nothing about a fourth key inside it. The
+  surface is therefore a fourth key of `data`, and this requirement now says
+  that `data` admits one — which is what `FR-OUT-027` already leaves to the
+  module owning the command, and what `FR-OUT-014` already makes non-breaking.
+  Nothing here touches the envelope: it stays closed at three keys, and
+  `FR-OUT-028` is undiminished. What `template_surface` contains is fixed by
+  `FR-ENV-005`, in [template-environment.md](template-environment.md), which
+  owns the surface; this requirement owns only its name and its position.
+
+  *Rejected.* Publishing the surface inside the entry of `tpl render` in
+  `data.commands`, which places it beside the one command that uses it and
+  needs no new key at all. It was rejected because the surface is not a
+  property of one command and must survive the reduction of `FR-HELP-029`: a
+  caller reading `tpl help cfg --format json` would lose the surface, and a
+  caller reading `tpl help render --format json` would receive filters and
+  tests as though `render` declared them, which `FR-HELP-020` reserves for the
+  flags a command declares. Also rejected: a document of its own, reached by a
+  command of its own, which adds a node to a tree `FR-CLI-002` closes in order
+  to publish material `FR-ENV-005` already requires this document to carry.
+
 - **FR-HELP-018**: `data.global_flags` SHALL carry the global flags once, and
   each command SHALL carry `"inherits_globals": true` instead of repeating
   them.
 
-- **FR-HELP-019**: Each command in `data.commands` SHALL carry `path`,
-  `aliases`, `description`, `arguments`, `options`, `examples`, and
-  `exit_codes`.
+- **FR-HELP-019**: `data.commands` SHALL be a **flat** array carrying one entry
+  per command of the tree of `FR-CLI-002` — every node below `tpl`, group nodes
+  included — ordered so that each node is followed by its own children before
+  the next node at its level, preserving declaration order throughout per
+  `FR-HELP-023`. Each entry SHALL carry `path`, `aliases`, `description`,
+  `arguments`, `options`, `examples`, and `exit_codes`, and SHALL NOT carry its
+  children: a child is reached through its own entry, whose `path` extends the
+  parent's.
+
+  *Amended in the twenty-first edition.* The requirement listed the members of
+  an entry and left unstated the array those entries sit in, so `path` on every
+  entry read as a flat array and "the subtree rooted at" of `FR-HELP-016` read
+  as a nested one, with nothing in the corpus to choose between them. Flat is
+  chosen, and the two requirements that name a subtree now say what one is
+  under it. The `path` every entry already carries **is** the parent-child
+  relation written out: a nested array would carry the same relation twice, and
+  a caller loading the whole surface — which `FR-HELP-016` says this document is
+  for — would have to recurse to reach a leaf it can otherwise reach by index.
+  It is also what `FR-HELP-026` assumes, and said so before this amendment: its
+  rationale rests on every node carrying its full `path` so that a caller can
+  hand the path straight back. One consequence is stated where it is read:
+  `arguments` holds a command's own arguments alone, and the children that the
+  text help of `FR-HELP-008` lists inside `ARGUMENTS` are entries of this array
+  instead, which is what the rationale of `FR-HELP-008` means by separating
+  them.
+
+  *Rejected.* Nesting, each entry carrying a `commands` member holding its
+  children. It names the tree in the shape the tree has, and `FR-HELP-016` reads
+  literally under it without amendment. It was rejected because it obliges every
+  consumer to recurse for a relation `path` already states, and because the tree
+  is closed at three levels by `FR-CLI-002`, so the nesting buys a structure
+  this surface is too small to need.
+
+  *Accepted cost.* A caller that wants the children of one node filters the
+  array on `path` rather than reading a member. That filter is exactly the
+  operation `FR-HELP-029` states, so the cost is paid once, by the requirement,
+  rather than by each caller.
 
 - **FR-HELP-020**: The `options` array of a command SHALL list every local flag
   that command declares, including `--format`, `--pretty`, `--direct`, and
@@ -247,7 +326,27 @@ alongside the command it documents.
 
 - **FR-HELP-029**: `tpl help --format json` SHALL apply `FR-HELP-026` to its
   own argument: `tpl help cfg database --format json` SHALL emit the subtree
-  rooted at `tpl cfg database`, per `FR-HELP-016`.
+  rooted at `tpl cfg database`, per `FR-HELP-016`. That subtree SHALL be
+  `data.commands` reduced to the entry whose `path` is the path given, together
+  with every entry whose `path` extends that path segment by segment, in the
+  order those entries hold in the unreduced document. The system SHALL emit
+  every other key of `data` unreduced, per `FR-HELP-017`.
+
+  *Amended in the twenty-first edition.* This requirement named a subtree and
+  `FR-HELP-016` named it too, and neither said what one is once `FR-HELP-019`
+  settles that `data.commands` is flat. It is a selection over that array, and
+  the selection is stated here rather than left to be inferred from `path`. Two
+  rules already in force reach it before it applies: a path resolves through an
+  alias to its canonical node, per `FR-HELP-027`, so the entry selected is the
+  canonical one; and a path that names no node exits `64` before any document
+  is emitted, per `FR-HELP-028`.
+
+  *Rejected.* Reducing the whole of `data` to the subtree, dropping
+  `tpl_version`, `global_flags`, and `template_surface`. It makes the reduced
+  document smaller, and it would make the shape of `data` depend on whether an
+  argument was given — leaving a caller unable to read one document the way it
+  reads the other, which is the whole ground on which `FR-OUT-024` fixed a
+  single envelope.
 
 ## Dependencies
 
@@ -257,6 +356,8 @@ alongside the command it documents.
   `global_flags`.
 - [output-formats.md](output-formats.md) — the JSON contract rules the document
   obeys.
+- [template-environment.md](template-environment.md) — `FR-ENV-005`, which owns
+  what `data.template_surface` contains.
 
 ## Open questions
 

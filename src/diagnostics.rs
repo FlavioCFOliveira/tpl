@@ -47,3 +47,6 @@ pub(crate) mod suggest;
 pub(crate) mod verbosity;
 
 pub(crate) use render::report;
+
+#[cfg(test)]
+pub(crate) use render::rendered;

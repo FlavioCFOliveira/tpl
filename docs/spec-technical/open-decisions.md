@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-15
 related: [README.md, traceability.md]
 ---
 
@@ -9,14 +9,21 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Twenty-eight entries, each a decision the repository could not settle on its
-own. **All twenty-eight are settled. None is open.** Nineteen were settled by
-the product owner in the interview of 2026-09-10, by the establishment of the
-decision register, and by the eighth edition of `/specification`; the remaining
-nine were settled on 2026-09-11, together with all five residuals the eighth
-edition left inside settled entries. The fifth, `OD-22`'s, was work rather than
-a decision: it was executed on 2026-09-11 by tasks #15 and #25, and the entry
-records what each produced.
+Thirty entries, each a decision the repository could not settle on its own.
+**All thirty are settled. None is open.** Nineteen were settled by the product
+owner in the interview of 2026-09-10, by the establishment of the decision
+register, and by the eighth edition of `/specification`; nine more were settled
+on 2026-09-11, together with all five residuals the eighth edition left inside
+settled entries. The fifth, `OD-22`'s, was work rather than a decision: it was
+executed on 2026-09-11 by tasks #15 and #25, and the entry records what each
+produced.
+
+**Two entries were added on 2026-09-15**, when the command surface was built and
+this folder was reconciled against it: `OD-29`, the two shapes of the JSON
+command tree, settled by the twenty-first edition of `/specification` after the
+implementation found them unstated; and `OD-30`, the interim outcome of a leaf
+the parser accepts and no sprint has implemented yet. `OD-08` was amended the
+same day, against the behaviour the binary was observed to produce.
 
 One obligation survives the settlement, and it is named in its own entry rather
 than left to be inferred:
@@ -30,7 +37,8 @@ than left to be inferred:
 `FR-ERR-030`, and `OD-12`'s observation on the referent of `FR-CONF-004`.
 Neither entry is reopened and neither history is dropped; each records what
 landed. One obligation of `OD-12`'s survives inside that entry and falls to
-`verification` rather than to this register, as `OD-08`'s does.
+`verification` rather than to this register. `OD-08`'s obligation of the same
+kind was discharged on 2026-09-15 and is recorded as discharged in that entry.
 
 **No entry is a conflict.** The three that were — `OD-21`, `OD-22` and
 `OD-24` — were resolved in the eighth edition, which read requirement against
@@ -119,6 +127,7 @@ the reason [README.md](README.md#conventions) gives.
 | **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it. **No entry carries this status today**: `OD-22`'s residual was discharged on 2026-09-11 |
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
+| **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. `OD-30` is the one entry carrying it |
 | **Open** | Not decided. The entry names the options and the owner. **No entry carries this status today** |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
@@ -154,9 +163,13 @@ the reason [README.md](README.md#conventions) gives.
 | [OD-26](#od-26--the-boundary-against-the-knowledge-graph) | The boundary against the knowledge graph | Settled | — |
 | [OD-27](#od-27--seed-benchsql-and-wl-001) | `seed-bench.sql` and `WL-001` | Settled | — |
 | [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Settled | — |
+| [OD-29](#od-29--the-json-command-tree-two-shapes-and-what-the-binary-publishes) | The JSON command tree: two shapes, and what the binary publishes | Settled | — |
+| [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled, interim | — |
 
-Twenty-seven entries are settled outright; `OD-14` alone carries an observation
-owed. Twenty-seven and one are the whole of the twenty-eight.
+Twenty-nine entries are settled outright; `OD-14` alone carries an observation
+owed. Twenty-nine and one are the whole of the thirty. `OD-30` is settled and
+**interim**: it records an arrangement each later sprint removes one arm of, and
+it is discharged when no arm remains.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
@@ -479,8 +492,31 @@ argument `FR-CONF-037` makes against inheriting a driver's TLS default.
 **Composition.** `clap`'s `color` feature is on by default and must be off:
 `NFR-DET-004` forbids an ANSI escape sequence on either stream. Its terminal
 wrapping lives behind the optional `wrap_help` feature, which is left off (clap
-feature-flags documentation, clap 4.6.6, verified 2026-09-10). `OD-08` remains
-open for the parser's error messages, which this decision does not reach.
+feature-flags documentation, clap 4.6.6, verified 2026-09-10). The parser's
+error messages are the neighbouring subject and were settled separately, in
+[`OD-08`](#od-08--the-parsers-own-diagnostics), which this decision does not
+reach.
+
+**Consequence, found in implementation and recorded 2026-09-15.** Turning the
+parser's own help flag off makes `-h`, `--help`, `-V` and `--version` ordinary
+global arguments of the tree, and the parser validates **required arguments
+before** it reads one. At the fourteen required operands the tree declares over
+thirteen leaves, `tpl <node> --help` was therefore refused for a missing operand
+— against `FR-HELP-002`, which makes the three help forms identical at every
+depth, and against `FR-GLOB-019` and `FR-GLOB-020`, which give both flags an
+outcome at every node. The mechanism that resolves it, and the reason the
+declarations are left untouched, are
+[interfaces.md](interfaces.md#the-help-surface)'s. Nothing in this decision
+moves: the alternative is the parser's own help flag, which this entry rejected
+for four reasons that stand.
+
+**Rejected, with its ground unverified here.** Declaring each required operand
+as required *unless* one of the two flags is present, through the parser's own
+`required_unless_present_any`. The task that resolved the defect records that
+the parser does not produce the behaviour under this tree; the attempt left no
+artefact in the repository, so this entry records the rejection and **does not
+assert the reason**. What is verifiable, and is stated in `interfaces.md`, is
+the mechanism that was kept and what it leaves untouched.
 
 ---
 
@@ -528,11 +564,38 @@ promises. `verification` therefore owes one test per `ErrorKind` that `tpl`
 maps, asserting the four lines it produces — the same discipline `FR-HELP-002`
 already imposes on the help surface through snapshots.
 
-**`ContextKind` is `#[non_exhaustive]`** (same source and date), so the mapping
-carries a wildcard arm by force of the language. That arm produces a `64` whose
-`cause` names the token and states that the invocation was rejected, which is
-the minimum `FR-ERR-034` row `64` admits; it never produces a code other than
-`64`, so no unmapped context can move a caller onto a different branch.
+**Discharged 2026-09-15**, at commit `f8f335d`. One test exists per mapped kind
+and one for the wildcard arm, and each asserts the kind **against this tree**
+before asserting the four lines, so a clap version that reclassified a refusal
+fails where the refusal is mapped rather than silently producing the wildcard's
+message.
+[verification.md](verification.md#the-parsers-mapping-one-test-per-kind) names
+them.
+
+**`ContextKind` is `#[non_exhaustive]`** (same source and date), and so is
+`ErrorKind` (docs.rs `clap::error::ErrorKind`, clap 4.6.6, verified
+2026-09-15), so **both** matches of the mapping carry a wildcard arm by force of
+the language. Neither arm produces a code other than `64`, so no unmapped kind
+and no unread context can move a caller onto a different branch.
+
+**Amended 2026-09-15 — the wildcard arm names no token where the parser named
+none.** This entry said the arm produces a `64` whose `cause` **names the
+token**. It cannot always do so, and the reason is the parser's: clap populates
+no context this crate reads for `ErrorKind::InvalidUtf8`, which is the one kind
+that reaches the arm from a vector a caller can write. `tpl --timeout $'\xff'
+version` therefore exits `64` with `cause: the invocation was rejected while it
+was being parsed, and the parser named no token of it` — observed against the
+binary at commit `f8f335d`, 2026-09-15. The arm names the token wherever the
+refusal carries one, reading `InvalidArg`, then `InvalidSubcommand`, then
+`InvalidValue`.
+
+`FR-ERR-034` row `64` obliges the token to be named *wherever one is
+available*, and none is available here, so the row is met as written rather
+than narrowed. **The degradation runs in the safe direction**: the token that
+was rejected is a sequence that is not valid UTF-8, so naming it would put a
+lossy rendering of bytes the caller supplied into a message, and withholding it
+costs a less specific `cause` and nothing else. What the entry decided is
+unchanged — the arm is `64`, always.
 
 **`FR-CLI-014` is answered without the parser's context at all.** A flag that
 carries a single value is declared with `ArgAction::Append`, and `tpl` rejects
@@ -654,7 +717,8 @@ records the unexplained musl blocking cost this entry mentioned; it bears on
 
 **Status: settled.** The observation it owed `specification-manager` landed in
 the ninth edition; one behaviour is still owed a verification, which falls to
-`verification` rather than to this register, exactly as `OD-08`'s does. It was
+`verification` rather than to this register. It is the only such obligation
+standing: `OD-08`'s was discharged on 2026-09-15. It was
 flagged as the entry likeliest to prove a requirement unmeetable. It did not:
 five of the six phases separate cleanly, and the sixth pair separates in the
 report rather than in the call.
@@ -1529,6 +1593,110 @@ changes.
 
 ---
 
+## OD-29 — The JSON command tree: two shapes, and what the binary publishes
+
+**Status: settled by the twenty-first edition of `/specification`, 2026-09-15.**
+
+**Decision.** Neither shape is this folder's to choose, and both are now fixed
+by requirement. `data.template_surface` is a **fourth key of `data`**, and
+`data` is an open set to which a later edition adds after the last
+(`FR-HELP-017`). `data.commands` is a **flat** array, one entry per node below
+`tpl`, no entry carrying its children, and a subtree is a selection over it
+(`FR-HELP-019`, with `FR-HELP-016` and `FR-HELP-029`). The rationale and the
+options rejected — nesting; publishing the surface inside the entry of
+`tpl render`; a document of its own — are recorded there and are **not restated
+here**.
+
+**Why the entry exists.** Both shapes were unstated, and the emitter could not
+be written until each was one answer: three keys listed *in that order* read as
+the whole of what `data` may carry, and the `path` on every entry read as a flat
+array while *the subtree rooted at* read as a nested one. Each was reachable
+only by deriving the document from the corpus. The questions were raised by this
+folder's implementation and answered by the functional owner, in that order,
+which is the order a contract shape may never be settled in reverse.
+
+**What the binary derives under them.** Each row is the implementation's, not
+the requirement's, and each is what a reader of
+[interfaces.md](interfaces.md#the-help-surface) meets as built.
+
+| Derived | Ground |
+|---|---|
+| The reduction of `FR-HELP-029` is a **pre-order walk from the node the path resolved to**, not a filter over the unreduced array | The walk yields exactly the entry whose `path` is given together with every entry extending it, in the order `FR-HELP-019` fixes, so the ordering obligation of `FR-HELP-023` is met by the container rather than by a sort |
+| The root is the one node carrying no entry | `FR-HELP-019` publishes every node **below** `tpl`, and what the root's `options` would hold is `data.global_flags`, carried once (`FR-HELP-018`, `FR-GLOB-003`) |
+| `inherits_globals` is emitted **after** the seven members `FR-HELP-019` names | It is not one of the seven, and last is the one position that leaves every one of them where the requirement puts it. **Rejected**: beside `options`, the member it qualifies, which reads well and interleaves an eighth member into a sequence a requirement fixes |
+| A line of an example carries `text` — the line as a caller types it, shell included — and `invocation`, the argument vector, `null` where the line carries no `tpl` call | `BR-HELP-003` parses the published vector itself, so what is published is what is parsed. **Rejected**: publishing the typed table's own prefix, invocation and suffix, which exposes a layout the renderer needs and obliges every consumer to reassemble the line the caller types |
+| The three arrays of `registered` are `null` | `FR-ENV-005` requires them to be derived from the registrations the environment actually performs, `render/` is a later sprint, and `FR-OUT-012` gives `null` for a value that is absent rather than empty. **Rejected**: restating the names of `FR-ENV-006`, `FR-ENV-007`, `FR-ENV-014` and `FR-ENV-020` here, which creates the second source `FR-HELP-021` exists to prevent and asserts a surface the binary does not have |
+| `inherited.tests` and `inherited.functions` are empty arrays, and the three arrays of `other` are `null` | `FR-ENV-005` fixes all five, permanently: group 2 enumerates filters alone, and group 3 is what the other two do not name and `tpl` cannot enumerate |
+
+**Recorded divergence — `inherited.filters` is `null` and the corpus fixes its
+names.** `FR-ENV-005` ties **`registered`** to the registrations the environment
+performs and says nothing of the kind about `inherited.filters`: it requires that
+array to carry the fourteen names of `FR-ENV-018`, in the order that requirement
+states them, and admits `null` only *where the group cannot be enumerated*. Group
+2 can be enumerated — the corpus enumerates it — so the `null` this binary
+publishes today is a divergence and not the absent value `FR-OUT-012` permits.
+Its cause is the same as `registered`'s: the implementation reads all four arrays
+as `render/`'s, and `render/` is a later sprint. Reported at commit `f8f335d`,
+2026-09-15, and not closed here: it is closed by publishing the fourteen names,
+which is a change to code. Until it is, a caller reading `data.template_surface`
+learns that group 2 is `pinned` and cannot learn which filters it holds.
+
+**Unblocks.** `interfaces`.
+
+---
+
+## OD-30 — A parsed leaf with no implementation
+
+**Status: settled, interim.**
+
+**Decision.** Every node of the tree parses from the sprint that declares it. A
+leaf whose work belongs to a later sprint returns the violated-invariant
+condition of `FR-ERR-030`, naming its own command path, and the process exits
+`70`. There is **one arm per leaf**, never one catch-all, so each later sprint
+replaces its own and finds it by the path rather than by reading.
+
+**Why the tree is complete before the commands are.** `FR-CLI-002` closes the
+tree, `FR-HELP-021` derives the published document from the tree the binary
+parses with, and `BR-HELP-003` makes every command, alias and flag of that
+document a contract. A tree grown command by command would publish a surface
+that is a subset of the specified one, and the three tests of `BR-HELP-003`
+would pass over the subset; the equivalences of `FR-HELP-002` would hold only
+where a node existed. The published surface is what a calling agent reads before
+it invokes anything, per `FR-HELP-016`, so it is the part that cannot wait.
+
+**Why `70`.** `FR-ERR-030` gives it to a violated internal invariant the system
+detects and declines to continue past, and a command the parser accepts and the
+program cannot execute is exactly that: not caused by the command line, not
+correctable by the caller. The condition is raised through the one guard that
+decides an invariant violation is a `70` and names where it was detected
+(`FR-ERR-031`, `FR-ERR-034` row `70`) — the same guard, not the `#[cfg(test)]`
+trigger of [`OD-21`](#od-21--two-test-seams-that-must-not-be-on-the-published-surface),
+which remains absent from the artefact.
+
+**What a caller observes while it stands.** At commit `f8f335d`, 2026-09-15:
+27 of the 29 leaves exit `70`. `tpl help` and `tpl version` act; the six group
+nodes print their own help and exit `0` (`FR-CLI-007`, `FR-HELP-025`); the two
+flag forms are answered at every node (`FR-GLOB-019`, `FR-GLOB-020`). A `70`
+from an ordinary invocation is therefore **expected** today and is not the
+defect `FR-ERR-030` otherwise reports — which is the reason this arrangement is
+recorded here rather than left in the code that carries it.
+
+**Rejected.**
+
+- **`todo!()` or `unimplemented!()`.** Both panic. A panic reaches `70` through the hook of [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md), but it reports the panic path's `cause` and `hint` rather than the condition's, and the project's own completeness rule bars a delivered arm that is not written.
+- **One catch-all arm for every unimplemented leaf.** The sprint that implements a command would have to find its arm by reading the match rather than by its path, and nothing would say which arms remain.
+- **Declaring a node only once its command is implemented.** It makes the tree a subset of `FR-CLI-002`'s, and the document, the help and the three tests of `BR-HELP-003` all true of the subset.
+- **`64` or `78`.** Both tell the caller to change something. Nothing a caller can write reaches an implementation that does not exist, and `FR-ERR-002` forbids collapsing two conditions onto one code where the caller's next step differs.
+
+**What removes it.** Each sprint that implements a leaf replaces that leaf's
+arm. The entry is discharged when no arm remains, and it is the only entry of
+this register whose discharge is measured in code rather than in a decision.
+
+**Unblocks.** Nothing. It records an arrangement `architecture` and `interfaces`
+cite.
+
+---
+
 ## Editorial defects, reported and corrected
 
 Two statements in `specification/` were stale when this register was written.
@@ -1562,7 +1730,8 @@ discharged: the ninth edition amended `FR-ERR-030` (`OD-28`) and gave
 `FR-CONF-005` the phase-to-key mapping with its shared connection budget
 (`OD-12`). Each entry records what landed, and neither is reopened.
 
-Two further obligations fall to `verification` rather than to this register, and
-are recorded in the entries that create them: one test per mapped
-`clap::ErrorKind` (`OD-08`), and the phase attribution of a TLS handshake
-failure against the fixture (`OD-12`).
+One obligation falls to `verification` rather than to this register, and is
+recorded in the entry that creates it: the phase attribution of a TLS handshake
+failure against the fixture (`OD-12`). The second, one test per mapped
+`clap::ErrorKind` (`OD-08`), was discharged at commit `f8f335d` of 2026-09-15
+and is recorded as discharged in that entry.

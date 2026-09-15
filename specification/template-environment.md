@@ -1,7 +1,7 @@
 ---
 title: The Template Environment
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-15
 related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md]
 ---
 
@@ -94,11 +94,77 @@ of the context variables, which belongs to
 
 - **FR-ENV-005**: `tpl help --format json` SHALL enumerate all three groups: the
   names of group 1, the names of group 2, and a statement that group 3 exists
-  and is unguaranteed.
+  and is unguaranteed. The enumeration SHALL be the value of
+  `data.template_surface`, whose name and position `FR-HELP-017` fixes, and
+  SHALL be an object carrying exactly these three keys, in this order, one per
+  group of `FR-ENV-001`:
+
+  | Key | Group | `guarantee` |
+  |---|---|---|
+  | `registered` | 1 | `contract` |
+  | `inherited` | 2 | `pinned` |
+  | `other` | 3 | `none` |
+
+  Each of the three SHALL be an object carrying exactly `guarantee`, `filters`,
+  `tests`, and `functions`, in that order. `guarantee` SHALL carry the value the
+  table gives it. Each of the other three SHALL be an array of names, or `null`
+  WHERE the group cannot be enumerated, per `FR-OUT-012`:
+
+  ```json
+  {"registered":{"guarantee":"contract","filters":[…],"tests":[…],"functions":[…]},"inherited":{"guarantee":"pinned","filters":[…],"tests":[],"functions":[]},"other":{"guarantee":"none","filters":null,"tests":null,"functions":null}}
+  ```
+
+  The arrays SHALL carry the names the requirements of this file already fix,
+  and this requirement SHALL NOT restate them: `registered.filters` the names of
+  `FR-ENV-006` followed by those of `FR-ENV-007`, `registered.tests` those of
+  `FR-ENV-014`, `registered.functions` those of `FR-ENV-020`, and
+  `inherited.filters` those of `FR-ENV-018`, each in the order the requirement
+  that fixes it states them, per `FR-HELP-023`. `inherited.tests` and
+  `inherited.functions` SHALL be empty arrays, because group 2 enumerates
+  filters alone, per `FR-ENV-018` and `FR-ENV-019`. The three arrays of `other`
+  SHALL be `null`: group 3 is everything the engine offers that the other two do
+  not name, and `tpl` cannot enumerate it.
+
+  The value SHALL NOT carry the pinned engine version, per `FR-ENV-003`.
+
+  The system SHALL derive `registered` from the registrations the environment
+  actually performs, for the reason `FR-HELP-021` gives for the command tree.
 
   *Rationale.* A calling agent loads the whole surface in one invocation, per
   `FR-HELP-016`. A surface it cannot enumerate is one it will discover by trial
   and error.
+
+  *Amended in the twenty-first edition.* The requirement obliged one document to
+  publish the surface and fixed neither where in it nor in what shape, so an
+  implementer had to invent both and `FR-HELP-017` had no key to carry. That
+  requirement now names the key and its position; this one fixes what the key
+  holds, and the two together leave no second reading. The three groups are
+  three sibling objects of one shape rather than three shapes, so that the
+  question a caller actually asks — which side of the line does this name fall
+  on — is answered by the same lookup whichever group answers it. Group 3 is
+  carried as data and not as prose: it is the entry whose `guarantee` is `none`
+  and whose arrays are `null`, which says the group exists, is unguaranteed, and
+  is not enumerable, in the form `FR-OUT-012` already fixes for a value that is
+  absent rather than empty. The shape is implementable before the template
+  environment is built: the three objects and their key order are fixed here,
+  and the arrays are filled by the registrations when there are registrations to
+  read.
+
+  *Rejected.* Three keys of unlike shape — an object of three arrays for group
+  1, a bare array of filter names for group 2, and a boolean for group 3. It is
+  the smallest document, and a boolean is the whole of the statement group 3
+  needs. It was rejected because that boolean is `true` in every document `tpl`
+  will ever emit, so it carries nothing a caller can act on, and because three
+  shapes oblige a caller to learn three readings of one value. Also rejected:
+  carrying the statement about group 3 as a sentence of English, which makes the
+  wording contract with nothing in this corpus fixing it, and obliges an agent
+  to parse prose for what the arrays beside it state as data.
+
+  *Accepted cost.* `inherited.tests` and `inherited.functions` are empty in
+  every document, and `other` carries three `null`s in every document. Both are
+  paid for the uniformity: a caller reads the three groups with one routine, and
+  an edition that came to guarantee an inherited test would fill an array that
+  is already there rather than change the shape of the value.
 
 ## Filters that `tpl` registers
 
@@ -619,8 +685,9 @@ row is a case the implementation SHALL satisfy.
   test, or a function is given the wrong thing.
 - [context-document.md](context-document.md) — the material the filters and
   tests act on.
-- [help-and-version.md](help-and-version.md) — the JSON document in which the
-  three groups are published.
+- [help-and-version.md](help-and-version.md) — `FR-HELP-017`, which fixes the
+  name and the position of `data.template_surface`, the JSON document's key in
+  which the three groups are published.
 - [project-and-discovery.md](project-and-discovery.md) — `FR-PROJ-017`, which
   writes `.tpl/templates/rust/_types.jinja`.
 

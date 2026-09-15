@@ -34,6 +34,16 @@ const LIST_SEPARATOR: &str = ", ";
 /// The separator before the last member of a list.
 const LIST_CONJUNCTION: &str = " and ";
 
+/// The separator before the last member of a list of alternatives, where the
+/// list is a choice rather than an enumeration.
+const LIST_ALTERNATIVE: &str = " or ";
+
+/// What the `cause` line says when a flag enumerates no value at all.
+const NO_PERMITTED_VALUE: &str = "no value at all";
+
+/// The program name, which is the whole of the command path at the root.
+const PROGRAM: &str = "tpl";
+
 /// What the `cause` line says when the supported window arrives empty.
 const EMPTY_WINDOW: &str = "no series";
 
@@ -46,11 +56,22 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
     match error {
         // ------------------------------------------------------------ 64 ---
         // The row obliges the token as written, and why it was rejected.
-        Error::UnknownCommand { token } => Cow::Owned(format!(
+        Error::UnknownCommand { token, .. } => Cow::Owned(format!(
             "'{token}' is not a name in the command tree, which is closed; tpl matches a command \
              exactly and never by a prefix of one"
         )),
-        Error::UnknownFlag { token } => Cow::Owned(format!(
+        // FR-HELP-028 raises the row's floor for this one condition: the
+        // `cause` names the segment that failed **and** the node it was looked
+        // for under, because a segment names no command anywhere on its own —
+        // `add` is a child of `tpl cfg database` and of nothing else — so a
+        // line naming only the segment would read identically for a segment
+        // mistyped at any depth.
+        Error::UnknownCommandPathSegment { segment, node, .. } => Cow::Owned(format!(
+            "'{segment}' names no child of '{}', whose children are the whole of what the path may \
+             continue with; tpl matches a segment exactly and never by a prefix of one",
+            invoked(node)
+        )),
+        Error::UnknownFlag { token, .. } => Cow::Owned(format!(
             "'{token}' is not a flag the invoked command declares; tpl matches a long flag exactly \
              and never by a prefix of one"
         )),
@@ -73,6 +94,56 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{key}' is outside the key space tpl cfg set writes into; the space is closed and a \
              key is never created"
         )),
+        Error::UnexpectedArgument { command, token } => Cow::Owned(format!(
+            "'{token}' was supplied to '{}', which takes no argument in that position",
+            invoked(command)
+        )),
+        // FR-CLI-014 obliges the message to name both values, and this is the
+        // line that names them: the `error:` line names the flag, which
+        // FR-ERR-010 then forbids this one to restate.
+        Error::RepeatedValueFlag {
+            flag,
+            first,
+            second,
+        } => Cow::Owned(format!(
+            "'{flag}' carries one value and was given two, '{first}' and then '{second}'; tpl \
+             refuses the repetition rather than letting one of them silently win"
+        )),
+        Error::RepeatedFlag { flag } => Cow::Owned(format!(
+            "'{flag}' carries no value, so a second occurrence of it states nothing the first did \
+             not; tpl accepts each flag once"
+        )),
+        Error::FlagValueMissing { flag } => Cow::Owned(format!(
+            "'{flag}' carries one value and the invocation supplied none for it"
+        )),
+        // FR-CLI-018: the token was written as a token of its own, which is
+        // the fact that decides it, and the hint carries the form that works.
+        Error::SeparateTokenValue { flag, value } => Cow::Owned(format!(
+            "'{value}' begins with '-' and was written as a token of its own, so tpl read it as a \
+             flag rather than as the value of '{flag}'"
+        )),
+        Error::ValueOutsideEnumeration {
+            flag,
+            value,
+            permitted,
+        } => Cow::Owned(format!(
+            "'{value}' was supplied for '{flag}', which takes {}",
+            alternatives(permitted)
+        )),
+        // OD-08's wildcard arm. It names the token where the parser named one,
+        // and says what happened where it did not — the one wording
+        // FR-ERR-034's ban on naming a category cannot reach, because no
+        // instance existed to name.
+        Error::InvocationRejected { token } => match token {
+            Some(token) => Cow::Owned(format!(
+                "'{token}' was rejected while the invocation was being parsed, and tpl does not \
+                 classify the refusal further"
+            )),
+            None => Cow::Borrowed(
+                "the invocation was rejected while it was being parsed, and the parser named no \
+                 token of it",
+            ),
+        },
 
         // ------------------------------------------------------------ 65 ---
         // The row obliges, for a template, the name, the line, the column and
@@ -376,6 +447,28 @@ fn listed(series: &[&'static str]) -> Cow<'static, str> {
         [only] => Cow::Borrowed(only),
         [rest @ .., last] => Cow::Owned(format!(
             "{}{LIST_CONJUNCTION}{last}",
+            rest.join(LIST_SEPARATOR)
+        )),
+    }
+}
+
+/// The command path as a caller writes it, which at the root is the program
+/// name alone.
+fn invoked(command: &str) -> Cow<'_, str> {
+    if command.is_empty() {
+        Cow::Borrowed(PROGRAM)
+    } else {
+        Cow::Owned(format!("{PROGRAM} {command}"))
+    }
+}
+
+/// Joins the values a flag enumerates into the choice they are.
+fn alternatives(permitted: &[String]) -> Cow<'_, str> {
+    match permitted {
+        [] => Cow::Borrowed(NO_PERMITTED_VALUE),
+        [only] => Cow::Borrowed(only.as_str()),
+        [rest @ .., last] => Cow::Owned(format!(
+            "{}{LIST_ALTERNATIVE}{last}",
             rest.join(LIST_SEPARATOR)
         )),
     }

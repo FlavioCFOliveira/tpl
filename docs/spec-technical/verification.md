@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-15
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -22,20 +22,35 @@ figure is `BENCHMARKS.md`'s. **No build command appears here.** The pipeline
 that runs the suite, the gates a release passes and the fixture's operational
 standing are [operations.md](operations.md#the-mandatory-validation-pipeline).
 
-**The harness exists, and so does one test of the register below.**
+**The harness exists.**
 [The container harness](#the-container-harness) records what
 `scripts/mariadb/` supplies as of 2026-09-11, which discharged the harness half
 of [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)'s
 residual, and what remains unestablished beside it.
 
-**One test of the register below is written — row 2, the `70` trigger — and
-every other row is obligation alone.** It is a unit test over the seam
-`FR-ERR-031` requires, and it asserts what that row asserts: the guard produces
-the condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires.
+**Five rows of the register below are written; every other row is obligation
+alone.** Row 2 is a unit test over the seam `FR-ERR-031` requires, and it
+asserts what that row asserts: the guard produces the condition of `FR-ERR-030`
+carrying the message `FR-ERR-032` requires. Rows 3 to 6 were written with the
+command surface, at commit `f8f335d` of 2026-09-15, and
+[Help](#help-snapshots-at-every-depth) names each. Row 1 is reached for two of
+its nine codes — `0`, by every successful form of help and version, and `64`, by
+every refusal of step 1 — because the commands that produce the other seven are
+later sprints.
+
 Nothing this project owns has been tested through the harness: its instruments
 were established against a substitute client, and no test named here has reached
-a container. What is recorded of a test is its obligation and its trace, never
-an outcome.
+a container. What is recorded of a test is its obligation, its trace, and, where
+the test exists, where it lives — never an outcome.
+
+## The suite as it stands
+
+At commit `f8f335d` of 2026-09-15, and recorded with its commit because it is a
+count that moves: **272 tests**, made of 246 unit tests inside the library, 24
+integration tests over the binary — 13 in `tests/help_surface.rs`, 7 in
+`tests/invocation_surface.rs`, 4 in `tests/help_environment.rs` — and 2
+doc-tests. No test needs a server, because no command that reaches one is
+implemented yet.
 
 ## The four kinds of test, and what each needs
 
@@ -74,6 +89,20 @@ name built on one therefore survives every edition of the corpus.
 The reverse direction — which requirement a document answers — is
 [traceability.md](traceability.md)'s and is not duplicated in test names.
 
+**Recorded divergence — the suite as built does not carry the identifier in the
+name.** At commit `f8f335d` of 2026-09-15 the suite carries 270 test functions
+— the 272 counted above, less the two doc-tests — and none begins with a
+requirement identifier: each names the property it asserts in
+a phrase and cites the identifiers in its own doc comment or beside the
+assertion. The two readings are that the rule above is met in substance — every
+test is bound to the requirements it verifies, in a place a reader sees — and
+unmet in form, so *which test covers `FR-X`?* is answerable by searching the
+comments rather than the names. The rule is not narrowed to fit: it is drawn
+from `specification/README.md` (*Identifier scheme*), which makes the identifier
+the reference used in test names, and `/specification` governs. The divergence
+is owed to the suite, and closing it is a change to code, which this document
+does not make.
+
 ## The register of mandated tests
 
 A **mandated** test is one the corpus requires, as against one an implementer
@@ -87,9 +116,9 @@ produce the behaviour, on the same footing as the behaviour itself.
 | 1 | Exit code per condition | One integration test per exit code of `FR-ERR-001`; nine codes, `70` excepted | Integration; the conditions that reach a server need one | `BR-ERR-001` |
 | 2 | The `70` trigger | The guard on a violated internal invariant produces the condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires | Unit | `FR-ERR-031`, `BR-ERR-001` |
 | 3 | Help equivalence | Byte-identical output across the three forms of each node, at every depth | Integration, snapshot | `BR-HELP-001`, `FR-HELP-002` |
-| 4 | Tree completeness | Every command, alias and flag appears in the JSON command tree | Integration | `BR-HELP-003` (1) |
-| 5 | Example presence | Every command carries at least one example | Integration | `BR-HELP-003` (2) |
-| 6 | Example validity | Every example parses through the command parser itself | Integration | `BR-HELP-003` (3) |
+| 4 | Tree completeness | Every command, alias and flag appears in the JSON command tree | Unit | `BR-HELP-003` (1) |
+| 5 | Example presence | Every command carries at least one example | Unit | `BR-HELP-003` (2) |
+| 6 | Example validity | Every example parses through the command parser itself | Unit | `BR-HELP-003` (3) |
 | 7 | The dump round-trip | A render over a dump fed back through `--context` is byte-identical to the same render against a live read | Server | `BR-SCH-004` |
 | 8 | The sentinel | A known sentinel password appears in no byte of either stream, from any command of the tree, at maximum verbosity | Integration; the commands that reach a server need one | `BR-SEC-003` |
 | 9 | The closed statement list | The server receives the four kinds of statement of `FR-SRV-006` and no fifth, with the three connection-start statements issued once each in that order | Server, observed on the server | `FR-SRV-012` |
@@ -111,6 +140,17 @@ produce the behaviour, on the same footing as the behaviour itself.
 | 25 | The three detections | Each shape of a privilege-driven absence is detected as the shape the catalogue gives it | Server, reduced-privilege reader | `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019`, `FR-PRIV-012` |
 | 26 | Type non-coercion | A naming filter applied to a non-string fails the render rather than coercing; a test applied to a non-column fails rather than answering `false` | Integration | `FR-ENV-034`, `FR-SEM-008`, `FR-SEM-009`; `FR-ENV-040`, `FR-SEM-005` |
 
+**Recorded change — the kind of rows 4 to 6.** This document gave the three
+tests of `BR-HELP-003` as integration tests; they are written as unit tests, and
+the column now says so. `BR-HELP-003` fixes the three properties and no kind, so
+nothing of the corpus moves. The reason the kind moved is that each of the three
+compares the document against **the tree the binary parses with**: an
+integration test reads the emitted bytes and would have to re-derive the tree in
+order to compare, which is the second source `FR-HELP-021` exists to prevent.
+Row 3 is unaffected and stays an integration test, because the equivalence it
+asserts is between two routes **through the process** and cannot be observed
+from inside it.
+
 **Recorded reading — the count.** [traceability.md](traceability.md) records
 *"fourteen mandated tests"*, naming `BR-HELP-003` once with *(three)* beside it
 and `FR-SRV-029` once with *(two)*, and counting the second expansion but not
@@ -122,17 +162,19 @@ differently. Nothing is corrected in the other file.
 
 ### Owed, and not yet observable
 
-Three verifications are owed by a settled decision rather than by a requirement.
+Two verifications are owed by a settled decision rather than by a requirement.
 Each decides a point on which a settled entry declined to assert, and each names
-what it costs if the expected answer does not hold.
+what it costs if the expected answer does not hold. A third was owed by
+[`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) and is
+discharged: the tests exist, and
+[The parser's mapping](#the-parsers-mapping-one-test-per-kind) names them.
 
 | Owed | What must be observed | What it costs if it fails | Kind | Recorded in |
 |---|---|---|---|---|
-| One test per mapped parser error kind | The four labelled lines `tpl` composes for each kind of the mapping, and the wildcard arm producing `64` with the token named | Nothing structural: the wildcard arm bounds the damage to a wrong `cause` line, never a different exit code | Unit | [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
 | The phase attribution of a TLS handshake failure | Whether an untrusted certificate, a name mismatch, and a server offering no TLS each reach `tpl` as the driver's TLS error rather than its I/O error | `FR-ERR-034` row `69` cannot be met as written, and a defect is owed to the functional owner naming `FR-ERR-034` | Server; needs the three failure modes `FR-CONF-038` obliges the fixture to present | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
 | A **defined** `null` under the strict undefined-behaviour variant | Whether it interpolates as the empty string rather than failing the render | `FR-SEM-010` and `FR-SEM-011` are contradicted outright | Unit, against the engine pinned by [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with) |
 
-The third is why
+The second is why
 [architecture.md](architecture.md#the-render-component) asserts nothing about a
 defined `null`: until the observation is made, **no passage of this folder may
 rely on either answer**, and this register carries the obligation so that it is
@@ -241,6 +283,35 @@ above are the ones it can reach, which is the reading
 already takes. The wording is the functional owner's to settle; nothing in the
 built system differs between the readings.
 
+## The invocation surface, observed on the process
+
+Four properties of the argument vector are properties of the **process** rather
+than of a function, so none can be established from inside the crate: a unit
+test over the renderer shows that the renderer escapes, not that the vector
+reaches it, that nothing else writes to the stream, or that the parser consulted
+no `PATH` on the way. They are asserted in `tests/invocation_surface.rs`, at
+commit `f8f335d` of 2026-09-15 — five tests for the four properties, and two
+regressions beside them. **Every negative test carries a control**: the decoy
+executable is run directly, and the environment is shown to reach a child
+process, because a test that asserts an absence is worth nothing until the same
+harness is shown to observe the presence.
+
+| Property | Requirement | Test |
+|---|---|---|
+| A rejected token reaches stderr escaped, whatever it carries, over the three untrusted populations | `FR-ERR-024` | `a_command_token_a_flag_token_and_a_help_path_segment_reach_stderr_escaped` |
+| A token cannot forge a labelled line of its own | `FR-ERR-008`, `FR-ERR-024` | `a_token_cannot_forge_a_labelled_line_of_its_own` |
+| One rejected token reaches the message, and the argument vector never does, at any verbosity | `FR-GLOB-018`, with [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) | `one_rejected_token_reaches_the_message_and_never_the_argument_vector` |
+| No `tpl`-prefixed executable is looked for on `PATH` | `FR-CLI-006` | `no_tpl_prefixed_executable_is_searched_for_on_path` |
+| No environment variable decides a form of help, of version, or a refusal | `FR-CLI-021`, `NFR-DET-004` | `no_environment_variable_decides_a_form_of_help_of_version_or_a_refusal` |
+| The argument terminator is never read as the value of the flag before it, so the `cause` names the node the invocation reached | `FR-CLI-017`, and `FR-ERR-009` through it | `the_argument_terminator_is_never_read_as_the_value_of_the_flag_before_it` |
+| A token written on both sides of the terminator is refused where it stands **first** | `FR-CLI-017`, `FR-CLI-019` | `a_token_written_on_both_sides_of_the_terminator_is_refused_where_it_stands_first` |
+
+The last two are regression tests over defects a security audit of the command
+surface found, and each was proved to fail against the defect it guards before
+being kept. They are recorded here rather than left in the file because a
+regression test whose defect is not named is a test the next reader cannot
+judge.
+
 ## The two test seams
 
 Two behaviours can be exercised only from a seam, and both seams are barred from
@@ -301,8 +372,39 @@ the suggestion machinery are
 [interfaces.md](interfaces.md#the-diagnostic-renderer)'s; the suggestion rule a
 test asserts against is `FR-ERR-019`, `FR-ERR-020` and `FR-ERR-023`.
 
-The parser's own diagnostics reach `64` through a mapping whose per-kind test is
-[owed](#owed-and-not-yet-observable).
+### The parser's mapping: one test per kind
+
+The parser's own diagnostics reach `64` through a mapping
+[`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) owed a test per
+kind, because no documentation promises **which** context a given refusal
+carries. The tests exist, in `src/cli/intercept.rs`, and each asserts the
+`clap::ErrorKind` against this tree before asserting the four lines: a parser
+version that reclassified one of these refusals fails where the refusal is
+mapped, rather than silently producing the wildcard's message.
+
+| `clap::ErrorKind` | Test |
+|---|---|
+| `InvalidSubcommand` | `an_unknown_subcommand_names_the_token_and_the_nearest_matches` |
+| `UnknownArgument` | `an_unknown_flag_names_the_token_and_the_nearest_matches`, and `a_token_the_command_takes_no_argument_for_is_named_as_written` for the condition `FR-CLI-017` separates from it |
+| `MissingRequiredArgument` | `a_missing_required_argument_names_the_command_and_the_argument` |
+| `InvalidValue` | `a_value_outside_an_enumeration_names_the_value_and_the_values_accepted`, `a_flag_given_without_any_value_says_so_rather_than_naming_a_value`, and `a_separate_token_value_beginning_with_a_dash_shows_the_corrected_form` for the two kinds the one condition of `FR-CLI-018` arrives under |
+| `ValueValidation` | `a_value_of_the_wrong_type_names_the_value_and_the_type_expected` |
+| `ArgumentConflict` | `a_flag_that_carries_no_value_is_refused_on_its_second_occurrence` |
+| The wildcard arm, reached by `InvalidUtf8` | `a_refusal_this_crate_does_not_classify_is_a_sixty_four_naming_what_it_can` |
+
+Two further tests hold the other half of that entry.
+`no_byte_the_parsers_own_renderer_composes_reaches_the_caller` renders what the
+parser's own renderer would have written for eight refusals and asserts
+that nothing it composes survives into the four labelled lines, and
+`every_flag_whose_value_is_parsed_names_the_type_it_expects` walks the tree
+feeding every flag a value no parser accepts, so a flag whose type the `cause`
+line cannot name fails there rather than reaching a caller.
+
+**What the wildcard test asserts is what the binary does, not what the entry
+first assumed.** `InvalidUtf8` carries no context this crate reads, so no token
+is named; the test asserts the kind, the `64`, and the `cause` that says the
+parser named none. `OD-08` records the wording and why the degradation is the
+safe direction.
 
 ## Help: snapshots at every depth
 
@@ -335,6 +437,37 @@ is what makes the third test of `BR-HELP-003` — every example parses through t
 command parser itself — a check of the parser against its own documentation
 rather than of one text against another. The help surface as built is
 [interfaces.md](interfaces.md#the-help-surface)'s.
+
+### Which tests exist
+
+At commit `f8f335d` of 2026-09-15. Every test in `tests/` launches the binary in
+an empty directory with no `.tpl` above it and under a cleared environment,
+because a run that happened to stand inside a project would pass for the wrong
+reason.
+
+| Test | What it covers |
+|---|---|
+| `tests/help_surface.rs::the_three_help_forms_are_byte_identical_at_every_node_of_the_tree` | `BR-HELP-001` and `FR-HELP-002`: the three forms compared byte for byte at all 35 nodes, the root among them, at every depth |
+| `tests/help_surface.rs::a_group_node_with_no_child_prints_what_its_help_form_prints` | The fourth form, at all six group nodes, the root among them (`FR-CLI-007`, `FR-HELP-025`) |
+| `tests/help_surface.rs::the_three_version_forms_write_exactly_the_line_of_the_requirement` | The third equivalence, and the line itself (`FR-HELP-005`) |
+| `tests/help_surface.rs::the_short_help_flag_is_not_a_summarised_long_one` | `FR-HELP-003`, on content: the seven sections and the four facts a leaf with an operand and an enumerated flag states |
+| `tests/help_surface.rs::a_leaf_that_requires_an_operand_still_answers_both_flag_forms` | All fourteen required operands answer `-h`, `--help`, `-V` and `--version`, and the node still refuses a missing operand with `64` |
+| `tests/help_surface.rs::an_alias_prints_the_same_bytes_as_the_node_it_names` | The seven aliases of `FR-CLI-011`, in the text form and the JSON one, over eight comparisons — `cfg db add` being the alias read at depth three |
+| `tests/help_surface.rs::a_segment_that_names_no_child_is_refused_with_the_node_it_was_sought_under` | `FR-HELP-028`, on the process: `64`, an empty stdout, the suggestion, and a `cause` naming both the segment and the node |
+| `tests/help_surface.rs`, six further tests | That every form succeeds where no project exists and nothing is in the environment (`FR-PROJ-025`, `FR-CLI-021`); the envelope and the four keys of `data`; the compact form and the indented one; the reduction of `FR-HELP-029`; the global flags carried once and repeated by no command; and a document byte-identical between runs |
+| `tests/help_environment.rs`, four tests | `FR-HELP-009`, `FR-HELP-010` and `NFR-DET-004`: the same bytes under two environments that disagree about `COLUMNS`, `TERM`, `CLICOLOR_FORCE` and `FORCE_COLOR`; exit `0` on stdout; no line over 80 columns; no ANSI escape on either stream |
+| `src/cli/help/document.rs`, three tests | The three properties of `BR-HELP-003`, each over the document `surface` builds, compared against the tree the binary parses with |
+
+**The population the walk covers is read from the document rather than
+listed**, so a node added to the tree is covered without any of these tests
+changing — which is the property a snapshot suite that enumerates nodes cannot
+have, and the failure `BR-HELP-001` exists to prevent.
+
+**No stored reference file exists.** The comparison is between the forms, which
+is the equivalence `FR-HELP-002` states and `BR-HELP-001` binds; nothing here
+compares today's bytes with a copy taken earlier, so a change to a help text is
+a change nobody has to re-bless, while a change that made two forms diverge
+fails.
 
 ## The dump round-trip
 

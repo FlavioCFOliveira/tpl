@@ -66,6 +66,7 @@ Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desen
 | Só se trabalha sobre **tarefa aberta**: no sprint `OPEN` e em `DOING` com `--commit-open` | **PARAR** e abri-la pela skill `roadmap-manager` |
 | **Nenhuma tarefa é executada directamente** — delega-se a um subagente, e a cada peça de trabalho o seu | **PARAR** e escolher o subagente |
 | **Um subagente de cada vez**, nunca em paralelo | **PARAR** e serializar. Só o utilizador autoriza paralelo, e só para o pedido em causa |
+| Trabalho com **proximidade funcional ou técnica substancial** faz-se num **único esforço**, e cada natureza de trabalho de uma só vez | **PARAR** e reagrupar. Juntar tarefas é planeamento, e exige confirmação do utilizador |
 | Escrita no Git **só** pela skill `gitflow` | **PARAR**. Nunca um `git commit` avulso, por trivial que seja |
 | Tarefas, sprints e comentários **só** pela skill `roadmap-manager` | **PARAR**. Nunca `rmp` invocado do Bash |
 | Conhecimento sobre o código **só** pela skill `knowledge-authority` | **PARAR**. Nunca `rmp graph …` directamente |
@@ -77,6 +78,9 @@ Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desen
 | O `tpl` **nunca escreve na base de dados** | **PARAR**. A leitura do catálogo é só por `INFORMATION_SCHEMA` |
 | Templates carregam-se **em runtime**, nunca embebidos em tempo de compilação | **PARAR**. Motores compile-time estão excluídos |
 | Validação que precise de base de dados usa a **fixture do projecto**, operada pelo seu harness | **PARAR** e levantá-la pelo harness. Nunca à mão, nunca mocks nem instâncias externas |
+| **Nada se inicia que não tenha sido explicitamente pedido** | **PARAR**. Registar o achado e perguntar ao utilizador como proceder |
+| **Nenhum trabalho se entrega a meio** | O trabalho **não está concluído**. Terminar, ou dizer explicitamente o que ficou por fazer e porquê |
+| Toda a **documentação é escrita em inglês**, e toda a instrução é explícita, objectiva, fechada e concisa | **PARAR** e reescrever |
 
 ## Antes de Começar
 
@@ -86,10 +90,41 @@ Correr esta verificação antes de qualquer trabalho. Um "não" em qualquer pont
 2. **Existe tarefa no `rmp` para este trabalho?** Se não — **PARAR** e criá-la pela skill `roadmap-manager`. Não se executa trabalho sem tarefa.
 3. **A tarefa está no sprint `OPEN`?** Se está em `BACKLOG`, ou num sprint `PENDING` ou `CLOSED` — **PARAR**. Trazê-la para o sprint aberto é acção de planeamento e **exige confirmação do utilizador**.
 4. **A tarefa está em `DOING`, aberta com `--commit-open <hash>`?** Se não, abrir agora, com o hash real de `git rev-parse HEAD`.
-5. **Que subagente executa cada peça do trabalho?** Decompor a tarefa e escolher por peça, avaliando os agentes efectivamente instalados. Sem especialista óbvio, o de propósito geral — **nunca** execução directa.
-6. **O âmbito está fechado?** O briefing é o que a tarefa define — título, descrição, requisitos, comentários — e mais nada. O que se descobrir fora dele **regista-se; não se executa**.
-7. **Durante o trabalho**, escrever o log à medida: `DECISION` com as opções rejeitadas, `FINDING` com o que se descobriu, `TEST` com a verificação e o resultado.
-8. **Ao fechar**, commit primeiro pela skill `gitflow`, depois `--commit-close <hash>` com o hash real desse commit.
+5. **Há sinergia por aproveitar?** Verificar se outras tarefas — no `rmp` ou fora dele — têm proximidade funcional ou técnica substancial com esta. Havendo, **PARAR**: propor ao utilizador juntá-las num único esforço e esperar pela decisão.
+6. **Que subagente executa cada peça do trabalho?** Decompor a tarefa e escolher por peça, avaliando os agentes efectivamente instalados. Sem especialista óbvio, o de propósito geral — **nunca** execução directa.
+7. **O âmbito está fechado?** O briefing é o que a tarefa define — título, descrição, requisitos, comentários — e mais nada. O que se descobrir fora dele **regista-se; não se executa**.
+8. **Durante o trabalho**, escrever o log à medida: `DECISION` com as opções rejeitadas, `FINDING` com o que se descobriu, `TEST` com a verificação e o resultado.
+9. **Ao fechar**, commit primeiro pela skill `gitflow`, depois `--commit-close <hash>` com o hash real desse commit.
+
+## Sinergia do Esforço
+
+**A procura de sinergia é permanente e vale em toda a forma de trabalhar neste projecto.** Antes de planear, antes de decompor e antes de delegar, a pergunta é a mesma: que trabalho pode ser feito **de uma só vez**, em benefício de mais do que uma tarefa?
+
+### Entre tarefas
+
+Identificadas tarefas — no `rmp` ou fora dele — cuja **proximidade funcional ou técnica é substancial**, juntam-se num **único esforço de desenvolvimento**, para que um trabalho sirva várias. Deixar tarefas próximas seguirem caminhos separados é desperdício, e é motivo para **PARAR** e reagrupar.
+
+Juntar tarefas é **acção de planeamento** e **exige confirmação do utilizador**: propõe-se, identificando as tarefas e a proximidade que as junta, e espera-se pela decisão. Identificar sinergia **NUNCA** é autorização para começar o trabalho das outras tarefas — é **Proactividade**, mais abaixo, e vale aqui sem alteração.
+
+As condições de **Nenhum trabalho fora de uma tarefa aberta** não se dispensam: cada tarefa do esforço pertence ao sprint `OPEN` e está em `DOING`, aberta com `--commit-open <hash>`.
+
+Autorizado o esforço, o seu âmbito é a **união dos âmbitos das tarefas que o compõem**, e essa união é ela própria fechada.
+
+### Dentro da tarefa
+
+Dentro de uma tarefa a exigência é a mesma: **agrupar o trabalho por natureza e executar cada natureza de uma só vez.** Escrever **todo** o código de uma vez e testar **tudo** de uma vez, em lugar de escrever um troço, testá-lo, escrever o seguinte e testá-lo — a alternância multiplica delegações, contextos e validações sem acrescentar nada.
+
+O mesmo vale para a documentação, e para qualquer outra natureza de trabalho: trata-se **toda de uma vez**. Sendo o âmbito grande de mais para uma só passagem, **identificam-se blocos** e trata-se cada bloco por inteiro, de uma só vez — nunca peça a peça.
+
+O pipeline de validação obrigatório, definido em **Desenvolvimento**, corre sobre o esforço completo, e não depois de cada fragmento.
+
+### Sinergia não é paralelismo
+
+A sinergia ganha-se com **menos delegações e maiores** — nunca com delegações simultâneas. **Um de cada vez — nunca em paralelo**, mais abaixo, mantém-se intacto, e nada nesta secção o afrouxa.
+
+### O esforço só está concluído quando todas as suas tarefas estão
+
+Um esforço que junte várias tarefas cumpre **Completude** por inteiro: nenhuma tarefa se dá por concluída enquanto o trabalho que lhe pertence não estiver feito e validado. Cada uma fecha pelo seu próprio gate, nos termos de **Fecho: primeiro o commit, depois a tarefa**.
 
 ## Execução de Tarefas por Subagentes
 
@@ -107,7 +142,9 @@ As indicações de agente já escritas noutras secções deste ficheiro — `rus
 
 **A delegação não é só por tarefa — é por cada peça de trabalho dentro dela.** Aberta a tarefa, o trabalho que ela contém é **decomposto**, e para **cada peça** escolhe-se o subagente mais adequado, avaliado contra os agentes efectivamente instalados na máquina nesse momento, nos termos da secção anterior.
 
-Uma tarefa que atravesse vários tipos de trabalho — especificação, código, testes, desempenho, segurança, documentação — usa **vários subagentes**, um por tipo, e **SEMPRE em série**, nos termos de **Um de cada vez — nunca em paralelo**, mais abaixo.
+**A decomposição é por natureza do trabalho, nunca por fragmento.** Todo o trabalho da mesma natureza vai numa **única delegação** ao mesmo subagente — nunca em delegações sucessivas sobre pedaços do mesmo problema. É o que **Sinergia do Esforço** exige.
+
+Uma tarefa que atravesse vários tipos de trabalho — especificação, código, testes, desempenho, segurança, documentação — usa **vários subagentes**, um por tipo, cada um com **todo** o trabalho desse tipo, e **SEMPRE em série**, nos termos de **Um de cada vez — nunca em paralelo**, mais abaixo.
 
 **A escolha do subagente de cada peça é registada na tarefa**, através da skill `roadmap-manager`, para que a execução fique rastreável a quem a fez.
 
@@ -119,13 +156,62 @@ Cada tarefa é executada sob um **âmbito fechado, objectivo e focado exclusivam
 
 O subagente **NUNCA** alarga o âmbito, **NUNCA** aproveita a passagem para corrigir o que encontra pelo caminho, e **NUNCA** antecipa a tarefa seguinte. O que descobrir fora do âmbito regista-se como comentário ou como nova tarefa, através da skill `roadmap-manager`; não se executa. Perante a tentação de o corrigir já, **PARAR** e registar.
 
+Um esforço que junte várias tarefas tem por âmbito a união dos âmbitos delas, fixada no momento em que o utilizador o autoriza e fechada a partir daí. **Sinergia do Esforço** decide-se antes de executar; durante a execução **NUNCA** é porta para alargar âmbito.
+
+O que aqui se exige ao subagente, **Proactividade**, mais abaixo, exige à sessão inteira.
+
 ### Um de cada vez — nunca em paralelo
 
 **NUNCA correr mais do que um subagente em simultâneo.** Podem usar-se tantos quantos a tarefa exigir, mas SEMPRE **em série**: lançar um, esperar que termine, avaliar o resultado, e só então lançar o seguinte. Dar por si prestes a lançar dois — **PARAR** e serializar.
 
 Esta regra sobrepõe-se a qualquer heurística por defeito que favoreça paralelismo, incluindo o hábito de agrupar várias invocações independentes na mesma mensagem para correrem em concorrência, e a orquestração por workflows, que faz fan-out de agentes. Neste projecto o padrão é execução em série, e é o padrão que prevalece na dúvida.
 
-Só o utilizador pode pedir execução em paralelo. Mesmo nesse caso é **excepcional**: cumpre-se para o pedido em causa e retoma-se de imediato o padrão em série. Um pedido de paralelismo não abre precedente para os pedidos seguintes.
+Só o utilizador pode autorizar execução em paralelo. Mesmo nesse caso é **excepcional**: cumpre-se para o pedido em causa, e a autorização **é revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização de paralelismo não abre precedente para as tarefas seguintes.
+
+## Linguagem
+
+A linguagem é instrumento de coordenação: o que aqui se escreve é o que outro agente vai executar. Uma frase vaga produz trabalho vago. As quatro exigências valem em tudo o que se **escreve** e em tudo o que se **interpreta** — briefings a subagentes, títulos e descrições de tarefas, comentários do log, mensagens de commit, respostas ao utilizador e documentação:
+
+| Exigência | O que impõe |
+|---|---|
+| **Explícito** | Dizer o que se pretende, por inteiro. Nada fica implícito, subentendido ou entregue à inferência de quem lê |
+| **Objectivo** | Dizer o que há a executar, em termos verificáveis. Nada de intenções genéricas nem de formulações que não se saiba se foram cumpridas |
+| **Fechado** | Delimitar o âmbito: o que entra e, quando não for evidente, o que fica de fora. Uma instrução sem fronteira é uma instrução por escrever |
+| **Conciso** | Poucas palavras. Cortar o que não acrescenta — nunca o que delimita |
+
+Estar prestes a escrever uma instrução que admita duas leituras é motivo para **PARAR** e reescrevê-la. Perante uma instrução **recebida** que admita duas leituras, **PARAR** e perguntar ao utilizador: **NUNCA** escolher uma delas por conta própria.
+
+### Língua
+
+**Toda a documentação é escrita em inglês** — o README, a especificação funcional, a especificação técnica, os registos de decisão, o CHANGELOG e os doc comments do código, sem excepção. Exige-se inglês impecável: ortografia, gramática e sintaxe sem erro, e tom profissional.
+
+As quatro exigências acima aplicam-se à documentação com o mesmo peso. Um texto em inglês correcto mas vago **não** cumpre o requisito.
+
+## Proactividade
+
+**A actuação é dirigida ao objectivo do trabalho em curso, e a nada mais.** É **proibido** iniciar por iniciativa própria qualquer trabalho que não tenha sido **explicitamente pedido**. Não há correcção pequena de mais, óbvia de mais nem oportuna de mais para escapar a esta regra.
+
+Identificada uma necessidade fora do âmbito do trabalho em execução:
+
+1. **PARAR.** Não se começa.
+2. **Registar** o achado pela skill `roadmap-manager`, como comentário na tarefa ou como tarefa nova.
+3. **Perguntar ao utilizador** como proceder, e esperar pela resposta.
+
+Retomar o trabalho em curso é o comportamento por defeito; iniciar o trabalho descoberto exige decisão do utilizador. Aproveitar a passagem para corrigir o que se encontra pelo caminho, antecipar a tarefa seguinte e acrescentar o que ninguém pediu são violações da mesma regra.
+
+## Completude
+
+**É proibido entregar trabalho parcial.** O que se inicia executa-se na sua plenitude: **NUNCA** deixar uma tarefa a meio, **NUNCA** dar por concluído o que está por acabar.
+
+Isto impõe três coisas, e nenhuma se dispensa:
+
+- **Não se declara concluído o que não está.** O trabalho termina quando tudo o que a tarefa define está feito e o pipeline de validação obrigatório, definido em **Desenvolvimento**, passa.
+- **Não se entrega um esqueleto.** Nada de `todo!()`, `unimplemented!()`, ramos por escrever, testes por escrever ou documentação por actualizar, deixados para depois.
+- **Não se estreita o âmbito em silêncio.** Bloqueada uma parte do trabalho, executa-se **tudo** o resto e diz-se **explicitamente** o que ficou por fazer e porquê. Reduzir o âmbito é decisão do utilizador, nunca de quem executa.
+
+Um trabalho que não caiba por inteiro no âmbito da tarefa não se entrega pela metade: **PARAR** e levar a questão ao utilizador.
+
+Um esforço que junte várias tarefas só está concluído quando **todas** elas estão: **Sinergia do Esforço** agrupa o trabalho, nunca dispensa parte dele.
 
 ## Skills Obrigatórias
 
@@ -191,6 +277,8 @@ O gate de commit impõe a ordem, e a ordem não se inverte:
 2. A tarefa é **fechada** com `--commit-close <hash>`, com o hash real desse commit.
 
 O hash vem do commit efectivamente criado. **NUNCA inventar, adivinhar ou reaproveitar um hash** para satisfazer o gate: sem commit criado, **PARAR** e criá-lo pela skill `gitflow`.
+
+Num esforço que junte várias tarefas, cada uma fecha com o hash do commit que **regista o trabalho dela**; sendo um só commit a registar o de várias, é esse hash que fecha cada uma. O que a regra proíbe é o hash de um commit que não contém o trabalho da tarefa.
 
 #### O log escreve-se durante o trabalho
 
@@ -275,6 +363,8 @@ O ciclo de vida de um registo, os seus estados, a numeração, o formato e as qu
 4. **Documentar** — actualizar README, doc comments e CHANGELOG.
 
 As etapas correm por esta ordem e **NUNCA** se salta nenhuma. Dar por si a implementar sem a etapa 1 cumprida — **PARAR** e voltar a ela.
+
+As quatro etapas correm sobre o **esforço inteiro**, não sobre cada fragmento: especifica-se tudo o que ele exige, implementa-se tudo, testa-se tudo, documenta-se tudo. A ordem não se altera por isso.
 
 ## Âmbito de Trabalho
 
@@ -502,7 +592,7 @@ A exigência de exaustividade não acaba no catálogo: vale igualmente para a su
 
 ## Documentação
 
-- Toda a documentação do projecto (README, doc comments, especificação, CHANGELOG) é escrita em **inglês**, com ortografia, gramática e sintaxe impecáveis.
-- A linguagem deve ser técnica, clara e sem ambiguidades, destinada a leitores humanos.
+- A língua e as exigências de escrita são as de **Linguagem**: inglês impecável, explícito, objectivo, fechado e conciso. Lê-se lá, e não se repete aqui.
+- O registo é técnico e destina-se a leitores humanos.
 - A documentação tem de ser **fiel ao código**: nunca descrever comandos, flags, filtros ou estruturas que não estejam implementados exactamente como descritos. Enquanto a implementação não existir, o README tem de o dizer explicitamente.
 - Todo o item público (`pub`) leva doc comment. `#![warn(missing_docs)]` no crate.

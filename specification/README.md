@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-14
+last-reviewed: 2026-09-15
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty editions. All are in force;
+The specification has been written in twenty-one editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1620,6 +1620,67 @@ that covers the corpus rather than settled from five instances.
 open question is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Twenty-first edition — a key nobody had named, and an array with two shapes
+
+Deriving the help command and the JSON document it emits produced two questions
+an implementer could not answer from what was written, and both are about the
+shape of that one document. `FR-ENV-005` obliged `tpl help --format json` to
+publish the template surface and named no place in the document for it, while
+`FR-HELP-017` listed a `data` of three keys with nothing said beside them, which
+reads as the whole of what `data` may carry; between them the surface had a
+publisher and no home. `FR-HELP-019` fixed the members of an entry of
+`data.commands` and left unstated the array those entries sit in, so the `path`
+on every entry read as a flat array and *the subtree rooted at* of `FR-HELP-016`
+read as a nested one, with nothing in the corpus to choose between them.
+
+**Neither settlement withdraws a requirement or reverses a decision.** Both fix
+a shape that was not fixed, in a document no implementation emits yet, and the
+shape is contract from here.
+
+- **Where the template surface is published** —
+  [help-and-version.md](help-and-version.md) and
+  [template-environment.md](template-environment.md). `FR-HELP-017` now carries
+  a fourth key of `data`, `template_surface`, after `commands`, and states that
+  `data` is an **open** set of keys to which a later edition may add, after the
+  last, so that the position of every key already present is unchanged. The
+  envelope of `FR-OUT-024` is untouched and stays closed at three keys;
+  `FR-OUT-028` bars a fourth key beside `data` and says nothing about a fourth
+  key inside it, and it is undiminished. `FR-ENV-005` fixes what the key holds
+  and keeps ownership of the content: three sibling objects of one shape, one
+  per group of `FR-ENV-001`, each carrying `guarantee`, `filters`, `tests`, and
+  `functions`, with the names drawn from the requirements that already fix them
+  and group 3 carried as the entry whose `guarantee` is `none` and whose arrays
+  are `null`, per `FR-OUT-012`. Publishing the surface inside the entry of
+  `tpl render` was rejected: it would not survive the reduction of
+  `FR-HELP-029`, and a command's entry lists the flags that command declares,
+  per `FR-HELP-020`. A document of its own was rejected too, because it adds a
+  node to a tree `FR-CLI-002` closes.
+- **What shape `data.commands` has** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-019` now states that the
+  array is **flat**: one entry per node below `tpl`, group nodes included, each
+  carrying its full `path` and never its children. `FR-HELP-016` and
+  `FR-HELP-029` define a subtree under it as a **selection** over that array —
+  the entry whose `path` is the path given, together with every entry whose
+  `path` extends it segment by segment, in the order they hold in the unreduced
+  document — with every other key of `data` emitted unreduced. Nesting was
+  rejected because it carries twice a relation `path` already states, and
+  because `FR-HELP-026` had rested on the flat reading since it was written:
+  its rationale turns on every node carrying its full `path` so that a caller
+  can hand the path straight back.
+
+**The two are one act because the first is unanswerable without the second.**
+A key added to `data` has to be a key the reduction of `FR-HELP-029` leaves
+alone, and what that reduction does could not be said until the array it
+reduces had a shape. The pair were found the way the twentieth edition's five
+were, by the first reader obliged to turn this corpus into a program, and they
+are of a different kind from those: nothing here decayed and nothing was stated
+wider than its ground — these shapes were never fixed at all, and the corpus
+read as though they had been.
+
+**No requirement is withdrawn, no identifier is retired or assigned, and no
+open question is raised or reopened.** The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -1991,6 +2052,18 @@ changes what `tpl` does — a suggestion may now name a configuration key and a
 hyphenated flag — and the other four state what was already in force. The
 obligation it records is below: the decision `NFR-DET-004` deliberately did not
 take from its own side.
+
+The twenty-first edition adds no obligation of either kind, and records none as
+discharged. It fixes the shape of the JSON document `tpl help --format json`
+emits, for which this corpus had fixed a command and not a payload:
+`FR-HELP-017` gains a fourth key of `data` and declares that set open,
+`FR-ENV-005` fixes what the key holds, and `FR-HELP-019` settles that
+`data.commands` is flat, which `FR-HELP-016` and `FR-HELP-029` then read as a
+selection rather than a nesting. It reverses no decision an earlier edition
+took: both defects were shapes nobody had fixed rather than statements that had
+decayed, so none of the five rules below would have found either, and what
+found them was a derivation of the command from the corpus. The item below was
+untouched by it and stayed outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.

@@ -1,7 +1,7 @@
 ---
 title: Architecture
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-15
 related: [README.md, traceability.md, open-decisions.md, overview.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -121,6 +121,62 @@ commands that skip two of them", which is the row count of `FR-PROJ-025`;
 `NFR-PERF-005` states the same set as three, because it groups the help command
 and the help flag together. The two describe one set, and nothing in the built
 system turns on the count. The table above follows `FR-PROJ-025`.
+
+## Step 1 in three parts, and the shape of `cli/`
+
+Step 1 runs for every command without exception (`FR-ERR-006`), and it is three
+things in one, in this order: whatever the **parser** refused, which
+[`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) re-renders; then
+the repeated single-value flag of `FR-CLI-014`; then the pair of `FR-CLI-015`.
+The order among the three is `cli/`'s own, for the reason
+[interfaces.md](interfaces.md#the-diagnostic-renderer) gives, and every one of
+them is `64`.
+
+`cli/` is therefore divided by subject and not by command: two of the three
+parts are properties of the whole tree rather than of any node under it.
+
+| Under `cli/` | Owns | Traced to |
+|---|---|---|
+| `cli.rs` | The tree and the five settings that close it at every node; the one route from the process to the parser; the dispatch | `FR-CLI-002`, `FR-CLI-004`, `FR-CLI-005`, `FR-CLI-006`, [`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own) |
+| `globals.rs`, `local.rs` | The seven global flags, declared once and accepted at any position; the flags more than one node declares, written once and flattened by each | `FR-GLOB-001`, `FR-GLOB-002`, `FR-CLI-024` |
+| `schema.rs`, `template.rs`, `cache.rs`, `cfg.rs` | The nodes, positional arguments and local flags of each group, taken from the module of `/specification` that owns the command | `FR-CLI-010`, `FR-CLI-008` |
+| `rules.rs` | The two refusals `tpl` makes itself, and the diagnostic level the two verbosity flags resolve to | `FR-CLI-014`, `FR-CLI-015`, `FR-GLOB-014`, [`OD-17`](open-decisions.md#od-17--observability) |
+| `intercept.rs` | What a parser refusal becomes, read as typed API and never as rendered text | [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
+| `help.rs`, with `help/render.rs` and `help/document.rs` | The typed table, the seven-section renderer, and the JSON command tree | `FR-HELP-006`, `FR-HELP-016`, `FR-HELP-022`, [`OD-05`](open-decisions.md#od-05--the-module-decomposition) |
+
+**Recorded reading — the map's phrase against the code.**
+[`OD-05`](open-decisions.md#od-05--the-module-decomposition) writes `cli/` as
+one module per porcelain command. As built there is one module per command
+**group** — `schema`, `template`, `cache`, `cfg` — while `render`, `init`,
+`help` and `version` declare their arguments where they are declared as nodes: a
+group's leaves share flags that are written once and flattened by each, and a
+top-level leaf sharing none has nothing to put in a module of its own. Nothing
+of the decomposition moves — no command's work lives in `cli/`, which is what
+that entry decided — and the granularity is recorded rather than silently read
+as the same thing.
+
+**Parsing yields one of three forms, and a command is only one of them.** The
+two flag forms are answered at whatever node they were given at (`FR-GLOB-019`,
+`FR-GLOB-020`), and a node that declares a required operand has none to supply
+when the caller is asking for the help in order to learn what the operand is. So
+what parsing yields is the seven global flags together with a form that is a
+help path, the version, or the command the vector names — the last being absent
+for a bare `tpl`, which `FR-CLI-007` answers with the top-level help. No value
+representing a complete command exists for an invocation whose required operand
+is absent, which is what keeps the two flag forms reachable at every node
+without weakening a declaration.
+
+**The diagnostic level is fixed between parsing and dispatch**, once, and
+nothing afterwards reads the two flags
+([`OD-17`](open-decisions.md#od-17--observability), `FR-GLOB-014`,
+`FR-GLOB-015`, `FR-CLI-016`). A failure to parse leaves it at the level of a run
+that supplied neither flag, which costs nothing: the four labelled lines are
+written at every level (`FR-ERR-008`).
+
+**A leaf whose implementation is a later sprint reports `70`**, naming its
+command path, and that arrangement is recorded as
+[`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) rather
+than left in the code that carries it.
 
 ## Project discovery and the trust checks
 
