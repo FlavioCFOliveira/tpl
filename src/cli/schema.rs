@@ -32,7 +32,7 @@
 //! name an object by flag: here the subcommand already carries the object's
 //! type, so the name needs no flag to disambiguate it.
 
-use clap::{Args, Subcommand};
+use clap::{ArgAction, Args, Subcommand};
 
 use super::local;
 
@@ -61,8 +61,12 @@ pub(crate) struct Pattern {
     /// literally. The pattern is evaluated in memory and is never sent to the
     /// server, per `FR-SCH-013`, and it folds case over ASCII `A-Z` and `a-z`
     /// only, per `FR-SCH-014`.
-    #[arg(long = "pattern", value_name = "PATTERN")]
-    pub(crate) pattern: Option<String>,
+    ///
+    /// Every occurrence, for the reason [`super::globals`] gives: `FR-CLI-014`
+    /// refuses a second one over the occurrences this declaration
+    /// accumulates.
+    #[arg(long = "pattern", value_name = "PATTERN", action = ArgAction::Append)]
+    pub(crate) pattern: Vec<String>,
 }
 
 /// The eight children of `tpl schema`.

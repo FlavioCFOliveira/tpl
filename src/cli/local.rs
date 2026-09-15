@@ -18,6 +18,16 @@
 //!
 //! None of these flags carries a short form, per `FR-GLOB-024`.
 //!
+//! **Each flag that carries a value is declared repeatable**, with
+//! `ArgAction::Append`, and the repetition is refused by [`super::rules`]. The
+//! reason is `OD-08`'s and is stated once, in [`super::globals`]: only the
+//! accumulated occurrences put the **both values** of `FR-CLI-014` in hand. A
+//! field of those flags is therefore every occurrence in the order written,
+//! reduced to at most one before any command reads it. The flags that carry no
+//! value — `--pretty`, `--direct` and `--no-cache` — are outside `FR-CLI-014`,
+//! which governs a flag that carries a single value, and keep their
+//! `ArgAction::SetTrue`.
+//!
 //! What is deliberately **not** here: `FR-OUT-009`, which makes `--pretty`
 //! without `--format json` a `64` on a command that declares both; and
 //! `FR-RND-005`, which refuses more than one kind of object flag in one
@@ -69,8 +79,18 @@ pub(crate) struct Output {
     /// `FR-OUT-002` forbids consulting `isatty()`, `TERM`, or any other
     /// terminal property, so a command and the same command in a pipeline
     /// produce identical bytes.
-    #[arg(long = "format", value_name = "FORMAT", value_enum, default_value_t = Format::Text)]
-    pub(crate) format: Format,
+    ///
+    /// Every occurrence, for the reason this module's own note gives. The
+    /// default occupies the single place when the flag is absent, so the
+    /// vector is never empty and its first entry is the format in force.
+    #[arg(
+        long = "format",
+        value_name = "FORMAT",
+        value_enum,
+        action = ArgAction::Append,
+        default_values_t = [Format::Text]
+    )]
+    pub(crate) format: Vec<Format>,
 
     /// `--pretty`, which `FR-OUT-009` admits only alongside `--format json`.
     #[command(flatten)]
@@ -102,7 +122,8 @@ pub(crate) struct Caching {
 /// `FR-RND-003` declares them on `tpl render` and `FR-CACHE-024` gives
 /// `tpl cache load` and `tpl cache clean` the same three spellings. Each takes
 /// exactly one value and is given at most once, per `FR-RND-004`; a repetition
-/// is `64` under `FR-CLI-014`, which is a parsing rule and not declared here.
+/// is `64` under `FR-CLI-014`, which [`super::rules`] refuses over the
+/// occurrences this declaration accumulates.
 ///
 /// The three are mutually exclusive in one invocation, per `FR-RND-005`, and
 /// that refusal is the command's rather than the parser's, for the reason this
@@ -111,12 +132,16 @@ pub(crate) struct Caching {
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
 pub(crate) struct Object {
     /// The table to bind (`FR-RND-003`).
-    #[arg(long = "table", value_name = "NAME")]
-    pub(crate) table: Option<String>,
+    ///
+    /// Every occurrence, for the reason this module's own note gives.
+    #[arg(long = "table", value_name = "NAME", action = ArgAction::Append)]
+    pub(crate) table: Vec<String>,
 
     /// The view to bind (`FR-RND-003`).
-    #[arg(long = "view", value_name = "NAME")]
-    pub(crate) view: Option<String>,
+    ///
+    /// Every occurrence, for the reason this module's own note gives.
+    #[arg(long = "view", value_name = "NAME", action = ArgAction::Append)]
+    pub(crate) view: Vec<String>,
 
     /// The routine to bind (`FR-RND-003`).
     ///
@@ -125,6 +150,8 @@ pub(crate) struct Object {
     /// functions occupy distinct namespaces on the server. Resolving the name
     /// is the command's, and a bare name matching both is `64` under
     /// `FR-SCH-010`.
-    #[arg(long = "routine", value_name = "NAME")]
-    pub(crate) routine: Option<String>,
+    ///
+    /// Every occurrence, for the reason this module's own note gives.
+    #[arg(long = "routine", value_name = "NAME", action = ArgAction::Append)]
+    pub(crate) routine: Vec<String>,
 }

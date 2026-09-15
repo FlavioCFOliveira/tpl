@@ -56,9 +56,9 @@ const MAX_SUGGESTIONS: usize = 3;
 /// does not fix, which the character set governs.
 #[allow(
     dead_code,
-    reason = "the eight populations of FR-ERR-021 belong to `mariadb/`, `render/`, \
-              `project/config.rs` and `cli/`, each a later sprint; this module owns the \
-              selection made over one of them and owns no population"
+    reason = "two of the four classes are constructed today, by `cli/`; the key space of \
+              FR-CONF-002 belongs to `project/config.rs` and the five populations this \
+              corpus does not fix to `mariadb/` and `render/`, each a later sprint"
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Population {
@@ -136,19 +136,12 @@ pub(crate) struct Suggestions<'a> {
 }
 
 impl<'a> Suggestions<'a> {
-    /// Whether nothing qualified, in which case `FR-ERR-020` omits the
-    /// suggestion and `FR-ERR-023` leaves the generic hint standing alone.
-    pub(crate) const fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    /// How many candidates were kept, never more than three.
-    pub(crate) const fn len(&self) -> usize {
-        self.len
-    }
-
     /// The kept candidates, in order.
-    pub(crate) fn names(&self) -> impl ExactSizeIterator<Item = &'a str> + '_ {
+    ///
+    /// The iterator is the whole of what a selection exposes: it reports how
+    /// many qualified, which is what `FR-ERR-020` turns on, and it is what
+    /// [`hint_line`] composes from.
+    pub(crate) fn names(&self) -> impl ExactSizeIterator<Item = &'a str> + Clone + '_ {
         self.kept[..self.len].iter().map(|kept| kept.name)
     }
 
@@ -186,11 +179,6 @@ impl<'a> Suggestions<'a> {
 /// lies within `MAX_DISTANCE`, ordered by distance and then by name.
 ///
 /// The returned names borrow from `candidates`; nothing is copied.
-#[allow(
-    dead_code,
-    reason = "the eight populations of FR-ERR-021 belong to the components that own them, \
-              each a later sprint; this is the selection they will be handed to"
-)]
 pub(crate) fn suggestions<'a, C>(
     supplied: &str,
     candidates: C,
@@ -226,32 +214,39 @@ where
 /// `FR-ERR-008` fixes the wording for one candidate; two are joined by ` or `
 /// and three by `, ` and ` or `, so the line reads as one question however many
 /// it carries.
-#[allow(
-    dead_code,
-    reason = "the eight populations of FR-ERR-021 belong to the components that own them, \
-              each a later sprint; no variant of Error carries one yet"
-)]
-pub(crate) fn hint_line<'a>(suggestions: &Suggestions<'_>, generic: &'a str) -> Cow<'a, str> {
-    if suggestions.is_empty() {
+///
+/// The candidates are taken as an iterator rather than as a [`Suggestions`],
+/// because a selection is made where the population lives and the line is
+/// composed where the diagnostic is: the two are separated by the error value,
+/// which carries the kept names. [`Suggestions::names`] and a slice of names an
+/// [`Error`](crate::error::Error) variant carries are therefore both admissible
+/// here, and the composition exists once.
+pub(crate) fn hint_line<'a, N>(names: N, generic: &'a str) -> Cow<'a, str>
+where
+    N: ExactSizeIterator + Clone,
+    N::Item: AsRef<str>,
+{
+    let kept = names.len();
+    if kept == 0 {
         return Cow::Borrowed(generic);
     }
 
     // "did you mean " and "? ", plus two quotation marks and a separator of at
     // most four bytes for each name.
-    let width = suggestions.names().map(str::len).sum::<usize>()
-        + suggestions.len() * 6
+    let width = names.clone().map(|name| name.as_ref().len()).sum::<usize>()
+        + kept * 6
         + generic.len()
         + 15;
     let mut line = String::with_capacity(width);
 
     line.push_str("did you mean ");
-    let last = suggestions.len() - 1;
-    for (index, name) in suggestions.names().enumerate() {
+    let last = kept - 1;
+    for (index, name) in names.enumerate() {
         if index > 0 {
             line.push_str(if index == last { " or " } else { ", " });
         }
         line.push('\'');
-        line.push_str(name);
+        line.push_str(name.as_ref());
         line.push('\'');
     }
     line.push_str("? ");
@@ -581,8 +576,7 @@ mod tests {
             Population::Names,
         );
 
-        assert!(selected.is_empty());
-        assert_eq!(selected.len(), 0);
+        assert_eq!(selected.names().len(), 0);
     }
 
     #[test]
@@ -611,9 +605,9 @@ mod tests {
         let hostile = "orders;DROP TABLE x";
         let selected = suggestions("orders;DROP TABLE y", [hostile], Population::Names);
 
-        assert!(selected.is_empty(), "the candidate must not be kept");
+        assert_eq!(selected.names().len(), 0, "the candidate must not be kept");
 
-        let line = hint_line(&selected, GENERIC);
+        let line = hint_line(selected.names(), GENERIC);
         assert_eq!(line, GENERIC, "the generic hint stands alone");
         assert!(!line.contains("DROP"), "{line}");
         assert!(!line.contains(';'), "{line}");
@@ -677,8 +671,8 @@ mod tests {
             Population::ConfigurationKeys,
         );
 
-        assert!(selected.is_empty(), "neither key qualifies");
-        assert!(!hint_line(&selected, GENERIC).contains("rm -rf"));
+        assert_eq!(selected.names().len(), 0, "neither key qualifies");
+        assert!(!hint_line(selected.names(), GENERIC).contains("rm -rf"));
     }
 
     #[test]
@@ -722,7 +716,7 @@ mod tests {
         let selected = suggestions("ordrs", ["orders", "customers"], Population::Names);
 
         assert_eq!(
-            hint_line(&selected, &hint::hint(&error)),
+            hint_line(selected.names(), &hint::hint(&error)),
             "did you mean 'orders'? list the available tables with: tpl -d shop schema tables"
         );
     }
@@ -731,20 +725,20 @@ mod tests {
     fn two_and_three_candidates_each_read_as_one_question() {
         let two = suggestions("orders", ["orderz", "aorders"], Population::Names);
         assert_eq!(
-            hint_line(&two, GENERIC),
+            hint_line(two.names(), GENERIC),
             format!("did you mean 'aorders' or 'orderz'? {GENERIC}")
         );
 
         let three = suggestions("orders", ["orderz", "aorders", "border"], Population::Names);
         assert_eq!(
-            hint_line(&three, GENERIC),
+            hint_line(three.names(), GENERIC),
             format!("did you mean 'aorders', 'orderz' or 'border'? {GENERIC}")
         );
     }
 
     #[test]
     fn an_empty_selection_borrows_the_generic_hint_rather_than_copying_it() {
-        let line = hint_line(&Suggestions::default(), GENERIC);
+        let line = hint_line(Suggestions::default().names(), GENERIC);
 
         assert_eq!(line, GENERIC);
         assert!(matches!(line, std::borrow::Cow::Borrowed(_)));

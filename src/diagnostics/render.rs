@@ -125,6 +125,17 @@ fn write_block(rendered: &str) {
     let _ = stderr.flush();
 }
 
+/// The four labelled lines [`report`] writes for `error`, as one block.
+///
+/// It exists so that a test may read what a caller would read, without
+/// capturing a process's stderr. `#[cfg(test)]` is the reachability rule
+/// `OD-21` applies to a test seam: the item is not compiled into the artefact
+/// `cargo build` produces.
+#[cfg(test)]
+pub(crate) fn rendered(error: &Error) -> String {
+    render(error)
+}
+
 /// Composes the four labelled lines for `error`, each terminated by a newline.
 fn render(error: &Error) -> String {
     let mut out = String::with_capacity(BLOCK_CAPACITY);
@@ -322,6 +333,7 @@ mod tests {
         // FR-ERR-034, the 64 row.
         let rendered = render(&Error::UnknownCommand {
             token: "sch".to_owned(),
+            nearest: Vec::new(),
         });
 
         assert_eq!(
@@ -803,6 +815,7 @@ mod tests {
         // success by a caller parsing the stream line by line.
         let rendered = render(&Error::UnknownCommand {
             token: HOSTILE.to_owned(),
+            nearest: Vec::new(),
         });
         let lines: Vec<&str> = rendered.lines().collect();
 
@@ -828,6 +841,7 @@ mod tests {
         let samples = [
             Error::UnknownCommand {
                 token: HOSTILE.to_owned(),
+                nearest: Vec::new(),
             },
             Error::MutuallyExclusiveFlags {
                 first: HOSTILE.to_owned(),
@@ -896,8 +910,37 @@ mod tests {
         let hostile_path = || PathBuf::from(payload);
 
         vec![
-            Error::UnknownCommand { token: hostile() },
-            Error::UnknownFlag { token: hostile() },
+            Error::UnknownCommand {
+                token: hostile(),
+                nearest: vec![hostile()],
+            },
+            Error::UnknownFlag {
+                token: hostile(),
+                nearest: vec![hostile()],
+            },
+            Error::UnexpectedArgument {
+                command: hostile(),
+                token: hostile(),
+            },
+            Error::RepeatedValueFlag {
+                flag: hostile(),
+                first: hostile(),
+                second: hostile(),
+            },
+            Error::RepeatedFlag { flag: hostile() },
+            Error::FlagValueMissing { flag: hostile() },
+            Error::SeparateTokenValue {
+                flag: hostile(),
+                value: hostile(),
+            },
+            Error::ValueOutsideEnumeration {
+                flag: hostile(),
+                value: hostile(),
+                permitted: vec![hostile()],
+            },
+            Error::InvocationRejected {
+                token: Some(hostile()),
+            },
             Error::MissingArgument {
                 command: hostile(),
                 argument: hostile(),
@@ -1082,7 +1125,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 43, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 50, "every variant of Error is sampled");
     }
 
     #[test]

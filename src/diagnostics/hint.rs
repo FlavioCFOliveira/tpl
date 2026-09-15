@@ -33,6 +33,7 @@
 
 use std::borrow::Cow;
 
+use super::suggest;
 use crate::error::{
     CatalogueObjectKind, ContextFault, DeadlineBound, Error, NetworkPhase, ReadOnlyFault,
 };
@@ -58,9 +59,79 @@ pub(super) const SOFTWARE_DEFECT: &str = "this is a defect in tpl and is not cor
 pub(super) fn hint(error: &Error) -> Cow<'static, str> {
     match error {
         // ------------------------------------------------------------ 64 ---
-        Error::UnknownCommand { .. } => Cow::Borrowed("list the commands with: tpl help"),
-        Error::UnknownFlag { .. } => {
-            Cow::Borrowed("list the flags a command declares with: tpl help <command>")
+        // FR-CLI-003 obliges the nearest-match half of these two lines and
+        // BR-CLI-001 routes a mistyped alias through it. The selection is
+        // `cli`'s, because FR-ERR-021's populations belong to the components
+        // that own them; the line is composed here, from what the variant
+        // carries, and falls back to the generic hint alone where nothing
+        // qualified, per FR-ERR-020.
+        Error::UnknownCommand { nearest, .. } => {
+            let admitted = admitted(nearest, admits_path);
+            suggest::hint_line(admitted.iter().copied(), "list the commands with: tpl help")
+        }
+        Error::UnknownFlag { nearest, .. } => {
+            let admitted = admitted(nearest, admits_flag);
+            suggest::hint_line(
+                admitted.iter().copied(),
+                "list the flags a command declares with: tpl help <command>",
+            )
+        }
+        Error::UnexpectedArgument { command, .. } => {
+            if admits_path(command) {
+                Cow::Owned(format!("show what it takes with: tpl help {command}"))
+            } else {
+                Cow::Borrowed("show what the command takes with: tpl help <command>")
+            }
+        }
+        // The flag is a spelling this corpus enumerates and is therefore a
+        // literal, per FR-ERR-022; the test beside it is the defensive
+        // assertion this module applies to every such value.
+        Error::RepeatedValueFlag { flag, .. } => {
+            if admits_flag(flag) {
+                Cow::Owned(format!("give '{flag}' once, with the value you intend"))
+            } else {
+                Cow::Borrowed("give the flag named above once, with the value you intend")
+            }
+        }
+        Error::RepeatedFlag { flag } => {
+            if admits_flag(flag) {
+                Cow::Owned(format!("give '{flag}' once"))
+            } else {
+                Cow::Borrowed("give the flag named above once")
+            }
+        }
+        Error::FlagValueMissing { flag } => {
+            if admits_flag(flag) {
+                Cow::Owned(format!(
+                    "give the value after the flag, or in one token: {flag}=<value>"
+                ))
+            } else {
+                Cow::Borrowed("give the flag named above a value")
+            }
+        }
+        // FR-CLI-018 fixes this line: the hint shows the corrected
+        // `--flag=value` form. The value is the caller's own and is tested
+        // before it is written into the line — with `admits_flag`, because a
+        // value that reaches this condition begins with `-` and is therefore
+        // shaped like one. A value the set refuses leaves the form standing
+        // with its placeholder, which is what FR-ERR-023 requires and what
+        // FR-CLI-018 asks for either way: the form is the correction.
+        Error::SeparateTokenValue { flag, value } => {
+            match (admits_flag(flag), admits_flag(value)) {
+                (true, true) => Cow::Owned(format!("write the value in one token: {flag}={value}")),
+                (true, false) => {
+                    Cow::Owned(format!("write the value in one token: {flag}=<value>"))
+                }
+                (false, _) => {
+                    Cow::Borrowed("write the value in one token, joined to its flag by '='")
+                }
+            }
+        }
+        Error::ValueOutsideEnumeration { .. } => {
+            Cow::Borrowed("show the values the command accepts with: tpl help <command>")
+        }
+        Error::InvocationRejected { .. } => {
+            Cow::Borrowed("show what the command accepts with: tpl help <command>")
         }
         Error::MissingArgument { command, .. } => {
             if admits_path(command) {
@@ -277,6 +348,23 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             update_entry(entry)
         )),
     }
+}
+
+/// The candidates of a nearest-match hint that `admits` lets through.
+///
+/// `FR-ERR-023` drops a candidate outside the character set in **every** form,
+/// and [`super::suggest`] applies that where the selection is made. This is the
+/// same test applied again where the line is composed, and it is the defensive
+/// assertion this module applies to every enumerated population: a command, an
+/// alias and a flag are spellings this corpus fixes, so a candidate that fails
+/// here came from somewhere other than the command tree and no line is built
+/// from it.
+fn admitted(nearest: &[String], admits: fn(&str) -> bool) -> Vec<&str> {
+    nearest
+        .iter()
+        .map(String::as_str)
+        .filter(|candidate| admits(candidate))
+        .collect()
 }
 
 /// The `tpl cfg database update` command that repoints an entry.

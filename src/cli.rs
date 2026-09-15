@@ -68,15 +68,31 @@
 //! that text is a later task; [`group_help`] is the call site it replaces, and
 //! it says so in its own documentation.
 //!
-//! Nothing in this module is reached from [`crate::run`] yet. The route from
-//! the process to [`parse_from`] carries one decision this module does not
-//! make — what a `clap::Error` becomes, per `OD-08` — and it is made where the
-//! parsing rules of `FR-CLI-014` through `FR-CLI-020` are.
+//! [`parse`] is the whole of the route from the process to the tree, and
+//! [`crate::run`] takes it: it builds the tree, hands it the vector, and turns
+//! whatever comes back into the one thing the caller reads — a [`Cli`], or an
+//! [`Error`] the four labelled lines of `FR-ERR-008` are composed from.
+//!
+//! # The parsing rules
+//!
+//! `FR-ERR-006` makes argument parsing step 1 of the validation order, for
+//! every command without exception, and the step is three things in one:
+//! whatever the parser refuses, which [`intercept`] re-renders per `OD-08`;
+//! then the repetition of `FR-CLI-014`; then the pair of `FR-CLI-015`.
+//! [`rules`] owns the last two and states the order among the three.
+//!
+//! Two of the six rules are the parser's own behaviour, and are therefore
+//! asserted here rather than implemented: `FR-CLI-017` terminates the arguments
+//! at `--` on every command, and `FR-CLI-020` matches a flag and its value byte
+//! for byte. A default is the one property of a dependency that can change
+//! without anything in this project changing, which is why each is a test.
 
 mod cache;
 mod cfg;
 mod globals;
+mod intercept;
 mod local;
+mod rules;
 mod schema;
 mod template;
 
@@ -92,6 +108,7 @@ use globals::Globals;
 use schema::Schema;
 use template::Template;
 
+use crate::diagnostics::verbosity::Level;
 use crate::error::{self, Error};
 
 /// The interim outcome of a leaf whose implementation is a later sprint.
@@ -174,8 +191,12 @@ pub(crate) enum Command {
         /// incompatible with `-d/--database` given explicitly on the command
         /// line, per `FR-RND-018`, which is a refusal between two arguments
         /// and so the command's rather than the parser's.
-        #[arg(long = "context", value_name = "PATH")]
-        context: Option<PathBuf>,
+        ///
+        /// Every occurrence, for the reason [`globals`] gives: it carries a
+        /// value, so `FR-CLI-014` refuses a second one over the occurrences
+        /// this declaration accumulates.
+        #[arg(long = "context", value_name = "PATH", action = ArgAction::Append)]
+        context: Vec<PathBuf>,
 
         /// `--direct` and `--no-cache`, per `FR-RND-025`.
         ///
@@ -237,10 +258,9 @@ pub(crate) enum Command {
 
 /// The parser tree, closed at every node by [`closed`].
 ///
-/// This is the single construction site of the tree, and the only one
-/// [`parse_from`] and the tests use: a setting applied here is applied to every
-/// node, and a node added to the tree acquires it without anyone remembering
-/// to.
+/// This is the single construction site of the tree, and the only one [`parse`]
+/// and the tests use: a setting applied here is applied to every node, and a
+/// node added to the tree acquires it without anyone remembering to.
 pub(crate) fn tree() -> clap::Command {
     closed(Cli::command())
 }
@@ -269,17 +289,64 @@ fn closed(command: clap::Command) -> clap::Command {
     )
 }
 
-/// Parses one argument vector against the tree.
+/// Parses one argument vector against the tree, and applies the parsing rules.
 ///
 /// The vector is the whole invocation, `argv[0]` included, as the process
-/// receives it.
+/// receives it. This is the only route from the process to the parser, and it
+/// is what makes `OD-08` hold: the `clap::Error` is intercepted here and never
+/// rendered, so no byte the parser composes reaches either stream.
 ///
 /// # Errors
 ///
-/// Returns the `clap::Error` the parser raised, unclassified. What it becomes —
-/// which of the conditions of `FR-CLI-003`, `FR-CLI-019` or `FR-ERR-006` it is,
-/// and which exit code that carries — is decided where `OD-08` places it, and
-/// deliberately not here.
+/// Returns the [`Error`] of the first condition of step 1 of `FR-ERR-006` that
+/// fails, in the order [`rules`] states: what the parser itself refused, then
+/// the repetition of `FR-CLI-014`, then the pair of `FR-CLI-015`. Every one of
+/// them exits `64`.
+pub(crate) fn parse<I, T>(arguments: I) -> Result<Cli, Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString>,
+{
+    let argv: Vec<OsString> = arguments.into_iter().map(Into::into).collect();
+
+    // The tree is built once and kept: `intercept` reads the node an invocation
+    // reached from it, and `rules` reads the declarations from it.
+    let mut tree = tree();
+    let matches = match tree.try_get_matches_from_mut(&argv) {
+        Ok(matches) => matches,
+        Err(refused) => return Err(intercept::intercepted(&refused, &tree, &argv)),
+    };
+
+    rules::refuse_repetition(&tree, &matches)?;
+
+    let invocation = Cli::from_arg_matches(&matches)
+        .map_err(|refused| intercept::intercepted(&refused, &tree, &argv))?;
+
+    rules::refuse_both_verbosities(&invocation.globals)?;
+
+    Ok(invocation)
+}
+
+/// The diagnostic level an invocation resolves to (`FR-GLOB-014`,
+/// `FR-GLOB-015`, `FR-CLI-016`).
+///
+/// `OD-17` resolves it once, during argument handling; the process fixes it for
+/// the rest of the run, and nothing else reads the two flags.
+pub(crate) fn level(invocation: &Cli) -> Level {
+    rules::level(&invocation.globals)
+}
+
+/// Parses one argument vector against the tree, and applies no rule of `tpl`.
+///
+/// It is the raw parse, and it exists for the tests that observe **what the
+/// parser itself refuses** — the closure of `FR-CLI-002`, the two inferences of
+/// `FR-CLI-004` and `FR-CLI-005`, the unknown flag of `FR-CLI-019`. Every other
+/// test, and the process, go through [`parse`].
+///
+/// # Errors
+///
+/// Returns the `clap::Error` the parser raised, unclassified.
+#[cfg(test)]
 pub(crate) fn parse_from<I, T>(arguments: I) -> Result<Cli, clap::Error>
 where
     I: IntoIterator<Item = T>,
@@ -409,7 +476,9 @@ mod tests {
 
     use clap::error::ErrorKind;
 
-    use super::{Cli, Command, Error, cfg, local, parse_from, route, schema, template, tree};
+    use super::{
+        Cli, Command, Error, Level, cfg, local, parse, parse_from, route, schema, template, tree,
+    };
 
     /// Every leaf of the tree of `FR-CLI-002`, by the path a caller writes and
     /// the operands that path requires.
@@ -819,7 +888,7 @@ mod tests {
             panic!("`tables` did not parse to its own node");
         };
 
-        assert_eq!(output.format, local::Format::Text);
+        assert_eq!(output.format, [local::Format::Text]);
         assert!(!output.pretty.pretty);
     }
 
@@ -1159,7 +1228,7 @@ mod tests {
 
         assert_eq!(before, after);
         assert_eq!(before, between);
-        assert_eq!(before.globals.database.as_deref(), Some("shop"));
+        assert_eq!(before.globals.database, ["shop"]);
 
         // And at the deepest node of the tree, where the flag sits between two
         // subcommands rather than between a command and its subcommand.
@@ -1223,14 +1292,14 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{path:?}: {error}"));
             let globals = &invocation.globals;
 
-            assert_eq!(globals.database.as_deref(), Some("shop"), "{path:?}");
+            assert_eq!(globals.database, ["shop"], "{path:?}");
             assert_eq!(
-                globals.tpl_dir.as_deref(),
-                Some(std::path::Path::new("/srv/project/.tpl")),
+                globals.tpl_dir,
+                [std::path::Path::new("/srv/project/.tpl")],
                 "{path:?}"
             );
             assert_eq!(
-                globals.timeout.map(std::num::NonZeroU64::get),
+                globals.timeout.first().map(|seconds| seconds.get()),
                 Some(30),
                 "{path:?}"
             );
@@ -1407,9 +1476,8 @@ mod tests {
             parse_from(argv(&["schema", "tables"], &["-d", "Shop"]))
                 .expect("parses")
                 .globals
-                .database
-                .as_deref(),
-            Some("Shop")
+                .database,
+            ["Shop"]
         );
 
         assert_eq!(
@@ -1467,5 +1535,273 @@ mod tests {
             read.command,
             Some(schema::Command::Routines { .. })
         ));
+    }
+
+    #[test]
+    fn a_flag_that_carries_a_single_value_is_refused_on_its_second_occurrence() {
+        // FR-CLI-014, and the whole of what OD-08 bought by declaring these
+        // flags repeatable: the message names **both values**, which the
+        // parser's own ArgumentConflict cannot, because it names the argument
+        // twice and neither value.
+        for (path, operands, trailing, flag, first, second) in [
+            (
+                &[][..],
+                &[][..],
+                &["-d", "a", "-d", "b", "schema", "tables"][..],
+                "--database",
+                "a",
+                "b",
+            ),
+            (
+                &["schema", "tables"][..],
+                &[][..],
+                &["--pattern", "order%", "--pattern", "invoice%"][..],
+                "--pattern",
+                "order%",
+                "invoice%",
+            ),
+            (
+                &["schema", "tables"][..],
+                &[][..],
+                &["--format", "json", "--format", "text"][..],
+                "--format",
+                "json",
+                "text",
+            ),
+            (
+                &["cfg", "database", "add"][..],
+                &["shop"][..],
+                &["--host", "a.example.com", "--host", "b.example.com"][..],
+                "--host",
+                "a.example.com",
+                "b.example.com",
+            ),
+            (
+                &["render"][..],
+                &["rust/struct"][..],
+                &["--table", "orders", "--table", "invoices"][..],
+                "--table",
+                "orders",
+                "invoices",
+            ),
+        ] {
+            let mut vector = operands.to_vec();
+            vector.extend_from_slice(trailing);
+            let refused = parse(argv(path, &vector)).expect_err("the repetition is refused");
+
+            assert_eq!(refused.exit_code(), 64, "{path:?} {trailing:?}");
+
+            let Error::RepeatedValueFlag {
+                flag: named,
+                first: written,
+                second: again,
+            } = &refused
+            else {
+                panic!("{path:?} {trailing:?} was refused as {refused}");
+            };
+
+            assert_eq!(named, flag);
+            assert_eq!(written, first);
+            assert_eq!(again, second);
+        }
+    }
+
+    #[test]
+    fn the_one_repeatable_flag_and_the_two_repeatable_arguments_are_not_refused() {
+        // FR-RND-008 makes `--set` repeatable with distinct keys, and
+        // FR-TMPL-019 and FR-HELP-026 make two positionals sequences. None of
+        // the three is the repetition FR-CLI-014 refuses.
+        let invocation = parse(argv(
+            &["render"],
+            &["rust/struct", "--set", "a=1", "--set", "b=2"],
+        ))
+        .expect("--set is repeatable");
+
+        let Some(Command::Render { set, .. }) = invocation.command else {
+            panic!("`render` did not parse to its own node");
+        };
+        assert_eq!(set, ["a=1", "b=2"]);
+
+        parse(argv(&["template", "check"], &["a", "b", "c"])).expect("names is a sequence");
+        parse(argv(&["help"], &["cfg", "database", "add"])).expect("the path is a sequence");
+    }
+
+    #[test]
+    fn a_global_flag_is_refused_on_its_second_occurrence_at_whatever_depth() {
+        // FR-CLI-024 frees the position of a global flag, and FR-CLI-014
+        // continues to refuse a repetition "wherever the two occurrences
+        // appear" — including one written before the command and one after it.
+        let refused = parse(argv(
+            &["cfg", "database", "add"],
+            &["-d", "a", "shop", "-d", "b"],
+        ))
+        .expect_err("the repetition is refused");
+
+        assert_eq!(refused.exit_code(), 64);
+        assert!(refused.to_string().contains("--database"), "{refused}");
+    }
+
+    #[test]
+    fn quiet_and_verbose_together_are_refused_and_the_repetition_is_decided_first() {
+        // FR-CLI-015 and FR-GLOB-015, then the order `rules` states: a refusal
+        // that is a property of one flag precedes one that is a property of
+        // two.
+        let refused = parse(argv(&["version"], &["-q", "-v"])).expect_err("the pair is refused");
+
+        assert_eq!(refused.exit_code(), 64);
+        assert!(
+            matches!(refused, Error::MutuallyExclusiveFlags { .. }),
+            "{refused}"
+        );
+
+        let refused = parse(argv(&["version"], &["-d", "a", "-d", "b", "-q", "-v"]))
+            .expect_err("both conditions hold");
+
+        assert!(
+            matches!(refused, Error::RepeatedValueFlag { .. }),
+            "the repetition is decided first, and this was {refused}"
+        );
+    }
+
+    #[test]
+    fn the_verbosity_count_saturates_past_three_and_past_two_hundred_and_fifty_five() {
+        // FR-CLI-016: the count reaches three levels and saturates above three
+        // **without error**. The second vector is the one the count's own type
+        // could have refused: `ArgAction::Count` accumulates into a `u8`, and
+        // what this asserts is that the parser saturates there rather than
+        // overflowing or refusing.
+        for (occurrences, counted, level) in [
+            (1, 1, Level::Info),
+            (2, 2, Level::Debug),
+            (3, 3, Level::Trace),
+            (4, 4, Level::Trace),
+            (300, u8::MAX, Level::Trace),
+        ] {
+            let repeated = vec!["-v"; occurrences];
+            let invocation =
+                parse(argv(&["version"], &repeated)).unwrap_or_else(|error| panic!("{error}"));
+
+            assert_eq!(invocation.globals.verbose, counted, "{occurrences} of -v");
+            assert_eq!(super::level(&invocation), level, "{occurrences} of -v");
+        }
+    }
+
+    #[test]
+    fn the_argument_terminator_is_accepted_on_every_command() {
+        // FR-CLI-017, at every node of FR-CLI-002 and not only at the ones
+        // that take an operand after it.
+        for (path, operands) in LEAVES
+            .iter()
+            .copied()
+            .chain(GROUPS.iter().map(|path| (*path, &[][..])))
+        {
+            let mut vector = operands.to_vec();
+            vector.push("--");
+
+            parse(argv(path, &vector)).unwrap_or_else(|error| panic!("{path:?}: {error}"));
+        }
+    }
+
+    #[test]
+    fn a_token_after_the_terminator_is_a_positional_argument() {
+        // FR-CLI-017 and the note FR-CLI-024 makes of it: `tpl render x -- -d`
+        // passes `-d` to the command as an argument and does not select a
+        // database entry.
+        let invocation = parse(argv(&["render"], &["--", "-d"])).expect("parses");
+        let Some(Command::Render { template, .. }) = &invocation.command else {
+            panic!("`render` did not parse to its own node");
+        };
+
+        assert_eq!(template, "-d");
+        assert!(
+            invocation.globals.database.is_empty(),
+            "the token selected a database entry"
+        );
+
+        let invocation =
+            parse(argv(&["template", "check"], &["--", "-d", "--format"])).expect("parses");
+        let Some(Command::Template(read)) = &invocation.command else {
+            panic!("`template` did not parse to its own node");
+        };
+        let Some(template::Command::Check { names }) = &read.command else {
+            panic!("`check` did not parse to its own node");
+        };
+
+        assert_eq!(names, &["-d", "--format"]);
+        assert!(invocation.globals.database.is_empty());
+
+        // And where the command has no place for it, the token is refused as
+        // an argument rather than read as the flag it resembles.
+        let refused = parse(argv(&["render"], &["x", "--", "-d"])).expect_err("no second operand");
+
+        assert_eq!(refused.exit_code(), 64);
+        assert!(
+            matches!(&refused, Error::UnexpectedArgument { token, .. } if token == "-d"),
+            "{refused}"
+        );
+    }
+
+    #[test]
+    fn a_value_beginning_with_a_dash_is_accepted_in_the_two_forms_that_carry_it() {
+        // FR-CLI-018, second sentence: the value is accepted in the
+        // `--flag=value` form, and as a positional argument after `--`.
+        for written in [&["-d=-x"][..], &["--database=-x"][..]] {
+            let invocation = parse(argv(&["schema", "tables"], written)).expect("parses");
+
+            assert_eq!(invocation.globals.database, ["-x"], "{written:?}");
+        }
+
+        let invocation =
+            parse(argv(&["cfg", "set"], &["core.database", "--", "-x"])).expect("parses");
+        let Some(Command::Cfg(config)) = &invocation.command else {
+            panic!("`cfg` did not parse to its own node");
+        };
+        let Some(cfg::Command::Set { value, .. }) = &config.command else {
+            panic!("`set` did not parse to its own node");
+        };
+
+        assert_eq!(value, "-x");
+    }
+
+    #[test]
+    fn a_flag_and_its_value_keep_their_case_in_the_message() {
+        // FR-CLI-020: neither is normalised, and the refusal reproduces both
+        // exactly as they were written.
+        let refused =
+            parse(argv(&["schema", "tables"], &["--Format", "JSON"])).expect_err("no --Format");
+
+        assert_eq!(refused.exit_code(), 64);
+        assert!(refused.to_string().contains("--Format"), "{refused}");
+
+        let refused =
+            parse(argv(&["schema", "tables"], &["--format", "JSON"])).expect_err("no such value");
+
+        assert!(refused.to_string().contains("JSON"), "{refused}");
+
+        let refused = parse(argv(&["schema", "tables"], &["-d", "Shop", "-d", "SHOP"]))
+            .expect_err("the repetition is refused");
+
+        let Error::RepeatedValueFlag { first, second, .. } = &refused else {
+            panic!("{refused}");
+        };
+        assert_eq!(first, "Shop");
+        assert_eq!(second, "SHOP");
+    }
+
+    #[test]
+    fn every_node_of_the_tree_is_reached_through_parse_as_it_is_through_the_parser() {
+        // `parse` is the one route from the process to the tree, and it adds
+        // rules rather than changing what parses: every node of FR-CLI-002
+        // still parses through it, and reaches the same invocation.
+        for (path, operands) in LEAVES
+            .iter()
+            .copied()
+            .chain(GROUPS.iter().map(|path| (*path, &[][..])))
+        {
+            let through_rules =
+                parse(argv(path, operands)).unwrap_or_else(|error| panic!("{path:?}: {error}"));
+
+            assert_eq!(through_rules, parsed(path, operands), "{path:?}");
+        }
     }
 }

@@ -57,12 +57,6 @@ impl Level {
     /// — which is the one outcome that favours neither flag. It is the same
     /// degradation [`Level::from_repr`] applies to a discriminant that cannot
     /// arise.
-    #[allow(
-        dead_code,
-        reason = "the flags that supply these two arguments belong to `cli/`, a later \
-                  sprint; OD-17 resolves the level during argument handling and this is that \
-                  resolution"
-    )]
     pub(crate) const fn resolve(verbose: u8, quiet: bool) -> Self {
         match (verbose, quiet) {
             // FR-GLOB-015.
@@ -107,10 +101,6 @@ static LEVEL: AtomicU8 = AtomicU8::new(Level::Warnings as u8);
 ///
 /// Called once, from argument handling. Calling it later does not corrupt the
 /// value; it merely changes which emissions are written from that point on.
-#[allow(
-    dead_code,
-    reason = "argument handling, which calls this once, belongs to `cli/`, a later sprint"
-)]
 pub(crate) fn set_level(level: Level) {
     LEVEL.store(level as u8, Ordering::Relaxed);
 }

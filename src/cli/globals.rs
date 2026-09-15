@@ -16,12 +16,21 @@
 //! whose copy was forgotten would refuse a flag `FR-GLOB-002` requires it to
 //! accept.
 //!
+//! **The three flags that carry a value are declared repeatable**, with
+//! `ArgAction::Append`, and the repetition is refused by [`super::rules`]
+//! rather than by the parser. That is `OD-08`: `ArgAction::Set` raises an
+//! `ArgumentConflict` naming the *argument* twice, where `FR-CLI-014` obliges
+//! the message to name **both values**, and only the accumulated occurrences
+//! put both in hand. A field of these three is therefore every occurrence in
+//! the order it was written, and is reduced to at most one before any command
+//! reads it.
+//!
 //! What is deliberately **not** here: the refusal of `-q` together with `-v`
-//! (`FR-CLI-015`), the repetition rule of `FR-CLI-014`, and the saturation of
-//! `FR-CLI-016`. All three are parsing rules, owned by the module that
-//! intercepts the parser's own failures, and a `conflicts_with` written here
-//! would decide one of them in the parser's words rather than in the four
-//! labelled lines of `FR-ERR-008`.
+//! (`FR-CLI-015`), the refusal of the repetition just described
+//! (`FR-CLI-014`), and the saturation of `FR-CLI-016`. All three are parsing
+//! rules, owned by [`super::rules`], and a `conflicts_with` written here would
+//! decide one of them in the parser's words rather than in the four labelled
+//! lines of `FR-ERR-008`.
 
 use std::num::NonZeroU64;
 use std::path::PathBuf;
@@ -41,14 +50,31 @@ pub(crate) struct Globals {
     ///
     /// Absent, the entry named by `core.database` applies (`FR-GLOB-005`), and
     /// `FR-GLOB-008` requires the two to stay distinguishable — which is what
-    /// [`Option`] carries here, rather than a resolved name.
-    #[arg(short = 'd', long = "database", value_name = "NAME", global = true)]
-    pub(crate) database: Option<String>,
+    /// an empty vector carries here, rather than a resolved name.
+    ///
+    /// Every occurrence, in the order written: `FR-CLI-014` refuses a second
+    /// one, per this module's own note, so the field holds at most one entry
+    /// once [`super::rules::refuse_repetition`] has run.
+    #[arg(
+        short = 'd',
+        long = "database",
+        value_name = "NAME",
+        action = ArgAction::Append,
+        global = true
+    )]
+    pub(crate) database: Vec<String>,
 
     /// The `.tpl` folder to use, naming it explicitly and suppressing
     /// discovery (`FR-GLOB-009`).
-    #[arg(long = "tpl-dir", value_name = "PATH", global = true)]
-    pub(crate) tpl_dir: Option<PathBuf>,
+    ///
+    /// Every occurrence, for the reason [`Globals::database`] states.
+    #[arg(
+        long = "tpl-dir",
+        value_name = "PATH",
+        action = ArgAction::Append,
+        global = true
+    )]
+    pub(crate) tpl_dir: Vec<PathBuf>,
 
     /// The overall wall-clock budget for the invocation, in seconds
     /// (`FR-GLOB-011`).
@@ -58,14 +84,29 @@ pub(crate) struct Globals {
     /// [`NonZeroU64`] because the requirement's value is a **positive**
     /// integer, so a budget of zero seconds is refused where it is written
     /// rather than where it would expire.
-    #[arg(long = "timeout", value_name = "SECONDS", global = true)]
-    pub(crate) timeout: Option<NonZeroU64>,
+    ///
+    /// Every occurrence, for the reason [`Globals::database`] states.
+    #[arg(
+        long = "timeout",
+        value_name = "SECONDS",
+        action = ArgAction::Append,
+        global = true
+    )]
+    pub(crate) timeout: Vec<NonZeroU64>,
 
     /// How many times `-v/--verbose` was given (`FR-GLOB-014`).
     ///
     /// One occurrence is `INFO`, two `DEBUG`, three `TRACE`. The count is
     /// carried raw: `FR-CLI-016` saturates it above three, and that is a
     /// parsing rule rather than a property of the flag.
+    ///
+    /// The count is the one repetition the tree admits, so the flag is not
+    /// declared with `ArgAction::Append` like the three above. `ArgAction::Count`
+    /// accumulates into this [`u8`] and **saturates** at its maximum rather
+    /// than overflowing or refusing, which is what lets `FR-CLI-016` saturate
+    /// "without error" past the two hundred and fifty-sixth occurrence as well
+    /// as past the third. That is a property of the parser and not of this
+    /// declaration, so it is asserted by a test rather than assumed.
     #[arg(short = 'v', long = "verbose", action = ArgAction::Count, global = true)]
     pub(crate) verbose: u8,
 

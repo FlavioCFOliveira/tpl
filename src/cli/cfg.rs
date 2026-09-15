@@ -38,7 +38,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Args, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Subcommand, ValueEnum};
 
 use super::local;
 
@@ -150,6 +150,13 @@ pub(crate) enum TlsMode {
 /// Every flag is optional here. `add` and `update` require different
 /// combinations — `FR-CFG-016` and `FR-CFG-029` — and both are refusals
 /// between arguments, left to the commands that make them.
+///
+/// Each of the nine carries a value, so each is declared repeatable and the
+/// repetition is refused by [`super::rules`], for the reason `OD-08` gives and
+/// [`super::globals`] states: `FR-CLI-014` obliges the message to name **both
+/// values**, and only the accumulated occurrences put both in hand. A field
+/// here is every occurrence in the order written, reduced to at most one
+/// before `add` or `update` reads it.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
 pub(crate) struct Entry {
     /// The whole connection as one URL, written to `database.<name>.dsn`.
@@ -158,38 +165,38 @@ pub(crate) struct Entry {
     /// `FR-CFG-029`. It is stored verbatim, a literal password included, per
     /// `FR-CFG-031`, and a value given here is visible in the process table
     /// for the life of the invocation, per `FR-CFG-033`.
-    #[arg(long = "dsn", value_name = "URL")]
-    pub(crate) dsn: Option<String>,
+    #[arg(long = "dsn", value_name = "URL", action = ArgAction::Append)]
+    pub(crate) dsn: Vec<String>,
 
     /// The server host, written to `database.<name>.host`.
-    #[arg(long = "host", value_name = "HOST")]
-    pub(crate) host: Option<String>,
+    #[arg(long = "host", value_name = "HOST", action = ArgAction::Append)]
+    pub(crate) host: Vec<String>,
 
     /// The server port, written to `database.<name>.port`.
     ///
     /// Absent, the entry carries no port and the default of `FR-CONF-002`,
     /// `3306`, applies when the entry is read.
-    #[arg(long = "port", value_name = "PORT")]
-    pub(crate) port: Option<u16>,
+    #[arg(long = "port", value_name = "PORT", action = ArgAction::Append)]
+    pub(crate) port: Vec<u16>,
 
     /// The user to authenticate as, written to `database.<name>.user`.
-    #[arg(long = "user", value_name = "USER")]
-    pub(crate) user: Option<String>,
+    #[arg(long = "user", value_name = "USER", action = ArgAction::Append)]
+    pub(crate) user: Vec<String>,
 
     /// The database on the server, written to `database.<name>.database`.
     ///
     /// It is the one flag whose name differs from the key it writes, per
     /// `FR-CFG-028`: `schema` is the catalogue's own word for it, and it leaves
     /// the global `-d/--database` free to mean the entry label everywhere.
-    #[arg(long = "schema", value_name = "NAME")]
-    pub(crate) schema: Option<String>,
+    #[arg(long = "schema", value_name = "NAME", action = ArgAction::Append)]
+    pub(crate) schema: Vec<String>,
 
     /// The TLS mode, written to `database.<name>.tls`.
     ///
     /// Absent, the entry carries no mode and the default of `FR-CONF-013`,
     /// `verify-identity`, applies when the entry is read.
-    #[arg(long = "tls", value_name = "MODE", value_enum)]
-    pub(crate) tls: Option<TlsMode>,
+    #[arg(long = "tls", value_name = "MODE", value_enum, action = ArgAction::Append)]
+    pub(crate) tls: Vec<TlsMode>,
 
     /// The command that produces the password, written to
     /// `database.<name>.password_command`.
@@ -199,18 +206,22 @@ pub(crate) struct Entry {
     /// repeatable, per `FR-CFG-046`. A value given here is visible in the
     /// process table for the life of the invocation, and `FR-CONF-017` admits
     /// no `${VAR}` expansion in this key, per `FR-CFG-033`.
-    #[arg(long = "password-command", value_name = "COMMAND")]
-    pub(crate) password_command: Option<String>,
+    #[arg(
+        long = "password-command",
+        value_name = "COMMAND",
+        action = ArgAction::Append
+    )]
+    pub(crate) password_command: Vec<String>,
 
     /// The certificate file trusted by `verify-ca` and `verify-identity`,
     /// written to `database.<name>.ca_file` (`FR-CONF-014`).
-    #[arg(long = "ca-file", value_name = "PATH")]
-    pub(crate) ca_file: Option<PathBuf>,
+    #[arg(long = "ca-file", value_name = "PATH", action = ArgAction::Append)]
+    pub(crate) ca_file: Vec<PathBuf>,
 
     /// The certificate directory trusted by `verify-ca` and `verify-identity`,
     /// written to `database.<name>.ca_path` (`FR-CONF-014`).
-    #[arg(long = "ca-path", value_name = "PATH")]
-    pub(crate) ca_path: Option<PathBuf>,
+    #[arg(long = "ca-path", value_name = "PATH", action = ArgAction::Append)]
+    pub(crate) ca_path: Vec<PathBuf>,
 }
 
 /// The six children of `tpl cfg database`.

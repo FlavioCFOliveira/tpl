@@ -6,12 +6,13 @@
 //! and the binary parses the invocation, dispatches, and maps the resulting
 //! error to an exit status.
 //!
-//! At this commit no command of the library acts. [`run`] is the entry point
-//! the binary calls, [`install_panic_hook`] is the process setup it performs
-//! first, [`Error`] is the value every module will report failure through,
-//! `cli` declares the closed command tree of `FR-CLI-002` and the seven global
-//! flags of `FR-GLOB-001` every node of it accepts, `diagnostics` writes the
-//! four labelled lines of `FR-ERR-008` that a failure reaches the caller as,
+//! At this commit the invocation is parsed and no command of the library acts.
+//! [`run`] is the entry point the binary calls, [`install_panic_hook`] is the
+//! process setup it performs first, [`Error`] is the value every module reports
+//! failure through, `cli` declares the closed command tree of `FR-CLI-002` and
+//! the seven global flags of `FR-GLOB-001` every node of it accepts and applies
+//! the parsing rules of `FR-CLI-014` through `FR-CLI-020`, `diagnostics` writes
+//! the four labelled lines of `FR-ERR-008` that a failure reaches the caller as,
 //! and `output` holds the two formats every result reaches the caller through
 //! — the envelope of `FR-OUT-024` and the aligned columns of `FR-OUT-006`; the
 //! catalogue reader and the render environment are added by the tasks that
@@ -22,16 +23,6 @@
 
 pub mod error;
 
-// The tree parses today and no node of it acts: `route` gives every leaf the
-// interim `70` its own module documents, and the route from the process to the
-// parser carries the one decision `OD-08` places outside this module. One fact
-// explains every item the lint names, so it is stated once here.
-#[allow(
-    dead_code,
-    reason = "no command is wired to the process yet; the parser tree is declared here because \
-              FR-CLI-002 closes it, and the interception of the parser's own failures that \
-              reaches it is a later task"
-)]
 pub(crate) mod cli;
 
 pub(crate) mod diagnostics;
@@ -84,18 +75,32 @@ pub fn install_panic_hook() {
 /// # Errors
 ///
 /// Returns the [`Error`] of the first condition that fails, in the order
-/// `FR-ERR-006` fixes, after it has been reported. At this commit no command is
-/// wired up, so no condition can arise and the function succeeds without
-/// reading or writing anything.
+/// `FR-ERR-006` fixes, after it has been reported. At this commit step 1 of
+/// that order is the whole of it: the invocation is parsed, and a command that
+/// parses reports the interim `70` its own module documents.
 pub fn run() -> Result<(), Error> {
     dispatch().inspect_err(diagnostics::report)
 }
 
 /// Parses the invocation and runs the command it names.
 ///
-/// This is where the parser tree of `cli/` is reached. It reports nothing: the
-/// diagnostic is written once, by [`run`], for whatever condition reaches it
-/// first.
+/// This is where the parser tree of `cli/` is reached, and it is reached once:
+/// [`cli::parse`] is the only route from the process to the parser, so the
+/// interception `OD-08` requires cannot be bypassed and no byte the parser's
+/// own renderer composes can reach either stream.
+///
+/// The diagnostic level of `FR-GLOB-014` and `FR-GLOB-015` is fixed between the
+/// two, which is where `OD-17` places it — after the invocation has been parsed
+/// and before anything that emits. A failure to parse leaves it at the level of
+/// a run that supplied neither flag, which costs nothing: the four labelled
+/// lines of `FR-ERR-008` are written at every level.
+///
+/// It reports nothing: the diagnostic is written once, by [`run`], for whatever
+/// condition reaches it first.
 fn dispatch() -> Result<(), Error> {
-    Ok(())
+    let invocation = cli::parse(std::env::args_os())?;
+
+    diagnostics::verbosity::set_level(cli::level(&invocation));
+
+    cli::dispatch(&invocation)
 }
