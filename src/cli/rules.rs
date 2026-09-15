@@ -50,6 +50,33 @@ const QUIET: &str = "--quiet";
 /// `-v/--verbose`, in the long form the tree declares it under.
 const VERBOSE: &str = "--verbose";
 
+/// Whether the tree accepts `argument` more than once.
+///
+/// It is the rule [`refuse_repetition`] applies, read the other way round, and
+/// it is here rather than in the renderer of [`super::help`] so that what the
+/// help states and what the invocation meets cannot drift apart. Reading the
+/// action instead would state the opposite of both: `OD-08` declares a flag
+/// that carries **one** value with `ArgAction::Append` so that both values
+/// reach the message of `FR-CLI-014`, and that flag is refused on its second
+/// occurrence all the same.
+///
+/// Three populations are repeatable, and no other:
+///
+/// | Population | Why |
+/// |---|---|
+/// | `-v/--verbose` | `FR-CLI-016` counts the occurrences and saturates them |
+/// | A positional argument that takes many values | `FR-TMPL-018` and `FR-HELP-026` are the sequence, not a repetition |
+/// | The flags of [`REPEATABLE`] | `FR-RND-008` makes `--set` repeatable with distinct keys |
+pub(super) fn repeats(argument: &clap::Arg) -> bool {
+    match argument.get_action() {
+        ArgAction::Count => true,
+        ArgAction::Append => {
+            argument.get_long().is_none() || REPEATABLE.contains(&argument.get_id().as_str())
+        }
+        _ => false,
+    }
+}
+
 /// Refuses a flag that carries a single value and was given more than once
 /// (`FR-CLI-014`).
 ///
@@ -87,9 +114,7 @@ pub(super) fn refuse_repetition(
             continue;
         };
 
-        if !matches!(argument.get_action(), ArgAction::Append)
-            || REPEATABLE.contains(&argument.get_id().as_str())
-        {
+        if !matches!(argument.get_action(), ArgAction::Append) || repeats(argument) {
             continue;
         }
 

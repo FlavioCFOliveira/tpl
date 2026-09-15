@@ -105,6 +105,29 @@ pub(crate) fn emit<T: Serialize>(document: &Document<T>, form: Form) -> Result<(
     Writer::new(std::io::stdout().lock()).document(document, form)
 }
 
+/// Writes one help text to `stream`.
+///
+/// Help is the one deliberate exception of `BR-CLI-005`: a legitimate stdout
+/// payload that is not the result of a read. It is written through the same
+/// buffer every other payload is, so the text reaches the consumer in as few
+/// writes as the buffer allows, and it is emitted exactly as the renderer
+/// composed it — `FR-HELP-009` puts the line breaks in the text, and nothing
+/// here lays anything out.
+///
+/// The stream is a parameter rather than standard output taken directly,
+/// because the caller is `cli`'s dispatch, which a test drives without a
+/// process. The process passes the locked standard output.
+///
+/// # Errors
+///
+/// Returns [`Error::StdoutUnwritable`] where the stream refused the write for a
+/// reason other than a close. A consumer that closed stdout is not a failure on
+/// this path: `FR-ERR-026` names a JSON document and nothing else, so a help
+/// text cut short is the silent success of `FR-ERR-025`.
+pub(crate) fn emit_help<W: std::io::Write>(stream: W, text: &str) -> Result<(), Error> {
+    Writer::new(stream).help(text)
+}
+
 /// Writes one `text` listing to standard output.
 ///
 /// This is the `text` half of `FR-OUT-001`'s two formats and the other route a

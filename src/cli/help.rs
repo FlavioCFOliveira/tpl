@@ -87,6 +87,16 @@
 //! this tree and never a website, a manual page or a README. Every reference
 //! is therefore a command path, checked against the tree by a test rather than
 //! written as free text.
+//!
+//! # Who reads the table
+//!
+//! [`render`] composes the seven sections of `FR-HELP-006` from this table and
+//! from the parser tree, and [`text`] is the whole of the route to it. The JSON
+//! command tree of `FR-HELP-016` is the second consumer and is a later task;
+//! [`entries`] is the entry point it reads the table through, in the order
+//! `FR-HELP-019` requires.
+
+mod render;
 
 /// One node of the tree, and the four things `FR-HELP-022` and `FR-HELP-019`
 /// require its help to carry beyond what the tree itself declares.
@@ -226,7 +236,29 @@ impl Code {
     }
 }
 
+/// The help text of the node `path` names, or [`None`] where it names no node.
+///
+/// `path` is the segments below `tpl`, and is empty for the root. The text is
+/// the seven sections of `FR-HELP-006`, laid out at the fixed width of
+/// `FR-HELP-009`, and it ends with a single newline.
+///
+/// The tree is built here because this is the whole route to the renderer, and
+/// the renderer reads the tree as it is declared: below the root, every node
+/// carries exactly its own arguments, which is what `FR-GLOB-003` requires of
+/// the `OPTIONS` section.
+pub(crate) fn text(path: &[&str]) -> Option<String> {
+    render::text(&super::tree(), path)
+}
+
 /// The whole table, in the order `FR-HELP-019` requires.
+// The JSON command tree of `FR-HELP-016` is the consumer, and it is a later
+// task. The suppression is this one item's: every other item of the module is
+// read by the renderer, so a member that stops being read is still reported.
+#[allow(
+    dead_code,
+    reason = "the JSON command tree of FR-HELP-016 is a later task, and it is what reads the \
+              table whole; the text renderer reaches one entry at a time"
+)]
 pub(crate) const fn entries() -> &'static [Entry] {
     &ENTRIES
 }

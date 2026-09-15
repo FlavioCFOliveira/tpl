@@ -261,9 +261,45 @@ impl<W: Write> Writer<W> {
         }
     }
 
+    /// Writes one help text, as composed, and flushes it.
+    ///
+    /// `BR-CLI-005` makes help a legitimate stdout payload, and it is written
+    /// through this buffer for the reason every other payload is: the bytes are
+    /// aggregated rather than emitted a line at a time. A consumer that goes
+    /// away is classified as [`Cut::Harmless`], which is the row a `text`
+    /// listing occupies and for the ground `FR-ERR-025` gives it: `FR-ERR-026`
+    /// names a **JSON document** and nothing else, and a help text a consumer
+    /// cut short is exactly what `tpl --help | head -20` asked for.
+    ///
+    /// A stream a previous call found closed is not written to again.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::StdoutUnwritable`] where the stream refused the write
+    /// for a reason other than a close. A close returns `Ok(())`, which is the
+    /// silent success of `FR-ERR-025`.
+    pub(super) fn help(&mut self, text: &str) -> Result<(), Error> {
+        if self.finished {
+            return Ok(());
+        }
+
+        self.inner.get_mut().begin();
+
+        match self.write_help(text) {
+            Ok(()) => Ok(()),
+            Err(refused) => self.classify(refused, Cut::Harmless),
+        }
+    }
+
     /// Writes one document and empties the buffer into the stream.
     fn write<T: Serialize>(&mut self, document: &Document<T>, form: Form) -> io::Result<()> {
         json::write_document(&mut self.inner, document, form)?;
+        self.inner.flush()
+    }
+
+    /// Writes one help text and empties the buffer into the stream.
+    fn write_help(&mut self, text: &str) -> io::Result<()> {
+        self.inner.write_all(text.as_bytes())?;
         self.inner.flush()
     }
 
@@ -543,6 +579,50 @@ mod tests {
 
         let refused = Writer::new(&mut stream)
             .table(&listing())
+            .expect_err("a stream that refuses the write is 74");
+
+        assert!(
+            matches!(refused, Error::StdoutUnwritable { .. }),
+            "{refused:?} is not the condition of the 74 row"
+        );
+        assert_eq!(refused.exit_code(), 74);
+    }
+
+    #[test]
+    fn a_help_text_reaches_the_stream_as_the_renderer_composed_it() {
+        // BR-CLI-005: help is a legitimate stdout payload, and this path lays
+        // nothing out — FR-HELP-009 puts the line breaks in the text.
+        let mut emitted = Vec::new();
+        Writer::new(&mut emitted)
+            .help("USAGE\n  tpl version [options]\n")
+            .expect("a buffer accepts every write");
+
+        assert_eq!(
+            String::from_utf8(emitted).expect("the renderer emits UTF-8"),
+            "USAGE\n  tpl version [options]\n"
+        );
+    }
+
+    #[test]
+    fn a_help_text_cut_by_the_consumer_is_the_silent_success() {
+        // FR-ERR-025, on the same ground a cut listing rests on: FR-ERR-026
+        // names a JSON document and nothing else, and `tpl --help | head -1`
+        // is what the consumer asked for.
+        let mut stream = Refusing::new(6, io::ErrorKind::BrokenPipe);
+
+        let outcome = Writer::new(&mut stream).help("USAGE\n  tpl version [options]\n");
+
+        assert!(outcome.is_ok(), "a cut help text is exit 0, not 74");
+        assert_eq!(stream.accepted.len(), 6, "the consumer holds part of it");
+    }
+
+    #[test]
+    fn a_help_text_refused_for_another_reason_is_unwritable() {
+        // The 74 row of FR-ERR-001: only a close is excused on this path.
+        let mut stream = Refusing::new(6, io::ErrorKind::StorageFull);
+
+        let refused = Writer::new(&mut stream)
+            .help("USAGE\n  tpl version [options]\n")
             .expect_err("a stream that refuses the write is 74");
 
         assert!(

@@ -50,8 +50,8 @@
 //!
 //! # The interim arrangement
 //!
-//! Two things in this module are deliberately provisional, and both are named
-//! here so that neither is mistaken for finished work.
+//! One thing in this module is deliberately provisional, and it is named here
+//! so that it is not mistaken for finished work.
 //!
 //! **A leaf whose work is a later sprint reports `70`.** Every leaf of the tree
 //! parses today; none of them acts. [`route`] gives each one an arm that
@@ -62,11 +62,10 @@
 //! catch-all so that each later sprint replaces **its own** entry, and so that
 //! the arm it must replace is named by its path rather than found by reading.
 //!
-//! **A group node's help is a placeholder.** `FR-CLI-007` and `FR-HELP-025`
-//! require a group node invoked with no child to print exactly the text
-//! `tpl help <node>` would print, and to exit `0`. The renderer that composes
-//! that text is a later task; [`group_help`] is the call site it replaces, and
-//! it says so in its own documentation.
+//! Nothing else is provisional here. `FR-CLI-007` and `FR-HELP-025` require a
+//! group node invoked with no child to print exactly the text `tpl help <node>`
+//! would print, and to exit `0`: [`group_help`] renders that text through
+//! [`help::text`] and writes it through [`output`].
 //!
 //! [`parse`] is the whole of the route from the process to the tree, and
 //! [`crate::run`] takes it: it builds the tree, hands it the vector, and turns
@@ -90,16 +89,6 @@
 mod cache;
 mod cfg;
 mod globals;
-// Nothing renders help yet: `OD-05` places the typed table of `FR-HELP-022` here, and the
-// renderer, the six forms and the JSON document that read it are the tasks that follow.
-// One fact explains every item the lint names, so it is stated once here rather than once
-// per item, and the attribute goes with the first consumer.
-#[allow(
-    dead_code,
-    reason = "the renderer, the help forms and the JSON command tree are later tasks; \
-              `OD-05` places the typed examples and exit-codes table of `FR-HELP-022` \
-              here, and every one of those consumers reads it"
-)]
 mod help;
 mod intercept;
 mod local;
@@ -121,6 +110,7 @@ use template::Template;
 
 use crate::diagnostics::verbosity::Level;
 use crate::error::{self, Error};
+use crate::output;
 
 /// The interim outcome of a leaf whose implementation is a later sprint.
 ///
@@ -394,10 +384,10 @@ pub(crate) fn dispatch(cli: &Cli) -> Result<(), Error> {
 /// [`Error::StdoutUnwritable`] where a group node's help could not be written.
 fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
     match &cli.command {
-        None => group_help(out, "tpl"),
+        None => group_help(out, &[]),
 
         Some(Command::Schema(schema)) => match &schema.command {
-            None => group_help(out, "tpl schema"),
+            None => group_help(out, &["schema"]),
             Some(schema::Command::Info { .. }) => not_yet_implemented!("tpl schema info"),
             Some(schema::Command::Tables { .. }) => not_yet_implemented!("tpl schema tables"),
             Some(schema::Command::Table { .. }) => not_yet_implemented!("tpl schema table"),
@@ -409,7 +399,7 @@ fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
         },
 
         Some(Command::Template(template)) => match &template.command {
-            None => group_help(out, "tpl template"),
+            None => group_help(out, &["template"]),
             Some(template::Command::List { .. }) => not_yet_implemented!("tpl template list"),
             Some(template::Command::Show { .. }) => not_yet_implemented!("tpl template show"),
             Some(template::Command::Check { .. }) => not_yet_implemented!("tpl template check"),
@@ -419,20 +409,20 @@ fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
         Some(Command::Render { .. }) => not_yet_implemented!("tpl render"),
 
         Some(Command::Cache(cache)) => match &cache.command {
-            None => group_help(out, "tpl cache"),
+            None => group_help(out, &["cache"]),
             Some(cache::Command::Load { .. }) => not_yet_implemented!("tpl cache load"),
             Some(cache::Command::Clean { .. }) => not_yet_implemented!("tpl cache clean"),
             Some(cache::Command::Status { .. }) => not_yet_implemented!("tpl cache status"),
         },
 
         Some(Command::Cfg(config)) => match &config.command {
-            None => group_help(out, "tpl cfg"),
+            None => group_help(out, &["cfg"]),
             Some(cfg::Command::Get { .. }) => not_yet_implemented!("tpl cfg get"),
             Some(cfg::Command::Set { .. }) => not_yet_implemented!("tpl cfg set"),
             Some(cfg::Command::Unset { .. }) => not_yet_implemented!("tpl cfg unset"),
             Some(cfg::Command::List { .. }) => not_yet_implemented!("tpl cfg list"),
             Some(cfg::Command::Database(database)) => match &database.command {
-                None => group_help(out, "tpl cfg database"),
+                None => group_help(out, &["cfg", "database"]),
                 Some(cfg::DatabaseCommand::Add { .. }) => {
                     not_yet_implemented!("tpl cfg database add")
                 }
@@ -463,22 +453,32 @@ fn route<W: Write>(out: &mut W, cli: &Cli) -> Result<(), Error> {
 /// Writes the help of a group node invoked with no child, per `FR-CLI-007` and
 /// `FR-HELP-025`.
 ///
-/// **This body is a placeholder, and the call site is the point of it.**
-/// `FR-HELP-025` requires exactly the text `tpl help <node>` would print, and
-/// `BR-HELP-001` requires that text to be byte-identical to
-/// `tpl <node> --help`; the renderer that composes all seven sections of
-/// `FR-HELP-006` is a later task, and it replaces what is written here without
-/// moving where it is written from. What the placeholder prints names the node
-/// whose help is owed and claims to be nothing else.
+/// `path` is the segments below `tpl`, and is empty for the root. The text is
+/// the one [`help::text`] composes, which is what `FR-HELP-025` requires:
+/// exactly the text `tpl help <node>` would print, from the one renderer both
+/// forms reach.
+///
+/// It is written through [`output`], which is the route `FR-OUT-020`
+/// gives stdout and which aggregates the bytes behind one buffer.
+/// `BR-CLI-005` makes this a legitimate stdout payload, and the caller of this
+/// function exits `0`.
 ///
 /// # Errors
 ///
-/// Returns [`Error::StdoutUnwritable`] where the stream refused the write. The
-/// `0`-or-`74` distinction of `FR-ERR-025` and `FR-ERR-026` belongs to the
-/// writer of `output`, and the renderer emits through it.
-fn group_help<W: Write>(out: &mut W, path: &str) -> Result<(), Error> {
-    writeln!(out, "the help of '{path}' is not rendered yet")
-        .map_err(|returned| Error::StdoutUnwritable { returned })
+/// Returns [`Error::StdoutUnwritable`] where the stream refused the write, and
+/// [`Error::InternalInvariant`] where the path names no node of the tree or no
+/// entry of the table — a disagreement between the tree and the table, which is
+/// a defect in `tpl` rather than in the invocation and which a test of
+/// [`help`] pins.
+fn group_help<W: Write>(out: &mut W, path: &[&str]) -> Result<(), Error> {
+    let Some(text) = help::text(path) else {
+        return error::ensure_invariant(
+            false,
+            "every group node of the tree carries an entry of the help table",
+        );
+    };
+
+    output::emit_help(out, &text)
 }
 
 #[cfg(test)]
@@ -488,7 +488,8 @@ mod tests {
     use clap::error::ErrorKind;
 
     use super::{
-        Cli, Command, Error, Level, cfg, local, parse, parse_from, route, schema, template, tree,
+        Cli, Command, Error, Level, cfg, help, local, parse, parse_from, route, schema, template,
+        tree,
     };
 
     /// Every leaf of the tree of `FR-CLI-002`, by the path a caller writes and
@@ -1032,17 +1033,21 @@ mod tests {
 
     #[test]
     fn a_group_node_invoked_with_no_child_prints_its_own_help_and_succeeds() {
-        // FR-CLI-007 and FR-HELP-025: help on stdout, exit 0. What the
-        // placeholder writes is not the help text, which is a later task; that
-        // it is written, at this call site, for exactly these six nodes, is
-        // this task's.
+        // FR-CLI-007 and FR-HELP-025: exactly the text `tpl help <node>` would
+        // print, on stdout, at exit 0. "Exactly" is asserted byte for byte
+        // against the renderer both forms reach, which is what keeps the two
+        // from drifting when one of them grows a caller.
         for path in GROUPS {
             let (result, written) = outcome(path, &[]);
 
             result.unwrap_or_else(|error| panic!("{path:?}: {error}"));
+
+            let expected = help::text(path).expect("every group node has an entry");
+
+            assert_eq!(written, expected, "{path:?}");
             assert!(
-                written.contains(&node_path(path)),
-                "{path:?} is not named by: {written:?}"
+                written.starts_with(&format!("USAGE\n  {}", node_path(path))),
+                "{path:?} did not print its own help"
             );
         }
     }
