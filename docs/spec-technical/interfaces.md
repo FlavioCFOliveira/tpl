@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-15
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -192,6 +192,14 @@ its own, and the eight-step validation order that decides which code wins when
 several conditions are unsatisfied is `architecture.md`'s (`FR-ERR-006`,
 `FR-ERR-007`).
 
+**One interim reading of the `70` row.** Until each leaf is implemented, a leaf
+the parser accepts and no sprint has written is itself a detected invariant
+violation, raised through the same guard, so a caller does reach `70` from an
+ordinary invocation today. The arrangement, what it covers and what removes it
+are [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation);
+the `#[cfg(test)]` trigger of `FR-ERR-031` is untouched by it and remains absent
+from the artefact.
+
 **stdout is empty on every error path.** `--format` is ignored, the four lines
 go to stderr, and no error is ever a JSON document — so `output/` is not reached
 at all once an error is the outcome (`FR-ERR-033`, `FR-OUT-015`,
@@ -232,8 +240,14 @@ over the tree (`FR-HELP-028`).
 **The parser's own rejections are intercepted and re-rendered**, settled in
 [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics): `cli/` hands
 `diagnostics/` the token as written and why it was rejected, through the error
-value, and no byte the argument parser would render reaches a caller. The four
-parsing rules this obliges the `cli/` surface to hold itself are:
+value, and no byte the argument parser would render reaches a caller. **Where
+the parser names no token, none is handed on**: the refusal is still `64`, and
+the `cause` says that the invocation was rejected and that no token was named.
+That is the wildcard arm of the mapping, and the one refusal of this tree that
+reaches it is a value that is not valid UTF-8; the entry records the observed
+wording and why the degradation is the safe direction.
+
+The four parsing rules this obliges the `cli/` surface to hold itself are:
 
 | Rule | Forced by |
 |---|---|
@@ -245,6 +259,22 @@ parsing rules this obliges the `cli/` surface to hold itself are:
 Five short forms exist in the whole tool and no other flag declares one
 (`FR-GLOB-024`), which makes the short-flag space a property of the parser tree
 rather than of each node.
+
+**Two of the four rules are held in `cli/`, and two are the parser's own
+behaviour.** The repetition of `FR-CLI-014` and the pair of `FR-CLI-015` are
+refused by `cli/` rather than declared on the arguments, because a refusal
+written in the parser's words is a refusal the caller never reads in the four
+labelled lines of `FR-ERR-008`; the repetition is read over the **declarations**
+— every flag declared as appending, less the one flag a requirement makes
+repeatable — so a flag added to the tree is governed without that rule changing.
+The argument terminator of `FR-CLI-017` and the byte-for-byte match of
+`FR-CLI-020` are what the parser already does, so each is asserted by a test
+rather than implemented: a default is the one property of a dependency that can
+change with nothing in this project changing. Step 1 of `FR-ERR-006` is
+therefore three things in one — what the parser refused, then `FR-CLI-014`, then
+`FR-CLI-015` — and the order among the three is `cli/`'s own, because
+`FR-ERR-006` fixes the order between steps and not within one: a refusal that is
+a property of **one** flag precedes a refusal that is a property of **two**.
 
 **The diagnostic sink is a closed set of typed emission functions**, so the six
 categories `FR-GLOB-018` forbids have no home to be written from, and the one
@@ -361,6 +391,51 @@ whose rationale and rejected option are not restated.
 | Help is self-contained, carries at least one correct example, lists only the codes its command can produce, and contains no colour, emoji or decoration | `FR-HELP-012`, `FR-HELP-014`, `FR-HELP-011`, `FR-HELP-015`, `BR-HELP-002` |
 | A group node with no child prints exactly the text its help form would print, and exits `0` | `FR-CLI-007`, `FR-HELP-025`, `FR-CLI-009` |
 
+**The renderer reads two sources and no third.** The **parser tree** `cli/`
+declares, read **unbuilt**, supplies `USAGE`, `ARGUMENTS` and `OPTIONS`; the
+typed table supplies `DESCRIPTION`, `EXAMPLES`, `EXIT CODES` and `SEE ALSO`.
+Reading the tree unbuilt is what puts the seven global flags at the root alone,
+by construction rather than by a filter: the parser propagates a global argument
+into a subcommand when the tree is **built**, so no other node's `OPTIONS` can
+carry one (`FR-GLOB-003`). Below the root the seven are acknowledged in `USAGE`
+as `[options]`, which names no flag and is true of every node (`FR-GLOB-002`).
+
+**Five of the six facts of `FR-HELP-013` are introspected**: the type, the
+enumerated values where there are any, the default, whether the argument is
+required, and whether it is repeatable. Repeatability is read from the refusal
+rule of `FR-CLI-014` and never from the parser's action, because a flag carrying
+a **single** value is declared as appending so that both values reach the
+message that requirement obliges
+([`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)); the action
+would state the reverse of what the tool enforces.
+
+**Recorded divergence — the sixth fact, mutual exclusion.** `FR-HELP-013`
+obliges help to state it, and no argument of the tree states it. The tree
+declares no `conflicts_with`, because the refusals the corpus obliges — the
+exclusions of `FR-CLI-015`, `FR-RND-005`, `FR-CFG-016` and `FR-CFG-029`, and the
+dependency of `FR-OUT-009` — are each refused away from the parser, for the
+reason the diagnostic renderer's section gives; so there is nothing to
+introspect, and no second source was invented for it. As built, such a pair
+is named instead in the prose of the `EXIT CODES` section of the command that
+**owns** the refusal: `tpl render` names its object flags and `--context`
+against `-d/--database` under `64`, and the `cfg database` entries name `--dsn`
+against the discrete connection flags. **The one pair that is global is named
+nowhere**: `-q/--quiet` with `-v/--verbose` appears in no help text of the tree,
+because the root's `64` line carries an unknown command, an unknown flag and a
+repeated flag value, and not that pair. `FR-HELP-013`'s sixth clause is
+therefore answered for every local pair and unanswered for the global one, and
+the remedy is one line of the typed table rather than a declaration on the
+tree. Reported at commit `f8f335d`,
+2026-09-15; it is not closed by narrowing the obligation above, which is the
+requirement's.
+
+**`70` is listed in one help text and no other**: the root's. `FR-ERR-030` makes
+its two producing conditions defects in `tpl` rather than conditions of any
+command under it, `FR-HELP-011` admits it at the root because a panic is
+reachable from any invocation, and `BR-HELP-002` refuses repeating at a level
+what has already been said — which is the shape `FR-GLOB-003` already fixes for
+the global flags.
+
 **The command tree is introspected at runtime from the tree the parser actually
 parses with** (`FR-HELP-021`), so `cli/` is the producer and `cli/help.rs` the
 consumer; the document is emitted through `output/` and obeys every rule of the
@@ -384,6 +459,45 @@ The per-command content is fixed by `FR-HELP-018`, `FR-HELP-019` and
 `FR-HELP-020`; the template surface is published in the same document, in three
 groups (`FR-ENV-005`), which makes `render/` a second producer into
 `cli/help.rs`. The three properties the tree carries as tests are `BR-HELP-003`.
+
+**The document as built.** It is the envelope of `FR-OUT-024` with `source` set
+to `binary` (`FR-OUT-026`), and `data` carries the four keys `FR-HELP-017` fixes,
+in that order. `commands` is flat and excludes the root; each entry carries its
+`path` as an **array of segments**, which is the vector a caller hands straight
+back to `tpl help` (`FR-HELP-026`), and `inherits_globals` after the seven
+members `FR-HELP-019` names. The reduction of `FR-HELP-029` is a pre-order walk
+from the node the path resolved to, so a subtree is the walk rather than a
+filter applied to the whole array. `template_surface` carries the three
+groups of `FR-ENV-005` in the shape that requirement fixes, with the arrays of
+`registered` set to `null` until `render/` registers, which is what `FR-ENV-005`
+and `FR-OUT-012` give for a value that is absent rather than empty; `filters` of
+`inherited` is `null` too, and that one is a divergence the register records.
+Both shapes, and the points the implementation derives under them, are
+[`OD-29`](open-decisions.md#od-29--the-json-command-tree-two-shapes-and-what-the-binary-publishes).
+
+**The six forms reach one renderer and one version line**, which is what makes
+the three equivalences of `FR-HELP-002` hold by construction rather than by
+comparison: `tpl help <path>`, `tpl <path> --help`, `tpl <path> -h` and a bare
+group node arrive at the first, and `tpl version`, `tpl --version` and `tpl -V`
+at the second. `tpl help <path>` and `tpl <path> --help` remain two distinct
+routes **through the parser**, which is what `BR-HELP-001` binds by test:
+[verification.md](verification.md#help-snapshots-at-every-depth).
+
+**A required operand does not hide the two flag forms.** `OD-07` turns the
+parser's own help flag off, so `-h`, `--help`, `-V` and `--version` are ordinary
+global arguments and the parser validates required arguments first; at the
+fourteen required operands the tree declares over thirteen leaves, the strict
+parse refused `tpl <node> --help` before the flag was read. It is resolved by a
+**second parse**, over the same tree with the requirement waived, narrowed to
+the parser's missing-argument refusal and honoured only where one of the two
+flags is present; a vector that names neither falls through to the first
+refusal with its message intact, and the parsing rules run over the second parse
+exactly as over the first, because step 1 of `FR-ERR-006` admits no exception.
+The declarations are untouched, so requiredness still reaches the help of
+`FR-HELP-013` and the document of `FR-HELP-021`. This is neither the argument
+pre-scan `FR-ERR-017` and `FR-ERR-018` withdrew nor the second set of rules
+`OD-08` rejects: it is the same parser over the same tree, differing in one
+validation setting, on a path that has already failed.
 
 **Path resolution is `cli/help.rs`'s own.** A path of any depth is accepted as a
 sequence of positional arguments, each segment resolved by the rules of the
