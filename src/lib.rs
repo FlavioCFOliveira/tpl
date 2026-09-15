@@ -6,19 +6,33 @@
 //! and the binary parses the invocation, dispatches, and maps the resulting
 //! error to an exit status.
 //!
-//! At this commit the library carries no command. [`run`] is the entry point
+//! At this commit no command of the library acts. [`run`] is the entry point
 //! the binary calls, [`install_panic_hook`] is the process setup it performs
 //! first, [`Error`] is the value every module will report failure through,
-//! `diagnostics` writes the four labelled lines of `FR-ERR-008` that a failure
-//! reaches the caller as, and `output` holds the two formats every result
-//! reaches the caller through — the envelope of `FR-OUT-024` and the aligned
-//! columns of `FR-OUT-006`; the parser tree, the catalogue reader and the
-//! render environment are added by the tasks that follow.
+//! `cli` declares the closed command tree of `FR-CLI-002` and the seven global
+//! flags of `FR-GLOB-001` every node of it accepts, `diagnostics` writes the
+//! four labelled lines of `FR-ERR-008` that a failure reaches the caller as,
+//! and `output` holds the two formats every result reaches the caller through
+//! — the envelope of `FR-OUT-024` and the aligned columns of `FR-OUT-006`; the
+//! catalogue reader and the render environment are added by the tasks that
+//! follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub mod error;
+
+// The tree parses today and no node of it acts: `route` gives every leaf the
+// interim `70` its own module documents, and the route from the process to the
+// parser carries the one decision `OD-08` places outside this module. One fact
+// explains every item the lint names, so it is stated once here.
+#[allow(
+    dead_code,
+    reason = "no command is wired to the process yet; the parser tree is declared here because \
+              FR-CLI-002 closes it, and the interception of the parser's own failures that \
+              reaches it is a later task"
+)]
+pub(crate) mod cli;
 
 pub(crate) mod diagnostics;
 
