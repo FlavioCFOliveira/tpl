@@ -314,7 +314,9 @@ fn reached<'a>(tree: &'a clap::Command, written: &[Cow<'_, str>]) -> Reached<'a>
         }
 
         if token.starts_with('-') {
-            index += 1 + usize::from(carries_the_next(tree, node, token));
+            let next = written.get(index + 1);
+
+            index += 1 + usize::from(carries_the_next(tree, node, token, next));
             continue;
         }
 
@@ -333,9 +335,24 @@ fn reached<'a>(tree: &'a clap::Command, written: &[Cow<'_, str>]) -> Reached<'a>
     Reached { node, path }
 }
 
-/// Whether the flag `token` names takes its value from the token after it.
-fn carries_the_next(tree: &clap::Command, node: &clap::Command, token: &str) -> bool {
-    !token.contains('=')
+/// Whether the flag `token` names takes its value from the token after it,
+/// which `next` is where the vector carries one.
+///
+/// The argument terminator is never a value. `FR-CLI-017` makes `--` end the
+/// flags, and the parser reads it as the terminator rather than as the value of
+/// the flag it follows — `tpl -d --` is refused for a flag given without a
+/// value, not accepted with `--` as the value of `-d`. A walk that stepped over
+/// it would continue past the end of the flags and resolve a **positional**
+/// argument as a command, so the `cause` line would name a node the invocation
+/// never reached and the `hint` would be a runnable command for that node.
+fn carries_the_next(
+    tree: &clap::Command,
+    node: &clap::Command,
+    token: &str,
+    next: Option<&Cow<'_, str>>,
+) -> bool {
+    next.is_some_and(|next| next != TERMINATOR)
+        && !token.contains('=')
         && declared(tree, node, token).is_some_and(|argument| argument.get_action().takes_values())
 }
 
@@ -502,16 +519,27 @@ fn value_after(
 
 /// Whether `token` was written after the argument terminator, which
 /// `FR-CLI-017` makes a positional argument of it.
+///
+/// The refusal names the token and not the place it was written at, so the
+/// place is recovered from the vector. The parser reads left to right and
+/// refuses the **first** token it cannot accept, so the occurrence it refused
+/// is the first one and the question is whether **that** occurrence lies after
+/// the terminator.
+///
+/// Rejected: asking whether the token occurs anywhere after the terminator. A
+/// token written on both sides of it — `tpl schema tables -x -- -x` — was
+/// refused at the occurrence **before** it, where it is the unknown flag of
+/// `FR-CLI-019`, and answering from the later occurrence reported it as the
+/// unexpected argument of `FR-CLI-017` instead.
 fn after_the_terminator(written: &[Cow<'_, str>], token: &str) -> bool {
+    let Some(terminator) = written.iter().position(|candidate| candidate == TERMINATOR) else {
+        return false;
+    };
+
     written
         .iter()
-        .position(|candidate| candidate == TERMINATOR)
-        .is_some_and(|terminator| {
-            written
-                .iter()
-                .skip(terminator + 1)
-                .any(|candidate| candidate == token)
-        })
+        .position(|candidate| candidate == token)
+        .is_some_and(|refused| refused > terminator)
 }
 
 /// The nearest matches to `token` among the children of `node`, per
