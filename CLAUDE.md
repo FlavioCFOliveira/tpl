@@ -220,7 +220,7 @@ Três domínios deste projecto **NUNCA** são operados directamente: têm uma sk
 | Domínio | Skill | CLI que a skill opera |
 |---|---|---|
 | Escrita no Git | `gitflow` | `git` (operações de escrita) |
-| Sprints, tarefas e comentários | `roadmap-manager` | `rmp` |
+| Sprints, tarefas e comentários | `roadmap-manager` | `rmp`, em todos os comandos excepto `rmp graph …` |
 | Conhecimento sobre o projecto | `knowledge-authority` | `rmp graph …` |
 
 ### 1. Git — skill `gitflow`
@@ -235,7 +235,7 @@ Leitura é livre: `git status`, `git log`, `git diff`, `git show` e equivalentes
 
 ### 2. Sprints, tarefas e comentários — skill `roadmap-manager`
 
-**Toda a gestão e coordenação de sprints, tarefas e comentários passa pela skill `roadmap-manager`**, que é a única operadora da CLI `rmp` (Groadmap). Isto abrange criar, listar, inspeccionar e editar tarefas; o ciclo de vida dos sprints (planear, iniciar, fechar, reabrir); transições de estado; prioridades e severidades; dependências e subtarefas; reordenação; o log de auditoria e as estatísticas; e o log tipado de comentários (`FINDING`, `HYPOTHESIS`, `TEST`, `DECISION`, `PROGRESS`, `UPDATE`, `NOTE`).
+**Toda a gestão e coordenação de sprints, tarefas e comentários passa pela skill `roadmap-manager`**, que é a única operadora da CLI `rmp` (Groadmap) em **todos os comandos excepto `rmp graph …`**, esses da skill `knowledge-authority`. Isto abrange criar, listar, inspeccionar e editar tarefas; o ciclo de vida dos sprints (planear, iniciar, fechar, reabrir); transições de estado; prioridades e severidades; dependências e subtarefas; reordenação; o log de auditoria e as estatísticas; e o log tipado de comentários (`FINDING`, `HYPOTHESIS`, `TEST`, `DECISION`, `PROGRESS`, `UPDATE`, `NOTE`).
 
 O `rmp` é a **única fonte de verdade** para o planeamento e execução das tarefas deste projecto. **NUNCA** usar ficheiros ad-hoc, listas no chat, TODOs no código ou qualquer outra ferramenta como substituto.
 
@@ -304,6 +304,7 @@ Usar também para sincronizar, refrescar ou auditar o grafo após um commit ou q
 
 As três skills não se substituem umas às outras, e a confusão entre elas é o erro habitual:
 
+- A fronteira entre `roadmap-manager` e `knowledge-authority` é o subcomando: `rmp graph …` é `knowledge-authority`, todo o restante `rmp` é `roadmap-manager`.
 - Gerir tarefas e sprints é `roadmap-manager` — **nunca** `knowledge-authority`, ainda que ambas usem o binário `rmp`.
 - Consultar o grafo de conhecimento é `knowledge-authority` — **nunca** `roadmap-manager`.
 - Registar trabalho em Git é `gitflow` — **nunca** um `git commit` avulso, mesmo que a alteração seja trivial.
