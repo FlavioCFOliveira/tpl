@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-17
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -42,7 +42,7 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 10 | The four labelled lines | `diagnostics/` | stderr, from `error.rs` | [The diagnostic renderer](#the-diagnostic-renderer) |
 | 11 | The rejected token | `cli/` | `diagnostics/`, through `error.rs` | [The diagnostic renderer](#the-diagnostic-renderer) |
 | 12 | A candidate population for a suggestion | `mariadb/`, `render/`, `project/config.rs`, `cli/` | `diagnostics/` | [The diagnostic renderer](#the-diagnostic-renderer) |
-| 13 | The envelope and one of seventeen payloads | `output/` | stdout, from `model/`, `cli/help.rs`, `project/config.rs`, `cache/` | [The document emitter](#the-document-emitter) |
+| 13 | The envelope and one of seventeen payloads | `output/` | stdout, from `model/`, `cli/help.rs`, `cli/cfg/`, `cache/` | [The document emitter](#the-document-emitter) |
 | 14 | Key order | `model/` and the other payload types | `output/` | [The document emitter](#the-document-emitter) |
 | 15 | The buffered writer and the mid-document state | `output/` | `error.rs`, `main.rs` | [The document emitter](#the-document-emitter) |
 | 16 | Every ordering | `output/`, with three orders preserved by `mariadb/` | stdout | [Ordering](#ordering-one-default-and-six-exceptions) |
@@ -52,9 +52,10 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 20 | The registered filters, tests and functions | `render/` | the engine, and `cli/help.rs` for publication | [The template surface](#the-template-surface) |
 | 21 | The render context, and access to it from a filter or a test | `cli/`, `model/`, `project/` | `render/` | [Context access from a filter or a test](#context-access-from-a-filter-or-a-test) |
 | 22 | The typed key space, read | `project/config.rs` | every consumer of a setting | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
-| 23 | The typed key space, written | `cli/` | `project/config.rs` | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
-| 24 | The password from a child process | `project/config.rs`, bounded by `deadline.rs` | `mariadb/` | [The `password_command` child](#the-password_command-child) |
-| 25 | A phase deadline | `deadline.rs` | `mariadb/`, `project/config.rs`, `render/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
+| 23 | The typed key space, written | `cli/cfg/` | `project/edit.rs` | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
+| 24 | The password from a child process | `project/password.rs`, bounded by `deadline.rs` | `mariadb/`, through `project/settings.rs` | [The `password_command` child](#the-password_command-child) |
+| 25 | A phase deadline | `deadline.rs` | `mariadb/`, `project/password.rs`, `render/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
+| 29 | The refusal of an incoherent entry write | `cli/cfg/coherence.rs`, over the predicate in `project/config/entry.rs` | `error.rs` | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
 | 26 | A name matched against a pattern | `cli/` | applied over names from `model/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
 | 27 | A routine named bare or qualified | `cli/` | `mariadb/`, `cache/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
 | 28 | A closed set of typed diagnostic emissions | `mariadb/`, `cache/`, `deadline.rs` | `diagnostics/` | [The diagnostic renderer](#the-diagnostic-renderer) |
@@ -288,7 +289,7 @@ distinguishable (`FR-GLOB-017`, `NFR-PERF-008`). Phase timings come from
 
 `output/` owns one envelope, seventeen payloads, one ordering rule, one
 `text` layout rule, one escaping rule and one writer. Its inputs are `model/`,
-`cli/help.rs`, `project/config.rs` and `cache/`; its output is stdout.
+`cli/help.rs`, `cli/cfg/` and `cache/`; its output is stdout.
 
 | Obligation | Forced by |
 |---|---|
@@ -322,8 +323,9 @@ dump round trip inverse by construction rather than by two routines kept in step
 
 **The two omissions are different mechanisms because they are different
 things.** A key absent from the configuration file is a key never inserted into
-the document `output/` receives — `project/config.rs` builds it from the keys
-the file carries, and applies no default (`FR-CFG-037`, `FR-CFG-014`). A
+the document `output/` receives — `cli/cfg/` builds it from the keys the typed
+document carries, and the typed document carries no default to apply
+(`FR-CFG-037`, `FR-CFG-014`). A
 `restricted` array is a genuinely optional property of the object it qualifies
 and is the one field carrying the omission attribute (`FR-PRIV-016`). Both are
 settled in
@@ -409,13 +411,28 @@ message that requirement obliges
 ([`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)); the action
 would state the reverse of what the tool enforces.
 
+**Recorded divergence — `FR-OUT-009` is refused nowhere.** That requirement
+makes `--pretty` without `--format json` a `64` on a command that declares both,
+and the `EXIT CODES` section of every such command already states it. In the
+working tree of 2026-09-17 no code refuses it: `tpl cfg list --pretty` writes
+the compact document and exits `0`, and `cli/` carries the rule in a doc comment
+saying it is deliberately not declared on the argument, with no arm refusing it
+either. Both readings are recorded. `/specification` governs, so the requirement
+stands and the built behaviour is the defect; it is **not** narrowed to fit, and
+this folder does not close it. The first commands able to reach it — the four
+`cfg` subcommands that declare both flags — were written on 2026-09-17, and the
+help that promises the refusal was written on 2026-09-15, so a caller reading
+the help is told something the binary does not do. Closing it is a change to
+code, which this document does not make.
+
 **Recorded divergence — the sixth fact, mutual exclusion.** `FR-HELP-013`
 obliges help to state it, and no argument of the tree states it. The tree
 declares no `conflicts_with`, because the refusals the corpus obliges — the
 exclusions of `FR-CLI-015`, `FR-RND-005`, `FR-CFG-016` and `FR-CFG-029`, and the
-dependency of `FR-OUT-009` — are each refused away from the parser, for the
-reason the diagnostic renderer's section gives; so there is nothing to
-introspect, and no second source was invented for it. As built, such a pair
+dependency of `FR-OUT-009` — are each meant to be refused away from the parser,
+for the reason the diagnostic renderer's section gives; so there is nothing to
+introspect, and no second source was invented for it. The four exclusions are so
+refused; the dependency is the divergence above. As built, such a pair
 is named instead in the prose of the `EXIT CODES` section of the command that
 **owns** the refusal: `tpl render` names its object flags and `--context`
 against `-d/--database` under `64`, and the `cfg database` entries name `--dsn`
@@ -616,12 +633,14 @@ here promises a lookup of a variable introduced inside a macro or a call block.
 
 ## The configuration reader and the writer
 
-`project/config.rs` owns one key space and two paths over it — a serde mapping
-to read and a format-preserving editor to write. The split, its rationale and
-the rejected options are
+`project/` owns one key space and two paths over it — `project/config.rs`, which
+reads into a typed document, and `project/edit.rs`, which rewrites the file
+preserving its format. The split, its rationale and the rejected options are
 [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path); the
 file's format, mode, rewrite discipline and key count are
-[data-model.md](data-model.md#tplcfg) and are not restated.
+[data-model.md](data-model.md#tplcfg) and are not restated. The submodule
+division, and why the two paths are two modules, are
+[architecture.md](architecture.md#inside-project).
 
 **The read path.**
 
@@ -629,6 +648,8 @@ file's format, mode, rewrite discipline and key count are
 |---|---|
 | The ownership and mode checks are a **precondition** of reading, on a canonicalised path, and an explicitly named project folder is not exempt from them | `FR-PROJ-009`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-PROJ-008`, `FR-GLOB-010` |
 | The value the reader hands `error.rs` on a malformed file carries the **position** of the fault as well as the key. The strictness that makes this reachable — an unrecognised key anywhere is fatal — is [data-model.md](data-model.md#tplcfg)'s and is not restated | `FR-CONF-034`, `FR-CONF-035`, `FR-ERR-034` |
+| The whole file is walked for keys outside the space **before** any value is read, so a file carrying both a misspelled key and a malformed value reports the misspelling | `FR-CONF-034`, `FR-CONF-002`, `FR-ERR-007` |
+| An **absent** file is an empty document rather than a failure: the project is the folder, and the directed write surface must be able to write the file again | `FR-PROJ-001`, `FR-PROJ-017`, `FR-CFG-004` |
 | A setting resolves through exactly two layers above a built-in default, with no environment layer; the resolver therefore has three inputs and no fourth | `FR-CONF-029`, `FR-CONF-030`, `FR-CLI-022` |
 | An entry selected on the command line is **distinguishable** from one resolved through the configured default, because two render rules depend on the distinction | `FR-GLOB-008`, `FR-RND-018`, `FR-RND-019` |
 | Nothing selected is `78`; a named entry that does not exist is `66` with a suggestion | `FR-GLOB-006`, `FR-GLOB-007`, `FR-ERR-004`, `FR-ERR-005` |
@@ -648,9 +669,8 @@ The third never reaches stdout. Credentials, the sentinel property and what may
 be printed are `security.md`'s.
 
 **The write path.** `cli/` validates a command's arguments and hands
-`project/config.rs` a value already typed; the writer preserves comments,
-spacing and the relative order of items, which six requirements make a
-functional need
+`project/edit.rs` a value already typed; the writer preserves comments, spacing
+and the relative order of items, which six requirements make a functional need
 ([`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path)).
 
 | Obligation | Forced by |
@@ -658,8 +678,10 @@ functional need
 | A value written through the key surface is validated against the enumerated key space **and** the declared type of that key | `FR-CFG-008`, `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-002` |
 | An unset accepts a leaf key or a whole block; an absent key or block is `66` | `FR-CFG-011`, `FR-CFG-012` |
 | Create and change are distinct verbs: an existing entry refuses creation with a hint, and an update changes the named fields and leaves the rest of the entry untouched | `FR-CFG-015`, `FR-CFG-016`, `FR-CFG-017`, `FR-CFG-020`, `BR-CFG-001` |
-| Removing the entry the configured default names also clears that key, silently, leaving the file coherent | `FR-CFG-022`, `FR-CFG-023` |
+| A deletion that removes the entry the configured default names also clears that key, silently and in the same rewrite. The obligation is over the **state**, so both deletions that reach it are bound: the entry-removal command, and an unset given that entry's block. An unset given one field of the entry does not engage it — the entry survives and the reference still resolves | `FR-CFG-022`, `FR-CFG-023`, `FR-CFG-011` |
+| A write that would leave a database entry in a refused combination is refused **before** the file is touched: `64`, the file unchanged, the `cause` naming both keys of the pair and the `hint` carrying a runnable repair. The entry judged is the entry as it would stand after the write, and nothing the invocation did not name is removed to make it coherent | `FR-CFG-048`, `FR-CONF-007`, `FR-CFG-020`, `BR-CFG-001`, `FR-ERR-009`, `FR-ERR-034` |
 | Every key of an entry has a flag, each mapping to exactly one key, and one flag's name deliberately differs from the key it writes | `FR-CFG-027`, `FR-CFG-028`, `FR-CFG-029` |
+| The connection-string flag admits exactly what the file admits — the grammar, the two schemes, no query parameter — validated before the write, stored verbatim when admitted, `64` and nothing written when not; a variable reference stays opaque and unexpanded | `FR-CFG-031`, `FR-CONF-009`, `FR-CONF-010`, `FR-CONF-011`, `FR-CONF-018` |
 | The password-command flag accepts a single string, stores the array it splits into, accepts no array on the command line and is not repeatable | `FR-CFG-046`, `FR-CONF-023`, `FR-CONF-025` |
 | No `cfg` subcommand writes anywhere but the configuration file, and only one of them contacts a server | `FR-CFG-004`, `FR-CFG-005` |
 
@@ -668,6 +690,22 @@ path is `64`; the same key found in the file is `78`. The distinction is the
 caller's, not the key space's — one is a malformed invocation and the other a
 configuration that cannot be trusted — and both are reached through one
 validator (`FR-CFG-009`, `FR-CONF-034`, `FR-ERR-001`).
+
+**One rule about a combination, two callers, two codes.** `FR-CONF-007` decides
+which combinations of connection and password keys one entry may hold, and two
+components ask it: the reader, for which a refused combination found in the file
+is `78`, and the writer, for which a write that would produce one is `64`
+(`FR-CFG-048`). Both reach **one predicate**, which carries whether each key of
+the rule is declared plus the one property of a value the rule reads — whether
+the connection string carries a password. Applying the rule twice would let the
+file and the invocation disagree about what an entry may hold, which is the
+state `FR-CFG-031`'s twenty-second-edition amendment records as unrepairable by
+any `cfg` command.
+
+The writer feeds that predicate the entry the file carries, with the keys the
+invocation names declared on top; the reader feeds it the entry alone. The
+difference between the two callers is therefore the input and the code, never
+the rule.
 
 **The connectivity command reports one field per step.** Four ordered steps —
 connect and authenticate, enforce and confirm the read-only session, verify the
@@ -690,10 +728,11 @@ one (`FR-PROJ-012` … `FR-PROJ-016`, `FR-PROJ-022`). What it ships is
 
 ## The `password_command` child
 
-`project/config.rs` runs the child and hands `mariadb/` a password; `deadline.rs`
-bounds it. It is the only child process this corpus admits: no other
-requirement creates one, and `FR-SRV-007` forbids an external process for
-reading structure.
+`project/password.rs` runs the child and hands `mariadb/` a password;
+`project/settings.rs` is its one caller, because the child belongs to the
+resolution and not to the read; `deadline.rs` bounds it. It is the only child
+process this corpus admits: no other requirement creates one, and `FR-SRV-007`
+forbids an external process for reading structure.
 
 | Obligation | Forced by |
 |---|---|
@@ -701,9 +740,24 @@ reading structure.
 | A string supplied to a command is split by POSIX quoting rules on the **command** path and stored as the array; no quoting engine exists on the path that reads the file | `FR-CONF-025`, `FR-CFG-046`, [`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms) |
 | The stored command is never expanded, so the environment cannot alter what is executed | `FR-CONF-017` |
 | The password is the trimmed standard output, read to a cap of 4096 bytes; a child that writes more is terminated and the invocation is `78` | `FR-CONF-027`, `FR-CONF-031` |
+| The cap is applied **at the pipe**, by a read bounded at one byte past it, so the process never holds more than that and never truncates a credential into a password it would then send | `FR-CONF-031`, `FR-SEC-024` |
+| The child's standard input is the null device, so a child cannot inherit the caller's and read from it | `FR-SEC-023`, `BR-CLI-003` |
 | The child's standard error goes to the null device: not inherited, not captured, never quoted | `FR-CONF-032`, `FR-SEC-024` |
 | A non-zero exit is `78`, with the `cause` naming the command as stored and the status the child returned | `FR-CONF-033`, `FR-ERR-034` |
-| The deadline is enforced by a timer thread that kills the child while the parent reports the expiry; exceeding it is `78` | `FR-CONF-028`, `FR-ERR-027`, [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| A child that cannot be **started** is a condition of its own, also `78`: its next step is to correct the file, not to read what the command printed | `FR-CONF-033`, `FR-ERR-002` |
+| The deadline is enforced by a reader thread draining the pipe and a polling loop in the parent, which kills the child and reports the expiry; exceeding it is `78` | `FR-CONF-028`, `FR-ERR-027`, [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| A bound already spent when the child would be started stops it from being started at all | `FR-GLOB-012`, `FR-CONF-028` |
+
+**Why the parent polls rather than waits.** Three obligations meet on one child
+— a deadline, a bounded read, and a child that may never exit — and neither a
+blocking wait nor a blocking read can hold all three: either holds the process
+past the deadline, and a child writing more than a pipe buffers blocks on its
+own write until something drains it. The drain therefore has to run while the
+deadline is watched. The runtime of
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md) is scoped to `mariadb/` and
+is not started for an invocation that never connects, so the watcher is a thread
+and a short sleep rather than a task
+([`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)).
 
 ## The shared functions and the phase clock
 
@@ -737,6 +791,20 @@ three modules belongs to none of them (`FR-GLOB-011`, `FR-GLOB-012`,
 phase is bounded by are
 [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced); the
 machinery itself is `architecture.md`.
+
+Four obligations shape its surface, and each is a property of the type rather
+than of its callers.
+
+| Obligation | Forced by |
+|---|---|
+| No deadline crosses a boundary as a bare integer: seconds are one type, carrying the unit the four keys are declared in, and a **positive** integer, so zero is refused where it is written and not where it would expire | `FR-CONF-002`, `FR-GLOB-001` |
+| What bounds one phase carries three facts, because a `65` and a `69` must name two of them: **which** of the two bounds applies, its resolved value, and how long the phase may actually run. The phase deadline wins a tie, naming the more specific of two equally true answers | `FR-GLOB-012`, `FR-GLOB-013`, `FR-ERR-027`, `FR-ERR-034` |
+| The origin of the overall budget is recorded once, by the crate entry point, before the argument vector is read; a second recording cannot move an origin already being spent | `FR-GLOB-011` |
+| The budget the three connection phases share is an **instant**, not a duration, so the three consume one budget in the order they run and the last of them may find nothing left | `FR-CONF-005` |
+
+The resolution of the four values from `[core]` is `project/`'s and the clock's
+composition of them with `--timeout` is this module's: `--timeout` takes no part
+in the resolution and composes with its result (`FR-CONF-004`, `FR-GLOB-012`).
 
 ## The library shape: five questions, open
 

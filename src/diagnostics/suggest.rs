@@ -54,12 +54,6 @@ const MAX_SUGGESTIONS: usize = 3;
 /// literals: no server, file or caller can influence `cfg database add`,
 /// `--ca-file` or `core.render_timeout`. The fourth is every value this corpus
 /// does not fix, which the character set governs.
-#[allow(
-    dead_code,
-    reason = "two of the four classes are constructed today, by `cli/`; the key space of \
-              FR-CONF-002 belongs to `project/config.rs` and the five populations this \
-              corpus does not fix to `mariadb/` and `render/`, each a later sprint"
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Population {
     /// The command tree of `cli-contract.md`: a command, or an alias of one.
@@ -97,20 +91,10 @@ impl Population {
         match self {
             Self::Commands => hint::admits_path(candidate),
             Self::Flags => hint::admits_flag(candidate),
-            Self::ConfigurationKeys => admits_key(candidate),
+            Self::ConfigurationKeys => hint::admits_key(candidate),
             Self::Names => hint::admits(candidate),
         }
     }
-}
-
-/// Whether every segment of a configuration key is admitted.
-///
-/// The `.` between key segments is a literal, per `FR-ERR-022`, so a key is
-/// tested segment by segment rather than refused for carrying a dot — which is
-/// what dropped every key of `FR-CONF-002` before the twentieth edition, none
-/// of the fifteen forms matching the character set as a whole.
-fn admits_key(key: &str) -> bool {
-    !key.is_empty() && key.split('.').all(hint::admits)
 }
 
 /// One kept candidate, with the distance that ordered it.

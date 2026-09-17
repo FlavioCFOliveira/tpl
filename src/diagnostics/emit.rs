@@ -68,11 +68,6 @@ pub(crate) fn catalogue_query() {
 ///
 /// `FR-PROJ-016` obliges the warning and fixes what it says; the two paths are
 /// the whole of what it can name.
-#[allow(
-    dead_code,
-    reason = "the `tpl init` command that calls this is a later sprint; the function is written \
-              here because OD-17 places the emission set in this module"
-)]
 pub(crate) fn project_shadows_ancestor(created: &Path, shadowed: &Path) {
     if !emits(Level::Warnings) {
         return;

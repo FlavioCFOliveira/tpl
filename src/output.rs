@@ -62,23 +62,8 @@ use serde::Serialize;
 use crate::error::Error;
 use writer::Writer;
 
-// `tpl help --format json` is the one command that emits today, and it builds
-// a payload of its own rather than a collection: `FR-HELP-017` fixes four keys
-// for it, where `FR-OUT-030` gives a listing one. The suppression is this one
-// statement's, so a stale import anywhere else in the module is still reported.
-#[allow(
-    unused_imports,
-    reason = "no command emits a listing yet; the re-export is the path those commands will use"
-)]
 pub(crate) use envelope::{Collection, Document, Source};
 pub(crate) use json::Form;
-
-// The same fact, for the same reason: `FR-OUT-006` gives every read command a
-// `text` layout, and the first of those commands is a later sprint.
-#[allow(
-    unused_imports,
-    reason = "no command lays out a listing yet; the re-export is the path those commands will use"
-)]
 pub(crate) use text::{Order, Table};
 
 /// Writes one document to standard output, in `form`.
@@ -148,6 +133,26 @@ pub(crate) fn emit_to<W: std::io::Write, T: Serialize>(
 /// this path: `FR-ERR-026` names a JSON document and nothing else, so a help
 /// text cut short is the silent success of `FR-ERR-025`.
 pub(crate) fn emit_help<W: std::io::Write>(stream: W, text: &str) -> Result<(), Error> {
+    emit_verbatim(stream, text)
+}
+
+/// Writes one already-composed payload to `stream`, byte for byte.
+///
+/// It is [`emit_help`] under the name the other payloads of that shape are
+/// written through, and it exists because help is not the only one. `FR-CFG-006`
+/// answers with "the value stored under that key, **as written in the file**"
+/// and `FR-CFG-013` prints "the contents of `.tpl/.cfg` **literally**": neither
+/// is a value interpolated into a layout, which is what `FR-OUT-019` governs,
+/// and escaping either would break the use each is written for — the first is
+/// piped into another command by the example `FR-CFG-006` itself gives, and the
+/// second is a TOML document whose line breaks are its structure.
+///
+/// # Errors
+///
+/// Returns [`Error::StdoutUnwritable`] where the stream refused the write for a
+/// reason other than a close. A consumer that closed stdout is the silent
+/// success of `FR-ERR-025`, for the reason [`emit_help`] gives.
+pub(crate) fn emit_verbatim<W: std::io::Write>(stream: W, text: &str) -> Result<(), Error> {
     Writer::new(stream).help(text)
 }
 
@@ -179,5 +184,25 @@ pub(crate) fn emit_table<C, const COLUMNS: usize>(
 where
     C: AsRef<str>,
 {
-    Writer::new(std::io::stdout().lock()).table(table)
+    emit_table_to(std::io::stdout().lock(), table)
+}
+
+/// Writes one `text` listing to `stream`.
+///
+/// It is [`emit_table`] with the stream supplied, and it exists for the reason
+/// [`emit_to`] does: the caller is a command, which a test drives without a
+/// process.
+///
+/// # Errors
+///
+/// Returns what [`emit_table`] returns, for the same conditions.
+pub(crate) fn emit_table_to<W, C, const COLUMNS: usize>(
+    stream: W,
+    table: &Table<'_, C, COLUMNS>,
+) -> Result<(), Error>
+where
+    W: std::io::Write,
+    C: AsRef<str>,
+{
+    Writer::new(stream).table(table)
 }

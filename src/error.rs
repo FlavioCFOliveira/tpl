@@ -146,6 +146,45 @@ pub enum ContextFault {
     },
 }
 
+/// Which half of the DSN grammar a value failed.
+///
+/// `FR-CONF-009` fixes the form and `FR-CONF-010` the two accepted schemes, and
+/// `FR-ERR-034` obliges the `cause` line to separate them: a caller who wrote
+/// `postgres://` and a caller who wrote a host with no database have different
+/// next steps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DsnFault {
+    /// The scheme is neither `mysql://` nor `mariadb://` (`FR-CONF-010`).
+    Scheme,
+    /// The value does not have the form
+    /// `scheme://[user[:password]@]host[:port]/database` (`FR-CONF-009`).
+    Form,
+}
+
+/// How a write `FR-CFG-048` refuses is made legal.
+///
+/// That requirement obliges the `hint` to carry a runnable command, and which
+/// command that is depends on where each member of the refused pair came from.
+/// Only the writer knows that, so the distinction is made where the refusal is
+/// raised rather than where the line is composed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntryRepair {
+    /// `.tpl/.cfg` carries the conflicting key, and removing that one key makes
+    /// the write legal: one `tpl cfg unset`.
+    Unset,
+
+    /// The entry carries more than one key the write conflicts with, so no
+    /// single removal makes it legal and the entry is written afresh:
+    /// `tpl cfg database remove`, then `tpl cfg database add`.
+    Rewrite,
+
+    /// The invocation itself supplies both members, so nothing in the file has
+    /// to change and the command is written again without one of the two.
+    ///
+    /// The value is the command path that writes the entry, below `tpl`.
+    Restate(String),
+}
+
 /// How the read-only session of `FR-SRV-008` failed to take effect.
 ///
 /// `FR-SRV-010` names two conditions and gives both `78`; the `cause` line has
@@ -385,6 +424,48 @@ pub enum Error {
     UnknownConfigurationKey {
         /// The key as written.
         key: String,
+        /// The nearest matches among the enumerated key space of
+        /// `FR-CONF-002`, selected by `FR-ERR-019` and ordered as it fixes.
+        ///
+        /// Empty where nothing qualified, which `FR-ERR-020` requires to leave
+        /// the generic hint standing alone. `FR-CFG-009` obliges the
+        /// suggestion.
+        nearest: Vec<String>,
+    },
+
+    /// `tpl cfg database add` named an entry that already exists
+    /// (`FR-CFG-017`).
+    ///
+    /// `BR-CFG-001` is why this is a refusal rather than a replacement: `add`
+    /// creates and `update` changes, and neither silently does the other's job.
+    #[error("database entry '{name}' already exists")]
+    DatabaseEntryAlreadyExists {
+        /// The entry name the invocation asked to create.
+        name: String,
+        /// The file that already defines it.
+        file: PathBuf,
+    },
+
+    /// A `cfg` write that would leave a database entry in a combination
+    /// `FR-CONF-007` refuses (`FR-CFG-048`).
+    ///
+    /// The same combination found **in the file** is
+    /// [`ConflictingEntryKeys`](Error::ConflictingEntryKeys) and `78`. The two
+    /// are the same rule over two different faults: there, `.tpl/.cfg` is what
+    /// the caller must repair; here, `.tpl/.cfg` is valid and stays untouched,
+    /// and what is refused is the invocation, which the caller wrote and can
+    /// rewrite.
+    #[error("database entry '{entry}' cannot declare both {written} and {conflicting}")]
+    IncoherentEntryWrite {
+        /// The entry the write would be applied to.
+        entry: String,
+        /// The fully qualified key the invocation writes.
+        written: String,
+        /// The fully qualified key it cannot stand beside — the one the entry
+        /// already carries, or the second the same invocation supplies.
+        conflicting: String,
+        /// Which runnable command makes the write legal.
+        repair: EntryRepair,
     },
 
     // ---------------------------------------------------------------- 65 ---
@@ -482,6 +563,11 @@ pub enum Error {
         name: String,
         /// The file whose entries it was sought among.
         file: PathBuf,
+        /// The nearest matches among the entry names the file defines,
+        /// selected by `FR-ERR-019` and ordered as it fixes. Empty where
+        /// nothing qualified, per `FR-ERR-020`. `FR-GLOB-007` obliges the
+        /// suggestion.
+        nearest: Vec<String>,
     },
 
     /// A key that is absent from `.tpl/.cfg` (`FR-CFG-007`, `FR-CFG-012`).
@@ -491,6 +577,10 @@ pub enum Error {
         key: String,
         /// The file it was sought in.
         file: PathBuf,
+        /// The nearest matches among the keys the file does carry, selected by
+        /// `FR-ERR-019` and ordered as it fixes. Empty where nothing qualified,
+        /// per `FR-ERR-020`. `FR-CFG-007` obliges the suggestion.
+        nearest: Vec<String>,
     },
 
     // ---------------------------------------------------------------- 69 ---
@@ -587,6 +677,26 @@ pub enum Error {
         returned: io::Error,
     },
 
+    /// A file of the project could not be written (`FR-ERR-001`, the `74`
+    /// row).
+    ///
+    /// The one file a command of this crate writes outside `tpl init` is
+    /// `.tpl/.cfg`, per `FR-CFG-004`, and `FR-CFG-041` writes it by a
+    /// temporary file renamed over the target — so this condition can arise on
+    /// the temporary file, on the write into it, or on the rename, and in
+    /// every case the previous `.cfg` is still in place, unchanged.
+    #[error("{} could not be written", .path.display())]
+    ProjectFileUnwritable {
+        /// The path that failed. It is the target rather than the temporary
+        /// file: `FR-CFG-041` makes the temporary an implementation of the
+        /// write, and naming it would send the caller to a path that no longer
+        /// exists.
+        path: PathBuf,
+        /// What the filesystem returned.
+        #[source]
+        returned: io::Error,
+    },
+
     /// Standard output could not be written (`FR-ERR-001`, the `74` row).
     #[error("standard output could not be written")]
     StdoutUnwritable {
@@ -677,6 +787,64 @@ pub enum Error {
         key: String,
         /// The file that declares it.
         file: PathBuf,
+        /// The nearest matches among the enumerated key space of
+        /// `FR-CONF-002`, selected by `FR-ERR-019` and ordered as it fixes.
+        /// Empty where nothing qualified, per `FR-ERR-020`. `FR-CONF-034`
+        /// obliges the suggestion.
+        nearest: Vec<String>,
+    },
+
+    /// A value in `.tpl/.cfg` that does not conform to the type `FR-CONF-002`
+    /// declares for its key (`FR-ERR-001`, the `78` row).
+    ///
+    /// The `78` row of `FR-ERR-034` obliges the `cause` line to name "the key
+    /// and the file, with the value found and the value expected", and
+    /// the `found` field below states how that is reconciled with
+    /// `FR-ERR-013`.
+    #[error("{key} is not {expected}")]
+    ConfigurationValueMalformed {
+        /// The fully qualified key.
+        key: String,
+        /// The file that declares it.
+        file: PathBuf,
+        /// Where in that file the declaration is.
+        position: Position,
+        /// What was found: the value as written, or — for a key whose value
+        /// may be a credential — the TOML type of that value alone.
+        ///
+        /// `FR-ERR-013` bars a credential from every message at every
+        /// verbosity, and a key's secrecy is a property of the key space, so
+        /// the choice is made where the condition is raised rather than here.
+        found: String,
+        /// The type `FR-CONF-002` declares for the key.
+        expected: &'static str,
+    },
+
+    /// A DSN that is not of the form `FR-CONF-009` fixes, or whose scheme is
+    /// not one of the two `FR-CONF-010` accepts.
+    ///
+    /// The DSN itself is not carried: `BR-ERR-003` bars the resolved DSN from
+    /// every message, and the key locates the fault without it. A DSN carrying
+    /// a query parameter is [`DsnQueryParameter`](Error::DsnQueryParameter)
+    /// instead, because `FR-CONF-011` and `FR-CONF-012` state that condition
+    /// separately.
+    #[error("{key} is not a valid connection URL")]
+    DsnMalformed {
+        /// The fully qualified key whose value is at fault.
+        key: String,
+        /// The file that declares it.
+        file: PathBuf,
+        /// Which half of the grammar it failed.
+        fault: DsnFault,
+    },
+
+    /// A `${` with no closing brace (`FR-CONF-021`).
+    #[error("{key} carries an unclosed ${{ expansion")]
+    UnclosedExpansion {
+        /// The fully qualified key whose value carries it.
+        key: String,
+        /// The file that declares it.
+        file: PathBuf,
     },
 
     /// `password_command` is stored as something other than an array of
@@ -756,6 +924,23 @@ pub enum Error {
         /// The cap, in bytes — `FR-CONF-031` obliges the `cause` line to name
         /// it beside the command, and never the bytes read.
         cap: usize,
+    },
+
+    /// `password_command` could not be started at all.
+    ///
+    /// `FR-CONF-033` routes a child that **exits** non-zero to `78`, on the
+    /// ground that the configured way of obtaining a password failed to produce
+    /// one; a child that never starts fails in the same way and for the same
+    /// reason, and is a condition of its own because its next step differs — a
+    /// program that is absent or not executable is corrected in the file, not
+    /// by running the command to see what it printed.
+    #[error("password_command could not be started")]
+    PasswordCommandNotExecutable {
+        /// The command as stored (`FR-CONF-017`).
+        command: Vec<String>,
+        /// What the operating system returned when the child was spawned.
+        #[source]
+        returned: io::Error,
     },
 
     /// `password_command` exited non-zero (`FR-CONF-033`).
@@ -922,7 +1107,9 @@ impl Error {
             | Self::MissingArgument { .. }
             | Self::MutuallyExclusiveFlags { .. }
             | Self::MalformedValue { .. }
-            | Self::UnknownConfigurationKey { .. } => 64,
+            | Self::UnknownConfigurationKey { .. }
+            | Self::DatabaseEntryAlreadyExists { .. }
+            | Self::IncoherentEntryWrite { .. } => 64,
 
             // 65 EX_DATAERR
             Self::TemplateSyntax { .. }
@@ -951,6 +1138,7 @@ impl Error {
 
             // 74 EX_IOERR
             Self::ProjectFileUnreadable { .. }
+            | Self::ProjectFileUnwritable { .. }
             | Self::StdoutUnwritable { .. }
             | Self::StdoutClosedMidDocument => 74,
 
@@ -963,12 +1151,16 @@ impl Error {
             | Self::ConfigurationUnsafeMode { .. }
             | Self::ConfigurationMalformed { .. }
             | Self::ConfigurationKeyOutsideSpace { .. }
+            | Self::ConfigurationValueMalformed { .. }
+            | Self::DsnMalformed { .. }
+            | Self::UnclosedExpansion { .. }
             | Self::PasswordCommandNotAnArray { .. }
             | Self::ConflictingEntryKeys { .. }
             | Self::DsnQueryParameter { .. }
             | Self::UndefinedVariable { .. }
             | Self::PasswordCommandDeadlineExceeded { .. }
             | Self::PasswordCommandOutputCapExceeded { .. }
+            | Self::PasswordCommandNotExecutable { .. }
             | Self::PasswordCommandFailed { .. }
             | Self::ReadOnlySessionNotEnforced { .. }
             | Self::NoDatabaseEntrySelected { .. }
@@ -981,8 +1173,8 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        CatalogueObjectKind, ContextFault, DeadlineBound, Error, NetworkPhase, Position,
-        ReadOnlyFault, ensure_invariant, trigger_internal_invariant,
+        CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
+        NetworkPhase, Position, ReadOnlyFault, ensure_invariant, trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -992,7 +1184,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 51;
+    const VARIANT_COUNT: usize = 58;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -1110,6 +1302,23 @@ mod tests {
             (
                 Error::UnknownConfigurationKey {
                     key: "core.databse".to_owned(),
+                    nearest: vec!["core.database".to_owned()],
+                },
+                64,
+            ),
+            (
+                Error::DatabaseEntryAlreadyExists {
+                    name: "shop".to_owned(),
+                    file: path(),
+                },
+                64,
+            ),
+            (
+                Error::IncoherentEntryWrite {
+                    entry: "shop".to_owned(),
+                    written: "database.shop.dsn".to_owned(),
+                    conflicting: "database.shop.host".to_owned(),
+                    repair: EntryRepair::Unset,
                 },
                 64,
             ),
@@ -1172,6 +1381,7 @@ mod tests {
                 Error::DatabaseEntryNotFound {
                     name: "shup".to_owned(),
                     file: path(),
+                    nearest: vec!["shop".to_owned()],
                 },
                 66,
             ),
@@ -1179,6 +1389,7 @@ mod tests {
                 Error::ConfigurationKeyNotFound {
                     key: "core.database".to_owned(),
                     file: path(),
+                    nearest: Vec::new(),
                 },
                 66,
             ),
@@ -1245,6 +1456,13 @@ mod tests {
                 74,
             ),
             (
+                Error::ProjectFileUnwritable {
+                    path: path(),
+                    returned: io::Error::from(io::ErrorKind::StorageFull),
+                },
+                74,
+            ),
+            (
                 Error::StdoutUnwritable {
                     returned: io::Error::from(io::ErrorKind::StorageFull),
                 },
@@ -1300,6 +1518,32 @@ mod tests {
                 Error::ConfigurationKeyOutsideSpace {
                     key: "core.databse".to_owned(),
                     file: path(),
+                    nearest: vec!["core.database".to_owned()],
+                },
+                78,
+            ),
+            (
+                Error::ConfigurationValueMalformed {
+                    key: "core.connect_timeout".to_owned(),
+                    file: path(),
+                    position: position(),
+                    found: "0".to_owned(),
+                    expected: "a positive integer number of seconds",
+                },
+                78,
+            ),
+            (
+                Error::DsnMalformed {
+                    key: "database.shop.dsn".to_owned(),
+                    file: path(),
+                    fault: DsnFault::Scheme,
+                },
+                78,
+            ),
+            (
+                Error::UnclosedExpansion {
+                    key: "database.shop.password".to_owned(),
+                    file: path(),
                 },
                 78,
             ),
@@ -1348,6 +1592,13 @@ mod tests {
                 Error::PasswordCommandOutputCapExceeded {
                     command: vec!["cat".to_owned(), "/dev/urandom".to_owned()],
                     cap: 4096,
+                },
+                78,
+            ),
+            (
+                Error::PasswordCommandNotExecutable {
+                    command: vec!["pass".to_owned()],
+                    returned: io::Error::from(io::ErrorKind::NotFound),
                 },
                 78,
             ),
@@ -1403,6 +1654,8 @@ mod tests {
             Error::MutuallyExclusiveFlags { .. } => "MutuallyExclusiveFlags",
             Error::MalformedValue { .. } => "MalformedValue",
             Error::UnknownConfigurationKey { .. } => "UnknownConfigurationKey",
+            Error::DatabaseEntryAlreadyExists { .. } => "DatabaseEntryAlreadyExists",
+            Error::IncoherentEntryWrite { .. } => "IncoherentEntryWrite",
             Error::TemplateSyntax { .. } => "TemplateSyntax",
             Error::RenderFailed { .. } => "RenderFailed",
             Error::TemplateOutsideRoot { .. } => "TemplateOutsideRoot",
@@ -1420,6 +1673,7 @@ mod tests {
             Error::ProjectAlreadyExists { .. } => "ProjectAlreadyExists",
             Error::ProjectNotCreated { .. } => "ProjectNotCreated",
             Error::ProjectFileUnreadable { .. } => "ProjectFileUnreadable",
+            Error::ProjectFileUnwritable { .. } => "ProjectFileUnwritable",
             Error::StdoutUnwritable { .. } => "StdoutUnwritable",
             Error::StdoutClosedMidDocument => "StdoutClosedMidDocument",
             Error::AuthenticationRefused { .. } => "AuthenticationRefused",
@@ -1429,12 +1683,16 @@ mod tests {
             Error::ConfigurationUnsafeMode { .. } => "ConfigurationUnsafeMode",
             Error::ConfigurationMalformed { .. } => "ConfigurationMalformed",
             Error::ConfigurationKeyOutsideSpace { .. } => "ConfigurationKeyOutsideSpace",
+            Error::ConfigurationValueMalformed { .. } => "ConfigurationValueMalformed",
+            Error::DsnMalformed { .. } => "DsnMalformed",
+            Error::UnclosedExpansion { .. } => "UnclosedExpansion",
             Error::PasswordCommandNotAnArray { .. } => "PasswordCommandNotAnArray",
             Error::ConflictingEntryKeys { .. } => "ConflictingEntryKeys",
             Error::DsnQueryParameter { .. } => "DsnQueryParameter",
             Error::UndefinedVariable { .. } => "UndefinedVariable",
             Error::PasswordCommandDeadlineExceeded { .. } => "PasswordCommandDeadlineExceeded",
             Error::PasswordCommandOutputCapExceeded { .. } => "PasswordCommandOutputCapExceeded",
+            Error::PasswordCommandNotExecutable { .. } => "PasswordCommandNotExecutable",
             Error::PasswordCommandFailed { .. } => "PasswordCommandFailed",
             Error::ReadOnlySessionNotEnforced { .. } => "ReadOnlySessionNotEnforced",
             Error::NoDatabaseEntrySelected { .. } => "NoDatabaseEntrySelected",

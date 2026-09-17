@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-17
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -39,7 +39,7 @@ being raw.
 |---|---|---|---|---|
 | 1 | The argument vector | `cli/` | Parsed and classified before any filesystem access; a rejected token leaves the parser as a typed value in an error, never as text the parser rendered | `FR-ERR-006`, `FR-CLI-006`, [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
 | 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised and both trust checks run as a **precondition** of opening the file; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
-| 3 | The environment | `project/config.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019` |
+| 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-SEC-007` |
 | 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
 | 5 | A supplied context document | `cli/` | Validated structurally and then handed to `render/`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
@@ -74,10 +74,29 @@ that the tool cautions and does not refuse, nothing in `cli/` inspects a value
 for secret-like content — a filter that admitted some values and rejected
 others would rest the guarantee on a heuristic.
 
+### A credential is a type that cannot be printed
+
+The prohibitions of `FR-ERR-013`, `BR-ERR-003` and `FR-GLOB-018` are all
+prohibitions on **printing**, so the design holds them by denying the value a
+way to be printed rather than by asking each caller to remember.
+
+| Property of the type | What it denies | Forced by |
+|---|---|---|
+| No display implementation | Interpolating a credential into a message does not compile | `FR-ERR-013`, `FR-SEC-006` |
+| A debug implementation that writes a fixed placeholder | A struct holding one discloses nothing when it is formatted, so the prohibition travels with the value rather than with the caller | `FR-SEC-006`, `FR-ERR-013` |
+| No serialisation implementation | The emitting path cannot take one at all, in either format | `FR-GLOB-018`, `FR-OUT-032` |
+| No equality implementation | Comparing two credentials is not something this crate does, and an ordinary one would be a timing oracle nobody asked for | — (design, absent a requirement) |
+| One accessor, named to be searchable | Every use of a credential is one search away, and the whole of what may call it is the code that authenticates | `BR-SEC-003` |
+
+`BR-SEC-003` asks for a property of the surface entire, and this is the second
+of the two constructions that produce it by shape rather than by review: the
+first is the closed set of emission functions below, which denies a formatted
+message a home; this denies the value itself one.
+
 ### What each read path over the configuration file may disclose
 
-`project/config.rs` holds three read paths over one file, and they are three
-code paths rather than one with a flag; their obligations are
+`project/` holds three read paths over one file, and they are three code paths
+rather than one with a flag; their obligations are
 [interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)'s. What
 belongs here is the disclosure property of each.
 
@@ -85,11 +104,14 @@ belongs here is the disclosure property of each.
 |---|---|---|
 | The directed key read | Unredacted and unexpanded, by decision, because the caller asked for one key by name | `FR-SEC-004`, `BR-CFG-002` |
 | The whole-file listing, and one entry shown | Redacted, with a variable reference emitted verbatim, so what the variable holds is never disclosed by either command | `FR-SEC-003`, `FR-CFG-021` |
-| The resolution a connection uses | Never reaches stdout at all; its only consumer is `mariadb/` | `FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-018` |
+| The resolution a connection uses | Never reaches stdout at all; its only consumer is `mariadb/`, and the credential inside it is carried in the type above | `FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-018` |
 
 The third row is what makes *the resolved DSN* a category a diagnostic cannot
-write: the value exists only between `project/config.rs` and `mariadb/`, and no
-component between them emits.
+write: the value exists only between `project/settings.rs` and `mariadb/`, and
+no component between them emits. Nothing re-composes a URL on that path either —
+the resolution hands on fields, not a string — so the value a diagnostic would
+have to be denied is never assembled in the first place (`FR-CONF-018`,
+`FR-SEC-009`).
 
 ### The six categories that reach no diagnostic stream
 
@@ -108,7 +130,7 @@ which keeps the forbidden values out of the error type.
 | 3 | The `password_command` | Nothing emits it as diagnostic content; the stored array is named in the `cause` of a child failure, which `FR-CONF-033` obliges and admits because `FR-CONF-017` keeps that array unexpanded | `FR-GLOB-018`, `FR-SEC-005` |
 | 4 | The child's standard error | It is directed to the null device, so the bytes never exist in the process to be written | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-032`, `FR-SEC-024` |
 | 5 | The raw driver error | It is classified at the `mariadb/` boundary and the original value is dropped; with no subscriber installed, what the driver itself emits is discarded before it exists | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-17`](open-decisions.md#od-17--observability) |
-| 6 | The contents of `.tpl/.cfg` | The reader hands `error.rs` the key and the position of a fault, never the text of the file | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-034`, `FR-CONF-035` |
+| 6 | The contents of `.tpl/.cfg` | The reader hands `error.rs` the key and the position of a fault, never the text of the file. For the two keys whose value may itself be a credential it hands on the value's **type** where it would otherwise hand on the value, and the choice is made from the key space rather than at the call site | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-034`, `FR-CONF-035`, `FR-ERR-013` |
 
 Two prohibitions bound the whole set rather than one category: no credential
 appears in an error message at any verbosity (`FR-SEC-006`, `FR-ERR-013`), and
@@ -167,10 +189,10 @@ not a configuration layer (`FR-CONF-030`;
 
 | Property | Where it is realised | Forced by |
 |---|---|---|
-| Expansion reaches the six fields that admit it and no others | `project/config.rs`, from the declared key space | `FR-SEC-007`, `FR-CONF-015` |
-| Two fields are excluded by the same table, so the exclusion is structural: neither the encryption mode nor the child command is expandable, and no variable can therefore weaken transport or choose the program that runs | `project/config.rs` | `FR-SEC-008`, `FR-CONF-016`, `FR-CONF-017` |
-| Inside a connection string, substitution happens after the URL has been broken into fields, and what it substitutes is encoded for the field it lands in | `project/config.rs`, before any connection exists | `FR-SEC-009`, `FR-CONF-018` |
-| An undefined variable ends the invocation; it is never an empty substitution | `project/config.rs` → `error.rs` | `FR-SEC-010`, `FR-CONF-022`, `BR-CONF-002` |
+| Expansion reaches the six fields that admit it and no others | `project/settings.rs`, deciding from the declared key space and not from the caller | `FR-SEC-007`, `FR-CONF-015` |
+| Two fields are excluded by the same table, so the exclusion is structural: neither the encryption mode nor the child command is expandable, and no variable can therefore weaken transport or choose the program that runs | The declared key space, asked per field | `FR-SEC-008`, `FR-CONF-016`, `FR-CONF-017` |
+| Inside a connection string, substitution happens after the URL has been broken into fields, and what it substitutes is encoded for the field it lands in | `project/config/dsn.rs` splits, `project/settings.rs` expands, before any connection exists | `FR-SEC-009`, `FR-CONF-018` |
+| An undefined variable ends the invocation; it is never an empty substitution | `project/config/expand.rs` → `error.rs` | `FR-SEC-010`, `FR-CONF-022`, `BR-CONF-002` |
 
 The third row is an ordering, not a sanitisation, and the order is what does
 the work: the field boundaries exist before any substitution occurs, so a
@@ -187,11 +209,12 @@ security properties it carries are these.
 
 | Property | How the build holds it | Forced by |
 |---|---|---|
-| No shell is involved | `project/config.rs` executes the stored argument array directly, so metacharacters are arguments and a `.cfg` inherited or cloned cannot choose code to run | `FR-SEC-011`, `FR-CONF-024`, `FR-CONF-026` |
-| The read is bounded | A fixed cap on what is read from the child; a child that writes past it is killed and the invocation fails, refusing rather than truncating | `FR-SEC-024`, `FR-CONF-031` |
+| No shell is involved | `project/password.rs` executes the stored argument array directly, so metacharacters are arguments and a `.cfg` inherited or cloned cannot choose code to run | `FR-SEC-011`, `FR-CONF-024`, `FR-CONF-026` |
+| The read is bounded | A fixed cap, applied **at the pipe** by a read that stops one byte past it, so the process never holds more; a child that reaches that byte is killed and the invocation fails, refusing rather than truncating | `FR-SEC-024`, `FR-CONF-031` |
 | The child is silent | Its standard error goes to the null device — not inherited, not captured | `FR-SEC-024`, `FR-CONF-032` |
 | A failure is diagnosable without the child's own words | The exit status and the stored command are what the `cause` carries | `FR-CONF-033` |
-| It cannot hang the caller | A deadline, enforced by the timer thread of [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) | `FR-SEC-012`, `FR-CONF-028` |
+| It cannot hang the caller | A deadline, enforced by the reader thread and polling loop of [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), which kills the child | `FR-SEC-012`, `FR-CONF-028` |
+| It cannot read the caller's input | Its standard input is the null device, so it cannot inherit a stream `tpl` itself is forbidden to read | `FR-SEC-023`, `BR-CLI-003` |
 
 The stored form is decided on the write path and never on the read path
 (`FR-CONF-023`, `FR-CONF-025`), so no quoting engine exists where the untrusted
@@ -211,6 +234,7 @@ therefore contains.
 | The file is the caller's | The process's own user identifier is obtained through a safe call and compared with the file's | `FR-SEC-014`, `FR-PROJ-010`, [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | Nobody else can write it | The mode check reads the same metadata as the ownership check | `FR-SEC-014`, `FR-PROJ-011` |
 | Naming the folder explicitly exempts nothing | The explicit path suppresses the walk and enters the same check sequence | `FR-SEC-016`, `FR-PROJ-008` |
+| An absent file is not a bypass | There is nothing to own and nothing to grant, so the checks pass and the configuration is empty; the project is the folder, and the write surface may create the file again | `FR-PROJ-001`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-004` |
 
 Two consequences are worth stating because a reader would otherwise assume more
 or less than the design gives. The boundary is **not** what refuses a project

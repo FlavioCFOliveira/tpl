@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-17
 related: [README.md, open-decisions.md]
 ---
 
@@ -38,6 +38,15 @@ two sections: section 4, where the shape of the JSON command tree was settled,
 and section 19, where the template surface was given its place in that document.
 Section 2 gains one row from the same work — a concern the corpus forces and no
 edition changed.
+
+**The twenty-second edition was harvested on 2026-09-17**, and it moved rows in
+one section: section 10, where `FR-CFG-031` was narrowed to what the file
+admits, `FR-CFG-048` was added, and `FR-CFG-023` was restated over the state
+rather than over one command. Sections 11 and 12 gain rows from the same work —
+concerns the corpus already forced and the build made concrete — and one row of
+section 10 was **wrong** before this harvest rather than merely absent: it gave
+`FR-CFG-023` as binding the entry-removal command alone, which is narrower than
+the requirement as amended.
 
 **Recorded gap — editions ten to twenty have not been harvested.** What they
 changed is not reflected in the rows below. The gap is recorded rather than
@@ -207,7 +216,10 @@ identifier is the authority and the wording here is a summary.
 | `cfg set` validates against the **enumerated key space and the declared type** of each key | `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-002` | `interfaces`, `data-model` |
 | `cfg unset` accepts a leaf key **or a whole block** | `FR-CFG-011` | `interfaces` |
 | `database update` changes only the named fields and leaves the rest of the entry untouched; `add` and `update` never do each other's job | `FR-CFG-020`, `BR-CFG-001` | `data-model` (`OD-09`) |
-| Removing the entry named by `core.database` also clears that key, silently | `FR-CFG-023` | `interfaces` |
+| A deletion that removes the entry named by `core.database` also clears that key, silently. The obligation is over the **state**, so both deletions that reach it are bound — the entry-removal command and an unset given that entry's block — while an unset given one field of the entry is not | `FR-CFG-023`, `FR-CFG-022`, `FR-CFG-011` | `interfaces` |
+| A write that would leave a database entry in a combination `FR-CONF-007` refuses is refused before the file is touched: `64`, file unchanged, both keys of the pair named, a runnable repair in the `hint`. The entry judged is the one that would stand **after** the write | `FR-CFG-048`, `FR-CONF-007` | `interfaces` |
+| One predicate decides `FR-CONF-007` for both callers — the reader, where a refused combination is `78`, and the writer, where a write producing one is `64` — because two copies could let the file and the invocation disagree about what an entry may hold | `FR-CFG-048`, `FR-CONF-007`, `FR-CONF-034` | `interfaces`, `architecture` |
+| The connection-string flag admits exactly what the file admits and no more, validated before the write and stored verbatim; a variable reference stays opaque | `FR-CFG-031`, `FR-CONF-009` … `FR-CONF-011` | `interfaces`, `security` |
 | A rewrite writes a temporary file in `.tpl/` at mode `0600` and renames it over the target; **no lock**; the mode is retained | `FR-CFG-034`, `FR-CFG-041`, `FR-CFG-042` | `data-model`, `security` |
 | `--password-command` takes a single string and stores the split array; not repeatable | `FR-CFG-046`, `FR-CONF-025` | `interfaces` (`OD-20`) |
 | `database test` performs **four ordered steps** and reports one field per step, with `server` the object of `FR-CTX-031` | `FR-CFG-024`, `FR-CFG-039` | `interfaces` |
@@ -225,6 +237,11 @@ identifier is the authority and the wording here is a summary.
 | Fifteen keys with declared types and defaults; the key space is the validator's population and `cfg list`'s shape | `FR-CONF-002` | `data-model` |
 | **Strict in both directions**: an unrecognised key anywhere is `78` with a suggestion; `password_command` not an array is `78` with the array form in the hint | `FR-CONF-034`, `FR-CONF-035`, `BR-CONF-004` | `data-model`, `security` |
 | An error must name the **line** of `.cfg` that carries the fault | `FR-CONF-035` example; `FR-ERR-034` row `78` | `data-model` (`OD-09`) |
+| Naming the offending key, its position and the file printed literally with passwords spliced in place are three facts a field-mapped read cannot produce, so the read path is a **spanned document tree** | `FR-CONF-034`, `FR-CONF-035`, `FR-CFG-013`, `FR-CFG-021` | `data-model`, `technology-stack` (`OD-09`) |
+| A key the file omits is carried as **absent** and never as its declared default, because one requirement forbids applying a default when printing and another requires applying it when resolving | `FR-CFG-014`, `FR-CONF-004`, `FR-CONF-002` | `architecture` |
+| The environment is a **parameter** of expansion and not a call inside it: the input is untrusted, and in edition 2024 setting a variable is an `unsafe` operation the crate forbids itself | `FR-SEC-007`, `FR-CONF-015`, `BR-CONF-003` | `architecture`, `security` |
+| A credential is carried in a type with no display and no serialisation, whose debug writes a placeholder — the prohibition is held by denying the value a way to be printed | `FR-ERR-013`, `FR-GLOB-018`, `BR-SEC-003` | `security` |
+| The 4096-byte cap is applied **at the pipe**, and the child is bounded by a reader thread and a polling loop rather than by a runtime timer, because the runtime is scoped to the database module and is not built for an invocation that connects to nothing | `FR-CONF-031`, `FR-CONF-028` | `interfaces`, `architecture` (`OD-12`, `ADR-005`) |
 | Five admitted/refused combinations of connection and password keys, decided before any connection | `FR-CONF-007` | `interfaces` |
 | A DSN carries **no** query parameters; a `?` is `78` whatever follows it | `FR-CONF-011`, `FR-CONF-012` | `interfaces`, `security` |
 | Five TLS modes, set **explicitly on every connection**, never inherited from the driver's default — including `disabled` | `FR-CONF-013`, `FR-CONF-037` | `security` (`OD-16`) |
@@ -254,6 +271,9 @@ identifier is the authority and the wording here is a summary.
 | The generated `.cfg` carries a **commented-out** example entry — the file must survive later rewrites with its comments | `FR-PROJ-017`, `FR-PROJ-018` | `data-model` (`OD-09`) |
 | Exactly four writers inside `.tpl`, and exactly one file-system exception outside it | `FR-PROJ-023`, `FR-PROJ-024` | `architecture`, `security` |
 | A nested project warns on stderr and exits `0` | `FR-PROJ-016` | `interfaces` |
+| An **absent** `.cfg` passes the trust checks and reads as an empty configuration: there is nothing to own and nothing to grant, the project is the folder, and the write surface may create the file again | `FR-PROJ-001`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-004` | `architecture`, `security` |
+| Ownership is judged **before** the mode, because a file belonging to another user is refused whatever its mode says | `FR-PROJ-010`, `FR-PROJ-011` | `architecture` |
+| The rewrite creates its temporary file **at** `0600` rather than changing the mode afterwards, so no instant exists at which it holds the old file's credentials at the umask's mode | `FR-PROJ-019`, `FR-CFG-034`, `FR-CFG-041` | `data-model`, `security` |
 
 ---
 

@@ -6,19 +6,21 @@
 //! and the binary parses the invocation, dispatches, and maps the resulting
 //! error to an exit status.
 //!
-//! At this commit the invocation is parsed and the command surface describes
-//! itself; no command that reads a database or a project acts yet. [`run`] is
-//! the entry point the binary calls, [`install_panic_hook`] is the process
-//! setup it performs first, [`Error`] is the value every module reports failure
-//! through, `cli` declares the closed command tree of `FR-CLI-002` and the
-//! seven global flags of `FR-GLOB-001` every node of it accepts, applies the
-//! parsing rules of `FR-CLI-014` through `FR-CLI-020`, and answers the six help
-//! and version forms of `FR-HELP-001` — including the JSON command tree of
-//! `FR-HELP-016` — `diagnostics` writes the four labelled lines of `FR-ERR-008`
-//! that a failure reaches the caller as, and `output` holds the two formats
-//! every result reaches the caller through — the envelope of `FR-OUT-024` and
-//! the aligned columns of `FR-OUT-006`; the catalogue reader and the render
-//! environment are added by the tasks that follow.
+//! At this commit the tool knows **where** it would connect, and still connects
+//! to nothing. [`run`] is the entry point the binary calls,
+//! [`install_panic_hook`] is the process setup it performs first, and [`Error`]
+//! is the value every module reports failure through.
+//!
+//! | Module | What it owns |
+//! |---|---|
+//! | `cli` | The closed command tree of `FR-CLI-002`, the seven global flags of `FR-GLOB-001` every node accepts, the parsing rules of `FR-CLI-014` through `FR-CLI-020`, the six help and version forms of `FR-HELP-001`, and the `cfg` arm that maintains `.tpl/.cfg` |
+//! | `project` | Where a project is found and why it is trusted (`FR-PROJ-001` … `FR-PROJ-011`), what `tpl init` creates (`FR-PROJ-012` … `FR-PROJ-024`), how `.tpl/.cfg` is read, validated and rewritten (`FR-CONF-001` … `FR-CONF-036`), and the settings a connection will need (`FR-CONF-004`, `FR-CONF-029`) |
+//! | `deadline` | The clock every blocking phase is bounded by: the four `[core]` deadlines of `FR-CONF-005` and the overall budget of `FR-GLOB-011`, composed as `FR-GLOB-012` composes them |
+//! | `diagnostics` | The four labelled lines of `FR-ERR-008` a failure reaches the caller as |
+//! | `output` | The two formats a result reaches the caller through — the envelope of `FR-OUT-024` and the aligned columns of `FR-OUT-006` |
+//!
+//! The catalogue reader and the render environment are added by the tasks that
+//! follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -27,18 +29,22 @@ pub mod error;
 
 pub(crate) mod cli;
 
+pub(crate) mod deadline;
+
 pub(crate) mod diagnostics;
 
-// `tpl help --format json` is the only command that emits a result so far, and
-// it emits a JSON document: the `text` layout of `FR-OUT-006`, the collection
-// shape of `FR-OUT-030` and the stdout route of `emit` are reached by commands
-// that are later sprints. One fact explains every constructor and enumerated
-// value the lint names, so it is stated once here rather than once per item,
-// and the attribute goes with the first command that reaches the rest.
+pub(crate) mod project;
+
+// Four items of this module have no caller yet, and all four wait on the same
+// sprint: `emit` and `emit_table`, which take standard output where the `cfg`
+// arm takes the stream its caller supplies; the `server` and `cache` values of
+// `FR-OUT-026`; and the excepted order of `NFR-DET-002`, which only a catalogue
+// collection carries. One fact explains every one of them, so it is stated once
+// here rather than once per item.
 #[allow(
     dead_code,
-    reason = "the commands that emit a listing are later sprints; OD-05 places the envelope, the \
-              emitter, the text layout and the writer here, and every one of those commands \
+    reason = "the commands that read a server are a later sprint, and OD-05 places the envelope, \
+              the emitter, the text layout and the writer here, so every one of those commands \
               depends on them"
 )]
 pub(crate) mod output;
@@ -92,7 +98,8 @@ pub fn run() -> Result<(), Error> {
 /// interception `OD-08` requires cannot be bypassed and no byte the parser's
 /// own renderer composes can reach either stream.
 ///
-/// The diagnostic level of `FR-GLOB-014` and `FR-GLOB-015` is fixed between the
+/// The instant `--timeout` is measured from is recorded first, and the
+/// diagnostic level of `FR-GLOB-014` and `FR-GLOB-015` is fixed between the
 /// two, which is where `OD-17` places it — after the invocation has been parsed
 /// and before anything that emits. A failure to parse leaves it at the level of
 /// a run that supplied neither flag, which costs nothing: the four labelled
@@ -101,6 +108,11 @@ pub fn run() -> Result<(), Error> {
 /// It reports nothing: the diagnostic is written once, by [`run`], for whatever
 /// condition reaches it first.
 fn dispatch() -> Result<(), Error> {
+    // FR-GLOB-011 measures the overall budget from process start, and this is
+    // the earliest instant a library function can record: the argument vector
+    // has not been read, so nothing blocking can have run.
+    deadline::mark_process_start();
+
     let invocation = cli::parse(std::env::args_os())?;
 
     diagnostics::verbosity::set_level(cli::level(&invocation));

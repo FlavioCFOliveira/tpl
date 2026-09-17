@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-17
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -28,9 +28,19 @@ would produce a technical statement with no trace, which this folder does not
 admit. A document listed as *unblocked* has no entry against it and has simply
 not been written.
 
-As of 2026-09-15 every entry of `open-decisions.md` is settled and **no document
+As of 2026-09-17 every entry of `open-decisions.md` is settled and **no document
 waits**. One entry is settled and **interim** — `OD-30`, which records an
 arrangement each later sprint removes one arm of — and it blocks nothing.
+
+**Three settled entries were amended on 2026-09-17, against what the project and
+configuration work built.** `OD-05` records that the read path and the write
+path over `.tpl/.cfg` are two modules rather than two paths of one; `OD-09`
+records that the read path is the TOML document tree and not a `serde` derive,
+with the three requirements a derive cannot answer; `OD-12` records that the
+`password_command` child is bounded by a reader thread and a polling loop rather
+than by a timer thread, and why the asynchronous runtime is unavailable on that
+path. Each is an amendment to a settled entry, not a reopening: the decision
+each entry made stands, and what changed is the mechanism recorded under it.
 
 The one residual that was work rather than a decision — `OD-22`'s fixture
 certificate and its container harness — was discharged on 2026-09-11 by tasks
@@ -124,7 +134,9 @@ the single junction of three sources and three consumers. The render component:
 engine construction, loader, undefined behaviour, auto-escape, context
 assembly. Deadlines on six named blocking phases. Lazy initialisation. The
 synchronous process and the runtime boundary inside `mariadb/`. The module map
-and the layout conventions.
+and the layout conventions. The division inside `project/` and the four
+decisions that produce it: reading apart from resolving, reading apart from
+writing, the environment as a parameter, and a credential as a type.
 
 **Must not contain.** Versions or crate rationale, which are
 `technology-stack.md`; signatures, which are `interfaces.md`; on-disk shapes,
@@ -157,10 +169,12 @@ its six exceptions. The help surface as built: the two sources the renderer
 reads, the five facts of a flag it introspects and the sixth it does not, the
 six forms that reach one renderer, and the runtime-introspected command tree
 with the two shapes of its document. The template surface as registered.
-Context access from a filter or a test. The configuration reader and writer. The
-`password_command` child. The pattern matcher and the qualified-routine-name
-parser. The five library-shape questions
-the functional specification hands to architecture.
+Context access from a filter or a test. The configuration reader and writer, the
+one predicate that decides an entry's coherence for both of them, and the two
+codes its two callers produce. The `password_command` child and why its parent
+polls. The phase clock's four obligations. The pattern matcher and the
+qualified-routine-name parser. The five library-shape questions the functional
+specification hands to architecture.
 
 **Must not contain.** Command-line or JSON syntax, which `/specification` owns
 and this file cites; persisted shapes, which are `data-model.md`.
@@ -183,7 +197,8 @@ does not promise. The four writers inside `.tpl`.
 ### `security.md`
 
 **Answers.** The six untrusted inputs and the component that first sees each.
-Credential handling and the three read paths over `.cfg`. The six categories
+Credential handling, the type that denies a credential any way of being printed,
+and the three read paths over `.cfg`. The six categories
 never written to a diagnostic stream. The sentinel property. `${VAR}` expansion
 and its ordering inside a DSN. The child process. The discovery boundary,
 canonicalisation, ownership and mode checks. Template containment. The
