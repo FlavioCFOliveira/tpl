@@ -20,7 +20,7 @@
 
 use std::borrow::Cow;
 
-use crate::error::{ContextFault, DeadlineBound, Error, ReadOnlyFault};
+use crate::error::{ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, ReadOnlyFault};
 
 /// The separator between two links of a template-engine error chain.
 const CHAIN_SEPARATOR: &str = ": caused by ";
@@ -90,10 +90,37 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         } => Cow::Owned(format!(
             "'{value}' was supplied for '{parameter}', which takes {expected}"
         )),
-        Error::UnknownConfigurationKey { key } => Cow::Owned(format!(
+        Error::UnknownConfigurationKey { key, .. } => Cow::Owned(format!(
             "'{key}' is outside the key space tpl cfg set writes into; the space is closed and a \
              key is never created"
         )),
+        Error::DatabaseEntryAlreadyExists { name, file } => Cow::Owned(format!(
+            "{} already defines the database entry '{name}'; add creates an entry and never \
+             replaces one",
+            file.display()
+        )),
+        // FR-CFG-048 obliges this line to name both members of the pair — the
+        // key the invocation writes and the key the entry already carries —
+        // which is the `64` row's "both members of the mutually exclusive
+        // pair". The third repair is the invocation supplying both itself, and
+        // it is said so rather than attributed to the file.
+        Error::IncoherentEntryWrite {
+            entry,
+            written,
+            conflicting,
+            repair,
+        } => Cow::Owned(match repair {
+            EntryRepair::Restate(_) => format!(
+                "the invocation writes both {written} and {conflicting} to database entry \
+                 '{entry}', which may state its connection and its password one way or the other \
+                 and never both; nothing was written"
+            ),
+            EntryRepair::Unset | EntryRepair::Rewrite => format!(
+                "the invocation writes {written} and database entry '{entry}' already declares \
+                 {conflicting}, which may state its connection and its password one way or the \
+                 other and never both; nothing was written"
+            ),
+        }),
         Error::UnexpectedArgument { command, token } => Cow::Owned(format!(
             "'{token}' was supplied to '{}', which takes no argument in that position",
             invoked(command)
@@ -211,16 +238,18 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "no template named '{name}' exists under the template root {}",
             root.display()
         )),
-        Error::DatabaseEntryNotFound { name, file } => Cow::Owned(format!(
+        Error::DatabaseEntryNotFound { name, file, .. } => Cow::Owned(format!(
             "{} declares no database entry named '{name}'",
             file.display()
         )),
         // FR-ERR-035 separates this from the 64 and the 78 that also name a
-        // key: this key is one tpl recognises, and the file does not set it.
-        Error::ConfigurationKeyNotFound { key, file } => Cow::Owned(format!(
-            "'{key}' is a key tpl recognises, and {} sets no value for it",
-            file.display()
-        )),
+        // key, and the exit code carries the separation: this is the key the
+        // file does not set. The line does not also claim the key is one the
+        // space admits, because FR-CFG-007 reaches a key outside it too — a
+        // spelling `tpl cfg get` was given and `.tpl/.cfg` does not carry.
+        Error::ConfigurationKeyNotFound { key, file, .. } => {
+            Cow::Owned(format!("{} sets no value for '{key}'", file.display()))
+        }
 
         // ------------------------------------------------------------ 69 ---
         // The row obliges the phase, the host and port attempted, and what
@@ -290,6 +319,10 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "the read of {} returned: {returned}",
             path.display()
         )),
+        Error::ProjectFileUnwritable { path, returned } => Cow::Owned(format!(
+            "the write of {} returned: {returned}; the previous file is still in place, unchanged",
+            path.display()
+        )),
         Error::StdoutUnwritable { returned } => {
             Cow::Owned(format!("the write to standard output returned: {returned}"))
         }
@@ -340,7 +373,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "the TOML parser stopped at {position} of {}",
             path.display()
         )),
-        Error::ConfigurationKeyOutsideSpace { key, file } => Cow::Owned(format!(
+        Error::ConfigurationKeyOutsideSpace { key, file, .. } => Cow::Owned(format!(
             "{} declares '{key}', which is outside the key space tpl recognises; an unrecognised \
              key is refused and never ignored",
             file.display()
@@ -362,6 +395,33 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         } => Cow::Owned(format!(
             "{} declares both {first} and {second} for database entry '{entry}'; an entry states \
              its connection one way or the other and never both",
+            file.display()
+        )),
+        Error::ConfigurationValueMalformed {
+            key,
+            file,
+            position,
+            found,
+            expected,
+        } => Cow::Owned(format!(
+            "{} at {position} declares {key} as {found}; this key takes {expected}",
+            file.display()
+        )),
+        Error::DsnMalformed { key, file, fault } => match fault {
+            DsnFault::Scheme => Cow::Owned(format!(
+                "{key} in {} names a scheme tpl does not accept; a DSN is written with mysql:// \
+                 or mariadb://, which are equivalent",
+                file.display()
+            )),
+            DsnFault::Form => Cow::Owned(format!(
+                "{key} in {} is not of the form scheme://[user[:password]@]host[:port]/database; \
+                 the host and the database are both required",
+                file.display()
+            )),
+        },
+        Error::UnclosedExpansion { key, file } => Cow::Owned(format!(
+            "{key} in {} opens a ${{ expansion that is never closed; an expansion is written \
+             ${{VAR}} and ends at its brace",
             file.display()
         )),
         Error::DsnQueryParameter { key, file } => Cow::Owned(format!(
@@ -391,6 +451,9 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         Error::PasswordCommandOutputCapExceeded { command, cap } => Cow::Owned(format!(
             "password_command {command:?} was terminated after writing more than {cap} bytes to \
              its standard output"
+        )),
+        Error::PasswordCommandNotExecutable { command, returned } => Cow::Owned(format!(
+            "password_command {command:?} could not be started: {returned}"
         )),
         Error::PasswordCommandFailed { command, status } => match status {
             Some(status) => Cow::Owned(format!(

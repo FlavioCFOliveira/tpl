@@ -1,7 +1,7 @@
 ---
 title: Architecture
 status: draft
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-17
 related: [README.md, traceability.md, open-decisions.md, overview.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -40,7 +40,7 @@ src/
 ├── render/        the engine, the loader, and the registered template surface
 ├── output/        the envelope, the JSON emitter, the text layouts, escaping, the writer
 ├── diagnostics/   the four-line renderer, the suggestion machinery, the verbosity gate
-├── deadline.rs    the phase clock and the timer thread of OD-12
+├── deadline.rs    the phase clock, and the threads OD-12 bounds two phases with
 └── error.rs       the error type and the exit-code derivation
 ```
 
@@ -80,7 +80,7 @@ therefore the shape of the process, not a convention of the error module.
 | 1 | Parse the invocation | `cli/` | `64` |
 | 2 | Discover the project and apply the trust checks | `project/` | `78` |
 | 3 | Read and validate the configuration file | `project/config.rs` | `78` |
-| 4 | Resolve the database entry | `project/config.rs` | `78` or `66` |
+| 4 | Resolve the database entry | `project/settings.rs` | `78` or `66` |
 | 5 | Consult the cache; open a connection if it does not answer | `cache/`, then `mariadb/` | `69`, `77` or `78` |
 | 6 | Resolve the named catalogue object | `mariadb/` or `cache/` | `66` |
 | 7 | Resolve the template | `render/` | `66` |
@@ -178,6 +178,57 @@ command path, and that arrangement is recorded as
 [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) rather
 than left in the code that carries it.
 
+## Inside `project/`
+
+`project/` is the whole of the path from a working directory to a validated
+configuration, and to the settings a connection will need. It is divided by the
+step of `FR-ERR-006` each part serves, so that the order of the steps is a
+property of the code rather than a convention: a project value exists only once
+discovery and both trust checks have passed, and reading the file is a method on
+it.
+
+| Part | What it owns | Serves |
+|---|---|---|
+| The locator | The upward walk, the mount-point boundary, the explicitly named folder, canonicalisation | Step 2 (`FR-PROJ-004` … `FR-PROJ-009`) |
+| The trust checks | Ownership and mode, judged over metadata already read | Step 2 (`FR-PROJ-010`, `FR-PROJ-011`) |
+| The reader | Parse, key space, declared types, coherence, DSN grammar — in that order, over the whole file | Step 3 (`FR-CONF-001`, `FR-CONF-002`, `FR-CONF-006` … `FR-CONF-014`, `FR-CONF-034`, `FR-CONF-035`) |
+| The key space | The enumerated keys as a type, with the declared type of each, and what `unset` may be given | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CFG-011` |
+| The entry | One `[database.<name>]` block typed, and the predicate that decides `FR-CONF-007` | `FR-CONF-002`, `FR-CONF-006`, `FR-CONF-007` |
+| The resolution | Entry selection, `${VAR}` expansion, the child, the four deadlines, the settings a connection takes | Step 4 (`FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-004` … `FR-GLOB-008`) |
+| The writer | The format-preserving rewrite of `.tpl/.cfg` | `FR-CFG-034`, `FR-CFG-041`, `FR-CFG-042` |
+| The creator | The five artefacts of a new project | `FR-PROJ-012` … `FR-PROJ-024` |
+
+Four divisions inside it are decisions rather than arrangement.
+
+- **Reading and resolving are separate modules, not two methods of one.**
+  `FR-CFG-014` forbids the whole-file listing to expand a variable, run the
+  child or apply a default, and the way to hold that is for the reader to be
+  unable to: the environment lookup and the child live outside it, reached only
+  from the resolution. A reader that could resolve would leave the prohibition
+  resting on every future call site.
+- **Reading and writing are separate modules.** They are different problems over
+  one file — reading validates and refuses, writing preserves and must not
+  reformat — and
+  [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path)
+  gives them two different parsers for that reason.
+- **The environment is a parameter of expansion, never a call inside it.**
+  `FR-SEC-007` treats the environment as untrusted, so the expansion has to be
+  exercisable against a hostile value without the process carrying it; and in
+  edition 2024 setting a variable is an `unsafe` operation, which
+  `#![forbid(unsafe_code)]` denies this crate. One function reads the real
+  environment, and it is the only read of it in the crate (`FR-CLI-021`,
+  `BR-CONF-003`).
+- **A credential is a type, not a string.** It is carried in a value with no
+  display implementation and no serialisation, whose one accessor is named so
+  that every use of a credential is one search away; the prohibition then
+  travels with the value rather than with the caller. What the type denies, and
+  why each denial is owed, is `security.md`'s.
+
+**The four deadlines are resolved here and applied elsewhere.** `project/`
+resolves the four `[core]` values, taking the built-in default of `FR-CONF-002`
+for each key the file omits; `deadline.rs` owns the construct they are applied
+through, which is [The six phase deadlines](#the-six-phase-deadlines) below.
+
 ## Project discovery and the trust checks
 
 `project/` owns the walk and the checks; nothing else in the crate locates a
@@ -192,6 +243,23 @@ project.
 | Check 1 | Canonicalise the resolved path **before** any check, so a symlinked folder is verified at its target | `FR-PROJ-009`, `FR-SEC-015` |
 | Check 2 | The configuration file is owned by the current user | `FR-PROJ-010` |
 | Check 3 | The configuration file carries no group and no other access bits | `FR-PROJ-011` |
+
+Three properties of the checks as built are decisions the requirements leave
+open, and each is stated rather than inferred.
+
+- **Ownership is judged before the mode.** A file belonging to another user is
+  refused whatever its mode says, because the caller's next step is to stop
+  using it rather than to change its permissions (`FR-PROJ-010`,
+  `FR-PROJ-011`).
+- **An absent configuration file passes.** There is nothing to own and nothing
+  to grant. `FR-PROJ-001` makes the project the folder rather than the file, and
+  `FR-CFG-004` lets the directed write surface create it again, so a project
+  whose file was removed by hand is a project with an empty configuration and
+  not a project that cannot be used.
+- **The judgment is separable from the metadata read.** The ownership half
+  cannot be exercised otherwise: a test process cannot give a file to another
+  user, and a check only ever called with its own identifier is a check nothing
+  has watched fire (`FR-PROJ-010`).
 
 **The boundary is a comparison, not a lookup.** It is decided by comparing a
 directory's filesystem device identifier with its parent's, which is why no
@@ -216,8 +284,17 @@ declared for the key. Two components supply them and neither owns the rule.
 |---|---|---|
 | The flag | `cli/`, from the parsed invocation | `FR-CONF-029`, `FR-GLOB-001` |
 | The file | `project/config.rs`, after the trust checks | `FR-CONF-029` |
-| The built-in default | The declared key space, in `project/config.rs` | `FR-CONF-029`, `FR-CONF-002` |
+| The built-in default | Applied in `project/settings.rs`, and in `deadline.rs` for the four deadlines | `FR-CONF-029`, `FR-CONF-002` |
 | **No environment layer** | — | `FR-CONF-030`, `FR-CLI-021`, `BR-CLI-002` |
+
+**A default is applied where it is used, never where the file is read.** The
+typed document carries a key the file omits as absent rather than as its
+declared default, because `FR-CFG-014` forbids the whole-file listing to apply
+one and `FR-CONF-004` requires the deadlines to resolve through one: a document
+that carried defaults would make the two disagree. The declared key space
+carries each key's declared **type**, which the reader and the writer both
+validate against; the declared **value** a key falls back to is held by the
+construct that consumes it.
 
 `${VAR}` expansion inside the file is not a fourth layer: it supplies the value
 of a key the file already carries (`FR-CONF-030`, `FR-CONF-015`), and it is the
@@ -226,6 +303,14 @@ single point at which the environment reaches an invocation at all
 and the three distinct read paths over the one file, are
 [interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)'s; the
 key space and the file's shape are [data-model.md](data-model.md#tplcfg)'s.
+
+**A connection string resolves to the same fields a discrete entry does.** The
+resolution parses the URL, expands within each already-delimited field, and
+hands on a host, a port, a user, a password and a server-side database name —
+whichever way the entry was written — so nothing downstream distinguishes the
+two shapes and an expanded value has no delimiter to move within (`FR-CONF-018`,
+`FR-SEC-009`). Percent-encoding, the third step of that order, is applied by
+whichever component composes a URL for the driver, which is a later sprint's.
 
 ## The connection lifecycle
 
@@ -423,7 +508,7 @@ not restated.
 | 2 | TCP connect | What remains of the same budget | The runtime's own timer, around the driver's connect call | `FR-CONF-005`, `FR-ERR-027` |
 | 3 | TLS handshake | What remains of the same budget | The same timer and the same call; the phase is separated in the **report**, from the driver's own discriminant | `FR-CONF-005`, `FR-ERR-027` |
 | 4 | Catalogue query | The query budget, per query | The runtime's own timer | `FR-CONF-005`, `FR-ERR-027` |
-| 5 | `password_command` | The password budget | A timer thread that kills the child while the parent reports the expiry | `FR-CONF-005`, `FR-CONF-028` |
+| 5 | `password_command` | The password budget | A reader thread draining the child's pipe and a polling loop in the parent, which kills the child and reports the expiry | `FR-CONF-005`, `FR-CONF-028` |
 | 6 | Render | The render budget | A timer thread that writes the diagnostic and terminates the process | `FR-CONF-005`, `FR-RND-033` |
 
 Four rules bind the table.
@@ -445,16 +530,23 @@ Four rules bind the table.
   work.
 
 **`deadline.rs` owns the construct and three modules use it** — the runtime
-inside `mariadb/`, the child process run from `project/config.rs`, and the
+inside `mariadb/`, the child process run from `project/password.rs`, and the
 render in `render/` — because a budget measured from process start and shared by
 three modules belongs to none of them
 ([`OD-05`](open-decisions.md#od-05--the-module-decomposition),
 [interfaces.md](interfaces.md#the-shared-functions-and-the-phase-clock)).
 
-**A timer is not the speculative parallelism the project forbids.** It performs
-no work of the invocation and makes nothing faster; it is created only on the
-paths that need it, so the commands of `NFR-PERF-005` create no thread at all
-([`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)).
+**It is at the crate root and not under `project/`.** `project/` resolves the
+four values from `[core]`; it does not own the clock they are applied through,
+because two of the three users are not in it and a budget measured from process
+start is not a property of the configuration file
+([`OD-05`](open-decisions.md#od-05--the-module-decomposition),
+[`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)).
+
+**A thread here is not the speculative parallelism the project forbids.** It
+performs no work of the invocation and makes nothing faster; it is created only
+on the paths that need it, so the commands of `NFR-PERF-005` create no thread at
+all ([`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)).
 
 ## Lazy initialisation
 
@@ -469,7 +561,7 @@ it observable rather than reviewable.
 | A connection | The command needs catalogue data and the cache did not answer | `NFR-PERF-006`, `NFR-PERF-003`, `FR-CACHE-011`, `FR-RND-022` |
 | The template engine | The invocation renders | `NFR-PERF-006` |
 | The asynchronous runtime | `mariadb/` is reached | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
-| A timer thread | A phase that needs one is entered | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| A thread of the crate's own | A phase bounded without the runtime is entered | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
 
 Each row is verified by an observation made outside the process and never by
 reading the source (`NFR-PERF-007`), which is why laziness is placed at a module
@@ -495,10 +587,11 @@ Two consequences bear on the rest of this document:
 - **The runtime's timers are available only inside the boundary**, which is what
   divides the six deadlines of
   [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) into
-  the four enforced with them and the two enforced with a timer thread. A
-  deadline mechanism that needed a runtime timer outside `mariadb/` would
+  the four enforced with them and the two enforced with a thread of the crate's
+  own. A deadline mechanism that needed a runtime timer outside `mariadb/` would
   contradict [`ADR-005`](../adr/adr-005-async-runtime-scope.md) and would be the
-  defect.
+  defect, and it is why the child of `project/password.rs` is bounded by a
+  thread and a polling loop and not by a task.
 
 ## Two exits that do not return through `main.rs`
 

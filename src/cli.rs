@@ -127,6 +127,7 @@ use template::Template;
 use crate::diagnostics::verbosity::Level;
 use crate::error::{self, Error};
 use crate::output;
+use crate::project;
 
 /// The interim outcome of a leaf whose implementation is a later sprint.
 ///
@@ -648,36 +649,53 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
             Some(cache::Command::Status { .. }) => not_yet_implemented!("tpl cache status"),
         },
 
-        Some(Command::Cfg(config)) => match &config.command {
-            None => node_help(out, &["cfg"]),
-            Some(cfg::Command::Get { .. }) => not_yet_implemented!("tpl cfg get"),
-            Some(cfg::Command::Set { .. }) => not_yet_implemented!("tpl cfg set"),
-            Some(cfg::Command::Unset { .. }) => not_yet_implemented!("tpl cfg unset"),
-            Some(cfg::Command::List { .. }) => not_yet_implemented!("tpl cfg list"),
-            Some(cfg::Command::Database(database)) => match &database.command {
-                None => node_help(out, &["cfg", "database"]),
-                Some(cfg::DatabaseCommand::Add { .. }) => {
-                    not_yet_implemented!("tpl cfg database add")
-                }
-                Some(cfg::DatabaseCommand::List { .. }) => {
-                    not_yet_implemented!("tpl cfg database list")
-                }
-                Some(cfg::DatabaseCommand::Show { .. }) => {
-                    not_yet_implemented!("tpl cfg database show")
-                }
-                Some(cfg::DatabaseCommand::Update { .. }) => {
-                    not_yet_implemented!("tpl cfg database update")
-                }
-                Some(cfg::DatabaseCommand::Remove { .. }) => {
-                    not_yet_implemented!("tpl cfg database remove")
-                }
-                Some(cfg::DatabaseCommand::Test { .. }) => {
-                    not_yet_implemented!("tpl cfg database test")
-                }
-            },
-        },
+        Some(Command::Cfg(config)) => {
+            let globals = &invocation.globals;
 
-        Some(Command::Init { .. }) => not_yet_implemented!("tpl init"),
+            match &config.command {
+                None => node_help(out, &["cfg"]),
+                Some(cfg::Command::Get { key, output }) => {
+                    cfg::keys::get(out, &cfg::Supplied::new(globals, Some(output)), key)
+                }
+                Some(cfg::Command::Set { key, value }) => {
+                    cfg::keys::set(&cfg::Supplied::new(globals, None), key, value)
+                }
+                Some(cfg::Command::Unset { key }) => {
+                    cfg::keys::unset(&cfg::Supplied::new(globals, None), key)
+                }
+                Some(cfg::Command::List { output }) => {
+                    cfg::keys::list(out, &cfg::Supplied::new(globals, Some(output)))
+                }
+                Some(cfg::Command::Database(database)) => match &database.command {
+                    None => node_help(out, &["cfg", "database"]),
+                    Some(cfg::DatabaseCommand::Add { name, entry }) => {
+                        cfg::entries::add(&cfg::Supplied::new(globals, None), name, &entry.flags())
+                    }
+                    Some(cfg::DatabaseCommand::List { output }) => {
+                        cfg::entries::list(out, &cfg::Supplied::new(globals, Some(output)))
+                    }
+                    Some(cfg::DatabaseCommand::Show { name, output }) => {
+                        cfg::entries::show(out, &cfg::Supplied::new(globals, Some(output)), name)
+                    }
+                    Some(cfg::DatabaseCommand::Update { name, entry }) => cfg::entries::update(
+                        &cfg::Supplied::new(globals, None),
+                        name,
+                        &entry.flags(),
+                    ),
+                    Some(cfg::DatabaseCommand::Remove { name }) => {
+                        cfg::entries::remove(&cfg::Supplied::new(globals, None), name)
+                    }
+                    // The one cfg subcommand that contacts a server, per
+                    // FR-CFG-005, and therefore the one the sprint that opens a
+                    // connection owns.
+                    Some(cfg::DatabaseCommand::Test { .. }) => {
+                        not_yet_implemented!("tpl cfg database test")
+                    }
+                },
+            }
+        }
+
+        Some(Command::Init { path }) => project::init::create(path),
 
         // The two commands of the tree this sprint implements. Both reach the
         // same two functions the flag forms above reach, which is the whole of
@@ -803,9 +821,24 @@ mod tests {
     ///
     /// `tpl help` prints the help of the node its path names, in either of the
     /// two representations of `FR-HELP-001`, and `tpl version` prints the line
-    /// of `FR-HELP-005`. Every other leaf is still the arrangement this
-    /// module's own documentation describes.
-    const IMPLEMENTED: [&[&str]; 2] = [&["help"], &["version"]];
+    /// of `FR-HELP-005`. `tpl init` creates the five artefacts of
+    /// `FR-PROJ-017`, and the nine `cfg` subcommands that do not contact a
+    /// server maintain `.tpl/.cfg`. Every other leaf is still the arrangement
+    /// this module's own documentation describes.
+    const IMPLEMENTED: [&[&str]; 12] = [
+        &["help"],
+        &["version"],
+        &["init"],
+        &["cfg", "get"],
+        &["cfg", "set"],
+        &["cfg", "unset"],
+        &["cfg", "list"],
+        &["cfg", "database", "add"],
+        &["cfg", "database", "list"],
+        &["cfg", "database", "show"],
+        &["cfg", "database", "update"],
+        &["cfg", "database", "remove"],
+    ];
 
     /// The six group nodes of `FR-CLI-008`, by the path a caller writes. None
     /// of them declares an argument of its own, per `FR-CLI-009`.
@@ -1309,6 +1342,22 @@ mod tests {
         };
 
         assert_eq!(command_path, ["cfg", "database", "add"]);
+    }
+
+    #[test]
+    fn init_writes_nothing_to_stdout_and_creates_the_project_at_the_path_it_was_given() {
+        // FR-PROJ-022 and BR-CLI-004: nothing on stdout, and exit 0. The path
+        // is an operand rather than the working directory, so the test never
+        // moves the process — which `cargo test` shares between threads.
+        let scratch = crate::project::scratch::Scratch::new();
+        let destination = scratch.path("project");
+        let named = destination.to_string_lossy().into_owned();
+
+        let (result, written) = outcome(&["init"], &[&named]);
+
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(written, "");
+        assert!(destination.join(".tpl").join(".cfg").is_file());
     }
 
     #[test]

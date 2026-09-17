@@ -1,7 +1,7 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-17
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md]
 ---
 
@@ -86,7 +86,8 @@ tpl cfg database test   <name>
   key whose value is empty.
 
 - **FR-CFG-008**: `tpl cfg set <key> <value>` SHALL write the value under that
-  key.
+  key. `FR-CFG-048` states when a write to a key of a database entry is
+  refused.
 
 - **FR-CFG-009**: `tpl cfg set` SHALL accept only the enumerated key space of
   `FR-CONF-002`. IF the key is not in that space, THEN the system SHALL exit
@@ -98,7 +99,8 @@ tpl cfg database test   <name>
 
 - **FR-CFG-011**: `tpl cfg unset <key>` SHALL accept either a leaf key, such as
   `database.shop.host`, or a whole block, such as `database.shop`, and SHALL
-  delete what it is given.
+  delete what it is given. `FR-CFG-023` states the one further change a
+  deletion makes.
 
 - **FR-CFG-012**: IF the key or block supplied to `tpl cfg unset` is absent,
   THEN the system SHALL exit `66`.
@@ -138,11 +140,66 @@ tpl cfg database test   <name>
   passwords redacted per `FR-CFG-021`, and SHALL NOT expand `${VAR}`.
 
 - **FR-CFG-020**: `tpl cfg database update <name>` SHALL change the fields named
-  by the flags supplied, leaving the rest of the entry untouched.
+  by the flags supplied, leaving the rest of the entry untouched. `FR-CFG-048`
+  states what happens where a field the flags name and a field they leave alone
+  cannot stand together.
 
 - **BR-CFG-001**: `add` creates and `update` changes. Neither silently does the
   other's job: there is no `--force` that replaces wholesale, and no idempotent
   `add` that would make the two verbs synonyms.
+
+- **FR-CFG-048**: IF a `cfg` command that writes a database entry — `tpl cfg
+  set`, `tpl cfg database add`, or `tpl cfg database update` — would leave that
+  entry in a combination `FR-CONF-007` refuses, THEN the system SHALL refuse
+  the write, SHALL leave `.tpl/.cfg` unchanged, and SHALL exit `64`
+  (`EX_USAGE`).
+
+  The entry this rule is applied to is the entry as it would stand after the
+  write: the fields `.tpl/.cfg` already carries for that entry, with the fields
+  the invocation names added or changed. The system SHALL NOT remove, replace,
+  or rewrite a field the invocation did not name in order to make the entry
+  coherent, and SHALL NOT perform the write and leave the incoherence for a
+  later invocation to fail on.
+
+  The `cause` SHALL name both members of the pair — the key the invocation
+  writes and the key the entry already carries — per the `64` row of
+  `FR-ERR-034`. The `hint` SHALL carry a runnable command that makes the write
+  legal, per `FR-ERR-009`: the `tpl cfg unset` of the field that conflicts, or
+  `tpl cfg database remove` followed by `tpl cfg database add`.
+
+  *What was missing.* `FR-CFG-016` and `FR-CFG-029` make the two ways of
+  describing a connection mutually exclusive **in one invocation**, and
+  `FR-CONF-007` makes them mutually exclusive **in one entry**. Nothing joined
+  the two, so `tpl cfg set database.shop.dsn <value>` and
+  `tpl cfg database update shop --dsn <value>` each wrote a legal invocation
+  into an entry `FR-CONF-007` refuses — and `FR-CFG-020` positively requires
+  the rest of that entry to be left in place. Every later read is then `78`
+  (`EX_CONFIG`) at step 3 of `FR-ERR-006`, including the `tpl cfg unset` that
+  would repair it, so the file is repairable only by hand. `add` reaches the
+  same state by the third row of `FR-CONF-007`: a `--dsn` carrying a password
+  beside `--password-command` is not a pair `FR-CFG-029` separates, because
+  `FR-CONF-006` excludes `password_command` from the discrete connection
+  fields.
+
+  *Rejected: removing the fields the new value supersedes.* It contradicts
+  `FR-CFG-020` and `BR-CFG-001`, which bar a wholesale replacement, and it is
+  the guess `BR-CONF-004` refuses, made by the writer rather than by the
+  reader — `tpl` would delete a host, a user, and a password the caller never
+  named, and the caller would learn of it from `tpl cfg database show`.
+
+  *Rejected: writing, and letting the next read fail.* It produces the
+  hand-repairable file described above, and it reports the fault at step 3
+  against `.tpl/.cfg`, one invocation after the invocation that caused it,
+  which is the opposite of the instance `FR-ERR-034` requires a `cause` to
+  name.
+
+  *Why `64` and not `78`.* The file as it stands is valid, and `78` sends the
+  caller to fix `.tpl/.cfg`, per its row of `FR-ERR-001`. What is refused is
+  the invocation, which the caller wrote and can rewrite. `FR-CFG-017` is the
+  same shape and already carries `64`: a `cfg` write refused for what
+  `.tpl/.cfg` already holds.
+
+  *Added in the twenty-second edition.*
 
 - **FR-CFG-021**: WHEN printing configuration, `tpl cfg list` and
   `tpl cfg database show` SHALL redact secrets as follows:
@@ -161,14 +218,34 @@ tpl cfg database test   <name>
 
 - **FR-CFG-022**: `tpl cfg database remove <name>` SHALL delete that entry.
 
-- **FR-CFG-023**: WHEN `tpl cfg database remove` deletes the entry named by
-  `core.database`, the system SHALL also clear `core.database`, silently,
-  leaving the file coherent.
+- **FR-CFG-023**: WHEN a `cfg` command deletes the entry named by
+  `core.database` — `tpl cfg database remove <name>`, or `tpl cfg unset` given
+  the block of that entry — the system SHALL also clear `core.database`,
+  silently and in the same rewrite, leaving the file coherent.
+
+  A deletion that leaves the entry in place does not engage this rule.
+  `tpl cfg unset database.<name>.<field>` removes one field; the entry still
+  exists, and `core.database` still resolves.
 
   *Rationale.* The next invocation without `-d` then fails with `78`, "no
   database entry selected", which is the correct message. A stderr warning would
   not be seen by a caller checking only the exit code, and refusing with `64`
   until the reference is cleared by hand would be worse.
+
+  *Amended in the twenty-second edition: the obligation is over the state, and
+  not over one command.* It named `tpl cfg database remove` alone, and
+  `tpl cfg unset database.<name>` reaches the identical state — `core.database`
+  naming an entry the file no longer carries — with no requirement governing
+  it. The next invocation without `-d` then selected an entry that does not
+  exist, which is `66` (`EX_NOINPUT`) with a nearest-match suggestion, per
+  `FR-ERR-005`, over a population the same invocation had just removed that
+  name from. The rationale above states why `78` and "no database entry
+  selected" is the right answer for this state, so no decision is taken here
+  that this requirement had not already taken: the same rule now reaches the
+  second command that produces the state it was written for. The two changes
+  are one rewrite because `FR-CFG-041` makes a rewrite atomic, and a file
+  carrying one of them without the other is what this requirement exists to
+  prevent.
 
 - **FR-CFG-024**: `tpl cfg database test <name>` SHALL perform exactly the
   following four steps, in this order, and SHALL report the outcome of each:
@@ -350,8 +427,53 @@ tpl cfg database test   <name>
 - **FR-CFG-030**: The system SHALL NOT declare a `--password` or `-p` flag on
   any command.
 
-- **FR-CFG-031**: `--dsn` SHALL accept whatever the caller writes, including a
-  literal password, and SHALL store it verbatim.
+- **FR-CFG-031**: `--dsn` SHALL accept exactly the values `FR-CONF-009`,
+  `FR-CONF-010` and `FR-CONF-011` admit — the grammar, the two schemes, and no
+  query parameter — and no others. The system SHALL validate the value before
+  writing it, SHALL store an admitted value verbatim, including a literal
+  password, and SHALL exit `64` (`EX_USAGE`) without writing anything where the
+  value is not admitted.
+
+  The value SHALL be validated as the caller wrote it, with `${VAR}` left
+  unexpanded and treated as opaque text within the field it occupies. That is
+  the form `FR-CONF-018` parses, and no `cfg` command reads the environment.
+
+  *A literal password is not what is refused.* `tpl` warns; it does not
+  prevent, per `BR-CFG-003`. A DSN carrying a password is admitted and stored
+  as written, the help of the flag states that the value is visible in the
+  process table, per `FR-CFG-033`, and `FR-SEC-002` names this flag as one of
+  the two paths that stay open. What this requirement refuses is a value the
+  reader of `.tpl/.cfg` cannot accept.
+
+  *Amended in the twenty-second edition: the flag admits what the file admits,
+  and nothing else.* It read "SHALL accept whatever the caller writes,
+  including a literal password, and SHALL store it verbatim" — a rule about
+  secrets, which is what `FR-SEC-002` and `DIV-002` cite it for, stated wide
+  enough to be read as a rule about syntax. Read that way,
+  `tpl cfg database add shop --dsn postgres://h/d` succeeded and wrote a scheme
+  `FR-CONF-010` does not accept. From that moment every invocation is refused
+  at step 3 of `FR-ERR-006`, because no `cfg` subcommand is among the commands
+  `FR-PROJ-025` excuses from reading and validating the file — including the
+  `tpl cfg database remove shop` that would undo it. The file was repairable
+  only by hand, which is the state `FR-CFG-023` and `BR-CONF-004` are both
+  written to prevent.
+
+  *The admission is an equality, in both directions.* Admitting more than the
+  three requirements do writes a file the reader refuses. Admitting less would
+  leave a `.cfg` that is legal and that `tpl` cannot write, against
+  `FR-CFG-027`, which gives every key of an entry a flag so that it can.
+
+  *Why `64`.* The value is a token the caller wrote on the invocation and can
+  rewrite, which is what `64` means in `FR-ERR-001` and where `FR-ERR-035`
+  places a value met on an invocation. The `cause` names the value as written
+  and the form expected, per the `64` row of `FR-ERR-034`, and the `hint`
+  carries a runnable command, per `FR-ERR-009`.
+
+  *The same value through the other write path.* `FR-CFG-010` validates a value
+  supplied to `tpl cfg set` against the type `FR-CONF-002` declares for its
+  key, and exits `64` where it does not conform. For `database.<name>.dsn` the
+  declared type *connection URL* is these same three requirements, so both
+  write paths admit the same set and refuse with the same code.
 
 - **FR-CFG-032**: `tpl cfg set` SHALL accept a literal password written to
   `database.<name>.password`.

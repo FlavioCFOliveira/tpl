@@ -35,7 +35,8 @@ use std::borrow::Cow;
 
 use super::suggest;
 use crate::error::{
-    CatalogueObjectKind, ContextFault, DeadlineBound, Error, NetworkPhase, ReadOnlyFault,
+    CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, NetworkPhase,
+    ReadOnlyFault,
 };
 
 /// The longest a name the character set of `FR-ERR-022` governs may be.
@@ -165,9 +166,45 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         Error::MalformedValue { .. } => {
             Cow::Borrowed("show what the command accepts with: tpl help <command>")
         }
-        Error::UnknownConfigurationKey { .. } => {
-            Cow::Borrowed("show what tpl cfg set accepts with: tpl help cfg set")
+        // FR-CFG-009 obliges the nearest-match half over the enumerated key
+        // space of FR-CONF-002. Every key of that space is a spelling this
+        // corpus fixes, so FR-ERR-022 makes it a literal and the test beside it
+        // is the defensive assertion this module applies to every such value.
+        Error::UnknownConfigurationKey { nearest, .. } => {
+            let admitted = admitted(nearest, admits_key);
+            suggest::hint_line(
+                admitted.iter().copied(),
+                "show what tpl cfg set accepts with: tpl help cfg set",
+            )
         }
+        // FR-CFG-017 obliges this hint to point at `tpl cfg database update`.
+        Error::DatabaseEntryAlreadyExists { name, .. } => {
+            Cow::Owned(format!("change it instead with: {}", update_entry(name)))
+        }
+        // FR-CFG-048 obliges a runnable command that makes the write legal, and
+        // the three are the three shapes such a command takes. Which one is
+        // decided where the refusal is raised, because only the writer knows
+        // whether the conflicting key is one the file carries, one of several,
+        // or one the same invocation supplied.
+        Error::IncoherentEntryWrite {
+            entry,
+            conflicting,
+            repair,
+            ..
+        } => match repair {
+            EntryRepair::Unset => Cow::Owned(format!(
+                "remove the key it conflicts with: {}",
+                unset_key(conflicting)
+            )),
+            EntryRepair::Rewrite => Cow::Owned(format!(
+                "write the entry one way only: {}",
+                rewrite_entry(entry)
+            )),
+            EntryRepair::Restate(command) => Cow::Owned(format!(
+                "write a DSN that carries no password: {}",
+                restate_entry(command, entry)
+            )),
+        },
 
         // ------------------------------------------------------------ 65 ---
         Error::TemplateSyntax { .. } => {
@@ -215,11 +252,25 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         Error::TemplateNotFound { .. } => {
             Cow::Borrowed("list the project's templates with: tpl template list")
         }
-        Error::DatabaseEntryNotFound { .. } => {
-            Cow::Borrowed("list the entries with: tpl cfg database list")
+        // FR-GLOB-007 obliges the nearest-match half over the entry names the
+        // file defines. An entry name is a value this corpus does not fix, so
+        // FR-ERR-022 governs it by the character set and FR-ERR-023 drops a
+        // candidate outside it in every form.
+        Error::DatabaseEntryNotFound { nearest, .. } => {
+            let admitted = admitted(nearest, admits);
+            suggest::hint_line(
+                admitted.iter().copied(),
+                "list the entries with: tpl cfg database list",
+            )
         }
-        Error::ConfigurationKeyNotFound { .. } => {
-            Cow::Borrowed("list the keys that are set with: tpl cfg list")
+        // FR-CFG-007 obliges the nearest-match half over the keys that do
+        // exist in the file.
+        Error::ConfigurationKeyNotFound { nearest, .. } => {
+            let admitted = admitted(nearest, admits_key);
+            suggest::hint_line(
+                admitted.iter().copied(),
+                "list the keys that are set with: tpl cfg list",
+            )
         }
 
         // ------------------------------------------------------------ 69 ---
@@ -263,6 +314,10 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         Error::ProjectFileUnreadable { .. } => Cow::Borrowed(
             "make .tpl and its contents readable by the invoking user, then run the command again",
         ),
+        Error::ProjectFileUnwritable { .. } => Cow::Borrowed(
+            "free space on the filesystem, or make .tpl writable by the invoking user, then run \
+             the command again",
+        ),
         Error::StdoutUnwritable { .. } => Cow::Borrowed(
             "free space on the destination, or send the output elsewhere, then run the command \
              again",
@@ -289,9 +344,47 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         Error::ConfigurationMalformed { .. } => Cow::Borrowed(
             "correct the TOML at the line and column named above, then run the command again",
         ),
-        Error::ConfigurationKeyOutsideSpace { .. } => Cow::Borrowed(
-            "remove the key from .tpl/.cfg, or show what tpl cfg set accepts with: tpl help cfg set",
-        ),
+        // FR-CONF-034 obliges the nearest-match half over the known keys.
+        Error::ConfigurationKeyOutsideSpace { nearest, .. } => {
+            let admitted = admitted(nearest, admits_key);
+            suggest::hint_line(
+                admitted.iter().copied(),
+                "remove the key from .tpl/.cfg, or show what tpl cfg set accepts with: \
+                 tpl help cfg set",
+            )
+        }
+        Error::ConfigurationValueMalformed { key, .. } => {
+            if admits_key(key) {
+                Cow::Owned(format!(
+                    "write a conforming value with: tpl cfg set {key} <value>"
+                ))
+            } else {
+                Cow::Borrowed(
+                    "correct the value at the line and column named above, then run the command \
+                     again",
+                )
+            }
+        }
+        // Neither line carries an example URL. FR-ERR-022 admits only
+        // `[A-Za-z0-9_]` in a value, and FR-SEC-019 builds a runnable hint from
+        // literals alone; a worked DSN would put an `@` on the line, which is
+        // the character the assertion over every hint looks for to prove that
+        // no value reached one ungated. The `cause` carries the grammar, per
+        // FR-ERR-034, and the help carries the example.
+        Error::DsnMalformed { fault, .. } => match fault {
+            DsnFault::Scheme => Cow::Borrowed(
+                "write the URL with one of the two schemes tpl accepts, mysql or mariadb",
+            ),
+            DsnFault::Form => Cow::Borrowed(
+                "write the URL with a scheme, a host and a database, and show the form with: \
+                 tpl help cfg database add",
+            ),
+        },
+        // FR-CONF-020 makes `$$` the literal dollar, so a value that meant one
+        // is corrected by doubling it rather than by closing a brace.
+        Error::UnclosedExpansion { .. } => {
+            Cow::Borrowed("close the expansion as ${VAR}, or write $$ for a literal dollar sign")
+        }
         // FR-CONF-035 obliges the hint to show the array form, and states this
         // example itself.
         Error::PasswordCommandNotAnArray { .. } => Cow::Borrowed(
@@ -328,6 +421,10 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         Error::PasswordCommandOutputCapExceeded { .. } => {
             Cow::Borrowed("make password_command write the password and nothing else")
         }
+        Error::PasswordCommandNotExecutable { .. } => Cow::Borrowed(
+            "check that the first element of password_command is the path of an executable \
+             program, then run the command again",
+        ),
         // FR-CONF-032 records the remedy: the child's own standard error is
         // visible when the command is run directly, and nowhere else.
         Error::PasswordCommandFailed { .. } => Cow::Borrowed(
@@ -407,6 +504,55 @@ fn update_entry(entry: &str) -> Cow<'static, str> {
     }
 }
 
+/// The `tpl cfg unset` that removes one key of one entry (`FR-CFG-048`).
+///
+/// The key arrives fully qualified, so every segment but the entry name is a
+/// spelling this corpus fixes: [`admits_key`] is the governing test for that
+/// one segment and the defensive assertion for the others.
+fn unset_key(key: &str) -> Cow<'static, str> {
+    if admits_key(key) {
+        Cow::Owned(format!("tpl cfg unset {key}"))
+    } else {
+        Cow::Borrowed("tpl cfg unset <key>")
+    }
+}
+
+/// The two commands that write one entry afresh (`FR-CFG-048`).
+///
+/// `FR-CFG-048` names this pair as the second of the two repairs, and it is the
+/// one that applies where no single `tpl cfg unset` would make the write legal.
+fn rewrite_entry(entry: &str) -> Cow<'static, str> {
+    if admits(entry) {
+        Cow::Owned(format!(
+            "tpl cfg database remove {entry}, then tpl cfg database add {entry} --dsn <url>"
+        ))
+    } else {
+        Cow::Borrowed(
+            "tpl cfg database remove <entry>, then tpl cfg database add <entry> --dsn <url>",
+        )
+    }
+}
+
+/// The same command written with the password in one place only
+/// (`FR-CFG-048`).
+///
+/// `command` is the command path below `tpl`, which is a spelling this corpus
+/// enumerates and is tested as the defensive assertion this module applies to
+/// every such value. The DSN is a placeholder and never the caller's own:
+/// `BR-ERR-003` bars the value from every message, and a DSN carrying a
+/// password is precisely what this refusal is about.
+fn restate_entry(command: &str, entry: &str) -> Cow<'static, str> {
+    const FORM: &str = "--dsn <url> --password-command <command>";
+
+    if !admits_path(command) {
+        return Cow::Owned(format!("tpl cfg database add <entry> {FORM}"));
+    }
+
+    let named = if admits(entry) { entry } else { "<entry>" };
+
+    Cow::Owned(format!("tpl {command} {named} {FORM}"))
+}
+
 /// Whether a name this corpus does not fix may be interpolated into a runnable
 /// command.
 ///
@@ -440,6 +586,19 @@ pub(super) fn admits(name: &str) -> bool {
 /// command is built from it.
 pub(super) fn admits_path(path: &str) -> bool {
     !path.is_empty() && path.split(' ').all(admits)
+}
+
+/// Whether every segment of a configuration key is admitted.
+///
+/// The `.` between key segments is a literal, per `FR-ERR-022`, so a key is
+/// tested segment by segment rather than refused for carrying a dot — which is
+/// what dropped every key of `FR-CONF-002` before the twentieth edition, none
+/// of the fifteen forms matching the character set as a whole.
+///
+/// It is the second of the four spelling tests and lives beside the other
+/// three for the reason [`admits_flag`] states.
+pub(super) fn admits_key(key: &str) -> bool {
+    !key.is_empty() && key.split('.').all(admits)
 }
 
 /// Whether every segment of a flag is admitted.

@@ -36,11 +36,84 @@
 //! `FR-CFG-032`, and `BR-CFG-003` states the position that makes those two
 //! acceptable: `tpl` warns, and does not prevent.
 
-use std::path::PathBuf;
+pub(crate) mod coherence;
+pub(crate) mod entries;
+pub(crate) mod keys;
 
-use clap::{ArgAction, Args, Subcommand, ValueEnum};
+use std::path::{Path, PathBuf};
 
-use super::local;
+use clap::{ArgAction, Args, Subcommand};
+
+use super::globals::Globals;
+use super::local::{self, Format};
+use crate::error::Error;
+use crate::output::Form;
+use crate::project::Project;
+use crate::project::config::entry::TlsMode;
+
+/// What one `cfg` invocation supplies that every subcommand of the arm reads.
+///
+/// The two are the project the command acts on and the representation it
+/// answers in, and they are collected once so that a subcommand takes one
+/// argument rather than two vectors it must reduce itself. `FR-CLI-014` has
+/// already reduced each of the three to at most one occurrence by the time this
+/// is built.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Supplied<'a> {
+    /// `--tpl-dir`, which names the `.tpl` folder and suppresses the walk
+    /// (`FR-GLOB-009`).
+    tpl_dir: Option<&'a Path>,
+    /// The representation of the result (`FR-OUT-001`), for the five
+    /// subcommands of the arm that declare `--format`.
+    format: Format,
+    /// Whether `--pretty` was given (`FR-OUT-008`).
+    pretty: bool,
+}
+
+impl<'a> Supplied<'a> {
+    /// What `globals` and `output` supply.
+    ///
+    /// `output` is [`None`] for the five subcommands that declare neither flag,
+    /// which `FR-GLOB-021` leaves without a representation to choose.
+    pub(crate) fn new(globals: &'a Globals, output: Option<&local::Output>) -> Self {
+        Self {
+            tpl_dir: globals.tpl_dir.first().map(PathBuf::as_path),
+            format: output
+                .and_then(|output| output.format.first().copied())
+                .unwrap_or(Format::Text),
+            pretty: output.is_some_and(|output| output.pretty.pretty),
+        }
+    }
+
+    /// The representation the result is written in.
+    pub(crate) const fn format(self) -> Format {
+        self.format
+    }
+}
+
+/// The project this invocation acts on.
+///
+/// It is steps 2 and 3 of `FR-ERR-006` in one call: discovery and the two trust
+/// checks, before any subcommand of the arm reads a key of its own. No `cfg`
+/// subcommand is among the four `FR-PROJ-025` excuses, so every one of them
+/// performs it.
+///
+/// # Errors
+///
+/// Returns what [`Project::current`] returns.
+fn project(supplied: &Supplied<'_>) -> Result<Project, Error> {
+    Project::current(supplied.tpl_dir)
+}
+
+/// Which of the two forms of `FR-OUT-007` and `FR-OUT-008` a document is
+/// written in.
+const fn form(supplied: &Supplied<'_>) -> Form {
+    if supplied.pretty {
+        Form::Indented
+    } else {
+        Form::Compact
+    }
+}
 
 /// The `tpl cfg` group node.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
@@ -114,29 +187,12 @@ pub(crate) struct Database {
     pub(crate) command: Option<DatabaseCommand>,
 }
 
-/// The mode of `--tls`, per `FR-CONF-013`.
-///
-/// The five are a closed set and are normative over the driver, per
-/// `FR-CONF-036`, so they are a type rather than a string checked after
-/// parsing: `FR-HELP-013` obliges the help to state the permitted values of
-/// every flag, and `FR-HELP-021` derives them by introspecting this tree.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub(crate) enum TlsMode {
-    /// No TLS.
-    Disabled,
-
-    /// Encrypt if the server allows it.
-    Preferred,
-
-    /// Always encrypt, without validating.
-    Required,
-
-    /// Also validate the certificate chain.
-    VerifyCa,
-
-    /// Also validate the hostname.
-    VerifyIdentity,
-}
+// The mode of `--tls` is the type `FR-CONF-013` closes and `FR-CONF-036` makes
+// normative over the driver, and it is declared once, beside the entry it
+// belongs to. It is a type rather than a string checked after parsing because
+// `FR-HELP-013` obliges the help to state the permitted values of every flag
+// and `FR-HELP-021` derives them by introspecting this tree; declaring a second
+// copy here would let the flag and the file disagree about what a mode is.
 
 /// The nine flags of `FR-CFG-027`, each mapping to one key of a
 /// `[database.<name>]` block.
@@ -224,6 +280,28 @@ pub(crate) struct Entry {
     pub(crate) ca_path: Vec<PathBuf>,
 }
 
+impl Entry {
+    /// The nine flags, reduced to what one invocation supplied.
+    ///
+    /// Each field is every occurrence in the order written, per this module's
+    /// own note, and [`super::rules::refuse_repetition`] has already refused a
+    /// second one — so the first is the value in force and there is never a
+    /// later one to lose.
+    pub(crate) fn flags(&self) -> entries::Flags<'_> {
+        entries::Flags {
+            dsn: self.dsn.first().map(String::as_str),
+            host: self.host.first().map(String::as_str),
+            port: self.port.first().copied(),
+            user: self.user.first().map(String::as_str),
+            schema: self.schema.first().map(String::as_str),
+            tls: self.tls.first().copied(),
+            password_command: self.password_command.first().map(String::as_str),
+            ca_file: self.ca_file.first().map(PathBuf::as_path),
+            ca_path: self.ca_path.first().map(PathBuf::as_path),
+        }
+    }
+}
+
 /// The six children of `tpl cfg database`.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub(crate) enum DatabaseCommand {
@@ -290,4 +368,211 @@ pub(crate) enum DatabaseCommand {
         #[command(flatten)]
         output: local::Output,
     },
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::path::{Path, PathBuf};
+
+    use super::{Supplied, entries, keys};
+    use crate::cli::local::Format;
+    use crate::error::Error;
+    use crate::project::edit::MODE;
+    use crate::project::scratch::Scratch;
+
+    /// A project on disk, and the ten subcommands driven against it.
+    ///
+    /// Every subcommand is reached through `--tpl-dir`, which `FR-PROJ-008`
+    /// makes subject to every trust check without exemption — so the harness
+    /// exercises the same path a caller does and never moves the process's
+    /// working directory, which `cargo test` shares between threads.
+    #[derive(Debug)]
+    pub(crate) struct Harness {
+        /// The temporary tree, removed when the harness goes out of scope.
+        scratch: Scratch,
+        /// The `.tpl` folder inside it.
+        tpl: PathBuf,
+    }
+
+    impl Harness {
+        /// A project whose `.tpl/.cfg` holds `configuration`.
+        pub(crate) fn new(configuration: &str) -> Self {
+            let scratch = Scratch::new();
+            let tpl = scratch.directory(".tpl");
+            let file = scratch.file(".tpl/.cfg", configuration);
+            scratch.chmod(&file, MODE);
+
+            Self { scratch, tpl }
+        }
+
+        /// What one subcommand of the arm was supplied.
+        fn supplied(&self, format: Format, pretty: bool) -> Supplied<'_> {
+            Supplied {
+                tpl_dir: Some(self.tpl.as_path()),
+                format,
+                pretty,
+            }
+        }
+
+        /// The `.tpl/.cfg` as it now stands.
+        pub(crate) fn written(&self) -> String {
+            std::fs::read_to_string(self.tpl.join(".cfg")).expect("the file is there")
+        }
+
+        /// The `.tpl` folder, for a test that inspects it directly.
+        pub(crate) fn tpl(&self) -> &Path {
+            &self.tpl
+        }
+
+        /// The temporary tree the project sits in.
+        pub(crate) const fn scratch(&self) -> &Scratch {
+            &self.scratch
+        }
+
+        /// What a command wrote, for a run that is expected to succeed.
+        fn wrote<F>(&self, run: F) -> String
+        where
+            F: FnOnce(&mut Vec<u8>) -> Result<(), Error>,
+        {
+            let mut out = Vec::new();
+            run(&mut out).expect("the command succeeds");
+
+            String::from_utf8(out).expect("the command writes UTF-8")
+        }
+
+        /// `tpl cfg get <key>`, in `text`.
+        pub(crate) fn get(&self, key: &str) -> String {
+            self.wrote(|out| keys::get(out, &self.supplied(Format::Text, false), key))
+        }
+
+        /// `tpl cfg get <key> --format json`.
+        pub(crate) fn get_json(&self, key: &str) -> String {
+            self.wrote(|out| keys::get(out, &self.supplied(Format::Json, false), key))
+        }
+
+        /// What `tpl cfg get <key>` refused.
+        pub(crate) fn get_refused(&self, key: &str) -> Error {
+            let mut out = Vec::new();
+
+            keys::get(&mut out, &self.supplied(Format::Text, false), key)
+                .expect_err("the command is refused")
+        }
+
+        /// `tpl cfg set <key> <value>`.
+        pub(crate) fn set(&self, key: &str, value: &str) -> Result<(), Error> {
+            keys::set(&self.supplied(Format::Text, false), key, value)
+        }
+
+        /// What `tpl cfg set` wrote to stdout, which `FR-OUT-023` makes empty.
+        pub(crate) fn set_output(&self, key: &str, value: &str) -> String {
+            self.wrote(|_| keys::set(&self.supplied(Format::Text, false), key, value))
+        }
+
+        /// `tpl cfg unset <key>`.
+        pub(crate) fn unset(&self, key: &str) -> Result<(), Error> {
+            keys::unset(&self.supplied(Format::Text, false), key)
+        }
+
+        /// `tpl cfg list`, in `text`.
+        pub(crate) fn list(&self) -> String {
+            self.wrote(|out| keys::list(out, &self.supplied(Format::Text, false)))
+        }
+
+        /// `tpl cfg list --format json`.
+        pub(crate) fn list_json(&self) -> String {
+            self.wrote(|out| keys::list(out, &self.supplied(Format::Json, false)))
+        }
+
+        /// `tpl cfg database add <name>`.
+        pub(crate) fn add(&self, name: &str, flags: entries::Flags<'_>) -> Result<(), Error> {
+            entries::add(&self.supplied(Format::Text, false), name, &flags)
+        }
+
+        /// What `tpl cfg database add` wrote to stdout.
+        pub(crate) fn add_output(&self, name: &str, flags: entries::Flags<'_>) -> String {
+            self.wrote(|_| entries::add(&self.supplied(Format::Text, false), name, &flags))
+        }
+
+        /// `tpl cfg database update <name>`.
+        pub(crate) fn update(&self, name: &str, flags: entries::Flags<'_>) -> Result<(), Error> {
+            entries::update(&self.supplied(Format::Text, false), name, &flags)
+        }
+
+        /// `tpl cfg database remove <name>`.
+        pub(crate) fn remove(&self, name: &str) -> Result<(), Error> {
+            entries::remove(&self.supplied(Format::Text, false), name)
+        }
+
+        /// `tpl cfg database list`, in `text`.
+        pub(crate) fn database_list(&self) -> String {
+            self.wrote(|out| entries::list(out, &self.supplied(Format::Text, false)))
+        }
+
+        /// `tpl cfg database list --format json`.
+        pub(crate) fn database_list_json(&self) -> String {
+            self.wrote(|out| entries::list(out, &self.supplied(Format::Json, false)))
+        }
+
+        /// `tpl cfg database show <name>`, in `text`.
+        pub(crate) fn show(&self, name: &str) -> String {
+            self.wrote(|out| entries::show(out, &self.supplied(Format::Text, false), name))
+        }
+
+        /// `tpl cfg database show <name> --format json`.
+        pub(crate) fn show_json(&self, name: &str) -> String {
+            self.wrote(|out| entries::show(out, &self.supplied(Format::Json, false), name))
+        }
+
+        /// What `tpl cfg database show <name>` did, for a run that is expected
+        /// to be refused.
+        pub(crate) fn show_refused(&self, name: &str) -> Result<(), Error> {
+            let mut out = Vec::new();
+
+            entries::show(&mut out, &self.supplied(Format::Text, false), name)
+        }
+    }
+
+    #[test]
+    fn a_pretty_document_is_indented_and_a_plain_one_is_not() {
+        // FR-OUT-007, FR-OUT-008: --pretty changes the whitespace and nothing
+        // else.
+        let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
+
+        let compact = harness.wrote(|out| keys::list(out, &harness.supplied(Format::Json, false)));
+        let indented = harness.wrote(|out| keys::list(out, &harness.supplied(Format::Json, true)));
+
+        assert_eq!(compact.matches('\n').count(), 1);
+        assert!(
+            indented.contains("\n  \"schema_version\": 1,\n"),
+            "{indented}"
+        );
+    }
+
+    #[test]
+    fn every_subcommand_of_the_arm_performs_discovery_and_the_trust_checks() {
+        // FR-PROJ-025: no cfg subcommand is among the four it excuses, and
+        // FR-GLOB-010 subjects --tpl-dir to every check without exemption.
+        let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
+        harness.scratch().chmod(&harness.tpl().join(".cfg"), 0o644);
+
+        assert_eq!(
+            harness.get_refused("core.database").exit_code(),
+            78,
+            "an unsafe mode is refused before the key is read"
+        );
+        assert_eq!(
+            harness
+                .set("core.database", "other")
+                .expect_err("the mode is unsafe")
+                .exit_code(),
+            78
+        );
+        assert_eq!(
+            harness
+                .remove("shop")
+                .expect_err("the mode is unsafe")
+                .exit_code(),
+            78
+        );
+    }
 }

@@ -1,7 +1,7 @@
 ---
 title: Technology Stack
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-17
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -91,9 +91,9 @@ rejected option and cites the argument rather than reproducing it.
 | `minijinja-contrib` | Adds utility filters and globals, all of them group 3 of `FR-ENV-019` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md) |
 | `sqlx` | Connects to MariaDB and issues the closed statement list of `FR-SRV-006` | [`ADR-003`](../adr/adr-003-database-driver.md) — settled by `FR-CONF-036`, not by the measurement | [`ADR-003`](../adr/adr-003-database-driver.md) |
 | `tokio` | The current-thread runtime the asynchronous driver requires, and the timers four of the six deadlines use | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
-| `serde` | The derive that fixes the key order of `FR-OUT-013` in the type, and the mapping the typed key space of `FR-CONF-002` is read through | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions), [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | A bespoke writer, and a distinct type per absence rule ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
+| `serde` | The derive that fixes the key order of `FR-OUT-013` in the type. It is **not** how `.tpl/.cfg` is read: [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) records why a derive cannot answer `FR-CONF-034` or `FR-CONF-035` | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | A bespoke writer, and a distinct type per absence rule ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
 | `serde_json` | Encodes the seventeen payload shapes and the envelope of `FR-OUT-024`; its pretty printer answers `FR-OUT-008` | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | `preserve_order`, and with it `indexmap`, which would contradict `NFR-DET-002` ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
-| `toml` | The read path over `.tpl/.cfg` | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which loses the serde mapping on the path that reads untrusted input |
+| `toml` | The read path over `.tpl/.cfg`, through its document tree — spanned keys and spanned values — rather than through a `serde` derive | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which would put an editing document on the path that reads untrusted input; and a `serde` derive, which cannot name the offending key or its position |
 | `toml_edit` | The write path over `.tpl/.cfg`, preserving comments, spacing and the relative order of items | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml` alone, which would delete the commented example `FR-PROJ-018` requires on the first write |
 | `thiserror` | Derives the one public error enum and its `Display` | [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) | `anyhow` in the library; per-module enums composed by `From`; an exit code stored as a field ([`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)) |
 | `anyhow` | The binary's error type, per `CLAUDE.md` *Stack* | `CLAUDE.md` *Stack* fixes it | **No alternative was ever weighed**, and the observation below is why one now has to be |
@@ -274,13 +274,16 @@ that results is [interfaces.md](interfaces.md#the-help-surface)'s.
 
 ## The two TOML paths
 
-One file, two crates, because format preservation is a functional need and a
-serde mapping is one too:
+One file, two crates, because the two paths carry opposite obligations: reading
+must name the key and the byte that are wrong, and writing must not disturb a
+byte it was not asked to change.
 [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) holds
-the six requirements that force the split and the two options it rejected. The
-file's shape, mode and rewrite discipline are
-[data-model.md](data-model.md#tplcfg); the reader's and the writer's obligations
-are [interfaces.md](interfaces.md#the-configuration-reader-and-the-writer).
+the six requirements that force the split, the three the read path's shape
+answers, and the options it rejected — including the `serde` derive this
+document named until 2026-09-17. The file's shape, mode and rewrite discipline
+are [data-model.md](data-model.md#tplcfg); the reader's and the writer's
+obligations are
+[interfaces.md](interfaces.md#the-configuration-reader-and-the-writer).
 
 **Recorded discrepancy — closed.** This document and
 [`ADR-007`](../adr/adr-007-msrv.md) read `toml` and `toml_edit` on the same day

@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-17
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -268,8 +268,18 @@ removes it. The wording is the functional owner's to settle.
 | Format | TOML, one file. No global configuration, no home, XDG or `/etc` fallback, so the project alone determines behaviour | `FR-CONF-001`, `FR-CONF-003`, `BR-PROJ-001` |
 | Key space | Exactly fifteen keys, each with a declared type and a declared default. One table serves two jobs: the validator's population, and the source of every built-in default a phase deadline resolves from | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-004` |
 | Mode | Created `0600`; refused at any looser mode and when not owned by the current user; retained at `0600` across every rewrite, including the temporary file | `FR-PROJ-019`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-034`, `FR-CFG-041` |
-| Rewrite | Temporary file in `.tpl/`, renamed over the target; a failure part-way leaves the previous file unchanged; **no lock**, so two writers yield one whole file or the other | `FR-CFG-041`, `FR-CFG-042` |
-| Read path and write path | Separate: a serde mapping to read the typed key space, a format-preserving editor to write | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) |
+| Rewrite | Temporary file in `.tpl/`, renamed over the target; a failure part-way leaves the previous file unchanged and removes the temporary; **no lock**, so two writers yield one whole file or the other | `FR-CFG-041`, `FR-CFG-042` |
+| Read path and write path | Separate: a span-carrying document tree to read the typed key space, a format-preserving editor to write | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) |
+
+**The temporary file is created at `0600` by the open itself, not chmod'd into
+it afterwards.** There is otherwise an instant at which a new file holding the
+credentials of the old one exists at whatever the process umask allows. The
+mode is then set again on the path before the rename, because a temporary file
+left by an earlier run keeps the mode it already had and `FR-CFG-034` requires
+`0600` whatever the previous run left behind. The rename is the whole of the
+concurrency story `FR-CFG-042` admits: two processes yield one whole file or the
+other, and a killed process leaves nothing locked and nothing half-written
+(`FR-PROJ-019`, `FR-CFG-034`, `FR-CFG-041`, `FR-CFG-042`).
 
 The write path is format-preserving because six requirements make it a
 functional need rather than a courtesy — chiefly `FR-PROJ-017` and
@@ -289,6 +299,17 @@ built system: the reader must retain the **line** of the fault, because
 `FR-CONF-035` and `FR-ERR-034` both require the diagnostic to name it; and
 forward compatibility is given up deliberately, so a binary that does not know
 a key refuses the whole file rather than ignoring the key.
+
+**Those two consequences decide the read path's shape, not just its crate.** A
+mapping onto declared fields answers *this document does not fit* and cannot
+answer *which key* or *at which byte*, because the offending key is precisely
+the one no field is declared for. The reader therefore walks the parsed document
+as a tree of spanned values, which yields both facts directly; the tree is also
+what the literal printing of `FR-CFG-013` needs, since the redaction of
+`FR-CFG-021` is spliced into the file's own bytes at the spans the reader
+recorded, leaving every comment, key order and space outside a credential
+untouched. [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path)
+records the choice and what it costs.
 
 Credential handling, `${VAR}` expansion and the child process are
 `security.md`; the commands that read and write the file are `interfaces.md`.

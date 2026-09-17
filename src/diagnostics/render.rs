@@ -251,8 +251,8 @@ const fn sysexits_name(code: u8) -> Option<&'static str> {
 mod tests {
     use super::{Label, SOFTWARE, exit_content, render, render_panic, sysexits_name};
     use crate::error::{
-        CatalogueObjectKind, ContextFault, DeadlineBound, Error, NetworkPhase, Position,
-        ReadOnlyFault, trigger_internal_invariant,
+        CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
+        NetworkPhase, Position, ReadOnlyFault, trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -954,7 +954,20 @@ mod tests {
                 value: hostile(),
                 expected: "an integer",
             },
-            Error::UnknownConfigurationKey { key: hostile() },
+            Error::UnknownConfigurationKey {
+                key: hostile(),
+                nearest: vec![hostile()],
+            },
+            Error::DatabaseEntryAlreadyExists {
+                name: hostile(),
+                file: hostile_path(),
+            },
+            Error::IncoherentEntryWrite {
+                entry: hostile(),
+                written: hostile(),
+                conflicting: hostile(),
+                repair: EntryRepair::Restate(hostile()),
+            },
             Error::TemplateSyntax {
                 template: hostile(),
                 position: position(),
@@ -992,10 +1005,12 @@ mod tests {
             Error::DatabaseEntryNotFound {
                 name: hostile(),
                 file: hostile_path(),
+                nearest: vec![hostile()],
             },
             Error::ConfigurationKeyNotFound {
                 key: hostile(),
                 file: hostile_path(),
+                nearest: vec![hostile()],
             },
             Error::NameNotResolved {
                 host: hostile(),
@@ -1031,6 +1046,10 @@ mod tests {
                 path: hostile_path(),
                 returned: io::Error::from(io::ErrorKind::PermissionDenied),
             },
+            Error::ProjectFileUnwritable {
+                path: hostile_path(),
+                returned: io::Error::from(io::ErrorKind::StorageFull),
+            },
             Error::StdoutUnwritable {
                 returned: io::Error::from(io::ErrorKind::StorageFull),
             },
@@ -1061,6 +1080,23 @@ mod tests {
                 position: position(),
             },
             Error::ConfigurationKeyOutsideSpace {
+                key: hostile(),
+                file: hostile_path(),
+                nearest: vec![hostile()],
+            },
+            Error::ConfigurationValueMalformed {
+                key: hostile(),
+                file: hostile_path(),
+                position: position(),
+                found: hostile(),
+                expected: "a positive integer number of seconds",
+            },
+            Error::DsnMalformed {
+                key: hostile(),
+                file: hostile_path(),
+                fault: DsnFault::Form,
+            },
+            Error::UnclosedExpansion {
                 key: hostile(),
                 file: hostile_path(),
             },
@@ -1094,6 +1130,10 @@ mod tests {
                 command: vec![hostile()],
                 cap: 4096,
             },
+            Error::PasswordCommandNotExecutable {
+                command: vec![hostile()],
+                returned: io::Error::from(io::ErrorKind::NotFound),
+            },
             Error::PasswordCommandFailed {
                 command: vec![hostile()],
                 status: None,
@@ -1125,7 +1165,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 50, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 57, "every variant of Error is sampled");
     }
 
     #[test]

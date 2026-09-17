@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-17
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -45,12 +45,15 @@ the test exists, where it lives — never an outcome.
 
 ## The suite as it stands
 
-At commit `f8f335d` of 2026-09-15, and recorded with its commit because it is a
-count that moves: **272 tests**, made of 246 unit tests inside the library, 24
-integration tests over the binary — 13 in `tests/help_surface.rs`, 7 in
+In the working tree of 2026-09-17, above commit `cd6ce7e`, and recorded with its
+point in history because it is a count that moves: **504 tests**, made of 453
+unit tests inside the library, 49 integration tests over the binary — 25 in
+`tests/project_and_configuration.rs`, 13 in `tests/help_surface.rs`, 7 in
 `tests/invocation_surface.rs`, 4 in `tests/help_environment.rs` — and 2
-doc-tests. No test needs a server, because no command that reaches one is
-implemented yet.
+doc-tests. It was 272 at commit `f8f335d` of 2026-09-15; the project and
+configuration work is the whole of the difference. No test needs a server,
+because no command that reaches one is implemented yet: the connectivity
+subcommand is the one `cfg` leaf still unwritten.
 
 ## The four kinds of test, and what each needs
 
@@ -90,11 +93,12 @@ The reverse direction — which requirement a document answers — is
 [traceability.md](traceability.md)'s and is not duplicated in test names.
 
 **Recorded divergence — the suite as built does not carry the identifier in the
-name.** At commit `f8f335d` of 2026-09-15 the suite carries 270 test functions
-— the 272 counted above, less the two doc-tests — and none begins with a
+name.** In the working tree of 2026-09-17 the suite carries 502 test functions
+— the 504 counted above, less the two doc-tests — and none begins with a
 requirement identifier: each names the property it asserts in
 a phrase and cites the identifiers in its own doc comment or beside the
-assertion. The two readings are that the rule above is met in substance — every
+assertion; the divergence has widened with the suite rather than narrowed. The
+two readings are that the rule above is met in substance — every
 test is bound to the requirements it verifies, in a place a reader sees — and
 unmet in form, so *which test covers `FR-X`?* is answerable by searching the
 comments rather than the names. The rule is not narrowed to fit: it is drawn
@@ -648,6 +652,17 @@ only flow that must run where **no project exists**, which is what makes
 `BR-SCH-004`, listed once in the register above and exercised here as a flow.
 `UC-011` is the only flow whose expected outcome is a **wrong answer with exit
 `0`**: the test asserts the documented failure mode, not its absence.
+
+**Which flows the built tree can reach, at 2026-09-17.** Three, and one of them
+only in part. `UC-001` and `UC-005` run whole. `UC-002` runs whole, and
+`tests/project_and_configuration.rs` exercises both of its refusals and the
+two `FR-CFG-048` adds. `UC-003` runs only as far as the file: the array the
+quoting rule produces is asserted on the write path, and the execution half —
+no shell, the cap, the deadline, the `78` — is reachable from no command,
+because the resolution that runs the child is entered only by a command that
+opens a connection. It is covered by unit tests against the child until
+`UC-004`'s subcommand exists. The other eight need a server or a command that
+is not written.
 
 ## The container harness
 

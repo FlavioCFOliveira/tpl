@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-17
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty-one editions. All are in force;
+The specification has been written in twenty-two editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1681,6 +1681,69 @@ read as though they had been.
 open question is raised or reopened.** The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Twenty-second edition — three writes the tool could not undo
+
+Implementing [project-and-discovery.md](project-and-discovery.md),
+[configuration-model.md](configuration-model.md) and the non-server part of
+[cfg-commands.md](cfg-commands.md) reached three places where a `cfg` command
+this corpus admits writes a `.tpl/.cfg` the same corpus refuses to read. In
+each of them the invocation is legal, the file it produces is not, and every
+later invocation is refused at step 3 of `FR-ERR-006` — including the `cfg`
+command that would undo the write, because no `cfg` subcommand is among the
+commands `FR-PROJ-025` excuses from reading and validating the file. **The
+three are one defect in three places**: a rule stated over the invocation where
+the state it protects is the entry, or over one command where two reach the
+state.
+
+**None of the three needed a decision from outside this corpus.** Each is
+settled on a requirement already in force, and each says so in its own text.
+
+- **`--dsn` admits what the file admits** — [cfg-commands.md](cfg-commands.md).
+  `FR-CFG-031` read "SHALL accept whatever the caller writes ... and SHALL
+  store it verbatim", which is a rule about secrets — `FR-SEC-002` and
+  `DIV-002` cite it for exactly that — stated wide enough to be read as a rule
+  about syntax. It now admits exactly what `FR-CONF-009`, `FR-CONF-010` and
+  `FR-CONF-011` admit, validates before writing, and exits `64` without writing
+  anything where the value is not admitted. A literal password is still
+  admitted and still stored as written, because `BR-CFG-003` governs and what
+  is refused is a value the reader cannot accept. The admission is an equality
+  in both directions: more writes a file the reader refuses, and less leaves a
+  legal `.cfg` that `tpl` cannot write.
+- **A write that would make an entry incoherent is refused** — the same file.
+  `FR-CFG-048` is new, and it states over one **entry** the rule `FR-CFG-016`
+  and `FR-CFG-029` state over one **invocation**, which is where `FR-CONF-007`
+  has always stated it. `tpl cfg set`, `tpl cfg database add` and
+  `tpl cfg database update` are refused with `64`, and `.tpl/.cfg` is left
+  unchanged, where the entry as it would stand after the write is a combination
+  `FR-CONF-007` refuses. Repairing the entry by removing the fields the new
+  value supersedes was rejected against `FR-CFG-020`, `BR-CFG-001` and
+  `BR-CONF-004` — it is the reader's forbidden guess, made by the writer.
+  Writing and letting the next read fail was rejected because it reports the
+  fault one invocation late and against the file rather than against the
+  invocation that caused it. `64` rather than `78` because the file is valid
+  and the invocation is not, which is `FR-CFG-017`'s shape exactly.
+- **The coherence obligation is over the state, not over one command** — the
+  same file. `FR-CFG-023` clears a `core.database` whose entry
+  `tpl cfg database remove` has deleted, and `tpl cfg unset database.<name>`
+  reaches the identical state. It now names both commands and clears the
+  reference in the same rewrite, which `FR-CFG-041` already makes atomic.
+  Nothing is decided that the requirement had not decided: its own rationale
+  settles silent clearing against a warning and against a refusal, for this
+  state.
+
+**One observation is recorded and not acted on.** `FR-CONF-010` states which
+two schemes are accepted and names no code for refusing a third, where
+`FR-CONF-011` states `78` for a query parameter in its own text. The `78` row
+of `FR-ERR-001` carries the condition as *invalid entry*, so nothing is
+ungoverned under `FR-ERR-002`, and no requirement of this edition rests on it —
+`FR-CFG-031` cites `FR-CONF-010` for what is admitted, and not for what a file
+carrying something else produces. It is named here so that the next reader of
+that requirement does not take the silence for a gap this edition left behind.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** One identifier is assigned, `FR-CFG-048`. The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -2064,6 +2127,22 @@ took: both defects were shapes nobody had fixed rather than statements that had
 decayed, so none of the five rules below would have found either, and what
 found them was a derivation of the command from the corpus. The item below was
 untouched by it and stayed outstanding.
+
+The twenty-second edition adds no obligation of either kind, and records none
+as discharged. It closes three places where a `cfg` command this corpus admits
+wrote a `.tpl/.cfg` the same corpus refuses to read: `FR-CFG-031` now admits
+what `FR-CONF-009`, `FR-CONF-010` and `FR-CONF-011` admit and nothing else,
+`FR-CFG-048` refuses a write that would leave an entry in a combination
+`FR-CONF-007` refuses, and `FR-CFG-023` reaches `tpl cfg unset` as well as
+`tpl cfg database remove`. None of the five rules below would have found any of
+the three: each was a rule stated over the invocation where the state it
+protects is the entry, or over one command where two reach the state, and what
+found them was the first implementation written against this corpus — the
+instrument that found the twentieth and twenty-first editions' defects as well.
+One observation is named in that edition and not acted on, that `FR-CONF-010`
+names no code for refusing a scheme it does not accept; nothing waits on it,
+and no requirement of the edition rests on it. The item below was untouched by
+it and stayed outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.

@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-17
 related: [README.md, traceability.md]
 ---
 
@@ -320,7 +320,7 @@ src/
 ├── render/        the engine, the loader, and the registered template surface
 ├── output/        the envelope, the JSON emitter, the text layouts, escaping, the writer
 ├── diagnostics/   the four-line renderer, the suggestion machinery, the verbosity gate
-├── deadline.rs    the phase clock and the timer thread of OD-12
+├── deadline.rs    the phase clock, and the threads OD-12 bounds two phases with
 └── error.rs       the error type and the exit-code derivation
 ```
 
@@ -335,7 +335,25 @@ src/
 | The privilege cross-checks | `mariadb/privileges.rs` | The three checks read the **shape of the rows the server returned** — an empty `VIEW_DEFINITION` (`FR-PRIV-011`), a `NULL` `ROUTINE_DEFINITION` (`FR-PRIV-017`), zero rows from three catalogue tables (`FR-PRIV-019`). None is a property of the model; each is a property of a read | Under `model/`, which would make the published model type know about grants, and would put a check on a shape the model no longer carries by the time it is built |
 | The configuration reader and writer | `project/config.rs` | `FR-PROJ-010` and `FR-PROJ-011` make the ownership and mode of `.tpl/.cfg` a precondition of reading it, so the file and the folder that holds it are one subject. One module owns both paths over one key space, which is what keeps the fifteen keys of `FR-CONF-002` in one place | A top-level `config/`, which separates the file from the discovery that found it and the trust checks that gate it, and puts the key space one module away from the rule that decides whether it may be read at all |
 | The diagnostic renderer and the suggestion machinery | `diagnostics/` | It holds transformations, not a taxonomy: the escaping of `FR-ERR-024`, the character set of `FR-ERR-022` and `FR-ERR-023`, the candidate selection of `FR-ERR-019`, and the four-line layout of `FR-ERR-008`. It also owns the verbosity gate of `FR-GLOB-014` and the typed diagnostic sinks of `OD-17` | Inside `error.rs`, which would put presentation beside the taxonomy and make the error type depend on an edit-distance implementation. `OD-06` separates the two for the same reason |
-| The phase clock and the timer thread | `deadline.rs` | `OD-12` gives one construct three users — the runtime inside `mariadb/`, the child process, and the render — and `FR-GLOB-012` composes every phase deadline with one budget measured from process start. A budget shared by three modules belongs to none of them | Inside `project/config.rs` beside the four `[core]` keys, which resolves the values but cannot hold the construct that applies them; and inside each of the three users, which is the same rule written three times |
+| The phase clock, and the threads two phases are bounded with | `deadline.rs` | `OD-12` gives one construct three users — the runtime inside `mariadb/`, the child process, and the render — and `FR-GLOB-012` composes every phase deadline with one budget measured from process start. A budget shared by three modules belongs to none of them | Inside `project/` beside the four `[core]` keys, which resolves the values but cannot hold the construct that applies them; and inside each of the three users, which is the same rule written three times |
+
+**Refined on 2026-09-17, when `project/` was built: the reader and the writer
+are two modules, not two paths of one.** The placement row above says
+`project/config.rs` owns both paths over one key space, and the reason it gives
+— that the file and the folder that gates it are one subject — is unchanged:
+both modules are under `project/`, and neither is reachable without the trust
+checks. What moved is one level down. `project/config.rs` reads and
+`project/edit.rs` writes, because
+[`OD-09`](#od-09--toml-the-read-path-and-the-write-path) gives them two
+different parsers over two opposite obligations — reading validates and refuses,
+writing preserves and must not reformat — and a module holding both would import
+both parsers and hold two representations of the same document. The key space
+they share is a third module, `project/config/keys.rs`, which is what keeps the
+fifteen keys in one place as the row requires. Three further modules sit beside
+them for reasons stated in
+[architecture.md](architecture.md#inside-project): `settings.rs`, because
+`FR-CFG-014` forbids the reader to resolve; `password.rs`, because the child
+belongs to the resolution; and `secret.rs`, because a credential is a type.
 
 **The name `diagnostics` rather than `diag`.** The project's own convention
 refuses obscure abbreviations in module names. The register named `diag/` as a
@@ -626,10 +644,12 @@ requires it.
 
 ## OD-09 — TOML: the read path and the write path
 
-**Status: settled. Applied to `CLAUDE.md` on 2026-09-11.**
+**Status: settled. Applied to `CLAUDE.md` on 2026-09-11. Amended on 2026-09-17,
+when the two paths were built: the read path is `toml`'s **document tree**,
+`toml::de::DeTable`, and not a `serde` derive.**
 
-**Decision.** **Read path `toml` with `serde`; write path `toml_edit` 0.25**,
-which preserves comments, spacing and the relative order of items.
+**Decision.** **Read path the `toml` crate; write path `toml_edit` 0.25**, which
+preserves comments, spacing and the relative order of items.
 
 **Rationale.** Six requirements make format preservation a functional need, not
 a nicety. `FR-PROJ-017` and `FR-PROJ-018` put a commented-out `[database.*]`
@@ -642,13 +662,42 @@ format-preserving editing or finer control over output, see `toml_edit`" (`toml`
 1.1.5+spec-1.1.0, docs.rs, verified 2026-09-10) — while `toml_edit`
 "allows you to parse and modify toml documents, while preserving comments,
 spaces *and relative order* of items" (`toml_edit` 0.25.13+spec-1.1.0,
-docs.rs, verified 2026-09-10). Splitting the paths keeps the serde mapping,
-which `FR-CONF-002`'s typed key space wants on the read side, and keeps the
-comments, which the write side must not destroy.
+docs.rs, verified 2026-09-10). Splitting the paths gives the read side a parser
+whose only job is to yield the file as written, and keeps the comments, which
+the write side must not destroy. *This sentence read "keeps the serde mapping,
+which `FR-CONF-002`'s typed key space wants on the read side" until 2026-09-17;
+the amendment below is why.*
+
+**Amendment of 2026-09-17 — why the read path is not a `serde` derive.** Three
+requirements ask the reader for facts a derive cannot produce, and each is a
+`78` the caller has to act on.
+
+| Fact required | Requirement | Why a derive cannot give it |
+|---|---|---|
+| The **name** of the offending key, with a nearest-match suggestion over the space | `FR-CONF-034` | The offending key is precisely the one no field is declared for. A deny-unknown-fields derive answers *this document does not fit*; the name is inside the error's rendered text, not a value the reader can suggest over |
+| The **position** of the fault | `FR-CONF-035`, `FR-ERR-034` row `78` | A span survives only where the value that carried it does |
+| The file printed **literally, with passwords redacted in place** | `FR-CFG-013`, `FR-CFG-021` | The redaction is spliced into the file's own bytes at the spans of the credential-bearing values. Every byte outside them — comments, key order, spacing — must reach the reader untouched, which a re-serialisation would not leave standing |
+
+`toml::de::DeTable` supplies all three: it is declared
+`pub type DeTable<'i> = Map<Spanned<DeString<'i>>, Spanned<DeValue<'i>>>`, so
+every key and every value carries its own range; `DeTable::parse` has the
+signature `pub fn parse(input: &'i str) -> Result<Spanned<Self>, Error>`; and
+`toml::de::Error::span` is `pub fn span(&self) -> Option<Range<usize>>`,
+documented as "the start/end index into the original document where the error
+occurred" (docs.rs `toml` 1.1.6+spec-1.1.0, verified 2026-09-17). The validation the derive would
+have performed is not lost: it is written out once, against the key space of
+`project/config/keys.rs`, which the writer already has to consult for
+`FR-CFG-009` and `FR-CFG-010`. So the choice is not *derive versus hand-written
+validation* but *one validator or two*, and the rejection below — that
+hand-written validation is more code on the path reading untrusted input — is
+answered by the one that was going to exist either way. What the amendment
+costs is that the typed document is built by hand; what it buys is that the two
+callers of the key space cannot disagree about it.
 
 **Rejected.**
 
-- **`toml_edit` for both paths.** It loses the serde mapping, so the fifteen typed keys of `FR-CONF-002` would be validated against a document tree by hand — more code on the path that reads untrusted input, which `BR-CONF-004` is written to keep small.
+- **`toml_edit` for both paths.** It carries no serde mapping either, and the read path would then hold a document type built for editing: mutable, formatting-aware, and larger than the reader needs. The write path's obligations are the reverse of the read path's, and one type serving both is the shape in which a reader acquires a way to write.
+- **A `serde` derive on the read path**, which is what this entry decided until the amendment above. It cannot answer the three questions in the table, and two of the three are the content `FR-ERR-034` obliges a `cause` line to carry.
 - **`toml` alone**, which is what `CLAUDE.md`'s stack table named until this was applied. The first `tpl cfg set` would delete the commented example that `FR-PROJ-018` requires the file to carry, so a stated requirement would stop holding on the second invocation, silently.
 
 **What was applied.** Task #20, at commit `ee7363d` of 2026-09-11: the `Stack`
@@ -730,7 +779,7 @@ report rather than in the call.
 | DNS resolution | `tokio::time::timeout` around `tokio::net::lookup_host`, performed by `tpl` before the driver is called | the connection deadline |
 | TCP connect **and** TLS handshake | one `tokio::time::timeout` around the driver's `connect_with`, which receives an address the resolution already produced | the remainder of the connection deadline |
 | Catalogue query | `tokio::time::timeout` around each query | `core.query_timeout` |
-| `password_command` | a timer thread that kills the child; the parent reports the deadline | `core.password_timeout` |
+| `password_command` | a reader thread draining the child's standard output and a polling loop in the parent, which kills the child and reports the deadline | `core.password_timeout` |
 | Render | a timer thread that writes the `65` diagnostic and exits the process | `core.render_timeout` |
 
 The **connection deadline** is one instant, set at `core.connect_timeout` from
@@ -755,6 +804,43 @@ a classification of the failure, and the driver error's `Display` is never
 reached. `OD-06` makes that structural by refusing the driver error a home
 inside the error type.
 
+**How the `password_command` child is bounded, amended on 2026-09-17 when it
+was built.** This entry gave the mechanism as a timer thread that kills the
+child while the parent reports the deadline. What is built inverts the two
+roles: the **parent** watches the deadline, in a loop that sleeps a millisecond
+at a time, and the thread does the one thing the parent cannot do while
+watching — drain the child's standard output.
+
+The reason is a third obligation the row did not account for. `FR-CONF-031`
+caps what is read from the child at 4096 bytes and requires a child that writes
+more to be terminated, and a cap is only worth what the read behind it is: a
+child writing more than the pipe buffers **blocks on its own write** until
+something drains it, so a parent that waits on the child while nothing reads the
+pipe waits for a child that is itself waiting. The drain therefore has to run
+while the deadline is watched, and one of the two has to be on another thread.
+Putting the drain there rather than the timer costs nothing and buys the cap:
+the reader stops one byte past 4096, which is enough to know the cap was passed
+and is the whole of what is ever held in memory, so the child is killed rather
+than the credential truncated — and a truncated password would be sent, refused,
+and reported as a `77` naming the credentials, which is a wrong diagnosis of a
+configuration fault.
+
+Three consequences follow, and each is a property of the built path.
+
+- **A read that fails part-way yields nothing rather than a prefix**, for the same reason: a prefix is a truncated credential wearing the appearance of a whole one, and the child's own exit status is the better diagnosis (`FR-CONF-031`, `FR-CONF-033`).
+- **A bound already spent stops the child from being started at all**, rather than starting it and killing it immediately (`FR-GLOB-012`).
+- **The child is reaped on every refusing path** — the cap, the deadline, a failure to inspect it — so nothing is left running behind the process (`FR-CONF-031`).
+
+**Why a thread and not a task.** The runtime of
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md) is scoped to `mariadb/` and
+is built only when that module is reached, so an invocation that resolves an
+entry without connecting — every `cfg` subcommand but the connectivity one — has
+no runtime to spawn a task onto. Bounding the child with a runtime timer would
+either start a runtime for a command that connects to nothing, which
+`NFR-PERF-006` refuses, or move the runtime outside `mariadb/`, which
+`ADR-005` refuses. The render's timer thread below is the same constraint met at
+the other end of the process.
+
 **How a render is bounded.** A **timer thread**. The render runs on the calling
 thread; a thread created immediately before it waits on a channel with
 `std::sync::mpsc::Receiver::recv_timeout`, whose signature is
@@ -777,13 +863,15 @@ timer holding the phase it was created for supplies directly; the same
 construct therefore realises the overall budget of `FR-GLOB-011` when
 `--timeout` is supplied.
 
-**Why a timer thread is not the speculative parallelism the project forbids.**
-The rule refuses concurrency adopted for speed without a measurement. A timer
-performs no work of the invocation and makes nothing faster; it is the only
-construct that can bound a computation with no interruption point. It is
-created only on the two paths that need it, so the four commands of
-`NFR-PERF-005` — `tpl init`, every form of `help`, every form of `version` —
-create no thread, open no socket and read no file, exactly as before.
+**Why a thread is not the speculative parallelism the project forbids.**
+The rule refuses concurrency adopted for speed without a measurement. Neither
+thread performs work of the invocation and neither makes anything faster: one
+bounds a computation with no interruption point, the other drains a pipe that
+must be drained for the bound to mean anything. Each is created only on the path
+that needs it, so the four commands of `NFR-PERF-005` — `tpl init`, every form
+of `help`, every form of `version` — create no thread, open no socket and read
+no file, exactly as before; and a `cfg` command that resolves no entry creates
+none either.
 
 **Rejected.**
 
@@ -1673,12 +1761,17 @@ decides an invariant violation is a `70` and names where it was detected
 trigger of [`OD-21`](#od-21--two-test-seams-that-must-not-be-on-the-published-surface),
 which remains absent from the artefact.
 
-**What a caller observes while it stands.** At commit `f8f335d`, 2026-09-15:
-27 of the 29 leaves exit `70`. `tpl help` and `tpl version` act; the six group
-nodes print their own help and exit `0` (`FR-CLI-007`, `FR-HELP-025`); the two
-flag forms are answered at every node (`FR-GLOB-019`, `FR-GLOB-020`). A `70`
-from an ordinary invocation is therefore **expected** today and is not the
-defect `FR-ERR-030` otherwise reports — which is the reason this arrangement is
+**What a caller observes while it stands.** In the working tree of 2026-09-17,
+above commit `cd6ce7e`: **17 of the 29 leaves exit `70`**, down from 27 at
+`f8f335d` of 2026-09-15. Twelve act — `tpl help`, `tpl version`, `tpl init`, the
+four dotted-key subcommands, and five of the six entry subcommands — and the
+seventeen that remain are the eight of the first arm, the four of the second,
+the render, the three cache subcommands, and the connectivity subcommand, which
+is the one `cfg` leaf that contacts a server (`FR-CFG-005`). The six group nodes
+print their own help and exit `0` (`FR-CLI-007`, `FR-HELP-025`); the two flag
+forms are answered at every node (`FR-GLOB-019`, `FR-GLOB-020`). A `70` from an
+ordinary invocation is therefore still **expected** today and is not the defect
+`FR-ERR-030` otherwise reports — which is the reason this arrangement is
 recorded here rather than left in the code that carries it.
 
 **Rejected.**
