@@ -29,7 +29,8 @@ it, which commands the two checks reach, what the model owes a difference
 between two supported series, the register in which each accommodated
 difference is recorded, the record of the differences actually observed between
 the four series, the visibility of the probed version and of the server's
-standing to a template, the closed statement list, the read-only session and
+standing to a template, the closed statement list, the order in which the
+three statements that open a connection are issued, the read-only session and
 its read-back, and the connection count.
 
 Out of scope: which fields are read, which belongs to
@@ -202,6 +203,14 @@ record has not been observed, and SHALL NOT be written down.
   statements it defers to are the ones `FR-SRV-006` already places at connection
   start, so the strongest guarantee this tool makes is still confirmed before
   the server is characterised, as `FR-ERR-006` records.
+
+  *Checked in the twenty-fourth edition, and unchanged.* This requirement
+  permits both orders. It defers to the read-only pair without saying whether
+  that pair is issued before this probe or after it, and the sentence above
+  states the intent without making it an obligation — which is why the intent
+  needed a requirement of its own. `FR-SRV-042` is it, and it places this probe
+  third. The deferral itself is untouched, and the order no longer has to be
+  inferred from the amendment note of a requirement that admits its opposite.
 
 - **FR-SRV-040**: The version string the probe of `FR-SRV-002` returns SHALL
   be taken to have the form
@@ -1482,7 +1491,7 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   | `SELECT` against `INFORMATION_SCHEMA.*` | Reading the catalogue, and the privilege probe of `FR-CFG-044` | As the command requires |
   | The server version probe | `FR-SRV-002` | Once, at connection start |
   | The read-only session statement | `FR-SRV-008` | Once, at connection start |
-  | One read of the session variable `@@session.tx_read_only`, reading nothing else | The read-back of `FR-SRV-009` | Once, at connection start, immediately after the statement above |
+  | One read of the session variable `@@session.tx_read_only`, reading nothing else | The read-back of `FR-SRV-009` | Once, at connection start, in the position `FR-SRV-042` fixes |
 
   *Amended in the fifth edition.* The fourth entry is new, and closes
   `OQ-046`. `FR-SRV-009` has required a read-back since the second edition and
@@ -1563,6 +1572,24 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   closed list is for. Also rejected: issuing `transaction_read_only` and
   falling back on `1193`, which `FR-SRV-023` forbids in terms.
 
+  *Amended in the twenty-fourth edition: the table enumerates and does not
+  order, and its fourth row cites the requirement that does.* The rows fix
+  **membership** — which four kinds of statement this system may issue — and
+  the *When* column fixes each kind's occasion and count. The table is not a
+  sequence and cannot be read as one: its first row is the catalogue read,
+  which is issued last and as many times as the command requires, so a reader
+  taking the rows top to bottom is given the one statement that must follow the
+  other three first. `FR-SRV-012` read the rows as a sequence and required a
+  test to assert them in that sequence, which puts the version probe before the
+  read-only pair and contradicts the condition order of `FR-ERR-006`.
+  `FR-SRV-042` closes that, and this note says which kind of table this is so
+  that the next reader does not make the same reading. The only order any cell here ever
+  carried is the adjacency of the third and fourth rows, decided by the fifth
+  edition in the paragraph above on a ground this edition leaves untouched;
+  that adjacency is now statements 1 and 2 of `FR-SRV-042`, and the fourth
+  row's *When* cell cites it instead of repeating it. No statement enters or
+  leaves the list, no count changes, and no row moves.
+
 - **FR-SRV-007**: The system SHALL NOT issue any other statement. It SHALL issue
   no DDL, no DML, no `SHOW`, no statement against any schema other than
   `INFORMATION_SCHEMA`, and SHALL NOT invoke an external process such as a dump
@@ -1571,6 +1598,97 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 - **BR-SRV-001**: The closed list is the read-only guarantee. It is a property of
   what `tpl` is built to send, it holds whatever the server permits, and it is
   the only part of the promise that prevents rather than detects.
+
+## The order of the connection start
+
+- **FR-SRV-042**: WHEN the system opens a connection, it SHALL issue the three
+  connection-start statements of `FR-SRV-006` in this order, and in no other:
+
+  | # | Statement | What it settles |
+  |---|---|---|
+  | 1 | The read-only session statement of `FR-SRV-008` | That the session refuses a write |
+  | 2 | The read-back of `FR-SRV-009`, issued immediately after statement 1 | That the setting took effect |
+  | 3 | The version probe of `FR-SRV-002` | The product, the series, and the standing |
+
+  Every `SELECT` against `INFORMATION_SCHEMA.*` — the first entry of
+  `FR-SRV-006`, whether a catalogue read or the privilege probe of
+  `FR-CFG-044` — follows all three, which `FR-SRV-002` and `FR-SRV-022` already
+  require in their own words and this requirement does not restate. This order
+  is stated here and nowhere else in this corpus, and every other passage that
+  depends on it SHALL cite this requirement rather than repeat it, which is the
+  discipline `BR-SRV-005` states for the supported set.
+
+  *New in the twenty-fourth edition, and it closes a contradiction between two
+  requirements in force.* `FR-SRV-012` required an integration test to assert
+  the three "in the order that table states", and the table of `FR-SRV-006`
+  states none: it enumerates the four kinds of statement the closed list
+  admits, and its first row is the statement issued last. `FR-ERR-006` fixes
+  the order of the three conditions these statements settle — the read-only
+  session of `FR-SRV-010`, then the product check of `FR-SRV-003`, then the
+  version-window check of `FR-SRV-020` — and a condition cannot be evaluated
+  before the statement that produces its evidence, so the two requirements
+  ordered the same three statements differently and no test could satisfy both.
+  The question the defect turned on is whether that table is an ordered list at
+  all. It is not, and `FR-SRV-006` now says so in its own text.
+
+  *Why the session is guaranteed before the server is identified.* The
+  read-only promise is the strongest guarantee this tool makes, and the version
+  probe is a read. Under any other order the system issues a read on a session
+  it has not confirmed refuses a write; and because every connection issues the
+  probe, the gap would be in every invocation that opens a connection.
+  `BR-SRV-001` and `BR-SRV-002` divide that promise into a part that prevents
+  and a part that detects; this order is what keeps the detecting part from
+  starting one statement late. It is also the order three requirements in force
+  already state for themselves: `FR-ERR-006` for the conditions, `FR-CFG-024`
+  for the four steps of `tpl cfg database test`, and `FR-CFG-039` for the five
+  fields in which that command reports them. `FR-SRV-002`'s fourth-edition
+  amendment states the intent in terms — the strongest guarantee is confirmed
+  before the server is characterised — and that requirement permits both
+  orders, which is why the intent needed a requirement of its own.
+
+  *The cost, stated rather than discovered.* A server that is not MariaDB
+  receives the read-only pair before anything has established what it is. Where
+  such a server refuses the `SET`, the system exits `78` under `FR-SRV-010` and
+  the `cause` names the read-only session, where `FR-SRV-003` would have named
+  the product. Both conditions carry `78`, both name the entry that reached the
+  server per `FR-ERR-034`, both leave the catalogue unread, and the caller's
+  next step is the same in either case: the entry points at a server `tpl` does
+  not serve. What is lost is which of two configuration faults the `cause`
+  names, and not the code the caller branches on.
+
+  *Rejected.* Identifying the server before setting its session, which is the
+  order `FR-SRV-012` read out of the table of `FR-SRV-006`. The argument for it
+  is real and is recorded rather than dismissed. `FR-SRV-022`
+  derives the treatment of every known difference from the probe, so probing
+  first is the order under which every later statement is issued against a
+  characterised server; and it gives the more accurate diagnosis for the
+  commonest fault this check meets, an entry pointed at the wrong server. It
+  loses on the exchange. What it buys is a `cause` line separating two
+  conditions that already share a code, an entry name and a remedy; what it
+  spends is the read-only guarantee, on the statement every connection issues.
+  Taking it would also reverse the fourth edition's decision in `FR-ERR-006`,
+  whose stated ground is that the strongest guarantee is confirmed before the
+  server is characterised, and a better-targeted `cause` for one class of
+  misconfiguration is not a ground that edition failed to weigh.
+
+  *Also rejected.* Probing first and deferring every verdict until all three
+  answers are held. It satisfies the condition order of `FR-ERR-006` literally,
+  because the three conditions are then evaluated in that order once the
+  answers are in, and it keeps the diagnosis the rejected order buys. It is
+  refused for what it does in between: a server the probe has already shown to
+  be the wrong product, or to be below the window, still receives the read-only
+  pair, so two statements are sent to a server the system has by then
+  established it refuses. It buys the `cause` line at a higher price than the
+  rejected order above, not a lower one.
+
+  *Also rejected.* Reordering the rows of `FR-SRV-006` and declaring that table
+  the order. It assigns no identifier and leaves `FR-SRV-012` as written. It is
+  refused because it gives one table two jobs, membership and sequence, which
+  is the shape that produced this defect; and because the order is forced by
+  `FR-ERR-006`, in [errors-and-exit-codes.md](errors-and-exit-codes.md). A
+  table cell cannot carry that derivation, so an edition changing the condition
+  order would leave the rows silently wrong. A requirement can carry it, and
+  this one does.
 
 ## The read-only session
 
@@ -1613,13 +1731,27 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   integration test that observes the statements the server actually receives.
   The test SHALL expect the four kinds of statement `FR-SRV-006` lists and no
   fifth, and SHALL assert that the three connection-start statements are issued
-  exactly once each, in the order that table states.
+  exactly once each, in the order `FR-SRV-042` fixes.
 
   *Amended in the fifth edition.* The list had three entries and now has four,
   per `OQ-046`. A test written against three would fail on the read-back the
   specification requires, which is how a closed list and a test drift apart:
   the list is the contract, and the count in the test is what keeps the list
   from growing by accident.
+
+  *Amended in the twenty-fourth edition: the order is cited, not read out of a
+  table that states none.* The clause read "in the order that table states",
+  and the table of `FR-SRV-006` enumerates the four kinds of statement the
+  closed list admits without ordering them — its first row is the catalogue
+  read, which is issued last. Read as a sequence it puts the version probe
+  before the read-only session statement and its read-back, which is the
+  reverse of the order that the condition order of `FR-ERR-006` forces, so this
+  requirement and that one could not both be satisfied by one test, and the
+  test mandated here could not be written. `FR-SRV-042` states the order once,
+  and this requirement asserts it without stating it. What the test
+  expects is otherwise unchanged: the four kinds, no fifth, and the three
+  connection-start statements exactly once each, observed on the server under
+  `BR-SRV-003`.
 
 - **FR-SRV-013**: The read-back of `FR-SRV-009` SHALL be verified by an
   integration test that exercises both outcomes: the setting taking effect, and

@@ -1,7 +1,7 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md]
 ---
 
@@ -269,6 +269,16 @@ tpl cfg database test   <name>
   `OQ-002` asked whether this command reports the reader's effective
   privileges; the answer is yes, as the single boolean `can_read_catalogue`
   produced by the probe of `FR-CFG-044`.
+
+  *Checked in the twenty-fourth edition, and unchanged.* Steps 2 and 3 put the
+  read-only session before the series check, and step 4 puts the catalogue
+  probe after both, which is the order `FR-SRV-042` fixes for the statements
+  that settle them and `FR-ERR-006` for the conditions themselves. This
+  requirement states neither and restates neither: its four steps are the four
+  outcomes this command reports, one field each per `FR-CFG-039`, and they are
+  performed in this order because those two requirements fix it. A reader who
+  needs the order of the connection-start statements reads `FR-SRV-042`, in
+  [server-contract.md](server-contract.md).
 
 - **FR-CFG-043**: IF the server the entry reaches is not a supported MariaDB
   series, THEN `tpl cfg database test` SHALL exit `78` with the message of

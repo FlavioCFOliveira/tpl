@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty-two editions. All are in force;
+The specification has been written in twenty-four editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1872,6 +1872,104 @@ precedes.
 is raised or reopened.** One identifier is assigned, `FR-CAT-053`. The index
 of [open-questions.md](open-questions.md) stays empty.
 
+### Twenty-fourth edition — an enumeration read as an order
+
+The first implementation of the connection start reached two requirements in
+force that order the same three statements differently. `FR-SRV-012` required
+an integration test to assert the three connection-start statements "in the
+order that table states", and the table of `FR-SRV-006` lists the version probe
+above the read-only session statement. `FR-ERR-006` orders the three conditions
+those statements settle — the read-only session of `FR-SRV-010`, then the
+product check of `FR-SRV-003`, then the version-window check of `FR-SRV-020` —
+and a condition cannot be evaluated before the statement that produces its
+evidence, so that order puts the read-only pair before the probe. No test could
+satisfy both, and the test that `FR-SRV-012` itself mandates could not be
+written until one order was stated.
+
+**Nothing here changes what `tpl` reads or how it fails**, and the order that
+governs is the one three requirements in force already state for themselves.
+One requirement is added, one has a clause replaced by a citation, one table is
+declared the enumeration it always was, and three are checked and left as
+written.
+
+- **The defect is in the reading, and the table is the evidence** —
+  [server-contract.md](server-contract.md). The table of `FR-SRV-006` fixes
+  **membership**: which four kinds of statement this system may issue, and each
+  kind's occasion and count. It is not a sequence and cannot be read as one,
+  because its first row is the catalogue read — the statement issued last, and
+  as many times as the command requires. A reader taking the rows top to bottom
+  is given the one statement that must follow the other three first. The table
+  now says which kind of table it is, and the only order any cell of it ever
+  carried, the adjacency of the read-only statement and its read-back, is cited
+  from the requirement that now states it. No row moves and no count changes.
+- **The order is stated once, in `FR-SRV-042`** — the same file. The read-only
+  session statement of `FR-SRV-008`; its read-back under `FR-SRV-009`,
+  immediately after it; then the version probe of `FR-SRV-002`; and every
+  `SELECT` against `INFORMATION_SCHEMA.*` after all three. The requirement
+  carries the discipline `BR-SRV-005` states for the supported set — stated
+  here, cited everywhere else — and it derives the order from `FR-ERR-006`
+  rather than asserting it independently, so the two cannot drift apart.
+- **`FR-SRV-012` cites it and states nothing of it itself** — the same file.
+  The clause "in the order that table states" becomes "in the order
+  `FR-SRV-042` fixes". What the test expects is otherwise unchanged: the four
+  kinds, no fifth, and the three connection-start statements exactly once each,
+  observed on the server under `BR-SRV-003`.
+- **Three requirements are checked and left as written.** `FR-ERR-006`, in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), orders conditions and
+  not statements, and its eight steps and the ordering among the three
+  conditions of step 5 are as the fourth edition left them. `FR-SRV-002` admits
+  both orders — it defers to the read-only pair without saying whether that
+  pair is issued before the probe — which is exactly why the intent its
+  fourth-edition amendment states needed a requirement of its own. And
+  `FR-CFG-024`, in [cfg-commands.md](cfg-commands.md), whose step 2 is the
+  read-only pair and step 3 the series check, fixes the four outcomes that
+  command reports and not the order of the statements. Each now records that it
+  was checked, and cites `FR-SRV-042` rather than repeating it.
+
+**The rejected order is recorded with the argument for it, because the argument
+is real.** Identifying the server before setting its session is the order the
+table was read as stating, and it gives the more accurate diagnosis for the
+commonest fault this check meets: an entry pointed at the wrong server is
+reported as the wrong product rather than as a session that could not be set
+read only. It loses on the exchange. What it buys is a `cause` line separating
+two conditions that already share the code `78`, the name of the entry and the
+caller's next step; what it spends is the read-only guarantee, on the one
+statement every connection issues, since the version probe is itself a read.
+Taking it would also reverse the fourth edition's decision in `FR-ERR-006`,
+whose stated ground is that the strongest guarantee is confirmed before the
+server is characterised, and a better-targeted `cause` for one class of
+misconfiguration is not a ground that edition failed to weigh. A third option —
+probing first and deferring every verdict until all three answers are held —
+satisfies `FR-ERR-006` literally and is refused for what it does in between: a
+server the probe has already shown `tpl` refuses still receives the read-only
+pair, so the diagnosis is bought at a higher price than the rejected order
+pays, not a lower one.
+
+**One question the nineteenth edition named is settled for one table and left
+open in general.** That edition asked whether every table in this corpus that
+characterises rather than enumerates should say which it does, and left it for
+a reading that covers the corpus. `FR-SRV-006`'s table now says it, on its own
+ground: a requirement in force read it wrongly, and a mandated test could not
+be written while it did. Nothing here is a reading of the other tables, and the
+question stands where the nineteenth edition left it.
+
+**One editorial correction.** The Scope above said this specification has been
+written in *twenty-two* editions, which was the twenty-second edition's count;
+the twenty-third added a section and left the number behind it. It reads
+twenty-four, which is the number of edition sections above.
+
+**None of the five validation rules below would have found this defect.** Both
+requirements resolve their cross-references correctly, neither describes an
+observation, no record of observations is in question, no condition of
+observation has moved, and nothing outside this corpus had decayed. The two
+were coherent apart and contradictory together, which is the eighth edition's
+shape; what found it was the first implementation of the connection start,
+written against both.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** One identifier is assigned, `FR-SRV-042`. The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -2289,6 +2387,24 @@ edition's passage asked for is half taken: the run of 2026-09-18 supplies the
 two readings' values and compares no two builds of one series, which is the
 half that would settle the classification and the half that is still untaken.
 The item below was untouched by this edition and stays outstanding.
+
+The twenty-fourth edition adds no obligation of either kind, and records none
+as discharged. It settles the order in which the three connection-start
+statements are issued, which `FR-SRV-012` and `FR-ERR-006` ordered differently
+and without which the test that `FR-SRV-012` mandates could not be written:
+`FR-SRV-042` states the order once, the table of `FR-SRV-006` is declared the
+enumeration it always was, `FR-SRV-012` cites rather than restates, and
+`FR-ERR-006`, `FR-SRV-002` and `FR-CFG-024` are checked and left as written.
+None of the five rules below would have found it, and what did was the first
+implementation of the connection start. Two statements about files this corpus
+does not own are named in it and neither is debt here, in any other sense than
+`DIV-036` is: `docs/spec-technical/architecture.md` records the discrepancy
+this edition settles and resolves it the same way, and
+`scripts/mariadb/probe-session.sql` demonstrates the rejected order, both as
+checked on 2026-09-18. Neither is an entry of
+[upstream-divergences.md](upstream-divergences.md), whose scope is the root
+`README.md` and the root `CLAUDE.md`, and nothing in this corpus waits on
+either. The item below was untouched by this edition and stays outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.
