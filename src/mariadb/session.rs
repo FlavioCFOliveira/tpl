@@ -4,7 +4,10 @@
 //! `FR-SRV-006` closes the statement list at four kinds and this module issues
 //! three of them — the fourth is the catalogue read, which is not this
 //! module's. Each of the three is issued **once**, and the order is the one
-//! `FR-ERR-006` fixes for the conditions they decide: the read-only session of
+//! `FR-SRV-042` fixes: the read-only session statement, its read-back
+//! immediately after, then the version probe. That requirement states the
+//! order and no other passage does; it derives it from the conditions the
+//! three settle, whose own order is `FR-ERR-006`'s — the read-only session of
 //! `FR-SRV-010`, then the product of `FR-SRV-003`, then the series of
 //! `FR-SRV-020`, "so the strongest guarantee is confirmed before the server is
 //! characterised".
@@ -300,7 +303,7 @@ fn not_mariadb(target: &Target<'_>, product: String) -> Error {
 }
 
 /// Runs the connection start of `FR-SRV-006`: the three statements, once each,
-/// in the order `FR-ERR-006` evaluates their conditions in.
+/// in the order `FR-SRV-042` fixes.
 ///
 /// # Errors
 ///
