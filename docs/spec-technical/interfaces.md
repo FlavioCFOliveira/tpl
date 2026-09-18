@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -59,6 +59,8 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 26 | A name matched against a pattern | `cli/` | applied over names from `model/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
 | 27 | A routine named bare or qualified | `cli/` | `mariadb/`, `cache/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
 | 28 | A closed set of typed diagnostic emissions | `mariadb/`, `cache/`, `deadline.rs` | `diagnostics/` | [The diagnostic renderer](#the-diagnostic-renderer) |
+| 30 | The document built from a model, embeddings materialised and every collection ordered | `model/document/` | `output/` | [The two directions over the document](#the-two-directions-over-the-document) |
+| 31 | A supplied context document, read back as a model | `cli/`, from bytes it opened | `model/document/` | [The two directions over the document](#the-two-directions-over-the-document) |
 
 ## The catalogue reader
 
@@ -121,6 +123,17 @@ which is the only condition in `FR-ERR-001` whose wording covers it; whether
 `FR-CAT-044` is such an invariant, or a key to be dropped, is not settled by the
 corpus. The gap is reported to the functional owner rather than filled here.
 
+**What the build does with the unsettled half, and why it does not close it.**
+The check reports a value of its own, naming the table, the key and the column
+and **naming no exit code**, because the same violation means two things at the
+two places a model is built: from a read it is an internal invariant, and from a
+supplied document it is caller data. Each caller maps it — `70` on the producing
+path and `65` on the `--context` path
+([The two directions over the document](#the-two-directions-over-the-document))
+— so the corpus's silence is carried in the type rather than answered by it. The
+other half of the gap the build does decide: a key is never dropped, on either
+path.
+
 ## The three privilege detections
 
 `mariadb/privileges.rs` reads the **shape of the rows the server returned** and
@@ -165,9 +178,13 @@ settle.
 
 `restricted` is an ordered, never-empty array of model property names, on the
 object and never on the envelope (`FR-PRIV-016`, `FR-OUT-029`); it is one of the
-two exceptions to "absent is `null`" and is expressed as the single
-`skip_serializing_if` in the crate
+two exceptions to "absent is `null`" and is expressed as the one omission
+attribute the crate admits, on that one field
 ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)).
+It is written once **per markable kind** — a table, a view and a routine — and
+`OD-18`'s reading of the count is amended there rather than here; every other
+optional value in the model serialises as `null`, which is what `FR-OUT-012`
+requires and what a fourth appearance would break visibly.
 The one limit the detections do not reach — a hidden trigger list, which is
 byte-identical to an empty one — is stated in `FR-PRIV-020` and carried in
 [overview.md](overview.md#the-three-limits-the-system-states-rather-than-overcomes).
@@ -319,7 +336,9 @@ ordering rule rather than to insertion order
 [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)).
 The same types deserialise a supplied context document, which is what makes the
 dump round trip inverse by construction rather than by two routines kept in step
-(`FR-SCH-022`, `BR-SCH-004`).
+(`FR-SCH-022`, `BR-SCH-004`). Which of them are the model's own, and the four
+that are not, is
+[The two directions over the document](#the-two-directions-over-the-document).
 
 **The two omissions are different mechanisms because they are different
 things.** A key absent from the configuration file is a key never inserted into
@@ -376,6 +395,88 @@ independently of directory iteration order (`FR-TMPL-013`), and the `restricted`
 array is ordered by property name (`FR-PRIV-016`). Byte-wise comparison, never a
 collation, is what makes an order identical on every machine and in every locale
 (`NFR-DET-002`, `FR-SCH-014`, `FR-SCH-028`).
+
+**Recorded discrepancy — which component applies the ordering.** This section
+and [quality-attributes.md](quality-attributes.md#the-six-requirements-of-form)
+place every ordering in `output/`. As built, the `text` path orders there and
+the **document** path orders in `model/document/`, at the point each collection
+of the document is assembled. `NFR-DET-002` decides neither reading: it requires
+an ordering to be explicit, stable and not inherited from the server or the
+filesystem, and names no component. Both readings are recorded. Nothing
+observable distinguishes them — the ordering is applied before any byte is
+written, and `output/` receives a document already in order — and the model's
+placement carries one property this section's does not: the default rule is
+bounded by a trait the excepted member types do not implement, so a collection
+`NFR-DET-002` excepts cannot be handed to it. Which placement governs is this
+folder's to settle in a pass of its own, and not here.
+
+**Recorded gap — the order of `referenced_by`.** An entry of that collection is
+a pair of a referencing table and the key it declares, so it has two names and
+the default rule of `NFR-DET-002` is written over one. The corpus names no
+order for it and the collection is not among the six exceptions. As built the
+entries are ordered by the referencing table's name and then by the constraint's,
+which is total — a table may reference another more than once — and byte-wise
+like every other. The gap is reported to the functional owner rather than closed
+here.
+
+## The two directions over the document
+
+`model/document/` owns both directions over the one document that carries the
+model, and they are inverse because they are two directions over **one** set of
+types rather than two routines kept in step (`FR-SCH-022`, `BR-SCH-004`,
+[`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)).
+The document's keys, depths and cuts are `specification/context-document.md`'s
+and are cited here, never reproduced.
+
+**The types are the model's own, with four exceptions and two projections.**
+
+| Shape | Whose type | Why |
+|---|---|---|
+| A column, an index, a trigger, a `CHECK` constraint, a view, a routine, a decomposed type, the `server` object, and every member type nested inside them | The model's, serialised directly | Each states its own keys in its own module, so the key order of `FR-OUT-013` is stated once where the fields are |
+| The `database` object, a table, a foreign key, an entry of `referenced_by` | The document's own | Each differs from the model in one respect and the same one: the **embedding** of `FR-CTX-006` and `FR-CTX-010`, which the model carries as a name and the document carries as an object |
+| A column default | The model's, projected onto a private tagged shape | `FR-CTX-012` puts the discriminant **inside** the object, beside a `value` the `null` form does not carry, which is neither shape a derive over the model's variants produces |
+| A `restricted` marking | The model's, projected onto a bare array of names | `FR-PRIV-016` makes the document shape an array rather than an object, and the projection is where its byte-wise order is applied |
+
+Both projections are declared on the model type, in both directions, so the
+document shape is still a property of a type and no writer restates it. The
+document's own types are `pub(crate)`: the document is contract and the types
+that write it are not (`DIV-032`).
+
+**What the inward direction checks, and where each check lives.** The document
+is untrusted input on this path, and every check is either a derived
+deserialisation or a constructor the model already has.
+
+| Checked | Where |
+|---|---|
+| The three envelope keys, with `source` one of the four values of `FR-OUT-026` | The envelope's derived deserialisation; a bare payload in place of the envelope is refused (`FR-SCH-036`) |
+| Every key the document contract names, with the type it fixes | Each type's derived deserialisation. An absent key is a fault, because `FR-OUT-012` emits an absent **value** as `null` rather than omitting the key |
+| `version`, `series` and `standing` present and strings, `standing` one of two values | The `server` object's three fields and its closed enumeration (`FR-CTX-031`, `FR-CTX-033`, `FR-CTX-034`) |
+| No key of a table names a column that table does not carry | The one constructor a table has (`FR-CAT-044`) |
+| A `restricted` marking names at least one property | The marking's fallible conversion (`FR-PRIV-016`) |
+
+**And four things it does not check**, two of them because `FR-CTX-033` forbids
+it in as many words and two because no requirement asks for them.
+
+| Not checked | Why |
+|---|---|
+| `series` against the supported window | `FR-CTX-033` forbids it. No connection is opened on this path (`FR-RND-022`), so there is no server to vouch for, and validating the window would make every committed dump expire on a calendar date as the window moved |
+| `standing` against `series` | `FR-CTX-033` forbids it in as many words |
+| The value of `schema_version` | `FR-OUT-014` fixes what moves it and states no rule for refusing a value, so refusing one would be a check the corpus does not ask for |
+| `primary_key` against `indexes` | `FR-CAT-043` makes the index collection the authoritative source and bars a second, and `BR-CTX-003` is the ground: the document presents the key twice so that a template need not match on a name, and reading both back would give the model a second place the two could disagree from. The document's `primary_key` is therefore not read at all |
+
+**Nothing is repaired.** A document that is JSON and does not match the contract
+is `65`, carrying the rule it failed; one that is not well-formed JSON is `65`
+carrying the position the decoder stopped at. Both halves are what the `65` row
+of `FR-ERR-034` obliges the `cause` line to carry, and the path is added by the
+caller that opened the file (`FR-RND-020`, `FR-ERR-029`, `FR-ERR-034`).
+
+**The outward direction can fail, and for one condition.** A foreign key naming
+a table the model does not carry is a violated internal invariant, `70`, which
+`FR-CTX-023` makes unreachable for a model produced by a server read.
+Materialising the embedding is what makes it detectable at all: an emitter that
+reproduced the cut at write time would have written the document and left the
+caller to find the dangling reference
+([`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md)).
 
 ## The help surface
 
@@ -815,33 +916,27 @@ rather than answering them.
 consequence; [data-model.md](data-model.md#the-model-in-memory) records that
 four of the five are not decided there.
 
-**All five are open.** They are held by
-[`OD-05`](open-decisions.md#od-05--the-module-decomposition), which settles the
-module decomposition and the visibility rule and settles none of these:
+**All five are now answered over the published surface**, which is `model/` and
+`error.rs` and nothing else
+([`OD-05`](open-decisions.md#od-05--the-module-decomposition)). Four were
+settled when the model was built and are recorded in
+[`OD-31`](open-decisions.md#od-31--the-models-shape-strings-fields-and-the-attribute);
+the fifth was already settled. None is settled **here**: the register is where a
+decision and its rejected options live, and this table states the answer and
+cites it.
 
-| # | Question | Status |
-|---|---|---|
-| 1 | Owned versus borrowed types in the model | **Open** |
-| 2 | Public fields versus accessors | **Open** |
-| 3 | Newtypes for names | **Open** |
-| 4 | Whether the serialisation crate is a public dependency | **Open** |
-| 5 | `#[non_exhaustive]` on the published types | **Open** |
+| # | Question | Answer over the published surface | Recorded in |
+|---|---|---|---|
+| 1 | Owned versus borrowed types in the model | Neither alone: one clone-on-write string type, under one lifetime parameter threaded through every type, so one shape serves a live read, a cached read and a supplied document | [`OD-31`](open-decisions.md#od-31--the-models-shape-strings-fields-and-the-attribute) |
+| 2 | Public fields versus accessors | Divided by whether the type carries an invariant: public fields where every field is an independent fact, private fields and one constructor where a value relates two of them | [`OD-31`](open-decisions.md#od-31--the-models-shape-strings-fields-and-the-attribute) |
+| 3 | Newtypes for names | None. A name is the string type of question 1 | [`OD-31`](open-decisions.md#od-31--the-models-shape-strings-fields-and-the-attribute) |
+| 4 | Whether the serialisation crate is a public dependency | Yes, deliberately, and it costs nothing because `DIV-032` withdraws the library's compatibility guarantee | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) |
+| 5 | `#[non_exhaustive]` on the published types | On every published type except the two that are **inputs** a caller must be able to write down | [`OD-31`](open-decisions.md#od-31--the-models-shape-strings-fields-and-the-attribute) |
 
-None is settled here. Settling one in this document would be writing a decision
-the register has not taken, and the register is where a decision and its
-rejected options live.
-
-**Recorded overlap, reported and not resolved.** Two settled entries answer a
-narrower form of two of the five, and neither generalises:
-[`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)
-records that the serialisation crate's traits appear in the library's public
-signature because the emitted types derive them, which is question 4 asked of
-those types alone; and
 [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)
-applies the non-exhaustive attribute to the error enum, which is question 5
-asked of one type and is load-bearing there for the exit-code derivation.
-Whether either narrow answer closes the general question is the register owner's
-to decide, not this document's.
+applies the attribute of question 5 to the error enum for a reason of its own,
+load-bearing there for the exit-code derivation; that answer and `OD-31`'s agree
+and are not one decision.
 
 ## What this document defers, and to what
 
