@@ -18,6 +18,8 @@
 //! | `deadline` | The clock every blocking phase is bounded by: the four `[core]` deadlines of `FR-CONF-005` and the overall budget of `FR-GLOB-011`, composed as `FR-GLOB-012` composes them |
 //! | `diagnostics` | The four labelled lines of `FR-ERR-008` a failure reaches the caller as |
 //! | `output` | The two formats a result reaches the caller through — the envelope of `FR-OUT-024` and the aligned columns of `FR-OUT-006` |
+//! | `model` | The structure a database is read as: the covered object kinds of `FR-CAT-001`, `FR-CAT-007` and `FR-CAT-008` with the field lists of `FR-CAT-042` and `FR-CAT-045` … `FR-CAT-051`, the per-column decomposition of `FR-CTX-011` … `FR-CTX-018` and `FR-CTX-037` … `FR-CTX-041`, the `server` and `database` objects of `FR-CTX-031` … `FR-CTX-036`, the `restricted` marking of `FR-PRIV-016`, and the refusals of `FR-CAT-024` and `FR-CTX-021` |
+//! | `model::document` | The one document that carries the model in both directions: the collection shape of `FR-CTX-003` … `FR-CTX-005`, the one-hop embedding of `FR-CTX-006` … `FR-CTX-010`, the orderings of `NFR-DET-002`, and the read-back `FR-CTX-033` admits |
 //!
 //! The catalogue reader and the render environment are added by the tasks that
 //! follow.
@@ -26,6 +28,8 @@
 #![warn(missing_docs)]
 
 pub mod error;
+
+pub mod model;
 
 pub(crate) mod cli;
 
