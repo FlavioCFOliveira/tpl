@@ -1,7 +1,7 @@
 ---
 title: Catalogue Coverage
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-18
 related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md]
 ---
 
@@ -164,7 +164,43 @@ of any catalogue query, which this specification does not state.
 
 ## What a routine carries
 
-- **FR-CAT-016**: A routine SHALL state its kind: procedure or function.
+- **FR-CAT-016**: A routine SHALL carry `kind`, stating whether it is a
+  procedure or a function. The value SHALL be the catalogue's own routine-type
+  string, carried unchanged, and SHALL therefore be exactly one of the two
+  strings `PROCEDURE` and `FUNCTION`.
+
+  *Amended in the twenty-third edition: the emitted value is stated.* The
+  requirement read "A routine SHALL state its kind: procedure or function",
+  which names the two kinds and fixes no string. A template or a `jq` filter
+  branching on `kind` therefore had no casing to branch on, and a generator
+  that guessed wrong matched nothing and exited `0`, which is silence rather
+  than a failure. The two strings are the values `FR-CAT-048` records the
+  catalogue returning for the routine-type field, and this requirement carries
+  them through rather than composing a value of its own.
+
+  **The value is not the prefix of the qualified form of `FR-SCH-008`, and the
+  two are not the same string.** That requirement admits `procedure:<name>`
+  and `function:<name>` on the command line, in lower case; this field carries
+  `PROCEDURE` and `FUNCTION`, in upper case. A caller composing a qualified
+  name from `kind` folds the case, and that is the whole of the difference:
+  the two kinds are the same two, their spelling is otherwise identical, and
+  neither requirement admits a third value.
+
+  *Rejected.* Carrying `kind` in lower case so that it equals the prefix
+  `FR-SCH-008` admits. It would make `kind` the only enumerated catalogue
+  value the model rewrites: `table_type` carries `BASE TABLE` and
+  `SYSTEM VERSIONED` exactly as `FR-CAT-031` observed them, and a view's
+  `check_option`, `is_updatable` and `security_type`, a routine's `body_kind`,
+  `parameter_style`, `is_deterministic`, `sql_data_access` and
+  `security_type`, a trigger's `event`, `timing` and `orientation`, and a
+  parameter's `mode` are each the catalogue's own string, per `FR-CAT-047`,
+  `FR-CAT-048`, `FR-CAT-049` and `FR-CAT-050`. One field folded and its
+  neighbours not is a rule every reader of the document has to memorise, and
+  it buys one case fold at the one place a qualified name is composed. Also
+  rejected: leaving the casing to the implementation and stating only the two
+  kinds, which is the defect being corrected — an unstated discriminant is a
+  contract surface fixed by whoever writes the first generator, and fixed
+  where no reader can find it.
 
 - **FR-CAT-017**: A routine SHALL carry its body.
 
@@ -706,6 +742,72 @@ requirement says otherwise.
   and cannot know which table-level constraints exist. That asymmetry is
   recorded in `FR-PRIV-018` and is why no cross-check is available here.
 
+### Tables
+
+- **FR-CAT-053**: Every property a table object carries SHALL be named in the
+  index below, beside the requirement that fixes it. A property a later
+  requirement gives a table SHALL be added to this index by that requirement,
+  and a property not named here SHALL NOT be carried.
+
+  | Property | Fixed by |
+  |---|---|
+  | `name` | this requirement. Every other named object of this section carries its name under `name` — `FR-CAT-042`, `FR-CAT-046`, `FR-CAT-047`, `FR-CAT-048`, `FR-CAT-050` — and `DIV-034` corrects the root `README.md`'s list of a table's fields in several places without ever contesting the `name` in it |
+  | `table_type` | `FR-CAT-002`, whose two values are those `FR-CAT-031` marks covered |
+  | its columns | `FR-CAT-009`, in the order `NFR-DET-002` fixes, with the coverage of `FR-CAT-052` applied to the column read |
+  | its primary key | `FR-CAT-011`, read from the source `FR-CAT-043` names, under the invariant of `FR-CAT-044` |
+  | its indexes | this requirement, with `FR-CAT-010` folding an index into one object and `FR-CAT-042` for its catalogue field list. No requirement of this file had said a table carries them; `FR-SCH-009` and `FR-CTX-007` said it from outside, and the index is where the model's own statement now sits |
+  | `foreign_keys` | `FR-CAT-012`, whose catalogue field lists are `FR-CAT-045`, and which `FR-CAT-033` bars from reporting `SET DEFAULT` |
+  | `referenced_by` | `FR-CAT-013`, shaped by `FR-CTX-010` |
+  | its triggers | `FR-CAT-014`, whose catalogue field list is `FR-CAT-050` |
+  | its `CHECK` constraints | `FR-CAT-015`, whose catalogue field list is `FR-CAT-046`, with `FR-CAT-037` and `FR-CAT-038` |
+  | its engine, its collation, and its comment | `FR-SCH-009`, which names all three and which records that a table has a collation and **no** character set; the comment's absent value is fixed by `FR-CAT-039`, and `FR-CAT-040` bars the table comment of a view from becoming a view's comment |
+
+  **An embedded table is a reduction of this object and not a second shape.**
+  `FR-CTX-006` through `FR-CTX-010` fix what survives one hop: an embedded
+  table carries its columns, its indexes and its primary key in full, per
+  `FR-CTX-007`, and its `foreign_keys` hold names rather than objects, per
+  `FR-CTX-008`. Nothing in that reduction adds a property, so this index
+  covers the embedded table as well.
+
+  **A table has no catalogue field list in this section, and that is an
+  absence of evidence rather than a decision.** `FR-CAT-039` through
+  `FR-CAT-051` were written from the observation pass of 2026-09-10, which
+  recorded the field list of every object kind an entry of
+  [open-questions.md](open-questions.md) had asked for. No entry asked for the
+  row the table catalogue returns, so that pass did not record it and this
+  corpus holds no reading of it. Fragments of it are recorded: `FR-CAT-024`
+  names twelve of its fields as volatile and excludes them, `FR-CAT-031`
+  records the table-type field on all four series, and `FR-CAT-039` records
+  the comment field's absent value. The list itself is not recorded, and
+  writing one from MariaDB's documentation is what the fourth provenance of
+  the [README](README.md#provenance) forbids.
+
+  *What would change this.* An observation pass of the kind that produced
+  `FR-CAT-047` and `FR-CAT-048`, recording the table catalogue's field list
+  verbatim on all four series of `FR-SRV-015` against the fixture of
+  `scripts/mariadb/`. It would add a field list beside this index and would
+  settle from evidence whether the catalogue offers a table a field this index
+  does not name — which is the one question the index cannot answer about
+  itself. **Nothing in this corpus waits on it.** Every property a requirement
+  in force gives a table is named above, so no requirement is ambiguous while
+  it stands; it is not an open question and no entry is opened for it, and the
+  index of [open-questions.md](open-questions.md) stays empty.
+
+  *Rejected.* Writing the catalogue field list from the fields this corpus
+  already names — the twelve of `FR-CAT-024`, the table type of `FR-CAT-031`,
+  the comment of `FR-CAT-039` — filled out from what MariaDB documents beside
+  them. It is exactly the shape the seventh edition's validation rule was
+  written from: four requirements were internally coherent, cross-referenced
+  correctly, and describing a catalogue that does not exist, and only reading
+  them against the evidence found it. A list assembled from exclusions also
+  runs `BR-CAT-005` backwards, which carries by default and excludes on a
+  stated ground. Also rejected: leaving the table with no entry here and
+  letting a reader assemble its properties from the requirements the index
+  names. That is what this corpus did through twenty-two editions, and the
+  first reader to write a worked example against the model found the gap — a
+  reader who must collect a property list from scattered requirements has no
+  way to know when the collection is complete.
+
 ### Views
 
 - **FR-CAT-047**: The catalogue field list for a view SHALL be taken to be
@@ -751,7 +853,7 @@ requirement says otherwise.
   | catalogue, schema | `def` and the database name | not carried — row identity |
   | specific name | equal to the routine name on all seven | not carried — restatement, `FR-CTX-021` |
   | routine name | the routine's name | `name` |
-  | routine type | `FUNCTION` (4) or `PROCEDURE` (3) | `kind`, per `FR-CAT-016` |
+  | routine type | `FUNCTION` (4) or `PROCEDURE` (3) | `kind`, carried unchanged, per `FR-CAT-016` |
   | data type, the five size fields, character set, collation, DTD identifier | for a **function**, the return type decomposed exactly as a column's type is; for a **procedure**, the data type is the **empty string**, the DTD identifier is SQL `NULL`, and the rest are SQL `NULL` | the return type, decomposed as `FR-CTX-015` decomposes a column's, and `null` in full for a procedure |
   | routine body | `SQL` on all seven | `body_kind` |
   | routine definition | the body **as written**, newlines and identifier case preserved, and **not** rewritten as a view definition is | `body`, per `FR-CAT-017` |

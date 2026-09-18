@@ -1,8 +1,8 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-14
-related: [cli-contract.md, output-formats.md, security.md, global-flags.md]
+last-reviewed: 2026-09-18
+related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md]
 ---
 
 # Errors and Exit Codes
@@ -372,6 +372,19 @@ Out of scope: the wording of any individual message.
   order saying where; the product check of `FR-SRV-003`; and the version-window
   check of `FR-SRV-020`. They are evaluated in that order among themselves, so
   the strongest guarantee is confirmed before the server is characterised.
+
+  *Checked in the twenty-fourth edition, and unchanged.* This requirement
+  orders **conditions**, and it is the condition order that governs. The order
+  of the statements that produce the evidence for the three named above is
+  `FR-SRV-042`, in [server-contract.md](server-contract.md), which derives it
+  from this requirement and states it once: a condition cannot be evaluated
+  before the statement that produces its evidence, so the order above places
+  the read-only session statement and its read-back before the version probe.
+  The two were in conflict until that requirement was written, because
+  `FR-SRV-012` read an order out of a table of `FR-SRV-006` that states none,
+  and that reading put the probe first. Nothing here changes: the eight steps,
+  the two that are skipped, and the ordering among the three conditions of step
+  5 are as the fourth edition left them.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.

@@ -137,13 +137,8 @@ connections() {
 # it down.
 # --------------------------------------------------------------------------
 
-# The redirection is load-bearing. tpl_mariadb_each walks the inventory with a
-# `while read` on stdin, and tpl_mariadb_sql reaches the server with
-# `docker exec -i`, which inherits that stdin and drains the records still
-# queued on it: without </dev/null the first server is read and the other four
-# are eaten. up.sh avoids the same collision by reading the inventory on fd 3.
 build_one() {
-    tpl_mariadb_sql "$1" -N -B -e "SHOW GLOBAL VARIABLES LIKE 'version%'" </dev/null \
+    tpl_mariadb_sql "$1" -N -B -e "SHOW GLOBAL VARIABLES LIKE 'version%'" \
         | awk -F'\t' -v s="$1" '{ printf "%-7s %-24s %s\n", s, $1, $2 }'
 }
 

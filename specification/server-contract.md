@@ -1,7 +1,7 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-18
 related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md]
 ---
 
@@ -29,7 +29,8 @@ it, which commands the two checks reach, what the model owes a difference
 between two supported series, the register in which each accommodated
 difference is recorded, the record of the differences actually observed between
 the four series, the visibility of the probed version and of the server's
-standing to a template, the closed statement list, the read-only session and
+standing to a template, the closed statement list, the order in which the
+three statements that open a connection are issued, the read-only session and
 its read-back, and the connection count.
 
 Out of scope: which fields are read, which belongs to
@@ -203,6 +204,14 @@ record has not been observed, and SHALL NOT be written down.
   start, so the strongest guarantee this tool makes is still confirmed before
   the server is characterised, as `FR-ERR-006` records.
 
+  *Checked in the twenty-fourth edition, and unchanged.* This requirement
+  permits both orders. It defers to the read-only pair without saying whether
+  that pair is issued before this probe or after it, and the sentence above
+  states the intent without making it an obligation — which is why the intent
+  needed a requirement of its own. `FR-SRV-042` is it, and it places this probe
+  third. The deferral itself is untouched, and the order no longer has to be
+  inferred from the amendment note of a requirement that admits its opposite.
+
 - **FR-SRV-040**: The version string the probe of `FR-SRV-002` returns SHALL
   be taken to have the form
   `<major>.<minor>.<patch>-MariaDB` optionally followed by `-<suffix>`, and
@@ -236,9 +245,11 @@ record has not been observed, and SHALL NOT be written down.
   *Two further readings were taken and neither is a version.* The build's
   source revision is a distinct 40-character hash per build and differs
   between all four; the SSL library string differs between `10.11` and the
-  other three. Both are properties of the build. A malloc-library variable was
-  requested and **no row came back on any of the four**, so no such variable
-  exists on these servers.
+  other three. Both are properties of the build, and the variables they were
+  read from are `version_source_revision` and `version_ssl_library`. A third
+  variable of the same family, `version_malloc_library`, returns a row on
+  every server of the fixture and the same value on all of them, so it varies
+  with nothing; the amendment below records it and states where it belongs.
 
   *Amended in the eighteenth edition: the two readings are classified where
   the observations live, not here.* They were recorded here as properties of
@@ -252,6 +263,45 @@ record has not been observed, and SHALL NOT be written down.
   string carries its bound and the observation that would settle it. The
   readings themselves are unchanged, and this requirement still derives
   `series` from `<major>.<minor>` and from nothing else.
+
+  *Amended in the twenty-third edition: a reading recorded as absent is
+  present on every server.* The paragraph above read that a malloc-library
+  variable was requested and **no row came back on any of the four**, so no
+  such variable exists on these servers. `version_malloc_library` returns a
+  row on all four series of `FR-SRV-015` and on the fifth listener of the
+  fixture, and its value is `system`. It was read three ways on each of the
+  five on 2026-09-18 — a `SHOW` of the variables matching a prefix, the
+  global-variables table of `INFORMATION_SCHEMA`, and a `SELECT` of the global
+  variable itself — and all fifteen readings agreed. The run that produced
+  them is recorded with the fixture, in `scripts/mariadb/README.md`, which
+  holds the values and is not restated here. What returned no row was the
+  **name**: a name a server does not have prints nothing at all under a `SHOW`
+  with a `LIKE`, header included, and exits `0`, while selecting that same
+  wrong name directly fails with `ERROR 1193 (HY000)`. Both forms were
+  observed on `11.8`, and the earlier record read the silence of the first as
+  an answer. None of these readings is a statement `tpl` issues: `FR-SRV-006`
+  and `FR-SRV-007` are untouched, and the probe of `FR-SRV-002` is still the
+  only version reading this requirement governs.
+
+  *The malloc reading is neither a row of `FR-SRV-038` nor a line below its
+  table.* It agrees on all four series and on the fifth listener, and both
+  homes that requirement offers hold an observation that **differs** across
+  the servers read — a row where the difference is established as one between
+  the series, a line below the table where it is not. A reading that differs
+  nowhere is neither, and it is recorded here, beside the readings it was
+  taken with.
+
+  *Rejected.* Striking the sentence and recording nothing in its place. The
+  correction's whole content would go with it, and so would the reason the
+  record was wrong: a `SHOW` with a `LIKE` that prints nothing and exits `0`
+  is a shape the next reader will meet again, and naming it is what stops the
+  same silence being read as an answer twice. Also rejected: recording the
+  reading below the table of `FR-SRV-038` beside the three readings of the
+  build. That home holds what differs across the servers read and is not
+  established as a difference between the series; a reading that agrees
+  everywhere, placed there, would turn a home into a list of readings taken,
+  and would invite the counts beside difference 8 to move for a reading that
+  separates nothing.
 
   *Checked in the twelfth edition against difference 13 of `FR-SRV-038`, and
   unchanged.* A server also announces a version when the connection opens, and
@@ -1273,16 +1323,52 @@ four servers and is not a difference between them belongs, per `FR-SRV-038`:
 | Reading | How it varied across the four servers |
 |---|---|
 | The distribution each image was built on, carried as the version string's suffix | `ubu2404` on `12.3`, `11.8` and `11.4`; `ubu2204` on `10.11` |
-| The build's source revision, a 40-character hash | a distinct hash on each of the four |
-| The SSL library string | one reading on `12.3`, `11.8` and `11.4`; a different one on `10.11` |
+| The build's source revision, a 40-character hash, read from `version_source_revision` | a distinct hash on each of the four |
+| The SSL library string, read from `version_ssl_library` | one reading on `12.3`, `11.8` and `11.4`; a different one on `10.11` |
 
-**None of the three can be given a row, and for two of them the reason comes
-before any classification.** A row of the table above names what each series
-returned, which `FR-SRV-038` requires of it. The observation recorded that the
-four servers differ in the source revision and in the SSL library string; it
-did not record what any of the four returned. Four columns of each row could
-not be filled from anything this corpus holds, and filling them from a second
-reading would be recording that reading rather than this one.
+The three were read again on 2026-09-18, on the same four series and the same
+fifth listener, with **what each server returned recorded** — in
+`scripts/mariadb/README.md`, which holds the values and is where they stay.
+The suffix is carried in the version string of `FR-SRV-040`; the other two are
+the variables the table above names.
+
+**None of the three is given a row, and the ground is the classification
+alone.** A row of the table above names what each series returned, which
+`FR-SRV-038` requires of it, and the reading of 2026-09-18 supplies that for
+the source revision and for the SSL library string. What it does not supply is
+the entailment a row asserts. It read one server of each series, and the fifth
+listener it added is the same `10.11` image and therefore the same build, so
+the question a row answers — would two servers of one series return the same
+value? — is untouched by it.
+
+*Amended in the twenty-third edition: one of the two grounds for declining a
+row is discharged, and the classification carries both readings alone.* This
+passage held that four columns of each row could not be filled from anything
+this corpus holds, because the observation recorded that the four servers
+differ and did not record what any of them returned. The reading of 2026-09-18
+records all five, so that ground is gone. The classification is untouched and
+is what declines the row: the source revision is a property of the build by
+what a source revision is, and the SSL library string is **not established**
+as a difference between the series, because its split is still coextensive
+with the distribution each image was built on and the run that supplied the
+values compared no two builds of one series. Naming the variables is part of
+the same correction, and the malloc-library variable read with them is
+classified under `FR-SRV-040`, where it belongs: it agrees on all five
+servers, so it is neither a row here nor a fourth reading below this table.
+
+*Rejected.* Giving the two readings a row now that their four columns can be
+filled. A value is not the thing a row asserts — a row asserts that the series
+fixes the value, and the fourth validation rule of the
+[README](README.md#maintenance-debt) refuses that credit while the fixture
+selects the build without pinning it. The run that supplied the values
+strengthens the refusal rather than weakening it: the fifth listener runs the
+`10.11` image and returns the same source revision and the same SSL library
+string byte for byte, which is what *per build* predicts and what a fifth
+series would not. Also rejected: transcribing the readings into this corpus
+beside the citation. A per-build value copied here decays the moment the
+fixture's upstream tag moves, and it decays silently, where the file that
+records the run is the file that is re-run and rewritten; difference 3 above
+declines to restate the fixture's own record for the same reason.
 
 **The build is the thing that varies, and for the first two readings that is
 settled.** The suffix names a distribution and not a MariaDB fact, and
@@ -1314,12 +1400,12 @@ of the two claims available and the only one this evidence carries; the
 stronger one — that the series fixes it — is what a row would assert.
 
 *Bounded claim.* One server of each series was read, at the four patch releases
-`FR-SRV-040` records, on the occasion that recorded those releases. For the
-source revision and the SSL library string the record holds that the four
-servers differ and holds no reading for any of them. No two servers of one
-series have been compared for any of the three: the fifth listener of the fixture is the
-same `10.11` image and therefore the same build, so it establishes nothing
-here, and it is not a fifth series. Nothing was observed about a server outside
+`FR-SRV-040` records, on the occasion that recorded those releases, and read
+again on 2026-09-18 at the same four patch releases, with the values recorded.
+No two servers of one series have been compared for any of the three: the
+fifth listener of the fixture is the same `10.11` image and therefore the same
+build, so it establishes nothing here, and it is not a fifth series. Nothing
+was observed about a server outside
 the window of `FR-SRV-015`, and nothing about any other build of the same four
 series.
 
@@ -1329,10 +1415,10 @@ image as the fixture stands and any `10.11` build carrying the other suffix, or
 the same image once its upstream tag has moved to one. Two readings that agree
 would establish the series as the thing that fixes it, earning it a row whose
 four series columns that same observation would fill; two that differ would
-settle it as a property of the build and leave this passage as it stands.
-Neither requirement names the server variable either reading was taken from,
-and nothing in `scripts/mariadb/` takes them, so this is an ad-hoc read whose
-first step is recovering those two names. **Nothing in this corpus waits on
+settle it as a property of the build and leave this passage as it stands. The
+variable is `version_ssl_library`, and the fixture reads it, so this is a
+second run of a reading that already exists rather than an ad-hoc read whose
+first step is recovering a name. **Nothing in this corpus waits on
 it.** No requirement reads any of the three, so it is not an open question and
 no entry is opened for it; the index of
 [open-questions.md](open-questions.md) stays empty.
@@ -1405,7 +1491,7 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   | `SELECT` against `INFORMATION_SCHEMA.*` | Reading the catalogue, and the privilege probe of `FR-CFG-044` | As the command requires |
   | The server version probe | `FR-SRV-002` | Once, at connection start |
   | The read-only session statement | `FR-SRV-008` | Once, at connection start |
-  | One read of the session variable `@@session.tx_read_only`, reading nothing else | The read-back of `FR-SRV-009` | Once, at connection start, immediately after the statement above |
+  | One read of the session variable `@@session.tx_read_only`, reading nothing else | The read-back of `FR-SRV-009` | Once, at connection start, in the position `FR-SRV-042` fixes |
 
   *Amended in the fifth edition.* The fourth entry is new, and closes
   `OQ-046`. `FR-SRV-009` has required a read-back since the second edition and
@@ -1486,6 +1572,24 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   closed list is for. Also rejected: issuing `transaction_read_only` and
   falling back on `1193`, which `FR-SRV-023` forbids in terms.
 
+  *Amended in the twenty-fourth edition: the table enumerates and does not
+  order, and its fourth row cites the requirement that does.* The rows fix
+  **membership** — which four kinds of statement this system may issue — and
+  the *When* column fixes each kind's occasion and count. The table is not a
+  sequence and cannot be read as one: its first row is the catalogue read,
+  which is issued last and as many times as the command requires, so a reader
+  taking the rows top to bottom is given the one statement that must follow the
+  other three first. `FR-SRV-012` read the rows as a sequence and required a
+  test to assert them in that sequence, which puts the version probe before the
+  read-only pair and contradicts the condition order of `FR-ERR-006`.
+  `FR-SRV-042` closes that, and this note says which kind of table this is so
+  that the next reader does not make the same reading. The only order any cell here ever
+  carried is the adjacency of the third and fourth rows, decided by the fifth
+  edition in the paragraph above on a ground this edition leaves untouched;
+  that adjacency is now statements 1 and 2 of `FR-SRV-042`, and the fourth
+  row's *When* cell cites it instead of repeating it. No statement enters or
+  leaves the list, no count changes, and no row moves.
+
 - **FR-SRV-007**: The system SHALL NOT issue any other statement. It SHALL issue
   no DDL, no DML, no `SHOW`, no statement against any schema other than
   `INFORMATION_SCHEMA`, and SHALL NOT invoke an external process such as a dump
@@ -1494,6 +1598,97 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 - **BR-SRV-001**: The closed list is the read-only guarantee. It is a property of
   what `tpl` is built to send, it holds whatever the server permits, and it is
   the only part of the promise that prevents rather than detects.
+
+## The order of the connection start
+
+- **FR-SRV-042**: WHEN the system opens a connection, it SHALL issue the three
+  connection-start statements of `FR-SRV-006` in this order, and in no other:
+
+  | # | Statement | What it settles |
+  |---|---|---|
+  | 1 | The read-only session statement of `FR-SRV-008` | That the session refuses a write |
+  | 2 | The read-back of `FR-SRV-009`, issued immediately after statement 1 | That the setting took effect |
+  | 3 | The version probe of `FR-SRV-002` | The product, the series, and the standing |
+
+  Every `SELECT` against `INFORMATION_SCHEMA.*` — the first entry of
+  `FR-SRV-006`, whether a catalogue read or the privilege probe of
+  `FR-CFG-044` — follows all three, which `FR-SRV-002` and `FR-SRV-022` already
+  require in their own words and this requirement does not restate. This order
+  is stated here and nowhere else in this corpus, and every other passage that
+  depends on it SHALL cite this requirement rather than repeat it, which is the
+  discipline `BR-SRV-005` states for the supported set.
+
+  *New in the twenty-fourth edition, and it closes a contradiction between two
+  requirements in force.* `FR-SRV-012` required an integration test to assert
+  the three "in the order that table states", and the table of `FR-SRV-006`
+  states none: it enumerates the four kinds of statement the closed list
+  admits, and its first row is the statement issued last. `FR-ERR-006` fixes
+  the order of the three conditions these statements settle — the read-only
+  session of `FR-SRV-010`, then the product check of `FR-SRV-003`, then the
+  version-window check of `FR-SRV-020` — and a condition cannot be evaluated
+  before the statement that produces its evidence, so the two requirements
+  ordered the same three statements differently and no test could satisfy both.
+  The question the defect turned on is whether that table is an ordered list at
+  all. It is not, and `FR-SRV-006` now says so in its own text.
+
+  *Why the session is guaranteed before the server is identified.* The
+  read-only promise is the strongest guarantee this tool makes, and the version
+  probe is a read. Under any other order the system issues a read on a session
+  it has not confirmed refuses a write; and because every connection issues the
+  probe, the gap would be in every invocation that opens a connection.
+  `BR-SRV-001` and `BR-SRV-002` divide that promise into a part that prevents
+  and a part that detects; this order is what keeps the detecting part from
+  starting one statement late. It is also the order three requirements in force
+  already state for themselves: `FR-ERR-006` for the conditions, `FR-CFG-024`
+  for the four steps of `tpl cfg database test`, and `FR-CFG-039` for the five
+  fields in which that command reports them. `FR-SRV-002`'s fourth-edition
+  amendment states the intent in terms — the strongest guarantee is confirmed
+  before the server is characterised — and that requirement permits both
+  orders, which is why the intent needed a requirement of its own.
+
+  *The cost, stated rather than discovered.* A server that is not MariaDB
+  receives the read-only pair before anything has established what it is. Where
+  such a server refuses the `SET`, the system exits `78` under `FR-SRV-010` and
+  the `cause` names the read-only session, where `FR-SRV-003` would have named
+  the product. Both conditions carry `78`, both name the entry that reached the
+  server per `FR-ERR-034`, both leave the catalogue unread, and the caller's
+  next step is the same in either case: the entry points at a server `tpl` does
+  not serve. What is lost is which of two configuration faults the `cause`
+  names, and not the code the caller branches on.
+
+  *Rejected.* Identifying the server before setting its session, which is the
+  order `FR-SRV-012` read out of the table of `FR-SRV-006`. The argument for it
+  is real and is recorded rather than dismissed. `FR-SRV-022`
+  derives the treatment of every known difference from the probe, so probing
+  first is the order under which every later statement is issued against a
+  characterised server; and it gives the more accurate diagnosis for the
+  commonest fault this check meets, an entry pointed at the wrong server. It
+  loses on the exchange. What it buys is a `cause` line separating two
+  conditions that already share a code, an entry name and a remedy; what it
+  spends is the read-only guarantee, on the statement every connection issues.
+  Taking it would also reverse the fourth edition's decision in `FR-ERR-006`,
+  whose stated ground is that the strongest guarantee is confirmed before the
+  server is characterised, and a better-targeted `cause` for one class of
+  misconfiguration is not a ground that edition failed to weigh.
+
+  *Also rejected.* Probing first and deferring every verdict until all three
+  answers are held. It satisfies the condition order of `FR-ERR-006` literally,
+  because the three conditions are then evaluated in that order once the
+  answers are in, and it keeps the diagnosis the rejected order buys. It is
+  refused for what it does in between: a server the probe has already shown to
+  be the wrong product, or to be below the window, still receives the read-only
+  pair, so two statements are sent to a server the system has by then
+  established it refuses. It buys the `cause` line at a higher price than the
+  rejected order above, not a lower one.
+
+  *Also rejected.* Reordering the rows of `FR-SRV-006` and declaring that table
+  the order. It assigns no identifier and leaves `FR-SRV-012` as written. It is
+  refused because it gives one table two jobs, membership and sequence, which
+  is the shape that produced this defect; and because the order is forced by
+  `FR-ERR-006`, in [errors-and-exit-codes.md](errors-and-exit-codes.md). A
+  table cell cannot carry that derivation, so an edition changing the condition
+  order would leave the rows silently wrong. A requirement can carry it, and
+  this one does.
 
 ## The read-only session
 
@@ -1536,13 +1731,27 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   integration test that observes the statements the server actually receives.
   The test SHALL expect the four kinds of statement `FR-SRV-006` lists and no
   fifth, and SHALL assert that the three connection-start statements are issued
-  exactly once each, in the order that table states.
+  exactly once each, in the order `FR-SRV-042` fixes.
 
   *Amended in the fifth edition.* The list had three entries and now has four,
   per `OQ-046`. A test written against three would fail on the read-back the
   specification requires, which is how a closed list and a test drift apart:
   the list is the contract, and the count in the test is what keeps the list
   from growing by accident.
+
+  *Amended in the twenty-fourth edition: the order is cited, not read out of a
+  table that states none.* The clause read "in the order that table states",
+  and the table of `FR-SRV-006` enumerates the four kinds of statement the
+  closed list admits without ordering them — its first row is the catalogue
+  read, which is issued last. Read as a sequence it puts the version probe
+  before the read-only session statement and its read-back, which is the
+  reverse of the order that the condition order of `FR-ERR-006` forces, so this
+  requirement and that one could not both be satisfied by one test, and the
+  test mandated here could not be written. `FR-SRV-042` states the order once,
+  and this requirement asserts it without stating it. What the test
+  expects is otherwise unchanged: the four kinds, no fifth, and the three
+  connection-start statements exactly once each, observed on the server under
+  `BR-SRV-003`.
 
 - **FR-SRV-013**: The read-back of `FR-SRV-009` SHALL be verified by an
   integration test that exercises both outcomes: the setting taking effect, and
