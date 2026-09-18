@@ -13,6 +13,7 @@
 //! | [`statements`] | The repertoire, and the plan one read issues | `FR-SRV-006`, `FR-SRV-037`, `NFR-PERF-001`, `NFR-PERF-002` |
 //! | [`row`] | How one field of one row is decoded | The catalogue field lists of `FR-CAT-042`, `FR-CAT-045` … `FR-CAT-051` |
 //! | [`fold`] | How the rows become the model | `FR-CAT-009` … `FR-CAT-015`, `FR-CAT-052`, `FR-CTX-036` |
+//! | [`completeness`] | What the reader's privileges did not reach | `FR-PRIV-001` … `FR-PRIV-007`, `FR-PRIV-011` … `FR-PRIV-019` |
 //!
 //! # The count is fixed before the first statement is sent
 //!
@@ -39,15 +40,23 @@
 //! model and the rows as one self-referential value.* It cannot be written in
 //! safe Rust, and `unsafe` is barred outright.
 //!
-//! # What this module does not do
+//! # A short read says so, object by object
 //!
-//! It takes no completeness verdict. `FR-PRIV-005` through `FR-PRIV-007` mark
-//! an object whose properties a reader's privileges did not reach, and every
-//! `restricted` field this fold writes is [`None`]; the cross-checks of
-//! `FR-PRIV-011` through `FR-PRIV-019` are the task that follows. A read that
-//! a privilege truncated therefore produces a model that is short and does not
-//! yet say so, which is exactly the state that task exists to end.
+//! A reader whose privileges do not reach the whole model is not refused: it
+//! receives rows, and the shortfall is in them. [`completeness`] holds the
+//! three checks that find it — the empty string, SQL `NULL` and zero rows, per
+//! `FR-PRIV-018` — and [`fold`] makes each of them as it maps the rows, so an
+//! object that is short carries the `restricted` marking of `FR-PRIV-016` and
+//! an object that is whole carries none.
+//!
+//! **What this module still does not do is decide what to do about it.**
+//! `FR-PRIV-003` answers a caller that named one object with `77`, and
+//! [`completeness::of_table`], [`completeness::of_view`] and
+//! [`completeness::of_routine`] produce that verdict; the exit code is emitted
+//! where every other one is, by the binary, and no command that names an object
+//! exists yet to ask for it.
 
+mod completeness;
 mod fold;
 mod row;
 mod statements;
@@ -243,7 +252,7 @@ fn fetch(
 #[cfg(test)]
 mod tests {
     use super::statements::Read;
-    use super::{Catalogue, Scope, read};
+    use super::{Catalogue, Scope, completeness, read};
     use crate::mariadb::connect::Target;
     use crate::model::check_constraint::ConstraintLevel;
     use crate::model::column::GeneratedStorage;
@@ -265,22 +274,34 @@ mod tests {
     /// The database entry every test below resolves.
     const ENTRY: &str = "fixture";
 
-    /// The settings that reach `address`, over a plain connection.
+    /// The privileged account of the fixture, which reads every property.
+    const ROOT: (&str, &str) = ("root", "tpl-root");
+
+    /// The reduced-grant reader of `FR-PRIV-018`, which holds
+    /// `SELECT, EXECUTE ON freight.*` and nothing else.
+    ///
+    /// It is the account the fixture carries so that an incomplete read is
+    /// reproducible without breaking anything, and it is the only way the three
+    /// shapes of `FR-PRIV-018` can be observed rather than simulated.
+    const REDUCED: (&str, &str) = ("tpl_reader", "tpl-reader-pw");
+
+    /// The settings that reach `address` as `account`, over a plain connection.
     ///
     /// The transport is not this module's subject — `FR-CONF-013`'s five modes
     /// are `connect`'s, and the fixture's certificate is exercised where that
     /// belongs — so the entry asks for the one mode that adds nothing to what
     /// is under test here.
-    fn settings(scratch: &Scratch, address: &str) -> Settings {
+    fn settings(scratch: &Scratch, address: &str, account: (&str, &str)) -> Settings {
         let (host, port) = address
             .rsplit_once(':')
             .expect("status.sh --export prints host:port");
+        let (user, password) = account;
 
         let file = scratch.file(
             ".cfg",
             &format!(
                 "[database.{ENTRY}]\nhost = \"{host}\"\nport = {port}\n\
-                 user = \"root\"\npassword = \"tpl-root\"\n\
+                 user = \"{user}\"\npassword = \"{password}\"\n\
                  database = \"{SCHEMA}\"\ntls = \"disabled\"\n"
             ),
         );
@@ -295,14 +316,15 @@ mod tests {
         .expect("the entry resolves")
     }
 
-    /// Reads `scope` from one fixture server and closes the session.
+    /// Reads `scope` from one fixture server as `account`, and closes the
+    /// session.
     ///
     /// The answer outlives the session on purpose: a [`Catalogue`] owns its
     /// rows, so the one connection of `NFR-PERF-004` is closed as soon as the
     /// read ends.
-    fn read_from(server: &fixture::Server, scope: Scope<'_>) -> Catalogue {
+    fn read_as(server: &fixture::Server, account: (&str, &str), scope: Scope<'_>) -> Catalogue {
         let scratch = Scratch::new();
-        let resolved = settings(&scratch, server.address());
+        let resolved = settings(&scratch, server.address(), account);
         let target = Target::of(&resolved).expect("the entry names a host");
         let clock = settings::clock(None);
 
@@ -314,6 +336,30 @@ mod tests {
         session.close();
 
         catalogue
+    }
+
+    /// Reads `scope` from one fixture server as the privileged account.
+    fn read_from(server: &fixture::Server, scope: Scope<'_>) -> Catalogue {
+        read_as(server, ROOT, scope)
+    }
+
+    /// Reads `scope` from one fixture server as the reduced-grant reader.
+    fn read_reduced(server: &fixture::Server, scope: Scope<'_>) -> Catalogue {
+        read_as(server, REDUCED, scope)
+    }
+
+    /// The property names one object's marking carries, or [`None`] where the
+    /// object carries no marking at all (`FR-PRIV-007`).
+    fn marked<'a>(
+        marking: Option<&'a crate::model::restricted::Restricted<'a>>,
+    ) -> Option<Vec<&'a str>> {
+        marking.map(|marking| {
+            marking
+                .properties()
+                .iter()
+                .map(std::convert::AsRef::as_ref)
+                .collect()
+        })
     }
 
     /// Runs `body` against every series of `FR-SRV-015`, or reports the skip.
@@ -1110,6 +1156,296 @@ mod tests {
         );
     }
 
+    #[test]
+    fn fr_priv_011_a_view_whose_definition_is_the_empty_string_is_reported_incomplete() {
+        // FR-PRIV-011, the first shape of FR-PRIV-018, observed rather than
+        // simulated: the reduced-grant reader holds no SHOW VIEW, so all five
+        // views arrive with every attribute and an empty definition. The row
+        // is present, which is why the check is on the value and not on a
+        // count of rows.
+        on_every_series(
+            "fr_priv_011_a_view_whose_definition_is_the_empty_string_is_reported_incomplete",
+            |server| {
+                let catalogue = read_reduced(server, Scope::Everything);
+                let model = catalogue.model().expect("the rows fold");
+
+                assert_eq!(model.views.len(), 5, "{}", server.name());
+
+                for view in &model.views {
+                    assert!(view.definition.is_empty(), "{}", view.name);
+                    assert_eq!(
+                        marked(view.restricted.as_ref()),
+                        Some(vec!["definition"]),
+                        "{}",
+                        view.name
+                    );
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn fr_priv_017_a_routine_whose_body_is_null_is_reported_incomplete() {
+        // FR-PRIV-017, the second shape of FR-PRIV-018. The catalogue answers
+        // SQL NULL and not the empty string, and the model has no shape for a
+        // NULL, so the verdict is taken on the row: the same reader sees all
+        // seven routines and every one of their bodies is gone.
+        on_every_series(
+            "fr_priv_017_a_routine_whose_body_is_null_is_reported_incomplete",
+            |server| {
+                let catalogue = read_reduced(server, Scope::Everything);
+                let model = catalogue.model().expect("the rows fold");
+
+                assert_eq!(model.routines.len(), 7, "{}", server.name());
+
+                for routine in &model.routines {
+                    assert_eq!(
+                        marked(routine.restricted.as_ref()),
+                        Some(vec!["body"]),
+                        "{}",
+                        routine.name
+                    );
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn fr_priv_019_a_key_column_under_no_referential_constraint_row_marks_both_ends() {
+        // FR-PRIV-019, the third shape of FR-PRIV-018. The reduced reader
+        // receives zero rows from REFERENTIAL_CONSTRAINTS and every row from
+        // KEY_COLUMN_USAGE, so the fixture's 15 keys are seen as 17 columns
+        // under no rule at all. Nine tables lose their outgoing rules and nine
+        // lose their incoming ones; four tables are in both lists.
+        on_every_series(
+            "fr_priv_019_a_key_column_under_no_referential_constraint_row_marks_both_ends",
+            |server| {
+                let catalogue = read_reduced(server, Scope::Everything);
+                let model = catalogue.model().expect("the rows fold");
+
+                assert!(catalogue.rows(Read::ForeignKeyRules).is_empty());
+                assert_eq!(catalogue.rows(Read::KeyColumns).len(), 17);
+
+                let referencing = ["cargo_item", "document", "voyage_leg"];
+                let referenced = ["charge_code", "customer", "vessel"];
+                let both = ["consignment", "container", "customs_declaration", "voyage"];
+
+                for table in &model.tables {
+                    let expected = if both.contains(&table.name()) {
+                        Some(vec!["foreign_keys", "referenced_by"])
+                    } else if referencing.contains(&table.name()) {
+                        Some(vec!["foreign_keys"])
+                    } else if referenced.contains(&table.name()) {
+                        Some(vec!["referenced_by"])
+                    } else {
+                        continue;
+                    };
+
+                    assert_eq!(marked(table.restricted()), expected, "{}", table.name());
+                    assert!(table.foreign_keys().is_empty(), "{}", table.name());
+                    assert!(table.referenced_by().is_empty(), "{}", table.name());
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn fr_priv_007_a_complete_object_in_a_marked_document_carries_no_marking() {
+        // FR-PRIV-007: the marking is per object, per FR-PRIV-006, so the
+        // three tables the fixture's foreign keys reach from neither end are
+        // unmarked in the same document that marks fourteen others. The whole
+        // of a privileged read is unmarked, which is the same requirement from
+        // the other side.
+        on_every_series(
+            "fr_priv_007_a_complete_object_in_a_marked_document_carries_no_marking",
+            |server| {
+                let reduced = read_reduced(server, Scope::Everything);
+                let reduced = reduced.model().expect("the rows fold");
+                let unmarked: Vec<&str> = reduced
+                    .tables
+                    .iter()
+                    .filter(|table| table.restricted().is_none())
+                    .map(crate::model::table::Table::name)
+                    .collect();
+
+                assert_eq!(unmarked, ["audit_event", "legacy_edi_field", "tariff"]);
+
+                let whole = read_from(server, Scope::Everything);
+                let whole = whole.model().expect("the rows fold");
+
+                for table in &whole.tables {
+                    assert_eq!(marked(table.restricted()), None, "{}", table.name());
+                }
+                for view in &whole.views {
+                    assert_eq!(marked(view.restricted.as_ref()), None, "{}", view.name);
+                }
+                for routine in &whole.routines {
+                    assert_eq!(
+                        marked(routine.restricted.as_ref()),
+                        None,
+                        "{}",
+                        routine.name
+                    );
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn fr_priv_015_no_object_kind_but_a_view_and_a_foreign_key_is_cross_checked() {
+        // FR-PRIV-015 with FR-PRIV-020. The reduced reader also receives zero
+        // rows from the trigger catalogue, and nothing anywhere says so: the
+        // six triggers of the fixture are simply absent, the tables that
+        // carried them are marked only for what the foreign-key check found,
+        // and no marking in the document names a property outside the four.
+        on_every_series(
+            "fr_priv_015_no_object_kind_but_a_view_and_a_foreign_key_is_cross_checked",
+            |server| {
+                let catalogue = read_reduced(server, Scope::Everything);
+                let model = catalogue.model().expect("the rows fold");
+                let triggers: usize = model.tables.iter().map(|t| t.triggers().len()).sum();
+
+                assert!(catalogue.rows(Read::Triggers).is_empty());
+                assert_eq!(triggers, 0);
+
+                let named: Vec<&str> = model
+                    .tables
+                    .iter()
+                    .filter_map(|table| marked(table.restricted()))
+                    .chain(
+                        model
+                            .views
+                            .iter()
+                            .filter_map(|v| marked(v.restricted.as_ref())),
+                    )
+                    .chain(
+                        model
+                            .routines
+                            .iter()
+                            .filter_map(|r| marked(r.restricted.as_ref())),
+                    )
+                    .flatten()
+                    .collect();
+
+                assert!(!named.is_empty());
+                for property in &named {
+                    assert!(
+                        ["body", "definition", "foreign_keys", "referenced_by"].contains(property),
+                        "{property}"
+                    );
+                }
+
+                // The table `audit_event` carries no key at either end and
+                // three of the fixture's six triggers; it is complete, and its
+                // hidden triggers are the limit FR-PRIV-020 states.
+                let audit = model
+                    .tables
+                    .iter()
+                    .find(|table| table.name() == "audit_event")
+                    .expect("the fixture carries it");
+
+                assert_eq!(marked(audit.restricted()), None);
+            },
+        );
+    }
+
+    #[test]
+    fn fr_priv_012_a_read_that_names_one_object_performs_the_same_checks() {
+        // FR-PRIV-012: every read that presents the property performs the
+        // check, so the narrowed forms of FR-SCH-008 and the dump agree with
+        // the schema-wide read rather than each carrying a check of its own.
+        on_every_series(
+            "fr_priv_012_a_read_that_names_one_object_performs_the_same_checks",
+            |server| {
+                let view = read_reduced(server, Scope::View("v_consignment_manifest"));
+                let view = view.model().expect("the rows fold");
+
+                assert_eq!(
+                    marked(view.views[0].restricted.as_ref()),
+                    Some(vec!["definition"])
+                );
+
+                let routine = read_reduced(
+                    server,
+                    Scope::Routine {
+                        name: "sp_book_consignment",
+                        kind: None,
+                    },
+                );
+                let routine = routine.model().expect("the rows fold");
+
+                assert_eq!(
+                    marked(routine.routines[0].restricted.as_ref()),
+                    Some(vec!["body"])
+                );
+
+                let table = read_reduced(server, Scope::Table("consignment"));
+                let table = table.model().expect("the rows fold");
+
+                assert_eq!(
+                    marked(table.tables[0].restricted()),
+                    Some(vec!["foreign_keys", "referenced_by"])
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn fr_priv_003_a_named_object_that_came_back_short_yields_the_verdict_that_owes_77() {
+        // FR-PRIV-003 and FR-PRIV-004: the caller that named the object
+        // receives a verdict rather than half of it, and FR-PRIV-013 puts the
+        // property in the message. The code is read from the verdict; nothing
+        // here emits it, because no command that names an object exists yet.
+        on_every_series(
+            "fr_priv_003_a_named_object_that_came_back_short_yields_the_verdict_that_owes_77",
+            |server| {
+                let view = read_reduced(server, Scope::View("v_consignment_manifest"));
+                let view = view.model().expect("the rows fold");
+                let refused = completeness::of_view(&view.views[0])
+                    .expect_err("the definition did not come back");
+
+                assert_eq!(refused.exit_code(), 77);
+
+                let rendered = crate::diagnostics::rendered(&refused);
+
+                assert!(
+                    rendered.contains("the definition of view 'v_consignment_manifest'"),
+                    "{rendered}"
+                );
+                for credential in [REDUCED.1, ROOT.1, "password"] {
+                    assert!(!rendered.contains(credential), "{rendered}");
+                }
+
+                let routine = read_reduced(
+                    server,
+                    Scope::Routine {
+                        name: "sp_book_consignment",
+                        kind: None,
+                    },
+                );
+                let routine = routine.model().expect("the rows fold");
+                let refused = completeness::of_routine(&routine.routines[0])
+                    .expect_err("the body did not come back");
+
+                assert_eq!(refused.exit_code(), 77);
+
+                let table = read_reduced(server, Scope::Table("consignment"));
+                let table = table.model().expect("the rows fold");
+                let refused = completeness::of_table(&table.tables[0])
+                    .expect_err("the referential rules did not come back");
+
+                assert_eq!(refused.exit_code(), 77);
+
+                // FR-PRIV-007 from the caller's side: a table the shortfall
+                // did not reach answers the same read with no verdict at all.
+                let whole = read_reduced(server, Scope::Table("audit_event"));
+                let whole = whole.model().expect("the rows fold");
+
+                assert!(completeness::of_table(&whole.tables[0]).is_ok());
+            },
+        );
+    }
+
     /// Asserts that `names` is ordered by the comparison `NFR-DET-002` fixes.
     fn assert_ordered(names: &[&str]) {
         for pair in names.windows(2) {
@@ -1129,7 +1465,7 @@ mod tests {
     /// `NFR-PERF-001` fixes, taken to its floor.
     fn read_empty_schema(server: &fixture::Server) -> Vec<&'static str> {
         let scratch = Scratch::new();
-        let resolved = settings(&scratch, server.address());
+        let resolved = settings(&scratch, server.address(), ROOT);
         let target = Target::of(&resolved).expect("the entry names a host");
         let clock = settings::clock(None);
 

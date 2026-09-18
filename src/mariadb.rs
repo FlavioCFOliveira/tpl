@@ -40,10 +40,15 @@
 //! the first `SELECT` is composed, as `FR-SRV-022` requires, rather than
 //! discovered from a read that failed.
 //!
-//! **What this module does not do yet.** It takes no completeness verdict. The
-//! markings of `FR-PRIV-005` through `FR-PRIV-007` and the cross-checks of
-//! `privileges-and-completeness.md` are the task that follows, so a read a
-//! privilege truncated produces a model that is short and does not yet say so.
+//! **A read a privilege truncated says so.** The three shapes a shortfall
+//! reaches a reader in — the empty string, SQL `NULL` and zero rows, per
+//! `FR-PRIV-018` — are found by the `completeness` submodule of [`catalogue`] as the
+//! rows are mapped, and the object that is short carries the `restricted`
+//! marking of `FR-PRIV-016` while the object that is whole carries none.
+//!
+//! **What this module does not do yet** is answer with the `77` of
+//! `FR-PRIV-003`. The verdict exists and is a value; emitting the code is the
+//! caller's, and no command that names one object exists to be that caller.
 
 pub(crate) mod catalogue;
 pub(crate) mod connect;

@@ -127,17 +127,21 @@ pub(super) fn maybe_text<'r>(row: &'r MySqlRow, field: &str) -> Result<Option<&'
 /// The model carries a bare [`Cow<'a, str>`](std::borrow::Cow) wherever the
 /// catalogue field list records a value on every row it was observed on, and
 /// the catalogue nonetheless declares some of those fields nullable — a
-/// trigger's definer, a trigger's action statement, a routine's definition, a
-/// foreign key's unique-constraint name and its referenced table name. The
-/// empty string is what an absent one becomes, because the model has no shape
-/// for an absent one and this task may not give it one.
+/// trigger's definer, a trigger's action statement, a foreign key's
+/// unique-constraint name and its referenced table name. The empty string is
+/// what an absent one becomes, because the model has no shape for an absent one
+/// and this task may not give it one.
 ///
 /// **This is a recorded limit and not a value the catalogue produced.** No row
-/// of the fixture returned SQL `NULL` in any of those five fields on any of
-/// the four series, so nothing observed reaches this substitution. The one
-/// case a requirement already foresees is a routine body a reader's privileges
-/// do not reach, which `FR-PRIV-015` records as self-announcing SQL `NULL` and
-/// which the completeness verdict marks rather than this reader.
+/// of the fixture returned SQL `NULL` in any of those four fields on any of the
+/// four series, so nothing observed reaches this substitution.
+///
+/// *A routine's definition was on that list and is no longer read through this
+/// accessor.* `FR-PRIV-017` makes SQL `NULL` there a **missing privilege**, and
+/// the substitution would make it indistinguishable from a body that is
+/// genuinely empty, so [`super::fold`] reads that one field's nullity with
+/// [`maybe_text`] and substitutes at the point it has already taken the
+/// verdict. The model's field is unchanged and still cannot carry a `NULL`.
 #[track_caller]
 pub(super) fn text_or_empty<'r>(row: &'r MySqlRow, field: &str) -> Result<&'r str, Error> {
     Ok(maybe_text(row, field)?.unwrap_or_default())

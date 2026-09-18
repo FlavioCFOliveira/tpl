@@ -22,10 +22,13 @@
 //! | `model` | The structure a database is read as: the covered object kinds of `FR-CAT-001`, `FR-CAT-007` and `FR-CAT-008` with the field lists of `FR-CAT-042` and `FR-CAT-045` … `FR-CAT-051`, the per-column decomposition of `FR-CTX-011` … `FR-CTX-018` and `FR-CTX-037` … `FR-CTX-041`, the `server` and `database` objects of `FR-CTX-031` … `FR-CTX-036`, the `restricted` marking of `FR-PRIV-016`, and the refusals of `FR-CAT-024` and `FR-CTX-021` |
 //! | `model::document` | The one document that carries the model in both directions: the collection shape of `FR-CTX-003` … `FR-CTX-005`, the one-hop embedding of `FR-CTX-006` … `FR-CTX-010`, the orderings of `NFR-DET-002`, and the read-back `FR-CTX-033` admits |
 //! | `mariadb` | The one connection of `NFR-PERF-004`, the TLS mode of `FR-CONF-037` and `ADR-002`, the read-only session of `FR-SRV-008` … `FR-SRV-011`, the version probe of `FR-SRV-002` with the window of `FR-SRV-015`, and the classification `OD-06` drops the driver's error at |
-//! | `mariadb::catalogue` | The fixed repertoire of catalogue queries — one per object kind, whose count `NFR-PERF-001` and `NFR-PERF-002` fix — the common column lists of `FR-SRV-037`, and the fold that turns their rows into the model |
+//! | `mariadb::catalogue` | The fixed repertoire of catalogue queries — one per object kind, whose count `NFR-PERF-001` and `NFR-PERF-002` fix — the common column lists of `FR-SRV-037`, the fold that turns their rows into the model, and the completeness verdict of `FR-PRIV-001` … `FR-PRIV-019` it takes as it folds |
 //!
-//! The completeness verdicts of `privileges-and-completeness.md` and the render
-//! environment are added by the tasks that follow.
+//! A read is therefore already honest about what a reader's privileges did not
+//! reach: an object that came back short carries the `restricted` marking of
+//! `FR-PRIV-016`, and a caller that named one object has the verdict
+//! `FR-PRIV-003` owes `77` for. The render environment, and the commands that
+//! turn that verdict into an exit code, are added by the tasks that follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

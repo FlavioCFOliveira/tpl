@@ -67,13 +67,35 @@
 //! sixth referential action would be read up to the row that carries it and
 //! then refused. The cost is recorded here rather than discovered: the
 //! alternative is a document that silently disagrees with the server.
+//!
+//! # Where the fold takes the completeness verdict
+//!
+//! The three checks of [`super::completeness`] are made **here**, on the row,
+//! as the model is built — never on the finished model. Two of the three would
+//! be wrong if they were made later: a routine's body reaches the model as the
+//! empty string whether the catalogue returned SQL `NULL` or an empty body, and
+//! a foreign key whose rules row is missing reaches the model as no foreign key
+//! at all, which is indistinguishable from a table that declares none.
+//!
+//! | Where | Check | Marks | Fixed by |
+//! |---|---|---|---|
+//! | [`views`] | The definition is the empty string | That view, with `definition` | `FR-PRIV-011` |
+//! | [`routine`] | The body is SQL `NULL` | That routine, with `body` | `FR-PRIV-017` |
+//! | [`foreign_keys`] | A key column has no referential-constraint row | The referencing table with `foreign_keys`, and the referenced one with `referenced_by` | `FR-PRIV-019` |
+//!
+//! Because the fold is the one path every read takes, `FR-PRIV-012` holds for
+//! the narrowed reads and for the dump without a call site of their own. No
+//! other object kind is cross-checked, per `FR-PRIV-015`, and no marking this
+//! fold writes ever names `triggers`, per `FR-PRIV-020`.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::panic::Location;
 
 use sqlx::mysql::MySqlRow;
 
 use super::Catalogue;
+use super::completeness::{self, Marking, Property};
 use super::row::{count, maybe_count, maybe_signed, maybe_text, signed, text, text_or_empty};
 use super::statements::Read;
 use crate::error::Error;
@@ -439,6 +461,12 @@ fn index<'a>(row: &'a MySqlRow, name: &'a str, first: IndexColumn<'a>) -> Result
 /// The two reads are joined here because neither catalogue table is
 /// sufficient: the rules table carries the rules and names no column, and the
 /// key-column table carries the columns and no rule.
+///
+/// That independence is also what `FR-PRIV-019` detects: a privilege that
+/// removes the rules table entirely leaves the key-column table whole, so a
+/// column that names a referenced table under no rules row is the third shape
+/// of `FR-PRIV-018` — zero rows — seen from the only place the catalogue offers
+/// a second view of the same population.
 fn foreign_keys<'a>(
     rules: &'a [MySqlRow],
     key_columns: &'a [MySqlRow],
@@ -446,6 +474,10 @@ fn foreign_keys<'a>(
 ) -> Result<(), Error> {
     let mut carried = Vec::with_capacity(rules.len());
     let mut positions = Vec::with_capacity(rules.len());
+    // One marking per table that lost a property, built only where there is a
+    // shortfall: the map allocates nothing on a complete read, and its order
+    // is its own rather than the rows'.
+    let mut unreadable: BTreeMap<&'a str, Marking> = BTreeMap::new();
 
     for row in rules {
         let table = text(row, "TABLE_NAME")?;
@@ -458,22 +490,47 @@ fn foreign_keys<'a>(
     let positions = Positions::of(positions);
 
     for row in key_columns {
-        let key = (text(row, "TABLE_NAME")?, text(row, "CONSTRAINT_NAME")?);
+        let table = text(row, "TABLE_NAME")?;
+        let key = (table, text(row, "CONSTRAINT_NAME")?);
+        // FR-PRIV-019's antecedent, read as the field it is stated over. The
+        // statement already restricts the read to rows that name a referenced
+        // table, per `FR-CAT-045`, so this is the name the other end is marked
+        // by rather than a second filter.
+        let referenced = maybe_text(row, "REFERENCED_TABLE_NAME")?;
         let pair = ForeignKeyColumn {
             column: Cow::Borrowed(text(row, "COLUMN_NAME")?),
             referenced_column: Cow::Borrowed(text_or_empty(row, "REFERENCED_COLUMN_NAME")?),
         };
+        let at = positions.find(key);
 
-        // A column whose rules row is absent is not presented: the two
-        // catalogue tables are lost independently under a reduced privilege,
-        // which is the shortfall `FR-PRIV-019` detects and the completeness
-        // verdict reports.
-        let Some(rule) = positions.find(key).and_then(|at| carried.get_mut(at)) else {
+        // FR-PRIV-019: the column names a table it references, and no rules row
+        // describes the constraint it belongs to. The two observations
+        // contradict each other — a column cannot reference a table under no
+        // constraint — and one explanation fits. Both ends lose a property,
+        // because `FR-CAT-045` presents one key from two of them.
+        if let Some(referenced) = referenced
+            && completeness::no_row(at)
+        {
+            unreadable
+                .entry(table)
+                .or_default()
+                .record(Property::ForeignKeys);
+            unreadable
+                .entry(referenced)
+                .or_default()
+                .record(Property::ReferencedBy);
+        }
+
+        // A column whose rules row is absent is not presented: there is no rule
+        // for it to be a column of.
+        let Some(rule) = at.and_then(|at| carried.get_mut(at)) else {
             continue;
         };
 
         rule.key.columns.push(pair);
     }
+
+    mark(unreadable, tables);
 
     for rule in carried {
         // FR-CAT-013 carries the same key on the referenced table, so the two
@@ -498,6 +555,27 @@ fn foreign_keys<'a>(
     }
 
     Ok(())
+}
+
+/// Writes each shortfall onto the table it belongs to (`FR-PRIV-005` …
+/// `FR-PRIV-007`).
+///
+/// `FR-PRIV-006` requires the marking to be **per object**, so each table is
+/// given the properties it lost and no table is given another's. A table the
+/// coverage filter of `FR-CAT-052` did not carry is marked nowhere, because it
+/// is presented nowhere.
+///
+/// This is the only writer of a table's marking, so the assignment replaces
+/// nothing: `FR-PRIV-015` admits no second cross-check for a table, and the
+/// three other member reads mark nothing at all.
+fn mark(unreadable: BTreeMap<&str, Marking>, tables: &mut Tables<'_>) {
+    for (name, marking) in unreadable {
+        if let Some(at) = tables.position(name)
+            && let Some(table) = tables.at(at)
+        {
+            table.restricted = marking.sealed();
+        }
+    }
 }
 
 /// One foreign key's rules row, with an empty column list (`FR-CAT-045`).
@@ -633,14 +711,24 @@ fn assemble(tables: Tables<'_>) -> Result<Vec<Table<'_>>, Error> {
     Ok(assembled)
 }
 
-/// The views of the view read (`FR-CAT-007`, `FR-CAT-047`).
+/// The views of the view read (`FR-CAT-007`, `FR-CAT-047`, `FR-PRIV-011`).
 fn views(rows: &[MySqlRow]) -> Result<Vec<View<'_>>, Error> {
     let mut views = Vec::with_capacity(rows.len());
 
     for row in rows {
+        // FR-PRIV-011, the first shape of FR-PRIV-018. The row is present and
+        // carries every other field; only the definition is short, and it is
+        // short by being the empty string rather than by being absent.
+        let definition = text(row, "VIEW_DEFINITION")?;
+        let mut marking = Marking::default();
+
+        if completeness::empty_string(definition) {
+            marking.record(Property::Definition);
+        }
+
         views.push(View {
             name: Cow::Borrowed(text(row, "TABLE_NAME")?),
-            definition: Cow::Borrowed(text(row, "VIEW_DEFINITION")?),
+            definition: Cow::Borrowed(definition),
             check_option: Cow::Borrowed(text(row, "CHECK_OPTION")?),
             is_updatable: yes(row, "IS_UPDATABLE")?,
             definer: Cow::Borrowed(text(row, "DEFINER")?),
@@ -648,11 +736,10 @@ fn views(rows: &[MySqlRow]) -> Result<Vec<View<'_>>, Error> {
             character_set_client: Cow::Borrowed(text(row, "CHARACTER_SET_CLIENT")?),
             collation_connection: Cow::Borrowed(text(row, "COLLATION_CONNECTION")?),
             algorithm: Cow::Borrowed(text(row, "ALGORITHM")?),
-            // The completeness verdict of `FR-PRIV-005` … `FR-PRIV-007` is
-            // the task that follows this one; a read that reached every field
-            // carries no marking, which is what `FR-PRIV-007` requires of a
-            // complete object.
-            restricted: None,
+            // FR-PRIV-005 marks the view that is short; FR-PRIV-007 leaves
+            // every other view of the same document unmarked, which is what
+            // sealing an empty marking answers.
+            restricted: marking.sealed(),
         });
     }
 
@@ -704,10 +791,22 @@ fn routines<'a>(
     Ok(routines)
 }
 
-/// One routine, with an empty parameter list (`FR-CAT-048`).
+/// One routine, with an empty parameter list (`FR-CAT-048`, `FR-PRIV-017`).
 fn routine<'a>(row: &'a MySqlRow, name: &'a str, declared: &str) -> Result<Routine<'a>, Error> {
     let kind = RoutineKind::from_catalogue(declared)
         .ok_or_else(|| refused(ENUMERATED, Location::caller()))?;
+    // FR-PRIV-017, the second shape of FR-PRIV-018. The **nullity** is the
+    // observation, and it is read from the row rather than from the model:
+    // `Routine::body` cannot carry SQL `NULL`, and the empty string it becomes
+    // is what a body that is genuinely empty carries too, so a verdict taken
+    // over the folded model could not tell the two apart. The substitution
+    // itself is unchanged and stays the recorded limit `super::row` states.
+    let body = maybe_text(row, "ROUTINE_DEFINITION")?;
+    let mut marking = Marking::default();
+
+    if completeness::sql_null(body) {
+        marking.record(Property::Body);
+    }
 
     Ok(Routine {
         name: Cow::Borrowed(name),
@@ -722,7 +821,7 @@ fn routine<'a>(row: &'a MySqlRow, name: &'a str, declared: &str) -> Result<Routi
             RoutineKind::Function => Some(declared_type(row)?),
         },
         parameters: Vec::new(),
-        body: Cow::Borrowed(text_or_empty(row, "ROUTINE_DEFINITION")?),
+        body: Cow::Borrowed(body.unwrap_or_default()),
         body_kind: Cow::Borrowed(text(row, "ROUTINE_BODY")?),
         parameter_style: Cow::Borrowed(text(row, "PARAMETER_STYLE")?),
         is_deterministic: yes(row, "IS_DETERMINISTIC")?,
@@ -734,7 +833,9 @@ fn routine<'a>(row: &'a MySqlRow, name: &'a str, declared: &str) -> Result<Routi
         character_set_client: Cow::Borrowed(text(row, "CHARACTER_SET_CLIENT")?),
         collation_connection: Cow::Borrowed(text(row, "COLLATION_CONNECTION")?),
         database_collation: Cow::Borrowed(text(row, "DATABASE_COLLATION")?),
-        restricted: None,
+        // FR-PRIV-005 and FR-PRIV-007, as the view read applies them: this
+        // routine alone, and only where the body did not come back.
+        restricted: marking.sealed(),
     })
 }
 
