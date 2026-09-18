@@ -1,7 +1,7 @@
 ---
 title: Architecture
 status: draft
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 related: [README.md, traceability.md, open-decisions.md, overview.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -438,6 +438,130 @@ The model's own shape, what it materialises and what it refuses to materialise,
 are [data-model.md](data-model.md#the-model-in-memory)'s. That the library API
 carrying it is not a public surface is
 [overview.md](overview.md#the-library-api-is-not-a-public-surface)'s.
+
+### Inside `model/`
+
+`model/` is divided by **object kind**, one module per kind, beside four modules
+that are not kinds — the two decompositions a column carries, the marking an
+incomplete object carries, and the document — and a module root holding what two
+of those decompositions share. Each part is named here by what it owns and by
+the requirement that fixes it; which fields each kind carries is
+[data-model.md](data-model.md#from-a-catalogue-field-list-to-a-model-property-list)'s
+and is not repeated.
+
+| Part | What it owns | Serves |
+|---|---|---|
+| `model.rs` | The one unescaping convention the two quoted forms share — a literal default's value, and a member of an `ENUM` or a `SET` | `FR-CTX-037` with `FR-CTX-039` |
+| `database.rs` | The root: three metadata fields, the `server` object, the three collections the three covered kinds stand in | `FR-CAT-001`, `FR-CAT-007`, `FR-CAT-008`, `FR-CTX-035`, `FR-CTX-036` |
+| `server.rs` | The three keys, the series derivation, and the two constructors that keep a probe apart from a supplied document | `FR-CTX-031` … `FR-CTX-034`, `BR-CTX-006`, `FR-SRV-040` |
+| `table.rs` | The coverage predicate over the table-type string, everything a table carries, and the one constructor a table has | `FR-CAT-001` … `FR-CAT-006`, `FR-CAT-009` … `FR-CAT-015`, `FR-CAT-031`, `FR-CAT-032`, `FR-CAT-043`, `FR-CAT-044`, `FR-SCH-009` |
+| `column.rs` | A column's own row, the table it names, and the static attributes read from one catalogue field | `FR-SCH-009`, `FR-CAT-027`, `FR-CAT-035`, `FR-CAT-041`, `FR-CAT-051`, `FR-CTX-019`, `FR-CTX-020`, `FR-CTX-021` |
+| `column_type.rs` | The raw string, the eight parts, and the member scan by quote state | `FR-CAT-034`, `FR-CAT-038`, `FR-CTX-014` … `FR-CTX-018`, `FR-CTX-038` … `FR-CTX-041` |
+| `column_default.rs` | The three-way discriminant and the eight-row classifier applied in order | `FR-CTX-011` … `FR-CTX-013`, `FR-CTX-037`, `BR-CTX-002` |
+| `index.rs` | The fold to one object with an ordered column list, and the name a primary key is told by | `FR-CAT-010`, `FR-CAT-042`, `FR-CAT-043` |
+| `foreign_key.rs` | One list of column **pairs**, the four reachable rules, and the incoming direction | `FR-CAT-012`, `FR-CAT-013`, `FR-CAT-033`, `FR-CAT-045` |
+| `check_constraint.rs`, `trigger.rs`, `view.rs`, `routine.rs` | One kind each, at the field list its own requirement fixes | `FR-CAT-037`, `FR-CAT-046`; `FR-CAT-050`; `FR-CAT-007`, `FR-CAT-040`, `FR-CAT-047`; `FR-CAT-008`, `FR-CAT-016` … `FR-CAT-018`, `FR-CAT-048`, `FR-CAT-049` |
+| `restricted.rs` | The marking: never empty, and present only on an incomplete object | `FR-PRIV-005` … `FR-PRIV-007`, `FR-PRIV-016` |
+| `document/` | The document in both directions, over the four shapes that differ from the model | `FR-CTX-001` … `FR-CTX-010`, `FR-CTX-023`, `FR-CTX-033`, `NFR-DET-002` |
+
+**Two rows rest on a recorded gap and are marked so here.** No requirement fixes
+the catalogue field list for the **table** row or for the **column** row, so the
+two rows above name the requirements that fix individual properties and not a
+field list. The gap is
+[data-model.md](data-model.md#from-a-catalogue-field-list-to-a-model-property-list)'s
+and is the functional owner's to close; nothing in this section may be read as
+closing it.
+
+**Three requirements are answered across the block rather than by one part**,
+and each is named here so that the absence of a row is not read as an omission.
+`FR-CAT-036` and `FR-CAT-039` bound what a comment and a default may be taken
+for, and each is recorded on the field it reaches — a table's comment, a
+column's, and a column's default. `FR-CTX-022` answers the two facts
+`FR-CTX-021` refuses to materialise, from the table a column names, on the
+ground `BR-CTX-003` gives — one statement of each fact; the tests themselves are
+`render/`'s. `BR-CAT-005` is the rule every field list above was derived by, and
+it is the first of the four construction choices below.
+
+**Only the object graph is published.** `model/` is one of the two `pub`
+modules ([`OD-05`](open-decisions.md#od-05--the-module-decomposition)) and the
+document submodule under it is not: the document is contract and the types that
+write it are not, which is
+[overview.md](overview.md#the-library-api-is-not-a-public-surface)'s reading of
+`DIV-032` applied one level down.
+
+**Four things the block does not do**, each because a component named in the
+map above owns it.
+
+| Not here | Where | Why |
+|---|---|---|
+| Any statement to a server, and the lossy conversion of catalogue bytes | `mariadb/` | `FR-SRV-006`, `FR-SRV-007`, `FR-OUT-017`; the model holds only valid text ([interfaces.md](interfaces.md#the-catalogue-reader)) |
+| The envelope, the two forms, escaping, the writer | `output/` | `FR-OUT-024`, `FR-OUT-032`; the document is handed over as a value and no byte of it is composed here |
+| Opening the file a supplied document is read from | The caller | The read-back direction is given bytes, so the one path that opens a file stays outside the model |
+| The three privilege detections | `mariadb/privileges.rs` | Each is a property of a **read** and not of the model (`BR-PRIV-003`, [`OD-05`](open-decisions.md#od-05--the-module-decomposition)); only the marking they produce is carried here |
+
+### Four construction choices inside `model/`
+
+Each is a choice the corpus leaves open, and each is made once so that a
+requirement holds by construction rather than by every later caller
+remembering it.
+
+| Choice | What it is | Ground |
+|---|---|---|
+| **Refusal is an absent field, not a filter** | A field excluded on one of the four grounds has no field in any type, so there is nothing for a later reader, emitter or caller to write into | `BR-CAT-005`, `FR-CAT-024`, `FR-CAT-026`, `FR-CAT-029` — whose list is empty, so it excludes nothing today — and `FR-CTX-021`. `FR-CAT-026` binds six consumers, and a filter would be six places to forget |
+| **Every collection is ordered where it is built** | One byte-wise comparator, called once per collection at the point that collection of the document is assembled; an excepted collection says so at its own call site | `NFR-DET-002`. The three exceptions the default rule would corrupt are unreachable by it, because the default rule is bounded by a trait their member types do not implement. **Which component applies an ordering** is recorded as a discrepancy in [interfaces.md](interfaces.md#ordering-one-default-and-six-exceptions) and is not settled here |
+| **The one-hop cut is a type parameter** | One table shape, instantiated twice: at the first hop a reference resolves to a table, one hop in it resolves to a name. A traversal terminates because a name carries no table | `FR-CTX-006` … `FR-CTX-010`, `BR-CTX-001`, [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md). There is no depth counter and no visited set, so the three shapes `FR-CTX-009` enumerates are one rule, which is the constant depth `BR-CTX-001` chose |
+| **Key order is the type's field order** | Serialisation is derived throughout, with two projections onto a private shape; no unordered map appears on the emitting path | `FR-OUT-013`, [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions). The two projections, and the four shapes that are not the model's own types, are [interfaces.md](interfaces.md#the-two-directions-over-the-document)'s |
+
+Three further refusals are structural in the same way and are stated so they
+are not read as omissions: a referential action the server discards silently
+has no variant (`FR-CAT-033`); a table type the model does not cover has none
+either (`FR-CAT-003` … `FR-CAT-006`, `FR-CAT-031`); and a key cannot name a
+column its table does not carry, which the one constructor a table has enforces
+(`FR-CAT-044`).
+
+### The document, in both directions
+
+One subject, two directions, and they are inverse because they are two
+directions over one set of types rather than two routines kept in step
+(`FR-SCH-022`, `BR-SCH-004`,
+[`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)).
+
+| Direction | What it does | What it may not do |
+|---|---|---|
+| Outward | Materialises both embeddings from a model whose references are names, orders every collection, and yields the value `output/` emits | Compose a byte. A foreign key naming a table the model does not carry is `70`, which `FR-CTX-023` makes unreachable on this path |
+| Inward | Reads a supplied document back as a model, undoing the embedding by taking the name out of each embedded object | Repair anything, and validate `series` against the supported window or `standing` against `series` (`FR-CTX-033`). A document that fails the contract is `65` (`FR-RND-020`) |
+
+The checks the inward direction makes, and the four it is forbidden or has no
+reason to make, are
+[interfaces.md](interfaces.md#the-two-directions-over-the-document)'s.
+
+**Neither direction has a caller yet.** `tpl schema dump` emits the document
+and `tpl render --context` consumes it, and both commands are a later sprint;
+the block that owns the model owns the document it is written as, so the two
+directions exist ahead of the commands that reach them. This is the same
+interim shape [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation)
+records for a parsed leaf, seen from the other end.
+
+### What `model/` does not answer of the two files it is built from
+
+Eighteen requirements of the two files are answered elsewhere, and none of them
+is an omission. Every other requirement of
+`specification/catalogue-coverage.md` and
+`specification/context-document.md` is answered by a part of the table above.
+
+| Not answered here | Which | Where it is answered |
+|---|---|---|
+| The rules that close the two exclusion lists, and the four grounds behind them | `FR-CAT-025`, `FR-CAT-030`, `BR-CAT-001` … `BR-CAT-004` | They govern what may **enter** a list, which is a change to the corpus and not a code path. [data-model.md](data-model.md#the-two-closed-exclusion-lists) |
+| Coverage applied before `--pattern`, and applied to the column read as well as the object read | `FR-CAT-028`, `FR-CAT-052` | The reader, `mariadb/` ([interfaces.md](interfaces.md#the-catalogue-reader)) |
+| The document's obedience to the four transport rules | `FR-CTX-002` | The envelope and the emitter, `output/` |
+| What a cache-served document does not promise | `FR-CTX-024`, `FR-CTX-025`, `BR-CTX-004` | `cache/` ([data-model.md](data-model.md#what-a-cached-document-does-not-promise)) |
+| The three context variables that come from no server | `FR-CTX-026` … `FR-CTX-030`, `BR-CTX-005` | [Context assembly](#context-assembly), in `cli/` and `render/` |
+
+Two groups are answered here **by absence** rather than by a part, and are
+named so that the absence is not read as a gap: the five features excluded
+whole have no type at all (`FR-CAT-019` … `FR-CAT-023`), and the two table
+types excluded by kind have no variant (`FR-CAT-004`, `FR-CAT-005`, with
+`FR-CAT-003` and `FR-CAT-006` in the same predicate).
 
 ## The render component
 

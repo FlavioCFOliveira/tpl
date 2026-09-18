@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 related: [README.md, traceability.md]
 ---
 
@@ -9,8 +9,8 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Thirty entries, each a decision the repository could not settle on its own.
-**All thirty are settled. None is open.** Nineteen were settled by the product
+Thirty-one entries, each a decision the repository could not settle on its own.
+**All thirty-one are settled. None is open.** Nineteen were settled by the product
 owner in the interview of 2026-09-10, by the establishment of the decision
 register, and by the eighth edition of `/specification`; nine more were settled
 on 2026-09-11, together with all five residuals the eighth edition left inside
@@ -25,12 +25,20 @@ implementation found them unstated; and `OD-30`, the interim outcome of a leaf
 the parser accepts and no sprint has implemented yet. `OD-08` was amended the
 same day, against the behaviour the binary was observed to produce.
 
-One obligation survives the settlement, and it is named in its own entry rather
-than left to be inferred:
+**One entry was added on 2026-09-18**, when the model was built: `OD-31`, the
+shape of the model's types, which answers four of the five library-shape
+questions `DIV-032` hands to architecture. `OD-05`, `OD-18` and `OD-19` were
+re-read against the same build the same day; the first two carry a refinement
+and two amendments, and the third carries an observation now owed to
+`adr-guardian`.
+
+Two obligations survive the settlement, and each is named in its own entry
+rather than left to be inferred:
 
 | Entry | What is owed | To whom |
 |---|---|---|
 | `OD-14` | An observation about a **defined** `null` under `UndefinedBehavior::Strict`, unverified against the engine pin | `technical-writer` |
+| `OD-19` | The record's wording — *owned copy* — against a value whose members are borrowed from the model, and the memory consequence the record draws from it | `adr-guardian` |
 
 **Two further obligations were discharged by the ninth edition of
 `/specification`**, at commit `4ad5e8c` of 2026-09-11: `OD-28`'s amendment to
@@ -153,7 +161,7 @@ the reason [README.md](README.md#conventions) gives.
 | [OD-16](#od-16--the-tls-backend-and-the-root-store) | The TLS backend and the root store | Settled | — |
 | [OD-17](#od-17--observability) | Observability | Settled | — |
 | [OD-18](#od-18--serialisation-key-order-and-the-two-omissions) | Serialisation, key order, and the two omissions | Settled | — |
-| [OD-19](#od-19--whether-the-two-embeddings-are-materialised) | Whether the two embeddings are materialised | Settled | — |
+| [OD-19](#od-19--whether-the-two-embeddings-are-materialised) | Whether the two embeddings are materialised | Settled, with an observation owed | `adr-guardian` |
 | [OD-20](#od-20--edit-distance-and-the-other-small-algorithms) | Edit distance, and the other small algorithms | Settled | — |
 | [OD-21](#od-21--two-test-seams-that-must-not-be-on-the-published-surface) | Two test seams that must not be on the published surface | Settled | — |
 | [OD-22](#od-22--the-test-harness-and-the-fixture-certificate) | The test harness, and the fixture certificate | Settled | — |
@@ -165,11 +173,12 @@ the reason [README.md](README.md#conventions) gives.
 | [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Settled | — |
 | [OD-29](#od-29--the-json-command-tree-two-shapes-and-what-the-binary-publishes) | The JSON command tree: two shapes, and what the binary publishes | Settled | — |
 | [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled, interim | — |
+| [OD-31](#od-31--the-models-shape-strings-fields-and-the-attribute) | The model's shape: strings, fields, and the attribute | Settled | — |
 
-Twenty-nine entries are settled outright; `OD-14` alone carries an observation
-owed. Twenty-nine and one are the whole of the thirty. `OD-30` is settled and
-**interim**: it records an arrangement each later sprint removes one arm of, and
-it is discharged when no arm remains.
+Twenty-nine entries are settled outright; `OD-14` and `OD-19` each carry an
+observation owed. Twenty-nine and two are the whole of the thirty-one. `OD-30`
+is settled and **interim**: it records an arrangement each later sprint removes
+one arm of, and it is discharged when no arm remains.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
@@ -181,7 +190,8 @@ against the source named beside it — vendor documentation on `docs.rs`, the
 crate index, the Rust Edition Guide, the Rust Reference, the Rust Book, the
 Cargo Book, or a file of this repository. Each claim carries the date it was
 verified on: **2026-09-10** for the nineteen entries settled that day,
-**2026-09-11** for everything added since. Anything not verified says so in its
+**2026-09-11** for everything added since, and **2026-09-18** for the two
+library and format claims `OD-31` rests on. Anything not verified says so in its
 own text. No claim rests on recollection.
 
 **An entry reduced to a citation carries no source of its own**, and neither
@@ -354,6 +364,22 @@ them for reasons stated in
 [architecture.md](architecture.md#inside-project): `settings.rs`, because
 `FR-CFG-014` forbids the reader to resolve; `password.rs`, because the child
 belongs to the resolution; and `secret.rs`, because a credential is a type.
+
+**Refined on 2026-09-18, when `model/` was built: the document is a submodule of
+the model, and it is not a second home for presentation.** The placement row
+above rejects `output/` **under** `model/`, on the ground that it would make the
+model own its own presentation and put an escaping rule inside the type
+`FR-SCH-022` requires to round-trip unchanged. None of that moves: the envelope,
+the two forms, the escaping and the writer are `output/`'s, and `model/document/`
+composes no byte and opens no file. What sits under `model/` is the document's
+**shape** — its keys, and the two instantiations of the one-hop cut of
+`FR-CTX-009` — which is the model's own contract and the thing the round trip of
+`FR-SCH-022` is a property of. Thirteen modules sit beside it, and the
+division is [architecture.md](architecture.md#inside-model)'s. One placement
+inside the submodule is **not** settled by this refinement and is recorded as a
+discrepancy in
+[interfaces.md](interfaces.md#ordering-one-default-and-six-exceptions): which
+component applies the ordering of `NFR-DET-002` to the document's collections.
 
 **The name `diagnostics` rather than `diag`.** The project's own convention
 refuses obscure abbreviations in module names. The register named `diag/` as a
@@ -1187,6 +1213,33 @@ default, and a second appearance of the attribute is a visible change rather
 than a silent one. `verification` owes the test that counts the omissions in
 the seventeen documents.
 
+**Amended on 2026-09-18, when the model was built: the count is once per
+markable kind, not once in the crate.** `FR-PRIV-005` through `FR-PRIV-007` put
+the marking on a table, a view and a routine, and each is a type of its own, so
+the attribute is written three times over **one** field. The decision is
+unchanged and so is what it enforces — one field of the model is omissible, and
+every other `Option` serialises as `null` — and the enforceable form moves from
+a count of occurrences to the name of the field they are all on. The test
+`verification` owes is unaffected: it counts omissions in the documents, not
+attributes in the source.
+
+**Amended on the same day: four of the emitted shapes are not the model's own
+types.** This entry reads *the emitted types are the model's*, which holds for a
+column, an index, a trigger, a `CHECK` constraint, a view, a routine, the
+decomposed type, the `server` object and the marking. Four shapes differ, and
+all four differ for one reason — the embedding of `FR-CTX-006` and `FR-CTX-010`,
+which the model carries as a **name** and the document carries as an **object**:
+the `database` object, a table, a foreign key, and an entry of `referenced_by`.
+Two further shapes are the model's type **projected** onto a private shape, each
+because the document's shape is not one a derive over that type produces: a
+column default, whose discriminant `FR-CTX-012` puts inside the object beside a
+`value` the `null` form does not carry, and the marking, whose document shape
+`FR-PRIV-016` makes a bare array. Both projections are declared on the model
+type and apply in both directions, so key order is still a property of a type
+and the round trip is still inverse by construction — which is the whole of what
+this entry decided. The shapes are enumerated in
+[interfaces.md](interfaces.md#the-two-directions-over-the-document).
+
 **`--pretty`.** `FR-OUT-008` fixes a two-space indent, which is
 `serde_json`'s own default — "construct a pretty printer formatter that
 defaults to using two spaces for indentation" (docs.rs
@@ -1219,7 +1272,8 @@ It is not an emitting-path transformation and does not belong to `output/`.
 
 ## OD-19 — Whether the two embeddings are materialised
 
-**Status: settled. Recorded in [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md).**
+**Status: settled, with an observation owed to `adr-guardian`. Recorded in
+[`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md).**
 
 **Decision.** Materialise both embeddings: the object graph is the document.
 
@@ -1227,6 +1281,26 @@ The rationale, the memory consequence, and the two options rejected — emitting
 by reference at serialisation time, and streaming the dump — are recorded in
 `ADR-009` and are **not restated here**, per rule R3 of
 [`docs/adr/README.md`](../adr/README.md).
+
+**Observation owed — the record's word for what an embedding site holds.**
+`ADR-009` reads *"Each embedding site holds its own **owned copy** of the
+embedded table"*. As built, each site holds its own **value**, materialised
+before any byte is written, and that value's members are **borrowed from the
+model** where the model already holds them in the order the document needs: an
+embedded table's columns, indexes, triggers and `CHECK` constraints are the
+model's own, not copies of them. What is built per site is the **cut itself** —
+the two reference collections, as names — together with the primary key the
+document presents a second time beside the indexes, and any collection that had
+to be reordered. The decision the record took is unaffected — the cut is a
+property of the value rather than of an emitter, which is the whole of what it
+decided, and it is what makes a dangling reference detectable as `70` rather
+than emitted at `0`. What may be affected is a **consequence** the record
+states: it names peak resident memory as the price of the choice, and a
+borrowed member does not pay it. Whether the record's wording is corrected, and
+whether its memory consequence is restated, is `adr-guardian`'s and not this
+register's; nothing in this folder may read *owned copy* as settling how the
+value holds its members until it is. Reported 2026-09-18, against commit
+`0cdc539`.
 
 ---
 
@@ -1790,6 +1864,99 @@ cite.
 
 ---
 
+## OD-31 — The model's shape: strings, fields, and the attribute
+
+**Status: settled**, on 2026-09-18, when `model/` was built.
+
+**Decision.** Four of the five library-shape questions `DIV-032` hands to
+architecture, answered over the published surface and over nothing else.
+
+| Question | Answer |
+|---|---|
+| Owned or borrowed strings | **Clone-on-write**, under **one** lifetime parameter threaded through every type of the graph |
+| Public fields or accessors | **Public fields** where every field is an independent fact; **private fields and one constructor** where a value relates two of them |
+| Newtypes for names | **None.** A name is the string type above |
+| `#[non_exhaustive]` | On every published type **except the two that are inputs** a caller has to be able to write down |
+
+The fifth question — whether the serialisation crate is a public dependency — is
+[`OD-18`](#od-18--serialisation-key-order-and-the-two-omissions)'s and is
+answered *yes*.
+
+**Why clone-on-write, and why one lifetime.** `specification/catalogue-coverage.md`
+promises that *the model is the same whatever the source*, and there are three
+sources: a live read, which borrows the row buffers; a document read back from
+disk, which borrows the bytes where the encoding allowed it and owns the value
+where it did not; and a value built with nothing behind it. One type serves all
+three only if a string can be either. The document is what makes the *either*
+necessary rather than merely cheap. A deserialiser can hand out a borrowed
+string only where the string is present verbatim in the input — "Deserializers
+commonly use transient data … when escape sequences are being processed so the
+resulting string is not present verbatim in the input" (serde.rs,
+*Understanding deserializer lifetimes*, consulted 2026-09-18) — and JSON
+requires the quotation mark to be escaped inside a string (RFC 8259 § 7,
+consulted 2026-09-18). A raw column type such as ``enum('8''6"')`` therefore
+arrives **owned** while its neighbours arrive borrowed, from one document, in
+one pass.
+
+**Why a constructor on three types and on no others.** A constructor earns its
+place where a requirement relates two fields, and only there.
+
+| Type | The invariant it establishes | Forced by |
+|---|---|---|
+| A table | No key names a column the column list does not carry | `FR-CAT-044` |
+| The `server` object | On the probe path, `series` is the leading two components of `version` and can be populated from nothing else. There are **two** constructors, because `FR-CTX-033` bars the same check on a supplied document, and a second constructor is what states that in the type rather than in a comment | `FR-SRV-040`, `FR-CTX-031`, `FR-CTX-033` |
+| The `restricted` marking | It names at least one property; the empty marking has no representation | `FR-PRIV-016` |
+
+Every other type is plain data: each field is one catalogue fact, there is
+nothing for a constructor to check, and private fields would buy an accessor per
+field and no property.
+
+**Why the attribute is not on the two inputs.** `#[non_exhaustive]` obliges a
+downstream construction to go through a constructor, which is exactly right for
+a value the crate **produces** and exactly wrong for one a caller **writes
+down**. Two types are written down — the catalogue's statement of a column type,
+and the parts a table is assembled from — and each produces a value that carries
+the attribute for both.
+
+**Rejected — owned strings everywhere.** The simplest shape, and it costs a copy
+of every catalogue string on the dominant path. It also does not remove the
+lifetime: the decomposed type and the classified default both borrow, so a
+column carrying either carries their lifetime, and an owned graph would need
+owned twins of both — the second parallel type this shape exists to avoid.
+
+**Rejected — borrowed strings everywhere.** Cheaper still, and it cannot
+represent two values the model already produces: a string literal whose doubled
+apostrophe was collapsed, and a document string that needed unescaping. Neither
+is a slice of its source.
+
+**Rejected — a type parameter for the string type.** It defers the choice to
+every caller, infects every type with a parameter, multiplies the
+monomorphisations, and leaves `render/` with two concrete models to be written
+against instead of one.
+
+**Rejected — an arena the whole graph borrows from.** It removes the per-string
+allocation on the owned path, at the price of a dependency the budget would have
+to justify and of a construction path the derived deserialisation of
+[`OD-18`](#od-18--serialisation-key-order-and-the-two-omissions) cannot express:
+the arena would have to be threaded through as a seed, which is the plain derive
+this choice keeps available.
+
+**Rejected — a newtype per name.** A *validated* name is a different thing from
+an arbitrary string, and there is no validation here to hang one on. `FR-CAT-042`
+records that the catalogue returns identifiers **unescaped**, hostile ones
+included, and `FR-ENV-045` makes quoting a name for a target dialect the
+**template**'s job; no requirement of the corpus puts a grammar on a name the
+model carries. A newtype would state an invariant nothing establishes, on every
+name, in both directions.
+
+**Scope.** This entry answers the shape of the model's types. It does not settle
+the library's compatibility, which `DIV-032` withdraws, and it reaches no module
+but `model/`.
+
+**Unblocks.** `interfaces`.
+
+---
+
 ## Editorial defects, reported and corrected
 
 Two statements in `specification/` were stale when this register was written.
@@ -1808,11 +1975,12 @@ left hunting for an open defect.
 ## What remains
 
 No entry is open, so there is no order of work over the register. What remains
-is one obligation, and it blocks one sentence of one document.
+is two obligations, and each blocks one statement.
 
 | Order | What | Owner | Blocks |
 |---|---|---|---|
 | 1 | `OD-14`'s owed observation — that a **defined** `null` interpolates as the empty string under `UndefinedBehavior::Strict`. It is unverified, and `FR-SEM-010` and `FR-SEM-011` are contradicted outright if it does not hold | `technical-writer` | `architecture` may not assert the behaviour until it is verified |
+| 2 | `OD-19`'s owed observation — `ADR-009`'s *owned copy* against a value whose members are borrowed, and the peak-memory consequence the record draws from that word | `adr-guardian` | No document of this folder may read *owned copy* as settling how an embedded value holds its members |
 
 `OD-22`'s residual — the fixture certificate and the harness — was discharged on
 2026-09-11 by tasks #15 and #25, and `operations` and `verification` no longer

@@ -14,7 +14,7 @@
 //! | `FR-OUT-030`, `FR-OUT-035` — one key in the plural, carrying an array that is empty rather than absent | [`Collection`] holds a slice, so the key always exists and its value is always an array |
 
 use serde::ser::SerializeStruct as _;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
 /// The version of the document contract, per `FR-OUT-011` and `FR-OUT-025`.
 ///
@@ -43,7 +43,7 @@ const COLLECTION: &str = "Collection";
 /// `FR-OUT-014` lets an enumerated field gain a value without breaking the
 /// contract and a boolean cannot gain one. Two of the four values arrived that
 /// way.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Source {
     /// Read from a server on this invocation.
@@ -71,7 +71,7 @@ pub(crate) enum Source {
 /// producing it (`FR-OUT-027`, `BR-OUT-002`). A listing passes a
 /// [`Collection`]; a single named object passes a struct of its own with one
 /// field, per `FR-OUT-031`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Document<T> {
     /// The version of the document contract. First, per `FR-OUT-025`.
     schema_version: u32,
@@ -93,6 +93,21 @@ impl<T> Document<T> {
             source,
             data,
         }
+    }
+
+    /// The payload, taken out of the envelope.
+    ///
+    /// It is the counterpart of [`Document::new`] on the one path that reads a
+    /// document rather than writing one: `FR-SCH-036` requires a `--context`
+    /// document to carry the whole envelope and refuses a bare `data` object in
+    /// its place, so the envelope is what is decoded and this is what a reader
+    /// continues from.
+    ///
+    /// `schema_version` and `source` are not returned. `FR-OUT-025` keeps the
+    /// version out of a caller's hands, and `FR-CDOC-016` — not this module —
+    /// owns what the value `cache` withdraws from a document that was read.
+    pub(crate) fn into_data(self) -> T {
+        self.data
     }
 }
 
