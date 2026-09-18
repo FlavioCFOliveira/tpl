@@ -21,7 +21,7 @@ observation was made against one series rather than all four, it says which.
 | `up.sh` | Starts every server and does not return until each is listening and verified |
 | `down.sh` | Stops and removes them, and proves nothing of the fixture is left |
 | `status.sh` | The gate: whether the fixture is up, answered without a client |
-| `observe.sh` | The three instruments the nine outside-the-process observations use |
+| `observe.sh` | The three instruments the nine outside-the-process observations use, and the reading that identifies a build |
 | `series.env` | The inventory — one record per server — and the helpers the scripts share |
 | `probe-session.sql` | The connection-start sequence of `FR-SRV-006`, for a substitute client |
 | `observer.Dockerfile` | The tracer image `observe.sh opens` falls back to |
@@ -145,7 +145,7 @@ the output it produced.
 | `up.sh` | Starts the servers and verifies each one |
 | `down.sh` | Removes them and proves nothing is left |
 | `status.sh` | The gate |
-| `observe.sh` | The three instruments |
+| `observe.sh` | The three instruments, and the build reading beside them |
 | `probe-session.sql` | The connection-start sequence of `FR-SRV-006`, for a substitute client |
 | `observer.Dockerfile` | The tracer image the third instrument falls back to |
 
@@ -1163,6 +1163,108 @@ bear on a statement `tpl` must issue.
    `10.11` included, so the two readings of the version disagree on exactly one
    series. Observed with the gate's own probe, which reads the greeting and
    nothing else; see [The gate](#the-gate).
+
+### Readings that differ without being differences between the series
+
+Some readings differ across the four servers and are still not series
+differences, because the **build** already explains them. This fixture names a
+series and never pins a patch release, so two runs of it can observe two builds;
+telling the two apart needs the build's own identifiers, and those are what this
+reading takes.
+
+```sh
+./observe.sh build            # every server
+./observe.sh build 12.3       # one of them
+```
+
+It enumerates the `version%` prefix instead of asking for names, and that choice
+is the point of the subcommand. A name asked for and absent comes back as **no
+row** — `SHOW GLOBAL VARIABLES LIKE 'malloc%'` prints nothing at all, header
+included, and exits `0` — so a name misremembered by one character is
+indistinguishable from a server that lacks the variable. Asking for the same
+wrong name directly is the louder alternative:
+
+```
+ERROR 1193 (HY000): Unknown system variable 'malloc_library'
+```
+
+Both were observed on `11.8`. An enumeration returns what the server has, which
+is also how these names were recovered when none was written down.
+
+#### Recorded run
+
+`./observe.sh build`, verbatim, with the fixture up:
+
+```
+SERVER  VARIABLE                 VALUE
+10.11   version                  10.11.19-MariaDB-ubu2204
+10.11   version_comment          mariadb.org binary distribution
+10.11   version_compile_machine  aarch64
+10.11   version_compile_os       debian-linux-gnu
+10.11   version_malloc_library   system
+10.11   version_source_revision  93e051860a9c7e87ee8cee6ed38b640d491f7170
+10.11   version_ssl_library      OpenSSL 3.0.2 15 Mar 2022
+11.4    version                  11.4.13-MariaDB-ubu2404
+11.4    version_comment          mariadb.org binary distribution
+11.4    version_compile_machine  aarch64
+11.4    version_compile_os       debian-linux-gnu
+11.4    version_malloc_library   system
+11.4    version_source_revision  170b1d70737be6f134448f51713cdc1ae215b420
+11.4    version_ssl_library      OpenSSL 3.0.13 30 Jan 2024
+11.8    version                  11.8.9-MariaDB-ubu2404
+11.8    version_comment          mariadb.org binary distribution
+11.8    version_compile_machine  aarch64
+11.8    version_compile_os       debian-linux-gnu
+11.8    version_malloc_library   system
+11.8    version_source_revision  bf9193a939f515e95dd8def1a5468088c91cede6
+11.8    version_ssl_library      OpenSSL 3.0.13 30 Jan 2024
+12.3    version                  12.3.3-MariaDB-ubu2404
+12.3    version_comment          mariadb.org binary distribution
+12.3    version_compile_machine  aarch64
+12.3    version_compile_os       debian-linux-gnu
+12.3    version_malloc_library   system
+12.3    version_source_revision  83e909fc2a0dbc394b4b683fb3fa2d7dcf26cc5e
+12.3    version_ssl_library      OpenSSL 3.0.13 30 Jan 2024
+notls   version                  10.11.19-MariaDB-ubu2204
+notls   version_comment          mariadb.org binary distribution
+notls   version_compile_machine  aarch64
+notls   version_compile_os       debian-linux-gnu
+notls   version_malloc_library   system
+notls   version_source_revision  93e051860a9c7e87ee8cee6ed38b640d491f7170
+notls   version_ssl_library      OpenSSL 3.0.2 15 Mar 2022
+```
+
+Read on an Apple Silicon host, from the `linux/arm64` images, which is what
+`version_compile_machine` records; one server of each series, at the four patch
+releases above.
+
+**The two variables are `version_source_revision` and `version_ssl_library`.**
+The source revision is a distinct 40-character hash on each of the four. The SSL
+library string splits them one against three, along the same line as the
+distribution the image was built on:
+
+| Reading | `10.11` | `11.4` | `11.8` | `12.3` |
+|---|---|---|---|---|
+| `version_source_revision` | `93e051860a9c7e87ee8cee6ed38b640d491f7170` | `170b1d70737be6f134448f51713cdc1ae215b420` | `bf9193a939f515e95dd8def1a5468088c91cede6` | `83e909fc2a0dbc394b4b683fb3fa2d7dcf26cc5e` |
+| `version_ssl_library` | `OpenSSL 3.0.2 15 Mar 2022` | `OpenSSL 3.0.13 30 Jan 2024` | `OpenSSL 3.0.13 30 Jan 2024` | `OpenSSL 3.0.13 30 Jan 2024` |
+| `version_malloc_library` | `system` | `system` | `system` | `system` |
+| `version_comment` | `mariadb.org binary distribution` | `mariadb.org binary distribution` | `mariadb.org binary distribution` | `mariadb.org binary distribution` |
+| `version_compile_os` | `debian-linux-gnu` | `debian-linux-gnu` | `debian-linux-gnu` | `debian-linux-gnu` |
+
+**`version_malloc_library` returns a row on all four, and its value is
+`system`.** It was read three ways on each of the five servers — `SHOW VARIABLES
+LIKE`, `information_schema.GLOBAL_VARIABLES` and `SELECT
+@@global.version_malloc_library` — and all three agreed everywhere. Any record
+that no row comes back for a malloc-library variable on these servers is
+contradicted by this run; what produces no row is the wrong name, as above.
+
+**The fifth server is the control, not a fifth reading.** `notls` runs the same
+`10.11` image, and it returns the same source revision and the same SSL library
+string, byte for byte. Same build, same readings — which is what makes these
+properties of the build, and it is also why the fifth listener settles nothing
+about any series. No two builds of one series were compared here, so this run
+does not establish whether the series or the distribution fixes the SSL library
+string; it records what the four servers returned.
 
 ## Stopping and removing
 
