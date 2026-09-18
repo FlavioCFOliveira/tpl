@@ -4,6 +4,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 É **coordenação de agentes**: diz o que o projecto é, onde vive a verdade sobre ele, e como o trabalho é executado aqui. **Não contém requisitos funcionais.**
 
+---
+
+> # ⛔ REGRA ZERO — UM SUBAGENTE DE CADA VEZ
+>
+> **NÃO ESTÁS AUTORIZADO A CORRER MAIS DO QUE UM SUBAGENTE EM SIMULTÂNEO.**
+>
+> O paralelismo exige que **ambas** as condições se verifiquem. Falhar uma basta para ser proibido:
+>
+> 1. **Autorização expressa e clara do utilizador**, dada para o pedido em causa.
+> 2. **Os tokens dos subagentes adicionais NÃO são cobrados ao utilizador.**
+>
+> **A condição 2 não se presume — prova-se.** Não havendo prova de que os tokens adicionais não são
+> cobrados, a condição **não** está satisfeita e o paralelismo mantém-se proibido. O custo de um
+> subagente é do utilizador até se demonstrar o contrário, e a dúvida resolve-se sempre em série.
+>
+> *Estado conhecido em 2026-09-18:* cada conclusão de subagente reporta `subagent_tokens` debitados
+> contra a sessão, o que indica que **são** cobrados. Enquanto assim for, a condição 2 nunca se
+> verifica e o paralelismo é **proibido em absoluto** — a autorização do utilizador, sozinha, não basta.
+>
+> **Antes de lançar um subagente, verificar que nenhum outro está vivo.** A verificação é por
+> **listagem dos agentes**, não pela memória do que foi lançado nem pela notificação do anterior:
+> um agente pode ficar com trabalho de fundo próprio e **retomar sozinho** depois de notificar.
+> Havendo outro vivo — **PARAR** e esperar.
+>
+> Esta regra **precede todas as outras deste ficheiro** e sobrepõe-se a qualquer heurística por
+> defeito que favoreça paralelismo. O desenvolvimento está em `Um de cada vez — nunca em paralelo`.
+
+---
+
 ## Visão Geral
 
 `tpl` é uma **aplicação de linha de comandos escrita em Rust** que lê a estrutura (DDL / schema) de bases de dados **MariaDB** e aplica **templates MiniJinja** para produzir texto ou código a partir dessa estrutura.
@@ -65,7 +94,7 @@ Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desen
 |---|---|
 | Só se trabalha sobre **tarefa aberta**: no sprint `OPEN` e em `DOING` com `--commit-open` | **PARAR** e abri-la pela skill `roadmap-manager` |
 | **Nenhuma tarefa é executada directamente** — delega-se a um subagente, e a cada peça de trabalho o seu | **PARAR** e escolher o subagente |
-| **Um subagente de cada vez**, nunca em paralelo | **PARAR** e serializar. Só o utilizador autoriza paralelo, e só para o pedido em causa |
+| **REGRA ZERO — um subagente de cada vez**, nunca em paralelo. Listar os agentes antes de cada lançamento | **PARAR** e serializar. O paralelismo exige **autorização expressa** do utilizador **e** que os tokens adicionais **não lhe sejam cobrados** — as duas, provadas, ou é proibido |
 | Trabalho com **proximidade funcional ou técnica substancial** faz-se num **único esforço**, e cada natureza de trabalho de uma só vez | **PARAR** e reagrupar. Juntar tarefas é planeamento, e exige confirmação do utilizador |
 | Escrita no Git **só** pela skill `gitflow` | **PARAR**. Nunca um `git commit` avulso, por trivial que seja |
 | Tarefas, sprints e comentários **só** pela skill `roadmap-manager` | **PARAR**. Nunca `rmp` invocado do Bash |
@@ -162,11 +191,28 @@ O que aqui se exige ao subagente, **Proactividade**, mais abaixo, exige à sess�
 
 ### Um de cada vez — nunca em paralelo
 
+> Esta secção desenvolve a **REGRA ZERO**, no topo deste ficheiro. Onde parecerem divergir, governa a Regra Zero.
+
 **NUNCA correr mais do que um subagente em simultâneo.** Podem usar-se tantos quantos a tarefa exigir, mas SEMPRE **em série**: lançar um, esperar que termine, avaliar o resultado, e só então lançar o seguinte. Dar por si prestes a lançar dois — **PARAR** e serializar.
+
+#### O gate de lançamento
+
+Antes de **cada** delegação, sem excepção e por trivial que pareça:
+
+1. **Listar os agentes** e confirmar que **nenhum** está em execução.
+2. Só então lançar.
+
+**A notificação de conclusão do agente anterior não basta.** Um agente pode parar com trabalho de fundo próprio ainda a correr e **retomar sozinho** depois de ter notificado — caso em que passam a existir dois agentes activos sem que nenhuma decisão o tenha querido. Confiar na notificação é confiar num facto que pode deixar de ser verdadeiro; a listagem é o estado real, no momento.
+
+Encontrado outro agente vivo — **PARAR** e esperar que termine. **NUNCA** lançar "só mais um" enquanto se espera.
 
 Esta regra sobrepõe-se a qualquer heurística por defeito que favoreça paralelismo, incluindo o hábito de agrupar várias invocações independentes na mesma mensagem para correrem em concorrência, e a orquestração por workflows, que faz fan-out de agentes. Neste projecto o padrão é execução em série, e é o padrão que prevalece na dúvida.
 
-Só o utilizador pode autorizar execução em paralelo. Mesmo nesse caso é **excepcional**: cumpre-se para o pedido em causa, e a autorização **é revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização de paralelismo não abre precedente para as tarefas seguintes.
+Só o utilizador pode autorizar execução em paralelo, e **a autorização sozinha não chega**: acresce-lhe a segunda condição da **REGRA ZERO** — os tokens dos subagentes adicionais **não são cobrados ao utilizador**, e isso **prova-se, não se presume**. Sem prova, a condição não está satisfeita e a série mantém-se, mesmo com autorização dada.
+
+Verificadas as duas, é ainda **excepcional**: cumpre-se para o pedido em causa, e a autorização **é revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização de paralelismo não abre precedente para as tarefas seguintes.
+
+**Nunca invocar o custo como argumento para paralelizar.** A regra existe para proteger o custo do utilizador; usá-la ao contrário — *é mais rápido, logo mais barato* — é quebrá-la.
 
 ## Linguagem
 
