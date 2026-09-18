@@ -1,7 +1,7 @@
 ---
 title: Privileges and Completeness
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-18
 related: [catalogue-coverage.md, server-contract.md, context-document.md, errors-and-exit-codes.md]
 ---
 
@@ -27,8 +27,9 @@ In scope: the definition of a complete and an incomplete read, the outcome for a
 named object, the outcome for a listing and a dump, the marking of an incomplete
 object and the shape of that marking, the refusal of a marked dump as a context,
 the three shapes a privilege-driven absence takes, the cross-checks that
-distinguish a missing privilege from an absence, and the one place where the
-catalogue makes no such distinction possible.
+distinguish a missing privilege from an absence, the one place where the
+catalogue makes no such distinction possible, and the outcome where the
+database a read covers has no row in the schema catalogue at all.
 
 Out of scope: which privileges a reader needs, which depends on the server and
 is not stated here; the connection and authentication failures that precede a
@@ -281,6 +282,64 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   relations at all. That is a larger silent failure than the one
   `FR-PRIV-011` prevents.
 
+- **FR-PRIV-021**: IF the schema catalogue returns no row for the database a
+  read covers, THEN the system SHALL exit `77` (`EX_NOPERM`), and SHALL NOT
+  present a database whose own metadata it could not read.
+
+  The `cause` SHALL name that database and state that its metadata could not be
+  read, per `FR-PRIV-013` and the `77` row of `FR-ERR-034`. The database a read
+  covers is the one the selected entry names, per `FR-CONF-041`, so the `cause`
+  has an instance to name in every case.
+
+  *The requirement does not claim which of two explanations holds, and says so
+  rather than implying one.* No row for that name is what a reader who may not
+  see the database receives and what a reader of a database that is not there
+  receives, and the catalogue offers no second view of the schema population to
+  separate them — the shape is the zero-rows shape of `FR-PRIV-018`, arriving
+  for the object the whole document describes. `FR-PRIV-010` requires that
+  limit to be stated here, and this is where it is stated. The code is chosen
+  on the caller's next step, which `FR-ERR-002` makes the test: under either
+  explanation the step is to establish that this reader can read that database,
+  which is the step the `77` row of `FR-ERR-001` states.
+
+  *Added in the twenty-fifth edition.* The condition was reported as a violated
+  internal invariant, exit `70`. It is not one. `FR-ERR-030` closes `70` to a
+  panic and to an invariant the system detects in itself, and nothing about
+  `tpl` is defective when a server declines to show a schema: the shortfall is
+  in what the reader was shown, which is the subject of this file. A `70` also
+  tells the caller, per its row of `FR-ERR-001`, that the condition is not
+  fixable by them, when it is — by a grant, or by correcting
+  `database.<name>.database`.
+
+  *Rejected: `66`.* Its row of `FR-ERR-001` sends the caller to list what
+  exists and choose another name, and `tpl` cannot support that step here: the
+  nearest-match suggestion `FR-ERR-005` and `FR-ERR-019` attach to a missing
+  name is drawn from a population, and the population of databases is one this
+  system never reads. Obtaining it is a second catalogue statement on a path
+  whose statement count `NFR-PERF-001` and `NFR-PERF-002` fix. It would also
+  tell a caller whose name is correct that it is not.
+
+  *Consequence, stated plainly, because it is a limit on the evidence rather
+  than on the guarantee.* No invocation of the distributed binary is observed
+  producing this condition, and this corpus does not establish that one can.
+  The requirement exists because a reader can meet the absence of that row and
+  must answer it with something, not because a reachable state has been
+  demonstrated. What can be exercised is this system's own handling of a schema
+  read that returned no row, in process, and the step from that condition to
+  the exit status is the step every condition of `FR-ERR-001` travels — the
+  composition `FR-ERR-031` records for `70`, arriving here for a different
+  reason. `BR-ERR-001` is not weakened by it: `77` has the integration tests
+  that rule mandates, through `FR-PRIV-003` with `FR-PRIV-011`, `FR-PRIV-017`
+  and `FR-PRIV-019`. The other two requirements written this way are
+  `FR-ERR-031` and `NFR-PERF-005`.
+
+  *What would change this.* An observation, against a series of `FR-SRV-015`,
+  of a session that is open and a schema catalogue that returns no row for the
+  database that session was opened against; or a second view of the schema
+  population in the catalogue, which would let the `cause` separate the two
+  explanations. Neither has been made, and this note is what an amendment
+  changes.
+
 - **FR-PRIV-020**: The system SHALL NOT claim to distinguish a table with no
   triggers from a table whose triggers the reader may not see, and this file
   SHALL state that limit rather than leave it to be discovered.
@@ -379,6 +438,8 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   completeness the round-trip already depends on.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `77`, and the message
   format.
+- [configuration-model.md](configuration-model.md) — `FR-CONF-041`, which names
+  the database `FR-PRIV-021` reports on.
 - [cache-commands.md](cache-commands.md) — `FR-CACHE-037`, which keeps a marked
   object out of the cache.
 - [cfg-commands.md](cfg-commands.md) — `FR-CFG-044`, whose probe reports

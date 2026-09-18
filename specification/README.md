@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty-four editions. All are in force;
+The specification has been written in twenty-five editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1970,6 +1970,116 @@ written against both.
 is raised or reopened.** One identifier is assigned, `FR-SRV-042`. The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Twenty-fifth edition — four refusals with no condition, a prefix with no casing, and a listing no rule produced
+
+The first arm is the first block whose output a calling agent consumes
+directly, and three instruments reached this corpus before it was built. The
+first implementation of the connection and the catalogue reader returned four
+conditions it could reach and no requirement named. Writing worked examples
+against the qualified routine form found a token this corpus neither admitted
+nor refused. And reading the one worked `text` listing this corpus carries
+against the layout that now exists found that no single rule produces it.
+
+**Nothing here adds an exit code.** The set of `FR-ERR-001` is closed and is
+untouched; four requirements are added, four are amended, and every new
+condition carries a code the table already holds.
+
+- **An entry that names no host, and an entry that names no database** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-002` gives `host`
+  and `database` no default, and `FR-CFG-016` requires one discrete flag and
+  neither of those two, so
+  `tpl cfg database add reporting --user reader`
+  writes an entry that is legal in the file, passes `FR-CONF-007`, and
+  describes no connection and no read. `FR-CONF-040` and `FR-CONF-041` refuse
+  the invocation that selects such an entry with `78`, at step 4 of
+  `FR-ERR-006`, before a connection is opened. The second of the two also
+  states the question nothing had answered — **which database a read covers**:
+  it is the one the entry names, by the `database` key or the `/database`
+  segment of a DSN, and from no other source. Every `schema` subcommand
+  depends on it. Composing either refusal where the connection is assembled
+  was rejected, because that layer cannot satisfy the `78` row of `FR-ERR-034`
+  — it holds neither the file nor the position the `cause` must name; refusing
+  the whole file at step 3 was rejected, because it makes `.tpl/.cfg`
+  repairable only by hand, which is the defect the twenty-second edition
+  closed from the writing side; taking the session's default schema, guessing
+  among the databases a reader can see, and adding a flag beside the `-d` that
+  already names the entry were each rejected in `FR-CONF-041`'s own text.
+- **A session that opens and does not hold** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). The four conditions of
+  `69` this corpus stated were a name that did not resolve, a refused
+  connection, a failed TLS handshake, and a deadline. A connection dropped
+  while a statement is in flight is none of them, and was reported as the
+  second — the right code under a `cause` line that names the TCP connect for
+  a session that had already connected, authenticated, been set read only and
+  been probed. `FR-ERR-036` states the condition, and the `69` row of
+  `FR-ERR-034` gains a fifth phase, the version probe of `FR-SRV-002`, which
+  belonged to none of the four. A tenth code was rejected against `FR-ERR-001`
+  and `FR-ERR-002`: the caller's next step is the one every `69` carries, and
+  what two conditions on one code owe a reader is a `cause` that separates
+  them.
+- **A database the reader cannot see** —
+  [privileges-and-completeness.md](privileges-and-completeness.md). A schema
+  catalogue returning no row for the database a read covers was reported as a
+  violated internal invariant, exit `70`, because no condition fitted.
+  `FR-ERR-030` closes `70` to a panic and to a defect this system detects in
+  itself, and this is neither: nothing about `tpl` is wrong when a server
+  declines to show a schema, and `70` tells a caller the condition is not
+  theirs to fix when a grant or a corrected key fixes it. `FR-PRIV-021` makes
+  it `77`, chosen on the caller's next step as `FR-ERR-002` requires, and
+  states in its own text that it does not claim which of the two explanations
+  holds — the shape is the zero-rows shape of `FR-PRIV-018`, arriving for the
+  object the whole document describes. `66` was rejected because its next step
+  is to list what exists, and the population of databases is one this system
+  never reads: obtaining it is a second statement against the counts
+  `NFR-PERF-001` and `NFR-PERF-002` fix.
+- **The qualified prefix is matched as written** —
+  [schema-commands.md](schema-commands.md). The twenty-third edition fixed
+  `kind` at `PROCEDURE` and `FUNCTION` and said a caller composing a qualified
+  name from the field folds the case. `procedure:calc_vat` was admitted and
+  `PROCEDURE:calc_vat` — what a caller that reads `kind` and concatenates
+  actually produces — was governed by nothing. `FR-SCH-008` now matches the
+  prefix case-sensitively and refuses a non-matching case with `64`, decided
+  at step 1 of `FR-ERR-006` from the token alone, with a `hint` carrying the
+  same invocation in lower case. `FR-CAT-016` gains the pointer that makes the
+  two readable from either side. Case-insensitive matching was rejected
+  because no spelling this corpus fixes is stated to be folded and because it
+  multiplies the names the prefix shadows; letting the token fall
+  through as a bare name was rejected because the resulting `66` diagnoses the
+  wrong fault, over a population that cannot hold the name the caller meant.
+- **The worked listing is now the rule applied to its own data** — the same
+  file. `FR-SCH-026`'s listing could not be reproduced by any single layout
+  rule: its `NAME` column was twelve wide against a widest cell of eleven, its
+  `COLUMNS` column was seven wide in the header row and eight beneath it — so
+  the header's `COMMENT` began one column left of every comment under it — and
+  it right-aligned a numeric column that no requirement mentioned. This is the
+  only worked `text` listing this corpus carries, and `FR-OUT-006` fixes that
+  the output is aligned columns under a header row and fixes nothing further,
+  so nothing else here could settle it. The requirement now states the rule in
+  six clauses — column order, width from the widest cell including the header,
+  left alignment for every cell including a column of numbers, a two-space
+  separator, a row ending at its last non-empty cell, one `\n` per line — and
+  the listing is those clauses applied to its own three tables. Right-aligning
+  a numeric column was rejected: it obliges an alignment per column and obliges
+  this corpus to say which columns hold numbers, a second field list written
+  for a surface `FR-OUT-004` declares is not a contract.
+
+**Three readings produced this edition and none of them is one of the five
+validation rules below.** Four of the six defects were found by writing the
+connection and the catalogue reader against this corpus — the instrument that
+produced the twentieth, twenty-first, twenty-second and twenty-fourth editions;
+one by composing a qualified routine name from the field this corpus fixes, as
+a caller does; and one by reading this corpus's only worked listing back
+against the layout that now exists. All six were shapes nobody had fixed rather
+than statements that had decayed, which is why no rule that re-reads a register
+would have found any of them.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** Four identifiers are assigned — `FR-CONF-040`,
+`FR-CONF-041`, `FR-ERR-036` and `FR-PRIV-021` — and none in
+[schema-commands.md](schema-commands.md), whose two defects are amendments to
+requirements in force, as is the pointer `FR-CAT-016` gains. The index of
+[open-questions.md](open-questions.md) stays empty.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -2111,11 +2221,12 @@ because they constrain the whole module rather than one interaction.
   members cite each other. A limit on the **evidence** for a guarantee — the
   observation that cannot be made, rather than the promise that cannot be kept
   — takes the same note shapes, as many of them as it has content for, without
-  joining that family, because it qualifies a different kind of claim. Two
+  joining that family, because it qualifies a different kind of claim. Three
   requirements are written this way:
   `FR-ERR-031`, where no invocation of the distributed binary is observed
-  returning `70`, and `NFR-PERF-005`, where the file-open observation is made
-  on the Linux targets and not on the macOS ones.
+  returning `70`; `NFR-PERF-005`, where the file-open observation is made
+  on the Linux targets and not on the macOS ones; and `FR-PRIV-021`, where no
+  invocation is observed producing a schema read that returns no row.
 
 ## Status legend
 
@@ -2405,6 +2516,25 @@ checked on 2026-09-18. Neither is an entry of
 [upstream-divergences.md](upstream-divergences.md), whose scope is the root
 `README.md` and the root `CLAUDE.md`, and nothing in this corpus waits on
 either. The item below was untouched by this edition and stays outstanding.
+
+The twenty-fifth edition adds no obligation of either kind, and records none as
+discharged. It states six conditions the first arm can reach and no requirement
+named: two entries that describe no connection and no read, a session that
+opens and does not hold, a database whose schema row is absent, the casing of
+the qualified routine prefix, and the layout rule that produces the one worked
+`text` listing this corpus carries. No exit code is added, and every condition
+carries a code of `FR-ERR-001` already in force. None of the five rules below
+would have found any of the six: four were found by the first implementation of
+the connection and the catalogue reader, and two by reading this corpus back
+against the layout and the document it now has, and all six were shapes nobody
+had fixed rather than statements that had decayed. Two observations are named
+in that edition's own requirements and neither is debt: `FR-PRIV-021` states
+that no invocation of the distributed binary is observed producing its
+condition, which is a limit on evidence and joins `FR-ERR-031` and
+`NFR-PERF-005` under *[Writing conventions](#writing-conventions)*; and
+`FR-SCH-026` states the layout rule for the listings of the first arm alone,
+because those are the only listings this corpus works. The item below was
+untouched by this edition and stays outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.

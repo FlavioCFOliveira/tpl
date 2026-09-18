@@ -184,7 +184,17 @@ of any catalogue query, which this specification does not state.
   `PROCEDURE` and `FUNCTION`, in upper case. A caller composing a qualified
   name from `kind` folds the case, and that is the whole of the difference:
   the two kinds are the same two, their spelling is otherwise identical, and
-  neither requirement admits a third value.
+  neither requirement admits a third value. `FR-SCH-008` states what a caller
+  that does not fold receives — it is `64`, decided from the token alone —
+  and states it there rather than here, because the prefix is a token of the
+  command line and this field is a value of the document.
+
+  *Amended in the twenty-fifth edition.* The last sentence is new. The
+  obligation to fold was stated in the edition above and its consequence was
+  stated nowhere, so a caller that concatenated `kind` unfolded met a token
+  neither this requirement nor `FR-SCH-008` governed. Nothing about the field
+  changes: it carries the catalogue's own string, in upper case, as the
+  twenty-third edition fixed it.
 
   *Rejected.* Carrying `kind` in lower case so that it equals the prefix
   `FR-SCH-008` admits. It would make `kind` the only enumerated catalogue

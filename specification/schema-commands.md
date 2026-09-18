@@ -100,6 +100,58 @@ tpl schema dump                        The whole database as one JSON document
   identical. Stated here in the twenty-third edition, with the field, so that
   a reader arriving from either side is told once.
 
+  **The prefix is matched as written, in lower case.** The system SHALL accept
+  `procedure:` and `function:` and no other spelling of either. IF the segment
+  before the first colon of a token that names one routine, folded over ASCII
+  `A-Z` and `a-z` alone as `FR-SCH-014` folds, is `procedure` or `function`
+  while the token does not carry it in lower case, THEN the system SHALL exit
+  `64` (`EX_USAGE`). The `cause` SHALL name the token as written and the
+  spelling expected, per the `64` row of `FR-ERR-034`; the `hint` SHALL carry
+  the same invocation with the prefix in lower case, per `FR-ERR-009`, built
+  under `FR-ERR-022` and dropped under `FR-ERR-023` where the routine name
+  falls outside the character set that requirement applies to it. The token's
+  shape is decidable without a server, so the condition is evaluated at step 1
+  of `FR-ERR-006` and precedes every catalogue read.
+
+  *Amended in the twenty-fifth edition: the casing of the prefix is stated,
+  because the composition the twenty-third edition described produced a token
+  this requirement neither admitted nor refused.* That edition fixed `kind` at
+  `PROCEDURE` and `FUNCTION` and said that a caller composing a qualified name
+  from the field folds the case. `procedure:calc_vat` was admitted in terms and
+  `PROCEDURE:calc_vat` — which is what a caller that reads `kind` from the
+  document and concatenates produces — was governed by nothing: a reader could
+  take it for a prefix this requirement admits in another spelling, or for a
+  bare name. Neither reading was available from the text, and the two build
+  different programs. The obligation to fold now has a stated consequence, and
+  the sentence above is what it always meant.
+
+  *Rejected: matching the prefix case-insensitively, so that every case
+  variant is admitted.* No spelling this corpus fixes is stated to be matched
+  case-insensitively — not a command or its alias, per `FR-CLI-002`; not a
+  flag, per `FR-GLOB-001`; not a TLS mode, per `FR-CONF-013`; not a key of the
+  space of `FR-CONF-002` — so one token folded inside a command line that folds
+  nothing else is a rule every reader has to memorise and every parser has to
+  except. It also widens the set of tokens read as qualified from two spellings
+  to every case variant of two words, and each of them shadows a routine that
+  could legally carry it as a name: this requirement accepts that shadow for
+  two spellings deliberately, and multiplying it buys nothing that one case
+  fold, at the one place a qualified name is composed, does not buy.
+
+  *Rejected: leaving the casing unstated, so that `PROCEDURE:calc_vat` falls
+  through as a bare name.* It is refused, by `FR-SCH-010`, with `66` and a
+  nearest-match suggestion over the routine names that exist — a message
+  reporting that an object of that name is absent, over a population that
+  cannot contain the name the caller meant, when what is wrong is the spelling
+  of a prefix this corpus fixes. That diagnoses the wrong fault, which is what
+  `FR-CONF-034` refuses for a misspelled configuration key and what
+  `FR-ERR-034` bans a `cause` line for.
+
+  *Accepted cost.* A routine whose own name begins with a case variant of
+  `procedure:` or `function:` is not reachable by that name through the four
+  commands above. The cost is already accepted for the two lower-case
+  spellings, by the amendment that introduced them; this widens it to their
+  case variants and to nothing else.
+
 - **FR-SCH-009**: `tpl schema table <name>` SHALL be exhaustive over what the
   catalogue holds for that table: its columns with position, type, nullability,
   default, comment, and generated-column status; its primary key, indexes, and
@@ -243,16 +295,38 @@ tpl schema dump                        The whole database as one JSON document
   cache, per `FR-CACHE-006`.
 
 - **FR-SCH-026**: In `text` output, a listing SHALL be presented as aligned
-  columns under a header row:
+  columns under a header row, laid out by the following rule and by no other:
+
+  1. One column per field, in a fixed order, under a header row carrying each
+     field's name in upper case. The fields and their order are a property of
+     the listing rather than of this rule; for `tpl schema tables` they are
+     those shown below.
+  2. Each column SHALL be as wide as the widest cell it holds, its header cell
+     included, measured in the characters a reader is shown — that is, after
+     the escaping of `FR-OUT-018`.
+  3. Every cell SHALL be left-aligned and padded on its right with spaces to
+     its column's width. A column of numbers SHALL be laid out exactly as any
+     other column and SHALL NOT be right-aligned.
+  4. Two adjacent columns SHALL be separated by exactly two spaces.
+  5. A row SHALL end at its last non-empty cell. That cell SHALL carry neither
+     padding nor a separator after it, and no line SHALL carry trailing
+     whitespace.
+  6. Every line, the header row included, SHALL be terminated by one `\n`.
+
+  Applied to a database holding three tables, the rule yields exactly this:
 
   ```
   tpl -d shop schema tables
 
-  NAME          ENGINE  COLUMNS  COMMENT
-  customers     InnoDB        14  Registered buyers
-  order_items   InnoDB         7
-  orders        InnoDB        21  One row per order
+  NAME         ENGINE  COLUMNS  COMMENT
+  customers    InnoDB  14       Registered buyers
+  order_items  InnoDB  7
+  orders       InnoDB  21       One row per order
   ```
+
+  The rows are ordered by name, ascending, byte-wise, per `FR-SCH-028` and
+  `NFR-DET-002`, which is why `order_items` precedes `orders`. A listing with
+  no rows prints the header row and nothing beneath it, per `FR-OUT-034`.
 
   *Amended in the second edition.* The listing previously carried a `ROWS`
   column, which is the server's row estimate. The storage engine revises that
@@ -260,6 +334,36 @@ tpl schema dump                        The whole database as one JSON document
   database differ — which contradicts `NFR-DET-001` and the argument
   `FR-SCH-018` used to keep `now` out of the dump. `COLUMNS` is a structural
   count and is stable. The general rule is `FR-CAT-024`.
+
+  *Amended in the twenty-fifth edition: the rule is stated, and the listing is
+  now the rule applied to its own data.* As it stood, no single layout rule
+  reproduced it. Its `NAME` column was twelve characters wide against a widest
+  cell of eleven; its `COLUMNS` column was seven wide in the header row and
+  eight in the rows beneath it, so the header's `COMMENT` began one column to
+  the left of every comment under it; and it right-aligned `COLUMNS`, which no
+  requirement of this corpus stated. `FR-OUT-006` fixes that the output is
+  aligned columns under a header row and fixes nothing further, and
+  `FR-OUT-004` makes it no contract, so nothing else here could settle the
+  question — and this is the only worked `text` listing this corpus carries.
+  The six clauses above are `FR-OUT-006` made reproducible, and they are stated
+  here, beside the listing that demonstrates them.
+
+  *Rejected: right-aligning a column of numbers, which the listing as it stood
+  did.* It obliges the layout to carry an alignment per column, and obliges
+  this corpus to say of every listing it fixes which of its columns hold
+  numbers — a second field list beside each of the ones
+  [catalogue-coverage.md](catalogue-coverage.md) already fixes, written for a
+  surface `FR-SCH-027` and `FR-OUT-004` declare is not a contract. One rule
+  applied to every cell alike is reproducible by a reader who knows nothing
+  about what a column holds, which is the whole of what a worked listing is
+  for.
+
+  *Rejected: keeping the listing as it stood and stating the rule that
+  produces it.* There is none. It would take three — a width per column that
+  the data does not determine, an alignment per column, and a header row laid
+  out to a different width from the rows beneath it — and none of the three is
+  derivable from the values shown, so a reader could not apply any of them to
+  a second listing.
 
 - **FR-SCH-027**: The `text` output of any `schema` subcommand is not a
   contract, per `FR-OUT-004`. Anything parsing a listing must use
@@ -360,6 +464,12 @@ tpl schema dump                        The whole database as one JSON document
 - [output-formats.md](output-formats.md) — `text` and `json` rules, `--pretty`.
 - [render-command.md](render-command.md) — the `--context` half of the
   dump round-trip.
+- [configuration-model.md](configuration-model.md) — `FR-CONF-041`, which fixes
+  which database a read covers, and `FR-CONF-040`, which refuses an entry that
+  names no host. Every subcommand of this arm depends on the first.
+- [privileges-and-completeness.md](privileges-and-completeness.md) —
+  `FR-PRIV-021`, the outcome where the schema catalogue returns no row for that
+  database.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `64`, `66`, `69`, `77`,
   `78`.
 

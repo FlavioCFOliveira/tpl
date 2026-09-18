@@ -450,7 +450,7 @@ Out of scope: the wording of any individual message.
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
   | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or the structural rule of [context-document.md](context-document.md) it failed. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012` |
   | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, or the key space of `FR-CONF-002` |
-  | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, or catalogue query — the host and port attempted, and what that phase returned |
+  | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
   | `74` | The path or stream that failed, the operation attempted on it, and what the filesystem or the stream returned |
@@ -484,6 +484,16 @@ Out of scope: the wording of any individual message.
   the row obliges is otherwise unchanged: the fact — an invariant or a panic —
   and where it happened. "Where" is the location the condition arose at, not
   the text a panic carried.
+
+  *Amended in the twenty-fifth edition: the `69` row names a fifth phase.* It
+  named four, and one statement this system issues belonged to none of them.
+  The version probe of `FR-SRV-002` is issued on an open session, after the
+  three network phases have completed and before any catalogue statement, so a
+  probe that fails because the session did not hold had no phase its `cause`
+  could name — and naming one of the other four would be a `cause` that is
+  false of the failure it reports, which the paragraph above bans. `FR-ERR-036`
+  states the condition; this row states what its `cause` must carry. No code
+  changes, and the other four phases are as the first edition left them.
 
 - **FR-ERR-011**: A template error SHALL carry the template name, the line, the
   column, and the chain of underlying template-engine errors.
@@ -709,6 +719,56 @@ Out of scope: the wording of any individual message.
 - **FR-ERR-027**: WHEN a deadline is exceeded, the system SHALL exit with the
   code of the phase: `69` for DNS resolution, TCP connect, TLS handshake, or a
   catalogue query; `78` for `password_command`; `65` for render.
+
+## A session that opens and does not hold
+
+- **FR-ERR-036**: IF a statement fails on a session that has opened, and the
+  failure is neither a deadline under `FR-ERR-027` nor a condition another
+  requirement routes elsewhere, THEN the system SHALL exit `69`
+  (`EX_UNAVAILABLE`), and the `cause` line SHALL name the phase the statement
+  belongs to — the version probe of `FR-SRV-002`, or the catalogue query — per
+  the `69` row of `FR-ERR-034`. It SHALL NOT name DNS resolution, TCP connect,
+  or the TLS handshake, each of which completed before the session opened.
+
+  The conditions other requirements route elsewhere are the three of step 5 of
+  `FR-ERR-006`, and all three are `78`: the read-only session statement and its
+  read-back, under `FR-SRV-010`, which is `78` whether the server refused the
+  statement or the session did not survive it, because a setting that cannot be
+  applied is a setting that cannot be applied; the product check of
+  `FR-SRV-003`; and the version-window check of `FR-SRV-020`. What is left for
+  this requirement is therefore the other two statements of `FR-SRV-006` — the
+  version probe, whose own verdicts `FR-SRV-003` and `FR-SRV-020` reach only
+  when the probe answered, and the catalogue read.
+
+  *Rationale.* `69` is right and was never in question — the session did not
+  hold, the server is unreachable for this invocation, and the caller's next
+  step is the one that row of `FR-ERR-001` states, which the read-only promise
+  of `FR-SRV-006` makes safe to take: the operation is read-only and therefore
+  repeatable. What was missing is the phase. A `cause` that named the TCP
+  connect for a session that had already connected, authenticated, been set
+  read only and been probed sends a caller to check whether the server is
+  listening, and it is; and it is a wording equally true of a different
+  failure, which `FR-ERR-034` bans in terms.
+
+  *Added in the twenty-fifth edition.* The four conditions of `69` this corpus
+  stated were a name that did not resolve, a connection that was refused, a
+  TLS handshake that failed, and a deadline. A session that opens and then
+  stops answering — a connection dropped mid-statement, a protocol fault — is
+  none of the four, and it was reported as the second of them, which is the
+  right code under a `cause` line that is false.
+
+  *Rejected: a tenth code for a session that did not hold.* `FR-ERR-001`
+  closes the code set in terms, and the caller's next step here is the one
+  every other `69` carries. `FR-ERR-002` admits two conditions on one code
+  exactly where that holds, and obliges the `cause` to separate them for a
+  reader — which is what this requirement does.
+
+  *Rejected: leaving the condition unstated and the phase to the
+  implementation.* It is how the defect arose: with no requirement naming the
+  phase, the nearest condition in force was the refused connection, and its
+  `cause` was emitted for a failure it does not describe. A phase a caller
+  reads is contract under `FR-ERR-034`, and this corpus states it rather than
+  letting the choice of a nearest neighbour decide it.
 
 ## Template codes
 
