@@ -47,6 +47,21 @@
 //!
 //! **No `docker` command is issued from Rust.** Every fixture operation goes
 //! through `up.sh`, `down.sh`, `status.sh`, `observe.sh` and `series.env`.
+//!
+//! # Why this module allows dead code
+//!
+//! It is included by more than one test binary, and each of them uses the part
+//! of the harness its own subject needs: the observations of `NFR-PERF-007`
+//! want the three instruments, and a test that reads a catalogue wants the
+//! gate, the inventory and an address. An item unused in one of those binaries
+//! is not dead code, and without this allowance `cargo clippy --all-targets`
+//! would reject the file for being complete.
+
+#![allow(
+    dead_code,
+    reason = "this module is included by more than one test binary and each uses the part of the \
+              harness its own subject needs; an item unused in one of them is not dead code"
+)]
 
 use std::collections::BTreeMap;
 use std::io::{Read as _, Write as _};
@@ -120,6 +135,14 @@ impl Server {
     /// The name the harness knows it by.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// The address it answered on, as `status.sh --export` printed it.
+    ///
+    /// It is `host:port`, and it is the harness's answer rather than this
+    /// file's: no port is written in Rust.
+    pub fn address(&self) -> &str {
+        &self.address
     }
 
     /// The address it answered on, as `status.sh --export` printed it,

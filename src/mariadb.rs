@@ -13,6 +13,7 @@
 //! | [`session`] | The three connection-start statements, and the verdicts they settle | `FR-SRV-006`, `FR-SRV-008` … `FR-SRV-010`, `FR-SRV-002`, `FR-SRV-020` |
 //! | [`window`] | The supported version window, as one ordered table | `FR-SRV-015`, `FR-SRV-021`, `FR-SRV-031` |
 //! | [`fault`] | Where the driver's error stops and a condition of `FR-ERR-001` begins | `FR-GLOB-018`, `OD-06`, `FR-ERR-034` |
+//! | [`catalogue`] | The fixed repertoire of catalogue queries, and the model their rows fold into | `FR-SRV-006`, `FR-SRV-037`, `NFR-PERF-001`, `NFR-PERF-002`, `FR-CAT-001` … `FR-CAT-053` |
 //!
 //! **The runtime is built here and nowhere else.** `ADR-005` makes the process
 //! synchronous and scopes the asynchronous runtime to this module: it is a
@@ -32,15 +33,19 @@
 //! there is none to find: the three statements are on the one path, behind no
 //! condition.
 //!
-//! **What this module does not do yet.** It reads no catalogue. The fourth
-//! entry of `FR-SRV-006` — a `SELECT` against `INFORMATION_SCHEMA` — is the
-//! task that follows, and so are the completeness verdicts of
-//! `privileges-and-completeness.md`. What is settled here is what `FR-SRV-002`
-//! and `FR-SRV-022` require to be settled **first**: the session is read only
-//! and confirmed, the product is MariaDB, and the series is resolved, so that
-//! every series-dependent treatment is selected from the connected series
-//! rather than from a failed attempt.
+//! **The catalogue read follows all three, and never precedes one.**
+//! `FR-SRV-042` fixes that order and [`catalogue::read`] takes a [`Session`],
+//! which is the value [`open`] produces once the three have answered — so the
+//! series every series-dependent treatment is selected from is resolved before
+//! the first `SELECT` is composed, as `FR-SRV-022` requires, rather than
+//! discovered from a read that failed.
+//!
+//! **What this module does not do yet.** It takes no completeness verdict. The
+//! markings of `FR-PRIV-005` through `FR-PRIV-007` and the cross-checks of
+//! `privileges-and-completeness.md` are the task that follows, so a read a
+//! privilege truncated produces a model that is short and does not yet say so.
 
+pub(crate) mod catalogue;
 pub(crate) mod connect;
 pub(crate) mod fault;
 pub(crate) mod session;
