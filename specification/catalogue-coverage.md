@@ -770,7 +770,8 @@ requirement says otherwise.
   | `referenced_by` | `FR-CAT-013`, shaped by `FR-CTX-010` |
   | its triggers | `FR-CAT-014`, whose catalogue field list is `FR-CAT-050` |
   | its `CHECK` constraints | `FR-CAT-015`, whose catalogue field list is `FR-CAT-046`, with `FR-CAT-037` and `FR-CAT-038` |
-  | its engine, its collation, and its comment | `FR-SCH-009`, which names all three and which records that a table has a collation and **no** character set; the comment's absent value is fixed by `FR-CAT-039`, and `FR-CAT-040` bars the table comment of a view from becoming a view's comment |
+  | `engine` and `collation` | `FR-CAT-054`, which records the catalogue field, the declared type and the observed value of each, and which records that a table has a collation and **no** character set |
+  | its comment | `FR-SCH-009`, which names it; the comment's absent value is fixed by `FR-CAT-039`, and `FR-CAT-040` bars the table comment of a view from becoming a view's comment |
 
   **An embedded table is a reduction of this object and not a second shape.**
   `FR-CTX-006` through `FR-CTX-010` fix what survives one hop: an embedded
@@ -787,10 +788,20 @@ requirement says otherwise.
   row the table catalogue returns, so that pass did not record it and this
   corpus holds no reading of it. Fragments of it are recorded: `FR-CAT-024`
   names twelve of its fields as volatile and excludes them, `FR-CAT-031`
-  records the table-type field on all four series, and `FR-CAT-039` records
-  the comment field's absent value. The list itself is not recorded, and
-  writing one from MariaDB's documentation is what the fourth provenance of
-  the [README](README.md#provenance) forbids.
+  records the table-type field on all four series, `FR-CAT-039` records the
+  comment field's absent value, and `FR-CAT-054` records the engine and the
+  collation fields. The list itself is not recorded, and writing one from
+  MariaDB's documentation is what the fourth provenance of the
+  [README](README.md#provenance) forbids.
+
+  *Amended in the twenty-sixth edition: a fourth fragment joins the three.*
+  Two properties this index names — the engine and the collation — were fixed
+  by `FR-SCH-009` alone, which requires `tpl schema table` to print them and
+  names neither the catalogue field either is read from nor what that field
+  holds. That is the gap this index was written to make visible, and it blocked
+  the command outright. `FR-CAT-054` closes it from the evidence, on all four
+  series of `FR-SRV-015`. It records two fields and not the list, so the pass
+  this note names is still untaken and nothing in this corpus waits on it.
 
   *What would change this.* An observation pass of the kind that produced
   `FR-CAT-047` and `FR-CAT-048`, recording the table catalogue's field list
@@ -817,6 +828,78 @@ requirement says otherwise.
   first reader to write a worked example against the model found the gap — a
   reader who must collect a property list from scattered requirements has no
   way to know when the collection is complete.
+
+- **FR-CAT-054**: A table SHALL carry `engine` and `collation`, read from the
+  two catalogue fields below and carried exactly as the server returns them,
+  per `FR-SRV-039`:
+
+  | Catalogue field | Declared | Observed | Model |
+  |---|---|---|---|
+  | engine | `varchar(64)`, nullable | `InnoDB` on every covered table | `engine` |
+  | table collation | `varchar(64)`, nullable | `utf8mb4_unicode_520_ci` on every covered table | `collation` |
+
+  *Observed on 2026-09-18 against all four series of `FR-SRV-015`.* The
+  `freight` schema returns 23 rows from the table catalogue — 16 `BASE TABLE`,
+  one `SYSTEM VERSIONED`, one `SEQUENCE` and five `VIEW`, exactly the types
+  `FR-CAT-031` records. The two fields hold the values above on all eighteen
+  non-view rows, are SQL `NULL` together on all five view rows, and are never
+  the empty string; the declared type of each is the same on every series, and
+  no reading differs between the four. The seventeen rows the model covers are
+  the `BASE TABLE` and `SYSTEM VERSIONED` ones, per `FR-CAT-001`.
+
+  *Conditions of the observation.* Taken through the harness of
+  `scripts/mariadb/`, raised by `up.sh` and taken down by `down.sh`, against
+  the four servers it raised: server versions `12.3.3`, `11.8.9`, `11.4.13`
+  and `10.11.19`. The fixture declares its schema `CHARACTER SET utf8mb4 COLLATE
+  utf8mb4_unicode_520_ci` and every table `ENGINE=InnoDB` with no table-level
+  `COLLATE`. A reading of these two fields is re-taken whenever that DDL
+  changes either declaration.
+
+  **A view takes neither field.** Both are SQL `NULL` on the row a view has in
+  the table catalogue, on all four series. Nothing follows for the model —
+  `FR-CAT-003` keeps a view out of the tables collection and `FR-CAT-047`
+  gives it a field list of its own — and it is recorded because the same row
+  is where `FR-CAT-040` reads the literal `VIEW` a view's table comment
+  carries, so a reader of that requirement meets these two fields beside it.
+
+  *A table has a collation and no character set*, which `FR-SCH-009` has
+  recorded since the seventh edition. This observation does not disturb it:
+  the table catalogue offers the collation field above and no character-set
+  field. A character set is reachable on the database, per `FR-CTX-036`, and on
+  each individual column, per `FR-CTX-041`, and not on the table between them.
+
+  *An inherited collation is reported explicitly*, exactly as `FR-CTX-041`
+  records at column level. No table of the fixture declares a `COLLATE` of its
+  own and every one reports the schema's default explicitly, rather than SQL
+  `NULL` or the empty string, so the model cannot say whether a table's
+  collation was written on the table or inherited from the schema, and does
+  not claim to.
+
+  *Bounded claim.* The fixture declares one engine and one table collation, so
+  no second value of either field was observed, and no claim is made here
+  about the population either can take. Both are carried under `BR-CAT-005`,
+  which carries a field holding the same **populated** value throughout and
+  records the bound beside it rather than dropping the field — the treatment
+  that rule states for a foreign key's match option and an index's ignored
+  flag.
+
+  *This is not the table catalogue's field list.* `FR-CAT-053` names the
+  observation pass that would record that list verbatim, and the pass is still
+  untaken. This requirement records two of its fields; it establishes nothing
+  about whether the catalogue offers a table a field this corpus does not
+  carry.
+
+  *Rejected: carrying neither, and having `FR-SCH-009` obtain what it prints
+  from somewhere else.* There is nowhere else. No statement this system issues
+  reports a table's engine or its collation other than the table catalogue,
+  and deriving the collation from the schema's default — which is what every
+  table of the fixture happens to report — is an inference the catalogue does
+  not state, and is the ground on which the seventh edition removed the
+  character set rather than reconstructing it. Carrying is also what
+  `BR-CAT-005` requires by default: neither field is on the closed exclusion
+  list of `FR-CAT-024`, neither restates a fact the model holds elsewhere
+  under `FR-CTX-021`, and neither is the *nothing observed* case, because both
+  hold a populated value on every covered table of every series.
 
 ### Views
 

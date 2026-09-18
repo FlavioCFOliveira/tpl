@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty-five editions. All are in force;
+The specification has been written in twenty-six editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -2080,6 +2080,131 @@ is raised or reopened.** Four identifiers are assigned — `FR-CONF-040`,
 requirements in force, as is the pointer `FR-CAT-016` gains. The index of
 [open-questions.md](open-questions.md) stays empty.
 
+### Twenty-sixth edition — a block that had gone, a measure with two members, and two facts a command must print
+
+The first arm is being built, and five statements it needs were either missing
+from this corpus or had stopped being true. Three of them govern the one path a
+calling agent meets most often — the message a wrong name produces. One is a
+pair of facts a command must print and no observation had recorded. One is the
+casing of a path segment, where two requirements in force each offered a
+spelling and neither claimed the segment.
+
+**Nothing here adds an exit code, withdraws a requirement or retires an
+identifier.** Four requirements are added, four are amended, and two statements
+this corpus makes about the repository are corrected.
+
+- **A mandated test whose block had gone** —
+  [schema-commands.md](schema-commands.md). `BR-SCH-004` mandates the dump
+  round-trip test, and its *Accepted cost* said the test was blocked only by
+  `tpl` not existing. The binary exists, so the note named no block at all, on
+  a test this corpus obliges someone to write. What blocks it is that neither
+  half of the round-trip is implemented: `tpl schema dump` and
+  `tpl render --context` are both declared in the command tree and neither
+  executes. The two halves belong to different arms, so the test becomes
+  writable when the later of the two lands and not before. Recording the block
+  as gone was rejected, and so was writing the dump half against a stored
+  snapshot — that asserts a determinism property `NFR-DET-001` already owns,
+  where this rule's subject is that a render from a dump and a render from a
+  live read agree.
+- **A suggestion with one worked cardinality out of three** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-008` shows one
+  candidate, `FR-ERR-019` admits three, and how two or three are written was
+  fixed nowhere, so the form was the implementation's rather than this
+  corpus's. `FR-ERR-037` fixes it: every candidate inside the one `did you
+  mean` question, quoted, `, ` between each pair but the last and ` or ` before
+  the last, in the order `FR-ERR-019` gives. Separating every pair with `, `
+  was rejected, because the caller must choose exactly one and ` or ` is the
+  word that says so, on the line `FR-ERR-009` makes the one they act on; one
+  line per candidate was rejected, because `FR-ERR-008` fixes the message at
+  four labelled lines and `FR-ERR-024` escapes the newline in every
+  interpolated value precisely so that nothing can forge a fifth.
+- **A comparison that folds case, or does not** — the same file. Nothing said
+  which, over a population of names a server owns, and the two readings build
+  different programs. `FR-ERR-038` compares the characters as written and folds
+  nothing; it names the two places this corpus does fold — `FR-SCH-014` for
+  `--pattern` and `FR-ENV-031` for the word-list tokeniser — so that a reader
+  arriving from either is told once, and it states the cost: a name differing
+  in more than two letters' case alone is outside the threshold and is not
+  offered, and the caller recovers it from the generic hint in one further
+  invocation. Folding was rejected on two grounds. `--pattern` selects a set
+  the caller then reads in full, where folding widens a listing; this is a
+  ranking under a threshold, where folding changes which candidates are offered
+  **at all**. And it would place a name differing only in case at distance
+  zero, beneath an `error` line stating that the name does not exist.
+- **A measure named by its family and not by its member** — the same file.
+  `FR-ERR-019` admits a candidate by an edit distance of two, and the two forms
+  of the Damerau-Levenshtein distance disagree inside exactly that threshold:
+  `ca` reaches `abc` in two steps unrestricted and three restricted. The
+  variant therefore decides whether a candidate is offered at all, not merely
+  where it ranks, and it was recorded outside this corpus, as a technical open
+  decision. `FR-ERR-039` names the restricted form — optimal string alignment.
+  The unrestricted form was rejected: what it buys is the candidates in which a
+  caller transposed two characters **and** edited between them, and what it
+  costs is that the distance can no longer be computed from a bounded window of
+  the comparison, on the path `BR-PERF-004` budgets at 200 names.
+- **Two facts a command prints and no observation had recorded** —
+  [catalogue-coverage.md](catalogue-coverage.md). `FR-SCH-009` has required
+  `tpl schema table` to carry a table's engine, collation and comment since the
+  first edition; nothing fixed the first two as model properties, neither had
+  ever been observed in this repository, and `FR-CAT-053` — the index added one
+  edition earlier to make a table's properties visible — showed it. It blocked
+  the command outright. `FR-CAT-054` records both from the evidence: the
+  catalogue field, its declared type, `InnoDB` and `utf8mb4_unicode_520_ci` on
+  every covered table and SQL `NULL` together on every view row, observed on
+  2026-09-18 against all four series of `FR-SRV-015` through the harness of
+  `scripts/mariadb/`, with the conditions the reading was taken under and a
+  bounded claim, because the fixture declares one engine and one table
+  collation. Carrying neither was rejected: there is nowhere else the two can
+  come from, and deriving the collation from the schema's default is the
+  inference the seventh edition refused when it removed the table character
+  set. `FR-CAT-053` gains the row and a fourth fragment; the table catalogue's
+  own field list is still unrecorded and nothing waits on it.
+- **A cache path with two plausible casings** —
+  [cache-documents.md](cache-documents.md). `FR-CDOC-014` fixes
+  `routines/<kind>.<name>.json` and fixed no casing for `<kind>`, while calling
+  itself the same rule at two layers as `FR-SCH-008` — which, since the
+  twenty-fifth edition, has a casing and it did not. A path builder could read
+  `<kind>` from `FR-CAT-016`, in upper case, or from `FR-SCH-008`, in lower,
+  and a cache written under one and read under the other neither collides nor
+  fails: it **misses**, silently, at exit `0`, which is `FR-CACHE-033`
+  behaving exactly as written. The requirement now fixes lower case and names
+  `FR-SCH-008` as the rule it follows, so its two-layers claim is true of
+  something a reader can check. Taking the casing from `FR-CAT-016` was
+  rejected: that field carries the catalogue's own string because it is a value
+  of a document a caller reads, and a path segment is a name this system
+  composes.
+
+**What found them.** Three instruments, and none is one of the five validation
+rules below. `FR-ERR-037`, `FR-ERR-038` and `FR-ERR-039` were found by writing
+the diagnostic that suggests a nearest match against this corpus — the
+instrument that produced the twentieth, twenty-first, twenty-second,
+twenty-fourth and twenty-fifth editions — which had to make three statements
+this corpus did not. `FR-CAT-054` and the casing of `FR-CDOC-014` were found by
+reading requirements in force against two things written one edition earlier,
+the index of `FR-CAT-053` and the casing `FR-SCH-008` gained, which is the third
+rule's lesson in a third setting: a statement that is correct about itself
+establishes nothing about whether it is complete against what it points at. And
+the block of `BR-SCH-004` was found by reading a note against the repository it
+describes, which is the fifth rule's shape applied to a file this corpus does
+not own — the note was true when it was written, and the repository moved under
+it.
+
+**Two statements about the repository are corrected with it**, both of them the
+same clause. The *Maintenance debt* section below said of `FR-SRV-013` that it,
+"like every test this corpus mandates", was blocked only by `tpl` not existing;
+`DIV-036` said it of three mandated tests. Both are corrected, and neither by
+deciding what blocks a test this edition did not read: what a mandated test
+waits on is the command it drives, and `BR-SCH-004` is the one this edition
+read.
+
+**Four identifiers are assigned** — `FR-ERR-037`, `FR-ERR-038`, `FR-ERR-039`
+and `FR-CAT-054` — and none is retired. No requirement is withdrawn, no open
+question is raised or reopened, and the index of
+[open-questions.md](open-questions.md) stays empty. One decision that had been
+recorded outside this corpus is brought inside it, because it decides an
+observable message and is therefore a requirement by the test
+[Writing conventions](#writing-conventions) states.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -2332,8 +2457,17 @@ corrections of wording, each stated beside the requirement it changed.
 The tenth edition adds no obligation of either kind either. It names a variable
 that two requirements had left to the implementer, records a twelfth difference
 between the series, and widens one verification that was already owed —
-`FR-SRV-013`, which like every test this corpus mandates is blocked only by
-`tpl` not existing.
+`FR-SRV-013`, which at the time was blocked, as every test this corpus mandates
+then was, by `tpl` not existing.
+
+*Corrected in the twenty-sixth edition.* The clause read that `FR-SRV-013`
+"like every test this corpus mandates is blocked only by `tpl` not existing",
+in the present tense and over every mandated test at once. The binary exists,
+so the clause named a condition that does not hold, and what a mandated test
+waits on is the command it drives, which differs from test to test.
+`BR-SCH-004` now records its own block, in
+[schema-commands.md](schema-commands.md); `DIV-036`, which made the same claim
+of three tests, is corrected with it.
 
 The eleventh edition adds no obligation of either kind. It records a limit on
 where one observation can be made, adds an instrument that closes the resulting
@@ -2535,6 +2669,22 @@ condition, which is a limit on evidence and joins `FR-ERR-031` and
 `FR-SCH-026` states the layout rule for the listings of the first arm alone,
 because those are the only listings this corpus works. The item below was
 untouched by this edition and stays outstanding.
+
+The twenty-sixth edition adds no obligation of either kind, and records none as
+discharged. It fixes five statements the first arm needs and this corpus did
+not make: the wording of a suggestion that names more than one candidate,
+whether the comparison behind it folds case, which Damerau-Levenshtein distance
+`FR-ERR-019` measures, the catalogue source and the observed value of a table's
+engine and collation, and the casing of the routine kind in a cache path. It
+also corrects two statements this corpus makes about the repository, which were
+true when they were written and had stopped being so — the clause above about
+`FR-SRV-013`, and the same clause in `DIV-036`. One decision recorded outside
+this corpus is brought inside it: the variant of the edit distance, which
+decides which candidate a `66` offers, is now `FR-ERR-039`. What remains of the
+technical open decision that held it is a matter for the owner of
+`docs/spec-technical/`, which this corpus does not write, and nothing here waits
+on that: `FR-ERR-039` is complete on its own terms. The item below was untouched
+by this edition and stays outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.

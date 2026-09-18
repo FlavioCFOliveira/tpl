@@ -1,7 +1,7 @@
 ---
 title: Cache Documents
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-18
 related: [cache-commands.md, context-document.md, output-formats.md, catalogue-coverage.md]
 ---
 
@@ -133,11 +133,40 @@ Out of scope: when the cache is consulted or written, which is
 
 - **FR-CDOC-014**: A cached routine SHALL be stored under a path that carries
   its kind as well as its name, in the form `routines/<kind>.<name>.json`.
+  `<kind>` SHALL be written in **lower case** — `procedure` or `function`, and
+  no other spelling of either — which is the spelling `FR-SCH-008` fixes for
+  the qualified prefix on the command line.
 
   *Rationale.* Procedures and functions occupy distinct namespaces on the
   server, so one name can denote two objects and a path keyed on the name alone
   would collide. The qualified command-line form of `FR-SCH-008` and this path
-  form are the same rule applied at two layers.
+  form are the same rule applied at two layers, and with the casing above the
+  two layers carry the same two spellings.
+
+  *Amended in the twenty-sixth edition: the casing of `<kind>` is stated,
+  because a path builder had two sources for it and no requirement saying
+  which.* `FR-CAT-016` fixes the emitted `kind` at `PROCEDURE` and `FUNCTION`,
+  in upper case, because it is the catalogue's own string; `FR-SCH-008` fixes
+  the invocation prefix at `procedure` and `function`, in lower case. Either
+  was a defensible reading of `<kind>`, and this requirement's own claim to be
+  the same rule at two layers was the stronger of the two pointers while being
+  true of nothing a reader could check. The consequence is the worst shape a
+  cache defect takes: a cache written under one casing and read under the other
+  neither collides nor fails. It **misses**, and `FR-CACHE-033` makes a miss
+  silent — the read is served from the server, the file is rewritten beside the
+  one already there, and the invocation exits `0` reporting neither an error
+  nor a warning.
+
+  *Rejected: taking the casing from `FR-CAT-016`, the emitted `kind`.* That
+  field carries the catalogue's own string because it is a value of a document
+  a caller reads. A path segment is a name this system composes, as the prefix
+  of `FR-SCH-008` is, and composing a filename out of the server's spelling
+  puts a catalogue string inside a path. It would also leave the two-layers
+  claim above false in the one respect a reader checks it on, the two layers
+  carrying the same two kinds under two spellings; and it fixes the casing no
+  more firmly than the lower-case form does, because whether two spellings of
+  one path denote one file is a property of the filesystem rather than of this
+  requirement.
 
 ## What a cache-served document does not promise
 

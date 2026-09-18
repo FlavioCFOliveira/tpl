@@ -579,11 +579,101 @@ Out of scope: the wording of any individual message.
   most three suggestions, drawn from names within an edit distance of two,
   ordered by distance and then by name.
 
+- **FR-ERR-039**: The edit distance of `FR-ERR-019` SHALL be the **restricted**
+  Damerau-Levenshtein distance — optimal string alignment — in which the
+  insertion, the deletion and the substitution of one character, and the
+  transposition of two **adjacent** characters, each cost one, and no substring
+  is edited more than once.
+
+  *The variant decides which candidates are offered, not merely how they are
+  ranked.* `FR-ERR-019` admits a candidate by its distance, and the two forms
+  of the Damerau-Levenshtein distance disagree inside the threshold that
+  requirement fixes. They part company only where a further edit falls between
+  the two transposed characters, and the canonical pair of that shape is `ca`
+  against `abc`: **three** steps under the restricted form and **two** under
+  the unrestricted one. Naming the family and not the member therefore admitted
+  two conforming implementations that offer different candidates for the same
+  invocation.
+
+  *The property the transposition exists for holds under both forms*, and is
+  why a plain Levenshtein distance is not the measure: `ordres` is one step
+  from `orders`, where plain Levenshtein reports two, so the commonest typing
+  slip of all stays inside the threshold.
+
+  *Rejected: the unrestricted form, which admits the pair above at two.* What
+  it buys is the candidates in which a caller transposed two characters **and**
+  edited between them — two slips in one name, which a threshold of two is
+  already at the edge of admitting. What it costs is that the distance can no
+  longer be computed from a bounded window of the comparison: the unrestricted
+  form reaches back to an arbitrary earlier position and holds the whole
+  comparison, plus an index over the alphabet of both names. `BR-PERF-004`
+  makes this a budgeted path — a `66` over `WL-001` compares against 200 names
+  — and a wrong invocation is the invocation a calling agent makes most often
+  while it is finding its way.
+
+- **FR-ERR-038**: The system SHALL compare a supplied name against a candidate
+  over the characters as written, and SHALL NOT fold case, of ASCII or of any
+  other range, before measuring the distance of `FR-ERR-039`.
+
+  **Where this corpus folds ASCII case it says so, and it does not say so
+  here.** `FR-SCH-014` folds it for the `--pattern` filter and `FR-ENV-031`
+  for the word-list tokeniser, each to widen what a comparison accepts, and
+  `FR-SCH-008` folds it to **detect** a qualified prefix spelled in the wrong
+  case and then refuses the token. None of the three reaches this path, and it
+  is stated here so that a reader arriving from any of them is told once.
+
+  *Accepted cost.* A name differing from the one that exists in more than two
+  letters' case alone — `ORDER_ITEMS` against `order_items` — falls outside the
+  threshold and is not offered. The caller receives the generic hint, which is
+  the listing command, so the name is still recoverable in one further
+  invocation — the same cost `FR-ERR-023` already accepts for a candidate its
+  character set refuses.
+  A single-letter slip — `Orders` against `orders` — is at distance one and is
+  offered.
+
+  *Rejected: folding ASCII case before measuring, as `FR-SCH-014` folds it for
+  `--pattern`.* The two rules answer different questions. `--pattern` selects
+  the set the caller asked for and shows everything it admits, so folding
+  widens a listing the caller then reads; this is a ranking under a threshold,
+  so folding changes which candidates are offered **at all** and in which order
+  `FR-ERR-019` presents them. And it would place a name differing only in case
+  at distance **zero** — the measure calling the candidate the supplied name,
+  beneath an `error` line stating that the supplied name does not exist.
+  `FR-ERR-010` reads an overlap between those two lines as the reader's signal
+  that both are about the same thing; a distance of zero makes them disagree
+  instead.
+
 - **FR-ERR-020**: IF no candidate is within that distance, THEN the system SHALL
   omit the suggestion entirely rather than offer a poor one.
 
 - **FR-ERR-021**: Suggestions SHALL apply to tables, views, routines, templates,
   database entries, commands, flags, and configuration keys.
+
+- **FR-ERR-037**: WHERE a suggestion names more than one candidate, the system
+  SHALL write all of them inside the one `did you mean` question of
+  `FR-ERR-008`, each between single quotation marks, separating every pair but
+  the last with `, ` and the last pair with ` or `. They SHALL appear in the
+  order `FR-ERR-019` fixes.
+
+  ```
+  hint:  did you mean 'orders'? list the available tables with: tpl -d shop schema tables
+  hint:  did you mean 'aorders' or 'orderz'? list the available tables with: tpl -d shop schema tables
+  hint:  did you mean 'aorders', 'orderz' or 'border'? list the available tables with: tpl -d shop schema tables
+  ```
+
+  `FR-ERR-008` shows one candidate and `FR-ERR-019` admits three, and between
+  them nothing said how two or three are written. The three lines above are one
+  sentence at the three cardinalities that requirement admits.
+
+  *Rejected: separating every pair with `, `, the last included.* It reads as
+  an enumeration where what is meant is a choice, and the caller must take
+  exactly one of the three; ` or ` is the word that says so, on the line
+  `FR-ERR-009` makes the one they act on.
+
+  *Rejected: one line per candidate.* `FR-ERR-008` fixes the message at four
+  labelled lines, and `FR-ERR-024` escapes the newline in every interpolated
+  value precisely so that no value can forge a fifth. A system that emits one
+  itself spends that guarantee on formatting.
 
 ## Safe hints
 

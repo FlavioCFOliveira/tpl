@@ -171,6 +171,16 @@ tpl schema dump                        The whole database as one JSON document
   required them since the second edition and this list, written in the first,
   never named them.
 
+  *Amended in the twenty-sixth edition: two of the three now cite the
+  observation that established them.* The engine and the collation were
+  required here from the first edition, and no requirement of this corpus said
+  which catalogue field either is read from or what that field holds — two
+  facts this command must print, fixed nowhere. `FR-CAT-054` records both,
+  observed on 2026-09-18 against all four series of `FR-SRV-015`, and
+  `FR-CAT-053` names it beside them. The comment's absent value was already
+  fixed by `FR-CAT-039`. Nothing this requirement obliges changes: the three
+  are as the seventh edition left them.
+
 - **FR-SCH-010**: IF a named table, view, or routine does not exist in the
   selected database, THEN the system SHALL exit `66` (`EX_NOINPUT`) with a
   nearest-match suggestion over the objects of that kind that do exist. IF a
@@ -279,8 +289,31 @@ tpl schema dump                        The whole database as one JSON document
 
   *Accepted cost.* The test needs the container of
   [performance-requirements.md](performance-requirements.md), which now
-  exists at all four series of `FR-SRV-015`. It is blocked only by `tpl` not
-  existing.
+  exists at all four series of `FR-SRV-015`.
+
+  *Amended in the twenty-sixth edition: the note named a condition that does
+  not hold.* It said the test was blocked only by `tpl` not existing. The
+  binary exists — the package landed at `d8e7e8a` and the repository carries
+  both a library and a binary — so the note named no block at all, on a test
+  this rule mandates. What blocks the test is that **neither half of the
+  round-trip is implemented**: `tpl schema dump`, per `FR-SCH-016`, and
+  `tpl render --context`, per `FR-RND-016`. Both are declared in the command
+  tree and neither executes — each raises the violated-invariant `70` of
+  `FR-ERR-030` instead — as checked at `90af569`. The two halves belong to
+  different arms, the dump to this one and `--context` to the third, so the
+  test becomes writable when the later of the two lands and not before. This
+  note states something about a file this corpus does not own, so it is
+  re-read whenever either command gains an implementation.
+
+  *Rejected: recording that the block is gone.* It is not. The test cannot be
+  written against two commands that neither dump nor render, and a rule that
+  mandates a test owes its reader a note saying what the test waits on.
+
+  *Rejected: writing the dump half now and asserting it against a stored
+  snapshot.* That asserts that the dump has not changed, which is a
+  determinism property `NFR-DET-001` already owns. The whole subject of this
+  rule is that a render from a dump and a render from a live read agree, and
+  neither render can be performed.
 
 ## Flags and output
 
