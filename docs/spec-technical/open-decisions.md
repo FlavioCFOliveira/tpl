@@ -32,6 +32,11 @@ re-read against the same build the same day; the first two carry a refinement
 and two amendments, and the third carries an observation now owed to
 `adr-guardian`.
 
+**One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
+that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
+shows that it is, under two parents that are not on the emitting path. The
+decision is untouched and the entry records what moved.
+
 Two obligations survive the settlement, and each is named in its own entry
 rather than left to be inferred:
 
@@ -191,8 +196,9 @@ crate index, the Rust Edition Guide, the Rust Reference, the Rust Book, the
 Cargo Book, or a file of this repository. Each claim carries the date it was
 verified on: **2026-09-10** for the nineteen entries settled that day,
 **2026-09-11** for everything added since, and **2026-09-18** for the two
-library and format claims `OD-31` rests on. Anything not verified says so in its
-own text. No claim rests on recollection.
+library and format claims `OD-31` rests on and for the dependency-graph reading
+that corrected `OD-18`. Anything not verified says so in its own text. No claim
+rests on recollection.
 
 **An entry reduced to a citation carries no source of its own**, and neither
 its sources nor its unverified points are restated here: both live in the
@@ -1168,7 +1174,7 @@ writer `tpl` owns. Five answers follow, one per question the entry asked.
 | Question | Answer |
 |---|---|
 | Derived or bespoke | Derived. The emitted types are the model's, and their **field declaration order is the key order** |
-| `preserve_order` | **Off**, and `indexmap` is not in the graph |
+| `preserve_order` | **Off.** Nothing enables it, and no unordered map reaches the emitting path |
 | The order of the two map-shaped documents | Byte-wise ascending by key, because `NFR-DET-002` already fixes it |
 | The two omissions | One is a map that is never given the key; the other is one `skip_serializing_if`, used once in the crate |
 | `serde` in the library's public signature | Yes, and it costs nothing |
@@ -1196,8 +1202,11 @@ exceptions, of which neither `FR-CTX-026`'s `vars` nor `FR-CFG-037`'s document
 is one. Both therefore fall to the default. The model carries them as ordered
 maps keyed by `String`, whose iteration order is byte-wise ascending, and
 `serde_json::Value` never appears on the emitting path — so `preserve_order`
-would change nothing if it were enabled, and it is not enabled. `indexmap` does
-not enter the dependency graph.
+would change nothing if it were enabled, and it is not enabled: `Cargo.toml`
+requests no feature of `serde_json`, and `Cargo.lock` records that crate's
+dependencies as `itoa`, `memchr`, `serde`, `serde_core` and `zmij`, among which
+the feature's optional `indexmap` does not appear (verified at commit
+`fd51ca2`, 2026-09-18).
 
 **The two exceptions to "absent is `null`", expressed differently because they
 are different things.**
@@ -1239,6 +1248,29 @@ type and apply in both directions, so key order is still a property of a type
 and the round trip is still inverse by construction — which is the whole of what
 this entry decided. The shapes are enumerated in
 [interfaces.md](interfaces.md#the-two-directions-over-the-document).
+
+**Amended on 2026-09-18 — `indexmap` is in the dependency graph, and its
+presence is irrelevant to this decision.** This entry asserted twice that it is
+not, in the `preserve_order` row and at the end of the paragraph above, and the
+assertion was already false when it was written.
+`cargo tree --all-features --invert indexmap`, run at commit `fd51ca2` on
+2026-09-18, returns `indexmap v2.14.2` under two parents: `sqlx-core v0.9.0` —
+the vendored, path-patched tree
+[`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) places in the
+repository — and `toml_edit v0.25.15+spec-1.1.0`. `tpl` depends directly on
+both.
+
+Neither parent is on the emitting path, which is the only path this entry
+decides anything about: the documents are written by `serde_json` over the
+model's own types, `toml_edit` is the configuration **write** path
+([`OD-09`](#od-09--toml-the-read-path-and-the-write-path)), and the driver emits
+no document at all. So what the entry was reaching for is true and checkable,
+and it is stated as three facts rather than as one claim about the whole graph:
+`preserve_order` is not enabled, `serde_json` does not depend on `indexmap`, and
+therefore no unordered map reaches the emitting path. **The decision, its ground
+and the options it rejected are unchanged**; a claim about the dependency graph
+was standing in for a claim about one crate's features, and only the claim
+moves.
 
 **`--pretty`.** `FR-OUT-008` fixes a two-space indent, which is
 `serde_json`'s own default — "construct a pretty printer formatter that

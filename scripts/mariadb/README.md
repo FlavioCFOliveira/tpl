@@ -21,7 +21,7 @@ observation was made against one series rather than all four, it says which.
 | `up.sh` | Starts every server and does not return until each is listening and verified |
 | `down.sh` | Stops and removes them, and proves nothing of the fixture is left |
 | `status.sh` | The gate: whether the fixture is up, answered without a client |
-| `observe.sh` | The three instruments the nine outside-the-process observations use, and the reading that identifies a build |
+| `observe.sh` | The three instruments of `NFR-PERF-007` that need a server or a tracer, and the reading that identifies a build |
 | `series.env` | The inventory — one record per server — and the helpers the scripts share |
 | `probe-session.sql` | The connection-start sequence of `FR-SRV-006`, for a substitute client |
 | `observer.Dockerfile` | The tracer image `observe.sh opens` falls back to |
@@ -617,8 +617,12 @@ docker exec tpl-mariadb-notls mariadb --skip-ssl -h 127.0.0.1 -P 3306 \
 `NFR-PERF-007` forbids verifying a requirement of form by reading the source,
 and `BR-SRV-003` says why: a promise about what a process sends that can only be
 checked by reading that process's own source is not a promise a caller can rely
-on. Nine requirements are held to that standard, and three instruments cover all
-nine.
+on. Nine requirements are held to that standard, and `NFR-PERF-007` fixes
+**four** instruments to reach them. Three are this fixture's and are described
+below; the fourth is a **differential run**, which needs neither a server nor a
+privilege and is therefore the test suite's, where it was built. Each instrument
+is bound to the targets its row of that requirement names, and this table names
+the instrument per row on the same terms.
 
 | # | Requirement | The property | Instrument |
 |---|---|---|---|
@@ -626,7 +630,7 @@ nine.
 | 2 | `NFR-PERF-002` | Reading one named object does not scale with the database | [statements](#the-statements-a-server-receives) |
 | 3 | `NFR-PERF-003` | A cache hit opens no connection and issues no query | [connections](#the-connections-a-server-accepts) and [statements](#the-statements-a-server-receives) |
 | 4 | `NFR-PERF-004` | At most one connection per invocation | [connections](#the-connections-a-server-accepts) |
-| 5 | `NFR-PERF-005` | The commands of `FR-PROJ-025` touch nothing | [files opened](#the-files-a-process-opens) |
+| 5 | `NFR-PERF-005` | The commands of `FR-PROJ-025` touch nothing | Split by clause and by target: [connections](#the-connections-a-server-accepts) for the connection clause, on all four targets; a differential run for the discovery and configuration clauses, on all four; [files opened](#the-files-a-process-opens) for those same two clauses **as syscalls**, on the two Linux targets only |
 | 6 | `NFR-PERF-006` | A command needing no catalogue opens no connection | [connections](#the-connections-a-server-accepts) |
 | 7 | `FR-SRV-012` | The closed statement list of `FR-SRV-006` | [statements](#the-statements-a-server-receives) |
 | 8 | `FR-SRV-013` | The read-only read-back, in both outcomes | [statements](#the-statements-a-server-receives), and the value the session reports |
@@ -834,7 +838,9 @@ matters — an unauthenticated connection, such as the gate's own probe, raises
 
 ### The files a process opens
 
-This is row 5, and it is the one instrument the server cannot provide.
+This is the third instrument, and the only one of the three the server cannot
+provide. It serves the two clauses of row 5 that are stated as syscalls, on the
+two Linux targets alone.
 
 **On Linux, `strace` on the host**, which observes the real process:
 
@@ -938,10 +944,15 @@ which does not exist. Until it does, the count can be observed but the
 comparison the requirement asks for cannot be made. The `freight`-versus-`mysql`
 pair above stands in for the shape of the comparison, not for its content.
 
-**Row 5 on Darwin.** The trace above is of a Linux process. macOS offers no
-tracer that runs without root or without System Integrity Protection disabled,
-as the table above records, so on a macOS host `NFR-PERF-005` is currently
-verified against the Linux build only.
+**Row 5 on Darwin, as a syscall.** The trace above is of a Linux process. macOS
+offers no tracer that runs without root or without System Integrity Protection
+disabled, as the table above records, so on a macOS host no clause of
+`NFR-PERF-005` is observed as a syscall. The clauses themselves are not left
+unobserved: the connection clause is the server's own record, on all four
+targets, and the discovery and configuration clauses fall to the fourth
+instrument, the differential run, which `NFR-PERF-005` makes the whole of the
+evidence where no tracer exists. That instrument is the test suite's, not this
+fixture's.
 
 ## Credentials
 
