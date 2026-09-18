@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn an_index_is_one_object_carrying_an_ordered_column_list() {
+    fn fr_cat_010_an_index_is_one_object_carrying_an_ordered_column_list() {
         // FR-CAT-010: the catalogue reports one row per column and the model
         // folds them into one object. The order is the sequence field's.
         let composite = index(
@@ -221,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn the_sort_direction_and_the_prefix_length_belong_to_the_member() {
+    fn fr_cat_042_the_sort_direction_and_the_prefix_length_belong_to_the_member() {
         // Both differ from row to row of one index, so neither can be a field
         // of the index. FR-CAT-042 reads them from the collation field and the
         // sub-part field of each row.
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn the_direction_is_read_from_the_two_values_observed_and_the_null_row_has_none() {
+    fn fr_cat_042_the_direction_is_read_from_the_two_values_observed_and_the_null_row_has_none() {
         // 70 rows read `A`, 6 read `D`, and the one full-text row is SQL NULL.
         assert_eq!(
             SortDirection::from_catalogue("A"),
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn the_primary_key_is_the_index_named_primary_and_nothing_else_names_it() {
+    fn fr_cat_043_the_primary_key_is_the_index_named_primary_and_nothing_else_names_it() {
         // FR-CAT-043: the name is the whole test.
         assert!(index(PRIMARY_KEY_NAME, vec![member("consignment_id")]).is_primary_key());
         assert!(!index("uq_consignment_reference", vec![member("reference")]).is_primary_key());

@@ -157,19 +157,19 @@ mod tests {
     }
 
     #[test]
-    fn a_value_with_no_control_is_unchanged() {
+    fn fr_out_018_a_value_with_no_control_is_unchanged() {
         assert_eq!(escaped("ordens_de_compra"), "ordens_de_compra");
     }
 
     #[test]
-    fn the_two_named_controls_take_their_readable_escape() {
+    fn fr_out_018_the_two_named_controls_take_their_readable_escape() {
         // FR-OUT-018: a newline inside a column comment cannot be allowed to
         // add a line to a listing.
         assert_eq!(escaped("one\ntwo\rthree"), "one\\ntwo\\rthree");
     }
 
     #[test]
-    fn tab_is_excepted_and_reaches_the_reader_intact() {
+    fn fr_out_018_tab_is_excepted_and_reaches_the_reader_intact() {
         // FR-OUT-018 excepts tab in `text` output alone, which is the one
         // point on which this rule and FR-ERR-024 disagree.
         assert_eq!(escaped("one\ttwo"), "one\ttwo");
@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn every_other_c0_control_takes_the_unicode_escape() {
+    fn fr_out_018_every_other_c0_control_takes_the_unicode_escape() {
         // The range the requirement names is U+0000 through U+001F. Three of
         // the thirty-two are spoken for; the other twenty-nine are not.
         let mut unicode_escaped = 0_u32;
@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn a_character_above_the_c0_range_is_left_alone() {
+    fn fr_out_018_a_character_above_the_c0_range_is_left_alone() {
         // U+007F is outside the range FR-OUT-018 names, and so is U+009B, the
         // single-character CSI that NFR-DET-004 read against this corpus and
         // left standing.
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn the_escaped_form_carries_no_control_but_tab() {
+    fn fr_out_018_the_escaped_form_carries_no_control_but_tab() {
         let hostile: String = (0x00_u32..0x20)
             .filter_map(char::from_u32)
             .chain("plain text".chars())
@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn the_width_is_the_number_of_characters_the_rule_emits() {
+    fn fr_out_006_the_width_is_the_number_of_characters_the_rule_emits() {
         // The layout aligns a column with `width` and fills it with `write`.
         // A disagreement between the two is a misaligned listing, so the two
         // are held to each other here rather than by review.
@@ -258,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn a_wide_character_is_measured_at_one_character_and_not_at_two_cells() {
+    fn fr_out_004_a_wide_character_is_measured_at_one_character_and_not_at_two_cells() {
         // The accepted cost `width` states: the layout counts characters, and
         // a terminal draws this one two cells wide. FR-OUT-004 makes `text`
         // explicitly not a contract, and correcting it needs a Unicode width

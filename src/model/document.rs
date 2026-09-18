@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn a_document_serialised_and_read_back_yields_an_equal_model() {
+    fn fr_sch_022_a_document_serialised_and_read_back_yields_an_equal_model() {
         // FR-SCH-022 with OD-18: the dump and its re-emission are inverse
         // because they are two directions over one set of types. The embedding
         // of FR-CTX-006 and FR-CTX-010 is undone by taking the name back out of
@@ -223,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_collection_is_an_empty_array_and_is_never_null_and_never_omitted() {
+    fn fr_ctx_004_an_empty_collection_is_an_empty_array_and_is_never_null_and_never_omitted() {
         // FR-CTX-004 and FR-CTX-005: a consumer may test a collection for
         // emptiness without first testing it for nullity, so `null` is left to
         // an absent scalar. FR-OUT-035 says the same for an empty result.
@@ -256,7 +256,8 @@ mod tests {
     }
 
     #[test]
-    fn a_complete_object_carries_no_restricted_key_and_an_incomplete_one_carries_an_array() {
+    fn fr_priv_005_a_complete_object_carries_no_restricted_key_and_an_incomplete_one_carries_an_array()
+     {
         // FR-PRIV-005 through FR-PRIV-007 and FR-PRIV-016, which is the one
         // exception OD-18 admits to FR-OUT-012: the key is absent rather than
         // `null` where there is nothing to report.
@@ -274,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn the_compact_and_the_indented_form_are_both_accepted() {
+    fn fr_out_016_the_compact_and_the_indented_form_are_both_accepted() {
         // FR-OUT-016 and FR-RND-021. The two differ in whitespace and in
         // nothing else, so one contract reads both and neither path knows
         // which it was given.
@@ -296,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn a_series_outside_the_supported_window_is_accepted() {
+    fn fr_ctx_033_a_series_outside_the_supported_window_is_accepted() {
         // FR-CTX-033: on this path the system SHALL NOT validate `series`
         // against FR-SRV-015 and SHALL NOT check `standing` against `series`.
         // The document is a record of a read that already happened, and
@@ -315,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn a_document_missing_a_key_of_the_server_object_is_refused() {
+    fn br_ctx_006_a_document_missing_a_key_of_the_server_object_is_refused() {
         // BR-CTX-006: `server` is a structural rule of context-document.md, so
         // a document that omits it does not match the contract and is 65 under
         // FR-RND-020. The same holds for one of its three keys, which
@@ -337,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn a_document_that_is_not_well_formed_json_is_refused_with_the_position() {
+    fn fr_rnd_020_a_document_that_is_not_well_formed_json_is_refused_with_the_position() {
         // FR-RND-020 and the 65 row of FR-ERR-034, whose cause line carries
         // either the position of the malformed JSON or the structural rule.
         let fault = refused("{\"schema_version\":1,\n  \"source\": oops}");
@@ -350,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    fn a_bare_data_object_is_refused_in_place_of_the_whole_envelope() {
+    fn fr_sch_036_a_bare_data_object_is_refused_in_place_of_the_whole_envelope() {
         // FR-SCH-036: a caller that had stripped the envelope would have
         // discarded the `source` field FR-CDOC-016 makes the signal of what the
         // document does not promise.
@@ -366,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn a_restricted_marking_that_names_no_property_is_refused_rather_than_repaired() {
+    fn fr_priv_016_a_restricted_marking_that_names_no_property_is_refused_rather_than_repaired() {
         // FR-PRIV-016: the array is never empty. Reading it as a complete
         // object would turn a document the requirement forbids into one it
         // permits, silently.
@@ -377,7 +378,7 @@ mod tests {
     }
 
     #[test]
-    fn a_table_whose_key_names_a_column_it_does_not_carry_is_refused() {
+    fn fr_cat_044_a_table_whose_key_names_a_column_it_does_not_carry_is_refused() {
         // FR-CAT-044, through Table::assemble, which is the model's only
         // constructor for a table. The same violation is an internal invariant
         // on the server path and caller data here, which is why the model
@@ -395,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn the_dump_is_the_envelope_of_the_requirement_carrying_one_data_key() {
+    fn fr_sch_017_the_dump_is_the_envelope_of_the_requirement_carrying_one_data_key() {
         // FR-SCH-017 and FR-OUT-024: three keys in one order, and a `data` of
         // one key named for the kind in the singular. FR-OUT-007 terminates it
         // with a single newline.
@@ -430,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn a_column_default_is_emitted_in_exactly_the_three_forms_the_requirement_lists() {
+    fn fr_ctx_012_a_column_default_is_emitted_in_exactly_the_three_forms_the_requirement_lists() {
         // FR-CTX-012 and FR-CTX-013: `kind` is a three-way discriminant, and
         // the `null` form carries no `value` — which is why the shape is a
         // tagged enumeration and not a struct with an optional field. A form
@@ -457,7 +458,7 @@ mod tests {
     }
 
     #[test]
-    fn a_restricted_marking_is_ordered_by_name_ascending_byte_wise() {
+    fn fr_priv_016_a_restricted_marking_is_ordered_by_name_ascending_byte_wise() {
         // FR-PRIV-016 requires the array to be ordered, and the marking keeps
         // the order it was given until it becomes a document collection, which
         // is where every other collection is ordered too.
@@ -481,7 +482,8 @@ mod tests {
     }
 
     #[test]
-    fn the_primary_key_is_read_back_from_the_index_collection_and_not_from_its_own_key() {
+    fn fr_cat_043_the_primary_key_is_read_back_from_the_index_collection_and_not_from_its_own_key()
+    {
         // FR-CAT-043 makes the index catalogue table the authoritative source
         // and bars every other. The document presents the primary key a second
         // time so that a template need not match on a name; reading it back
@@ -509,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn the_path_a_document_was_read_from_is_carried_into_the_diagnostic() {
+    fn fr_err_034_the_path_a_document_was_read_from_is_carried_into_the_diagnostic() {
         // FR-ERR-034 obliges the cause line of this 65 to name the path.
         let reported = read("{", Path::new("/tmp/freight.json"))
             .expect_err("an unterminated object is not well-formed JSON");

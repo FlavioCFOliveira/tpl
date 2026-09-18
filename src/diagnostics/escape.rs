@@ -68,7 +68,7 @@ mod tests {
     }
 
     #[test]
-    fn a_line_without_a_control_character_is_unchanged() {
+    fn fr_err_024_a_line_without_a_control_character_is_unchanged() {
         assert_eq!(
             escaped("error: table 'ordrs' does not exist"),
             "error: table 'ordrs' does not exist"
@@ -76,12 +76,12 @@ mod tests {
     }
 
     #[test]
-    fn the_three_named_controls_take_their_readable_escape() {
+    fn fr_err_024_the_three_named_controls_take_their_readable_escape() {
         assert_eq!(escaped("a\nb\rc\td"), "a\\nb\\rc\\td");
     }
 
     #[test]
-    fn every_other_c0_control_takes_the_unicode_escape() {
+    fn fr_err_024_every_other_c0_control_takes_the_unicode_escape() {
         // FR-ERR-024 names three controls and then "every C0 control
         // character", which is U+0000 through U+001F.
         for value in 0x00u32..0x20 {
@@ -95,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn the_escaped_line_carries_no_control_character() {
+    fn fr_err_024_the_escaped_line_carries_no_control_character() {
         let hostile: String = (0x00u32..0x20)
             .filter_map(char::from_u32)
             .chain("plain text".chars())
@@ -110,7 +110,7 @@ mod tests {
     }
 
     #[test]
-    fn a_character_above_the_c0_range_is_left_alone() {
+    fn fr_err_024_a_character_above_the_c0_range_is_left_alone() {
         // FR-ERR-024's set is the C0 range. A name is UTF-8 and its
         // non-control characters reach the caller as written.
         assert_eq!(

@@ -120,7 +120,7 @@ mod tests {
     use super::{Level, emits, level, set_level};
 
     #[test]
-    fn one_v_is_info_two_is_debug_three_is_trace() {
+    fn fr_glob_014_one_v_is_info_two_is_debug_three_is_trace() {
         // FR-GLOB-014.
         assert_eq!(Level::resolve(0, false), Level::Warnings);
         assert_eq!(Level::resolve(1, false), Level::Info);
@@ -129,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn further_occurrences_saturate_without_error() {
+    fn fr_glob_014_further_occurrences_saturate_without_error() {
         // FR-GLOB-014.
         for verbose in 3u8..=u8::MAX {
             assert_eq!(Level::resolve(verbose, false), Level::Trace);
@@ -137,7 +137,7 @@ mod tests {
     }
 
     #[test]
-    fn quiet_lowers_the_level_to_errors_only() {
+    fn fr_glob_015_quiet_lowers_the_level_to_errors_only() {
         // FR-GLOB-015.
         assert_eq!(Level::resolve(0, true), Level::Errors);
     }
@@ -145,7 +145,7 @@ mod tests {
     /// `FR-CLI-015` exits `64` on `-q` with `-v`, so the pair never reaches
     /// `resolve`. The function is total regardless, and neither flag wins.
     #[test]
-    fn the_pair_the_parser_refuses_favours_neither_flag() {
+    fn fr_cli_015_the_pair_the_parser_refuses_favours_neither_flag() {
         for verbose in 1u8..=u8::MAX {
             assert_eq!(Level::resolve(verbose, true), Level::default());
         }
@@ -153,7 +153,7 @@ mod tests {
     }
 
     #[test]
-    fn the_levels_are_ordered_so_that_the_gate_is_a_comparison() {
+    fn fr_glob_014_the_levels_are_ordered_so_that_the_gate_is_a_comparison() {
         assert!(Level::Errors < Level::Warnings);
         assert!(Level::Warnings < Level::Info);
         assert!(Level::Info < Level::Debug);
@@ -177,7 +177,7 @@ mod tests {
     /// The one test that touches the shared value. No other test reads it, so
     /// running in parallel with them observes nothing.
     #[test]
-    fn the_gate_opens_at_the_level_that_was_set() {
+    fn fr_glob_014_the_gate_opens_at_the_level_that_was_set() {
         let restore = level();
 
         set_level(Level::Errors);

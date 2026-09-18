@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -26,34 +26,48 @@ standing are [operations.md](operations.md#the-mandatory-validation-pipeline).
 [The container harness](#the-container-harness) records what
 `scripts/mariadb/` supplies as of 2026-09-11, which discharged the harness half
 of [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)'s
-residual, and what remains unestablished beside it.
+residual, what the suite added to it at commit `a6d1fed`, and what remains
+unestablished beside both.
 
-**Five rows of the register below are written; every other row is obligation
-alone.** Row 2 is a unit test over the seam `FR-ERR-031` requires, and it
-asserts what that row asserts: the guard produces the condition of `FR-ERR-030`
-carrying the message `FR-ERR-032` requires. Rows 3 to 6 were written with the
-command surface, at commit `f8f335d` of 2026-09-15, and
+**Six rows of the register below are written or partly written; every other row
+is obligation alone.** Row 2 is a unit test over the seam `FR-ERR-031` requires,
+and it asserts what that row asserts: the guard produces the condition of
+`FR-ERR-030` carrying the message `FR-ERR-032` requires. Rows 3 to 6 were
+written with the command surface, at commit `f8f335d` of 2026-09-15, and
 [Help](#help-snapshots-at-every-depth) names each. Row 1 is reached for two of
 its nine codes — `0`, by every successful form of help and version, and `64`, by
 every refusal of step 1 — because the commands that produce the other seven are
-later sprints.
+later sprints. Row 15 is reached for two of its six requirements, at commit
+`a6d1fed`, and [the register](#mandated-by-the-corpus) says which, on what
+evidence, and what is written but runs on neither Darwin target.
 
-Nothing this project owns has been tested through the harness: its instruments
-were established against a substitute client, and no test named here has reached
-a container. What is recorded of a test is its obligation, its trace, and, where
-the test exists, where it lives — never an outcome.
+**The suite reaches the containers.** `tests/outside_the_process.rs` carries six
+tests: two drive the four series of `FR-SRV-015`, two are differential runs that
+need no server, one is the syscall trace the two Linux targets admit, and one
+exercises the gate's own mapping with no fixture in reach. What is recorded of
+every other test is its obligation, its trace, and, where the test exists, where
+it lives — never an outcome.
 
 ## The suite as it stands
 
-In the working tree of 2026-09-17, above commit `cd6ce7e`, and recorded with its
-point in history because it is a count that moves: **504 tests**, made of 453
-unit tests inside the library, 49 integration tests over the binary — 25 in
-`tests/project_and_configuration.rs`, 13 in `tests/help_surface.rs`, 7 in
-`tests/invocation_surface.rs`, 4 in `tests/help_environment.rs` — and 2
-doc-tests. It was 272 at commit `f8f335d` of 2026-09-15; the project and
-configuration work is the whole of the difference. No test needs a server,
-because no command that reaches one is implemented yet: the connectivity
-subcommand is the one `cfg` leaf still unwritten.
+At commit `fd51ca2`, and recorded with its point in history because it is a
+count that moves: **621 tests**, made of 564 unit tests inside the library, 55
+integration tests over the binary — 25 in `tests/project_and_configuration.rs`,
+13 in `tests/help_surface.rs`, 7 in `tests/invocation_surface.rs`, 6 in
+`tests/outside_the_process.rs`, 4 in `tests/help_environment.rs` — and 2
+doc-tests. It was 504 in the working tree of 2026-09-17 and 272 at commit
+`f8f335d` of 2026-09-15; the model work of `0cdc539` and the harness work of
+`a6d1fed` are the whole of the difference, at 111 tests and 6.
+
+`tests/support/` holds two modules and no test target: `fixture.rs`, which is
+the gate and the three server-side instruments, and `differential.rs`, which is
+the fourth. Both are reached by `#[path]` from the files that use them.
+
+**Two tests need a server**, both in `tests/outside_the_process.rs`, and both
+are gated on the fixture: they run where it is up and are skipped, with a
+printed reason, where it is not. No other test reaches one, because no other
+command does — the connectivity subcommand is the one `cfg` leaf still
+unwritten.
 
 ## The four kinds of test, and what each needs
 
@@ -87,25 +101,45 @@ name built on one therefore survives every edition of the corpus.
 | Where one requirement mandates several tests, the phrase distinguishes them and the identifier does not change | The three of `BR-HELP-003`, the two of `FR-SRV-029` |
 | Where one test verifies several requirements, the name carries the one that **mandates the test**; the others are cited in the test's own doc comment | `BR-SCH-004` names the test; `FR-SCH-016`, `FR-SCH-021`, `FR-SCH-022` are cited in it |
 | A test that verifies a **row** of a published vector names the row, not a new identifier | `BR-ENV-007` makes a cell the contract, so the cell is the case |
-| No test is named without an identifier | *Which test covers `FR-X`?* is then answerable by search alone, which is what makes the register below auditable against the suite |
+| No test that verifies a **single** requirement is named without one | *Which test covers `FR-X`?* is then answerable by search alone, which is what makes the register below auditable against the suite |
 
 The reverse direction — which requirement a document answers — is
 [traceability.md](traceability.md)'s and is not duplicated in test names.
 
-**Recorded divergence — the suite as built does not carry the identifier in the
-name.** In the working tree of 2026-09-17 the suite carries 502 test functions
-— the 504 counted above, less the two doc-tests — and none begins with a
-requirement identifier: each names the property it asserts in
-a phrase and cites the identifiers in its own doc comment or beside the
-assertion; the divergence has widened with the suite rather than narrowed. The
-two readings are that the rule above is met in substance — every
-test is bound to the requirements it verifies, in a place a reader sees — and
-unmet in form, so *which test covers `FR-X`?* is answerable by searching the
-comments rather than the names. The rule is not narrowed to fit: it is drawn
-from `specification/README.md` (*Identifier scheme*), which makes the identifier
-the reference used in test names, and `/specification` governs. The divergence
-is owed to the suite, and closing it is a change to code, which this document
-does not make.
+**Recorded change — the suite now carries the identifier in the name.** This
+section recorded a divergence on 2026-09-17: the suite carried 502 test
+functions, none of which began with an identifier, so the rule was met in
+substance — every test bound to its requirements in its own doc comment — and
+unmet in form. It was closed where it was owed, in the code: at commit
+`bfa043d`, **604 of the 619 test functions** were renamed so that the mandating
+identifier leads, and *which test covers `FR-X`?* is now answerable by search
+alone. **Every test name this document prints is read from the tree at commit
+`fd51ca2`**, except the two illustrations of the form in the table above, which
+name no test.
+
+**Fifteen tests keep a descriptive name, and the rule's last row is narrowed to
+say so.** The row read *no test is named without an identifier*, which those
+fifteen do not satisfy. It was this folder's own strengthening rather than the
+corpus's: `specification/README.md` makes the identifier **the reference used
+in** a test name and does not require every test to reference a requirement, so
+a test that verifies none has no identifier to be named after. The row now
+states the rule the suite holds to, and the criterion that decides which tests
+fall outside it is stated here rather than left to the next reader: **a test
+verifies no single requirement when what it asserts is a property of the crate's
+internals or of the test corpus rather than of `tpl`'s observable behaviour**.
+The fifteen fall into four families, each searchable by the absence of a
+prefix.
+
+| Family | Count | Why no identifier leads |
+|---|---|---|
+| Allocation and borrowing | 8 | The assertion is that a value is borrowed rather than copied. `CLAUDE.md` requires minimal allocation on a hot path; no requirement of `/specification` states it, and a caller cannot observe it |
+| The test corpus, or a private type | 4 | One walks the sample set the exit-code test is driven from, two exercise a type no document publishes, and `display_is_one_line_and_carries_no_labelled_line` in `src/error.rs` cites [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) — an open decision, and not a requirement identifier |
+| `text` output | 2 | `FR-OUT-004` makes `text` output explicitly not a contract, so line termination and trailing whitespace are properties of a layout no requirement fixes |
+| The suite's own gate | 1 | It asserts how `scripts/mariadb/status.sh`'s exit code is mapped, which is a property of the harness and not of `tpl` |
+
+A better criterion replaces this one. What may not happen is a test named for a
+requirement it does not verify: that makes the search above answer wrongly
+rather than not at all.
 
 ## The register of mandated tests
 
@@ -163,6 +197,31 @@ outside that list — `FR-SRV-014`, `NFR-PERF-007`, `FR-ENV-045`, `FR-CTX-039`,
 `FR-PROJ-021`, `FR-CAT-044`, `FR-SEM-018`, the three privilege detections and
 the non-coercion rules. The two are not in conflict about any test; they count
 differently. Nothing is corrected in the other file.
+
+**What row 15 reaches, and what it does not.** Two of the six requirements of
+form are asserted, at commit `a6d1fed`, in `tests/outside_the_process.rs`. Every
+negative assertion carries a control, on the terms
+[the invocation surface](#the-invocation-surface-observed-on-the-process) states
+and for the same reason.
+
+| Requirement, or clause of one | Instrument | Where it runs |
+|---|---|---|
+| `NFR-PERF-006`, and the connection clause of `NFR-PERF-005` | The server's connection record, corroborated over the same window by the server's statement record | Every series of `FR-SRV-015`, once each, gated on the fixture |
+| The discovery clause of `NFR-PERF-005` | A differential run, with its inversion | All four targets: it needs no server |
+| The configuration clause of `NFR-PERF-005` | A differential run, with its inversion | All four targets |
+| The two clauses above, **as syscalls** | A syscall trace | **Written, and run on neither Darwin target.** The body skips, with a printed notice, on a host that is not Linux or that has no `strace` |
+
+The trace is written and does not run on either Darwin target, and that is the
+requirement's arrangement rather than a gap in the suite: `NFR-PERF-005` forbids
+crediting a trace taken inside a Linux container to a Darwin target, because the
+artefact observed would not be the artefact distributed. Where the trace does
+not exist the differential run is the whole of the evidence, which
+`NFR-PERF-007` provides for in terms and `NFR-PERF-005` states in its own
+text.
+
+`NFR-PERF-001` through `NFR-PERF-004` are the four of the six that are not
+reached, and each waits on the same thing: a catalogue reader, so that there is
+a query to count and a connection to attribute.
 
 ### Owed, and not yet observable
 
@@ -258,9 +317,35 @@ A Linux observation **may not be credited to either Darwin target**, which
 `NFR-PERF-005` forbids in terms and for the reason `FR-ERR-031` already gave:
 the artefact observed would not be the artefact distributed. The fixture's
 `observe.sh` traces inside a Linux container when the host has no `strace`, and
-that trace is evidence for the Linux targets alone. What the two Darwin targets
-consequently do not catch is named by the requirement: a build that opened
-`.tpl/.cfg`, read it and discarded what it read.
+that trace is evidence for the Linux targets alone. The wrapper in
+`tests/support/fixture.rs` therefore names the backend rather than leaving it at
+`auto`, so that the fallback cannot happen silently and produce a trace no
+caller may use. What the two Darwin targets consequently do not catch is named
+by the requirement: a build that opened `.tpl/.cfg`, read it and discarded what
+it read.
+
+**Recorded contradiction — `tpl init`, the ancestor, and the discovery clause.**
+Three requirements in force cannot all hold, and the built command satisfies the
+first of them.
+
+| Requirement | What it states about `tpl init` inside an existing project |
+|---|---|
+| `FR-PROJ-016` | It **requires** a warning on stderr that the project just created shadows the one above; the built command names both paths in it |
+| `NFR-PERF-005` | Every command of `FR-PROJ-025`, `tpl init` among them, performs **no project discovery**. Finding the ancestor is discovery |
+| `NFR-PERF-007` | Its worked arrangement for the discovery clause asserts that the same invocation creates the project there **and does not report the ancestor** |
+
+Nothing is corrected in `/specification`, and no reading of it is chosen here:
+the wording is the functional owner's, and the defect is registered as task #120
+for `specification-manager`. What belongs to this document is what the
+contradiction costs the instrument. The differential run reads the exit code,
+the stdout bytes and the artefacts left on disk, and stderr is none of the
+three, so it neither sees the warning nor is falsified by it: it passes
+honestly, and what it establishes is narrower than the clause's words — that the
+ancestor did not decide where the project went, not that no ancestor was looked
+at. The test states that limit in its own doc comment, which is where a reader
+of a run meets it. The syscall trace is taken over `tpl help`, so no instrument
+in the suite is presently pointed at the invocation the three requirements
+disagree about.
 
 Rows 1 and 2 are the only two that need a **second, larger** database to be
 conclusive, which is `WL-001` and therefore `seed-bench.sql`
@@ -294,21 +379,22 @@ than of a function, so none can be established from inside the crate: a unit
 test over the renderer shows that the renderer escapes, not that the vector
 reaches it, that nothing else writes to the stream, or that the parser consulted
 no `PATH` on the way. They are asserted in `tests/invocation_surface.rs`, at
-commit `f8f335d` of 2026-09-15 — five tests for the four properties, and two
-regressions beside them. **Every negative test carries a control**: the decoy
-executable is run directly, and the environment is shown to reach a child
-process, because a test that asserts an absence is worth nothing until the same
-harness is shown to observe the presence.
+commit `f8f335d` of 2026-09-15 and under the names `bfa043d` gave them — five
+tests for the four properties, and two regressions beside them. **Every negative
+test carries a control**: the decoy executable is run directly, and the
+environment is shown to reach a child process, because a test that asserts an
+absence is worth nothing until the same harness is shown to observe the
+presence.
 
 | Property | Requirement | Test |
 |---|---|---|
-| A rejected token reaches stderr escaped, whatever it carries, over the three untrusted populations | `FR-ERR-024` | `a_command_token_a_flag_token_and_a_help_path_segment_reach_stderr_escaped` |
-| A token cannot forge a labelled line of its own | `FR-ERR-008`, `FR-ERR-024` | `a_token_cannot_forge_a_labelled_line_of_its_own` |
-| One rejected token reaches the message, and the argument vector never does, at any verbosity | `FR-GLOB-018`, with [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) | `one_rejected_token_reaches_the_message_and_never_the_argument_vector` |
-| No `tpl`-prefixed executable is looked for on `PATH` | `FR-CLI-006` | `no_tpl_prefixed_executable_is_searched_for_on_path` |
-| No environment variable decides a form of help, of version, or a refusal | `FR-CLI-021`, `NFR-DET-004` | `no_environment_variable_decides_a_form_of_help_of_version_or_a_refusal` |
-| The argument terminator is never read as the value of the flag before it, so the `cause` names the node the invocation reached | `FR-CLI-017`, and `FR-ERR-009` through it | `the_argument_terminator_is_never_read_as_the_value_of_the_flag_before_it` |
-| A token written on both sides of the terminator is refused where it stands **first** | `FR-CLI-017`, `FR-CLI-019` | `a_token_written_on_both_sides_of_the_terminator_is_refused_where_it_stands_first` |
+| A rejected token reaches stderr escaped, whatever it carries, over the three untrusted populations | `FR-ERR-024` | `fr_err_024_a_command_token_a_flag_token_and_a_help_path_segment_reach_stderr_escaped` |
+| A token cannot forge a labelled line of its own | `FR-ERR-008`, `FR-ERR-024` | `fr_err_024_a_token_cannot_forge_a_labelled_line_of_its_own` |
+| One rejected token reaches the message, and the argument vector never does, at any verbosity | `FR-GLOB-018`, with [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) | `fr_glob_018_one_rejected_token_reaches_the_message_and_never_the_argument_vector` |
+| No `tpl`-prefixed executable is looked for on `PATH` | `FR-CLI-006` | `fr_cli_006_no_tpl_prefixed_executable_is_searched_for_on_path` |
+| No environment variable decides a form of help, of version, or a refusal | `FR-CLI-021`, `NFR-DET-004` | `fr_cli_021_no_environment_variable_decides_a_form_of_help_of_version_or_a_refusal` |
+| The argument terminator is never read as the value of the flag before it, so the `cause` names the node the invocation reached | `FR-CLI-017`, and `FR-ERR-009` through it | `fr_cli_017_the_argument_terminator_is_never_read_as_the_value_of_the_flag_before_it` |
+| A token written on both sides of the terminator is refused where it stands **first** | `FR-CLI-017`, `FR-CLI-019` | `fr_cli_019_a_token_written_on_both_sides_of_the_terminator_is_refused_where_it_stands_first` |
 
 The last two are regression tests over defects a security audit of the command
 surface found, and each was proved to fail against the defect it guards before
@@ -388,21 +474,21 @@ mapped, rather than silently producing the wildcard's message.
 
 | `clap::ErrorKind` | Test |
 |---|---|
-| `InvalidSubcommand` | `an_unknown_subcommand_names_the_token_and_the_nearest_matches` |
-| `UnknownArgument` | `an_unknown_flag_names_the_token_and_the_nearest_matches`, and `a_token_the_command_takes_no_argument_for_is_named_as_written` for the condition `FR-CLI-017` separates from it |
-| `MissingRequiredArgument` | `a_missing_required_argument_names_the_command_and_the_argument` |
-| `InvalidValue` | `a_value_outside_an_enumeration_names_the_value_and_the_values_accepted`, `a_flag_given_without_any_value_says_so_rather_than_naming_a_value`, and `a_separate_token_value_beginning_with_a_dash_shows_the_corrected_form` for the two kinds the one condition of `FR-CLI-018` arrives under |
-| `ValueValidation` | `a_value_of_the_wrong_type_names_the_value_and_the_type_expected` |
-| `ArgumentConflict` | `a_flag_that_carries_no_value_is_refused_on_its_second_occurrence` |
-| The wildcard arm, reached by `InvalidUtf8` | `a_refusal_this_crate_does_not_classify_is_a_sixty_four_naming_what_it_can` |
+| `InvalidSubcommand` | `fr_cli_003_an_unknown_subcommand_names_the_token_and_the_nearest_matches` |
+| `UnknownArgument` | `fr_cli_019_an_unknown_flag_names_the_token_and_the_nearest_matches`, and `fr_cli_017_a_token_the_command_takes_no_argument_for_is_named_as_written` for the condition `FR-CLI-017` separates from it |
+| `MissingRequiredArgument` | `fr_err_034_a_missing_required_argument_names_the_command_and_the_argument` |
+| `InvalidValue` | `fr_err_034_a_value_outside_an_enumeration_names_the_value_and_the_values_accepted`, `fr_err_034_a_flag_given_without_any_value_says_so_rather_than_naming_a_value`, and `fr_cli_018_a_separate_token_value_beginning_with_a_dash_shows_the_corrected_form` for the two kinds the one condition of `FR-CLI-018` arrives under |
+| `ValueValidation` | `fr_err_034_a_value_of_the_wrong_type_names_the_value_and_the_type_expected` |
+| `ArgumentConflict` | `fr_cli_014_a_flag_that_carries_no_value_is_refused_on_its_second_occurrence` |
+| The wildcard arm, reached by `InvalidUtf8` | `fr_err_034_a_refusal_this_crate_does_not_classify_is_a_sixty_four_naming_what_it_can` |
 
 Two further tests hold the other half of that entry.
-`no_byte_the_parsers_own_renderer_composes_reaches_the_caller` renders what the
-parser's own renderer would have written for eight refusals and asserts
-that nothing it composes survives into the four labelled lines, and
-`every_flag_whose_value_is_parsed_names_the_type_it_expects` walks the tree
-feeding every flag a value no parser accepts, so a flag whose type the `cause`
-line cannot name fails there rather than reaching a caller.
+`fr_err_033_no_byte_the_parsers_own_renderer_composes_reaches_the_caller`
+renders what the parser's own renderer would have written for eight refusals and
+asserts that nothing it composes survives into the four labelled lines, and
+`fr_err_034_every_flag_whose_value_is_parsed_names_the_type_it_expects` walks
+the tree feeding every flag a value no parser accepts, so a flag whose type the
+`cause` line cannot name fails there rather than reaching a caller.
 
 **What the wildcard test asserts is what the binary does, not what the entry
 first assumed.** `InvalidUtf8` carries no context this crate reads, so no token
@@ -444,20 +530,20 @@ rather than of one text against another. The help surface as built is
 
 ### Which tests exist
 
-At commit `f8f335d` of 2026-09-15. Every test in `tests/` launches the binary in
-an empty directory with no `.tpl` above it and under a cleared environment,
-because a run that happened to stand inside a project would pass for the wrong
-reason.
+At commit `f8f335d` of 2026-09-15, under the names `bfa043d` gave them. Every
+test in `tests/` launches the binary in an empty directory with no `.tpl` above
+it and under a cleared environment, because a run that happened to stand inside
+a project would pass for the wrong reason.
 
 | Test | What it covers |
 |---|---|
-| `tests/help_surface.rs::the_three_help_forms_are_byte_identical_at_every_node_of_the_tree` | `BR-HELP-001` and `FR-HELP-002`: the three forms compared byte for byte at all 35 nodes, the root among them, at every depth |
-| `tests/help_surface.rs::a_group_node_with_no_child_prints_what_its_help_form_prints` | The fourth form, at all six group nodes, the root among them (`FR-CLI-007`, `FR-HELP-025`) |
-| `tests/help_surface.rs::the_three_version_forms_write_exactly_the_line_of_the_requirement` | The third equivalence, and the line itself (`FR-HELP-005`) |
-| `tests/help_surface.rs::the_short_help_flag_is_not_a_summarised_long_one` | `FR-HELP-003`, on content: the seven sections and the four facts a leaf with an operand and an enumerated flag states |
-| `tests/help_surface.rs::a_leaf_that_requires_an_operand_still_answers_both_flag_forms` | All fourteen required operands answer `-h`, `--help`, `-V` and `--version`, and the node still refuses a missing operand with `64` |
-| `tests/help_surface.rs::an_alias_prints_the_same_bytes_as_the_node_it_names` | The seven aliases of `FR-CLI-011`, in the text form and the JSON one, over eight comparisons — `cfg db add` being the alias read at depth three |
-| `tests/help_surface.rs::a_segment_that_names_no_child_is_refused_with_the_node_it_was_sought_under` | `FR-HELP-028`, on the process: `64`, an empty stdout, the suggestion, and a `cause` naming both the segment and the node |
+| `tests/help_surface.rs::fr_help_002_the_three_help_forms_are_byte_identical_at_every_node_of_the_tree` | `BR-HELP-001` and `FR-HELP-002`: the three forms compared byte for byte at all 35 nodes, the root among them, at every depth |
+| `tests/help_surface.rs::fr_help_025_a_group_node_with_no_child_prints_what_its_help_form_prints` | The fourth form, at all six group nodes, the root among them (`FR-CLI-007`, `FR-HELP-025`) |
+| `tests/help_surface.rs::fr_help_005_the_three_version_forms_write_exactly_the_line_of_the_requirement` | The third equivalence, and the line itself (`FR-HELP-005`) |
+| `tests/help_surface.rs::fr_help_003_the_short_help_flag_is_not_a_summarised_long_one` | `FR-HELP-003`, on content: the seven sections and the four facts a leaf with an operand and an enumerated flag states |
+| `tests/help_surface.rs::fr_glob_019_a_leaf_that_requires_an_operand_still_answers_both_flag_forms` | All fourteen required operands answer `-h`, `--help`, `-V` and `--version`, and the node still refuses a missing operand with `64` |
+| `tests/help_surface.rs::fr_help_027_an_alias_prints_the_same_bytes_as_the_node_it_names` | The seven aliases of `FR-CLI-011`, in the text form and the JSON one, over eight comparisons — `cfg db add` being the alias read at depth three |
+| `tests/help_surface.rs::fr_help_028_a_segment_that_names_no_child_is_refused_with_the_node_it_was_sought_under` | `FR-HELP-028`, on the process: `64`, an empty stdout, the suggestion, and a `cause` naming both the segment and the node |
 | `tests/help_surface.rs`, six further tests | That every form succeeds where no project exists and nothing is in the environment (`FR-PROJ-025`, `FR-CLI-021`); the envelope and the four keys of `data`; the compact form and the indented one; the reduction of `FR-HELP-029`; the global flags carried once and repeated by no command; and a document byte-identical between runs |
 | `tests/help_environment.rs`, four tests | `FR-HELP-009`, `FR-HELP-010` and `NFR-DET-004`: the same bytes under two environments that disagree about `COLUMNS`, `TERM`, `CLICOLOR_FORCE` and `FORCE_COLOR`; exit `0` on stdout; no line over 80 columns; no ANSI escape on either stream |
 | `src/cli/help/document.rs`, three tests | The three properties of `BR-HELP-003`, each over the document `surface` builds, compared against the tree the binary parses with |
@@ -686,21 +772,73 @@ obligation each part discharges, and what a test suite still has to decide.
 | The reduced-privilege reader is reachable beside the privileged one, on every series | `FR-PRIV-018`, `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019` | `tpl_reader`, with the three shapes of absence observed identically on all four series |
 | The statements a server receives, and the connections it accepts, are observable **from the server side** | `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-014`, `BR-SRV-003` | `observe.sh statements` and `observe.sh connections`, each established against a substitute client and each with its own observer baseline measured rather than assumed |
 | The files a process opens are observable from outside it | `NFR-PERF-005`, `NFR-PERF-007` | `observe.sh opens`, on a Linux host. See the target limit below |
-| Every command of the tree can be run at maximum verbosity with both streams captured whole | `BR-SEC-003` | The fixture supplies the servers the commands that reach one need; capturing both streams whole is the suite's, and no test in the suite launches the binary |
+| Every command of the tree can be run at maximum verbosity with both streams captured whole | `BR-SEC-003` | The fixture supplies the servers the commands that reach one need; capturing both streams whole is the suite's, and the suite does it — every launch of the binary in `tests/` captures both. The sentinel test itself waits on the commands that carry a credential to a server |
 
 **The instruments were established against a substitute client**, `tpl` having
 no catalogue reader to send a statement with. That is the correct order for an
 instrument whose whole purpose is to observe from outside the process under
 test: what was established is that the instrument sees what a client sends, not
-what any particular client sends.
+what any particular client sends. **Two tests now drive `tpl` itself** against
+the four series, and what each establishes is an absence — no connection
+accepted, no statement received — which is why each carries the control the
+absence is worthless without: the same record is shown to count a connection
+that was made, and to hold the observer's own statements, over the same window.
+
+### The gate, and the fourth instrument
+
+Two of the open points this section recorded were discharged at commit
+`a6d1fed`, by building them rather than by settling them on paper. Both are the
+**suite's** and neither is the fixture's, which is what the open points
+predicted: neither needs a container.
+
+**The gate is `scripts/mariadb/status.sh --quiet`, and its exit code is mapped
+by value.** The suite reaches it through `tests/support/fixture.rs`, which also
+wraps the three server-side instruments, reads the inventory from
+`status.sh --export` and the series from `series.env`, and issues no `docker`
+command of its own. No port, credential, server name or schema name is restated
+in Rust.
+
+| Exit code | What the suite does |
+|---|---|
+| `0` | Runs the body |
+| `1` | Skips it, and prints why |
+| `2`, every other code, and a gate that was signalled rather than exited | **Fails the run** |
+
+The third row is the row that earns the three-valued code. Half a fixture is not
+an absent one, and a gate that could not be asked has answered nothing: mapping
+either onto a skip would report a real failure as a pass, which is the failure
+the code exists to prevent.
+
+**A skip is written to `/dev/stderr`, past the test harness's capture.**
+`libtest` captures both streams of every test — its own `--no-capture` is
+documented as *"don't capture stdout/stderr of each task, allow printing
+directly"* and `--show-output` as *"Show captured stdout of successful tests"*
+(`libtest` command-line help, rustc 1.98.1, read 2026-09-18) — so a notice
+written with `println!` or `eprintln!` is shown for no passing test, and **a
+skip a caller cannot see is a skip a caller reads as a pass**. A second handle
+on the process's own file descriptor `2` is outside the capture; the notice goes
+through it, opened for append and written in one call, because the tests that
+report one run on parallel threads.
+
+**The fourth instrument of `NFR-PERF-007` exists, in
+`tests/support/differential.rs`.** It records the three channels the requirement
+names — the exit code, the bytes on stdout, and the paths left under an observed
+root — and no fourth. It needs no container and no privilege, so it is available
+on all four targets of `NFR-PERF-018`, which is what `NFR-PERF-005` relies on
+where no syscall tracer exists. **Every run made through it carries its
+inversion**: the same comparison over a command that *does* perform the
+operation, whose two outcomes are shown to differ — because an equality between
+two outcomes establishes nothing until the arrangement is shown to be potent.
 
 ### What is not established
 
+Two rows of this table were discharged at commit `a6d1fed` and are recorded
+above rather than deleted: the fourth instrument, and what the suite does with
+each value of the gate.
+
 | Open | Why it is not answered here |
 |---|---|
-| **The fourth instrument of `NFR-PERF-007` is not in the harness.** `observe.sh` carries three — statements, connections, files opened — and the differential run is carried by none of them | The eleventh edition of `/specification` added it after the harness was built. It needs no container and no privilege, so it is a property of the test suite rather than of the fixture, and no test in the suite launches the binary |
 | **The file-open instrument does not exist on either Darwin target.** On a host with no `strace` the harness traces a Linux build inside a container and says so; `NFR-PERF-005` forbids crediting that observation to macOS | The limit is the platform's, recorded by `NFR-PERF-005` with the three commands that established it. What would lift it is named there, and is not this folder's to take |
-| **Whether server-dependent tests are gated, and how a skip is reported.** `status.sh` supplies the gate and its three-valued exit code; what the suite does with each value is undecided | The choice interacts with the test suite as it is actually invoked, which is [operations.md](operations.md#the-mandatory-validation-pipeline)'s, and with what a skipped test may report without a caller mistaking it for a pass. Neither is settled |
 | **What the refusal test of `FR-SRV-029` runs against** | The contradiction is recorded under [cross-series equivalence](#cross-series-equivalence-across-four-series) and is the functional owner's; the fixture provisions no container outside the window |
 | **Two observations the fixture could not produce**: the failing outcome of `FR-SRV-013`, and rows 1 and 2 conclusively | The first needs a server that accepts the read-only statement and does not apply it, which no real MariaDB does — a fault-injection seam in `tpl`, not a container, and no such seam is decided. The second waits on `WL-001` ([`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001)) |
 

@@ -324,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn the_eight_rows_of_the_classifier_are_applied_in_the_order_written() {
+    fn fr_ctx_037_the_eight_rows_of_the_classifier_are_applied_in_the_order_written() {
         // FR-CTX-037, row by row, over the values the requirement quotes. The
         // final row quotes none, because it is the row for a shape that was not
         // observed; `current_timestamp` supplies one, matching none of the
@@ -378,7 +378,7 @@ mod tests {
     }
 
     #[test]
-    fn the_four_decimal_shapes_the_requirement_quotes_are_literals() {
+    fn fr_ctx_037_the_four_decimal_shapes_the_requirement_quotes_are_literals() {
         // FR-CTX-037, row 4: digits, with or without a fractional part, and the
         // value carried unchanged.
         for written in ["0", "0.0000", "18.5", "1.000000"] {
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_that_is_not_digits_and_a_point_is_not_a_decimal_number() {
+    fn fr_ctx_037_a_value_that_is_not_digits_and_a_point_is_not_a_decimal_number() {
         // The row is read no wider than it was observed: anything else reaches
         // the final row and is an expression carrying the value unchanged.
         for written in ["1.2.3", "1.", ".5", "1e6", "-1", "current_user"] {
@@ -396,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn the_bit_row_carries_its_prefix_and_its_quotes_into_the_value() {
+    fn fr_ctx_037_the_bit_row_carries_its_prefix_and_its_quotes_into_the_value() {
         // FR-CTX-037 orders the rows, and a bit literal begins with `b` rather
         // than with a quote, so the third row and the fifth cannot collide.
         // What the fifth row does require is that the value is carried
@@ -409,7 +409,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lone_quote_delimits_nothing_and_falls_to_the_final_row() {
+    fn fr_ctx_037_a_lone_quote_delimits_nothing_and_falls_to_the_final_row() {
         // The third row needs an opening quote and a closing one. A single
         // character is one quote, not two, and the value is not a literal.
         classified(
@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn a_null_default_carries_no_value_and_the_other_two_kinds_carry_one() {
+    fn fr_ctx_012_a_null_default_carries_no_value_and_the_other_two_kinds_carry_one() {
         // FR-CTX-012: `{"kind":"null"}` has no `value`, and the form
         // `{"kind":"null","value":…}` is not one the enumeration can express.
         assert_eq!(ColumnDefault::Null.value(), None);
@@ -433,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn the_kind_takes_exactly_the_three_spellings_of_the_requirement() {
+    fn fr_ctx_013_the_kind_takes_exactly_the_three_spellings_of_the_requirement() {
         // FR-CTX-013: `literal`, `expression`, `null`, and no fourth.
         assert_eq!(DefaultKind::Literal.name(), "literal");
         assert_eq!(DefaultKind::Expression.name(), "expression");

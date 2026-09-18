@@ -533,7 +533,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_pretty_document_is_indented_and_a_plain_one_is_not() {
+    fn fr_out_007_a_pretty_document_is_indented_and_a_plain_one_is_not() {
         // FR-OUT-007, FR-OUT-008: --pretty changes the whitespace and nothing
         // else.
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
@@ -549,7 +549,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn every_subcommand_of_the_arm_performs_discovery_and_the_trust_checks() {
+    fn fr_proj_025_every_subcommand_of_the_arm_performs_discovery_and_the_trust_checks() {
         // FR-PROJ-025: no cfg subcommand is among the four it excuses, and
         // FR-GLOB-010 subjects --tpl-dir to every check without exemption.
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");

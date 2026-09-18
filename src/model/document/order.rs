@@ -194,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn the_comparison_is_byte_wise_and_not_what_a_collation_would_give() {
+    fn nfr_det_002_the_comparison_is_byte_wise_and_not_what_a_collation_would_give() {
         // NFR-DET-002's accepted cost: `Orders` precedes `customers` because
         // every upper-case ASCII letter sorts below every lower-case one, and
         // `_internal` follows `Zebra` for the same reason. A locale-aware
@@ -213,7 +213,7 @@ mod tests {
     }
 
     #[test]
-    fn a_collection_out_of_order_is_copied_and_ordered() {
+    fn nfr_det_002_a_collection_out_of_order_is_copied_and_ordered() {
         let members = [member("vessel", 1), member("carrier", 2)];
         let ordered = by_name(&members);
 
@@ -225,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn two_members_of_one_name_keep_the_order_they_were_built_in() {
+    fn nfr_det_002_two_members_of_one_name_keep_the_order_they_were_built_in() {
         // The sort is stable, so the result does not depend on its internals.
         let mut members = [member("leg", 3), member("carrier", 1), member("leg", 4)];
         sort_by_name(&mut members);
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn an_excepted_collection_is_carried_in_the_order_it_was_given() {
+    fn nfr_det_002_an_excepted_collection_is_carried_in_the_order_it_was_given() {
         // NFR-DET-002's six exceptions: the order is the meaning, and this is
         // the call the collections that carry one are built through.
         let members = [member("vessel_imo", 1), member("leg_sequence", 2)];
@@ -247,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn pointers_are_ordered_without_the_members_moving() {
+    fn nfr_det_002_pointers_are_ordered_without_the_members_moving() {
         let members = [member("vessel", 1), member("carrier", 2)];
         let ordered = pointers_by_name(&members);
 
@@ -257,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    fn a_bare_string_is_its_own_name() {
+    fn fr_ctx_008_a_bare_string_is_its_own_name() {
         // The member type of the two cut collections of FR-CTX-008 and of the
         // `restricted` marking of FR-PRIV-016.
         let mut names = [

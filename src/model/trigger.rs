@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn the_three_events_and_the_two_timings_round_trip() {
+    fn fr_cat_050_the_three_events_and_the_two_timings_round_trip() {
         // FR-CAT-050: all three events and both timings were observed, and all
         // six combinations appear in the fixture.
         for event in [
@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn the_row_aliases_are_constants_and_the_event_is_where_availability_is_read() {
+    fn fr_cat_050_the_row_aliases_are_constants_and_the_event_is_where_availability_is_read() {
         // FR-CAT-050: both aliases hold their literal on every row, including
         // the INSERT trigger where OLD does not exist. A template that
         // branches on them branches on a constant.
@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn the_statement_is_carried_as_written() {
+    fn fr_cat_050_the_statement_is_carried_as_written() {
         // FR-CAT-050: newlines and case preserved, unlike a view definition.
         let fired = trigger(TriggerEvent::Update, TriggerTiming::Before);
 

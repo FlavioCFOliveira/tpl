@@ -750,7 +750,7 @@ mod tests {
     }
 
     #[test]
-    fn an_absent_section_yields_an_empty_document() {
+    fn fr_conf_002_an_absent_section_yields_an_empty_document() {
         let document = accepted("");
 
         assert_eq!(document.core, Core::default());
@@ -758,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn the_five_core_keys_read_as_the_types_the_table_declares() {
+    fn fr_conf_002_the_five_core_keys_read_as_the_types_the_table_declares() {
         // FR-CONF-002.
         let core = accepted(
             r#"
@@ -780,7 +780,7 @@ render_timeout = 90
     }
 
     #[test]
-    fn a_key_outside_the_space_is_refused_with_a_nearest_match() {
+    fn fr_conf_034_a_key_outside_the_space_is_refused_with_a_nearest_match() {
         // FR-CONF-034: anywhere in the file, with a nearest-match suggestion
         // over the known keys.
         let condition = refused("[core]\ndatabse = \"shop\"\n");
@@ -803,7 +803,7 @@ render_timeout = 90
     }
 
     #[test]
-    fn a_misspelled_entry_key_is_refused_and_the_suggestion_names_the_entry() {
+    fn fr_conf_034_a_misspelled_entry_key_is_refused_and_the_suggestion_names_the_entry() {
         // FR-CONF-034: the rationale's own example — a misspelled
         // passwrod_command must not be a silent no-op.
         let condition =
@@ -824,7 +824,7 @@ render_timeout = 90
     }
 
     #[test]
-    fn a_section_the_space_does_not_name_is_refused_too() {
+    fn fr_conf_034_a_section_the_space_does_not_name_is_refused_too() {
         // FR-CONF-034: the space has exactly two sections.
         assert!(matches!(
             refused("[cache]\nsize = 1\n"),
@@ -833,7 +833,7 @@ render_timeout = 90
     }
 
     #[test]
-    fn a_value_of_the_wrong_type_is_refused_with_its_position() {
+    fn fr_conf_002_a_value_of_the_wrong_type_is_refused_with_its_position() {
         // FR-CONF-002, and the `78` row of FR-ERR-034: the key and the file,
         // with the value found and the value expected.
         let condition = refused("[core]\nconnect_timeout = \"soon\"\n");
@@ -857,7 +857,7 @@ render_timeout = 90
     }
 
     #[test]
-    fn a_deadline_of_zero_seconds_is_not_a_positive_integer() {
+    fn fr_conf_002_a_deadline_of_zero_seconds_is_not_a_positive_integer() {
         // FR-CONF-002 declares the four keys positive integers.
         assert!(matches!(
             refused("[core]\nquery_timeout = 0\n"),
@@ -870,7 +870,7 @@ render_timeout = 90
     }
 
     #[test]
-    fn a_malformed_value_of_a_credential_key_names_its_type_and_never_its_bytes() {
+    fn fr_err_013_a_malformed_value_of_a_credential_key_names_its_type_and_never_its_bytes() {
         // FR-ERR-013: no credential in any message, at any verbosity.
         let condition = refused("[database.shop]\npassword = 1234\n");
 
@@ -884,7 +884,7 @@ render_timeout = 90
     }
 
     #[test]
-    fn a_password_command_that_is_not_an_array_of_strings_is_refused() {
+    fn fr_conf_035_a_password_command_that_is_not_an_array_of_strings_is_refused() {
         // FR-CONF-035, and the hint shows the array form.
         for text in [
             "[database.shop]\npassword_command = \"pass db/shop\"\n",
@@ -901,7 +901,7 @@ render_timeout = 90
     }
 
     #[test]
-    fn an_entry_reads_every_key_of_the_space_as_its_declared_type() {
+    fn fr_conf_002_an_entry_reads_every_key_of_the_space_as_its_declared_type() {
         let entries = accepted(
             r#"
 [database.shop]
@@ -932,7 +932,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn a_port_outside_the_range_of_a_tcp_port_is_refused() {
+    fn fr_conf_002_a_port_outside_the_range_of_a_tcp_port_is_refused() {
         assert!(matches!(
             refused("[database.shop]\nport = 70000\n"),
             Error::ConfigurationValueMalformed { .. }
@@ -944,7 +944,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn a_tls_mode_outside_the_five_is_refused() {
+    fn fr_conf_013_a_tls_mode_outside_the_five_is_refused() {
         // FR-CONF-013: the set is closed.
         assert!(matches!(
             refused("[database.shop]\ntls = \"off\"\n"),
@@ -953,7 +953,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn a_dsn_beside_a_discrete_connection_field_is_refused() {
+    fn fr_conf_006_a_dsn_beside_a_discrete_connection_field_is_refused() {
         // FR-CONF-006, FR-CONF-007, first row.
         let condition =
             refused("[database.shop]\ndsn = \"mysql://db.example.com/shop\"\nhost = \"other\"\n");
@@ -975,7 +975,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn a_dsn_with_no_password_beside_a_password_command_is_admitted() {
+    fn fr_conf_007_a_dsn_with_no_password_beside_a_password_command_is_admitted() {
         // FR-CONF-007, second row: the safest configuration there is.
         let entries = accepted(
             "[database.shop]\ndsn = \"mysql://alice@db.example.com/shop\"\npassword_command = [\"pass\", \"db/shop\"]\n",
@@ -988,7 +988,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn a_dsn_carrying_a_password_beside_a_password_command_is_refused() {
+    fn fr_conf_007_a_dsn_carrying_a_password_beside_a_password_command_is_refused() {
         // FR-CONF-007, third row: two answers to one question.
         assert!(matches!(
             refused(
@@ -999,7 +999,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn discrete_fields_beside_a_password_command_are_admitted() {
+    fn fr_conf_007_discrete_fields_beside_a_password_command_are_admitted() {
         // FR-CONF-007, fourth row.
         let entries = accepted(
             "[database.shop]\nhost = \"db.example.com\"\nuser = \"alice\"\npassword_command = [\"pass\"]\n",
@@ -1010,7 +1010,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn a_password_beside_a_password_command_is_refused() {
+    fn fr_conf_007_a_password_beside_a_password_command_is_refused() {
         // FR-CONF-007, fifth row.
         let condition = refused(
             "[database.shop]\nhost = \"db\"\npassword = \"hunter2\"\npassword_command = [\"pass\"]\n",
@@ -1031,7 +1031,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn a_malformed_dsn_in_the_file_is_refused_at_the_read() {
+    fn fr_conf_009_a_malformed_dsn_in_the_file_is_refused_at_the_read() {
         // FR-CONF-009, FR-CONF-010: the file is validated before any command
         // resolves a key of its own, per step 3 of FR-ERR-006.
         let condition = refused("[database.shop]\ndsn = \"postgres://db.example.com/shop\"\n");
@@ -1047,7 +1047,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn a_dsn_query_parameter_in_the_file_is_refused_at_the_read() {
+    fn fr_conf_011_a_dsn_query_parameter_in_the_file_is_refused_at_the_read() {
         // FR-CONF-011, FR-CONF-012.
         let condition =
             refused("[database.shop]\ndsn = \"mysql://db.example.com/shop?tls=false\"\n");
@@ -1057,7 +1057,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn toml_the_parser_rejects_is_refused_with_its_position() {
+    fn fr_err_001_toml_the_parser_rejects_is_refused_with_its_position() {
         let condition = read("[core\n", &file()).expect_err("the TOML is malformed");
 
         assert!(matches!(condition, Error::ConfigurationMalformed { .. }));
@@ -1065,7 +1065,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn the_unknown_key_is_reported_before_the_malformed_value() {
+    fn fr_conf_034_the_unknown_key_is_reported_before_the_malformed_value() {
         // The steps run in order over the whole file, so a file carrying both
         // reports the misspelling, which is the likelier cause of the other.
         assert!(matches!(
@@ -1075,7 +1075,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn the_document_answers_with_the_value_as_written() {
+    fn fr_cfg_006_the_document_answers_with_the_value_as_written() {
         // FR-CFG-006, FR-CFG-036.
         let document = accepted(
             "[core]\ndatabase = \"shop\"\n\n[database.shop]\nport = 3307\npassword_command = [\"pass\", \"db/shop\"]\n",
@@ -1095,7 +1095,7 @@ ca_path = "/etc/ssl/certs"
     }
 
     #[test]
-    fn the_key_a_document_sets_is_reachable_by_its_dotted_name() {
+    fn fr_cfg_006_the_key_a_document_sets_is_reachable_by_its_dotted_name() {
         let document = accepted("[core]\ndatabase = \"shop\"\n");
         let configuration = Configuration {
             file: file(),

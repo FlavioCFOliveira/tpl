@@ -304,7 +304,8 @@ mod tests {
     }
 
     #[test]
-    fn a_foreign_key_embeds_the_referenced_table_and_referenced_by_embeds_the_referencing_one() {
+    fn fr_ctx_006_a_foreign_key_embeds_the_referenced_table_and_referenced_by_embeds_the_referencing_one()
+     {
         // FR-CTX-006 and FR-CTX-010: the two directions are the same question
         // asked from the two ends, and a template that could reach the
         // referenced table's column type but only the referencing table's name
@@ -323,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn an_embedded_table_carries_its_columns_its_indexes_and_its_primary_key_in_full() {
+    fn fr_ctx_007_an_embedded_table_carries_its_columns_its_indexes_and_its_primary_key_in_full() {
         // FR-CTX-007, against the summary embedding BR-CTX-001 rejected: a
         // name, a primary key and column names only would stop short of the one
         // field a foreign-key accessor needs, which is the referenced column's
@@ -352,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn a_two_table_cycle_terminates_at_the_first_hop_with_names() {
+    fn fr_ctx_009_a_two_table_cycle_terminates_at_the_first_hop_with_names() {
         // FR-CTX-009, first shape: `A` references `B`, and `B` references `A`.
         // The embedded `A` inside `B` and the embedded `B` inside `A` are each
         // at the first hop and are each cut to names.
@@ -375,7 +376,8 @@ mod tests {
     }
 
     #[test]
-    fn the_two_directions_of_one_relation_are_two_first_hops_and_not_a_path_of_length_two() {
+    fn fr_ctx_009_the_two_directions_of_one_relation_are_two_first_hops_and_not_a_path_of_length_two()
+     {
         // FR-CTX-009, second shape: `A` references `B`, so `B` is
         // `referenced_by` `A`. What the fifth-edition amendment removed is the
         // reading under which an outgoing hop followed by an incoming one could
@@ -397,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn a_self_reference_is_cut_in_both_collections_at_the_first_hop() {
+    fn fr_ctx_009_a_self_reference_is_cut_in_both_collections_at_the_first_hop() {
         // FR-CTX-009, third shape: `A` references itself. The embedded `A` is
         // at the first hop and is cut, in both collections.
         let model = fixture::database_of(vec![tariff()]);
@@ -416,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn a_primary_key_keeps_the_column_order_the_catalogue_states() {
+    fn nfr_det_002_a_primary_key_keeps_the_column_order_the_catalogue_states() {
         // NFR-DET-002's first corrupting exception: `voyage_leg`'s key is
         // (vessel_imo, voyage_number, leg_sequence); sorted by name it becomes
         // (leg_sequence, vessel_imo, voyage_number), which is a different key.
@@ -460,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn a_foreign_keys_column_pairing_survives_because_it_is_one_list_of_pairs() {
+    fn nfr_det_002_a_foreign_keys_column_pairing_survives_because_it_is_one_list_of_pairs() {
         // NFR-DET-002's second corrupting exception: the referencing and the
         // referenced list are paired positionally, so sorting either
         // independently pairs each column with the wrong counterpart. One list
@@ -496,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn an_enum_member_list_keeps_the_ordinal_each_member_is_stored_as() {
+    fn nfr_det_002_an_enum_member_list_keeps_the_ordinal_each_member_is_stored_as() {
         // NFR-DET-002's third corrupting exception: the order **is** the
         // meaning. Sorting enum('Draft','Booked','Loaded','Delivered') by name
         // renumbers every member, and a generator emitting a target-language
@@ -517,7 +519,7 @@ mod tests {
     }
 
     #[test]
-    fn every_collection_the_default_rule_governs_is_ordered_by_name_byte_wise() {
+    fn nfr_det_002_every_collection_the_default_rule_governs_is_ordered_by_name_byte_wise() {
         // NFR-DET-002's default rule, applied where each collection is built
         // and not where it is emitted, so the answer is the same whatever order
         // the model arrived in.
@@ -612,7 +614,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reference_the_model_does_not_carry_is_the_seventy_of_the_internal_invariant() {
+    fn fr_ctx_023_a_reference_the_model_does_not_carry_is_the_seventy_of_the_internal_invariant() {
         // FR-CTX-023 promises that every object referenced from another object
         // in a document produced by a server read is present in it, which is
         // what makes this unreachable on that path. ADR-009's materialisation
@@ -629,7 +631,7 @@ mod tests {
     }
 
     #[test]
-    fn the_comparator_the_document_orders_by_is_the_one_the_module_states() {
+    fn nfr_det_002_the_comparator_the_document_orders_by_is_the_one_the_module_states() {
         // One comparator, so the two-key order of `referenced_by` and every
         // single-key order are the same byte-wise comparison.
         assert!(order::compare("consignment", "consignment_leg").is_lt());

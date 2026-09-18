@@ -9,10 +9,15 @@
 #   connections  what the server accepted      the server's status counters
 #   opens        what the process opened       a system-call tracer
 #
+# A fourth subcommand, `build`, is not one of them: it verifies no requirement
+# and observes the server rather than the process. It reads the conditions the
+# other three are taken under, and it is described above its own function.
+#
 # Usage:
 #     ./observe.sh statements on|off|dump <server> [filters]
 #     ./observe.sh connections <server> [--value]
 #     ./observe.sh opens [--server <name>] [--backend auto|strace|container] -- <command...>
+#     ./observe.sh build [<server>]
 #
 # <server> is a name from series.env: 10.11, 11.4, 11.8, 12.3 or notls.
 #
@@ -113,6 +118,47 @@ connections() {
 }
 
 # --------------------------------------------------------------------------
+# build — what identifies the build a server is, as against the series it
+# belongs to.
+#
+# Not one of the three instruments above. It verifies no requirement and
+# observes the server rather than the process under test. It is here because
+# the values it reads are the conditions under which the other three are taken:
+# this fixture selects a series and never pins a patch release, so two runs can
+# observe two builds, and a reading that differs across the four servers is a
+# difference between the series only once the build fails to explain it. That
+# question cannot be asked without these values.
+#
+# It enumerates the `version%` prefix rather than asking for names. Asking for
+# a name that does not exist returns no row, and no row is indistinguishable
+# from a variable that exists and is empty — so a name misremembered by one
+# character reads as a server that lacks the variable. An enumeration returns
+# what the server has, which is also how a name is recovered when nobody wrote
+# it down.
+# --------------------------------------------------------------------------
+
+# The redirection is load-bearing. tpl_mariadb_each walks the inventory with a
+# `while read` on stdin, and tpl_mariadb_sql reaches the server with
+# `docker exec -i`, which inherits that stdin and drains the records still
+# queued on it: without </dev/null the first server is read and the other four
+# are eaten. up.sh avoids the same collision by reading the inventory on fd 3.
+build_one() {
+    tpl_mariadb_sql "$1" -N -B -e "SHOW GLOBAL VARIABLES LIKE 'version%'" </dev/null \
+        | awk -F'\t' -v s="$1" '{ printf "%-7s %-24s %s\n", s, $1, $2 }'
+}
+
+build() {
+    [ $# -le 1 ] || die "build takes at most one server"
+    [ $# -eq 0 ] || tpl_mariadb_record "$1" >/dev/null || die "unknown server: $1"
+    printf '%-7s %-24s %s\n' SERVER VARIABLE VALUE
+    if [ $# -eq 1 ]; then
+        build_one "$1"
+    else
+        tpl_mariadb_each build_one
+    fi
+}
+
+# --------------------------------------------------------------------------
 # opens — the files a process opens, and the sockets it connects.
 #
 # strace on the host when there is one, which observes the real process. On a
@@ -204,5 +250,6 @@ case "$subcommand" in
         connections "$server" "$@"
         ;;
     opens) opens "$@" ;;
+    build) build "$@" ;;
     *) usage ;;
 esac

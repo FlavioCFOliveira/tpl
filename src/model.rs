@@ -174,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn each_doubled_apostrophe_collapses_to_one_and_every_other_byte_passes_through() {
+    fn fr_ctx_037_each_doubled_apostrophe_collapses_to_one_and_every_other_byte_passes_through() {
         // FR-CTX-037 and FR-CTX-039 share this convention. The double quote of
         // the fixture's `8'6"` is left alone, and the em dash survives whole.
         assert_eq!(collapse_doubled_apostrophes(r#"8''6""#), "8'6\"");
@@ -464,7 +464,7 @@ mod refusals {
     }
 
     #[test]
-    fn a_table_carries_one_collection_for_each_of_the_seven_facts_it_holds() {
+    fn fr_cat_009_a_table_carries_one_collection_for_each_of_the_seven_facts_it_holds() {
         // FR-CAT-009 through FR-CAT-015, and FR-CAT-011 with FR-CAT-043: the
         // primary key is not an eighth collection but the index named PRIMARY
         // inside the index one.
@@ -480,7 +480,7 @@ mod refusals {
     }
 
     #[test]
-    fn no_type_carries_any_of_the_sixteen_volatile_fields() {
+    fn fr_cat_024_no_type_carries_any_of_the_sixteen_volatile_fields() {
         // FR-CAT-024 excludes them anywhere, under any name, and FR-CAT-026
         // applies the exclusion to every consumer without exception. There is
         // no field to filter out downstream, which is what makes FR-CAT-026
@@ -505,7 +505,8 @@ mod refusals {
     }
 
     #[test]
-    fn the_auto_increment_the_model_keeps_is_the_column_attribute_and_not_the_table_counter() {
+    fn fr_cat_027_the_auto_increment_the_model_keeps_is_the_column_attribute_and_not_the_table_counter()
+     {
         // FR-CAT-027 against FR-CAT-024: one word, two things. The attribute
         // is a field of a column and the counter is a field of nothing.
         let column = format!("{:#?}", column());
@@ -516,7 +517,7 @@ mod refusals {
     }
 
     #[test]
-    fn no_type_materialises_is_primary_key_or_is_unique() {
+    fn fr_ctx_021_no_type_materialises_is_primary_key_or_is_unique() {
         // FR-CTX-021 names both in as many words, and BR-CTX-003 is the
         // reason: a column that said it was not part of the primary key while
         // its table said it was would be a document that contradicts itself,
@@ -536,7 +537,7 @@ mod refusals {
     }
 
     #[test]
-    fn the_version_the_server_carries_is_the_probes_string_and_not_the_excluded_field() {
+    fn fr_cat_024_the_version_the_server_carries_is_the_probes_string_and_not_the_excluded_field() {
         // The `VERSION` of FR-CAT-024 is a field of the **table** catalogue,
         // and no type of the graph carries it. The `version` of FR-CTX-031 is
         // the string the probe of FR-SRV-002 returns; BR-CTX-006 records that
@@ -553,7 +554,8 @@ mod refusals {
     }
 
     #[test]
-    fn a_marking_is_absent_where_the_object_is_complete_and_names_a_property_where_it_is_not() {
+    fn fr_priv_007_a_marking_is_absent_where_the_object_is_complete_and_names_a_property_where_it_is_not()
+     {
         // FR-PRIV-007 and FR-PRIV-016, over the three kinds a marking can
         // reach: a table, a view and a routine.
         assert!(table().restricted().is_some());

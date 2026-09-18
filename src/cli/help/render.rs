@@ -787,7 +787,7 @@ mod tests {
     }
 
     #[test]
-    fn every_node_carries_the_seven_sections_in_order_and_no_eighth() {
+    fn fr_help_006_every_node_carries_the_seven_sections_in_order_and_no_eighth() {
         // FR-HELP-006 fixes seven sections, "in this order and no other". The
         // headings of every node are therefore a subsequence of the seven, and
         // a heading the requirement does not name is an eighth section however
@@ -805,7 +805,7 @@ mod tests {
     }
 
     #[test]
-    fn the_four_mandatory_sections_appear_on_every_node() {
+    fn fr_help_007_the_four_mandatory_sections_appear_on_every_node() {
         // FR-HELP-007: USAGE, DESCRIPTION, EXAMPLES and EXIT CODES always
         // appear.
         for (path, help) in every_help() {
@@ -816,7 +816,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_section_is_omitted_and_a_filled_one_is_not() {
+    fn fr_help_007_an_empty_section_is_omitted_and_a_filled_one_is_not() {
         // FR-HELP-007: the other three appear exactly when the node has
         // something to put in them. ARGUMENTS holds two kinds of thing, per
         // FR-HELP-008, so it appears for a node with children as well as for
@@ -854,7 +854,7 @@ mod tests {
     }
 
     #[test]
-    fn no_rendered_line_exceeds_eighty_columns() {
+    fn fr_help_009_no_rendered_line_exceeds_eighty_columns() {
         // FR-HELP-009, over every node of the tree. A column is one Unicode
         // scalar value, which the alphabet test below holds the text to.
         for (path, help) in every_help() {
@@ -869,7 +869,7 @@ mod tests {
     }
 
     #[test]
-    fn the_children_of_a_node_are_its_first_positional_argument() {
+    fn fr_help_008_the_children_of_a_node_are_its_first_positional_argument() {
         // FR-HELP-008: a subcommand is formally the node's first positional
         // argument, so the children are listed inside ARGUMENTS, under
         // `<subcommand>`, and nothing precedes them there.
@@ -914,7 +914,7 @@ mod tests {
     }
 
     #[test]
-    fn the_seven_global_flags_are_listed_at_the_root_and_at_no_other_node() {
+    fn fr_glob_003_the_seven_global_flags_are_listed_at_the_root_and_at_no_other_node() {
         // FR-GLOB-003, both halves. The root lists the seven in the order
         // FR-GLOB-001 declares them, and no other node names one of them in
         // its OPTIONS.
@@ -947,7 +947,7 @@ mod tests {
     }
 
     #[test]
-    fn every_flag_and_argument_states_the_facts_of_the_requirement() {
+    fn fr_help_013_every_flag_and_argument_states_the_facts_of_the_requirement() {
         // FR-HELP-013, for the five facts the declarations carry. The sixth,
         // mutual exclusion, is not declared anywhere in the tree, for the
         // reason this module documents.
@@ -995,7 +995,7 @@ mod tests {
     }
 
     #[test]
-    fn the_type_of_every_argument_of_the_tree_is_named() {
+    fn fr_help_013_the_type_of_every_argument_of_the_tree_is_named() {
         // `kind` falls back to the word "value" for a type it does not name,
         // and no argument of the tree reaches it. A new value type therefore
         // fails here rather than telling a caller nothing.
@@ -1008,7 +1008,7 @@ mod tests {
     }
 
     #[test]
-    fn the_repeatability_stated_is_the_repeatability_enforced() {
+    fn fr_rnd_008_the_repeatability_stated_is_the_repeatability_enforced() {
         // The one flag FR-RND-008 makes repeatable says so, and a flag that
         // carries a single value says the opposite — which is what FR-CLI-014
         // enforces over the very declarations this help is read from.
@@ -1035,7 +1035,7 @@ mod tests {
     }
 
     #[test]
-    fn no_markup_reaches_the_help() {
+    fn fr_help_015_no_markup_reaches_the_help() {
         // FR-HELP-015: help is read by a caller, not rendered by a documentation
         // tool. The one text lifted from the tree is a node's `about`, which is
         // a doc comment and carries backticks; three of them do.
@@ -1045,7 +1045,7 @@ mod tests {
     }
 
     #[test]
-    fn nothing_decorative_reaches_the_help() {
+    fn fr_help_015_nothing_decorative_reaches_the_help() {
         // FR-HELP-015 and NFR-DET-004: no colour, no emoji, no ANSI escape
         // sequence, no decorative character. The alphabet is pinned rather
         // than the absence of an escape alone, because it is also what makes
@@ -1066,7 +1066,7 @@ mod tests {
     }
 
     #[test]
-    fn the_layout_is_the_one_the_sections_fix() {
+    fn fr_help_006_the_layout_is_the_one_the_sections_fix() {
         // One node, written out, so that a change to the layout is a change to
         // this test rather than something noticed downstream. `tpl version`
         // is the smallest node of the tree: no argument, no flag of its own,
@@ -1098,7 +1098,7 @@ SEE ALSO
     }
 
     #[test]
-    fn a_word_wider_than_the_line_takes_a_line_of_its_own() {
+    fn fr_help_009_a_word_wider_than_the_line_takes_a_line_of_its_own() {
         // Wrapping never cuts a word: a break inside a flag spelling or a
         // command path would read as something the tree does not declare.
         assert_eq!(wrap("--no-cache", 4), vec!["--no-cache"]);
@@ -1107,13 +1107,13 @@ SEE ALSO
     }
 
     #[test]
-    fn a_path_that_names_no_node_has_no_help() {
+    fn fr_help_028_a_path_that_names_no_node_has_no_help() {
         assert_eq!(text(&tree(), &["schema", "nowhere"]), None);
         assert_eq!(text(&tree(), &["nowhere"]), None);
     }
 
     #[test]
-    fn an_alias_reaches_the_help_of_the_node_it_names() {
+    fn fr_help_027_an_alias_reaches_the_help_of_the_node_it_names() {
         // FR-HELP-027: an alias resolves to its canonical node, so the table
         // is reached by the canonical path however the caller spelled it.
         assert_eq!(rendered(&["cfg", "db"]), rendered(&["cfg", "database"]));
@@ -1124,7 +1124,7 @@ SEE ALSO
     }
 
     #[test]
-    fn the_help_of_a_node_names_the_node() {
+    fn fr_help_006_the_help_of_a_node_names_the_node() {
         // USAGE opens with the path a caller writes, at every depth.
         for (path, help) in every_help() {
             let segments: Vec<&str> = path.iter().map(String::as_str).collect();

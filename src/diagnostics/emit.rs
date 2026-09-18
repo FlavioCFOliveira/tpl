@@ -106,7 +106,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn the_catalogue_query_token_is_distinguishable_from_every_label() {
+    fn fr_glob_017_the_catalogue_query_token_is_distinguishable_from_every_label() {
         // FR-GLOB-017: the line must be distinguishable from every other
         // diagnostic line. The four labels of FR-ERR-008 and the warning token
         // are the whole of what else this module writes.
@@ -120,7 +120,7 @@ mod tests {
     }
 
     #[test]
-    fn the_warning_names_both_projects() {
+    fn fr_proj_016_the_warning_names_both_projects() {
         let line = shadow_line(Path::new("/work/app/.tpl"), Path::new("/work/.tpl"));
 
         assert!(line.starts_with(WARNING_TOKEN), "{line}");

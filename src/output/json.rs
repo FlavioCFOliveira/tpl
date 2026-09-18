@@ -92,13 +92,13 @@ mod tests {
     }
 
     #[test]
-    fn compact_is_the_default_form() {
+    fn fr_out_007_compact_is_the_default_form() {
         // FR-OUT-007: compact by default, and the type says so.
         assert_eq!(Form::default(), Form::Compact);
     }
 
     #[test]
-    fn a_compact_document_is_one_line_with_one_terminating_newline() {
+    fn fr_out_007_a_compact_document_is_one_line_with_one_terminating_newline() {
         // FR-OUT-007, FR-OUT-024: one line, no superfluous whitespace, the
         // three keys in order, terminated by a single newline.
         let document = emitted(Form::Compact);
@@ -119,7 +119,7 @@ mod tests {
     }
 
     #[test]
-    fn an_indented_document_has_a_two_space_indent_and_one_key_per_line() {
+    fn fr_out_008_an_indented_document_has_a_two_space_indent_and_one_key_per_line() {
         // FR-OUT-008: a two-space indent with one key per line, which is
         // serde_json's own default.
         let document = emitted(Form::Indented);
@@ -139,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn the_indented_form_ends_with_one_terminating_newline_too() {
+    fn fr_out_007_the_indented_form_ends_with_one_terminating_newline_too() {
         // FR-OUT-007 fixes the terminator for the compact form; the indented
         // form is the same document and ends the same way, so a consumer
         // reading line by line sees a complete document in both.
@@ -150,7 +150,7 @@ mod tests {
     }
 
     #[test]
-    fn both_forms_carry_the_same_keys_in_the_same_order() {
+    fn fr_out_013_both_forms_carry_the_same_keys_in_the_same_order() {
         // FR-OUT-013, FR-OUT-024: key order is a property of the type, so
         // --pretty changes the whitespace and nothing else.
         for document in [emitted(Form::Compact), emitted(Form::Indented)] {

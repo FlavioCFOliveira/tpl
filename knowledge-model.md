@@ -133,7 +133,7 @@ One recorded performance measurement in `BENCHMARKS.md`.
 | `subject` | string | What was measured or decided. |
 | `target` | string | The target triple(s) the measurement was taken on. Multiple targets are separated by `; `. A baseline without a target is not a baseline, and figures from different targets are never compared. |
 
-### `Component` — defined, not populated
+### `Component`
 
 An architectural unit of the implementation: the crate root, the binary, or a
 module within it.
@@ -142,12 +142,13 @@ module within it.
 |---|---|---|
 | **`name`** | string | **Identity.** The module path, e.g. `tpl::mariadb::reader`. |
 | `path` | string | Repository-relative path of the directory or file that realises it. |
-| `kind` | string | One of `crate-root`, `binary`, `module`, `submodule`. |
+| `kind` | string | One of `crate-root`, `binary`, `module`, `submodule`, `test-crate`. |
 | `role` | string | One sentence on what the component is responsible for. |
 
-**Zero instances after the bootstrap task.** `Component` is one of the three
-widened layers. It is populated once the architecture document is turned into
-graph content, which the bootstrap task deliberately deferred to separate work.
+**Populated from the module tree**, one node per Rust file that realises a
+module, plus the crate root, the binary and each integration-test crate.
+`role` is **absent**: it is a sentence about responsibility, and no sentence is
+written here that a document does not already state.
 
 ### `Flow` — defined, not populated
 
@@ -174,7 +175,7 @@ One ordered step within a `Flow`.
 
 **Zero instances after the bootstrap task**, for the same reason as `Component`.
 
-### `Crate` — defined, not populated
+### `Crate`
 
 A Rust dependency, or the standard library.
 
@@ -186,10 +187,12 @@ A Rust dependency, or the standard library.
 | `features` | string | The declared feature list, comma-separated. |
 | `justification` | string | Why the crate earns its place, per the project's dependency budget. |
 
-**Zero instances after the bootstrap task**: the repository holds no Rust yet —
-no `Cargo.toml`, no `src/`, and no `.rs` file.
+**Populated from the `[dependencies]` table of `Cargo.toml`**, and from that
+table alone: a crate the resolver pulls in transitively is not a declared
+dependency and gets no node. `justification` is **absent** where no document
+states one; it is never inferred from the crate's purpose.
 
-### `Function` — defined, not populated
+### `Function`
 
 A free function.
 
@@ -202,9 +205,13 @@ A free function.
 | `file` | string | Repository-relative path of the file that declares it. |
 | `line` | **integer** | Declaration line, 1-based. |
 
-**Zero instances after the bootstrap task**: the repository holds no Rust yet.
+**Populated by a scan of every `.rs` file under `src/` and `tests/`.** The key
+is derived from the file's own path, so an `impl` written for a type imported
+from another module yields a key naming the importing module; each such case is
+repaired against the file's `use` list, and one for a type this crate does not
+declare correctly resolves to no node at all.
 
-### `Type` — defined, not populated
+### `Type`
 
 A struct, enum, union, or type alias.
 
@@ -218,9 +225,13 @@ A struct, enum, union, or type alias.
 | `file` | string | Repository-relative declaring file. |
 | `line` | **integer** | Declaration line, 1-based. |
 
-**Zero instances after the bootstrap task**: the repository holds no Rust yet.
+**Populated by a scan of every `.rs` file under `src/` and `tests/`.** The key
+is derived from the file's own path, so an `impl` written for a type imported
+from another module yields a key naming the importing module; each such case is
+repaired against the file's `use` list, and one for a type this crate does not
+declare correctly resolves to no node at all.
 
-### `Trait` — defined, not populated
+### `Trait`
 
 A trait declaration. Identical to `Type` except that it has no `kind`.
 
@@ -233,9 +244,13 @@ A trait declaration. Identical to `Type` except that it has no `kind`.
 | `file` | string | Repository-relative declaring file. |
 | `line` | **integer** | Declaration line, 1-based. |
 
-**Zero instances after the bootstrap task**: the repository holds no Rust yet.
+**Populated by a scan of every `.rs` file under `src/` and `tests/`.** The key
+is derived from the file's own path, so an `impl` written for a type imported
+from another module yields a key naming the importing module; each such case is
+repaired against the file's `use` list, and one for a type this crate does not
+declare correctly resolves to no node at all.
 
-### `Method` — defined, not populated
+### `Method`
 
 A method in an inherent or trait `impl`.
 
@@ -249,9 +264,13 @@ A method in an inherent or trait `impl`.
 | `file` | string | Repository-relative declaring file. |
 | `line` | **integer** | Declaration line, 1-based. |
 
-**Zero instances after the bootstrap task**: the repository holds no Rust yet.
+**Populated by a scan of every `.rs` file under `src/` and `tests/`.** The key
+is derived from the file's own path, so an `impl` written for a type imported
+from another module yields a key naming the importing module; each such case is
+repaired against the file's `use` list, and one for a type this crate does not
+declare correctly resolves to no node at all.
 
-### `Test` — defined, not populated
+### `Test`
 
 One test, benchmark, or doc test.
 
@@ -263,7 +282,42 @@ One test, benchmark, or doc test.
 | `file` | string | Repository-relative declaring file. |
 | `line` | **integer** | Declaration line, 1-based. |
 
-**Zero instances after the bootstrap task**: the repository holds no Rust yet.
+**Populated by a scan of every `.rs` file under `src/` and `tests/`.** The key
+is derived from the file's own path, so an `impl` written for a type imported
+from another module yields a key naming the importing module; each such case is
+repaired against the file's `use` list, and one for a type this crate does not
+declare correctly resolves to no node at all.
+
+### `Variant`
+
+One variant of an `enum`.
+
+| Property | Type | Meaning |
+|---|---|---|
+| **`key`** | string | **Identity.** `<enum key>::<Variant>`, e.g. `tpl::error::Error::UnknownCommand`. |
+| `name` | string | The bare variant name. |
+| `owner` | string | `key` of the owning `Type`. |
+| `file` | string | Repository-relative declaring file. |
+| `line` | **integer** | Declaration line, 1-based. |
+
+A variant is modelled because it is what an exhaustive `match` must cover: the
+arms a function owes are the variants of the enum it matches, and that is a
+question about the enum rather than about the function.
+
+### `Const`
+
+One `const` or `static` item.
+
+| Property | Type | Meaning |
+|---|---|---|
+| **`key`** | string | **Identity.** `<owner>::<NAME>`, where the owner is the declaring module, or the `Type` when the item sits in an `impl`. |
+| `name` | string | The bare name. |
+| `module` | string | The module path the item is written in. |
+| `owner` | string | `key` of the owning `Type`. **Absent** for a module-level item. |
+| `kind` | string | `const` or `static`. |
+| `visibility` | string | As for `Function`. |
+| `file` | string | Repository-relative declaring file. |
+| `line` | **integer** | Declaration line, 1-based. |
 
 ---
 
@@ -288,6 +342,13 @@ assertion and is listed separately.
 | `REFERENCES` | `(File)→(Requirement)` | The file names the identifier **outside** any definition block — narrative prose, an index table, a fixture comment. | `firstLine` (**integer**). |
 | `REFERENCES` | `(File)→(Decision)` | Same assertion, for a technical identifier. | `firstLine` (**integer**). |
 | `RELATED_TO` | `(File)→(File)` | The source file's front-matter `related:` list declares the target adjacent. Directed and **not** automatically reciprocal: traverse both ways when adjacency in either direction matters. | — |
+| `DECLARES` | `(File)→(Type\|Trait\|Function\|Method\|Const\|Variant\|Test)` | This file is the declaration site of the symbol. Same assertion as the `(File)→(Baseline)` row. | `line` (**integer**) — the 1-based declaration line, carried on the node as well |
+| `IMPLEMENTED_BY` | `(Component)→(File)` | The component is realised by this file. | — |
+| `DEPENDS_ON` | `(Component)→(Crate)` | The component declares this crate as a dependency. Written from the crate root only, because `Cargo.toml` declares dependencies per package and not per module. | `optional` (**boolean**) |
+| `MEMBER_OF` | `(Method)→(Type)` | The method belongs to this type. **Absent** where the type is not declared by this crate, which is the honest answer for an `impl` of a local trait on a foreign type. | — |
+| `MEMBER_OF` | `(Variant)→(Type)` | The variant belongs to this enum. Every `Variant` carries exactly one. | — |
+| `IMPLEMENTS` | `(Type)→(Trait)` | The type implements this trait. Written only where **this crate declares the trait**: an `impl` of a foreign trait names no node and produces no edge, so the absence of an edge is not the absence of an implementation. | — |
+| `VERIFIES` | `(Test)→(Requirement)` | The test verifies the requirement. **Derived from the test's own name**, which `docs/spec-technical/verification.md` requires to begin with the identifier that mandates the test — so the edge is mechanical, and a test that verifies no single requirement correctly has none. **This is the coverage edge**: inverted, it answers "is `FR-X` verified by anything?". | — |
 
 `CITES` and `REFERENCES` **partition** every non-definition occurrence of an
 identifier, and the partition rule is one line: an occurrence inside a
@@ -319,26 +380,20 @@ model, and keeps `CONTAINS` unambiguously about the tree.
 
 ### Defined, not populated
 
-Every predicate below has **zero instances after the bootstrap task**. The two
-reasons are the same as for the labels: the `Component`/`Flow` layers await the
-architecture document being turned into graph content, and the Rust-symbol
-predicates await the existence of Rust in the repository.
+Every predicate below has zero instances. Two reasons appear: the `Flow` layer
+awaits the architecture document being turned into graph content, and two
+Rust-side edges were **deferred by an explicit decision** rather than blocked —
+each row states which.
 
 | Predicate | Endpoints | Asserts | Edge properties | Why unpopulated |
 |---|---|---|---|---|
-| `SATISFIES` | `(Component)→(Requirement)` | This component satisfies the requirement. **The requirement-satisfaction layer**: it answers "which component satisfies `FR-X`?" and, inverted, "is `FR-X` implemented at all?". | `kind` (string) — `full` or `partial` | no `Component` data yet |
-| `IMPLEMENTED_BY` | `(Component)→(File)` | The component is realised by this file. | — | no `Component` data yet |
 | `DEPENDS_ON` | `(Component)→(Component)` | The source needs the target to function. | `optional` (**boolean**) | no `Component` data yet |
-| `DEPENDS_ON` | `(Component)→(Crate)` | The component depends on this external crate. | `optional` (**boolean**) | no `Component` or `Crate` data yet |
 | `HAS_STEP` | `(Flow)→(FlowStep)` | The step belongs to this flow. | — | no `Flow` data yet |
 | `NEXT` | `(FlowStep)→(FlowStep)` | Step ordering: the target follows the source. | — | no `Flow` data yet |
 | `PERFORMED_BY` | `(FlowStep)→(Component)` | The component carries out this step. | — | no `Flow` data yet |
 | `SPECIFIED_BY` | `(Flow)→(Requirement)` | The requirement specifies this flow. | — | no `Flow` data yet |
-| `DECLARES` | `(File)→(Function\|Type\|Trait\|Method\|Test)` | This file is the declaration site of the symbol. Same assertion as the populated `(File)→(Baseline)` row. | `line` (**integer**) | no Rust in the repository |
-| `MEMBER_OF` | `(Method)→(Type)` | The method belongs to this type. | — | no Rust in the repository |
-| `IMPLEMENTS` | `(Type)→(Trait)` | The type implements this trait. | — | no Rust in the repository |
-| `CALLS` | `(Function\|Method)→(Function\|Method)` | The source calls the target. | — | no Rust in the repository |
-| `VERIFIES` | `(Test)→(Requirement)` | The test verifies the requirement. | — | no Rust in the repository |
+| `CALLS` | `(Function\|Method)→(Function\|Method)` | The source calls the target. | — | deferred by decision: it needs static analysis of every call site, and it is the edge that decays fastest under a commit |
+| `SATISFIES` | `(Component)→(Requirement)` | This component satisfies the requirement. | `kind` (string) — `full` or `partial` | deferred by decision: satisfaction is a judgement and is not derivable from the source. The nearest mechanical answer is the two-hop `(Component)-[:IMPLEMENTED_BY]->(:File)-[:DECLARES]->(:Test)-[:VERIFIES]->(:Requirement)`, which says the module's tests **verify** the requirement and does **not** say the module satisfies it |
 
 ---
 
@@ -393,6 +448,10 @@ CREATE CONSTRAINT method_key_uniq          IF NOT EXISTS FOR (x:Method)      REQ
 CREATE CONSTRAINT method_key_notnull       IF NOT EXISTS FOR (x:Method)      REQUIRE x.key IS NOT NULL;
 CREATE CONSTRAINT test_key_uniq            IF NOT EXISTS FOR (x:Test)        REQUIRE x.key IS UNIQUE;
 CREATE CONSTRAINT test_key_notnull         IF NOT EXISTS FOR (x:Test)        REQUIRE x.key IS NOT NULL;
+CREATE CONSTRAINT variant_key_uniq         IF NOT EXISTS FOR (x:Variant)     REQUIRE x.key IS UNIQUE;
+CREATE CONSTRAINT variant_key_notnull      IF NOT EXISTS FOR (x:Variant)     REQUIRE x.key IS NOT NULL;
+CREATE CONSTRAINT const_key_uniq           IF NOT EXISTS FOR (x:Const)       REQUIRE x.key IS UNIQUE;
+CREATE CONSTRAINT const_key_notnull        IF NOT EXISTS FOR (x:Const)       REQUIRE x.key IS NOT NULL;
 ```
 
 Constraints on an unpopulated label are declared all the same: they cost nothing

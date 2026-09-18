@@ -296,7 +296,7 @@ mod tests {
     // -------------------------------------------------------- the shape ---
 
     #[test]
-    fn the_four_labels_appear_in_the_order_fr_err_008_fixes() {
+    fn fr_err_008_the_four_labels_appear_in_the_order_the_requirement_fixes() {
         let rendered = render(&Error::StdoutClosedMidDocument);
         let lines: Vec<&str> = rendered.lines().collect();
 
@@ -309,14 +309,14 @@ mod tests {
     }
 
     #[test]
-    fn the_labels_are_aligned_as_the_requirement_shows() {
+    fn fr_err_008_the_labels_are_aligned_as_the_requirement_shows() {
         for label in [Label::Error, Label::Cause, Label::Hint, Label::Exit] {
             assert_eq!(label.as_str().len(), 7, "{label:?} is not aligned");
         }
     }
 
     #[test]
-    fn the_nine_codes_of_the_table_carry_their_sysexits_name() {
+    fn fr_err_001_the_nine_codes_of_the_table_carry_their_sysexits_name() {
         let named: BTreeSet<u8> = [64, 65, 66, 69, 70, 73, 74, 77, 78]
             .into_iter()
             .filter(|code| sysexits_name(*code).is_some())
@@ -329,7 +329,7 @@ mod tests {
     // ---------------------------------------- one test per FR-ERR-001 code ---
 
     #[test]
-    fn code_64_names_the_token_and_why_it_was_rejected() {
+    fn fr_err_034_code_64_names_the_token_and_why_it_was_rejected() {
         // FR-ERR-034, the 64 row.
         let rendered = render(&Error::UnknownCommand {
             token: "sch".to_owned(),
@@ -347,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn code_64_names_both_members_of_a_mutually_exclusive_pair() {
+    fn fr_err_034_code_64_names_both_members_of_a_mutually_exclusive_pair() {
         let rendered = render(&Error::MutuallyExclusiveFlags {
             first: "--dsn".to_owned(),
             second: "--host".to_owned(),
@@ -359,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn code_64_names_the_value_and_the_type_expected() {
+    fn fr_err_034_code_64_names_the_value_and_the_type_expected() {
         let rendered = render(&Error::MalformedValue {
             parameter: "--timeout".to_owned(),
             value: "soon".to_owned(),
@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn code_65_names_the_template_the_position_and_the_engine_chain() {
+    fn fr_err_034_code_65_names_the_template_the_position_and_the_engine_chain() {
         // FR-ERR-034, the 65 row, with FR-ERR-011.
         let rendered = render(&Error::TemplateSyntax {
             template: "example.jinja".to_owned(),
@@ -396,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn code_65_names_the_context_path_and_the_position_of_the_malformed_json() {
+    fn fr_err_034_code_65_names_the_context_path_and_the_position_of_the_malformed_json() {
         let rendered = render(&Error::ContextDocumentMalformed {
             path: PathBuf::from("context.json"),
             fault: ContextFault::NotJson(position()),
@@ -408,7 +408,7 @@ mod tests {
     }
 
     #[test]
-    fn code_65_names_which_deadline_expired_and_its_resolved_value() {
+    fn fr_err_034_code_65_names_which_deadline_expired_and_its_resolved_value() {
         let rendered = render(&Error::RenderDeadlineExceeded {
             bound: DeadlineBound::Overall,
             limit: Duration::from_secs(10),
@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn code_66_names_the_identifier_the_kind_and_the_population() {
+    fn fr_err_034_code_66_names_the_identifier_the_kind_and_the_population() {
         // FR-ERR-034, the 66 row: the database entry and the server-side
         // database are the population for a catalogue object.
         let rendered = render(&Error::CatalogueObjectNotFound {
@@ -441,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn code_69_names_the_phase_the_host_and_the_port() {
+    fn fr_err_034_code_69_names_the_phase_the_host_and_the_port() {
         // FR-ERR-034, the 69 row. What the phase returned is the
         // classification `mariadb/` made of it: OD-06 drops the driver value.
         let rendered = render(&Error::ConnectionRefused {
@@ -461,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn code_69_names_the_phase_when_a_deadline_expires() {
+    fn fr_err_034_code_69_names_the_phase_when_a_deadline_expires() {
         let rendered = render(&Error::NetworkDeadlineExceeded {
             phase: NetworkPhase::CatalogueQuery,
             host: "db.example.com".to_owned(),
@@ -480,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn code_70_names_the_invariant_and_where_it_was_detected() {
+    fn fr_err_034_code_70_names_the_invariant_and_where_it_was_detected() {
         // FR-ERR-034, the 70 row, and FR-ERR-032 for the hint.
         let location = Location::caller();
         let rendered = render(&Error::InternalInvariant {
@@ -507,7 +507,7 @@ mod tests {
     // ------------------------------- the other producing condition of 70 ---
 
     #[test]
-    fn a_panic_is_reported_as_the_four_lines_and_names_where_it_arose() {
+    fn fr_err_030_a_panic_is_reported_as_the_four_lines_and_names_where_it_arose() {
         // FR-ERR-030 and ADR-004: the panic path produces the same outcome as
         // the invariant violation, from a site where no Error exists.
         // FR-ERR-034, the 70 row, obliges that a panic occurred and where.
@@ -535,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn a_panic_carries_the_hint_fr_err_032_requires() {
+    fn fr_err_032_a_panic_carries_the_hint_the_requirement_requires() {
         let hint = line(&render_panic(Some(Location::caller())), Label::Hint);
 
         assert!(hint.contains("a defect in tpl"), "{hint}");
@@ -554,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn a_panic_carries_no_payload() {
+    fn fr_glob_018_a_panic_carries_no_payload() {
         // ADR-004 withholds the payload on FR-GLOB-018: nothing composed at the
         // panic site reaches the stream, only the location the runtime yields.
         let rendered = render_panic(Some(Location::caller()));
@@ -568,7 +568,7 @@ mod tests {
     }
 
     #[test]
-    fn a_panic_without_a_location_says_so_rather_than_naming_a_category() {
+    fn fr_err_034_a_panic_without_a_location_says_so_rather_than_naming_a_category() {
         // FR-ERR-034 bans a cause that would read identically for a different
         // failure. Where the runtime yields no location, the absence is the
         // fact, and stating it is not naming a category over an instance.
@@ -582,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    fn the_constant_the_panic_path_exits_with_is_the_code_it_prints() {
+    fn fr_err_030_the_constant_the_panic_path_exits_with_is_the_code_it_prints() {
         // The `exit` line and the process status cannot disagree, because
         // `panic::install` terminates with this same constant.
         assert_eq!(SOFTWARE, 70);
@@ -598,7 +598,7 @@ mod tests {
     }
 
     #[test]
-    fn the_trigger_of_fr_err_031_produces_the_condition_of_fr_err_030() {
+    fn fr_err_031_the_trigger_produces_the_condition_of_fr_err_030() {
         // The composition OD-21 admits for 70, and the whole of what is
         // executed: the guard is exercised in process and observed to produce
         // the condition of FR-ERR-030 carrying the message FR-ERR-032 requires.
@@ -639,7 +639,7 @@ mod tests {
     }
 
     #[test]
-    fn code_73_names_the_path_and_which_obstacle_it_met() {
+    fn fr_err_034_code_73_names_the_path_and_which_obstacle_it_met() {
         // FR-ERR-034, the 73 row: an existing .tpl, or a failure the
         // filesystem reported. The two arms must not read alike.
         let existing = render(&Error::ProjectAlreadyExists {
@@ -667,7 +667,7 @@ mod tests {
     }
 
     #[test]
-    fn code_74_names_the_stream_the_operation_and_what_it_returned() {
+    fn fr_err_034_code_74_names_the_stream_the_operation_and_what_it_returned() {
         // FR-ERR-034, the 74 row.
         let rendered = render(&Error::ProjectFileUnreadable {
             path: path(),
@@ -683,7 +683,7 @@ mod tests {
     }
 
     #[test]
-    fn code_77_names_the_user_the_host_and_that_the_server_refused() {
+    fn fr_err_034_code_77_names_the_user_the_host_and_that_the_server_refused() {
         // FR-ERR-034, the 77 row.
         let rendered = render(&Error::AuthenticationRefused {
             user: "reader".to_owned(),
@@ -701,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    fn code_77_names_which_property_of_which_object() {
+    fn fr_priv_013_code_77_names_which_property_of_which_object() {
         // FR-PRIV-013.
         let rendered = render(&Error::PropertyNotReadable {
             kind: CatalogueObjectKind::Routine,
@@ -717,7 +717,7 @@ mod tests {
     }
 
     #[test]
-    fn code_78_names_the_key_the_file_and_the_value_expected() {
+    fn fr_err_034_code_78_names_the_key_the_file_and_the_value_expected() {
         // FR-ERR-034, the 78 row.
         let rendered = render(&Error::PasswordCommandNotAnArray {
             key: "database.shop.password_command".to_owned(),
@@ -741,7 +741,7 @@ mod tests {
     }
 
     #[test]
-    fn code_78_names_the_specific_condition_where_the_fault_is_not_a_key() {
+    fn fr_err_034_code_78_names_the_specific_condition_where_the_fault_is_not_a_key() {
         // The 78 row's second half: the directory the walk ended at, the name
         // of the undefined variable, the series found.
         let walk = render(&Error::ProjectNotFound {
@@ -790,7 +790,7 @@ mod tests {
     }
 
     #[test]
-    fn the_unsafe_mode_diagnostic_is_the_one_fr_proj_011_shows() {
+    fn fr_proj_011_the_unsafe_mode_diagnostic_is_the_one_the_requirement_shows() {
         let rendered = render(&Error::ConfigurationUnsafeMode {
             path: path(),
             mode: 0o644,
@@ -809,7 +809,7 @@ mod tests {
     // ------------------------------------------------------- the escaping ---
 
     #[test]
-    fn a_hostile_value_cannot_forge_a_fifth_line() {
+    fn fr_err_024_a_hostile_value_cannot_forge_a_fifth_line() {
         // FR-ERR-024: the value carries \n, \r, \t and a C0 control, and a
         // whole `exit:  0 (EX_OK)` line. Unescaped it would be read as a
         // success by a caller parsing the stream line by line.
@@ -833,7 +833,7 @@ mod tests {
     }
 
     #[test]
-    fn a_hostile_value_is_escaped_on_every_one_of_the_four_lines() {
+    fn fr_err_022_a_hostile_value_is_escaped_on_every_one_of_the_four_lines() {
         // The token reaches `error:` through Display, `cause:` through the
         // derivation, and `hint:` through the character set of FR-ERR-022;
         // `exit:` carries no interpolation at all. Each is escaped as a whole.
@@ -1158,7 +1158,7 @@ mod tests {
     }
 
     #[test]
-    fn the_sample_set_reaches_every_code_of_the_table() {
+    fn fr_err_001_the_sample_set_reaches_every_code_of_the_table() {
         // Per-variant coverage is not this set's job: the matches in `cause`
         // and `hint` are exhaustive and carry no wildcard arm, so a variant
         // added to `Error` fails to compile until both derive a line for it.
@@ -1169,7 +1169,7 @@ mod tests {
     }
 
     #[test]
-    fn every_variant_renders_four_labelled_lines_and_no_control_character() {
+    fn fr_err_008_every_variant_renders_four_labelled_lines_and_no_control_character() {
         for error in samples() {
             let rendered = render(&error);
             let lines: Vec<&str> = rendered.lines().collect();
@@ -1187,7 +1187,7 @@ mod tests {
     }
 
     #[test]
-    fn no_cause_restates_its_error_line() {
+    fn fr_err_010_no_cause_restates_its_error_line() {
         // FR-ERR-010.
         for error in samples() {
             let rendered = render(&error);
@@ -1200,7 +1200,7 @@ mod tests {
     }
 
     #[test]
-    fn no_line_is_empty_and_every_hint_says_something() {
+    fn fr_err_008_no_line_is_empty_and_every_hint_says_something() {
         // FR-ERR-008 answers three questions; FR-ERR-012 forbids vague advice,
         // and an empty line is the vaguest of all.
         for error in samples() {
@@ -1215,7 +1215,7 @@ mod tests {
     }
 
     #[test]
-    fn no_rendered_line_carries_an_ansi_escape_sequence() {
+    fn nfr_det_004_no_rendered_line_carries_an_ansi_escape_sequence() {
         // NFR-DET-004, and NFR-DET-003: no terminal property is consulted, so
         // the output does not vary with one.
         for error in samples() {
@@ -1246,7 +1246,7 @@ mod tests {
     ];
 
     #[test]
-    fn no_hint_line_carries_a_value_the_character_set_governs() {
+    fn fr_err_022_no_hint_line_carries_a_value_the_character_set_governs() {
         // FR-ERR-022 and FR-ERR-023, over every variant at once: a hint is
         // built from literals and from names matching `[A-Za-z0-9_]{1,64}`, so
         // a value outside the set reaches no hint line in any form — neither as
@@ -1263,7 +1263,7 @@ mod tests {
     }
 
     #[test]
-    fn a_name_the_character_set_admits_still_reaches_its_hint() {
+    fn fr_err_022_a_name_the_character_set_admits_still_reaches_its_hint() {
         // The control that makes the test above mean something: the gate lets
         // an admissible name through, so a hint that carried nothing at all
         // would not pass for a hint that refused a hostile name.
@@ -1281,7 +1281,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_outside_the_spelling_the_corpus_enumerates_is_not_reproduced() {
+    fn fr_err_022_a_flag_outside_the_spelling_the_corpus_enumerates_is_not_reproduced() {
         // The pair of a mutually exclusive refusal is prose rather than a
         // runnable command, so FR-ERR-022 does not demand the test; it is the
         // same defensive assertion `admits_path` is for the command path. A

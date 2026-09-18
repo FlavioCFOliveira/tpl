@@ -175,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reference_is_replaced_by_the_value_of_the_variable() {
+    fn fr_conf_015_a_reference_is_replaced_by_the_value_of_the_variable() {
         // FR-CONF-015: expansion supplies the value of a key already in the
         // file.
         assert_eq!(expanded("${SHOP_DB_PASSWORD}"), "hunter2");
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn a_doubled_dollar_is_a_literal_dollar() {
+    fn fr_conf_020_a_doubled_dollar_is_a_literal_dollar() {
         // FR-CONF-020: `$$` denotes a literal `$`.
         assert_eq!(expanded("$$"), "$");
         assert_eq!(expanded("a$$b"), "a$b");
@@ -201,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn expansion_never_runs_twice_over_its_own_output() {
+    fn fr_conf_019_expansion_never_runs_twice_over_its_own_output() {
         // FR-CONF-019: the system SHALL NOT re-expand the result of an
         // expansion. A value that is itself a reference is carried through as
         // text, and a value that is `$$` stays two characters.
@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unclosed_expansion_is_refused() {
+    fn fr_conf_021_an_unclosed_expansion_is_refused() {
         // FR-CONF-021: `${VAR` with no closing brace is 78.
         let refused = expand(
             "${SHOP_DB_PASSWORD",
@@ -228,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unclosed_expansion_after_a_closed_one_is_refused_too() {
+    fn fr_conf_021_an_unclosed_expansion_after_a_closed_one_is_refused_too() {
         // The scan reaches it at the second `$`, which is the whole of why the
         // rule is a property of the loop.
         let refused = expand(
@@ -243,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn an_undefined_variable_is_refused_and_is_never_an_empty_substitution() {
+    fn fr_conf_022_an_undefined_variable_is_refused_and_is_never_an_empty_substitution() {
         // FR-CONF-022, BR-CONF-002.
         let refused = expand("${ABSENT}", &table, "database.shop.host", &file())
             .expect_err("an undefined variable is refused");
@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn a_variable_defined_as_the_empty_string_is_defined() {
+    fn br_conf_002_a_variable_defined_as_the_empty_string_is_defined() {
         // BR-CONF-002 forbids a silent empty substitution for an *undefined*
         // variable. A variable the environment defines as empty is defined, and
         // expands to what it holds.
@@ -269,13 +269,13 @@ mod tests {
     }
 
     #[test]
-    fn a_lone_dollar_that_opens_nothing_is_carried_through() {
+    fn fr_conf_015_a_lone_dollar_that_opens_nothing_is_carried_through() {
         assert_eq!(expanded("a$b"), "a$b");
         assert_eq!(expanded("trailing$"), "trailing$");
     }
 
     #[test]
-    fn a_whole_reference_is_told_apart_from_a_value_that_merely_contains_one() {
+    fn fr_cfg_021_a_whole_reference_is_told_apart_from_a_value_that_merely_contains_one() {
         // FR-CFG-021: `${VAR}` in any field prints as written. A value that is
         // only partly a reference is not that case.
         assert!(is_whole_reference("${SHOP_DB_PASSWORD}"));

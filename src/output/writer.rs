@@ -411,7 +411,7 @@ mod tests {
     }
 
     #[test]
-    fn a_document_reaches_the_stream_whole() {
+    fn fr_out_020_a_document_reaches_the_stream_whole() {
         let mut emitted = Vec::new();
         Writer::new(&mut emitted)
             .document(&sample(), Form::Compact)
@@ -424,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    fn a_stream_closed_before_the_first_byte_is_a_silent_success() {
+    fn fr_err_025_a_stream_closed_before_the_first_byte_is_a_silent_success() {
         // FR-ERR-025: `tpl … | head -1` is not an error. Nothing of the
         // document reached the consumer, so there is nothing it could misread
         // and the process ends silently at 0.
@@ -437,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn a_stream_closed_after_the_first_byte_is_the_mid_document_condition() {
+    fn fr_err_026_a_stream_closed_after_the_first_byte_is_the_mid_document_condition() {
         // FR-ERR-026: the consumer holds truncated JSON and cannot tell.
         let mut stream = Refusing::new(12, io::ErrorKind::BrokenPipe);
 
@@ -454,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn a_document_larger_than_the_buffer_is_classified_the_same_way() {
+    fn fr_err_025_a_document_larger_than_the_buffer_is_classified_the_same_way() {
         // A document that does not fit the buffer is refused inside the
         // encoder rather than at the final flush, so the refusal comes back
         // wrapped in the encoder's own error type. Both requirements have to
@@ -485,7 +485,7 @@ mod tests {
     }
 
     #[test]
-    fn a_stream_that_refuses_for_another_reason_is_unwritable() {
+    fn fr_err_001_a_stream_that_refuses_for_another_reason_is_unwritable() {
         // The 74 row of FR-ERR-001: standard output could not be written. It
         // is not the EPIPE rule and does not consult the mid-document state.
         let mut stream = Refusing::new(12, io::ErrorKind::StorageFull);
@@ -502,7 +502,7 @@ mod tests {
     }
 
     #[test]
-    fn a_refusal_before_the_first_byte_is_unwritable_when_it_is_not_a_close() {
+    fn fr_err_025_a_refusal_before_the_first_byte_is_unwritable_when_it_is_not_a_close() {
         // The distinction FR-ERR-025 draws is about a *closed* stream. A stream
         // that refuses for another reason is a failure wherever it arises.
         let mut stream = Refusing::new(0, io::ErrorKind::PermissionDenied);
@@ -516,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn nothing_further_is_written_after_the_consumer_closed_the_stream() {
+    fn fr_err_025_nothing_further_is_written_after_the_consumer_closed_the_stream() {
         // FR-ERR-025 ends the process; a second document written into a dead
         // stream could only turn that silent 0 into a different outcome.
         let mut stream = Refusing::new(0, io::ErrorKind::BrokenPipe);
@@ -535,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn a_listing_reaches_the_stream_whole() {
+    fn fr_out_006_a_listing_reaches_the_stream_whole() {
         // FR-OUT-006, FR-OUT-020: the `text` result goes to stdout through the
         // same buffer the JSON result does.
         let mut emitted = Vec::new();
@@ -550,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn a_listing_cut_by_the_consumer_is_the_silent_success() {
+    fn fr_err_025_a_listing_cut_by_the_consumer_is_the_silent_success() {
         // FR-ERR-025, against the same stream state that makes a JSON document
         // the 74 of FR-ERR-026: the requirement names a *document*, and its own
         // ground names this case — "in `text`, a cut listing is exactly what
@@ -564,7 +564,7 @@ mod tests {
     }
 
     #[test]
-    fn a_listing_into_a_stream_closed_before_the_first_byte_is_a_silent_success_too() {
+    fn fr_err_025_a_listing_into_a_stream_closed_before_the_first_byte_is_a_silent_success_too() {
         let mut stream = Refusing::new(0, io::ErrorKind::BrokenPipe);
 
         assert!(Writer::new(&mut stream).table(&listing()).is_ok());
@@ -572,7 +572,7 @@ mod tests {
     }
 
     #[test]
-    fn a_listing_refused_for_another_reason_is_unwritable() {
+    fn fr_err_001_a_listing_refused_for_another_reason_is_unwritable() {
         // The 74 row of FR-ERR-001 reaches the `text` path unchanged: only a
         // *close* is excused, and only because the consumer asked for it.
         let mut stream = Refusing::new(12, io::ErrorKind::StorageFull);
@@ -589,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn a_help_text_reaches_the_stream_as_the_renderer_composed_it() {
+    fn br_cli_005_a_help_text_reaches_the_stream_as_the_renderer_composed_it() {
         // BR-CLI-005: help is a legitimate stdout payload, and this path lays
         // nothing out — FR-HELP-009 puts the line breaks in the text.
         let mut emitted = Vec::new();
@@ -604,7 +604,7 @@ mod tests {
     }
 
     #[test]
-    fn a_help_text_cut_by_the_consumer_is_the_silent_success() {
+    fn fr_err_025_a_help_text_cut_by_the_consumer_is_the_silent_success() {
         // FR-ERR-025, on the same ground a cut listing rests on: FR-ERR-026
         // names a JSON document and nothing else, and `tpl --help | head -1`
         // is what the consumer asked for.
@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn a_help_text_refused_for_another_reason_is_unwritable() {
+    fn fr_err_001_a_help_text_refused_for_another_reason_is_unwritable() {
         // The 74 row of FR-ERR-001: only a close is excused on this path.
         let mut stream = Refusing::new(6, io::ErrorKind::StorageFull);
 
@@ -633,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn the_indented_form_reaches_the_stream_too() {
+    fn fr_out_008_the_indented_form_reaches_the_stream_too() {
         // FR-OUT-008: --pretty changes the whitespace and nothing else about
         // how a document is written.
         let mut emitted = Vec::new();
@@ -711,7 +711,7 @@ mod tests {
     }
 
     #[test]
-    fn a_payload_that_fails_part_way_leaves_stdout_empty() {
+    fn fr_err_033_a_payload_that_fails_part_way_leaves_stdout_empty() {
         // FR-ERR-033: the outcome is an error, so stdout is left empty. The
         // part of the document the encoder had composed is still inside the
         // buffer when the failure is classified, and the buffer's own drop
@@ -737,7 +737,7 @@ mod tests {
     }
 
     #[test]
-    fn a_stream_that_recovers_receives_nothing_after_the_failure() {
+    fn fr_err_033_a_stream_that_recovers_receives_nothing_after_the_failure() {
         // The same rule where the refusal is the stream's rather than the
         // payload's, and the stream would accept the retry: nothing of the
         // document may follow the failure that was already reported.
@@ -763,7 +763,7 @@ mod tests {
     }
 
     #[test]
-    fn a_listing_refused_part_way_leaves_nothing_further_on_stdout() {
+    fn fr_err_025_a_listing_refused_part_way_leaves_nothing_further_on_stdout() {
         // A listing is the silent 0 of FR-ERR-025 when the consumer closes,
         // and FR-ERR-033's empty stdout when the stream refuses for another
         // reason. Neither wants the remainder of the buffer afterwards.

@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn a_literal_password_prints_as_three_asterisks() {
+    fn fr_cfg_021_a_literal_password_prints_as_three_asterisks() {
         // FR-CFG-021, first row.
         assert_eq!(
             value(EntryKey::Password, Written::Text("hunter2")),
@@ -205,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn the_password_inside_a_dsn_prints_redacted_and_the_rest_visible() {
+    fn fr_cfg_021_the_password_inside_a_dsn_prints_redacted_and_the_rest_visible() {
         // FR-CFG-021, second row.
         let printed = value(
             EntryKey::Dsn,
@@ -217,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reference_prints_exactly_as_written() {
+    fn fr_cfg_021_a_reference_prints_exactly_as_written() {
         // FR-CFG-021, third row: a password living in an environment variable
         // never reaches stdout through these two commands.
         assert_eq!(
@@ -234,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_only_partly_a_reference_is_redacted() {
+    fn fr_cfg_021_a_value_only_partly_a_reference_is_redacted() {
         // Printing `secret${SUFFIX}` as written would disclose the literal
         // half, which is the disclosure the third row exists to prevent.
         assert_eq!(
@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_that_cannot_hold_a_credential_is_printed_unchanged() {
+    fn fr_cfg_021_a_key_that_cannot_hold_a_credential_is_printed_unchanged() {
         assert_eq!(
             value(EntryKey::Host, Written::Text("db.example.com")),
             "db.example.com"
@@ -253,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn the_document_keeps_its_comments_and_its_order_and_loses_its_password() {
+    fn fr_cfg_013_the_document_keeps_its_comments_and_its_order_and_loses_its_password() {
         // FR-CFG-013: the contents of .tpl/.cfg, literally, with passwords
         // redacted.
         let text = concat!(
@@ -285,14 +285,14 @@ mod tests {
     }
 
     #[test]
-    fn a_document_with_nothing_to_redact_is_copied_byte_for_byte() {
+    fn fr_cfg_013_a_document_with_nothing_to_redact_is_copied_byte_for_byte() {
         let text = "# a note\n[core]\ndatabase = \"shop\"\n";
 
         assert_eq!(printed(text), text);
     }
 
     #[test]
-    fn every_password_of_every_entry_is_redacted() {
+    fn fr_cfg_013_every_password_of_every_entry_is_redacted() {
         let text = concat!(
             "[database.a]\n",
             "password = \"one\"\n",

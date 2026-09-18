@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn the_two_verbosity_flags_are_refused_together_and_alone_are_not() {
+    fn fr_cli_015_the_two_verbosity_flags_are_refused_together_and_alone_are_not() {
         // FR-CLI-015 and FR-GLOB-015.
         let refused = refuse_both_verbosities(&globals(1, true)).expect_err("the pair is refused");
 
@@ -212,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn the_verbosity_count_saturates_at_trace_without_error() {
+    fn fr_cli_016_the_verbosity_count_saturates_at_trace_without_error() {
         // FR-CLI-016 and FR-GLOB-014: one INFO, two DEBUG, three TRACE, and
         // every further occurrence TRACE. The count reaching this function is
         // itself saturated at 255 by the parser, which `super::super` asserts
@@ -228,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn the_only_repeatable_flag_is_the_one_the_requirement_names() {
+    fn fr_rnd_008_the_only_repeatable_flag_is_the_one_the_requirement_names() {
         // FR-RND-008 makes `--set` repeatable and nothing else in the tree is.
         // The identifiers are what `ArgMatches` is keyed by, so a flag renamed
         // without this constant following it fails here rather than silently

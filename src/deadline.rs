@@ -434,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn the_built_in_defaults_are_the_four_the_key_space_declares() {
+    fn fr_conf_002_the_built_in_defaults_are_the_four_the_key_space_declares() {
         // FR-CONF-002: the defaults of the four [core] timeout keys.
         let resolved = Deadlines::default();
 
@@ -445,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    fn every_phase_resolves_from_the_key_the_requirement_names() {
+    fn fr_conf_004_every_phase_resolves_from_the_key_the_requirement_names() {
         // FR-CONF-004, FR-CONF-005: the six phases map onto the four keys.
         assert_eq!(Phase::DnsResolution.key(), "core.connect_timeout");
         assert_eq!(Phase::TcpConnect.key(), "core.connect_timeout");
@@ -456,7 +456,7 @@ mod tests {
     }
 
     #[test]
-    fn the_three_connection_phases_share_one_budget_and_the_other_three_do_not() {
+    fn fr_conf_005_the_three_connection_phases_share_one_budget_and_the_other_three_do_not() {
         // FR-CONF-005: the system SHALL NOT give each of the three a budget of
         // the configured value.
         assert!(Phase::DnsResolution.shares_the_connection_budget());
@@ -468,7 +468,7 @@ mod tests {
     }
 
     #[test]
-    fn a_configured_value_displaces_the_built_in_default_for_that_key_alone() {
+    fn fr_conf_004_a_configured_value_displaces_the_built_in_default_for_that_key_alone() {
         // FR-CONF-004: each phase resolves from its own key, or from the
         // built-in default where the key is absent.
         let resolved = Deadlines::resolve(Some(seconds(3)), None, Some(seconds(7)), None);
@@ -480,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn without_the_flag_a_phase_is_bounded_by_its_own_deadline_alone() {
+    fn fr_glob_011_without_the_flag_a_phase_is_bounded_by_its_own_deadline_alone() {
         // FR-GLOB-011: absent --timeout the invocation carries no overall
         // budget.
         let bound = Clock::new(None).bound(seconds(30));
@@ -491,7 +491,7 @@ mod tests {
     }
 
     #[test]
-    fn the_overall_budget_composes_with_the_phase_deadline_rather_than_replacing_it() {
+    fn fr_glob_012_the_overall_budget_composes_with_the_phase_deadline_rather_than_replacing_it() {
         // FR-GLOB-012: a phase ends when the first of the two expires. A
         // --timeout of 1 bounds a phase whose own deadline is 30, and a
         // --timeout of 600 does not bound it at all.
@@ -507,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn the_flag_is_not_a_layer_of_the_per_phase_resolution() {
+    fn fr_conf_004_the_flag_is_not_a_layer_of_the_per_phase_resolution() {
         // FR-CONF-004: --timeout SHALL NOT participate in the resolution of a
         // phase deadline. The four [core] keys are reachable whatever the flag
         // says, which is what the third edition's amendment restored.
@@ -522,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn a_spent_budget_leaves_a_phase_no_time_at_all() {
+    fn fr_glob_012_a_spent_budget_leaves_a_phase_no_time_at_all() {
         // FR-GLOB-012: the phase ends at the first of the two, and a budget
         // already exhausted is the first.
         let clock = Clock::new(Some(seconds(1)));
@@ -537,7 +537,7 @@ mod tests {
     }
 
     #[test]
-    fn a_built_in_default_is_positive() {
+    fn fr_conf_002_a_built_in_default_is_positive() {
         // FR-CONF-002 declares the four keys positive integers, and the
         // fallback of `positive` is never reached by a literal of this file.
         assert_eq!(positive(10).get(), 10);
@@ -545,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn the_shared_connection_budget_is_one_budget_and_not_three() {
+    fn fr_conf_005_the_shared_connection_budget_is_one_budget_and_not_three() {
         // FR-CONF-005: the three connection phases share one budget of
         // core.connect_timeout, consumed in the order they run.
         let clock = Clock::new(None);
@@ -563,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn a_deadline_carries_its_unit() {
+    fn fr_conf_004_a_deadline_carries_its_unit() {
         // The type is the unit: no bare integer of seconds crosses a boundary.
         assert_eq!(seconds(5).to_string(), "5s");
         assert_eq!(Duration::from(seconds(5)), Duration::from_secs(5));

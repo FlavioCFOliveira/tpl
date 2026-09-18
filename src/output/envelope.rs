@@ -174,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn the_envelope_carries_the_three_keys_of_the_requirement_in_order() {
+    fn fr_out_024_the_envelope_carries_the_three_keys_of_the_requirement_in_order() {
         // FR-OUT-024, FR-OUT-025, FR-OUT-028: exactly three keys, in this
         // order, with nothing beside `data`.
         let document = Document::new(Source::Server, Collection::new("tables", &["orders"]));
@@ -186,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn source_takes_exactly_the_four_values_of_the_requirement() {
+    fn fr_out_026_source_takes_exactly_the_four_values_of_the_requirement() {
         // FR-OUT-026, FR-CDOC-010: four enumerated strings, never a boolean.
         let values: Vec<String> = [
             Source::Server,
@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn a_collection_is_one_key_in_the_plural_carrying_an_array() {
+    fn fr_out_030_a_collection_is_one_key_in_the_plural_carrying_an_array() {
         // FR-OUT-030: `data` is an object of one key, named for the collection
         // in the plural, whose value is an array of its members.
         let document = Document::new(
@@ -225,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_collection_carries_its_key_with_an_empty_array() {
+    fn fr_out_035_an_empty_collection_carries_its_key_with_an_empty_array() {
         // FR-OUT-035: the key is not omitted and its value is not `null`.
         let empty: [&str; 0] = [];
         let document = Document::new(Source::Project, Collection::new("templates", &empty));
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn an_absent_value_is_null_and_is_not_omitted() {
+    fn fr_out_012_an_absent_value_is_null_and_is_not_omitted() {
         // FR-OUT-012: the shape of a document is constant, so an absent value
         // is emitted as `null`. OD-18 confines `skip_serializing_if` to one
         // field of one type, which is not written yet.
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn the_schema_version_is_the_one_the_corpus_publishes() {
+    fn fr_out_011_the_schema_version_is_the_one_the_corpus_publishes() {
         // FR-OUT-011, FR-OUT-025: the number every worked example in the
         // specification carries. A release gate checks that it moved only on a
         // breaking row of FR-OUT-014.

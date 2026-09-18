@@ -524,7 +524,7 @@ mod tests {
     }
 
     #[test]
-    fn the_coverage_predicate_admits_two_table_types_and_refuses_the_other_four() {
+    fn fr_cat_001_the_coverage_predicate_admits_two_table_types_and_refuses_the_other_four() {
         // FR-CAT-001 covers two of the six types FR-CAT-031 closes the set at.
         // FR-CAT-032 requires the exclusion of a temporary table to be this
         // filter and not a reliance on the catalogue omitting it — which only
@@ -546,7 +546,7 @@ mod tests {
     }
 
     #[test]
-    fn a_table_whose_keys_name_its_own_columns_assembles() {
+    fn fr_cat_044_a_table_whose_keys_name_its_own_columns_assembles() {
         let table = Table::assemble(parts()).expect("every key names a column the table carries");
 
         assert_eq!(table.name(), TARIFF);
@@ -556,7 +556,7 @@ mod tests {
     }
 
     #[test]
-    fn the_primary_key_is_the_index_named_primary_and_is_not_a_second_copy_of_it() {
+    fn fr_cat_043_the_primary_key_is_the_index_named_primary_and_is_not_a_second_copy_of_it() {
         // FR-CAT-043: the index catalogue table is the authoritative source,
         // and the primary key is the index it reports under the name PRIMARY.
         // The answer is an element of the index collection, so the two cannot
@@ -569,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn a_table_with_no_index_named_primary_has_no_primary_key() {
+    fn fr_cat_043_a_table_with_no_index_named_primary_has_no_primary_key() {
         let table = Table::assemble(TableParts {
             indexes: vec![index("uq_tariff_code", &["tariff_id"])],
             ..parts()
@@ -581,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    fn an_index_naming_a_column_the_table_does_not_carry_is_refused() {
+    fn fr_cat_044_an_index_naming_a_column_the_table_does_not_carry_is_refused() {
         // FR-CAT-044, and it is the case FR-CAT-043 was decided by: key column
         // usage reports the primary key of `tariff` as (tariff_id, row_end),
         // and the column catalogue carries no row for `row_end` on any table.
@@ -599,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn an_outgoing_foreign_key_naming_an_absent_referencing_column_is_refused() {
+    fn fr_cat_044_an_outgoing_foreign_key_naming_an_absent_referencing_column_is_refused() {
         // FR-CAT-044 applies to both directions of a foreign key. The
         // referencing columns of an outgoing key are this table's.
         let refused = Table::assemble(TableParts {
@@ -617,7 +617,8 @@ mod tests {
     }
 
     #[test]
-    fn an_outgoing_foreign_keys_referenced_column_belongs_to_the_other_table_and_is_not_checked() {
+    fn fr_cat_044_an_outgoing_foreign_keys_referenced_column_belongs_to_the_other_table_and_is_not_checked()
+     {
         // The far half of a key belongs to the table at the far end. Checking
         // it here would make the invariant unsatisfiable for every key that
         // crosses a table boundary, which is every foreign key that is not
@@ -636,7 +637,7 @@ mod tests {
     }
 
     #[test]
-    fn an_incoming_foreign_key_naming_an_absent_referenced_column_is_refused() {
+    fn fr_cat_044_an_incoming_foreign_key_naming_an_absent_referenced_column_is_refused() {
         // The incoming direction is the mirror: the referenced columns point
         // at this table, so they are the half this table's column list must
         // carry.
@@ -654,7 +655,7 @@ mod tests {
     }
 
     #[test]
-    fn an_incoming_foreign_keys_referencing_column_belongs_to_the_referencing_table() {
+    fn fr_cat_044_an_incoming_foreign_keys_referencing_column_belongs_to_the_referencing_table() {
         let table = Table::assemble(TableParts {
             referenced_by: vec![IncomingForeignKey {
                 table: Cow::Borrowed("tariff_band"),
@@ -668,7 +669,7 @@ mod tests {
     }
 
     #[test]
-    fn a_complete_table_carries_no_marking_and_an_incomplete_one_names_a_property() {
+    fn fr_priv_007_a_complete_table_carries_no_marking_and_an_incomplete_one_names_a_property() {
         // FR-PRIV-007 and FR-PRIV-016.
         let complete = Table::assemble(parts()).expect("the fixture assembles");
         assert_eq!(complete.restricted(), None);
@@ -689,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn a_table_carries_a_collation_and_no_character_set() {
+    fn fr_sch_009_a_table_carries_a_collation_and_no_character_set() {
         // FR-SCH-009 as amended: the table catalogue carries a collation and
         // no character set, on all four series. The three places a character
         // set is reachable are the database and each individual column.

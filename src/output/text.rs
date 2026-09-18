@@ -280,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn a_listing_is_aligned_columns_under_a_header_row() {
+    fn fr_out_006_a_listing_is_aligned_columns_under_a_header_row() {
         // FR-OUT-006: aligned columns under a header row, carrying the useful
         // information rather than only the name.
         let rows = [
@@ -305,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_listing_prints_the_header_row_and_nothing_beneath_it() {
+    fn fr_out_034_an_empty_listing_prints_the_header_row_and_nothing_beneath_it() {
         // FR-OUT-034: the shape does not change with the data, and a reader
         // sees which listing answered rather than a blank screen.
         let empty: [[&str; 3]; 0] = [];
@@ -321,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_wider_than_its_header_sets_the_column_width() {
+    fn fr_out_006_a_value_wider_than_its_header_sets_the_column_width() {
         let rows = [["a", "x"], ["a_considerably_longer_name", "y"]];
 
         assert_eq!(
@@ -335,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn a_header_wider_than_every_value_sets_the_column_width() {
+    fn fr_out_006_a_header_wider_than_every_value_sets_the_column_width() {
         let rows = [["a", "x"], ["b", "y"]];
 
         assert_eq!(
@@ -345,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn a_c0_control_in_a_value_is_escaped_and_a_tab_is_not() {
+    fn fr_out_018_a_c0_control_in_a_value_is_escaped_and_a_tab_is_not() {
         // FR-OUT-018 and FR-OUT-019: every interpolated value is escaped
         // whatever its source, and tab alone is excepted because the columns
         // are laid out with spacing rather than escaped away.
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_cannot_forge_a_line_of_the_listing() {
+    fn fr_out_018_a_value_cannot_forge_a_line_of_the_listing() {
         // The line-forgery ground of FR-OUT-018: a reader splitting the
         // listing on newlines sees exactly the lines the layout emitted.
         let rows = [["a\nb\rc\u{7}d", "\u{0}"]];
@@ -376,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn an_escaped_value_is_measured_at_the_width_it_is_printed_at() {
+    fn fr_out_006_an_escaped_value_is_measured_at_the_width_it_is_printed_at() {
         // The column is as wide as what the reader sees, not as wide as what
         // the catalogue held: the escape is six characters and the column
         // accommodates six.
@@ -389,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn the_default_order_is_by_name_ascending_and_byte_wise() {
+    fn nfr_det_002_the_default_order_is_by_name_ascending_and_byte_wise() {
         // NFR-DET-002: byte-wise, which puts every uppercase letter before
         // every lowercase one. A locale-aware collation orders these the other
         // way round — `en_US` sorts `apple`, `Banana`, `cherry` — so this
@@ -403,7 +403,7 @@ mod tests {
     }
 
     #[test]
-    fn an_accented_name_sorts_where_its_bytes_put_it_and_not_where_a_collation_would() {
+    fn nfr_det_002_an_accented_name_sorts_where_its_bytes_put_it_and_not_where_a_collation_would() {
         // `é` is U+00E9, which is 0xc3 0xa9 in UTF-8 and therefore after every
         // ASCII letter. A collation sorts it beside `e`, which would place
         // `época` first of the three.
@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn an_excepted_collection_keeps_the_order_it_was_given() {
+    fn nfr_det_002_an_excepted_collection_keeps_the_order_it_was_given() {
         // NFR-DET-002's exceptions: a primary key's columns are the order the
         // catalogue states, and sorting them by name is a different key.
         let rows = [["vessel_imo"], ["voyage_number"], ["leg_sequence"]];
@@ -428,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn two_equal_names_keep_the_order_they_arrived_in() {
+    fn nfr_det_002_two_equal_names_keep_the_order_they_arrived_in() {
         // The comparator is total, so the listing does not depend on the sort
         // being stable.
         let rows = [["same", "second"], ["same", "first"], ["other", "third"]];
@@ -464,13 +464,13 @@ mod tests {
     }
 
     #[test]
-    fn by_name_is_the_default_rule_the_requirement_states() {
+    fn nfr_det_002_by_name_is_the_default_rule_the_requirement_states() {
         // NFR-DET-002: every collection it does not except is ordered by name.
         assert_eq!(Order::default(), Order::ByName);
     }
 
     #[test]
-    fn a_cell_the_caller_composed_is_laid_out_like_any_other() {
+    fn fr_out_006_a_cell_the_caller_composed_is_laid_out_like_any_other() {
         // The cell type is borrowed wherever the caller can borrow, and owned
         // where it had to compose the value — a count formatted for a column.
         let rows = [

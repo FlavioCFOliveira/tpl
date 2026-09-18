@@ -175,7 +175,7 @@ fn written(path: &[String]) -> String {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_three_help_forms_are_byte_identical_at_every_node_of_the_tree() {
+fn fr_help_002_the_three_help_forms_are_byte_identical_at_every_node_of_the_tree() {
     // FR-HELP-002 and BR-HELP-001, over the whole tree rather than a sample:
     // `tpl help <path>`, `tpl <path> --help` and `tpl <path> -h` are three
     // distinct routes through the parser and must arrive at the same bytes at
@@ -204,7 +204,7 @@ fn the_three_help_forms_are_byte_identical_at_every_node_of_the_tree() {
 }
 
 #[test]
-fn the_short_help_flag_is_not_a_summarised_long_one() {
+fn fr_help_003_the_short_help_flag_is_not_a_summarised_long_one() {
     // FR-HELP-003: `-h` prints everything `--help` prints, EXAMPLES, EXIT
     // CODES, types and defaults included. The equality above already fixes it;
     // this asserts the content of what both print, so that the two agreeing on
@@ -226,7 +226,7 @@ fn the_short_help_flag_is_not_a_summarised_long_one() {
 }
 
 #[test]
-fn a_leaf_that_requires_an_operand_still_answers_both_flag_forms() {
+fn fr_glob_019_a_leaf_that_requires_an_operand_still_answers_both_flag_forms() {
     // The defect this effort resolves. `OD-07` turns the parser's own help
     // flag off, so `--help` is an ordinary global argument and the parser
     // validates required arguments first; without the waiver, every node that
@@ -295,7 +295,7 @@ fn a_leaf_that_requires_an_operand_still_answers_both_flag_forms() {
 }
 
 #[test]
-fn the_three_version_forms_write_exactly_the_line_of_the_requirement() {
+fn fr_help_005_the_three_version_forms_write_exactly_the_line_of_the_requirement() {
     // FR-HELP-005 and the third equivalence of FR-HELP-002: exactly
     // `tpl <version>` and a single newline, and nothing else, from all three.
     for form in [&["version"][..], &["--version"][..], &["-V"][..]] {
@@ -311,7 +311,7 @@ fn the_three_version_forms_write_exactly_the_line_of_the_requirement() {
 }
 
 #[test]
-fn an_alias_prints_the_same_bytes_as_the_node_it_names() {
+fn fr_help_027_an_alias_prints_the_same_bytes_as_the_node_it_names() {
     // FR-HELP-027 with FR-CLI-011: each of the seven aliases resolves to its
     // canonical node, in the text form and in the JSON one alike, at every
     // depth the alias appears at.
@@ -353,7 +353,7 @@ fn an_alias_prints_the_same_bytes_as_the_node_it_names() {
 }
 
 #[test]
-fn a_segment_that_names_no_child_is_refused_with_the_node_it_was_sought_under() {
+fn fr_help_028_a_segment_that_names_no_child_is_refused_with_the_node_it_was_sought_under() {
     // FR-HELP-028: exit 64, a nearest-match suggestion over the children of
     // the node reached and over nothing else, and a cause naming both the
     // segment and that node. Asserted on the process because FR-ERR-033 makes
@@ -389,7 +389,7 @@ fn a_segment_that_names_no_child_is_refused_with_the_node_it_was_sought_under() 
 }
 
 #[test]
-fn every_form_succeeds_where_no_project_exists_and_nothing_is_in_the_environment() {
+fn fr_proj_025_every_form_succeeds_where_no_project_exists_and_nothing_is_in_the_environment() {
     // FR-PROJ-025 and NFR-PERF-005: none of these forms performs discovery,
     // reads configuration or opens a connection, so each succeeds in a
     // directory with no `.tpl` above it and with an empty environment — which
@@ -414,7 +414,7 @@ fn every_form_succeeds_where_no_project_exists_and_nothing_is_in_the_environment
 }
 
 #[test]
-fn a_group_node_with_no_child_prints_what_its_help_form_prints() {
+fn fr_help_025_a_group_node_with_no_child_prints_what_its_help_form_prints() {
     // FR-HELP-025 with FR-CLI-007: exactly the text `tpl help <node>` would
     // print, and exit 0. The six group nodes are read from the document — a
     // node with at least one child whose own path is a prefix of that child's.
@@ -444,7 +444,7 @@ fn a_group_node_with_no_child_prints_what_its_help_form_prints() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_document_is_the_envelope_of_the_contract_carrying_the_four_keys_of_data() {
+fn fr_help_017_the_document_is_the_envelope_of_the_contract_carrying_the_four_keys_of_data() {
     // FR-HELP-017 with FR-OUT-024 and FR-OUT-026: the three envelope keys in
     // order, `source` set to `binary`, and a `data` carrying `tpl_version`,
     // `global_flags`, `commands` and `template_surface` in that order. The
@@ -475,7 +475,7 @@ fn the_document_is_the_envelope_of_the_contract_carrying_the_four_keys_of_data()
 }
 
 #[test]
-fn the_document_is_compact_by_default_and_indented_under_pretty() {
+fn fr_help_024_the_document_is_compact_by_default_and_indented_under_pretty() {
     // FR-HELP-024 with FR-OUT-007 and FR-OUT-008: one line and one terminating
     // newline by default, a two-space indent with one key per line under
     // --pretty, and the same document either way.
@@ -522,7 +522,7 @@ fn the_document_is_compact_by_default_and_indented_under_pretty() {
 }
 
 #[test]
-fn a_path_reduces_the_document_to_the_subtree_it_roots() {
+fn fr_help_029_a_path_reduces_the_document_to_the_subtree_it_roots() {
     // FR-HELP-029: `data.commands` reduced to the entry whose path is the path
     // given, together with every entry whose path extends it segment by
     // segment, in the order they hold unreduced. Every other key of `data` is
@@ -571,7 +571,7 @@ fn a_path_reduces_the_document_to_the_subtree_it_roots() {
 }
 
 #[test]
-fn the_global_flags_are_carried_once_and_no_command_repeats_them() {
+fn fr_help_018_the_global_flags_are_carried_once_and_no_command_repeats_them() {
     // FR-HELP-018 with FR-GLOB-003, asserted on what a caller receives: the
     // seven appear in `data.global_flags`, each command says
     // `inherits_globals` instead, and no command's `options` names one of them.
@@ -614,7 +614,7 @@ fn the_global_flags_are_carried_once_and_no_command_repeats_them() {
 }
 
 #[test]
-fn the_document_is_byte_identical_between_runs() {
+fn nfr_det_001_the_document_is_byte_identical_between_runs() {
     // NFR-DET-001 over this document, and the observable consequence of
     // FR-HELP-023 and FR-OUT-013: an unordered map anywhere on the emitting
     // path would reorder some run's keys, and the order of the whole document

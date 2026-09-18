@@ -195,14 +195,14 @@ mod tests {
     }
 
     #[test]
-    fn a_column_names_the_table_it_belongs_to() {
+    fn fr_ctx_019_a_column_names_the_table_it_belongs_to() {
         // FR-CTX-019: a column reached through an index or a key must find its
         // own table without the template having carried a reference to it.
         assert_eq!(column("consignment_id").table_name, "consignment");
     }
 
     #[test]
-    fn the_storage_kind_is_read_from_the_attribute_field_and_from_no_other() {
+    fn fr_cat_051_the_storage_kind_is_read_from_the_attribute_field_and_from_no_other() {
         // FR-CAT-051: the is-generated field reads `ALWAYS` for both kinds and
         // cannot be the source. These are the two values the attribute field
         // was observed to take over the fixture's nine generated columns.
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn the_attribute_spelling_round_trips() {
+    fn fr_cat_051_the_attribute_spelling_round_trips() {
         // The spelling is contract surface once the attribute it reports
         // reaches the document, and the case of each value is the catalogue's.
         for storage in [GeneratedStorage::Virtual, GeneratedStorage::Stored] {
@@ -232,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn a_generated_column_carries_the_expression_and_the_kind_together() {
+    fn fr_cat_051_a_generated_column_carries_the_expression_and_the_kind_together() {
         // FR-CAT-051: one value, so neither half can be present alone. The
         // expression is the fixture's, as the catalogue rewrote it.
         let generated = Column {
@@ -255,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn the_auto_increment_a_column_carries_is_the_attribute_and_not_the_counter() {
+    fn fr_cat_027_the_auto_increment_a_column_carries_is_the_attribute_and_not_the_counter() {
         // FR-CAT-027 keeps the column attribute; FR-CAT-024 excludes the
         // table-level counter of the same name outright. The two are one word
         // and two different things, and only one of them is a field.

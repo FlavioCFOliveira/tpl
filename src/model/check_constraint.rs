@@ -90,7 +90,7 @@ mod tests {
     use std::borrow::Cow;
 
     #[test]
-    fn the_level_admits_exactly_the_two_values_the_catalogue_writes() {
+    fn fr_cat_046_the_level_admits_exactly_the_two_values_the_catalogue_writes() {
         // FR-CAT-046: `Table` on 22 of 24 and `Column` on 2, mixed case, and
         // no third value on any of the four series.
         assert_eq!(
@@ -109,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn a_column_level_constraint_is_carried_under_the_column_name() {
+    fn fr_cat_037_a_column_level_constraint_is_carried_under_the_column_name() {
         // FR-CAT-037: the catalogue names it after the column it qualifies, so
         // a constraint name is not guaranteed distinct from a column name of
         // the same table. The model carries what the catalogue gave.
@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn the_clause_is_carried_as_the_catalogue_rewrote_it() {
+    fn fr_cat_046_the_clause_is_carried_as_the_catalogue_rewrote_it() {
         // FR-CAT-046: identifiers backtick-quoted and operators lower-cased.
         // The DDL wrote `un_number IS NULL OR (un_number >= 1 AND ...)`.
         let table_level = CheckConstraint {

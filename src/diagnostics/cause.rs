@@ -551,39 +551,39 @@ mod tests {
     use super::{CHAIN_SEPARATOR, EMPTY_CHAIN, EMPTY_WINDOW, joined, listed};
 
     #[test]
-    fn an_empty_chain_says_so_rather_than_rendering_nothing() {
+    fn fr_err_011_an_empty_chain_says_so_rather_than_rendering_nothing() {
         assert_eq!(joined(&[]), EMPTY_CHAIN);
     }
 
     #[test]
-    fn a_chain_of_one_is_the_link_itself() {
+    fn fr_err_011_a_chain_of_one_is_the_link_itself() {
         let chain = [String::from("unexpected end of input")];
         assert_eq!(joined(&chain), "unexpected end of input");
     }
 
     #[test]
-    fn a_chain_is_joined_outermost_first() {
+    fn fr_err_011_a_chain_is_joined_outermost_first() {
         let chain = [String::from("outer"), String::from("inner")];
         assert_eq!(joined(&chain), format!("outer{CHAIN_SEPARATOR}inner"));
     }
 
     #[test]
-    fn an_empty_window_says_so_rather_than_rendering_nothing() {
+    fn fr_srv_030_an_empty_window_says_so_rather_than_rendering_nothing() {
         assert_eq!(listed(&[]), EMPTY_WINDOW);
     }
 
     #[test]
-    fn a_window_of_one_is_the_series_itself() {
+    fn fr_srv_030_a_window_of_one_is_the_series_itself() {
         assert_eq!(listed(&["Z.9"]), "Z.9");
     }
 
     #[test]
-    fn a_window_of_two_is_joined_by_the_conjunction_alone() {
+    fn fr_srv_030_a_window_of_two_is_joined_by_the_conjunction_alone() {
         assert_eq!(listed(&["Z.9", "Z.8"]), "Z.9 and Z.8");
     }
 
     #[test]
-    fn a_longer_window_separates_by_comma_and_conjoins_the_last() {
+    fn fr_srv_030_a_longer_window_separates_by_comma_and_conjoins_the_last() {
         // The form FR-SRV-030 shows.
         assert_eq!(
             listed(&["Z.9", "Z.8", "Z.7", "Z.6"]),

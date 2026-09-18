@@ -406,7 +406,7 @@ mod tests {
     use super::{CoreKey, EntryKey, Key, Target, ValueType, candidates};
 
     #[test]
-    fn the_space_is_exactly_the_fifteen_forms_the_table_declares() {
+    fn fr_conf_002_the_space_is_exactly_the_fifteen_forms_the_table_declares() {
         // FR-CONF-002: five [core] keys and ten keys of an entry, and no
         // others.
         assert_eq!(CoreKey::ALL.len(), 5);
@@ -443,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_of_the_space_parses_and_spells_itself_back() {
+    fn fr_conf_002_a_key_of_the_space_parses_and_spells_itself_back() {
         // FR-CONF-002, FR-CFG-009: the dotted form is the key's identity, and
         // parsing it is the whole of the membership test.
         for spelling in [
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_outside_the_space_does_not_parse() {
+    fn fr_conf_034_a_key_outside_the_space_does_not_parse() {
         // FR-CONF-034, FR-CFG-009: the space is closed, and a key is never
         // created by writing one.
         for spelling in [
@@ -482,7 +482,7 @@ mod tests {
     }
 
     #[test]
-    fn an_entry_name_carrying_a_dot_still_round_trips() {
+    fn fr_conf_008_an_entry_name_carrying_a_dot_still_round_trips() {
         // FR-CONF-008: the entry name is a label local to the project, and
         // nothing in the corpus forbids a dot in it. The key splits at its last
         // dot so the field is never mistaken for part of the name.
@@ -499,7 +499,7 @@ mod tests {
     }
 
     #[test]
-    fn each_key_declares_the_type_the_table_gives_it() {
+    fn fr_conf_002_each_key_declares_the_type_the_table_gives_it() {
         // FR-CONF-002, FR-CFG-010: the declared type is looked up from the key.
         assert_eq!(CoreKey::Database.expects(), ValueType::EntryName);
         assert_eq!(CoreKey::QueryTimeout.expects(), ValueType::Seconds);
@@ -513,7 +513,7 @@ mod tests {
     }
 
     #[test]
-    fn expansion_reaches_exactly_the_six_fields_the_requirement_names() {
+    fn fr_conf_015_expansion_reaches_exactly_the_six_fields_the_requirement_names() {
         // FR-CONF-015, FR-CONF-016, FR-CONF-017: dsn, host, port, user,
         // password and database expand; tls, password_command, ca_file and
         // ca_path do not.
@@ -539,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn unset_accepts_a_leaf_key_and_a_whole_block() {
+    fn fr_cfg_011_unset_accepts_a_leaf_key_and_a_whole_block() {
         // FR-CFG-011: either a leaf key, such as database.shop.host, or a whole
         // block, such as database.shop.
         assert_eq!(
@@ -559,7 +559,7 @@ mod tests {
     }
 
     #[test]
-    fn the_candidate_population_carries_the_entry_the_supplied_key_names() {
+    fn fr_err_021_the_candidate_population_carries_the_entry_the_supplied_key_names() {
         // FR-ERR-021: the population is the enumerated key space, which for an
         // entry key is written out per entry name — including the one the
         // misspelled key itself carries.
@@ -575,7 +575,7 @@ mod tests {
     }
 
     #[test]
-    fn the_candidate_population_does_not_repeat_a_defined_entry() {
+    fn fr_err_021_the_candidate_population_does_not_repeat_a_defined_entry() {
         let population = candidates(["shop"], "database.shop.hst");
         let hosts = population
             .iter()

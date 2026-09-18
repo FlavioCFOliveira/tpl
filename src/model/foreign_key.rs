@@ -189,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn the_two_column_lists_are_one_list_of_pairs_and_cannot_drift() {
+    fn fr_cat_045_the_two_column_lists_are_one_list_of_pairs_and_cannot_drift() {
         // FR-CAT-045 pairs the referencing and referenced columns
         // positionally. One list of pairs makes a length mismatch and a
         // reordering of one half unrepresentable.
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn the_four_reachable_rule_spellings_round_trip_and_set_default_is_not_one() {
+    fn fr_cat_045_the_four_reachable_rule_spellings_round_trip_and_set_default_is_not_one() {
         // FR-CAT-045 fixes four spellings as contract surface. FR-CAT-033
         // observed that `SET DEFAULT` is accepted, discarded silently, and
         // reported as `RESTRICT`, so no read can return it.
@@ -229,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn the_outgoing_direction_does_not_name_its_own_table_and_the_incoming_one_does() {
+    fn br_cat_005_the_outgoing_direction_does_not_name_its_own_table_and_the_incoming_one_does() {
         // BR-CAT-005 excludes the field naming the object a row hangs from
         // only where the model already carries it there. It does for an
         // outgoing key and it does not for an incoming one.

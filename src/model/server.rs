@@ -207,7 +207,7 @@ mod tests {
     const PROBED: &str = "11.4.13-MariaDB-ubu2404";
 
     #[test]
-    fn the_series_is_the_first_two_components_and_the_suffix_reaches_nothing() {
+    fn fr_srv_040_the_series_is_the_first_two_components_and_the_suffix_reaches_nothing() {
         // FR-SRV-040: `series` is `<major>.<minor>` and is derived from
         // nothing else. The four strings are the ones the four fixture servers
         // returned verbatim.
@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn changing_only_the_suffix_changes_nothing_the_series_is_read_from() {
+    fn fr_srv_040_changing_only_the_suffix_changes_nothing_the_series_is_read_from() {
         // The suffix is a property of the build: three of the four fixture
         // servers carry `ubu2404` and one carries `ubu2204`, on the same
         // series. A build that changed it must move no field but `version`.
@@ -236,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn the_version_is_carried_unaltered_including_the_suffix() {
+    fn fr_ctx_031_the_version_is_carried_unaltered_including_the_suffix() {
         // FR-CTX-031: `version` is the string the probe returns, unaltered.
         let server = Server::probed(Cow::Borrowed(PROBED), Standing::Supported)
             .expect("the observed form yields a series");
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn a_string_outside_the_observed_form_yields_no_series() {
+    fn fr_srv_040_a_string_outside_the_observed_form_yields_no_series() {
         // FR-SRV-040 fixes one form. Refusing a server is FR-SRV-041's and
         // FR-SRV-003's; this reports only that no series can be read.
         assert_eq!(series_of(""), None);
@@ -269,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn the_greeting_is_not_the_probes_string_and_this_reads_the_probes_string() {
+    fn fr_srv_038_the_greeting_is_not_the_probes_string_and_this_reads_the_probes_string() {
         // Difference 13 of FR-SRV-038: on `10.11` the connection greeting
         // carries a `5.5.5-` prefix the probe's answer does not. Fed the
         // greeting, the derivation reads `5.5` — which is exactly why
@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn a_stated_server_carries_what_the_document_said_and_is_not_checked() {
+    fn fr_ctx_033_a_stated_server_carries_what_the_document_said_and_is_not_checked() {
         // FR-CTX-033: on the `--context` path the system does not validate
         // `series` against `version`, nor `standing` against `series`. A
         // document that disagrees with itself is carried as written.
@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn the_standing_carries_the_two_spellings_of_the_requirement() {
+    fn fr_ctx_034_the_standing_carries_the_two_spellings_of_the_requirement() {
         assert_eq!(Standing::Supported.name(), "supported");
         assert_eq!(Standing::NewerThanSupported.name(), "newer_than_supported");
     }

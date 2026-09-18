@@ -109,7 +109,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn a_file_owned_by_the_invoking_user_at_six_hundred_passes() {
+    fn fr_proj_010_a_file_owned_by_the_invoking_user_at_six_hundred_passes() {
         // FR-PROJ-010, FR-PROJ-011, and the mode FR-PROJ-019 creates.
         let scratch = Scratch::new();
         let file = scratch.file(".cfg", "[core]\n");
@@ -119,14 +119,14 @@ mod tests {
     }
 
     #[test]
-    fn an_absent_file_passes_because_there_is_nothing_to_trust() {
+    fn fr_proj_010_an_absent_file_passes_because_there_is_nothing_to_trust() {
         let scratch = Scratch::new();
 
         assert!(check(&scratch.path("absent.cfg")).is_ok());
     }
 
     #[test]
-    fn a_file_owned_by_another_user_is_refused() {
+    fn fr_proj_010_a_file_owned_by_another_user_is_refused() {
         // FR-PROJ-010: the ownership is judged over values already read,
         // because a test process cannot give a file away.
         let invoking = invoking_user();
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn ownership_is_judged_before_the_mode() {
+    fn fr_proj_010_ownership_is_judged_before_the_mode() {
         // FR-PROJ-010 before FR-PROJ-011: a file belonging to someone else is
         // refused whatever its mode says, and the caller's next step is to
         // stop using it rather than to chmod it.
@@ -168,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn a_file_granting_group_or_other_any_access_is_refused() {
+    fn fr_proj_011_a_file_granting_group_or_other_any_access_is_refused() {
         // FR-PROJ-011: no group and no other access bits, and the message
         // names the mode found.
         let scratch = Scratch::new();
@@ -189,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mode_that_grants_the_owner_alone_passes_whatever_the_owner_may_do() {
+    fn fr_proj_011_a_mode_that_grants_the_owner_alone_passes_whatever_the_owner_may_do() {
         // The requirement is about group and other; the owner's own bits are
         // not constrained by it.
         let scratch = Scratch::new();
@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn a_symbolic_link_is_checked_at_its_target() {
+    fn fr_proj_009_a_symbolic_link_is_checked_at_its_target() {
         // FR-PROJ-009: the path is followed before any check, so the mode that
         // decides is the target's and not the link's.
         let scratch = Scratch::new();
@@ -221,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn the_invoking_user_owns_a_file_this_process_creates() {
+    fn fr_proj_010_the_invoking_user_owns_a_file_this_process_creates() {
         // FR-PROJ-010 compares the owner against this value.
         let scratch = Scratch::new();
         let file = scratch.file("owned.cfg", "");

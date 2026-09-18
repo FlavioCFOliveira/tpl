@@ -255,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn the_password_is_the_trimmed_standard_output_of_the_child() {
+    fn fr_conf_027_the_password_is_the_trimmed_standard_output_of_the_child() {
         // FR-CONF-027.
         let produced = obtain(&command(&[&echo(), "  hunter2  "]), bound(10))
             .expect("the child produced a password");
@@ -264,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn a_shell_metacharacter_reaches_the_child_as_a_literal_argument() {
+    fn fr_conf_026_a_shell_metacharacter_reaches_the_child_as_a_literal_argument() {
         // FR-CONF-026, FR-SEC-011. Every one of these would differ under a
         // shell: `;` would start a second command, `$(…)` would substitute,
         // `|` would pipe, and `*` would glob.
@@ -281,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn a_child_that_exceeds_its_deadline_is_terminated_and_refused() {
+    fn fr_conf_028_a_child_that_exceeds_its_deadline_is_terminated_and_refused() {
         // FR-CONF-028, FR-SEC-012: the deadline is what keeps a command
         // waiting on a FIFO from hanging the caller with no diagnosis.
         let sleep = tool(&["/bin/sleep", "/usr/bin/sleep"]);
@@ -298,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn a_child_that_writes_more_than_the_cap_is_terminated_and_refused() {
+    fn fr_conf_031_a_child_that_writes_more_than_the_cap_is_terminated_and_refused() {
         // FR-CONF-031: the bound is a refusal rather than a truncation, and
         // the child is terminated.
         let yes = tool(&["/usr/bin/yes", "/bin/yes"]);
@@ -313,7 +313,7 @@ mod tests {
     }
 
     #[test]
-    fn output_exactly_at_the_cap_is_accepted() {
+    fn fr_conf_031_output_exactly_at_the_cap_is_accepted() {
         // The cap is the most that is read, so a helper printing exactly that
         // many bytes is not over it.
         let head = tool(&["/usr/bin/head", "/bin/head"]);
@@ -331,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn a_child_that_exits_non_zero_is_refused_with_the_status_it_returned() {
+    fn fr_conf_033_a_child_that_exits_non_zero_is_refused_with_the_status_it_returned() {
         // FR-CONF-033: the cause names the command as stored and the status.
         let no = tool(&["/usr/bin/false", "/bin/false"]);
         let condition = obtain(&command(&[&no]), bound(10)).expect_err("the child fails");
@@ -350,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn a_program_that_does_not_exist_is_refused_as_a_configuration_fault() {
+    fn fr_conf_033_a_program_that_does_not_exist_is_refused_as_a_configuration_fault() {
         let condition = obtain(&command(&["/nonexistent/tpl-password-helper"]), bound(10))
             .expect_err("the child cannot be started");
 
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn the_standard_error_of_a_failing_child_reaches_no_message() {
+    fn fr_conf_032_the_standard_error_of_a_failing_child_reaches_no_message() {
         // FR-CONF-032, FR-SEC-005: it goes to the null device, so there is
         // nothing to name and the diagnosis is the exit status alone.
         let cat = tool(&["/bin/cat", "/usr/bin/cat"]);
@@ -378,7 +378,7 @@ mod tests {
     }
 
     #[test]
-    fn a_bound_that_has_already_expired_never_starts_a_child() {
+    fn fr_glob_012_a_bound_that_has_already_expired_never_starts_a_child() {
         // FR-GLOB-012: a phase ends at the first of the two bounds, and an
         // overall budget already spent is the first. The program named here
         // does not exist, so a run that reached the spawn would report that
