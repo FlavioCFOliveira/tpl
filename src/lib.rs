@@ -20,6 +20,7 @@
 //! | `output` | The two formats a result reaches the caller through — the envelope of `FR-OUT-024` and the aligned columns of `FR-OUT-006` |
 //! | `model` | The structure a database is read as: the covered object kinds of `FR-CAT-001`, `FR-CAT-007` and `FR-CAT-008` with the field lists of `FR-CAT-042` and `FR-CAT-045` … `FR-CAT-051`, the per-column decomposition of `FR-CTX-011` … `FR-CTX-018` and `FR-CTX-037` … `FR-CTX-041`, the `server` and `database` objects of `FR-CTX-031` … `FR-CTX-036`, the `restricted` marking of `FR-PRIV-016`, and the refusals of `FR-CAT-024` and `FR-CTX-021` |
 //! | `model::document` | The one document that carries the model in both directions: the collection shape of `FR-CTX-003` … `FR-CTX-005`, the one-hop embedding of `FR-CTX-006` … `FR-CTX-010`, the orderings of `NFR-DET-002`, and the read-back `FR-CTX-033` admits |
+//! | `mariadb` | The one connection of `NFR-PERF-004`, the TLS mode of `FR-CONF-037` and `ADR-002`, the read-only session of `FR-SRV-008` … `FR-SRV-011`, the version probe of `FR-SRV-002` with the window of `FR-SRV-015`, and the classification `OD-06` drops the driver's error at |
 //!
 //! The catalogue reader and the render environment are added by the tasks that
 //! follow.
@@ -38,6 +39,19 @@ pub(crate) mod deadline;
 pub(crate) mod diagnostics;
 
 pub(crate) mod project;
+
+// Nothing calls this module yet. Every command that reads a server is a later
+// sprint, and `ADR-005` scopes the runtime to this module precisely so that no
+// caller above it exists until one does; `FR-SRV-002` and `FR-SRV-022` require
+// the session, the product and the series to be settled before the first
+// catalogue read, so the connection is built before the reader that uses it.
+#[allow(
+    dead_code,
+    reason = "the commands that read a server are a later sprint, and FR-SRV-002 settles the \
+              session, the product and the series before the first catalogue read — so the \
+              connection exists before the reader that opens one"
+)]
+pub(crate) mod mariadb;
 
 // Four items of this module have no caller yet, and all four wait on the same
 // sprint: `emit` and `emit_table`, which take standard output where the `cfg`
