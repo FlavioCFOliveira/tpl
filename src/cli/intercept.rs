@@ -670,7 +670,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_subcommand_names_the_token_and_the_nearest_matches() {
+    fn fr_cli_003_an_unknown_subcommand_names_the_token_and_the_nearest_matches() {
         // FR-CLI-003 and BR-CLI-001: the nearest-match rule resolves a
         // mistyped alias, `tbl` and `tbls` differing by one character.
         let error = refused(&["tpl", "schema", "tbles"], ErrorKind::InvalidSubcommand);
@@ -687,7 +687,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_flag_names_the_token_and_the_nearest_matches() {
+    fn fr_cli_019_an_unknown_flag_names_the_token_and_the_nearest_matches() {
         // FR-CLI-019: a command rejects every flag it does not declare, and
         // FR-ERR-021 applies the nearest-match rule to a flag name.
         let error = refused(
@@ -707,7 +707,7 @@ mod tests {
     }
 
     #[test]
-    fn a_token_the_command_takes_no_argument_for_is_named_as_written() {
+    fn fr_cli_017_a_token_the_command_takes_no_argument_for_is_named_as_written() {
         // The same ErrorKind, and not a flag: `foo` names none, and FR-CLI-017
         // has already made `-d` a positional argument by the time it is
         // refused.
@@ -732,7 +732,7 @@ mod tests {
     }
 
     #[test]
-    fn a_separate_token_value_beginning_with_a_dash_shows_the_corrected_form() {
+    fn fr_cli_018_a_separate_token_value_beginning_with_a_dash_shows_the_corrected_form() {
         // FR-CLI-018, over both of the kinds the parser reports it as: an
         // unknown flag where the value names none, and an empty value where it
         // names a flag the node declares.
@@ -768,7 +768,7 @@ mod tests {
     }
 
     #[test]
-    fn a_separate_token_value_shows_the_corrected_form_whatever_shape_it_has() {
+    fn fr_cli_018_a_separate_token_value_shows_the_corrected_form_whatever_shape_it_has() {
         // FR-CLI-018 draws no line at a value's length or shape, and neither
         // does this: the parser decomposes a single-dash token of more than one
         // character into short flags and reports only its head, so `-foo`
@@ -814,7 +814,7 @@ mod tests {
     }
 
     #[test]
-    fn a_short_flag_written_in_a_cluster_refuses_a_value_exactly_as_it_does_alone() {
+    fn fr_cli_018_a_short_flag_written_in_a_cluster_refuses_a_value_exactly_as_it_does_alone() {
         // FR-CLI-018 conditions on the **value**, not on how the flag that
         // takes it was written. `-d` is the one short form of FR-GLOB-024 that
         // carries a value, so the shapes are the clusters that end in it, and
@@ -869,7 +869,7 @@ mod tests {
     }
 
     #[test]
-    fn a_cluster_that_carries_its_value_is_still_the_invocation_it_was() {
+    fn fr_cli_018_a_cluster_that_carries_its_value_is_still_the_invocation_it_was() {
         // The control the rule above needs on the other side: reading a cluster
         // must not make one refuse a value it accepted. Both forms the parser
         // admits — the value in the next token, and the value attached to the
@@ -887,7 +887,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_the_character_set_refuses_still_shows_the_corrected_form() {
+    fn fr_err_022_a_value_the_character_set_refuses_still_shows_the_corrected_form() {
         // FR-ERR-022 governs what may be written into the line and FR-ERR-023
         // drops a value outside the set, so a path-shaped value leaves the form
         // standing with its placeholder — which is still the correction
@@ -920,7 +920,7 @@ mod tests {
     }
 
     #[test]
-    fn a_cluster_written_after_a_flag_that_carries_no_value_stays_an_unknown_flag() {
+    fn fr_cli_018_a_cluster_written_after_a_flag_that_carries_no_value_stays_an_unknown_flag() {
         // The control the rule above needs: `--pretty -foo` is reported exactly
         // as `--pattern -foo` is, and what separates them is that one flag
         // carries a value and the other carries none. A rule that read the
@@ -950,7 +950,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_given_without_any_value_says_so_rather_than_naming_a_value() {
+    fn fr_err_034_a_flag_given_without_any_value_says_so_rather_than_naming_a_value() {
         let error = refused(&["tpl", "--timeout"], ErrorKind::InvalidValue);
         let lines = four_lines(&error);
 
@@ -970,7 +970,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_outside_an_enumeration_names_the_value_and_the_values_accepted() {
+    fn fr_err_034_a_value_outside_an_enumeration_names_the_value_and_the_values_accepted() {
         // FR-ERR-034, the `64` row: the value that did not conform, together
         // with the type expected — which for an enumerated flag is the set of
         // spellings it declares.
@@ -992,7 +992,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_of_the_wrong_type_names_the_value_and_the_type_expected() {
+    fn fr_err_034_a_value_of_the_wrong_type_names_the_value_and_the_type_expected() {
         for (vector, flag, value, expected) in [
             (
                 &["tpl", "--timeout", "soon", "version"][..],
@@ -1023,7 +1023,7 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_required_argument_names_the_command_and_the_argument() {
+    fn fr_err_034_a_missing_required_argument_names_the_command_and_the_argument() {
         let error = refused(
             &["tpl", "cfg", "set", "core.database"],
             ErrorKind::MissingRequiredArgument,
@@ -1042,7 +1042,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_that_carries_no_value_is_refused_on_its_second_occurrence() {
+    fn fr_cli_014_a_flag_that_carries_no_value_is_refused_on_its_second_occurrence() {
         // The parser refuses it, since FR-CLI-014 governs a flag that carries a
         // single value and this one carries none. What this task owns is that
         // the caller reads the refusal in the four labelled lines and never in
@@ -1059,7 +1059,7 @@ mod tests {
     }
 
     #[test]
-    fn a_refusal_this_crate_does_not_classify_is_a_sixty_four_naming_what_it_can() {
+    fn fr_err_034_a_refusal_this_crate_does_not_classify_is_a_sixty_four_naming_what_it_can() {
         // OD-08's wildcard arm, reached by a value that is not valid UTF-8:
         // `clap` reports `InvalidUtf8` and populates no context this crate
         // reads, so no token can be named and the arm says so.
@@ -1091,7 +1091,7 @@ mod tests {
     }
 
     #[test]
-    fn no_byte_the_parsers_own_renderer_composes_reaches_the_caller() {
+    fn fr_err_033_no_byte_the_parsers_own_renderer_composes_reaches_the_caller() {
         // OD-08 and FR-ERR-033: the parser keeps `error-context`, which is read
         // as typed API, and its renderer is never invoked. The comparison is
         // made against what that renderer would have written for the same
@@ -1131,7 +1131,7 @@ mod tests {
     }
 
     #[test]
-    fn every_flag_whose_value_is_parsed_names_the_type_it_expects() {
+    fn fr_err_034_every_flag_whose_value_is_parsed_names_the_type_it_expects() {
         // `expected` is a total function with a floor nobody should read, and
         // this is what keeps the floor unreachable: every flag of the tree is
         // given a value no parser of a number accepts, at the node that

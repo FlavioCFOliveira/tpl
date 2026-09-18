@@ -143,7 +143,7 @@ fn the_gate_maps_its_three_exit_codes_and_needs_no_fixture() {
 }
 
 #[test]
-fn one_body_is_driven_once_per_series_of_fr_srv_015() {
+fn fr_srv_029_one_body_is_driven_once_per_series_of_fr_srv_015() {
     // FR-SRV-029 requires a test body to run against every series of
     // FR-SRV-015, so the suite drives one body once per series rather than once
     // per server: series.env states that the --skip-ssl record FR-CONF-038
@@ -152,7 +152,9 @@ fn one_body_is_driven_once_per_series_of_fr_srv_015() {
     // The body below is the smallest one that establishes the drive happened:
     // each series answered at the address the inventory gave for it.
     let _guard = fixture::exclusive();
-    let Some(series) = fixture::series("one_body_is_driven_once_per_series_of_fr_srv_015") else {
+    let Some(series) =
+        fixture::series("fr_srv_029_one_body_is_driven_once_per_series_of_fr_srv_015")
+    else {
         return;
     };
 
@@ -190,7 +192,7 @@ fn one_body_is_driven_once_per_series_of_fr_srv_015() {
 // ------------------------------------------ NFR-PERF-005 and NFR-PERF-006 ---
 
 #[test]
-fn the_commands_that_need_no_catalogue_open_no_connection() {
+fn nfr_perf_007_the_commands_that_need_no_catalogue_open_no_connection() {
     // NFR-PERF-005 requires every command of FR-PROJ-025 to open no connection,
     // and NFR-PERF-006 requires the same of every command that needs no
     // catalogue data — which, among the commands that exist today, is every cfg
@@ -201,7 +203,8 @@ fn the_commands_that_need_no_catalogue_open_no_connection() {
     // The connection clause is verified on every target of NFR-PERF-018, from
     // the server side, and this is that observation.
     let _guard = fixture::exclusive();
-    let Some(series) = fixture::series("the_commands_that_need_no_catalogue_open_no_connection")
+    let Some(series) =
+        fixture::series("nfr_perf_007_the_commands_that_need_no_catalogue_open_no_connection")
     else {
         return;
     };
@@ -281,7 +284,7 @@ fn the_commands_that_need_no_catalogue_open_no_connection() {
 // ------------------------------------------- NFR-PERF-005, discovery clause ---
 
 #[test]
-fn the_discovery_clause_of_nfr_perf_005_is_established_by_a_differential_run() {
+fn nfr_perf_007_the_discovery_clause_of_nfr_perf_005_is_established_by_a_differential_run() {
     // NFR-PERF-007 fixes the arrangement: `tpl init` invoked inside a
     // subdirectory of an existing project, which per FR-PROJ-012 and
     // FR-PROJ-013 creates a project in that subdirectory. Had the ancestor
@@ -387,7 +390,7 @@ fn the_discovery_clause_of_nfr_perf_005_is_established_by_a_differential_run() {
 // --------------------------------------- NFR-PERF-005, configuration clause ---
 
 #[test]
-fn the_configuration_clause_of_nfr_perf_005_is_established_by_a_differential_run() {
+fn nfr_perf_007_the_configuration_clause_of_nfr_perf_005_is_established_by_a_differential_run() {
     // NFR-PERF-007 fixes the arrangement: a command of FR-PROJ-025 invoked
     // inside a project whose `.tpl/.cfg` would fail the validation of
     // FR-CONF-034, asserting exit `0` and stdout byte-identical to the same
@@ -510,7 +513,7 @@ fn the_configuration_clause_of_nfr_perf_005_is_established_by_a_differential_run
 // ------------------------------- NFR-PERF-005, the clauses as syscalls ---
 
 #[test]
-fn the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowhere_else() {
+fn nfr_perf_007_the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowhere_else() {
     // NFR-PERF-007 credits the syscall trace to the two Linux targets of
     // NFR-PERF-018 and to no other, and NFR-PERF-005 forbids inferring it on
     // either Darwin target from a Linux build observed in a container: the
@@ -523,7 +526,7 @@ fn the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowhere_else() {
     // each says so in its own doc comment.
     if !cfg!(target_os = "linux") {
         fixture::notice(
-            "skipped the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowhere_else: \
+            "skipped nfr_perf_007_the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowhere_else: \
              NFR-PERF-005 credits the syscall trace to the two Linux targets only, and this is \
              not one of them. The discovery and configuration clauses are established here by \
              the differential runs of NFR-PERF-007.",
@@ -543,7 +546,7 @@ fn the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowhere_else() {
     let traced = format!("cd '{root}' && '{binary}' help");
     let Some(trace) = fixture::opens(&["sh", "-c", &traced]) else {
         fixture::notice(
-            "skipped the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowhere_else: \
+            "skipped nfr_perf_007_the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowhere_else: \
              this Linux host has no strace, so the instrument NFR-PERF-007 credits to it does \
              not exist here.",
         );

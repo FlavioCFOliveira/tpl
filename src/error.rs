@@ -1702,7 +1702,7 @@ mod tests {
     }
 
     #[test]
-    fn every_variant_carries_the_code_of_its_row() {
+    fn fr_err_001_every_variant_carries_the_code_of_its_row() {
         for (error, expected) in samples() {
             assert_eq!(
                 error.exit_code(),
@@ -1727,7 +1727,7 @@ mod tests {
     }
 
     #[test]
-    fn the_codes_are_the_nine_of_the_table_and_no_others() {
+    fn fr_err_001_the_codes_are_the_nine_of_the_table_and_no_others() {
         let produced: BTreeSet<u8> = samples().iter().map(|(e, _)| e.exit_code()).collect();
         let table = BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]);
 
@@ -1735,7 +1735,7 @@ mod tests {
     }
 
     #[test]
-    fn code_73_is_confined_to_the_init_path() {
+    fn fr_err_003_code_73_is_confined_to_the_init_path() {
         // FR-ERR-003: 73 is produced only by `tpl init`.
         for (error, _) in samples() {
             if error.exit_code() == 73 {
@@ -1749,7 +1749,7 @@ mod tests {
     }
 
     #[test]
-    fn code_70_is_confined_to_the_internal_error_variant() {
+    fn fr_err_030_code_70_is_confined_to_the_internal_error_variant() {
         // FR-ERR-030: 70 is a defect in `tpl`, never something a caller
         // provokes. The other producing condition, a panic, never becomes an
         // Error value.
@@ -1761,12 +1761,12 @@ mod tests {
     }
 
     #[test]
-    fn the_guard_passes_an_invariant_that_holds() {
+    fn fr_err_030_the_guard_passes_an_invariant_that_holds() {
         assert!(ensure_invariant(true, "a sample invariant").is_ok());
     }
 
     #[test]
-    fn the_guard_reports_a_violated_invariant_at_its_call_site() {
+    fn fr_err_034_the_guard_reports_a_violated_invariant_at_its_call_site() {
         // FR-ERR-034, the 70 row: the invariant, and where it was detected.
         // `#[track_caller]` is what makes "where" this line and not the guard.
         let here = Location::caller();
@@ -1791,7 +1791,7 @@ mod tests {
     }
 
     #[test]
-    fn the_trigger_of_fr_err_031_always_fires() {
+    fn fr_err_031_the_trigger_always_fires() {
         // FR-ERR-031: the trigger exists so that the condition can be exercised
         // in process, and it is reachable from nothing a caller can write.
         let error =
@@ -1802,7 +1802,7 @@ mod tests {
     }
 
     #[test]
-    fn display_carries_the_error_line_of_the_corpus_examples() {
+    fn fr_err_008_display_carries_the_error_line_of_the_corpus_examples() {
         // FR-ERR-008's own example.
         assert_eq!(
             Error::CatalogueObjectNotFound {

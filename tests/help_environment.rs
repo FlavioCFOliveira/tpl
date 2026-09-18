@@ -64,7 +64,7 @@ fn spelled(path: &[&str]) -> String {
 }
 
 #[test]
-fn the_help_of_a_group_node_is_the_same_under_every_environment() {
+fn fr_help_010_the_help_of_a_group_node_is_the_same_under_every_environment() {
     for path in GROUPS {
         let narrow = run(path, "20", "dumb");
         let wide = run(path, "500", "xterm-256color");
@@ -79,7 +79,7 @@ fn the_help_of_a_group_node_is_the_same_under_every_environment() {
 }
 
 #[test]
-fn the_help_of_a_group_node_is_written_to_stdout_at_exit_zero() {
+fn fr_cli_007_the_help_of_a_group_node_is_written_to_stdout_at_exit_zero() {
     // FR-CLI-007, FR-HELP-025 and BR-CLI-005: help is a legitimate stdout
     // payload, and stderr carries nothing beside it, per BR-CLI-006.
     for path in GROUPS {
@@ -108,7 +108,7 @@ fn the_help_of_a_group_node_is_written_to_stdout_at_exit_zero() {
 }
 
 #[test]
-fn no_line_of_a_rendered_help_exceeds_the_fixed_width() {
+fn fr_help_009_no_line_of_a_rendered_help_exceeds_the_fixed_width() {
     // FR-HELP-009, asserted on the bytes the process emits rather than on the
     // renderer's return value. A column is one Unicode scalar value, which is
     // the count the renderer lays out to.
@@ -128,7 +128,7 @@ fn no_line_of_a_rendered_help_exceeds_the_fixed_width() {
 }
 
 #[test]
-fn no_ansi_escape_sequence_reaches_either_stream() {
+fn nfr_det_004_no_ansi_escape_sequence_reaches_either_stream() {
     // NFR-DET-004 and FR-HELP-015, under an environment that asks three times
     // over for colour.
     for path in GROUPS {

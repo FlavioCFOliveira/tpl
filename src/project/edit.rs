@@ -369,7 +369,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rewrite_preserves_the_comments_and_the_key_order_of_the_file() {
+    fn fr_cfg_041_a_rewrite_preserves_the_comments_and_the_key_order_of_the_file() {
         // FR-CFG-041, and the reason the write path is toml_edit: a file that
         // carried both comes back carrying both, byte for byte outside the one
         // value that changed.
@@ -413,7 +413,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rewrite_keeps_the_file_at_six_hundred() {
+    fn fr_cfg_034_a_rewrite_keeps_the_file_at_six_hundred() {
         // FR-CFG-034: FR-PROJ-019 creates it at 0600 and FR-PROJ-011 refuses to
         // read it at any looser mode, so a command that loosened it would break
         // the next invocation.
@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rewrite_of_a_file_left_at_a_looser_mode_tightens_it() {
+    fn fr_cfg_034_a_rewrite_of_a_file_left_at_a_looser_mode_tightens_it() {
         // The rename replaces the inode, so the mode that survives is the
         // temporary file's, which FR-CFG-034 fixes at 0600.
         let scratch = Scratch::new();
@@ -449,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn no_temporary_file_is_left_behind() {
+    fn fr_cfg_041_no_temporary_file_is_left_behind() {
         // FR-CFG-041: the temporary is renamed over the target, so `.tpl` holds
         // the two artefacts it held before and nothing else.
         let scratch = Scratch::new();
@@ -471,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn a_new_entry_is_written_as_its_own_block() {
+    fn fr_cfg_008_a_new_entry_is_written_as_its_own_block() {
         let scratch = Scratch::new();
         let directory = project(&scratch, "[core]\ndatabase = \"shop\"\n");
 
@@ -501,7 +501,7 @@ mod tests {
     }
 
     #[test]
-    fn removing_a_leaf_and_removing_a_block_each_delete_what_they_are_given() {
+    fn fr_cfg_011_removing_a_leaf_and_removing_a_block_each_delete_what_they_are_given() {
         // FR-CFG-011.
         let scratch = Scratch::new();
         let directory = project(
@@ -528,7 +528,7 @@ mod tests {
     }
 
     #[test]
-    fn the_editor_reports_which_entries_the_document_defines() {
+    fn fr_cfg_017_the_editor_reports_which_entries_the_document_defines() {
         // FR-CFG-017 turns on this question.
         let scratch = Scratch::new();
         let directory = project(&scratch, "[database.shop]\nhost = \"a\"\n");
@@ -539,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn an_absent_file_opens_as_an_empty_document() {
+    fn fr_cfg_008_an_absent_file_opens_as_an_empty_document() {
         let scratch = Scratch::new();
         let directory = scratch.directory(".tpl");
 
@@ -558,7 +558,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_is_validated_against_the_type_the_key_declares() {
+    fn fr_cfg_010_a_value_is_validated_against_the_type_the_key_declares() {
         // FR-CFG-010: a value that does not conform is 64.
         for (spelling, supplied) in [
             ("core.connect_timeout", "soon"),
@@ -585,7 +585,7 @@ mod tests {
     }
 
     #[test]
-    fn a_password_command_supplied_as_a_string_is_stored_as_the_array_it_splits_into() {
+    fn fr_conf_025_a_password_command_supplied_as_a_string_is_stored_as_the_array_it_splits_into() {
         // FR-CONF-025, FR-CFG-046.
         let scratch = Scratch::new();
         let directory = project(&scratch, "");
@@ -606,7 +606,7 @@ mod tests {
     }
 
     #[test]
-    fn an_argument_array_composes_into_a_toml_array() {
+    fn fr_conf_023_an_argument_array_composes_into_a_toml_array() {
         let arguments = ["pass".to_owned(), "db/shop".to_owned()];
 
         assert_eq!(array(&arguments).to_string(), r#"["pass", "db/shop"]"#);

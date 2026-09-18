@@ -1057,7 +1057,7 @@ mod tests {
     }
 
     #[test]
-    fn every_node_of_the_tree_parses() {
+    fn fr_cli_002_every_node_of_the_tree_parses() {
         // FR-CLI-002: the tree is closed, and these are what it is closed
         // around. The two constants are the tree of the requirement written
         // out, and the count is what makes an unreachable node a failure here
@@ -1079,7 +1079,7 @@ mod tests {
     }
 
     #[test]
-    fn every_node_declares_exactly_the_arguments_and_flags_of_its_requirement() {
+    fn fr_cli_019_every_node_declares_exactly_the_arguments_and_flags_of_its_requirement() {
         // FR-CLI-019: a command rejects every flag it does not declare, so the
         // declaration is the contract and this is the whole of it. The count
         // makes an argument added to a node a failure here rather than a
@@ -1114,7 +1114,7 @@ mod tests {
     }
 
     #[test]
-    fn each_of_the_four_local_flags_is_declared_by_exactly_the_nodes_its_row_names() {
+    fn fr_glob_021_each_of_the_four_local_flags_is_declared_by_exactly_the_nodes_its_row_names() {
         // FR-GLOB-021, the whole table. The set is asserted in both
         // directions: a node the row names and does not declare the flag
         // fails, and so does a node that declares it and the row does not
@@ -1149,7 +1149,7 @@ mod tests {
     }
 
     #[test]
-    fn no_node_declares_a_flag_that_carries_a_password() {
+    fn fr_glob_023_no_node_declares_a_flag_that_carries_a_password() {
         // FR-GLOB-023 and FR-CFG-030: no flag named `password`, and no `-p`,
         // at any node. `--password-command` names a command rather than a
         // password, per FR-CFG-027, and is the nearest thing the tree has.
@@ -1164,7 +1164,7 @@ mod tests {
     }
 
     #[test]
-    fn an_enumerated_value_is_a_type_the_parser_holds() {
+    fn fr_help_013_an_enumerated_value_is_a_type_the_parser_holds() {
         // FR-HELP-013 obliges the help to state the permitted values of every
         // flag and FR-HELP-021 derives them from this tree, so a closed value
         // set is carried on the argument rather than checked after parsing.
@@ -1209,7 +1209,7 @@ mod tests {
     }
 
     #[test]
-    fn the_default_of_format_is_fixed_at_text_wherever_it_is_declared() {
+    fn fr_out_001_the_default_of_format_is_fixed_at_text_wherever_it_is_declared() {
         // FR-OUT-001 and FR-OUT-002: the default is `text` and is conditioned
         // on nothing, so it is declared on the argument and is the same at
         // each of the sixteen nodes that carry it.
@@ -1236,7 +1236,7 @@ mod tests {
     }
 
     #[test]
-    fn a_required_argument_is_required_and_an_optional_one_is_not() {
+    fn fr_help_013_a_required_argument_is_required_and_an_optional_one_is_not() {
         // FR-HELP-013 obliges the help to state whether each argument is
         // required, and FR-HELP-021 derives that from this tree.
         let tree = tree();
@@ -1311,7 +1311,7 @@ mod tests {
     }
 
     #[test]
-    fn a_repeatable_argument_collects_every_occurrence() {
+    fn fr_rnd_008_a_repeatable_argument_collects_every_occurrence() {
         // FR-RND-008 makes `--set` repeatable with distinct keys, and
         // FR-TMPL-019 and FR-HELP-026 make two positionals sequences rather
         // than single values. FR-RND-014 refuses a repeated key, which is the
@@ -1345,7 +1345,8 @@ mod tests {
     }
 
     #[test]
-    fn init_writes_nothing_to_stdout_and_creates_the_project_at_the_path_it_was_given() {
+    fn fr_proj_022_init_writes_nothing_to_stdout_and_creates_the_project_at_the_path_it_was_given()
+    {
         // FR-PROJ-022 and BR-CLI-004: nothing on stdout, and exit 0. The path
         // is an operand rather than the working directory, so the test never
         // moves the process — which `cargo test` shares between threads.
@@ -1361,7 +1362,7 @@ mod tests {
     }
 
     #[test]
-    fn every_unimplemented_leaf_reports_the_interim_seventy_naming_its_command_path() {
+    fn fr_err_030_every_unimplemented_leaf_reports_the_interim_seventy_naming_its_command_path() {
         // The interim arrangement this module documents: a leaf parses, has no
         // implementation, and says so as FR-ERR-030 does — never as a success
         // and never as a usage error the caller could act on. The two leaves
@@ -1397,7 +1398,7 @@ mod tests {
     }
 
     #[test]
-    fn both_flag_forms_are_answered_at_the_node_the_vector_reached() {
+    fn fr_glob_019_both_flag_forms_are_answered_at_the_node_the_vector_reached() {
         // FR-GLOB-019 and FR-GLOB-020 give each flag an outcome at every node,
         // and FR-CLI-024 frees its position. The node answered is therefore
         // the node the vector reached, and the path it carries is canonical,
@@ -1453,7 +1454,7 @@ mod tests {
     }
 
     #[test]
-    fn the_waiver_reaches_the_two_flags_and_nothing_else() {
+    fn fr_err_034_the_waiver_reaches_the_two_flags_and_nothing_else() {
         // The other half of the defect's resolution. A vector that supplies
         // neither the operand nor one of the two flags is refused exactly as
         // it was, with the message FR-ERR-034 row 64 obliges — so the waiver
@@ -1475,7 +1476,7 @@ mod tests {
     }
 
     #[test]
-    fn a_group_node_invoked_with_no_child_prints_its_own_help_and_succeeds() {
+    fn fr_cli_007_a_group_node_invoked_with_no_child_prints_its_own_help_and_succeeds() {
         // FR-CLI-007 and FR-HELP-025: exactly the text `tpl help <node>` would
         // print, on stdout, at exit 0. "Exactly" is asserted byte for byte
         // against the renderer both forms reach, which is what keeps the two
@@ -1496,7 +1497,7 @@ mod tests {
     }
 
     #[test]
-    fn the_group_nodes_are_exactly_the_six_of_the_requirement() {
+    fn fr_cli_008_the_group_nodes_are_exactly_the_six_of_the_requirement() {
         // FR-CLI-008 names six, and FR-CLI-009 gives none of them an action of
         // its own. A node with children is a group by construction here: the
         // child is optional and the arm for None prints help, so a seventh
@@ -1517,7 +1518,7 @@ mod tests {
     }
 
     #[test]
-    fn the_top_level_commands_are_exactly_the_eight_of_the_requirement() {
+    fn fr_cli_010_the_top_level_commands_are_exactly_the_eight_of_the_requirement() {
         // FR-CLI-010.
         let tree = tree();
         let mut top_level: Vec<&str> = tree
@@ -1535,7 +1536,7 @@ mod tests {
     }
 
     #[test]
-    fn each_of_the_seven_aliases_resolves_to_its_canonical_node() {
+    fn fr_cli_011_each_of_the_seven_aliases_resolves_to_its_canonical_node() {
         // FR-CLI-011, the whole table.
         for (alias, canonical, operands) in [
             (["schema", "tbls"], ["schema", "tables"], &[][..]),
@@ -1562,7 +1563,7 @@ mod tests {
     }
 
     #[test]
-    fn no_alias_other_than_the_seven_is_accepted() {
+    fn fr_cli_011_no_alias_other_than_the_seven_is_accepted() {
         // FR-CLI-011 declares seven "and no others"; FR-CLI-012 refuses every
         // top-level alias, of which `tpl s`, `tpl t` and `tpl r` are the three
         // the requirement names.
@@ -1586,7 +1587,7 @@ mod tests {
     }
 
     #[test]
-    fn a_command_is_not_inferred_from_a_prefix_of_its_name() {
+    fn fr_cli_004_a_command_is_not_inferred_from_a_prefix_of_its_name() {
         // FR-CLI-004: `tpl sch tables` is 64, not `tpl schema tables`.
         //
         // `closed` sets `infer_subcommands` off at every node, and `clap`
@@ -1613,7 +1614,7 @@ mod tests {
     }
 
     #[test]
-    fn a_long_flag_is_not_inferred_from_a_prefix_of_its_name() {
+    fn fr_cli_005_a_long_flag_is_not_inferred_from_a_prefix_of_its_name() {
         // FR-CLI-005: `tpl --data shop schema tables` is 64. `infer_long_args`
         // has no getter either, and every prefix below is unambiguous for the
         // same reason as above.
@@ -1649,7 +1650,7 @@ mod tests {
     }
 
     #[test]
-    fn an_undeclared_token_is_never_handed_to_an_executable_on_the_path() {
+    fn fr_cli_006_an_undeclared_token_is_never_handed_to_an_executable_on_the_path() {
         // FR-CLI-006: a token that is not a declared command SHALL NOT cause a
         // lookup of a `tpl-<token>` executable on PATH. The parser performs no
         // process lookup of any kind; the one setting that would make an
@@ -1678,7 +1679,7 @@ mod tests {
     }
 
     #[test]
-    fn a_global_flag_is_accepted_in_every_position_of_the_command_line() {
+    fn fr_cli_024_a_global_flag_is_accepted_in_every_position_of_the_command_line() {
         // FR-CLI-024 and FR-GLOB-002: the three lines of the requirement are
         // one invocation.
         let before = parse_from(argv(&[], &["-d", "shop", "schema", "tables"])).expect("parses");
@@ -1722,7 +1723,7 @@ mod tests {
     }
 
     #[test]
-    fn every_node_accepts_every_one_of_the_seven_global_flags() {
+    fn fr_glob_002_every_node_accepts_every_one_of_the_seven_global_flags() {
         // FR-GLOB-002: every node, every flag. The vector puts all seven after
         // the node, which is the position FR-CLI-024 had to free and the one an
         // agent appending to a line it has already built writes.
@@ -1770,7 +1771,7 @@ mod tests {
     }
 
     #[test]
-    fn the_seven_global_flags_are_the_whole_of_the_global_set() {
+    fn fr_glob_001_the_seven_global_flags_are_the_whole_of_the_global_set() {
         // FR-GLOB-001 declares exactly seven and no others, and FR-GLOB-021
         // keeps four flags out of that set deliberately — none of the local
         // flags this tree declares is global.
@@ -1805,7 +1806,7 @@ mod tests {
     }
 
     #[test]
-    fn the_short_flag_set_of_the_whole_tree_is_the_five_of_the_requirement() {
+    fn fr_glob_024_the_short_flag_set_of_the_whole_tree_is_the_five_of_the_requirement() {
         // FR-GLOB-024: `-d`, `-v`, `-q`, `-h` and `-V` are the complete
         // short-flag set of the tool, at any node, global or local.
         let tree = tree();
@@ -1839,7 +1840,7 @@ mod tests {
     }
 
     #[test]
-    fn the_parser_generates_no_help_of_its_own_at_any_node() {
+    fn fr_help_006_the_parser_generates_no_help_of_its_own_at_any_node() {
         // OD-07: `tpl` renders all seven sections of FR-HELP-006 itself, so
         // `-h/--help` is the global flag of FR-GLOB-001 and `help` is the real
         // subcommand of FR-HELP-004 — neither is the parser's.
@@ -1863,7 +1864,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_a_node_does_not_declare_is_refused_there() {
+    fn fr_cli_019_a_flag_a_node_does_not_declare_is_refused_there() {
         // FR-CLI-019: there is no "known but inapplicable" category. The first
         // two rows are the two invocations the requirement's own rationale
         // names; the rest are every other place the corpus withholds a flag
@@ -1929,7 +1930,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_and_its_value_are_case_sensitive() {
+    fn fr_cli_020_a_flag_and_its_value_are_case_sensitive() {
         // FR-CLI-020: neither is normalised.
         assert_eq!(
             parse_from(argv(&["schema", "tables"], &["-d", "Shop"]))
@@ -1964,7 +1965,7 @@ mod tests {
     }
 
     #[test]
-    fn the_nested_node_of_the_third_level_is_reached_through_its_parent() {
+    fn fr_cli_002_the_nested_node_of_the_third_level_is_reached_through_its_parent() {
         // The one three-level path of FR-CLI-002, and the one place a group
         // node is a child of a group node.
         let invocation = parsed(&["cfg", "database", "remove"], &["shop"]);
@@ -1983,7 +1984,7 @@ mod tests {
     }
 
     #[test]
-    fn an_alias_and_its_canonical_name_reach_the_same_variant() {
+    fn fr_cli_011_an_alias_and_its_canonical_name_reach_the_same_variant() {
         let invocation = parsed(&["schema", "rtns"], &[]);
 
         let Some(Command::Schema(read)) = &invocation.command else {
@@ -1997,7 +1998,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_that_carries_a_single_value_is_refused_on_its_second_occurrence() {
+    fn fr_cli_014_a_flag_that_carries_a_single_value_is_refused_on_its_second_occurrence() {
         // FR-CLI-014, and the whole of what OD-08 bought by declaring these
         // flags repeatable: the message names **both values**, which the
         // parser's own ArgumentConflict cannot, because it names the argument
@@ -2066,7 +2067,7 @@ mod tests {
     }
 
     #[test]
-    fn the_one_repeatable_flag_and_the_two_repeatable_arguments_are_not_refused() {
+    fn fr_rnd_008_the_one_repeatable_flag_and_the_two_repeatable_arguments_are_not_refused() {
         // FR-RND-008 makes `--set` repeatable with distinct keys, and
         // FR-TMPL-019 and FR-HELP-026 make two positionals sequences. None of
         // the three is the repetition FR-CLI-014 refuses.
@@ -2086,7 +2087,7 @@ mod tests {
     }
 
     #[test]
-    fn a_global_flag_is_refused_on_its_second_occurrence_at_whatever_depth() {
+    fn fr_cli_024_a_global_flag_is_refused_on_its_second_occurrence_at_whatever_depth() {
         // FR-CLI-024 frees the position of a global flag, and FR-CLI-014
         // continues to refuse a repetition "wherever the two occurrences
         // appear" — including one written before the command and one after it.
@@ -2101,7 +2102,7 @@ mod tests {
     }
 
     #[test]
-    fn quiet_and_verbose_together_are_refused_and_the_repetition_is_decided_first() {
+    fn fr_cli_015_quiet_and_verbose_together_are_refused_and_the_repetition_is_decided_first() {
         // FR-CLI-015 and FR-GLOB-015, then the order `rules` states: a refusal
         // that is a property of one flag precedes one that is a property of
         // two.
@@ -2123,7 +2124,7 @@ mod tests {
     }
 
     #[test]
-    fn the_verbosity_count_saturates_past_three_and_past_two_hundred_and_fifty_five() {
+    fn fr_cli_016_the_verbosity_count_saturates_past_three_and_past_two_hundred_and_fifty_five() {
         // FR-CLI-016: the count reaches three levels and saturates above three
         // **without error**. The second vector is the one the count's own type
         // could have refused: `ArgAction::Count` accumulates into a `u8`, and
@@ -2146,7 +2147,7 @@ mod tests {
     }
 
     #[test]
-    fn the_argument_terminator_is_accepted_on_every_command() {
+    fn fr_cli_017_the_argument_terminator_is_accepted_on_every_command() {
         // FR-CLI-017, at every node of FR-CLI-002 and not only at the ones
         // that take an operand after it.
         for (path, operands) in LEAVES
@@ -2162,7 +2163,7 @@ mod tests {
     }
 
     #[test]
-    fn a_token_after_the_terminator_is_a_positional_argument() {
+    fn fr_cli_017_a_token_after_the_terminator_is_a_positional_argument() {
         // FR-CLI-017 and the note FR-CLI-024 makes of it: `tpl render x -- -d`
         // passes `-d` to the command as an argument and does not select a
         // database entry.
@@ -2201,7 +2202,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_beginning_with_a_dash_is_accepted_in_the_two_forms_that_carry_it() {
+    fn fr_cli_018_a_value_beginning_with_a_dash_is_accepted_in_the_two_forms_that_carry_it() {
         // FR-CLI-018, second sentence: the value is accepted in the
         // `--flag=value` form, and as a positional argument after `--`.
         for written in [&["-d=-x"][..], &["--database=-x"][..]] {
@@ -2223,7 +2224,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_and_its_value_keep_their_case_in_the_message() {
+    fn fr_cli_020_a_flag_and_its_value_keep_their_case_in_the_message() {
         // FR-CLI-020: neither is normalised, and the refusal reproduces both
         // exactly as they were written.
         let refused =
@@ -2248,7 +2249,7 @@ mod tests {
     }
 
     #[test]
-    fn every_node_of_the_tree_is_reached_through_parse_as_it_is_through_the_parser() {
+    fn fr_cli_002_every_node_of_the_tree_is_reached_through_parse_as_it_is_through_the_parser() {
         // `parse` is the one route from the process to the tree, and it adds
         // rules rather than changing what parses: every node of FR-CLI-002
         // still parses through it, and reaches the same invocation.

@@ -481,7 +481,8 @@ mod tests {
     }
 
     #[test]
-    fn the_five_modes_are_the_five_the_requirement_names_and_the_default_is_the_strictest() {
+    fn fr_conf_013_the_five_modes_are_the_five_the_requirement_names_and_the_default_is_the_strictest()
+     {
         // FR-CONF-013, FR-SEC-021.
         let spellings: Vec<&str> = TlsMode::ALL.iter().map(|mode| mode.name()).collect();
 
@@ -502,7 +503,7 @@ mod tests {
     }
 
     #[test]
-    fn an_argument_array_is_never_empty() {
+    fn fr_conf_023_an_argument_array_is_never_empty() {
         // FR-CONF-023, FR-CONF-024: the first element is the program, and a
         // command with no program cannot be executed.
         assert_eq!(PasswordCommand::new(Vec::new()), None);
@@ -514,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn a_string_supplied_to_a_command_is_split_by_posix_quoting_rules() {
+    fn fr_conf_025_a_string_supplied_to_a_command_is_split_by_posix_quoting_rules() {
         // FR-CONF-025, FR-CFG-046.
         let split = |supplied: &str| {
             PasswordCommand::split(supplied)
@@ -541,13 +542,13 @@ mod tests {
     }
 
     #[test]
-    fn a_string_that_yields_no_word_is_refused() {
+    fn fr_conf_025_a_string_that_yields_no_word_is_refused() {
         assert_eq!(PasswordCommand::split(""), None);
         assert_eq!(PasswordCommand::split("   "), None);
     }
 
     #[test]
-    fn an_entry_reports_which_keys_it_declares_and_what_they_say() {
+    fn fr_cfg_036_an_entry_reports_which_keys_it_declares_and_what_they_say() {
         let entry = Entry {
             host: Some("db.example.com".to_owned()),
             tls: Some(TlsMode::Required),
@@ -575,7 +576,7 @@ mod tests {
     }
 
     #[test]
-    fn a_port_written_as_a_reference_stays_a_string() {
+    fn fr_conf_015_a_port_written_as_a_reference_stays_a_string() {
         // FR-CONF-015 expands ${VAR} in `port`, so the key admits a string as
         // well as an integer, and `tpl cfg get` answers with what was written.
         let entry = Entry {
@@ -593,7 +594,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_renders_as_one_line_of_text_in_the_shape_the_file_would_carry() {
+    fn fr_cfg_006_a_value_renders_as_one_line_of_text_in_the_shape_the_file_would_carry() {
         assert_eq!(Written::Text("db.example.com").line(), "db.example.com");
         assert_eq!(Written::Number(3306).line(), "3306");
 
@@ -602,7 +603,7 @@ mod tests {
     }
 
     #[test]
-    fn a_written_value_serialises_as_itself_and_not_as_a_wrapper() {
+    fn fr_cfg_036_a_written_value_serialises_as_itself_and_not_as_a_wrapper() {
         // FR-CFG-036: `value` is the value as written, so a port is a JSON
         // number and a password_command a JSON array.
         let arguments = ["pass".to_owned()];
@@ -622,7 +623,7 @@ mod tests {
     }
 
     #[test]
-    fn the_combination_decides_the_five_rows_of_the_table() {
+    fn fr_conf_007_the_combination_decides_the_five_rows_of_the_table() {
         // FR-CONF-007, row by row, over the predicate both the reader and the
         // writer ask: three refusals, two admissions.
         let combination = |fields: &[EntryKey], dsn_password: bool| {
@@ -664,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn the_three_keys_outside_the_table_take_no_part_in_it() {
+    fn fr_conf_007_the_three_keys_outside_the_table_take_no_part_in_it() {
         // FR-CONF-007 names the connection and password keys; tls, ca_file and
         // ca_path are neither, and an entry that carries them beside a DSN is
         // admitted.
@@ -682,7 +683,7 @@ mod tests {
     }
 
     #[test]
-    fn the_first_discrete_field_of_the_order_is_the_one_named() {
+    fn fr_conf_002_the_first_discrete_field_of_the_order_is_the_one_named() {
         // FR-CONF-002 fixes the order, and the pair reported is the first field
         // of it the entry declares, so the message is the same for one file
         // however the keys were written.

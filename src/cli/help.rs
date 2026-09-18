@@ -2004,7 +2004,7 @@ mod tests {
     }
 
     #[test]
-    fn a_path_of_any_depth_resolves_to_the_node_it_names() {
+    fn fr_help_026_a_path_of_any_depth_resolves_to_the_node_it_names() {
         // FR-HELP-026: the full path of any node, at any depth, as a sequence
         // of positional arguments. Every node of the tree is handed back to
         // the resolver by the path the walk reached it by, which is what
@@ -2026,7 +2026,7 @@ mod tests {
     }
 
     #[test]
-    fn an_alias_resolves_to_the_canonical_node_and_a_prefix_resolves_to_none() {
+    fn fr_help_027_an_alias_resolves_to_the_canonical_node_and_a_prefix_resolves_to_none() {
         // FR-HELP-027: an alias of FR-CLI-011 reaches the node it names, and
         // no segment is inferred from a prefix, per FR-CLI-004. The seven
         // aliases are read from the tree rather than listed, so an alias added
@@ -2063,7 +2063,8 @@ mod tests {
     }
 
     #[test]
-    fn a_segment_that_names_no_child_names_the_segment_and_the_node_it_was_sought_under() {
+    fn fr_help_028_a_segment_that_names_no_child_names_the_segment_and_the_node_it_was_sought_under()
+     {
         // FR-HELP-028: exit 64, a nearest-match suggestion over the children
         // of the node reached, and a cause naming both the segment and that
         // node. The suggestion is asserted to be the short one the requirement
@@ -2113,7 +2114,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mistyped_alias_is_suggested_from_the_children_of_the_node_reached() {
+    fn br_cli_001_a_mistyped_alias_is_suggested_from_the_children_of_the_node_reached() {
         // BR-CLI-001: a mistyped alias is resolved through the nearest-match
         // rule, so an alias is a candidate beside a canonical name. `tpl help
         // cfg d` has `db` one step away and `database` far off.
@@ -2129,7 +2130,7 @@ mod tests {
     }
 
     #[test]
-    fn every_node_of_the_tree_has_an_entry() {
+    fn fr_help_022_every_node_of_the_tree_has_an_entry() {
         // FR-HELP-022: the table is indexed by command path and feeds both
         // consumers, so a node without an entry is a node whose help has two
         // sections missing. Comparing the whole vector rather than membership
@@ -2142,7 +2143,7 @@ mod tests {
     }
 
     #[test]
-    fn the_table_holds_one_entry_per_node() {
+    fn fr_help_022_the_table_holds_one_entry_per_node() {
         // The array's length is written into its type, so a node added without
         // an entry fails to compile rather than shipping without help. This
         // asserts the count is the tree's: 8 top-level commands, 6 group nodes
@@ -2152,7 +2153,7 @@ mod tests {
     }
 
     #[test]
-    fn every_entry_is_reachable_by_its_path() {
+    fn fr_help_022_every_entry_is_reachable_by_its_path() {
         for declared in &ENTRIES {
             let found = entry(declared.path).expect("the table carries this path");
 
@@ -2163,7 +2164,7 @@ mod tests {
     }
 
     #[test]
-    fn every_entry_carries_a_description() {
+    fn fr_help_007_every_entry_carries_a_description() {
         // FR-HELP-007 makes DESCRIPTION one of the four sections that always
         // appear, so an empty one is a section the renderer cannot omit and
         // cannot fill.
@@ -2177,7 +2178,7 @@ mod tests {
     }
 
     #[test]
-    fn every_entry_carries_at_least_one_example() {
+    fn fr_help_012_every_entry_carries_at_least_one_example() {
         // FR-HELP-012, and the second property of BR-HELP-003.
         for declared in &ENTRIES {
             assert!(
@@ -2202,7 +2203,7 @@ mod tests {
     }
 
     #[test]
-    fn every_example_parses_through_the_command_parser() {
+    fn br_help_003_every_example_parses_through_the_command_parser() {
         // The third property of BR-HELP-003, and the one that makes the
         // examples worth carrying: an example that does not parse is worse
         // than no example. `parse` is the whole of step 1 of FR-ERR-006 — what
@@ -2235,7 +2236,7 @@ mod tests {
     }
 
     #[test]
-    fn every_see_also_reference_names_another_node() {
+    fn fr_help_014_every_see_also_reference_names_another_node() {
         // FR-HELP-014: help is self-contained, and SEE ALSO references only
         // other `tpl` commands. Checking against the tree rather than against
         // a list is what keeps a renamed node from leaving a dangling
@@ -2261,7 +2262,7 @@ mod tests {
     }
 
     #[test]
-    fn every_exit_code_section_is_ordered_and_carries_no_repetition() {
+    fn fr_help_011_every_exit_code_section_is_ordered_and_carries_no_repetition() {
         for declared in &ENTRIES {
             let listed = codes(declared);
             let mut ascending = listed.clone();
@@ -2287,7 +2288,7 @@ mod tests {
     }
 
     #[test]
-    fn every_entry_lists_success_and_usage() {
+    fn fr_err_006_every_entry_lists_success_and_usage() {
         // Step 1 of FR-ERR-006 runs for every command without exception, so
         // every node can be refused with 64; and every node has a success.
         for declared in &ENTRIES {
@@ -2299,13 +2300,13 @@ mod tests {
     }
 
     #[test]
-    fn only_init_lists_cant_create() {
+    fn fr_err_003_only_init_lists_cant_create() {
         // FR-ERR-003: 73 is produced only by `tpl init`.
         assert_eq!(carrying(Code::CantCreate), vec!["tpl init"]);
     }
 
     #[test]
-    fn the_commands_that_perform_no_discovery_omit_configuration() {
+    fn fr_proj_025_the_commands_that_perform_no_discovery_omit_configuration() {
         // FR-PROJ-025 exempts init, help and version from discovery and states
         // in its own accepted cost that each omits 78. A group node invoked
         // bare joins them: FR-HELP-025 makes it print its help and exit 0
@@ -2336,7 +2337,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_commands_that_open_a_connection_list_the_server_codes() {
+    fn fr_cache_009_only_the_commands_that_open_a_connection_list_the_server_codes() {
         // FR-CACHE-009 names the commands that read a catalogue — the eight
         // schema subcommands and render — and FR-CFG-005 adds the one cfg
         // subcommand that contacts a server. `cache load` reads the server by
@@ -2361,7 +2362,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_commands_that_reach_a_template_list_data_error() {
+    fn fr_err_001_only_the_commands_that_reach_a_template_list_data_error() {
         // The 65 row of FR-ERR-001 is template work throughout: a syntax
         // error, a render failure, a malformed --context document, the render
         // deadline, and a template path escaping the root. Only the four nodes
@@ -2378,7 +2379,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_root_lists_internal_error() {
+    fn fr_err_030_only_the_root_lists_internal_error() {
         // 70 belongs to `tpl` and to no command under it, for the reason this
         // module's own documentation gives: FR-ERR-030 gives it two producing
         // conditions and neither is a condition of a command. It is therefore
@@ -2394,7 +2395,7 @@ mod tests {
     }
 
     #[test]
-    fn every_code_carries_the_sysexits_name_of_its_number() {
+    fn fr_err_001_every_code_carries_the_sysexits_name_of_its_number() {
         // FR-ERR-001 names the codes, and the `exit` line of FR-ERR-008 writes
         // the name beside the number. The ten are asserted pair by pair so
         // that a mistyped name is a failure rather than a line of help nobody

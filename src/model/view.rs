@@ -100,7 +100,7 @@ mod tests {
     }
 
     #[test]
-    fn a_complete_view_carries_no_marking_and_an_incomplete_one_names_a_property() {
+    fn fr_priv_007_a_complete_view_carries_no_marking_and_an_incomplete_one_names_a_property() {
         // FR-PRIV-007: a complete object is not marked. FR-PRIV-016: where the
         // marking is present it names at least one property.
         assert_eq!(view(None).restricted, None);
@@ -115,7 +115,7 @@ mod tests {
     }
 
     #[test]
-    fn the_session_collation_is_passed_through_exactly_as_the_server_returns_it() {
+    fn fr_srv_039_the_session_collation_is_passed_through_exactly_as_the_server_returns_it() {
         // FR-SRV-039: no normalisation, substitution or adjustment. The two
         // values below are two different collations, not two spellings of one.
         let newer = view(None);

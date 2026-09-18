@@ -129,7 +129,7 @@ mod tests {
     use crate::project::scratch::Scratch;
 
     #[test]
-    fn the_walk_finds_the_marker_in_the_directory_it_starts_from() {
+    fn fr_proj_001_the_walk_finds_the_marker_in_the_directory_it_starts_from() {
         // FR-PROJ-001, FR-PROJ-004.
         let scratch = Scratch::new();
         let root = scratch.directory("project");
@@ -141,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn the_walk_climbs_until_it_finds_the_first_marker_and_stops_there() {
+    fn fr_proj_004_the_walk_climbs_until_it_finds_the_first_marker_and_stops_there() {
         // FR-PROJ-004: the first one found is the project root, and the walk
         // stops there.
         let scratch = Scratch::new();
@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn a_walk_that_finds_nothing_is_the_condition_the_requirement_names() {
+    fn fr_proj_006_a_walk_that_finds_nothing_is_the_condition_the_requirement_names() {
         // FR-PROJ-006, FR-PROJ-007: no fallback, and the walk's end is named.
         let scratch = Scratch::new();
         let start = scratch.directory("bare/deeper");
@@ -167,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn the_resolved_path_is_canonical() {
+    fn fr_proj_009_the_resolved_path_is_canonical() {
         // FR-PROJ-009: a symlinked .tpl is verified at its real target.
         let scratch = Scratch::new();
         let real = scratch.directory("elsewhere/tpl-data");
@@ -181,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn the_explicit_folder_suppresses_the_walk() {
+    fn fr_proj_008_the_explicit_folder_suppresses_the_walk() {
         // FR-PROJ-008, FR-GLOB-009: --tpl-dir names the folder, and the walk
         // does not run — so a project above the named one is not found.
         let scratch = Scratch::new();
@@ -195,7 +195,7 @@ mod tests {
     }
 
     #[test]
-    fn an_explicit_folder_that_is_not_a_directory_is_refused() {
+    fn fr_proj_008_an_explicit_folder_that_is_not_a_directory_is_refused() {
         // FR-PROJ-008: it names a `.tpl` folder, and a path that is not one
         // leaves the invocation with no project at all.
         let scratch = Scratch::new();
@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn a_marker_that_is_a_file_is_not_a_project() {
+    fn fr_proj_001_a_marker_that_is_a_file_is_not_a_project() {
         // FR-PROJ-001: a project is a directory containing a `.tpl` **folder**.
         let scratch = Scratch::new();
         let project = scratch.directory("project");

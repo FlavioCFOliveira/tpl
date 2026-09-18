@@ -296,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn the_full_form_splits_into_its_five_fields() {
+    fn fr_conf_009_the_full_form_splits_into_its_five_fields() {
         // FR-CONF-009: scheme://[user[:password]@]host[:port]/database.
         let dsn = parsed("mysql://alice:hunter2@db.example.com:3306/shop");
 
@@ -308,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn every_optional_part_of_the_grammar_is_optional() {
+    fn fr_conf_009_every_optional_part_of_the_grammar_is_optional() {
         let bare = parsed("mysql://db.example.com/shop");
         assert_eq!(bare.user(), None);
         assert_eq!(bare.password(), None);
@@ -320,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn both_schemes_are_accepted_and_are_equivalent() {
+    fn fr_conf_010_both_schemes_are_accepted_and_are_equivalent() {
         // FR-CONF-010: the two are treated as equivalent, so the fields they
         // yield are the same. The values themselves differ in the raw text each
         // borrows from, which is what the redaction of FR-CFG-021 splices into.
@@ -335,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn a_scheme_outside_the_two_is_refused_as_the_scheme() {
+    fn fr_conf_010_a_scheme_outside_the_two_is_refused_as_the_scheme() {
         // FR-CONF-010: the `cause` line separates the scheme from the form,
         // because the two have different next steps.
         for raw in [
@@ -353,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_that_is_not_of_the_form_is_refused_as_the_form() {
+    fn fr_conf_009_a_value_that_is_not_of_the_form_is_refused_as_the_form() {
         // FR-CONF-009: the host and the database are both required.
         for raw in [
             "db.example.com/shop",
@@ -373,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn a_query_parameter_is_refused_whatever_follows_it() {
+    fn fr_conf_011_a_query_parameter_is_refused_whatever_follows_it() {
         // FR-CONF-011, FR-CONF-012: a `?` is 78, and a TLS parameter is the
         // special case that would otherwise contradict BR-CONF-001.
         for raw in [
@@ -391,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn the_parameter_refusal_is_reached_before_the_scheme_is_judged() {
+    fn fr_conf_011_the_parameter_refusal_is_reached_before_the_scheme_is_judged() {
         // FR-CONF-011 refuses a `?` "whatever follows it", and the parameter is
         // the condition with the security consequence BR-CONF-001 names.
         assert!(matches!(
@@ -401,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn a_literal_password_carrying_an_at_sign_is_not_cut_in_half() {
+    fn fr_cfg_031_a_literal_password_carrying_an_at_sign_is_not_cut_in_half() {
         // FR-CFG-031 stores a DSN verbatim, so the authority is split at its
         // last `@` rather than its first.
         let dsn = parsed("mysql://alice:p@ss@db.example.com/shop");
@@ -412,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reference_survives_the_parse_as_written() {
+    fn fr_conf_018_a_reference_survives_the_parse_as_written() {
         // FR-CONF-018: the URL is parsed first and the reference is expanded
         // inside the already-delimited field, so the parser never sees an
         // expanded value.
@@ -424,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    fn an_ipv6_literal_keeps_its_brackets_and_its_port() {
+    fn fr_conf_009_an_ipv6_literal_keeps_its_brackets_and_its_port() {
         let dsn = parsed("mysql://[2001:db8::1]:3307/shop");
 
         assert_eq!(dsn.host().raw(), "[2001:db8::1]");
@@ -436,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn percent_encoding_denies_an_expanded_value_every_delimiter() {
+    fn fr_conf_018_percent_encoding_denies_an_expanded_value_every_delimiter() {
         // FR-CONF-018, FR-SEC-009: the threat is
         // SHOP_PW=x@attacker.example.com/shop?# redirecting the connection.
         let encoded = Field::encode("x@attacker.example.com/shop?#");
@@ -451,7 +451,7 @@ mod tests {
     }
 
     #[test]
-    fn the_password_inside_a_dsn_is_replaced_and_nothing_else_is() {
+    fn fr_cfg_021_the_password_inside_a_dsn_is_replaced_and_nothing_else_is() {
         // FR-CFG-021: `***`, with user, host, port and database left visible.
         let raw = "mysql://alice:hunter2@db.example.com:3306/shop";
         let redacted = parsed(raw)
@@ -463,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dsn_with_no_password_has_nothing_to_replace() {
+    fn fr_cfg_021_a_dsn_with_no_password_has_nothing_to_replace() {
         assert_eq!(
             parsed("mysql://alice@db.example.com/shop").with_password("***"),
             None
@@ -483,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn the_condition_names_the_key_and_the_file_and_never_the_value() {
+    fn br_err_003_the_condition_names_the_key_and_the_file_and_never_the_value() {
         // BR-ERR-003: the resolved DSN reaches no message.
         let condition = parse(
             "postgres://alice:hunter2@db.example.com/shop",

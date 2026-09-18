@@ -140,7 +140,7 @@ mod tests {
     use crate::error::Error;
 
     #[test]
-    fn a_project_exists_only_once_discovery_and_the_two_checks_have_passed() {
+    fn fr_err_006_a_project_exists_only_once_discovery_and_the_two_checks_have_passed() {
         // FR-ERR-006, step 2: discovery and the trust checks, before the file
         // is read at step 3.
         let scratch = Scratch::new();
@@ -167,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unsafe_configuration_is_refused_before_it_is_read() {
+    fn fr_proj_011_an_unsafe_configuration_is_refused_before_it_is_read() {
         // FR-PROJ-011, and step 2 before step 3: the file is never read.
         let scratch = Scratch::new();
         let root = scratch.directory("project");
@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn a_project_named_by_the_flag_is_subject_to_the_same_checks() {
+    fn fr_proj_008_a_project_named_by_the_flag_is_subject_to_the_same_checks() {
         // FR-PROJ-008, FR-GLOB-010: without exemption.
         let scratch = Scratch::new();
         let named = scratch.directory("elsewhere/.tpl");
@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn a_project_with_no_configuration_file_is_a_project_with_an_empty_one() {
+    fn fr_proj_001_a_project_with_no_configuration_file_is_a_project_with_an_empty_one() {
         // FR-PROJ-001 makes the project the folder, and FR-CFG-004 lets
         // `tpl cfg set` write the file again.
         let scratch = Scratch::new();

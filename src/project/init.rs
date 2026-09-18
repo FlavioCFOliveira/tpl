@@ -273,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn init_creates_exactly_the_five_artefacts_the_requirement_names() {
+    fn fr_proj_017_init_creates_exactly_the_five_artefacts_the_requirement_names() {
         // FR-PROJ-017, FR-PROJ-020: five artefacts, and no `.cache/`.
         let scratch = Scratch::new();
         let destination = scratch.path("project");
@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn the_configuration_is_created_at_six_hundred() {
+    fn fr_proj_019_the_configuration_is_created_at_six_hundred() {
         // FR-PROJ-019.
         let scratch = Scratch::new();
         let destination = scratch.path("project");
@@ -305,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn the_generated_configuration_carries_no_active_database_entry() {
+    fn fr_proj_018_the_generated_configuration_carries_no_active_database_entry() {
         // FR-PROJ-018: a fresh project knows about no database until one is
         // added, and the commented example shows the shape all the same.
         let scratch = Scratch::new();
@@ -325,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn the_gitignore_carries_the_two_lines_the_requirement_names() {
+    fn fr_proj_017_the_gitignore_carries_the_two_lines_the_requirement_names() {
         // FR-PROJ-017, FR-PROJ-003.
         let scratch = Scratch::new();
         let destination = scratch.path("project");
@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn the_example_template_names_the_command_that_runs_it_and_walks_the_columns() {
+    fn fr_proj_021_the_example_template_names_the_command_that_runs_it_and_walks_the_columns() {
         // FR-PROJ-021: the header carries the command, the body walks the
         // columns, and at least one filter and one test are used.
         let scratch = Scratch::new();
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn the_macro_file_maps_a_column_to_a_rust_type() {
+    fn fr_proj_017_the_macro_file_maps_a_column_to_a_rust_type() {
         // FR-PROJ-017, FR-ENV-011: the mapping the binary no longer performs.
         let scratch = Scratch::new();
         let destination = scratch.path("project");
@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    fn init_creates_the_destination_and_its_missing_parents() {
+    fn fr_proj_013_init_creates_the_destination_and_its_missing_parents() {
         // FR-PROJ-013.
         let scratch = Scratch::new();
         let destination = scratch.path("a/b/c");
@@ -394,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn a_destination_that_already_holds_a_project_is_refused_with_nothing_changed() {
+    fn fr_proj_014_a_destination_that_already_holds_a_project_is_refused_with_nothing_changed() {
         // FR-PROJ-014: 73, and it does not merge, complete partially, or
         // overwrite.
         let scratch = Scratch::new();
@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn a_destination_that_cannot_be_created_is_refused() {
+    fn fr_proj_015_a_destination_that_cannot_be_created_is_refused() {
         // FR-PROJ-015: 73.
         let scratch = Scratch::new();
         let blocking = scratch.file("a-file", "");
@@ -427,7 +427,7 @@ mod tests {
     }
 
     #[test]
-    fn a_nested_project_is_created_and_shadows_the_one_above_it() {
+    fn fr_proj_016_a_nested_project_is_created_and_shadows_the_one_above_it() {
         // FR-PROJ-016: the nested project is created and the invocation
         // succeeds; the warning goes to stderr, which NFR-DET-001 puts outside
         // the contract.
@@ -441,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn a_project_discovered_after_init_is_the_one_init_created() {
+    fn fr_proj_001_a_project_discovered_after_init_is_the_one_init_created() {
         // FR-PROJ-001, FR-PROJ-004: what init writes is what discovery finds.
         let scratch = Scratch::new();
         let destination = scratch.directory("project");

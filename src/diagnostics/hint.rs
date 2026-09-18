@@ -650,7 +650,7 @@ mod tests {
     use super::{MAX_NAME, admits, admits_flag, admits_path, update_entry};
 
     #[test]
-    fn the_admitted_set_is_the_one_fr_err_022_states() {
+    fn fr_err_022_the_admitted_set_is_the_one_the_requirement_states() {
         assert!(admits("orders"));
         assert!(admits("order_lines_2026"));
         assert!(admits("A9"));
@@ -673,13 +673,13 @@ mod tests {
     }
 
     #[test]
-    fn a_name_of_more_than_sixty_four_characters_is_refused() {
+    fn fr_err_022_a_name_of_more_than_sixty_four_characters_is_refused() {
         assert!(admits(&"a".repeat(MAX_NAME)));
         assert!(!admits(&"a".repeat(MAX_NAME + 1)));
     }
 
     #[test]
-    fn a_command_path_is_admitted_segment_by_segment() {
+    fn fr_err_022_a_command_path_is_admitted_segment_by_segment() {
         assert!(admits_path("schema"));
         assert!(admits_path("cfg database add"));
         assert!(!admits_path(""));
@@ -687,7 +687,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_is_admitted_segment_by_segment() {
+    fn fr_err_022_a_flag_is_admitted_segment_by_segment() {
         // FR-ERR-022: the `-` or `--` that introduces a flag is a literal, and
         // so is the `-` inside the five flags of this corpus that carry one.
         assert!(admits_flag("-d"));
@@ -704,7 +704,7 @@ mod tests {
     }
 
     #[test]
-    fn a_refused_entry_name_leaves_the_placeholder_standing() {
+    fn fr_err_023_a_refused_entry_name_leaves_the_placeholder_standing() {
         assert_eq!(
             update_entry("shop"),
             "tpl cfg database update shop --host <host>"

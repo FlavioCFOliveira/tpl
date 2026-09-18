@@ -501,7 +501,7 @@ mod tests {
     }
 
     #[test]
-    fn the_unsigned_attribute_is_read_from_the_raw_string_and_the_data_type_is_shared() {
+    fn fr_ctx_038_the_unsigned_attribute_is_read_from_the_raw_string_and_the_data_type_is_shared() {
         // FR-CTX-038: `unsigned` appears inside the raw string only, after the
         // display width; `data_type` reads the same for the signed and the
         // unsigned form, so it cannot be the source.
@@ -531,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn a_member_carrying_the_attribute_does_not_make_an_enum_unsigned() {
+    fn fr_ctx_038_a_member_carrying_the_attribute_does_not_make_an_enum_unsigned() {
         // The attribute follows the display width, so the search runs over what
         // follows the final `)` and never over the member list.
         let column = ColumnType::decompose(&CatalogueType {
@@ -545,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn a_member_list_is_read_by_quote_state_and_a_bare_comma_stays_inside_its_member() {
+    fn fr_ctx_039_a_member_list_is_read_by_quote_state_and_a_bare_comma_stays_inside_its_member() {
         // FR-CTX-039: the separator and a member's own content are the same
         // byte. Splitting on the comma reports seven members, three of them
         // fragments, at exit 0.
@@ -575,7 +575,7 @@ mod tests {
     }
 
     #[test]
-    fn a_doubled_apostrophe_inside_a_member_collapses_to_one() {
+    fn fr_ctx_039_a_doubled_apostrophe_inside_a_member_collapses_to_one() {
         // FR-CTX-039: an apostrophe inside a member is doubled and is never
         // backslash-escaped, and the member ends at the quote that is not.
         let column = ColumnType::decompose(&CatalogueType {
@@ -596,7 +596,7 @@ mod tests {
     }
 
     #[test]
-    fn a_member_list_passes_every_other_byte_through_including_multi_byte_ones() {
+    fn fr_ctx_039_a_member_list_passes_every_other_byte_through_including_multi_byte_ones() {
         // FR-CTX-039: the em dash of the fixture survives intact, and so does a
         // member that is the empty string.
         let column = ColumnType::decompose(&CatalogueType {
@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn a_type_that_is_neither_an_enum_nor_a_set_carries_no_member_list() {
+    fn fr_ctx_016_a_type_that_is_neither_an_enum_nor_a_set_carries_no_member_list() {
         // FR-CTX-016: `values` is null for every other type.
         let column = ColumnType::decompose(&CatalogueType {
             column_type: "varchar(255)",
@@ -634,7 +634,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unrecognised_type_keeps_the_raw_string_and_nulls_every_part() {
+    fn fr_ctx_018_an_unrecognised_type_keeps_the_raw_string_and_nulls_every_part() {
         // FR-CTX-018: the raw string is the safety net, so a type a later
         // server introduces reaches the template intact rather than guessed at.
         let column = ColumnType::decompose(&CatalogueType {
@@ -657,7 +657,7 @@ mod tests {
     }
 
     #[test]
-    fn the_two_precision_fields_merge_into_one_part() {
+    fn fr_ctx_040_the_two_precision_fields_merge_into_one_part() {
         // FR-CTX-040: no type populates both, so the merge is lossless and
         // `datetime(6)`'s 6 stays reachable through a part list naming
         // `precision` once.
@@ -680,7 +680,7 @@ mod tests {
     }
 
     #[test]
-    fn a_zero_precision_is_a_value_and_not_an_absence() {
+    fn fr_ctx_040_a_zero_precision_is_a_value_and_not_an_absence() {
         // FR-CTX-040: a DATETIME with no fractional part reports 0, where a
         // DATE reports SQL NULL. A caller testing absence must test for None.
         let datetime = ColumnType::decompose(&CatalogueType {
@@ -700,7 +700,7 @@ mod tests {
     }
 
     #[test]
-    fn a_type_equal_to_its_data_type_carries_no_part_but_its_own_name() {
+    fn fr_ctx_038_a_type_equal_to_its_data_type_carries_no_part_but_its_own_name() {
         // FR-CTX-038 and FR-CTX-040: the geometry types, inet4, inet6 and uuid
         // return a string equal to `data_type`, and populate no size field.
         let column = ColumnType::decompose(&CatalogueType {
@@ -716,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn the_recognised_set_is_the_thirty_nine_observed_values_and_is_sorted() {
+    fn fr_ctx_018_the_recognised_set_is_the_thirty_nine_observed_values_and_is_sorted() {
         // FR-CTX-018 recognises what FR-CTX-040 has a rule for, and
         // `recognised` binary-searches, which a list out of order would break.
         assert!(

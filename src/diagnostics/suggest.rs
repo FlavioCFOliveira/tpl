@@ -448,7 +448,7 @@ mod tests {
     // ----------------------------------------------------- the distance ---
 
     #[test]
-    fn a_transposition_is_one_error_and_not_two() {
+    fn fr_err_019_a_transposition_is_one_error_and_not_two() {
         // OD-20's worked example, which is observable output: plain
         // Levenshtein reports 2 for this pair and the candidate set differs on
         // it, because FR-ERR-019 admits a candidate by its distance.
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    fn a_transposition_split_by_a_further_edit_costs_three() {
+    fn fr_err_019_a_transposition_split_by_a_further_edit_costs_three() {
         // The restricted form's one departure from the unrestricted one, held
         // deliberately: 'ca' reaches 'abc' in two steps only by transposing and
         // then inserting between the transposed pair, which is the substring
@@ -472,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn two_substitutions_are_admitted_and_three_are_not() {
+    fn fr_err_019_two_substitutions_are_admitted_and_three_are_not() {
         // FR-ERR-019 admits "within an edit distance of two".
         assert_eq!(measured("orders", "ordert"), Some(1));
         assert_eq!(measured("orders", "ordezz"), Some(2));
@@ -480,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn the_three_elementary_edits_each_cost_one() {
+    fn fr_err_019_the_three_elementary_edits_each_cost_one() {
         assert_eq!(measured("orders", "order"), Some(1), "a deletion");
         assert_eq!(measured("orders", "borders"), Some(1), "an insertion");
         assert_eq!(measured("orders", "orderz"), Some(1), "a substitution");
@@ -488,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn a_name_of_a_different_length_is_refused_before_it_is_measured() {
+    fn br_perf_004_a_name_of_a_different_length_is_refused_before_it_is_measured() {
         // The length bound, which is what keeps BR-PERF-004's 200 comparisons
         // cheap: three characters of difference cannot be two edits.
         assert_eq!(measured("orders", "ord"), None);
@@ -496,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_side_is_measured_by_the_length_of_the_other() {
+    fn fr_err_019_an_empty_side_is_measured_by_the_length_of_the_other() {
         assert_eq!(measured("", "ab"), Some(2));
         assert_eq!(measured("ab", ""), Some(2));
         assert_eq!(measured("", ""), Some(0));
@@ -504,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn the_three_economies_agree_with_the_whole_matrix_on_every_short_pair() {
+    fn fr_err_019_the_three_economies_agree_with_the_whole_matrix_on_every_short_pair() {
         // 121 strings over {a, b, c}, so 14 641 ordered pairs: the rolling
         // rows, the length refusal and the abandoned row are each checked
         // against the recurrence written out in full.
@@ -528,7 +528,7 @@ mod tests {
     }
 
     #[test]
-    fn the_distance_counts_characters_and_not_bytes() {
+    fn fr_err_019_the_distance_counts_characters_and_not_bytes() {
         // A supplied name is arbitrary UTF-8; one character replaced is one
         // edit however many bytes it occupies.
         assert_eq!(
@@ -540,7 +540,7 @@ mod tests {
     // ------------------------------------------- the selection and its cap ---
 
     #[test]
-    fn four_candidates_within_two_yield_three_by_distance_then_name() {
+    fn fr_err_019_four_candidates_within_two_yield_three_by_distance_then_name() {
         // 'aorders' and 'orderz' are one edit away, 'border' and 'xorderz' two.
         let population = ["xorderz", "border", "orderz", "aorders"];
 
@@ -552,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn nothing_within_the_distance_yields_nothing() {
+    fn fr_err_020_nothing_within_the_distance_yields_nothing() {
         // FR-ERR-020: the suggestion is omitted rather than weakened.
         let selected = suggestions(
             "orders",
@@ -564,7 +564,7 @@ mod tests {
     }
 
     #[test]
-    fn a_name_of_sixty_four_characters_is_admitted_and_one_of_sixty_five_is_not() {
+    fn fr_err_022_a_name_of_sixty_four_characters_is_admitted_and_one_of_sixty_five_is_not() {
         let supplied = format!("{}b", "a".repeat(63));
         let admitted = "a".repeat(64);
         let refused = "a".repeat(65);
@@ -583,7 +583,7 @@ mod tests {
     // --------------------------------------- FR-ERR-022 and FR-ERR-023 ---
 
     #[test]
-    fn a_candidate_outside_the_set_is_presented_in_no_form() {
+    fn fr_err_023_a_candidate_outside_the_set_is_presented_in_no_form() {
         // FR-ERR-023: the candidate is near enough to be suggested and is
         // dropped anyway, because a table name is free text on the server.
         let hostile = "orders;DROP TABLE x";
@@ -599,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_of_fr_conf_002_is_suggested_and_is_not_dropped_for_its_dot() {
+    fn fr_err_022_a_key_of_fr_conf_002_is_suggested_and_is_not_dropped_for_its_dot() {
         // FR-ERR-022 as amended in the twentieth edition: a key is a spelling
         // this specification enumerates, and no key matches the character set
         // as a whole because all fifteen forms carry a dot.
@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn a_hyphenated_flag_is_suggested_and_is_not_dropped_for_its_hyphen() {
+    fn fr_err_022_a_hyphenated_flag_is_suggested_and_is_not_dropped_for_its_hyphen() {
         // The five flags of this corpus that carry a hyphen inside the name.
         let population = [
             "--ca-file",
@@ -635,7 +635,7 @@ mod tests {
     }
 
     #[test]
-    fn a_database_key_is_tested_segment_by_segment() {
+    fn fr_err_022_a_database_key_is_tested_segment_by_segment() {
         // FR-ERR-022's consequence: the key is admissible exactly as far as
         // the entry name inside it is.
         assert!(Population::ConfigurationKeys.admits("database.reporting.host"));
@@ -647,7 +647,7 @@ mod tests {
     }
 
     #[test]
-    fn a_database_key_naming_an_entry_outside_the_set_reaches_no_line() {
+    fn fr_err_023_a_database_key_naming_an_entry_outside_the_set_reaches_no_line() {
         let hostile = "database.rm -rf /.host";
         let selected = suggestions(
             "database.rm -rf /.hosts",
@@ -660,13 +660,13 @@ mod tests {
     }
 
     #[test]
-    fn a_command_path_is_admitted_over_its_segments() {
+    fn fr_err_022_a_command_path_is_admitted_over_its_segments() {
         assert!(Population::Commands.admits("cfg database add"));
         assert!(!Population::Commands.admits("cfg database add; rm"));
     }
 
     #[test]
-    fn an_empty_or_malformed_spelling_is_refused_by_every_population() {
+    fn fr_err_022_an_empty_or_malformed_spelling_is_refused_by_every_population() {
         for population in [
             Population::Commands,
             Population::Flags,
@@ -690,7 +690,7 @@ mod tests {
     // -------------------------------------------------- the composed line ---
 
     #[test]
-    fn one_candidate_composes_the_line_fr_err_008_shows() {
+    fn fr_err_008_one_candidate_composes_the_line_the_requirement_shows() {
         let error = Error::CatalogueObjectNotFound {
             kind: CatalogueObjectKind::Table,
             name: "ordrs".to_owned(),
@@ -706,7 +706,7 @@ mod tests {
     }
 
     #[test]
-    fn two_and_three_candidates_each_read_as_one_question() {
+    fn fr_err_008_two_and_three_candidates_each_read_as_one_question() {
         let two = suggestions("orders", ["orderz", "aorders"], Population::Names);
         assert_eq!(
             hint_line(two.names(), GENERIC),

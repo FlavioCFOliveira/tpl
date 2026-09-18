@@ -251,7 +251,7 @@ fn line(written: &str, label: &str) -> String {
 // ------------------------------------------------------------ FR-PROJ-017 ---
 
 #[test]
-fn init_creates_exactly_the_five_artefacts_and_nothing_else() {
+fn fr_proj_017_init_creates_exactly_the_five_artefacts_and_nothing_else() {
     // FR-PROJ-017, FR-PROJ-019, FR-PROJ-020 and FR-PROJ-022: five artefacts,
     // `.cfg` at 0600, no `.cache/`, nothing on stdout, exit 0.
     let sandbox = Sandbox::new();
@@ -302,7 +302,7 @@ fn init_creates_exactly_the_five_artefacts_and_nothing_else() {
 }
 
 #[test]
-fn the_generated_configuration_carries_no_active_database_entry() {
+fn fr_proj_018_the_generated_configuration_carries_no_active_database_entry() {
     // FR-PROJ-018: a fresh project knows about no database, and the shape of a
     // real entry is in front of the reader as a comment.
     let sandbox = Sandbox::new();
@@ -321,7 +321,7 @@ fn the_generated_configuration_carries_no_active_database_entry() {
 // ------------------------------------------------------------ FR-PROJ-011 ---
 
 #[test]
-fn a_configuration_that_grants_group_or_other_access_is_refused() {
+fn fr_proj_011_a_configuration_that_grants_group_or_other_access_is_refused() {
     // FR-PROJ-011: no group and no other access bits, and the refusal is the
     // 78 of its row. Ownership by another user, which FR-PROJ-010 refuses,
     // cannot be staged without privilege and is left to the unit test that
@@ -342,7 +342,7 @@ fn a_configuration_that_grants_group_or_other_access_is_refused() {
 }
 
 #[test]
-fn a_folder_named_by_the_flag_is_subject_to_the_same_checks() {
+fn fr_glob_010_a_folder_named_by_the_flag_is_subject_to_the_same_checks() {
     // FR-GLOB-010 and FR-PROJ-008: --tpl-dir suppresses the walk and is
     // exempted from nothing.
     let sandbox = Sandbox::new();
@@ -357,7 +357,7 @@ fn a_folder_named_by_the_flag_is_subject_to_the_same_checks() {
 // ------------------------------------------------------------ FR-PROJ-004 ---
 
 #[test]
-fn the_walk_finds_the_project_from_a_nested_working_directory() {
+fn fr_proj_004_the_walk_finds_the_project_from_a_nested_working_directory() {
     // FR-PROJ-004: the walk starts at the working directory and climbs.
     let sandbox = Sandbox::new();
     sandbox.project("[core]\ndatabase = \"shop\"\n");
@@ -370,7 +370,7 @@ fn the_walk_finds_the_project_from_a_nested_working_directory() {
 }
 
 #[test]
-fn the_first_project_the_walk_meets_is_the_one_it_stops_at() {
+fn fr_proj_004_the_first_project_the_walk_meets_is_the_one_it_stops_at() {
     // FR-PROJ-004: the first `.tpl` found is the project root, and the walk
     // stops there — so a nested project shadows the one above it. The other
     // boundary of the walk, the mount point of FR-PROJ-005, is not staged here:
@@ -387,7 +387,7 @@ fn the_first_project_the_walk_meets_is_the_one_it_stops_at() {
 }
 
 #[test]
-fn the_flag_names_the_folder_and_suppresses_the_walk() {
+fn fr_glob_009_the_flag_names_the_folder_and_suppresses_the_walk() {
     // FR-GLOB-009: the folder named is the one used, whatever the walk from
     // the working directory would have found.
     let sandbox = Sandbox::new();
@@ -407,7 +407,7 @@ fn the_flag_names_the_folder_and_suppresses_the_walk() {
 }
 
 #[test]
-fn a_walk_that_meets_no_project_is_refused_and_points_at_tpl_init() {
+fn fr_proj_006_a_walk_that_meets_no_project_is_refused_and_points_at_tpl_init() {
     // FR-PROJ-006: 78, and the hint suggests `tpl init`.
     let sandbox = Sandbox::new();
 
@@ -420,7 +420,7 @@ fn a_walk_that_meets_no_project_is_refused_and_points_at_tpl_init() {
 // ------------------------------------------------------------ FR-PROJ-025 ---
 
 #[test]
-fn the_commands_that_require_no_project_run_where_there_is_none() {
+fn fr_proj_025_the_commands_that_require_no_project_run_where_there_is_none() {
     // FR-PROJ-025 names four and no others. `tpl init` is exercised by its own
     // tests; the other three, in the six forms FR-HELP-001 gives them, are
     // here.
@@ -451,7 +451,7 @@ fn the_commands_that_require_no_project_run_where_there_is_none() {
 }
 
 #[test]
-fn every_other_command_performs_discovery_and_fails_without_a_project() {
+fn fr_proj_025_every_other_command_performs_discovery_and_fails_without_a_project() {
     // FR-PROJ-025: every command outside the four requires a project, and no
     // cfg subcommand is among the four.
     let sandbox = Sandbox::new();
@@ -474,7 +474,7 @@ fn every_other_command_performs_discovery_and_fails_without_a_project() {
 // ------------------------------------------------------------ FR-CONF-034 ---
 
 #[test]
-fn a_file_the_reader_refuses_is_refused_before_the_command_is_reached() {
+fn fr_err_006_a_file_the_reader_refuses_is_refused_before_the_command_is_reached() {
     // Step 3 of FR-ERR-006, over the three faults a `.cfg` written by hand
     // reaches without resolving anything: a key outside the space
     // (FR-CONF-034), a DSN outside the grammar (FR-CONF-009, FR-CONF-010) and a
@@ -512,7 +512,7 @@ fn a_file_the_reader_refuses_is_refused_before_the_command_is_reached() {
 // ------------------------------------------------------------ FR-CFG-041 ---
 
 #[test]
-fn a_rewrite_keeps_every_byte_it_was_not_asked_to_change() {
+fn fr_cfg_041_a_rewrite_keeps_every_byte_it_was_not_asked_to_change() {
     // FR-CFG-041 and FR-CFG-034: the comments, the key order and the spacing
     // are the file's own, and the mode survives the rename. The comparison is
     // byte for byte, against the file composed from the original with one value
@@ -552,7 +552,7 @@ fn a_rewrite_keeps_every_byte_it_was_not_asked_to_change() {
 // ------------------------------------------------------------ FR-CFG-021 ---
 
 #[test]
-fn the_two_printers_redact_and_the_directed_read_does_not() {
+fn fr_cfg_021_the_two_printers_redact_and_the_directed_read_does_not() {
     // FR-CFG-021 redacts in `cfg list` and `cfg database show`; BR-CFG-002
     // makes `cfg get` the one deliberate exception, so that a password can be
     // fed to another command.
@@ -591,7 +591,7 @@ fn the_two_printers_redact_and_the_directed_read_does_not() {
 }
 
 #[test]
-fn the_password_inside_a_url_is_redacted_and_the_rest_of_it_is_not() {
+fn fr_cfg_021_the_password_inside_a_url_is_redacted_and_the_rest_of_it_is_not() {
     // FR-CFG-021: the substitution is over the one field, so the user, the
     // host, the port and the database stay visible.
     let sandbox = Sandbox::new();
@@ -611,7 +611,7 @@ fn the_password_inside_a_url_is_redacted_and_the_rest_of_it_is_not() {
 // ------------------------------------------------------------ FR-ERR-035 ---
 
 #[test]
-fn a_named_thing_that_is_not_there_and_a_name_that_is_already_taken() {
+fn fr_cfg_007_a_named_thing_that_is_not_there_and_a_name_that_is_already_taken() {
     // FR-CFG-007 and FR-CFG-012 make an absent key 66; FR-CFG-017 makes a name
     // `add` cannot create 64; the entry `update`, `show` and `remove` cannot
     // find is 66, per BR-CFG-001 and FR-GLOB-007.
@@ -659,7 +659,7 @@ fn a_named_thing_that_is_not_there_and_a_name_that_is_already_taken() {
 // ------------------------------------------------------------ FR-CFG-035 ---
 
 #[test]
-fn every_subcommand_that_declares_the_flag_answers_in_the_envelope() {
+fn fr_cfg_035_every_subcommand_that_declares_the_flag_answers_in_the_envelope() {
     // FR-CFG-035 with FR-OUT-024 and FR-OUT-026: the envelope, and `source`
     // set to `project`. `tpl cfg database test` is the one exception, and the
     // sprint that opens a connection owns it.
@@ -698,7 +698,7 @@ fn every_subcommand_that_declares_the_flag_answers_in_the_envelope() {
 // ------------------------------------------------------------ FR-CFG-031 ---
 
 #[test]
-fn a_dsn_outside_what_the_file_admits_is_refused_by_both_write_paths() {
+fn fr_cfg_031_a_dsn_outside_what_the_file_admits_is_refused_by_both_write_paths() {
     // FR-CFG-031 with FR-CFG-010: `--dsn` and `tpl cfg set database.<name>.dsn`
     // admit exactly what FR-CONF-009, FR-CONF-010 and FR-CONF-011 admit, the
     // refusal is 64 because the invocation is at fault and the file is not, and
@@ -739,7 +739,7 @@ fn a_dsn_outside_what_the_file_admits_is_refused_by_both_write_paths() {
 }
 
 #[test]
-fn a_dsn_carrying_a_reference_is_admitted_and_stored_as_the_caller_wrote_it() {
+fn fr_cfg_031_a_dsn_carrying_a_reference_is_admitted_and_stored_as_the_caller_wrote_it() {
     // FR-CFG-031: the value is validated as written, with ${VAR} left
     // unexpanded and treated as opaque text within the field it occupies. The
     // variable is defined in the child's environment, so a run that expanded it
@@ -774,7 +774,7 @@ fn a_dsn_carrying_a_reference_is_admitted_and_stored_as_the_caller_wrote_it() {
 // ------------------------------------------------------------ FR-CFG-048 ---
 
 #[test]
-fn set_refuses_a_write_the_entry_cannot_hold_and_the_hint_repairs_it() {
+fn fr_cfg_048_set_refuses_a_write_the_entry_cannot_hold_and_the_hint_repairs_it() {
     // FR-CFG-048: 64, the file byte for byte as it was, a cause naming both
     // keys, and a hint whose command is run here to prove it makes the write
     // legal.
@@ -807,7 +807,7 @@ fn set_refuses_a_write_the_entry_cannot_hold_and_the_hint_repairs_it() {
 }
 
 #[test]
-fn add_refuses_a_dsn_carrying_a_password_beside_a_password_command() {
+fn fr_cfg_048_add_refuses_a_dsn_carrying_a_password_beside_a_password_command() {
     // FR-CFG-048 over the third row of FR-CONF-007, which FR-CFG-029 does not
     // separate: password_command is not one of the discrete connection fields.
     let sandbox = Sandbox::new();
@@ -858,7 +858,7 @@ fn add_refuses_a_dsn_carrying_a_password_beside_a_password_command() {
 }
 
 #[test]
-fn update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alone() {
+fn fr_cfg_048_update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alone() {
     // FR-CFG-048 with FR-CFG-020: the fields the flags do not name stay in
     // place, so the write is refused rather than the entry made coherent by
     // removing what the caller never named. The hint is the pair of commands
@@ -911,7 +911,7 @@ fn update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alone() {
 }
 
 #[test]
-fn the_combinations_the_table_admits_are_written_by_all_three_paths() {
+fn fr_cfg_048_the_combinations_the_table_admits_are_written_by_all_three_paths() {
     // FR-CFG-048 refuses what FR-CONF-007 refuses and nothing else: the two
     // admitted rows of the table go through `set`, `add` and `update` alike.
     let sandbox = Sandbox::new();
@@ -958,7 +958,7 @@ fn the_combinations_the_table_admits_are_written_by_all_three_paths() {
 // ------------------------------------------------------------ FR-CFG-023 ---
 
 #[test]
-fn unset_of_the_block_clears_the_reference_and_unset_of_a_leaf_does_not() {
+fn fr_cfg_023_unset_of_the_block_clears_the_reference_and_unset_of_a_leaf_does_not() {
     // FR-CFG-023: the block of the entry `core.database` names takes the
     // reference with it, silently, in the same rewrite and with no change to
     // the exit code. A leaf leaves the entry in place, so the reference still
@@ -1003,7 +1003,7 @@ fn unset_of_the_block_clears_the_reference_and_unset_of_a_leaf_does_not() {
 }
 
 #[test]
-fn remove_clears_the_reference_and_leaves_one_to_another_entry_alone() {
+fn fr_cfg_023_remove_clears_the_reference_and_leaves_one_to_another_entry_alone() {
     // FR-CFG-023 over the command it was first written for, beside the entry it
     // does not name.
     let sandbox = Sandbox::new();
@@ -1042,7 +1042,7 @@ fn remove_clears_the_reference_and_leaves_one_to_another_entry_alone() {
 // ------------------------------------------------------------ FR-CFG-046 ---
 
 #[test]
-fn a_password_command_is_stored_as_the_array_the_quoting_rule_splits_it_into() {
+fn fr_cfg_046_a_password_command_is_stored_as_the_array_the_quoting_rule_splits_it_into() {
     // FR-CFG-046 with FR-CONF-025: one string on the command line, the array of
     // FR-CONF-023 in the file. A shell metacharacter is a character of an
     // argument and never a separator — the `;` below is one element of the

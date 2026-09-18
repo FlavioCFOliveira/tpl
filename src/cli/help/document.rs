@@ -627,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn every_command_alias_and_flag_of_the_tree_appears_in_the_document() {
+    fn br_help_003_every_command_alias_and_flag_of_the_tree_appears_in_the_document() {
         // BR-HELP-003, first property, and the one that makes FR-HELP-021 a
         // contract rather than an intention: the document is compared against
         // the tree the binary parses with, node by node, so a node, an alias
@@ -707,7 +707,7 @@ mod tests {
     }
 
     #[test]
-    fn every_command_of_the_document_carries_at_least_one_example() {
+    fn br_help_003_every_command_of_the_document_carries_at_least_one_example() {
         // BR-HELP-003, second property, asserted on the document rather than
         // on the table it is read from: the table's own test covers the root,
         // which FR-HELP-019 does not publish, and this one covers exactly what
@@ -725,7 +725,7 @@ mod tests {
     }
 
     #[test]
-    fn every_example_of_the_document_parses_through_the_command_parser() {
+    fn br_help_003_every_example_of_the_document_parses_through_the_command_parser() {
         // BR-HELP-003, third property: an example that does not parse is worse
         // than no example. The vector published as `invocation` is the one an
         // agent runs, so it is that vector that is parsed — not the `text`
@@ -758,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn the_global_flags_are_carried_once_and_no_command_repeats_them() {
+    fn fr_help_018_the_global_flags_are_carried_once_and_no_command_repeats_them() {
         // FR-HELP-018 and FR-GLOB-003: the seven are listed once, and each
         // command says `inherits_globals` instead of repeating them. The
         // property holds by construction — the seven are declared on the root
@@ -787,7 +787,8 @@ mod tests {
     }
 
     #[test]
-    fn a_subtree_is_the_node_and_its_descendants_in_the_order_the_whole_document_holds() {
+    fn fr_help_029_a_subtree_is_the_node_and_its_descendants_in_the_order_the_whole_document_holds()
+    {
         // FR-HELP-029: `data.commands` reduced to the entry whose path is the
         // path given, together with every entry whose path extends it segment
         // by segment, in the order those entries hold unreduced.
@@ -826,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn the_document_carries_the_keys_of_the_requirement_in_the_order_it_fixes() {
+    fn fr_out_024_the_document_carries_the_keys_of_the_requirement_in_the_order_it_fixes() {
         // FR-OUT-024 for the envelope, FR-HELP-017 for the four keys of `data`,
         // and FR-HELP-019 for the eight members of an entry. Asserting the
         // emitted bytes rather than the types is what covers FR-HELP-023 and
@@ -871,7 +872,7 @@ mod tests {
     }
 
     #[test]
-    fn the_template_surface_is_the_three_groups_of_the_requirement() {
+    fn fr_env_005_the_template_surface_is_the_three_groups_of_the_requirement() {
         // FR-ENV-005: three sibling objects of one shape, each carrying
         // `guarantee`, `filters`, `tests` and `functions` in that order, with
         // the guarantee its table gives the group. The four arrays `render/`
@@ -889,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn every_flag_of_the_tree_declares_a_long_form_and_every_value_a_named_type() {
+    fn fr_glob_024_every_flag_of_the_tree_declares_a_long_form_and_every_value_a_named_type() {
         // Two properties the document asserts about the tree rather than about
         // itself. FR-GLOB-024 gives five flags of the whole tool a short form
         // and gives none of them a spelling without a long one, so the

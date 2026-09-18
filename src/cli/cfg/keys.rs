@@ -290,7 +290,7 @@ mod tests {
     use crate::error::Error;
 
     #[test]
-    fn get_prints_the_value_as_written_and_does_not_redact_it() {
+    fn fr_cfg_006_get_prints_the_value_as_written_and_does_not_redact_it() {
         // FR-CFG-006, BR-CFG-002: the one deliberate exception to redaction.
         let harness = Harness::new("[database.reporting]\nhost = \"a\"\npassword = \"hunter2\"\n");
 
@@ -298,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn get_does_not_expand_a_reference() {
+    fn fr_cfg_006_get_does_not_expand_a_reference() {
         // FR-CFG-006: without expanding ${VAR}.
         let harness = Harness::new("[database.shop]\nhost = \"${SHOP_DB_HOST}\"\n");
 
@@ -306,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn get_answers_with_the_value_in_the_shape_the_file_wrote_it() {
+    fn fr_cfg_036_get_answers_with_the_value_in_the_shape_the_file_wrote_it() {
         // FR-CFG-036: the value as written, so a port is a JSON number and a
         // password_command a JSON array.
         let harness = Harness::new(
@@ -324,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_absent_from_the_file_is_a_named_object_that_does_not_exist() {
+    fn fr_cfg_007_a_key_absent_from_the_file_is_a_named_object_that_does_not_exist() {
         // FR-CFG-007: 66, with a nearest-match suggestion over the keys that do
         // exist.
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
@@ -341,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_in_the_space_the_file_does_not_set_is_also_sixty_six() {
+    fn fr_cfg_007_a_key_in_the_space_the_file_does_not_set_is_also_sixty_six() {
         // FR-CFG-007: exiting 0 with empty output would be indistinguishable
         // from a key whose value is empty.
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
@@ -350,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn set_writes_the_value_under_the_key() {
+    fn fr_cfg_008_set_writes_the_value_under_the_key() {
         // FR-CFG-008.
         let harness = Harness::new("[core]\n");
 
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn set_writes_nothing_to_stdout() {
+    fn fr_out_023_set_writes_nothing_to_stdout() {
         // FR-OUT-023: a command that writes no result leaves stdout empty.
         let harness = Harness::new("[core]\n");
 
@@ -370,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn set_refuses_a_key_outside_the_enumerated_space() {
+    fn fr_cfg_009_set_refuses_a_key_outside_the_enumerated_space() {
         // FR-CFG-009: 64, with a nearest-match suggestion over the known keys.
         let harness = Harness::new("[core]\n");
 
@@ -388,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn set_refuses_a_value_that_does_not_conform_to_the_declared_type() {
+    fn fr_cfg_010_set_refuses_a_value_that_does_not_conform_to_the_declared_type() {
         // FR-CFG-010: 64.
         let harness = Harness::new("[core]\n");
 
@@ -401,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn set_against_a_file_carrying_an_unknown_key_is_seventy_eight_and_not_sixty_four() {
+    fn fr_err_007_set_against_a_file_carrying_an_unknown_key_is_seventy_eight_and_not_sixty_four() {
         // FR-ERR-007, and the consequence its own text says is easy to
         // implement backwards: the file is validated at step 3, before the
         // command resolves a key of its own at step 4.
@@ -419,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn unset_deletes_a_leaf_and_a_whole_block() {
+    fn fr_cfg_011_unset_deletes_a_leaf_and_a_whole_block() {
         // FR-CFG-011.
         let harness = Harness::new(
             "[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"a\"\nuser = \"b\"\n",
@@ -434,7 +434,8 @@ mod tests {
         );
 
         // The block takes `core.database` with it, per FR-CFG-023, which
-        // `unset_of_the_selected_block_clears_the_reference` states on its own.
+        // `fr_cfg_023_unset_of_the_selected_block_clears_the_reference` states
+        // on its own.
         harness
             .unset("database.shop")
             .expect("the block is deleted");
@@ -442,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn unset_refuses_a_key_the_file_does_not_carry() {
+    fn fr_cfg_012_unset_refuses_a_key_the_file_does_not_carry() {
         // FR-CFG-012: 66.
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
 
@@ -463,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn list_prints_the_file_literally_with_passwords_redacted() {
+    fn fr_cfg_013_list_prints_the_file_literally_with_passwords_redacted() {
         // FR-CFG-013, FR-CFG-021, FR-SEC-003.
         let original = concat!(
             "# a note the author wrote\n",
@@ -485,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn list_prints_a_reference_exactly_as_written() {
+    fn fr_cfg_021_list_prints_a_reference_exactly_as_written() {
         // FR-CFG-021, third row: a password living in an environment variable
         // never reaches stdout through this command.
         let harness = Harness::new("[database.shop]\npassword = \"${SHOP_DB_PASSWORD}\"\n");
@@ -494,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn list_mirrors_the_key_space_and_omits_what_the_file_does_not_set() {
+    fn fr_cfg_037_list_mirrors_the_key_space_and_omits_what_the_file_does_not_set() {
         // FR-CFG-037: nested objects, with an absent key absent rather than
         // emitted as its default.
         let harness = Harness::new(
@@ -513,7 +514,7 @@ mod tests {
     }
 
     #[test]
-    fn list_of_a_project_with_nothing_set_is_an_empty_document_and_a_success() {
+    fn fr_out_033_list_of_a_project_with_nothing_set_is_an_empty_document_and_a_success() {
         // FR-OUT-033, FR-PROJ-018: an empty listing is the ordinary first state
         // of a project.
         let harness = Harness::new("");
@@ -526,7 +527,7 @@ mod tests {
     }
 
     #[test]
-    fn list_redacts_the_password_inside_a_dsn_and_leaves_the_rest_visible() {
+    fn fr_cfg_021_list_redacts_the_password_inside_a_dsn_and_leaves_the_rest_visible() {
         // FR-CFG-021, second row.
         let harness = Harness::new(
             "[database.shop]\ndsn = \"mysql://alice:hunter2@db.example.com:3306/shop\"\n",
@@ -542,7 +543,7 @@ mod tests {
     }
 
     #[test]
-    fn list_does_not_resolve_the_configuration() {
+    fn fr_cfg_014_list_does_not_resolve_the_configuration() {
         // FR-CFG-014: no expansion, no child process, no defaults. A file whose
         // only password source is a command that does not exist still lists.
         let harness = Harness::new(
@@ -556,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn the_text_of_a_listing_is_the_bytes_the_file_holds() {
+    fn fr_cfg_013_the_text_of_a_listing_is_the_bytes_the_file_holds() {
         // The literal print is a copy, not a re-serialisation: a document with
         // unusual spacing comes back with it.
         let original = "[core]\ndatabase    =    \"shop\"\n";
@@ -566,7 +567,8 @@ mod tests {
     }
 
     #[test]
-    fn set_refuses_a_dsn_outside_the_three_requirements_with_the_same_code_as_the_flag() {
+    fn fr_cfg_010_set_refuses_a_dsn_outside_the_three_requirements_with_the_same_code_as_the_flag()
+    {
         // FR-CFG-010 with FR-CFG-031: the declared type of database.<name>.dsn
         // is those three requirements, so both write paths admit the same set
         // and refuse with the same code.
@@ -599,7 +601,7 @@ mod tests {
     }
 
     #[test]
-    fn set_refuses_a_key_that_cannot_stand_beside_one_the_entry_carries() {
+    fn fr_cfg_048_set_refuses_a_key_that_cannot_stand_beside_one_the_entry_carries() {
         // FR-CFG-048: the entry as it would stand after the write is a
         // combination FR-CONF-007 refuses, so nothing is written and the
         // invocation is 64 — the file it met is valid.
@@ -629,7 +631,7 @@ mod tests {
     }
 
     #[test]
-    fn set_refuses_the_second_password_source_of_an_entry() {
+    fn fr_cfg_048_set_refuses_the_second_password_source_of_an_entry() {
         // FR-CFG-048 over the fifth row of FR-CONF-007.
         let file = "[database.shop]\nhost = \"db\"\npassword = \"hunter2\"\n";
         let harness = Harness::new(file);
@@ -643,7 +645,7 @@ mod tests {
     }
 
     #[test]
-    fn set_writes_a_key_the_entry_can_hold_beside_what_it_carries() {
+    fn fr_cfg_048_set_writes_a_key_the_entry_can_hold_beside_what_it_carries() {
         // FR-CFG-048 refuses only what FR-CONF-007 refuses: the fourth row is
         // admitted, and so is every key outside the table.
         let harness = Harness::new("[database.shop]\nhost = \"db\"\n");
@@ -663,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn unset_of_the_selected_block_clears_the_reference() {
+    fn fr_cfg_023_unset_of_the_selected_block_clears_the_reference() {
         // FR-CFG-023: the same rewrite, silently, with no change to the exit
         // code and nothing written to either stream.
         let harness = Harness::new(
@@ -678,7 +680,7 @@ mod tests {
     }
 
     #[test]
-    fn unset_of_a_leaf_of_the_selected_entry_leaves_the_reference_alone() {
+    fn fr_cfg_023_unset_of_a_leaf_of_the_selected_entry_leaves_the_reference_alone() {
         // FR-CFG-023: a deletion that leaves the entry in place does not engage
         // the rule — the entry still exists and core.database still resolves.
         let harness = Harness::new(
@@ -696,7 +698,7 @@ mod tests {
     }
 
     #[test]
-    fn unset_of_a_block_the_reference_does_not_name_leaves_it_alone() {
+    fn fr_cfg_023_unset_of_a_block_the_reference_does_not_name_leaves_it_alone() {
         // FR-CFG-023 fires on the entry core.database names, and on no other.
         let harness = Harness::new(
             "[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"db\"\n\n\
@@ -714,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn unset_of_every_block_clears_a_reference_to_one_of_them() {
+    fn fr_cfg_023_unset_of_every_block_clears_a_reference_to_one_of_them() {
         // FR-CFG-023 is stated over the state and not over one command, and
         // `tpl cfg unset database` reaches the same state as the block of the
         // entry the reference names.

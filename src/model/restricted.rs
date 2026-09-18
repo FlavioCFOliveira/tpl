@@ -116,14 +116,14 @@ mod tests {
     use std::borrow::Cow;
 
     #[test]
-    fn an_empty_marking_cannot_be_built() {
+    fn fr_priv_016_an_empty_marking_cannot_be_built() {
         // FR-PRIV-016: the array is never empty. The constructor is the only
         // way in, so the empty array is not a value that exists.
         assert_eq!(Restricted::new(Vec::new()), None);
     }
 
     #[test]
-    fn a_marking_that_names_a_property_is_built_and_keeps_it() {
+    fn fr_priv_016_a_marking_that_names_a_property_is_built_and_keeps_it() {
         // The example of FR-PRIV-016: an unreadable routine body.
         let marking = Restricted::new(vec![Cow::Borrowed("body")])
             .expect("a marking naming one property is not empty");
@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn the_order_the_marking_is_given_is_the_order_it_keeps() {
+    fn fr_priv_016_the_order_the_marking_is_given_is_the_order_it_keeps() {
         // The byte-wise ordering of FR-PRIV-016 belongs to NFR-DET-002 and is
         // applied where every other collection is ordered, not here. This type
         // is a sequence, and it does not silently rearrange what it is given.

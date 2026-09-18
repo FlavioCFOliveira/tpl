@@ -72,7 +72,7 @@ mod tests {
     use super::{REDACTED, Secret};
 
     #[test]
-    fn the_debug_of_a_secret_carries_none_of_it() {
+    fn fr_err_013_the_debug_of_a_secret_carries_none_of_it() {
         // FR-ERR-013, FR-GLOB-018: a credential reaches no message and no
         // diagnostic stream, at any verbosity.
         let secret = Secret::new("hunter2".to_owned());
@@ -83,7 +83,7 @@ mod tests {
     }
 
     #[test]
-    fn a_struct_holding_a_secret_carries_none_of_it_either() {
+    fn fr_err_013_a_struct_holding_a_secret_carries_none_of_it_either() {
         // The derived Debug of a containing struct delegates to this one, so
         // the prohibition travels with the value rather than with the caller.
         #[derive(Debug)]

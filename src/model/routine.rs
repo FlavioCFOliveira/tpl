@@ -212,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn the_two_kinds_round_trip_and_nothing_else_is_a_kind() {
+    fn fr_cat_008_the_two_kinds_round_trip_and_nothing_else_is_a_kind() {
         // FR-CAT-008 covers procedures and functions together; FR-CAT-016
         // requires each object to state which it is.
         for kind in [RoutineKind::Procedure, RoutineKind::Function] {
@@ -224,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn a_procedure_carries_no_return_type_and_a_function_carries_one() {
+    fn fr_cat_048_a_procedure_carries_no_return_type_and_a_function_carries_one() {
         // FR-CAT-048: the model emits the whole return type as `null` for a
         // procedure, per FR-CTX-005, rather than carrying the two different
         // absent values the catalogue reports side by side.
@@ -236,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn a_parameter_carries_a_name_and_a_mode_because_the_return_row_is_not_one() {
+    fn fr_cat_049_a_parameter_carries_a_name_and_a_mode_because_the_return_row_is_not_one() {
         // FR-CAT-049: the return row is at ordinal position 0 with both fields
         // SQL NULL, and it is not presented as a parameter. Every value that
         // reaches this type is therefore a declared parameter.
@@ -249,7 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unreadable_body_is_the_marking_the_requirement_gives_as_its_example() {
+    fn fr_priv_016_an_unreadable_body_is_the_marking_the_requirement_gives_as_its_example() {
         // FR-PRIV-016: `{"name":"sp_book_consignment","restricted":["body"]}`.
         let incomplete = Routine {
             restricted: Restricted::new(vec![Cow::Borrowed("body")]),
@@ -265,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn the_body_is_carried_as_written() {
+    fn fr_cat_048_the_body_is_carried_as_written() {
         // FR-CAT-048: newlines and identifier case preserved, unlike a view
         // definition, which the server rewrites.
         let procedure = routine(RoutineKind::Procedure, None);

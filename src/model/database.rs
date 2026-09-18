@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn the_database_carries_the_three_metadata_fields_the_requirement_fixes() {
+    fn fr_ctx_036_the_database_carries_the_three_metadata_fields_the_requirement_fixes() {
         // FR-CTX-036: exactly three, and the values observed for the fixture.
         let freight = database();
 
@@ -103,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn the_three_collections_stand_beside_the_server_and_are_empty_rather_than_absent() {
+    fn fr_ctx_035_the_three_collections_stand_beside_the_server_and_are_empty_rather_than_absent() {
         // FR-CTX-035 with FR-CTX-004: an empty collection is `[]`, never null
         // and never omitted, so a consumer may test it for emptiness without
         // first testing it for nullity.
@@ -116,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    fn a_table_that_assembled_is_carried_in_the_tables_collection() {
+    fn fr_ctx_035_a_table_that_assembled_is_carried_in_the_tables_collection() {
         let freight = Database {
             tables: vec![
                 Table::assemble(TableParts::new(

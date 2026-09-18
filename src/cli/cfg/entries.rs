@@ -470,7 +470,7 @@ mod tests {
     use crate::project::config::entry::TlsMode;
 
     #[test]
-    fn add_creates_the_block_from_the_flags_supplied() {
+    fn fr_cfg_015_add_creates_the_block_from_the_flags_supplied() {
         // FR-CFG-015, FR-CFG-027, FR-CFG-028.
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
 
@@ -507,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn add_writes_nothing_to_stdout() {
+    fn fr_out_023_add_writes_nothing_to_stdout() {
         // FR-OUT-023 names this command.
         let harness = Harness::new("");
 
@@ -524,7 +524,7 @@ mod tests {
     }
 
     #[test]
-    fn add_requires_a_dsn_or_a_discrete_connection_flag() {
+    fn fr_cfg_016_add_requires_a_dsn_or_a_discrete_connection_flag() {
         // FR-CFG-016: 64 where neither is supplied.
         let harness = Harness::new("");
 
@@ -549,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dsn_and_a_discrete_connection_flag_cannot_be_given_together() {
+    fn fr_cfg_029_a_dsn_and_a_discrete_connection_flag_cannot_be_given_together() {
         // FR-CFG-029.
         let harness = Harness::new("");
 
@@ -578,7 +578,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dsn_composes_with_a_password_command_and_with_the_trust_material() {
+    fn fr_conf_007_a_dsn_composes_with_a_password_command_and_with_the_trust_material() {
         // FR-CONF-007, second row, and FR-CFG-027's last three rows: they are
         // not connection flags, so they are not exclusive of --dsn.
         let harness = Harness::new("");
@@ -599,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn add_refuses_a_name_that_is_already_taken() {
+    fn fr_cfg_017_add_refuses_a_name_that_is_already_taken() {
         // FR-CFG-017, BR-CFG-001: add creates and update changes.
         let harness = Harness::new("[database.shop]\nhost = \"db\"\n");
 
@@ -622,7 +622,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dsn_the_grammar_refuses_is_not_written_into_the_file() {
+    fn br_conf_004_a_dsn_the_grammar_refuses_is_not_written_into_the_file() {
         // BR-CONF-004 makes the file strict in both directions, and a value the
         // reader would refuse would make every later invocation a 78.
         let harness = Harness::new("");
@@ -643,7 +643,7 @@ mod tests {
     }
 
     #[test]
-    fn update_changes_the_fields_the_flags_name_and_leaves_the_rest() {
+    fn fr_cfg_020_update_changes_the_fields_the_flags_name_and_leaves_the_rest() {
         // FR-CFG-020.
         let harness =
             Harness::new("[database.shop]\nhost = \"db\"\nuser = \"alice\"\ntls = \"required\"\n");
@@ -665,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn update_refuses_an_entry_that_does_not_exist() {
+    fn br_cfg_001_update_refuses_an_entry_that_does_not_exist() {
         // BR-CFG-001: update changes, and there is nothing to change.
         let harness = Harness::new("[database.shop]\nhost = \"db\"\n");
 
@@ -684,7 +684,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_deletes_the_entry() {
+    fn fr_cfg_022_remove_deletes_the_entry() {
         // FR-CFG-022.
         let harness =
             Harness::new("[database.shop]\nhost = \"a\"\n\n[database.other]\nhost = \"b\"\n");
@@ -697,7 +697,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_clears_the_reference_the_core_section_held_to_it() {
+    fn fr_cfg_023_remove_clears_the_reference_the_core_section_held_to_it() {
         // FR-CFG-023: silently, leaving the file coherent.
         let harness = Harness::new(
             "[core]\ndatabase = \"shop\"\nquery_timeout = 45\n\n[database.shop]\nhost = \"a\"\n",
@@ -709,7 +709,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_leaves_a_reference_to_another_entry_alone() {
+    fn fr_cfg_023_remove_leaves_a_reference_to_another_entry_alone() {
         let harness = Harness::new(
             "[core]\ndatabase = \"other\"\n\n[database.shop]\nhost = \"a\"\n\n[database.other]\nhost = \"b\"\n",
         );
@@ -720,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_refuses_an_entry_that_does_not_exist() {
+    fn br_cfg_001_remove_refuses_an_entry_that_does_not_exist() {
         let harness = Harness::new("[database.shop]\nhost = \"a\"\n");
 
         assert_eq!(
@@ -733,7 +733,7 @@ mod tests {
     }
 
     #[test]
-    fn list_prints_the_names_of_the_entries_the_file_defines() {
+    fn fr_cfg_018_list_prints_the_names_of_the_entries_the_file_defines() {
         // FR-CFG-018, FR-CFG-038, NFR-DET-002.
         let harness =
             Harness::new("[database.shop]\nhost = \"a\"\n\n[database.archive]\nhost = \"b\"\n");
@@ -746,7 +746,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_listing_is_a_success_carrying_its_header_and_an_empty_array() {
+    fn fr_cfg_040_an_empty_listing_is_a_success_carrying_its_header_and_an_empty_array() {
         // FR-CFG-040, FR-OUT-033 … FR-OUT-035, FR-PROJ-018.
         let harness = Harness::new("[core]\n");
 
@@ -758,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn show_redacts_the_secret_and_leaves_a_reference_as_written() {
+    fn fr_cfg_019_show_redacts_the_secret_and_leaves_a_reference_as_written() {
         // FR-CFG-019, FR-CFG-021, FR-SEC-003.
         let harness = Harness::new("[database.shop]\nhost = \"db\"\npassword = \"hunter2\"\n");
 
@@ -774,7 +774,7 @@ mod tests {
     }
 
     #[test]
-    fn show_does_not_expand_a_reference() {
+    fn fr_cfg_019_show_does_not_expand_a_reference() {
         // FR-CFG-019.
         let harness = Harness::new(
             "[database.shop]\nhost = \"${SHOP_DB_HOST}\"\npassword = \"${SHOP_DB_PASSWORD}\"\n",
@@ -787,7 +787,7 @@ mod tests {
     }
 
     #[test]
-    fn show_refuses_an_entry_that_does_not_exist() {
+    fn br_cfg_001_show_refuses_an_entry_that_does_not_exist() {
         let harness = Harness::new("[database.shop]\nhost = \"a\"\n");
 
         assert_eq!(
@@ -800,7 +800,7 @@ mod tests {
     }
 
     #[test]
-    fn the_text_layout_of_an_entry_is_aligned_columns_under_a_header_row() {
+    fn fr_out_006_the_text_layout_of_an_entry_is_aligned_columns_under_a_header_row() {
         // FR-OUT-006.
         let harness = Harness::new("[database.shop]\nhost = \"db.example.com\"\nport = 3306\n");
 
@@ -811,7 +811,7 @@ mod tests {
     }
 
     #[test]
-    fn the_dsn_flag_admits_exactly_what_the_file_admits_and_leaves_a_reference_alone() {
+    fn fr_cfg_031_the_dsn_flag_admits_exactly_what_the_file_admits_and_leaves_a_reference_alone() {
         // FR-CFG-031: the flag admits the values FR-CONF-009, FR-CONF-010 and
         // FR-CONF-011 admit, and no others. A ${VAR} is opaque text inside the
         // field it occupies, so the value below is admitted and stored
@@ -841,7 +841,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dsn_outside_the_three_requirements_is_sixty_four_and_writes_nothing() {
+    fn fr_cfg_031_a_dsn_outside_the_three_requirements_is_sixty_four_and_writes_nothing() {
         // FR-CFG-031: the refusal is 64, the invocation being at fault and not
         // the file, and nothing is written — including no temporary file left
         // behind under FR-CFG-041.
@@ -876,7 +876,7 @@ mod tests {
     }
 
     #[test]
-    fn add_refuses_a_dsn_carrying_a_password_beside_a_password_command() {
+    fn fr_cfg_048_add_refuses_a_dsn_carrying_a_password_beside_a_password_command() {
         // FR-CFG-048, the third row of FR-CONF-007: FR-CFG-029 does not
         // separate this pair, because FR-CONF-006 excludes password_command
         // from the discrete connection fields.
@@ -912,7 +912,7 @@ mod tests {
     }
 
     #[test]
-    fn update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alone() {
+    fn fr_cfg_048_update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alone() {
         // FR-CFG-048 with FR-CFG-020: the rest of the entry is left in place,
         // so the write that would contradict it is refused rather than made
         // coherent by removing what the invocation did not name.
@@ -950,7 +950,7 @@ mod tests {
     }
 
     #[test]
-    fn an_entry_with_more_than_one_conflicting_field_is_repaired_by_a_rewrite() {
+    fn fr_cfg_048_an_entry_with_more_than_one_conflicting_field_is_repaired_by_a_rewrite() {
         // FR-CFG-048: the hint carries a command that makes the write legal,
         // and no single `tpl cfg unset` does where three discrete fields stand
         // against the DSN.
@@ -977,7 +977,7 @@ mod tests {
     }
 
     #[test]
-    fn the_two_admitted_rows_of_the_table_are_written_without_complaint() {
+    fn fr_conf_007_the_two_admitted_rows_of_the_table_are_written_without_complaint() {
         // FR-CONF-007 admits password_command beside either way of describing a
         // connection, and FR-CFG-048 refuses only what that table refuses.
         let discrete = Harness::new("");

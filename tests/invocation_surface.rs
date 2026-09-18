@@ -184,7 +184,7 @@ fn every_c0_control_escaped() -> String {
 // ------------------------------------------------------------ FR-ERR-024 ---
 
 #[test]
-fn a_command_token_a_flag_token_and_a_help_path_segment_reach_stderr_escaped() {
+fn fr_err_024_a_command_token_a_flag_token_and_a_help_path_segment_reach_stderr_escaped() {
     // FR-ERR-024 escapes `\n`, `\r`, `\t` and every C0 control character in
     // every value a message interpolates, and names the argument vector among
     // them. The three populations below are the three ways a caller's own bytes
@@ -228,7 +228,7 @@ fn a_command_token_a_flag_token_and_a_help_path_segment_reach_stderr_escaped() {
 }
 
 #[test]
-fn a_token_cannot_forge_a_labelled_line_of_its_own() {
+fn fr_err_024_a_token_cannot_forge_a_labelled_line_of_its_own() {
     // The rationale of FR-ERR-024: escaping the newline separately is what
     // protects the line-oriented format of FR-ERR-008 from having a whole
     // diagnostic line forged. The token below is a complete `exit` line telling
@@ -246,7 +246,7 @@ fn a_token_cannot_forge_a_labelled_line_of_its_own() {
 // ------------------------------------------------ FR-GLOB-018 and OD-08 ---
 
 #[test]
-fn one_rejected_token_reaches_the_message_and_never_the_argument_vector() {
+fn fr_glob_018_one_rejected_token_reaches_the_message_and_never_the_argument_vector() {
     // FR-GLOB-018 bars the argument vector from every diagnostic stream at
     // every verbosity, and the composition note of OD-08 reads that against the
     // `64` row of FR-ERR-034, which obliges the rejected token to be named:
@@ -315,7 +315,7 @@ fn one_rejected_token_reaches_the_message_and_never_the_argument_vector() {
 // ------------------------------------------------------------ FR-CLI-006 ---
 
 #[test]
-fn no_tpl_prefixed_executable_is_searched_for_on_path() {
+fn fr_cli_006_no_tpl_prefixed_executable_is_searched_for_on_path() {
     // FR-CLI-006: a token that is not a declared command SHALL NOT cause a
     // lookup of a `tpl-<token>` executable on PATH. The observable form of a
     // lookup is the execution that would follow it, so the decoy writes a file:
@@ -389,7 +389,7 @@ fn write_decoy(at: &Path, marker: &Path) {
 // ------------------------------------------- FR-CLI-021 and NFR-DET-004 ---
 
 #[test]
-fn no_environment_variable_decides_a_form_of_help_of_version_or_a_refusal() {
+fn fr_cli_021_no_environment_variable_decides_a_form_of_help_of_version_or_a_refusal() {
     // FR-CLI-021 reads no environment variable to decide behaviour, defaults or
     // the location of the project, and BR-CLI-002 states the consequence: an
     // invocation is fully described by what is visible of it. The observable
@@ -468,7 +468,7 @@ fn no_environment_variable_decides_a_form_of_help_of_version_or_a_refusal() {
 // ----------------------------------------------- FR-CLI-017 and -CLI-019 ---
 
 #[test]
-fn the_argument_terminator_is_never_read_as_the_value_of_the_flag_before_it() {
+fn fr_cli_017_the_argument_terminator_is_never_read_as_the_value_of_the_flag_before_it() {
     // FR-CLI-017 makes `--` end the flags, so it is never the value of the flag
     // it follows, and the token after it is a positional argument and never a
     // command. A walk that stepped over it resolved that positional as a node,
@@ -502,7 +502,7 @@ fn the_argument_terminator_is_never_read_as_the_value_of_the_flag_before_it() {
 }
 
 #[test]
-fn a_token_written_on_both_sides_of_the_terminator_is_refused_where_it_stands_first() {
+fn fr_cli_019_a_token_written_on_both_sides_of_the_terminator_is_refused_where_it_stands_first() {
     // The parser reads left to right and refuses the first token it cannot
     // accept, so a token written on both sides of `--` was refused at the
     // occurrence before it, where FR-CLI-019 makes it an unknown flag.

@@ -399,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn the_flag_selects_the_entry_and_the_file_supplies_it_otherwise() {
+    fn fr_glob_004_the_flag_selects_the_entry_and_the_file_supplies_it_otherwise() {
         // FR-GLOB-004, FR-GLOB-005, FR-GLOB-008.
         let scratch = Scratch::new();
         let configuration = document(
@@ -418,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn nothing_selected_is_a_configuration_fault_naming_the_file() {
+    fn fr_glob_006_nothing_selected_is_a_configuration_fault_naming_the_file() {
         // FR-GLOB-006: 78, with a message naming the file.
         let scratch = Scratch::new();
         let configuration = document(&scratch, "[database.shop]\nhost = \"a\"\n");
@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn a_named_entry_that_does_not_exist_is_a_named_object_that_does_not_exist() {
+    fn fr_glob_007_a_named_entry_that_does_not_exist_is_a_named_object_that_does_not_exist() {
         // FR-GLOB-007: 66, with a nearest-match suggestion over the entry
         // names that exist.
         let scratch = Scratch::new();
@@ -448,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn the_four_deadlines_take_the_file_and_then_the_built_in_default() {
+    fn fr_conf_004_the_four_deadlines_take_the_file_and_then_the_built_in_default() {
         // FR-CONF-004, FR-CONF-005.
         let scratch = Scratch::new();
         let configuration = document(&scratch, "[core]\nconnect_timeout = 3\n");
@@ -461,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn a_discrete_entry_resolves_its_fields_and_defaults_the_rest() {
+    fn fr_conf_002_a_discrete_entry_resolves_its_fields_and_defaults_the_rest() {
         // FR-CONF-002: port defaults to 3306; FR-CONF-013: tls defaults to
         // verify-identity.
         let scratch = Scratch::new();
@@ -485,7 +485,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dsn_resolves_to_the_same_fields_a_discrete_entry_does() {
+    fn fr_conf_018_a_dsn_resolves_to_the_same_fields_a_discrete_entry_does() {
         // FR-CONF-018: the URL is parsed, and each field expanded inside it.
         let scratch = Scratch::new();
         let configuration = document(
@@ -509,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn an_expanded_value_cannot_move_the_host_the_port_or_the_database() {
+    fn fr_conf_018_an_expanded_value_cannot_move_the_host_the_port_or_the_database() {
         // FR-CONF-018, FR-SEC-009: the threat is
         // SHOP_PW=x@attacker.example.com/shop redirecting the connection.
         let scratch = Scratch::new();
@@ -532,7 +532,7 @@ mod tests {
     }
 
     #[test]
-    fn an_undefined_variable_stops_the_resolution() {
+    fn fr_conf_022_an_undefined_variable_stops_the_resolution() {
         // FR-CONF-022, BR-CONF-002.
         let scratch = Scratch::new();
         let configuration = document(&scratch, "[database.shop]\nhost = \"${ABSENT}\"\n");
@@ -545,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn an_expanded_port_that_is_not_a_port_is_refused() {
+    fn fr_conf_015_an_expanded_port_that_is_not_a_port_is_refused() {
         let scratch = Scratch::new();
         let configuration = document(
             &scratch,
@@ -563,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn a_password_command_supplies_the_password() {
+    fn fr_conf_007_a_password_command_supplies_the_password() {
         // FR-CONF-007, fourth row, and FR-CONF-027.
         let echo = ["/bin/echo", "/usr/bin/echo"]
             .into_iter()
@@ -589,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn the_resolved_settings_carry_the_secret_in_a_type_that_does_not_print_it() {
+    fn fr_err_013_the_resolved_settings_carry_the_secret_in_a_type_that_does_not_print_it() {
         // FR-ERR-013, FR-GLOB-018: no credential in any message, and the
         // derived Debug of the settings delegates to Secret's own.
         let scratch = Scratch::new();
@@ -606,7 +606,7 @@ mod tests {
     }
 
     #[test]
-    fn there_is_no_environment_layer_in_the_precedence() {
+    fn fr_conf_030_there_is_no_environment_layer_in_the_precedence() {
         // FR-CONF-030: `${VAR}` supplies the value of a key that is already in
         // the file, and a variable named after a key reaches nothing.
         let scratch = Scratch::new();
