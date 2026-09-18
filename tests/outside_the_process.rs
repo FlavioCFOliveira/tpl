@@ -55,9 +55,12 @@
 mod differential;
 #[path = "support/fixture.rs"]
 mod fixture;
+#[path = "support/sandbox.rs"]
+mod sandbox;
 
-use differential::{Outcome, Sandbox};
+use differential::Outcome;
 use fixture::Gate;
+use sandbox::Sandbox;
 
 /// A `.tpl/.cfg` the reader accepts.
 const ACCEPTED: &str = "[core]\n";
