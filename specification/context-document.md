@@ -1,7 +1,7 @@
 ---
 title: The Context Document
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-18
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
 ---
 
@@ -200,9 +200,9 @@ variable is bound to a source, which is
   Also rejected: keeping four cases and documenting the collision, which
   leaves in force a requirement no implementation can satisfy.
 
-- **FR-CTX-013**: `kind` SHALL be an enumerated field taking exactly the three
-  values `literal`, `expression`, and `null`. Adding a value to it is not a
-  breaking change, per `FR-OUT-014`.
+- **FR-CTX-013**: The `kind` of a column default SHALL be an enumerated field
+  taking exactly the three values `literal`, `expression`, and `null`. Adding a
+  value to it is not a breaking change, per `FR-OUT-014`.
 
   *Amended in the seventh edition, and this is a **narrowing of contract
   surface**.* `kind` was enumerated without its values being stated, and
@@ -211,6 +211,16 @@ variable is bound to a source, which is
   branched on a fourth form was branching on a case no read can produce; a
   caller that treats `{"kind":"null"}` as covering both `DEFAULT NULL` and a
   nullable column with no default is correct.
+
+  *Amended in the twenty-third edition: the enumeration names its subject.* It
+  read "`kind` SHALL be an enumerated field", and the document carries a second
+  field of that name — a routine's, which `FR-CAT-016` fixes at `PROCEDURE` and
+  `FUNCTION`. The three values here were always the column default's:
+  `FR-CTX-011` and `FR-CTX-012` state that subject above and the section
+  heading states it again, so nothing about the field changes. What the
+  amendment removes is the reading under which one enumeration governs both
+  fields, which would have put this requirement and `FR-CAT-016` in
+  contradiction the moment either stated its strings.
 
 - **FR-CTX-037**: The system SHALL classify the value of the column-default
   catalogue field by its observed shape, as follows, and SHALL derive the

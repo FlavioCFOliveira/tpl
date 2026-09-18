@@ -1,7 +1,7 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-18
 related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md]
 ---
 
@@ -236,9 +236,11 @@ record has not been observed, and SHALL NOT be written down.
   *Two further readings were taken and neither is a version.* The build's
   source revision is a distinct 40-character hash per build and differs
   between all four; the SSL library string differs between `10.11` and the
-  other three. Both are properties of the build. A malloc-library variable was
-  requested and **no row came back on any of the four**, so no such variable
-  exists on these servers.
+  other three. Both are properties of the build, and the variables they were
+  read from are `version_source_revision` and `version_ssl_library`. A third
+  variable of the same family, `version_malloc_library`, returns a row on
+  every server of the fixture and the same value on all of them, so it varies
+  with nothing; the amendment below records it and states where it belongs.
 
   *Amended in the eighteenth edition: the two readings are classified where
   the observations live, not here.* They were recorded here as properties of
@@ -252,6 +254,45 @@ record has not been observed, and SHALL NOT be written down.
   string carries its bound and the observation that would settle it. The
   readings themselves are unchanged, and this requirement still derives
   `series` from `<major>.<minor>` and from nothing else.
+
+  *Amended in the twenty-third edition: a reading recorded as absent is
+  present on every server.* The paragraph above read that a malloc-library
+  variable was requested and **no row came back on any of the four**, so no
+  such variable exists on these servers. `version_malloc_library` returns a
+  row on all four series of `FR-SRV-015` and on the fifth listener of the
+  fixture, and its value is `system`. It was read three ways on each of the
+  five on 2026-09-18 — a `SHOW` of the variables matching a prefix, the
+  global-variables table of `INFORMATION_SCHEMA`, and a `SELECT` of the global
+  variable itself — and all fifteen readings agreed. The run that produced
+  them is recorded with the fixture, in `scripts/mariadb/README.md`, which
+  holds the values and is not restated here. What returned no row was the
+  **name**: a name a server does not have prints nothing at all under a `SHOW`
+  with a `LIKE`, header included, and exits `0`, while selecting that same
+  wrong name directly fails with `ERROR 1193 (HY000)`. Both forms were
+  observed on `11.8`, and the earlier record read the silence of the first as
+  an answer. None of these readings is a statement `tpl` issues: `FR-SRV-006`
+  and `FR-SRV-007` are untouched, and the probe of `FR-SRV-002` is still the
+  only version reading this requirement governs.
+
+  *The malloc reading is neither a row of `FR-SRV-038` nor a line below its
+  table.* It agrees on all four series and on the fifth listener, and both
+  homes that requirement offers hold an observation that **differs** across
+  the servers read — a row where the difference is established as one between
+  the series, a line below the table where it is not. A reading that differs
+  nowhere is neither, and it is recorded here, beside the readings it was
+  taken with.
+
+  *Rejected.* Striking the sentence and recording nothing in its place. The
+  correction's whole content would go with it, and so would the reason the
+  record was wrong: a `SHOW` with a `LIKE` that prints nothing and exits `0`
+  is a shape the next reader will meet again, and naming it is what stops the
+  same silence being read as an answer twice. Also rejected: recording the
+  reading below the table of `FR-SRV-038` beside the three readings of the
+  build. That home holds what differs across the servers read and is not
+  established as a difference between the series; a reading that agrees
+  everywhere, placed there, would turn a home into a list of readings taken,
+  and would invite the counts beside difference 8 to move for a reading that
+  separates nothing.
 
   *Checked in the twelfth edition against difference 13 of `FR-SRV-038`, and
   unchanged.* A server also announces a version when the connection opens, and
@@ -1273,16 +1314,52 @@ four servers and is not a difference between them belongs, per `FR-SRV-038`:
 | Reading | How it varied across the four servers |
 |---|---|
 | The distribution each image was built on, carried as the version string's suffix | `ubu2404` on `12.3`, `11.8` and `11.4`; `ubu2204` on `10.11` |
-| The build's source revision, a 40-character hash | a distinct hash on each of the four |
-| The SSL library string | one reading on `12.3`, `11.8` and `11.4`; a different one on `10.11` |
+| The build's source revision, a 40-character hash, read from `version_source_revision` | a distinct hash on each of the four |
+| The SSL library string, read from `version_ssl_library` | one reading on `12.3`, `11.8` and `11.4`; a different one on `10.11` |
 
-**None of the three can be given a row, and for two of them the reason comes
-before any classification.** A row of the table above names what each series
-returned, which `FR-SRV-038` requires of it. The observation recorded that the
-four servers differ in the source revision and in the SSL library string; it
-did not record what any of the four returned. Four columns of each row could
-not be filled from anything this corpus holds, and filling them from a second
-reading would be recording that reading rather than this one.
+The three were read again on 2026-09-18, on the same four series and the same
+fifth listener, with **what each server returned recorded** — in
+`scripts/mariadb/README.md`, which holds the values and is where they stay.
+The suffix is carried in the version string of `FR-SRV-040`; the other two are
+the variables the table above names.
+
+**None of the three is given a row, and the ground is the classification
+alone.** A row of the table above names what each series returned, which
+`FR-SRV-038` requires of it, and the reading of 2026-09-18 supplies that for
+the source revision and for the SSL library string. What it does not supply is
+the entailment a row asserts. It read one server of each series, and the fifth
+listener it added is the same `10.11` image and therefore the same build, so
+the question a row answers — would two servers of one series return the same
+value? — is untouched by it.
+
+*Amended in the twenty-third edition: one of the two grounds for declining a
+row is discharged, and the classification carries both readings alone.* This
+passage held that four columns of each row could not be filled from anything
+this corpus holds, because the observation recorded that the four servers
+differ and did not record what any of them returned. The reading of 2026-09-18
+records all five, so that ground is gone. The classification is untouched and
+is what declines the row: the source revision is a property of the build by
+what a source revision is, and the SSL library string is **not established**
+as a difference between the series, because its split is still coextensive
+with the distribution each image was built on and the run that supplied the
+values compared no two builds of one series. Naming the variables is part of
+the same correction, and the malloc-library variable read with them is
+classified under `FR-SRV-040`, where it belongs: it agrees on all five
+servers, so it is neither a row here nor a fourth reading below this table.
+
+*Rejected.* Giving the two readings a row now that their four columns can be
+filled. A value is not the thing a row asserts — a row asserts that the series
+fixes the value, and the fourth validation rule of the
+[README](README.md#maintenance-debt) refuses that credit while the fixture
+selects the build without pinning it. The run that supplied the values
+strengthens the refusal rather than weakening it: the fifth listener runs the
+`10.11` image and returns the same source revision and the same SSL library
+string byte for byte, which is what *per build* predicts and what a fifth
+series would not. Also rejected: transcribing the readings into this corpus
+beside the citation. A per-build value copied here decays the moment the
+fixture's upstream tag moves, and it decays silently, where the file that
+records the run is the file that is re-run and rewritten; difference 3 above
+declines to restate the fixture's own record for the same reason.
 
 **The build is the thing that varies, and for the first two readings that is
 settled.** The suffix names a distribution and not a MariaDB fact, and
@@ -1314,12 +1391,12 @@ of the two claims available and the only one this evidence carries; the
 stronger one — that the series fixes it — is what a row would assert.
 
 *Bounded claim.* One server of each series was read, at the four patch releases
-`FR-SRV-040` records, on the occasion that recorded those releases. For the
-source revision and the SSL library string the record holds that the four
-servers differ and holds no reading for any of them. No two servers of one
-series have been compared for any of the three: the fifth listener of the fixture is the
-same `10.11` image and therefore the same build, so it establishes nothing
-here, and it is not a fifth series. Nothing was observed about a server outside
+`FR-SRV-040` records, on the occasion that recorded those releases, and read
+again on 2026-09-18 at the same four patch releases, with the values recorded.
+No two servers of one series have been compared for any of the three: the
+fifth listener of the fixture is the same `10.11` image and therefore the same
+build, so it establishes nothing here, and it is not a fifth series. Nothing
+was observed about a server outside
 the window of `FR-SRV-015`, and nothing about any other build of the same four
 series.
 
@@ -1329,10 +1406,10 @@ image as the fixture stands and any `10.11` build carrying the other suffix, or
 the same image once its upstream tag has moved to one. Two readings that agree
 would establish the series as the thing that fixes it, earning it a row whose
 four series columns that same observation would fill; two that differ would
-settle it as a property of the build and leave this passage as it stands.
-Neither requirement names the server variable either reading was taken from,
-and nothing in `scripts/mariadb/` takes them, so this is an ad-hoc read whose
-first step is recovering those two names. **Nothing in this corpus waits on
+settle it as a property of the build and leave this passage as it stands. The
+variable is `version_ssl_library`, and the fixture reads it, so this is a
+second run of a reading that already exists rather than an ad-hoc read whose
+first step is recovering a name. **Nothing in this corpus waits on
 it.** No requirement reads any of the three, so it is not an open question and
 no entry is opened for it; the index of
 [open-questions.md](open-questions.md) stays empty.

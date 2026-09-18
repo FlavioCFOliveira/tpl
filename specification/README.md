@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -286,7 +286,10 @@ seventh edition writes them in, settles the one entry that needed a decision,
 and corrects what the evidence contradicts.
 
 **Twenty entries close, and the last entry the corpus held closes with
-them.** The field lists of every object kind are now fixed: comments and
+them.** The field lists of every object kind **an entry had asked for** are
+fixed — the twenty-third edition corrects this sentence, which read *of every
+object kind* and passed over the table object, for which no entry had
+asked: comments and
 defaults (`FR-CAT-039`), the column attribute string (`FR-CAT-041`), indexes
 (`FR-CAT-042`), the primary key (`FR-CAT-043`), foreign keys
 (`FR-CAT-045`), `CHECK` constraints
@@ -1386,9 +1389,12 @@ is corrected, and no row enters the table.
   classification.** A row names what each series returned. The observation
   recorded that the four servers differ in the source revision and in the SSL
   library string, and did not record what any of the four returned, so four
-  columns of each row could not be filled from anything this corpus holds. The
+  columns of each row could not be filled from anything this corpus then held.
+  The
   outcome that would have produced new evidence was therefore not the only one
-  that needed it: a row needs a new observation too, and a different one.
+  that needed it: a row needs a new observation too, and a different one. The
+  twenty-third edition records the reading that supplies those columns and
+  leaves the classification, which is the ground that survives it.
 - **One phrase was doing two jobs, and the record now separates them** —
   `FR-SRV-038`. The fourteenth edition's sweep calls nine rows of the table
   properties of the server build, to establish that no setting of the fixture
@@ -1743,6 +1749,128 @@ that requirement does not take the silence for a gap this edition left behind.
 **No requirement is withdrawn, no identifier is retired, and no open question
 is raised or reopened.** One identifier is assigned, `FR-CFG-048`. The index of
 [open-questions.md](open-questions.md) stays empty.
+
+### Twenty-third edition — a reading recorded as absent, and an object with no field list
+
+Two instruments reached this corpus before the catalogue reader was written,
+and each returned a defect the other could not have found. Re-running the
+fixture's build reading found `FR-SRV-040` recording that a malloc-library
+variable returns no row on any server, where it returns one on every server.
+Writing worked examples against the model found that a routine's `kind` has no
+stated casing to branch on, and that a table object — the one the model is
+mostly made of — has no field list where a view and a routine each have one.
+
+**Nothing here changes what `tpl` reads or how it fails.** Two requirements are
+amended, one is scoped to the subject it always had, one gains a note saying
+what it is not, one is added, and one observation record is corrected against
+the run that contradicts it.
+
+- **A reading recorded as absent is present on every server** —
+  [server-contract.md](server-contract.md). `FR-SRV-040` said a
+  malloc-library variable was requested and no row came back on any of the
+  four, so no such variable exists on these servers.
+  `version_malloc_library` returns a row on all four series and on the fifth
+  listener, and its value is `system`; it was read three ways on each of the
+  five on 2026-09-18 and all fifteen readings agreed, and the run is recorded
+  with the fixture. What returned no row was the **name**: a wrong name prints
+  nothing at all under a `SHOW` with a `LIKE`, header included, and exits `0`,
+  while selecting the same wrong name directly fails with `ERROR 1193`. The
+  requirement now records the reading and the shape that produced the wrong
+  one, because that shape is what the next reader will meet. The reading takes
+  neither home of `FR-SRV-038` — it agrees everywhere, and both homes hold an
+  observation that differs. Striking the sentence was rejected: the reason the
+  record was wrong would go with it.
+- **The two readings of the build now have their values, and still take no
+  row** — the same file. The passage below the table of `FR-SRV-038` declined
+  a row to the source revision and the SSL library string on two grounds, and
+  the same run discharges one of them: four columns of each row could not be
+  filled from anything this corpus held, and now they can. The classification
+  is untouched and declines the row alone — a source revision is per build by
+  what it is, and the SSL library string's split is still coextensive with the
+  distribution each image was built on, which the fourth validation rule below
+  refuses to credit to the series while the fixture selects the build without
+  pinning it. The run strengthens that refusal rather than weakening it: the
+  fifth listener runs the `10.11` image and returns both readings byte for
+  byte. Transcribing the values into this corpus was rejected — a per-build
+  value copied here decays silently when the fixture's tag moves, and
+  difference 3 declines to restate the fixture's own record for the same
+  reason. Both variables are named now — `version_source_revision` and
+  `version_ssl_library` — where one sentence of that passage had said that
+  neither requirement named them and that nothing in the fixture read them.
+  Both halves were false.
+- **A routine's `kind` is one string** —
+  [catalogue-coverage.md](catalogue-coverage.md), with
+  [schema-commands.md](schema-commands.md). `FR-CAT-016` read "procedure or
+  function" and fixed no value, so a template or a `jq` filter had no casing
+  to branch on and a wrong guess matched nothing at exit `0`. It now carries
+  the catalogue's own string unchanged, `PROCEDURE` or `FUNCTION`, which is
+  what `FR-CAT-048` records the routine-type field returning. **It is not the
+  prefix of the qualified form of `FR-SCH-008`**, which is lower case, and
+  both requirements now say so: a caller composing a qualified name from
+  `kind` folds the case, and nothing else separates the two. Lower-casing the
+  field was rejected because it would make `kind` the only enumerated
+  catalogue value the model rewrites — `table_type`, `check_option`,
+  `is_updatable`, `security_type`, `body_kind`, `parameter_style`,
+  `is_deterministic`, `sql_data_access`, a trigger's `event`, `timing` and
+  `orientation`, and a parameter's `mode` are each the catalogue's own string.
+- **A table object has an index of its properties** — the same file.
+  `FR-CAT-053` is new. Views get a field list in `FR-CAT-047` and routines in
+  `FR-CAT-048`; a table had coverage requirements, per-property requirements
+  for its indexes, keys and constraints, and nothing that said what a table
+  carries. The new requirement indexes every property against the requirement
+  that fixes it, obliges a later requirement that gives a table a property to
+  add it there, and fixes the two properties no requirement of that file
+  stated:
+  `name`, which every other named object of that section already carries under
+  that key, and the indexes, which `FR-CAT-010` shapes and `FR-CAT-042`
+  enumerates without either saying that a table carries them — `FR-SCH-009`
+  and `FR-CTX-007` said it from outside. It
+  does **not** write a catalogue field list, and says why: the observation
+  pass of 2026-09-10 recorded the field list of every object kind an entry of
+  [open-questions.md](open-questions.md) had asked for, no entry asked for the
+  table catalogue's own row, and this corpus holds no reading of it. Writing
+  one from the fields already named and from MariaDB's documentation was
+  rejected on the seventh edition's validation rule below, which exists
+  because four requirements were once coherent, correctly cross-referenced,
+  and describing a catalogue that does not exist.
+- **One enumeration names its subject** —
+  [context-document.md](context-document.md). `FR-CTX-013` read "`kind` SHALL
+  be an enumerated field taking exactly the three values", and with
+  `FR-CAT-016` stating two strings for a field of the same name the absolute
+  would have read across both. It now says *the `kind` of a column default*,
+  which is the subject `FR-CTX-011`, `FR-CTX-012` and the section heading
+  already gave it. This is the twentieth edition's shape — an absolute stated
+  wider than its ground — found this time by a change that would have
+  collided with it.
+
+**Two editorial corrections, one to a claim that was never true and one to a
+report the evidence has overtaken.** The seventh edition's entry above said
+the field lists of *every object kind* were fixed and listed eleven, none of
+them the table; it now says *every object kind an entry had asked for*, which
+is what that edition did. And the eighteenth edition's entry said four columns
+*could not be filled from anything this corpus holds*, in the present tense of
+a report this edition overtakes; it reads *then held*, which is the correction
+that edition made twice itself.
+
+**None of the five validation rules below would have found any of the four
+defects, and the malloc sentence is the one worth saying why about.** It cited
+an observation, the observation had been made, and the record of it was
+internally coherent, correctly cross-referenced, complete against the corpus
+and conditioned — the four rules this corpus can run on itself each pass it.
+What was wrong was the **reading**, and the form the reading took is what
+hid it: a `SHOW` with a `LIKE` answers a wrong name and an absent variable
+with the same silence and the same exit code, so a negative result carries no
+evidence that the question was the right one. The casing and the missing index
+are of the twenty-first edition's kind instead — shapes nobody had fixed,
+which no rule about decay or completeness can reach. What found all four was a
+re-run of a fixture reading by a second form and the first worked examples
+written against the model: the same class of instrument the twentieth,
+twenty-first and twenty-second editions used, applied before the code it
+precedes.
+
+**No requirement is withdrawn, no identifier is retired, and no open question
+is raised or reopened.** One identifier is assigned, `FR-CAT-053`. The index
+of [open-questions.md](open-questions.md) stays empty.
 
 ### Still out of scope
 
@@ -2143,6 +2271,24 @@ One observation is named in that edition and not acted on, that `FR-CONF-010`
 names no code for refusing a scheme it does not accept; nothing waits on it,
 and no requirement of the edition rests on it. The item below was untouched by
 it and stayed outstanding.
+
+The twenty-third edition adds no obligation of either kind, and records none as
+discharged. It corrects `FR-SRV-040`, which recorded a malloc-library variable
+as returning no row where it returns one on every server of the fixture; it
+discharges one of the two grounds on which the passage below the table of
+`FR-SRV-038` declines a row to two readings of the build, leaving the
+classification to decline it alone; it states the emitted value of a routine's
+`kind` and its relation to the qualified form of `FR-SCH-008`; it adds
+`FR-CAT-053`, the index of a table object's properties; and it scopes one
+enumeration to the subject it always had. Two observations are named in it and
+neither is debt. The table catalogue's own field list has never been recorded,
+and `FR-CAT-053` names the pass against the fixture of `scripts/mariadb/` that
+would record it; nothing waits on it, because every property a requirement in
+force gives a table is named in that index. And the observation the eighteenth
+edition's passage asked for is half taken: the run of 2026-09-18 supplies the
+two readings' values and compares no two builds of one series, which is the
+half that would settle the classification and the half that is still untaken.
+The item below was untouched by this edition and stays outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.

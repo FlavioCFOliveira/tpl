@@ -1,7 +1,7 @@
 ---
 title: Schema Commands (First Arm)
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-18
 related: [cli-contract.md, cache-commands.md, output-formats.md, render-command.md]
 ---
 
@@ -91,6 +91,14 @@ tpl schema dump                        The whole database as one JSON document
   bare ambiguous name in favour of the function with a warning on stderr, which
   exits `0` — so a caller checking the code never sees it — and leaves the
   procedure unreachable.
+
+  **The prefix is not the `kind` the document carries.** `FR-CAT-016` fixes
+  that field at `PROCEDURE` and `FUNCTION`, in upper case, because it is the
+  catalogue's own string; the two prefixes here are lower case. A caller
+  composing a qualified name from `kind` folds the case, and nothing else
+  separates the two — the kinds are the same two and the spelling is otherwise
+  identical. Stated here in the twenty-third edition, with the field, so that
+  a reader arriving from either side is told once.
 
 - **FR-SCH-009**: `tpl schema table <name>` SHALL be exhaustive over what the
   catalogue holds for that table: its columns with position, type, nullability,
