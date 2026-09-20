@@ -242,7 +242,7 @@ impl<'a> Reader<'a> {
             &target,
             &clock,
             database,
-            catalogue::Scope::Everything,
+            &catalogue::Scope::Everything,
         );
 
         session.close();
@@ -274,7 +274,7 @@ impl<'a> Reader<'a> {
     ///
     /// Returns what [`Reader::open`] and [`Reader::fetch`] return, what the
     /// fold and the document build return, and whatever `present` returns.
-    pub(super) fn serve<T, P>(&self, look: Look<'_>, present: P) -> Result<T, Error>
+    pub(super) fn serve<T, P>(&self, look: &Look<'_>, present: P) -> Result<T, Error>
     where
         P: FnOnce(&DatabaseDocument<'_>, Source, &str) -> Result<T, Error>,
     {

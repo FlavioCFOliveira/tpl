@@ -105,6 +105,16 @@ pub(crate) struct Catalogue {
     /// the model.
     server: Server<'static>,
 
+    /// The database the read covered — the one the selected entry names, per
+    /// `FR-CONF-041`.
+    ///
+    /// It is owned rather than borrowed so that a [`Catalogue`] outlives the
+    /// settings the read was made from, as it already outlives the session.
+    /// `FR-PRIV-021` is the one caller: a schema catalogue that returned no row
+    /// leaves the fold with no row to read the name from, and that condition's
+    /// `cause` must name the database all the same.
+    schema: String,
+
     /// The statements that were issued, in order.
     ///
     /// It is what an assertion of `NFR-PERF-001` and `NFR-PERF-002` reads: the
@@ -136,10 +146,17 @@ impl Catalogue {
     /// # Errors
     ///
     /// Returns [`Error::InternalInvariant`] where the catalogue returned a
-    /// shape the model cannot represent; [`fold`] records which four those are
-    /// and why each is a `70` rather than a condition the caller can act on.
+    /// shape the model cannot represent, and [`Error::PropertyNotReadable`] —
+    /// the `77` of `FR-PRIV-021` — where the schema catalogue returned no row
+    /// for the database the read covered. [`fold`] records which shapes those
+    /// are and why the two codes differ.
     pub(crate) fn model(&self) -> Result<Database<'_>, Error> {
         fold::database(self)
+    }
+
+    /// The database this read covered.
+    fn schema(&self) -> &str {
+        &self.schema
     }
 
     /// The statements this read issued, in the order they were issued.
@@ -190,7 +207,7 @@ pub(crate) fn read(
     target: &Target<'_>,
     clock: &Clock,
     schema: &str,
-    scope: Scope<'_>,
+    scope: &Scope<'_>,
 ) -> Result<Catalogue, Error> {
     let plan = statements::plan(schema, scope);
     let mut issued = Vec::with_capacity(plan.len());
@@ -208,6 +225,7 @@ pub(crate) fn read(
 
     Ok(Catalogue {
         server: session.server().clone(),
+        schema: schema.to_owned(),
         issued,
         rows,
     })
@@ -242,6 +260,22 @@ fn fetch(
         return Err(expired());
     }
 
+    // FR-GLOB-017: exactly one line per catalogue query issued, at `INFO`, in a
+    // form distinguishable from every other diagnostic line — which is what
+    // makes the count observable from outside the process under `NFR-PERF-008`,
+    // and therefore what makes `NFR-PERF-001` and `NFR-PERF-002` checkable at
+    // all. The gate is inside the emission function, so the cost of a run that
+    // does not emit is one load of an atomic per statement.
+    //
+    // It is written **here**, after the deadline check and before the statement
+    // is sent, rather than after the statement returns: a statement that
+    // reached the server and then failed was issued, and the server's own
+    // record counts it, so a line written only on success would undercount
+    // exactly the reads a caller most wants to see. A statement the bound
+    // refused was never sent and is never counted, which is why the check comes
+    // first.
+    crate::diagnostics::emit::catalogue_query();
+
     let mut query = sqlx::query::<sqlx::MySql>(statement.sql());
 
     for bind in statement.binds() {
@@ -270,6 +304,7 @@ fn fetch(
 mod tests {
     use super::statements::Read;
     use super::{Catalogue, Scope, completeness, read};
+    use crate::error::{CatalogueObjectKind, Error};
     use crate::mariadb::connect::Target;
     use crate::model::check_constraint::ConstraintLevel;
     use crate::model::column::GeneratedStorage;
@@ -277,6 +312,7 @@ mod tests {
     use crate::model::foreign_key::ReferentialAction;
     use crate::model::index::PRIMARY_KEY_NAME;
     use crate::model::routine::RoutineKind;
+    use crate::model::server::Standing;
     use crate::model::table::TableType;
     use crate::model::trigger::{TriggerEvent, TriggerTiming};
     use crate::project::config;
@@ -301,6 +337,12 @@ mod tests {
     /// reproducible without breaking anything, and it is the only way the three
     /// shapes of `FR-PRIV-018` can be observed rather than simulated.
     const REDUCED: (&str, &str) = ("tpl_reader", "tpl-reader-pw");
+
+    /// A database name no fixture server carries.
+    ///
+    /// A read issued with it returns no row from the schema catalogue, which
+    /// is the condition `FR-PRIV-021` governs.
+    const ABSENT_SCHEMA: &str = "a_schema_no_server_of_the_fixture_carries";
 
     /// The settings that reach `address` as `account`, over a plain connection.
     ///
@@ -347,7 +389,7 @@ mod tests {
 
         let mut session = crate::mariadb::open(&target, &clock)
             .unwrap_or_else(|failure| panic!("{} did not answer: {failure}", server.name()));
-        let catalogue = read(&mut session, &target, &clock, SCHEMA, scope)
+        let catalogue = read(&mut session, &target, &clock, SCHEMA, &scope)
             .unwrap_or_else(|failure| panic!("{} refused the read: {failure}", server.name()));
 
         session.close();
@@ -792,8 +834,14 @@ mod tests {
 
                 for key in &keys {
                     assert_eq!(key.match_option, "NONE");
-                    assert_eq!(key.referenced_key, PRIMARY_KEY_NAME);
-                    assert!(!key.referenced_table.is_empty());
+                    // FR-CAT-056: both are declared nullable and both
+                    // were observed populated on all 15 rules of the fixture.
+                    assert_eq!(key.referenced_key.as_deref(), Some(PRIMARY_KEY_NAME));
+                    assert!(
+                        key.referenced_table
+                            .as_deref()
+                            .is_some_and(|named| !named.is_empty())
+                    );
                     assert!(!key.columns.is_empty());
                 }
 
@@ -834,7 +882,7 @@ mod tests {
 
                 for table in &model.tables {
                     for entry in table.referenced_by() {
-                        assert_eq!(entry.key.referenced_table, table.name());
+                        assert_eq!(entry.key.referenced_table.as_deref(), Some(table.name()));
                         assert_ne!(entry.table, "");
                     }
                 }
@@ -913,8 +961,20 @@ mod tests {
                     assert_eq!(trigger.orientation, "ROW");
                     assert_eq!(trigger.old_row_alias, "OLD");
                     assert_eq!(trigger.new_row_alias, "NEW");
-                    assert!(!trigger.statement.is_empty());
-                    assert!(!trigger.definer.is_empty());
+                    // FR-CAT-056: both are declared nullable and both were
+                    // observed populated on all 6 triggers of the fixture.
+                    assert!(
+                        trigger
+                            .statement
+                            .as_deref()
+                            .is_some_and(|body| !body.is_empty())
+                    );
+                    assert!(
+                        trigger
+                            .definer
+                            .as_deref()
+                            .is_some_and(|definer| !definer.is_empty())
+                    );
                 }
             },
         );
@@ -976,13 +1036,19 @@ mod tests {
                 assert_eq!(functions, 4, "{}", server.name());
 
                 for routine in &model.routines {
-                    assert!(!routine.body.is_empty(), "{}", routine.name);
+                    // FR-CAT-056: declared nullable, populated on all 7
+                    // routines for a privileged reader.
+                    assert!(
+                        routine.body.as_deref().is_some_and(|body| !body.is_empty()),
+                        "{}",
+                        routine.name
+                    );
                     assert_eq!(routine.body_kind, "SQL");
                     assert_eq!(routine.parameter_style, "SQL");
                     assert_eq!(routine.security_type, "DEFINER");
                     assert!(routine.restricted.is_none());
 
-                    match routine.kind {
+                    match &routine.kind {
                         RoutineKind::Procedure => assert!(routine.return_type.is_none()),
                         RoutineKind::Function => {
                             let returned = routine
@@ -993,6 +1059,18 @@ mod tests {
                             assert!(!returned.raw().is_empty(), "{}", routine.name);
                             assert!(returned.data_type().is_some(), "{}", routine.name);
                         }
+                        // FR-CAT-016: the two strings are what a server whose
+                        // `standing` is `supported` returns, and every server
+                        // of the fixture is one. A third kind here would
+                        // falsify that requirement, which is `FR-CAT-055`'s own
+                        // *Consequence* arriving as a test failure rather than
+                        // as a wrong document.
+                        unrecorded => panic!(
+                            "{} reported routine kind {:?}, which FR-CAT-016 does not admit \
+                             from a supported series",
+                            routine.name,
+                            unrecorded.name()
+                        ),
                     }
                 }
             },
@@ -1487,12 +1565,14 @@ mod tests {
         }
     }
 
-    /// The statements a full read of a schema that holds nothing issues.
+    /// A full read of a schema no fixture server carries, kept whole.
     ///
-    /// The name is one no fixture server carries, so every statement of the
-    /// plan returns no row — which is the *one table against many* comparison
-    /// `NFR-PERF-001` fixes, taken to its floor.
-    fn read_empty_schema(server: &fixture::Server) -> Vec<&'static str> {
+    /// The name is one no server holds, so the schema catalogue returns no row
+    /// and every other statement of the plan returns none either. The
+    /// [`Catalogue`] is returned rather than folded, because the two callers
+    /// want different halves of it: one the statements it issued, and one the
+    /// condition the fold raises over a schema row that is not there.
+    fn read_absent_schema(server: &fixture::Server) -> Catalogue {
         let scratch = Scratch::new();
         let resolved = settings(&scratch, server.address(), ROOT);
         let target = Target::of(&resolved).expect("the entry names a host");
@@ -1503,12 +1583,358 @@ mod tests {
             &mut session,
             &target,
             &clock,
-            "a_schema_no_server_of_the_fixture_carries",
-            Scope::Everything,
+            ABSENT_SCHEMA,
+            &Scope::Everything,
         )
         .expect("a schema that holds nothing is read like any other");
 
         session.close();
+
+        catalogue
+    }
+
+    /// Opens a session and reads the whole catalogue as the privileged
+    /// account, returning whatever the attempt produced.
+    ///
+    /// Unlike [`read_as`] it refuses nothing: the two bodies below are about
+    /// the verdict the connection start reaches, so the condition is the
+    /// answer rather than a failure.
+    fn attempt_read(server: &fixture::Server) -> Result<Catalogue, Error> {
+        let scratch = Scratch::new();
+        let resolved = settings(&scratch, server.address(), ROOT);
+        let target = Target::of(&resolved).expect("the entry names a host");
+        let clock = settings::clock(None);
+
+        let mut session = crate::mariadb::open(&target, &clock)?;
+        let catalogue = read(&mut session, &target, &clock, SCHEMA, &Scope::Everything);
+
+        session.close();
+
+        catalogue
+    }
+
+    #[test]
+    fn fr_srv_035_a_series_above_the_window_is_read_and_marked_newer_than_supported() {
+        // FR-SRV-035: present the reader with a series above its own window,
+        // and assert that the read completes without error and that `standing`
+        // is `newer_than_supported`.
+        //
+        // No such server exists to point the test at — by construction the
+        // window contains the newest MariaDB there is — so the requirement
+        // obliges the test to narrow the **reader** rather than widen the
+        // server, through the seam of FR-ERR-031. The server below is a real
+        // one of FR-SRV-015, answering a real connection and a real catalogue
+        // read; what is narrowed is the table the reader compares against.
+        //
+        // The body is a unit test rather than an integration test because that
+        // seam is `#[cfg(test)]`: an integration test links the library
+        // compiled without that configuration and cannot see it. FR-SRV-035's
+        // own eighth-edition amendment is what admits that — the assertion on
+        // the exit code is the half that yielded, and the step from a read that
+        // completes to exit `0` is BR-CLI-004, observed by every successful
+        // command of the integration suite.
+        on_every_series(
+            "fr_srv_035_a_series_above_the_window_is_read_and_marked_newer_than_supported",
+            |server| {
+                let name = server.name();
+
+                // Every series of FR-SRV-015 is 10.11 or newer, so a window
+                // holding 10.6 alone puts all four above it.
+                let _narrowed = crate::mariadb::window::narrow_to(
+                    crate::mariadb::window::Series::parse("10.6").expect("two components"),
+                );
+
+                let catalogue = attempt_read(server).unwrap_or_else(|failure| {
+                    panic!("{name}: the read did not complete: {failure}")
+                });
+                let model = catalogue
+                    .model()
+                    .unwrap_or_else(|failure| panic!("{name}: the rows did not fold: {failure}"));
+
+                // FR-SRV-031: the catalogue is read in full, not refused.
+                assert_eq!(catalogue.statements().len(), 11, "{name}");
+                assert_eq!(model.tables.len(), 17, "{name}");
+                assert_eq!(model.views.len(), 5, "{name}");
+                assert_eq!(model.routines.len(), 7, "{name}");
+
+                // FR-SRV-032 with FR-CTX-034: the marking is in the document,
+                // and it is the field that says the read is unverified.
+                assert_eq!(
+                    model.server.standing(),
+                    Standing::NewerThanSupported,
+                    "{name}"
+                );
+                assert_eq!(model.server.standing().name(), "newer_than_supported");
+
+                // The control: with the window restored, the same server is
+                // `supported`. Without it, a reader that answered
+                // `newer_than_supported` to everything would pass the
+                // assertion above.
+                drop(_narrowed);
+
+                let restored =
+                    attempt_read(server).expect("the same server is read with the window restored");
+                let restored = restored.model().expect("the rows fold");
+
+                assert_eq!(restored.server.standing(), Standing::Supported, "{name}");
+            },
+        );
+    }
+
+    #[test]
+    fn fr_srv_029_a_series_below_the_window_is_refused_with_seventy_eight_and_reads_no_catalogue() {
+        // FR-SRV-029's second half asks for the refusal of FR-SRV-020 against
+        // at least one series outside the window. **The fixture holds no such
+        // server**: `series.env` carries 10.11, 11.4, 11.8 and 12.3, and all
+        // four are inside it. The condition is reached here the only way this
+        // project can reach it against a real server — by narrowing the
+        // reader's window through the seam FR-SRV-035 mandates, so that a real
+        // server of a real series falls below it.
+        //
+        // What that establishes is what FR-SRV-020 promises: the series is
+        // refused, the code is 78, and the catalogue is not read. What it does
+        // not establish is the integration test FR-SRV-029 words, which needs a
+        // server this fixture does not have.
+        on_every_series(
+            "fr_srv_029_a_series_below_the_window_is_refused_with_seventy_eight_and_reads_no_catalogue",
+            |server| {
+                let name = server.name();
+
+                // Every series of FR-SRV-015 is older than 13.0, so a window
+                // holding it alone puts all four below.
+                let _narrowed = crate::mariadb::window::narrow_to(
+                    crate::mariadb::window::Series::parse("13.0").expect("two components"),
+                );
+
+                let refused = attempt_read(server)
+                    .err()
+                    .unwrap_or_else(|| panic!("{name}: a series below the window was not refused"));
+
+                assert_eq!(
+                    refused.exit_code(),
+                    78,
+                    "{name}: {refused:?} — FR-SRV-020 with FR-ERR-006 fixes 78 (EX_CONFIG)"
+                );
+
+                // FR-SRV-030: the message names the series found and the entry
+                // that reached it, and the `cause` lists the series that are
+                // supported — which BR-SRV-005 puts on the value rather than in
+                // the renderer.
+                let Error::SeriesNotSupported {
+                    entry, supported, ..
+                } = &refused
+                else {
+                    panic!("{name}: expected an unsupported series, got {refused:?}")
+                };
+
+                assert_eq!(entry, ENTRY);
+                assert_eq!(*supported, crate::mariadb::window::SUPPORTED);
+            },
+        );
+    }
+
+    #[test]
+    fn fr_priv_021_a_schema_catalogue_that_returns_no_row_is_seventy_seven_and_never_seventy() {
+        // FR-PRIV-021 rejects the reading this fold shipped with, in as many
+        // words: "The condition was reported as a violated internal invariant,
+        // exit 70. It is not one." FR-ERR-030 closes 70 to a panic and to an
+        // invariant the system detects in itself, and nothing about tpl is
+        // defective when a server declines to show a schema — the caller can
+        // fix it with a grant or by correcting `database.<name>.database`.
+        //
+        // The condition is not reachable through the distributed binary:
+        // FR-CONF-041 puts the database on the connection, so the server
+        // refuses the handshake with 1049 or 1044 and `mariadb::fault` routes
+        // that pair to this same condition long before a statement is sent.
+        // What is exercised here is this system's own handling of a schema read
+        // that returned no row, in process, which is the whole of what
+        // FR-PRIV-021's own *Consequence* says can be exercised.
+        on_every_series(
+            "fr_priv_021_a_schema_catalogue_that_returns_no_row_is_seventy_seven_and_never_seventy",
+            |server| {
+                let catalogue = read_absent_schema(server);
+
+                assert!(
+                    catalogue.rows(Read::Schema).is_empty(),
+                    "{}: the schema catalogue returned a row for a database it does not hold",
+                    server.name()
+                );
+
+                let refused = catalogue
+                    .model()
+                    .expect_err("a database whose own metadata is unreadable is not presented");
+
+                assert_eq!(
+                    refused.exit_code(),
+                    77,
+                    "{}: {refused:?} — FR-PRIV-021 fixes 77 (EX_NOPERM) here",
+                    server.name()
+                );
+                assert_ne!(
+                    refused.exit_code(),
+                    70,
+                    "{}: the 70 FR-PRIV-021 rejected has come back",
+                    server.name()
+                );
+
+                // FR-PRIV-013 and the 77 row of FR-ERR-034 oblige the `cause`
+                // to name the database and to state which property could not be
+                // read. FR-CONF-041 is what guarantees there is a name to
+                // give: it is the one the read was issued with.
+                let Error::PropertyNotReadable {
+                    kind,
+                    object,
+                    property,
+                } = &refused
+                else {
+                    panic!(
+                        "{}: expected a property that could not be read, got {refused:?}",
+                        server.name()
+                    )
+                };
+
+                assert_eq!(*kind, CatalogueObjectKind::Database);
+                assert_eq!(object, ABSENT_SCHEMA);
+                assert_eq!(*property, "metadata");
+
+                let rendered = crate::diagnostics::rendered(&refused);
+
+                assert!(rendered.contains(ABSENT_SCHEMA), "{rendered}");
+                assert!(rendered.contains("metadata"), "{rendered}");
+            },
+        );
+    }
+
+    #[test]
+    fn fr_cat_056_the_six_nullable_fields_are_populated_on_every_series_and_carry_no_empty_string()
+    {
+        // FR-CAT-056: six fields the model carries are declared to admit SQL
+        // `NULL`, and each was observed populated on every row the read
+        // presents. The requirement fixes what happens when one is not — the
+        // model carries `null`, never the empty string — and this asserts the
+        // population the requirement records, which is what makes the
+        // substitution it forbids unreachable here.
+        on_every_series(
+            "fr_cat_056_the_six_nullable_fields_are_populated_on_every_series_and_carry_no_empty_string",
+            |server| {
+                let catalogue = read_from(server, Scope::Everything);
+                let model = catalogue.model().expect("the rows fold");
+                let name = server.name();
+
+                let triggers: Vec<_> = model
+                    .tables
+                    .iter()
+                    .flat_map(crate::model::table::Table::triggers)
+                    .collect();
+
+                assert_eq!(triggers.len(), 6, "{name}");
+
+                for trigger in &triggers {
+                    assert!(trigger.statement.is_some(), "{name}: {}", trigger.name);
+                    assert!(trigger.definer.is_some(), "{name}: {}", trigger.name);
+                }
+
+                assert_eq!(model.routines.len(), 7, "{name}");
+
+                for routine in &model.routines {
+                    assert!(routine.body.is_some(), "{name}: {}", routine.name);
+                }
+
+                let keys: Vec<_> = model
+                    .tables
+                    .iter()
+                    .flat_map(crate::model::table::Table::foreign_keys)
+                    .collect();
+                let pairs: usize = keys.iter().map(|key| key.columns.len()).sum();
+
+                assert_eq!(keys.len(), 15, "{name}");
+                assert_eq!(pairs, 17, "{name}");
+
+                for key in &keys {
+                    assert!(key.referenced_key.is_some(), "{name}: {}", key.name);
+                    assert!(key.referenced_table.is_some(), "{name}: {}", key.name);
+
+                    // The sixth field is settled by the read's population
+                    // rather than by a value: FR-CAT-045 restricts the read to
+                    // the rows that name a referenced table, which are exactly
+                    // the rows this field is populated on, so the model carries
+                    // a string there and not an absent scalar.
+                    for pair in &key.columns {
+                        assert!(
+                            !pair.referenced_column.is_empty(),
+                            "{name}: {} names an empty referenced column",
+                            key.name
+                        );
+                    }
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn fr_cat_057_every_foreign_key_the_fixture_holds_names_one_schema_at_both_ends() {
+        // FR-CAT-057 excludes a cross-schema foreign key in both directions,
+        // and states that the behaviour is excluded rather than recorded
+        // **because it could not be observed**: the fixture declares one user
+        // schema and carries no such key. This is that observation, taken
+        // through the reader rather than by hand — every key the model carries
+        // names a table the model also carries, which is the condition
+        // FR-CTX-023 needs and the exclusion exists to preserve.
+        on_every_series(
+            "fr_cat_057_every_foreign_key_the_fixture_holds_names_one_schema_at_both_ends",
+            |server| {
+                let catalogue = read_from(server, Scope::Everything);
+                let model = catalogue.model().expect("the rows fold");
+                let name = server.name();
+
+                let carried: Vec<&str> = model
+                    .tables
+                    .iter()
+                    .map(crate::model::table::Table::name)
+                    .collect();
+                let mut keys = 0;
+
+                for table in &model.tables {
+                    for key in table.foreign_keys() {
+                        keys += 1;
+
+                        let referenced = key
+                            .referenced_table
+                            .as_deref()
+                            .expect("every key of the fixture names a table");
+
+                        assert!(
+                            carried.contains(&referenced),
+                            "{name}: {} names {referenced}, which this read does not carry —                              a key FR-CAT-057 should have excluded reached the model",
+                            key.name
+                        );
+                    }
+
+                    for incoming in table.referenced_by() {
+                        assert!(
+                            carried.contains(&incoming.table.as_ref()),
+                            "{name}: {} is referenced by {}, which this read does not carry",
+                            table.name(),
+                            incoming.table
+                        );
+                    }
+                }
+
+                // Nothing was excluded: the 15 rules the fixture declares all
+                // reached the model, so the exclusion did not fire on a key it
+                // should have carried.
+                assert_eq!(keys, 15, "{name}");
+            },
+        );
+    }
+
+    /// The statements a full read of a schema that holds nothing issues.
+    ///
+    /// The name is one no fixture server carries, so every statement of the
+    /// plan returns no row — which is the *one table against many* comparison
+    /// `NFR-PERF-001` fixes, taken to its floor.
+    fn read_empty_schema(server: &fixture::Server) -> Vec<&'static str> {
+        let catalogue = read_absent_schema(server);
 
         assert!(catalogue.rows(Read::Tables).is_empty());
 

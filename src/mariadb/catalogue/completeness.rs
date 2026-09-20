@@ -375,7 +375,7 @@ mod tests {
             kind: RoutineKind::Procedure,
             return_type: None,
             parameters: Vec::new(),
-            body: Cow::Borrowed(body),
+            body: Some(Cow::Borrowed(body)),
             body_kind: Cow::Borrowed("SQL"),
             parameter_style: Cow::Borrowed("SQL"),
             is_deterministic: false,

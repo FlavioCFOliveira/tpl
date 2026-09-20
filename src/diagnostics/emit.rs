@@ -47,11 +47,13 @@ const LINE_CAPACITY: usize = 160;
 /// constrains the existence of the line and its distinguishability, not its
 /// wording, and the query identity `OD-17` anticipates is a type `mariadb/`
 /// owns; adding it is a change this signature invites and does not need.
-#[allow(
-    dead_code,
-    reason = "the catalogue reader that calls this is a later sprint; the function is written \
-              here because FR-GLOB-017 and OD-17 place the emission set in this module"
-)]
+///
+/// **It carries no credential and no driver message**, which is `FR-ERR-013`
+/// and `FR-GLOB-018` obtained structurally rather than by rule: the function
+/// takes no argument, so there is nothing a caller could hand it and nothing
+/// composed into the line but a literal. The statement text is not carried
+/// either — it would be the one thing a caller could mistake for the contract
+/// `NFR-DET-001` puts outside stderr.
 pub(crate) fn catalogue_query() {
     if !emits(Level::Info) {
         return;

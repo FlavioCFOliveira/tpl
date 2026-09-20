@@ -203,9 +203,33 @@ forms! {
 // and unique key, and `FR-CAT-043` bars reading a primary key from it: on a
 // system-versioned table those rows name the implicit period column, which the
 // column catalogue carries for no table.
+//
+// `REFERENCED_TABLE_SCHEMA` is read for `FR-CAT-057`, and it is the one field
+// of either foreign-key read that says where the referenced table lives. It is
+// **selected rather than filtered on**, so the exclusion is made in the fold:
+// a rules row for an outgoing cross-schema key is returned whatever this
+// statement does — its constraint is declared in the schema the read covers,
+// and the rules statement is filtered on that — so a key excluded here would
+// otherwise reach a table through its rule with no columns at all. The fold
+// excludes both halves together, and `super::fold` records why.
+//
+// *Rejected: excluding in SQL on the rules statement, through
+// `UNIQUE_CONSTRAINT_SCHEMA`.* That field is the only cross-schema
+// discriminant the rules table carries and `FR-CAT-056` records it as
+// **nullable**; a predicate over it would therefore drop, silently, every key
+// whose unique-constraint name is SQL `NULL` — which `FR-CTX-006` requires to
+// be presented.
+//
+// `TABLE_SCHEMA = ?` excludes the **incoming** direction of `FR-CAT-057`: a key
+// declared in another schema that references a table this read covers returns
+// no row here at all. That was an accident of `FR-CAT-052`'s filter before
+// `FR-CAT-057` was written and is now a requirement this predicate satisfies.
+//
+// The statement count is unchanged at eleven, which `NFR-PERF-001` and
+// `NFR-PERF-002` fix: this is a column, not a statement.
 forms! {
-    "SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, \
-     REFERENCED_COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE \
+    "SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_SCHEMA, \
+     REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE \
      WHERE TABLE_SCHEMA = ? AND REFERENCED_TABLE_NAME IS NOT NULL",
     " ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
 
@@ -408,33 +432,51 @@ impl Read {
 /// not match: `NFR-PERF-002` fixes the count of a named read independently of
 /// how many objects the database holds, and a discard would make the rows
 /// depend on it even where the statement count did not.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// The type is [`Clone`] and not [`Copy`], because [`Scope::Routine`] carries a
+/// [`RoutineKind`] and `FR-CAT-055` gives that enumeration a variant holding
+/// the catalogue's own string. [`plan`] therefore takes it by reference.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Scope<'a> {
     /// The whole schema: every covered table, every view, every routine.
     Everything,
 
     /// One table, with everything `FR-CAT-053` gives a table.
     ///
-    /// No command constructs it. `FR-CTX-006` and `FR-CTX-010` embed, in full,
-    /// the table at each end of every foreign key and `FR-CTX-023` requires
-    /// every referenced object to be present, so a plan that reads one table
-    /// row returns that table's keys without the tables they name and the
-    /// document cannot be built from it. The plan is kept because it is the
-    /// repertoire's own statement of what a named table read would issue, and
-    /// the gap is reported rather than papered over.
+    /// No command constructs it, and **that is not a gap**. `FR-CTX-006` and
+    /// `FR-CTX-010` embed, in full, the table at each end of every foreign key
+    /// and `FR-CTX-023` requires every referenced object to be present, so a
+    /// plan that reads one table row returns that table's keys without the
+    /// tables they name and no document can be built from it. `NFR-PERF-002`
+    /// settles what that costs: it counts **statements**, the rows such a read
+    /// returns MAY be the whole catalogue, and a read that returns them SHALL
+    /// NOT be taken to violate it. A whole-catalogue read is therefore the
+    /// admissible plan rather than a shortfall, and the requirement's own
+    /// *Accepted cost* records the wall-clock and memory price against
+    /// `NFR-PERF-014` and the `WL-002` scalar.
+    ///
+    /// The plan is kept because it is the repertoire's own statement of what a
+    /// narrowed table read would issue, and because `NFR-PERF-002` keeps the
+    /// option open in as many words: a narrow read that returned the
+    /// neighbours of the named table would also satisfy it, and choosing
+    /// between the two is an architecture decision rather than a functional
+    /// one.
     #[allow(
         dead_code,
-        reason = "a one-table plan cannot produce the embedding FR-CTX-006 and FR-CTX-010 fix, \
-                  so every command reads the whole catalogue; the plan is the repertoire's \
-                  record of the narrowed read and the gap is reported"
+        reason = "every command reads the whole catalogue because FR-CTX-006, FR-CTX-010 and \
+                  FR-CTX-023 make a one-table plan unable to produce a document; NFR-PERF-002 \
+                  as amended admits that read, counting statements rather than rows, so this \
+                  plan records the narrowed read the requirement leaves open"
     )]
     Table(&'a str),
 
     /// One view.
     ///
-    /// No command constructs it either, and for one reason rather than two:
-    /// `FR-SCH-010` draws a nearest-match suggestion from the objects of that
-    /// kind that do exist, which only a collection read has in hand.
+    /// No command constructs it either, and the cause is **not** the one
+    /// [`Scope::Table`] records: nothing about a view's document needs a second
+    /// object. It is `FR-SCH-010`, which obliges a name that reaches no object
+    /// to carry a nearest-match suggestion drawn from the objects of that kind
+    /// that do exist — a population only a collection read has in hand.
     #[allow(
         dead_code,
         reason = "FR-SCH-010 draws its suggestion from the objects of that kind that exist, \
@@ -446,7 +488,8 @@ pub(crate) enum Scope<'a> {
     /// which may match a procedure **and** a function; the caller decides what
     /// two matches mean, per `FR-SCH-010`.
     ///
-    /// No command constructs it, for the reason [`Scope::View`] gives.
+    /// No command constructs it, for the cause [`Scope::View`] records and not
+    /// the one [`Scope::Table`] does.
     #[allow(
         dead_code,
         reason = "FR-SCH-010 draws its suggestion from the objects of that kind that exist, \
@@ -456,7 +499,14 @@ pub(crate) enum Scope<'a> {
         /// The routine's name, without the qualifying prefix.
         name: &'a str,
         /// The kind the qualified form named, or [`None`] for a bare name.
-        kind: Option<RoutineKind>,
+        ///
+        /// Only a kind `FR-SCH-008` admits reaches here, because the qualified
+        /// form carries one of two prefixes and no third. [`plan`] nevertheless
+        /// narrows on [`RoutineKind::recorded`] and falls back to the bare-name
+        /// plan where a kind has no recorded spelling, which is `FR-CAT-055`'s
+        /// own consequence: an unrecorded kind is carried in the document and
+        /// is not reachable by a qualified name.
+        kind: Option<RoutineKind<'a>>,
     },
 }
 
@@ -543,10 +593,10 @@ const fn three<'a>(
 /// | [`Scope::Table`] | 8 | The schema, the table row, and the six reads of the members `FR-CAT-053` gives a table |
 /// | [`Scope::View`] | 2 | The schema and the view row; `FR-CAT-047` gives a view no member collection |
 /// | [`Scope::Routine`] | 3 | The schema, the routine row, and its parameters |
-pub(super) fn plan<'a>(schema: &'a str, scope: Scope<'a>) -> Vec<Statement<'a>> {
+pub(super) fn plan<'a>(schema: &'a str, scope: &'a Scope<'a>) -> Vec<Statement<'a>> {
     let schema_row = one(Read::Schema, SCHEMA, schema);
 
-    match scope {
+    match *scope {
         Scope::Everything => vec![
             schema_row,
             one(Read::Tables, TABLES, schema),
@@ -574,21 +624,25 @@ pub(super) fn plan<'a>(schema: &'a str, scope: Scope<'a>) -> Vec<Statement<'a>> 
 
         Scope::View(name) => vec![schema_row, two(Read::Views, VIEW, schema, name)],
 
-        Scope::Routine { name, kind } => match kind {
+        // FR-CAT-055: a kind with no recorded spelling narrows nothing, so the
+        // qualified plan falls back to the bare-name one. The requirement
+        // names this as the one place a third kind is not reachable, and the
+        // fall-back is what keeps its bare name reaching it, per `FR-SCH-010`.
+        Scope::Routine { name, ref kind } => match kind.as_ref().and_then(RoutineKind::recorded) {
             None => vec![
                 schema_row,
                 two(Read::Routines, ROUTINES_NAMED, schema, name),
                 two(Read::Parameters, PARAMETERS_NAMED, schema, name),
             ],
-            Some(kind) => vec![
+            Some(recorded) => vec![
                 schema_row,
-                three(Read::Routines, ROUTINE_QUALIFIED, schema, name, kind.name()),
+                three(Read::Routines, ROUTINE_QUALIFIED, schema, name, recorded),
                 three(
                     Read::Parameters,
                     PARAMETERS_QUALIFIED,
                     schema,
                     name,
-                    kind.name(),
+                    recorded,
                 ),
             ],
         },
@@ -610,7 +664,7 @@ mod tests {
         // has one entry per object kind. FR-CAT-043 is why there is no twelfth
         // for the primary key, and FR-CAT-045 why there is none for the
         // incoming direction of a foreign key.
-        let statements = plan("freight", Scope::Everything);
+        let statements = plan("freight", &Scope::Everything);
 
         assert_eq!(statements.len(), FULL_READ);
         assert_eq!(statements.len(), Read::COUNT);
@@ -626,14 +680,92 @@ mod tests {
     }
 
     #[test]
+    fn fr_cat_057_the_key_column_read_names_the_referenced_schema_and_stays_one_statement() {
+        // FR-CAT-057 needs to know where a referenced table lives, and the
+        // referenced-schema field of the key-column table is the only place
+        // either foreign-key read says so. It is a **column**, not a twelfth
+        // statement: NFR-PERF-001 and NFR-PERF-002 fix the count, and the
+        // exclusion is made in the fold.
+        let statements = plan("freight", &Scope::Everything);
+
+        assert_eq!(statements.len(), FULL_READ, "the count is unchanged");
+
+        let key_columns = statements
+            .iter()
+            .find(|statement| statement.read() == Read::KeyColumns)
+            .expect("the repertoire reads KEY_COLUMN_USAGE");
+
+        assert!(
+            key_columns.sql().contains("REFERENCED_TABLE_SCHEMA"),
+            "{}",
+            key_columns.sql()
+        );
+
+        // The incoming direction of FR-CAT-057 is excluded by this predicate
+        // and by nothing else: a key declared in another schema that
+        // references a table this read covers returns no row at all.
+        assert!(
+            key_columns.sql().contains("TABLE_SCHEMA = ?"),
+            "{}",
+            key_columns.sql()
+        );
+
+        // *Rejected: excluding in SQL on the rules statement.* Its only
+        // cross-schema discriminant is the unique-constraint schema, which
+        // FR-CAT-056 records as nullable, so a predicate over it would drop
+        // every key whose unique-constraint name is SQL `NULL` — which
+        // FR-CTX-006 requires to be presented.
+        let rules = statements
+            .iter()
+            .find(|statement| statement.read() == Read::ForeignKeyRules)
+            .expect("the repertoire reads REFERENTIAL_CONSTRAINTS");
+
+        assert!(
+            !rules.sql().contains("UNIQUE_CONSTRAINT_SCHEMA"),
+            "{}",
+            rules.sql()
+        );
+    }
+
+    #[test]
+    fn fr_cat_055_a_routine_kind_with_no_recorded_spelling_falls_back_to_the_bare_name_plan() {
+        // FR-CAT-055 names the qualified name of FR-SCH-008 as the one place a
+        // kind outside the recorded two is not reachable. The plan reads the
+        // recorded spelling, so such a kind narrows on the name alone rather
+        // than binding a string no requirement fixes to ROUTINE_TYPE.
+        let unrecorded = plan(
+            "freight",
+            &Scope::Routine {
+                name: "fn_chargeable_weight",
+                kind: Some(RoutineKind::Unrecorded(std::borrow::Cow::Borrowed(
+                    "PACKAGE",
+                ))),
+            },
+        );
+        let bare = plan(
+            "freight",
+            &Scope::Routine {
+                name: "fn_chargeable_weight",
+                kind: None,
+            },
+        );
+
+        assert_eq!(unrecorded.len(), bare.len());
+
+        for (unrecorded, bare) in unrecorded.iter().zip(&bare) {
+            assert_eq!(unrecorded.sql(), bare.sql());
+        }
+    }
+
+    #[test]
     fn nfr_perf_001_the_plan_of_a_full_read_does_not_depend_on_what_the_database_holds() {
         // NFR-PERF-001 requires the count over WL-001 to equal the count over
         // WL-003 — a database of 200 tables against one of a single table.
         // The plan is a function of the schema name and the scope and of
         // nothing else, so two plans differ in the bound schema name and in
         // nothing besides.
-        let large = plan("two_hundred_tables", Scope::Everything);
-        let small = plan("one_table", Scope::Everything);
+        let large = plan("two_hundred_tables", &Scope::Everything);
+        let small = plan("one_table", &Scope::Everything);
 
         assert_eq!(large.len(), small.len());
 
@@ -649,18 +781,18 @@ mod tests {
         // objects the database holds either. Every statement of a named plan
         // but the schema row carries a predicate naming the object, so nothing
         // is read and discarded.
-        let table = plan("freight", Scope::Table("consignment"));
-        let view = plan("freight", Scope::View("v_consignment_manifest"));
+        let table = plan("freight", &Scope::Table("consignment"));
+        let view = plan("freight", &Scope::View("v_consignment_manifest"));
         let bare = plan(
             "freight",
-            Scope::Routine {
+            &Scope::Routine {
                 name: "fn_chargeable_weight",
                 kind: None,
             },
         );
         let qualified = plan(
             "freight",
-            Scope::Routine {
+            &Scope::Routine {
                 name: "fn_chargeable_weight",
                 kind: Some(RoutineKind::Function),
             },
@@ -690,7 +822,7 @@ mod tests {
         // where the caller supplied one.
         let qualified = plan(
             "freight",
-            Scope::Routine {
+            &Scope::Routine {
                 name: "sp_recalculate_freight",
                 kind: Some(RoutineKind::Procedure),
             },
@@ -705,7 +837,7 @@ mod tests {
 
         let bare = plan(
             "freight",
-            Scope::Routine {
+            &Scope::Routine {
                 name: "sp_recalculate_freight",
                 kind: None,
             },
@@ -824,7 +956,7 @@ mod tests {
         // foreign-key rows, so the rows that would carry a primary key — and
         // that name the implicit period column the model does not carry — are
         // never returned; and no statement reads the constraint table at all.
-        let statements = plan("freight", Scope::Everything);
+        let statements = plan("freight", &Scope::Everything);
 
         assert!(
             of(&statements, Read::KeyColumns)
@@ -842,7 +974,7 @@ mod tests {
         // FR-CAT-042: the two fields are different fields, and the text a DDL
         // writes as `KEY … COMMENT '…'` lands in the second. A reader that
         // took the first would report every index as uncommented.
-        let statements = plan("freight", Scope::Everything);
+        let statements = plan("freight", &Scope::Everything);
         let indexes = of(&statements, Read::Indexes);
 
         assert!(indexes.sql().contains("INDEX_COMMENT"));
@@ -874,7 +1006,7 @@ mod tests {
         ];
 
         scopes
-            .into_iter()
+            .iter()
             .flat_map(|scope| plan("freight", scope))
             .map(|statement| statement.sql())
             .collect()

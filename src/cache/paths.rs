@@ -160,12 +160,13 @@ impl Layout {
     /// line — and not the upper-case string `FR-CAT-016` fixes for the emitted
     /// `kind`, which is the catalogue's own and belongs in a document rather
     /// than in a path this system composes.
-    pub(super) fn routine(&self, kind: RoutineKind, name: &str) -> Option<PathBuf> {
+    pub(super) fn routine(&self, kind: &RoutineKind<'_>, name: &str) -> Option<PathBuf> {
         let name = component(name)?;
+        let kind = lower(kind)?;
 
         Some(
             self.collection(Collection::Routines)
-                .join(format!("{}.{name}{DOT_JSON}", lower(kind))),
+                .join(format!("{kind}.{name}{DOT_JSON}")),
         )
     }
 
@@ -181,17 +182,25 @@ impl Layout {
 }
 
 /// The lower-case spelling of a routine kind, per `FR-CDOC-014` and
-/// `FR-SCH-008`.
+/// `FR-SCH-008`, or [`None`] where the kind has none.
 ///
 /// It is written out rather than derived from
 /// [`RoutineKind::name`](crate::model::routine::RoutineKind::name) by folding
 /// case, so that the two spellings this project uses are each stated where they
 /// are fixed: the catalogue's own string on the model, and this one on the
 /// path and on the command line.
-pub(crate) const fn lower(kind: RoutineKind) -> &'static str {
+///
+/// [`None`] is `FR-CAT-055`'s own consequence, and this is one of the two
+/// callers that requirement names. `FR-CDOC-014` builds a path from the two
+/// kinds `FR-SCH-008` admits and no third, so a routine whose kind is outside
+/// them has no file of its own: it is carried in a document and is not
+/// reachable by a qualified name. The caller answers a miss, which is what an
+/// absent file already means everywhere else in this module.
+pub(crate) fn lower(kind: &RoutineKind<'_>) -> Option<&'static str> {
     match kind {
-        RoutineKind::Procedure => "procedure",
-        RoutineKind::Function => "function",
+        RoutineKind::Procedure => Some("procedure"),
+        RoutineKind::Function => Some("function"),
+        RoutineKind::Unrecorded(_) => None,
     }
 }
 
@@ -274,11 +283,11 @@ mod tests {
         let layout = Layout::of(tpl(), "shop").expect("a component");
 
         assert_eq!(
-            layout.routine(RoutineKind::Procedure, "calc_vat"),
+            layout.routine(&RoutineKind::Procedure, "calc_vat"),
             Some("/project/.tpl/.cache/shop/routines/procedure.calc_vat.json".into())
         );
         assert_eq!(
-            layout.routine(RoutineKind::Function, "calc_vat"),
+            layout.routine(&RoutineKind::Function, "calc_vat"),
             Some("/project/.tpl/.cache/shop/routines/function.calc_vat.json".into())
         );
     }
@@ -290,8 +299,8 @@ mod tests {
         let layout = Layout::of(tpl(), "shop").expect("a component");
 
         assert_ne!(
-            layout.routine(RoutineKind::Procedure, "calc_vat"),
-            layout.routine(RoutineKind::Function, "calc_vat")
+            layout.routine(&RoutineKind::Procedure, "calc_vat"),
+            layout.routine(&RoutineKind::Function, "calc_vat")
         );
     }
 
@@ -301,9 +310,23 @@ mod tests {
         // `kind` in upper case. The two layers carry the same two kinds under
         // the two spellings each requirement fixes.
         for kind in [RoutineKind::Procedure, RoutineKind::Function] {
-            assert_eq!(lower(kind), kind.name().to_lowercase());
-            assert_ne!(lower(kind), kind.name());
+            assert_eq!(lower(&kind), Some(kind.name().to_lowercase().as_str()));
+            assert_ne!(lower(&kind), Some(kind.name()));
         }
+    }
+
+    #[test]
+    fn fr_cat_055_a_kind_outside_the_recorded_two_has_no_file_of_its_own() {
+        // FR-CAT-055 names this as one of the two places a third kind is not
+        // reachable: FR-CDOC-014 builds a path from the two kinds FR-SCH-008
+        // admits and no third, so such a routine is carried in a document and
+        // has no file. The caller reads the `None` as the miss an absent file
+        // already is everywhere else here.
+        let layout = Layout::of(tpl(), "shop").expect("a component");
+        let package = RoutineKind::Unrecorded(std::borrow::Cow::Borrowed("PACKAGE"));
+
+        assert_eq!(lower(&package), None);
+        assert_eq!(layout.routine(&package, "calc_vat"), None);
     }
 
     #[test]
@@ -316,7 +339,7 @@ mod tests {
             assert_eq!(layout.table(refused), None, "{refused:?}");
             assert_eq!(layout.view(refused), None, "{refused:?}");
             assert_eq!(
-                layout.routine(RoutineKind::Procedure, refused),
+                layout.routine(&RoutineKind::Procedure, refused),
                 None,
                 "{refused:?}"
             );

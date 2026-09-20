@@ -140,11 +140,100 @@ fn newest() -> Series {
 /// message of `FR-SRV-030` names the database entry that reached the server
 /// and this module knows nothing of entries.
 pub(crate) fn standing(series: Series) -> Option<Standing> {
-    if WINDOW.iter().any(|row| row.series == series) {
+    #[cfg(test)]
+    if let Some(narrowed) = narrowed() {
+        return against(series, narrowed, |member| member == narrowed);
+    }
+
+    against(series, newest(), |member| {
+        WINDOW.iter().any(|row| row.series == member)
+    })
+}
+
+/// The standing of `series` against a window whose newest member is `newest`
+/// and whose membership `holds` answers.
+///
+/// It is the one comparison, written once, so that the window a test narrows
+/// the reader to is answered by the rule the real window is answered by rather
+/// than by a second copy of it.
+fn against(series: Series, newest: Series, holds: impl Fn(Series) -> bool) -> Option<Standing> {
+    if holds(series) {
         return Some(Standing::Supported);
     }
 
-    (series > newest()).then_some(Standing::NewerThanSupported)
+    (series > newest).then_some(Standing::NewerThanSupported)
+}
+
+/// The window this thread has been narrowed to, or [`None`] where it has not.
+#[cfg(test)]
+fn narrowed() -> Option<Series> {
+    NARROWED.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The single series a narrowed window holds.
+    ///
+    /// It is **thread-local** because `libtest` runs the tests of one binary on
+    /// parallel threads, and a process-wide value would decide the standing of
+    /// a read another test was making. The value is read on the thread that
+    /// calls [`standing`], which is the thread that opened the connection:
+    /// [`super::session`] resolves the probe's answer on the caller's thread,
+    /// outside the runtime it blocks on.
+    static NARROWED: std::cell::Cell<Option<Series>> = const { std::cell::Cell::new(None) };
+}
+
+/// Narrows this thread's window to `series` alone, until the answer is dropped
+/// (`FR-SRV-035`).
+///
+/// `FR-SRV-035` requires a test that presents the reader with a series **above
+/// its own window**, and no such server exists to point it at: by construction
+/// the window contains the newest MariaDB there is. The test must therefore
+/// narrow the reader rather than widen the server, and the requirement fixes
+/// the seam it narrows by — the seam of `FR-ERR-031`, which is this one.
+///
+/// `#[cfg(test)]` is the whole of that reachability rule, per `OD-21`. The item
+/// is not compiled into the artefact `cargo build` produces; an integration
+/// test links the library compiled without that configuration and cannot see it
+/// either; it appears in no help text, in no JSON command tree of `FR-HELP-016`
+/// and in no command tree of `FR-CLI-002`, because it is not a node of any
+/// tree. `FR-ERR-031` rejects by name every mechanism that would reach it from
+/// outside the process — a command or a flag, an environment variable, a build
+/// selected by a feature — and each of those is rejected here for the same
+/// reason. `FR-SRV-020` had already refused a flag that overrides the window,
+/// which is the argument `FR-SRV-035` cites.
+///
+/// **`BR-SRV-003` is not excepted from.** That rule reaches `FR-SRV-012`
+/// through `FR-SRV-014`, the three promises about what the process *sends*, and
+/// `FR-SRV-035` is a promise about what the reader *emits* into the document.
+/// Narrowing the window changes neither the statements of `FR-SRV-006` nor
+/// their count, and the tests that observe those still observe them on the
+/// server.
+///
+/// The answer restores the previous value when it is dropped, including on the
+/// unwind of a failing assertion, so a narrowed window cannot outlive the body
+/// that asked for it.
+#[cfg(test)]
+#[must_use]
+pub(crate) fn narrow_to(series: Series) -> Narrowing {
+    Narrowing {
+        restore: NARROWED.with(|narrowed| narrowed.replace(Some(series))),
+    }
+}
+
+/// The narrowing [`narrow_to`] installed, which is undone when this is dropped.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct Narrowing {
+    /// What the thread's window was before.
+    restore: Option<Series>,
+}
+
+#[cfg(test)]
+impl Drop for Narrowing {
+    fn drop(&mut self) {
+        NARROWED.with(|narrowed| narrowed.set(self.restore));
+    }
 }
 
 #[cfg(test)]

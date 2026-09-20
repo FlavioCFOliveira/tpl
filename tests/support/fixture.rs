@@ -271,6 +271,32 @@ pub fn notice(text: &str) {
     }
 }
 
+/// A `.tpl/.cfg` naming one database entry that reaches `server` as `account`.
+///
+/// `entry` is the entry name and `schema` the server-side database it selects,
+/// per `FR-CONF-041`. The transport is `disabled` because the five modes of
+/// `FR-CONF-013` are exercised where the connection is made, and a body that
+/// is about something else asks for the one mode that adds nothing to what is
+/// under test.
+///
+/// The address is the harness's own answer, split here rather than written:
+/// no port is written in Rust anywhere in this module, and this composes the
+/// file from what `status.sh --export` printed.
+pub fn configuration(server: &Server, entry: &str, schema: &str, account: (&str, &str)) -> String {
+    let (host, port) = server
+        .address()
+        .rsplit_once(':')
+        .expect("status.sh --export prints host:port");
+    let (user, password) = account;
+
+    format!(
+        "[core]\ndatabase = \"{entry}\"\n\n\
+         [database.{entry}]\nhost = \"{host}\"\nport = {port}\n\
+         user = \"{user}\"\npassword = \"{password}\"\n\
+         database = \"{schema}\"\ntls = \"disabled\"\n"
+    )
+}
+
 // ------------------------------------------------------- the three instruments ---
 
 /// The server's connection record: the count of connections it has accepted

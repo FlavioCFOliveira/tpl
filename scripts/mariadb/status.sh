@@ -47,7 +47,14 @@ wanted() {
 }
 
 up=0; down=0; rows=""
-while read -r name series image container port tls; do
+# The inventory is read on file descriptor 9, not on stdin, on the same terms
+# `tpl_mariadb_each` and up.sh read it: a command in this body that reads stdin
+# would drain the records still to be read, and the loop would end after the
+# first server — silently, and with exit 0, looking like a filter that matched
+# once. Nothing in the body reads stdin today, so the defect is latent rather
+# than present, and the descriptor is what keeps it that way. Descriptor 9 and
+# not 3: `tpl_mariadb_handshake` opens the TCP port on 3.
+while read -r name series image container port tls <&9; do
     [ -n "$name" ] || continue
     wanted "$name" || continue
     version="$(tpl_mariadb_handshake "$port" 2>/dev/null || true)"
@@ -58,7 +65,7 @@ while read -r name series image container port tls; do
         down=$((down + 1))
         rows="$rows$name|$port|$tls|down|-"$'\n'
     fi
-done <<< "$TPL_MARIADB_SERVERS"
+done 9<<< "$TPL_MARIADB_SERVERS"
 
 case "$MODE" in
     table)

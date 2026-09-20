@@ -36,6 +36,7 @@ pub(super) mod named;
 mod pattern;
 mod text;
 
+use std::borrow::Cow;
 use std::io::Write;
 
 use clap::{ArgAction, Args, Subcommand};
@@ -49,6 +50,7 @@ use crate::error::Error;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::shape::TableDocument;
 use crate::model::routine::Routine;
+use crate::model::server::Server;
 use crate::model::view::View;
 use crate::output::{self, Collection as Members, Document, Form, Source};
 
@@ -233,8 +235,7 @@ pub(crate) enum Command {
 /// with the same invocation corrected, per `FR-ERR-009`.
 const ROUTINE: &str = "schema routine";
 
-/// The `data` of `tpl schema info` and `tpl schema dump` (`FR-SCH-031`,
-/// `FR-SCH-034`).
+/// The `data` of `tpl schema dump` (`FR-SCH-034`).
 ///
 /// One key, named for the kind in the singular, whose value is the whole
 /// `database` object [context-document.md](../../../specification/context-document.md)
@@ -244,6 +245,73 @@ const ROUTINE: &str = "schema routine";
 struct DatabaseData<'a, 'd> {
     /// The whole model of the selected database.
     database: &'a DatabaseDocument<'d>,
+}
+
+/// The `data` of `tpl schema info` (`FR-SCH-031`).
+///
+/// One key, `database`, whose value is the **named subset** that requirement
+/// fixes rather than the whole object [`DatabaseData`] carries.
+#[derive(Debug, Serialize)]
+struct InfoData<'a, 'd> {
+    /// The metadata of the selected database.
+    database: DatabaseMetadata<'a, 'd>,
+}
+
+/// The `database` object of `tpl schema info` (`FR-SCH-031`).
+///
+/// ```json
+/// {"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{…}}
+/// ```
+///
+/// **Exactly four members and no others**: the three metadata fields
+/// `FR-CTX-036` fixes and the `server` object `FR-CTX-031` fixes. The three
+/// collections of `FR-CTX-035` — `tables`, `views` and `routines` — are not
+/// carried, which is what `FR-SCH-031` requires and is the whole of the
+/// difference between this command and `tpl schema dump`.
+///
+/// *Why the reduction is a type of its own rather than a serialisation
+/// attribute on [`DatabaseDocument`].* That type is the document
+/// `tpl schema dump` emits under `FR-SCH-034` and `tpl render --context`
+/// consumes under `FR-SCH-036`, and skipping three of its fields there would
+/// change both. The fields below are **borrowed** from it, so the reduction
+/// copies nothing and cannot disagree with the object it reduces: every member
+/// is the same member, under the same name and with the same value, which is
+/// what `FR-SCH-031` promises a caller that reads `data.database.name` from
+/// either command.
+///
+/// The key order is the field order, per `OD-18`, and it is `FR-CTX-036`'s
+/// order with the collections removed from the end.
+///
+/// *Rejected: a key of its own beside `database`, or a count of each
+/// collection.* `FR-SCH-031` rejects both by name — a count is derivable from
+/// the three listings of `FR-SCH-032` and from the dump, and inventing a field
+/// the model does not carry would put a number in the plumbing contract that no
+/// requirement of `catalogue-coverage.md` fixes.
+#[derive(Debug, Serialize)]
+struct DatabaseMetadata<'a, 'd> {
+    /// The schema's name.
+    name: &'a Cow<'d, str>,
+
+    /// The schema's default character set.
+    charset: &'a Cow<'d, str>,
+
+    /// The schema's default collation.
+    collation: &'a Cow<'d, str>,
+
+    /// The server the read was made against (`FR-CTX-031`).
+    server: &'a Server<'d>,
+}
+
+impl<'a, 'd> DatabaseMetadata<'a, 'd> {
+    /// The four members of `document` this command presents.
+    const fn of(document: &'a DatabaseDocument<'d>) -> Self {
+        Self {
+            name: &document.name,
+            charset: &document.charset,
+            collation: &document.collation,
+            server: &document.server,
+        }
+    }
 }
 
 /// The `data` of `tpl schema table` (`FR-SCH-033`, `FR-OUT-031`).
@@ -291,12 +359,20 @@ pub(crate) fn run<W: Write>(
         Command::Info { output, caching } => {
             let (format, form) = representation(output);
 
-            Reader::new(globals, Some(caching)).serve(Look::Everything, |document, source, _| {
+            Reader::new(globals, Some(caching)).serve(&Look::Everything, |document, source, _| {
                 match format {
                     Format::Text => text::info(&mut *out, document),
-                    Format::Json => {
-                        enveloped(&mut *out, source, form, DatabaseData { database: document })
-                    }
+                    // FR-SCH-031: the named subset, not the whole object. The
+                    // two commands answer different questions and this is what
+                    // keeps them from emitting the same bytes.
+                    Format::Json => enveloped(
+                        &mut *out,
+                        source,
+                        form,
+                        InfoData {
+                            database: DatabaseMetadata::of(document),
+                        },
+                    ),
                 }
             })
         }
@@ -310,7 +386,7 @@ pub(crate) fn run<W: Write>(
             let mut selector = selector(filter);
 
             Reader::new(globals, Some(caching)).serve(
-                Look::Collection(Collection::Tables),
+                &Look::Collection(Collection::Tables),
                 |document, source, _| {
                     let selected = filtered(selector.as_mut(), document.tables.iter(), |table| {
                         &table.name
@@ -335,7 +411,7 @@ pub(crate) fn run<W: Write>(
             let mut selector = selector(filter);
 
             Reader::new(globals, Some(caching)).serve(
-                Look::Collection(Collection::Views),
+                &Look::Collection(Collection::Views),
                 |document, source, _| {
                     let selected =
                         filtered(selector.as_mut(), document.views.iter(), |view| &view.name);
@@ -359,7 +435,7 @@ pub(crate) fn run<W: Write>(
             let mut selector = selector(filter);
 
             Reader::new(globals, Some(caching)).serve(
-                Look::Collection(Collection::Routines),
+                &Look::Collection(Collection::Routines),
                 |document, source, _| {
                     let selected =
                         filtered(selector.as_mut(), document.routines.iter(), |routine| {
@@ -384,7 +460,7 @@ pub(crate) fn run<W: Write>(
             let (format, form) = representation(output);
 
             Reader::new(globals, Some(caching)).serve(
-                Look::Table(name),
+                &Look::Table(name),
                 |document, source, entry| {
                     let found = named::table(document, name, sought(entry, document))?;
 
@@ -406,7 +482,7 @@ pub(crate) fn run<W: Write>(
             let (format, form) = representation(output);
 
             Reader::new(globals, Some(caching)).serve(
-                Look::View(name),
+                &Look::View(name),
                 |document, source, entry| {
                     let found = named::view(document, name, sought(entry, document))?;
 
@@ -431,9 +507,10 @@ pub(crate) fn run<W: Write>(
             let wanted = named::routine_token(name, ROUTINE)?;
 
             Reader::new(globals, Some(caching)).serve(
-                look_for(wanted),
+                &look_for(&wanted),
                 |document, source, entry| {
-                    let found = named::routine(document, wanted, sought(entry, document), ROUTINE)?;
+                    let found =
+                        named::routine(document, &wanted, sought(entry, document), ROUTINE)?;
 
                     match format {
                         Format::Text => text::routine(&mut *out, found),
@@ -450,7 +527,7 @@ pub(crate) fn run<W: Write>(
         Command::Dump { pretty, caching } => {
             let form = form(pretty.pretty);
 
-            Reader::new(globals, Some(caching)).serve(Look::Everything, |document, source, _| {
+            Reader::new(globals, Some(caching)).serve(&Look::Everything, |document, source, _| {
                 enveloped(&mut *out, source, form, DatabaseData { database: document })
             })
         }
@@ -474,10 +551,14 @@ const ROUTINES: &str = "routines";
 /// between them is the ambiguity `FR-SCH-010` refuses over the population of
 /// the database — so it asks for the collection, which `FR-CDOC-007` serves
 /// only where it was loaded whole and which is therefore the population itself.
-const fn look_for(wanted: named::Wanted<'_>) -> Look<'_> {
+fn look_for<'a>(wanted: &named::Wanted<'a>) -> Look<'a> {
     match wanted {
         named::Wanted::Bare(_) => Look::Collection(Collection::Routines),
-        named::Wanted::Qualified(kind, name) => Look::Routine(kind, name),
+        // The kind is cloned rather than copied: `FR-CAT-055` gives
+        // `RoutineKind` a variant carrying the catalogue's own string. Only a
+        // recorded kind reaches here, so the clone is of a unit variant and
+        // allocates nothing.
+        named::Wanted::Qualified(kind, name) => Look::Routine(kind.clone(), name),
     }
 }
 

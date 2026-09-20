@@ -641,11 +641,21 @@ fewer than nine distinct observations. Rows 1 and 2 are the only two that need a
 second and larger database to be conclusive; see [what could not be
 instrumented](#what-could-not-be-instrumented).
 
-`tpl` does not exist yet. Every observation below was therefore made against a
-**substitute client** — the `mariadb` client of the series being observed, or
-the one in the observer image — and that is deliberate: what is being
-established is the instrument, not the behaviour of a binary nobody has written.
-When `tpl` exists the instrument stays and the client changes.
+Every observation below was made against a **substitute client** — the
+`mariadb` client of the series being observed, or the one in the observer
+image. It was made that way because `tpl` had no catalogue reader when these
+instruments were established, so there was no binary to point them at, and what
+was being established was the instrument rather than the behaviour of the
+client: an instrument that shows what a substitute sent shows what any client
+sent.
+
+**That condition no longer holds, and the instruments are now reached by the
+test suite.** `tpl` reads the catalogue, and the suite drives the distributed
+binary against these servers through `tests/support/fixture.rs`, which wraps
+the three instruments below. The observations recorded here are unchanged and
+are what the substitute produced on the dates they carry; what changed is that
+the client under test is now `tpl` itself, and the instrument stayed, exactly
+as this paragraph said it would.
 
 ### The statements a server receives
 
@@ -689,7 +699,8 @@ test for "four kinds and no fifth" depends on.
 
 **`FR-SRV-012`, end to end.** `probe-session.sql` issues the connection-start
 sequence of `FR-SRV-006` — the version probe, the read-only session statement,
-the read-back, then a catalogue read — and stands in for `tpl`:
+the read-back, then a catalogue read — and stood in for `tpl` while the reader
+was being built:
 
 ```sh
 ./observe.sh statements on 11.8
@@ -745,10 +756,13 @@ ERROR 1792 (25006) at line 1: Cannot execute statement in a READ ONLY transactio
 ./observe.sh statements dump 11.4 --catalogue --count
 ```
 
-`--catalogue` keeps the `Query` rows naming `INFORMATION_SCHEMA`; `--count`
-prints the number alone. Three fixed catalogue queries were sent against two
-schemas of different size, and the instrument reported the count that matters
-rather than the size of the schema:
+`--catalogue` keeps the rows naming `INFORMATION_SCHEMA` that mean *a statement
+was issued* — a `Query` row for the text protocol and an `Execute` row for the
+binary one — and drops the `Prepare` row, which registers a statement text
+rather than an issue of it; `observe.sh` records why in the header above
+`statements_dump`. `--count` prints the number alone. Three fixed catalogue
+queries were sent against two schemas of different size, and the instrument
+reported the count that matters rather than the size of the schema:
 
 ```
   schema=freight    objects=23   catalogue queries the server received=3

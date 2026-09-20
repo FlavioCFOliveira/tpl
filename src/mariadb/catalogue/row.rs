@@ -8,7 +8,7 @@
 //! |---|---|---|
 //! | [`text`] | A field the catalogue declares `NOT NULL` | `&str`, borrowed from the row |
 //! | [`maybe_text`] | A field that admits SQL `NULL` | `Option<&str>`, [`None`] for `NULL` |
-//! | [`text_or_empty`] | A field that admits SQL `NULL` and reaches a model field that does not | `&str`, empty for `NULL` |
+//! | [`text_or_empty`] | One of the two fields that admit SQL `NULL` and reach a decomposed type rather than a field of their own | `&str`, empty for `NULL` |
 //! | [`count`] | An integer field declared **unsigned** and `NOT NULL` | `u64` |
 //! | [`maybe_count`] | An integer field declared **unsigned** that admits SQL `NULL` | `Option<u64>` |
 //! | [`signed`] | An integer field declared **signed** and `NOT NULL` | `u64` |
@@ -124,24 +124,26 @@ pub(super) fn maybe_text<'r>(row: &'r MySqlRow, field: &str) -> Result<Option<&'
 
 /// A field that admits SQL `NULL` and reaches a model field that does not.
 ///
-/// The model carries a bare [`Cow<'a, str>`](std::borrow::Cow) wherever the
-/// catalogue field list records a value on every row it was observed on, and
-/// the catalogue nonetheless declares some of those fields nullable — a
-/// trigger's definer, a trigger's action statement, a foreign key's
-/// unique-constraint name and its referenced table name. The empty string is
-/// what an absent one becomes, because the model has no shape for an absent one
-/// and this task may not give it one.
+/// Two fields are read through this accessor and no others, and both reach a
+/// **decomposed type** rather than a field of their own:
 ///
-/// **This is a recorded limit and not a value the catalogue produced.** No row
-/// of the fixture returned SQL `NULL` in any of those four fields on any of the
-/// four series, so nothing observed reaches this substitution.
+/// | Field | Where it goes | Why the empty string is the value and not a substitution |
+/// |---|---|---|
+/// | `COLUMNS.GENERATION_EXPRESSION` | [`Generated::expression`](crate::model::column::Generated::expression) | It is read only where the column is generated, per `FR-CAT-051`, and the catalogue populates it on exactly those rows |
+/// | `DTD_IDENTIFIER`, in the routine and parameter catalogues | [`ColumnType::raw`](crate::model::column_type::ColumnType::raw) | `FR-CAT-048` records that a procedure's is SQL `NULL` beside a data-type field that is the empty string, and the model answers the pair by emitting the whole return type as `null` from the **kind**, so this value is never the one presented |
 ///
-/// *A routine's definition was on that list and is no longer read through this
-/// accessor.* `FR-PRIV-017` makes SQL `NULL` there a **missing privilege**, and
-/// the substitution would make it indistinguishable from a body that is
-/// genuinely empty, so [`super::fold`] reads that one field's nullity with
-/// [`maybe_text`] and substitutes at the point it has already taken the
-/// verdict. The model's field is unchanged and still cannot carry a `NULL`.
+/// **The four fields this accessor used to serve have left it**, because
+/// `FR-CAT-056` forbids the substitution for them by name: a trigger's definer
+/// and action statement, and a foreign key's unique-constraint name and
+/// referenced table name, are declared nullable on all four series and now
+/// reach the model as [`Option`], read with [`maybe_text`]. A routine's
+/// definition left earlier, for the reason `FR-PRIV-017` gives, and is now an
+/// [`Option`] too.
+///
+/// The requirement's ground is the one this accessor's own documentation used
+/// to concede: the empty string is a recorded limit rather than a value the
+/// catalogue produced, and a model field that cannot tell the two apart makes
+/// an absent value indistinguishable from an empty one.
 #[track_caller]
 pub(super) fn text_or_empty<'r>(row: &'r MySqlRow, field: &str) -> Result<&'r str, Error> {
     Ok(maybe_text(row, field)?.unwrap_or_default())

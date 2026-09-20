@@ -237,7 +237,11 @@ pub(crate) struct Held {
 /// needs would turn a warm cache into a miss, and one that asked for less would
 /// serve a listing short — which is the wrong answer `BR-CDOC-002` exists to
 /// prevent.
-#[derive(Debug, Clone, Copy)]
+///
+/// It is [`Clone`] and not [`Copy`], because [`Look::Routine`] carries a
+/// [`RoutineKind`] and `FR-CAT-055` gives that enumeration a variant holding
+/// the catalogue's own string.
+#[derive(Debug, Clone)]
 pub(crate) enum Look<'a> {
     /// The whole catalogue, all three collections recorded whole.
     ///
@@ -263,7 +267,7 @@ pub(crate) enum Look<'a> {
     /// holding one of the two says nothing about whether the other exists on
     /// the server, so a bare name asks for [`Look::Collection`] instead and is
     /// served only from a routines collection recorded whole.
-    Routine(RoutineKind, &'a str),
+    Routine(RoutineKind<'a>, &'a str),
 }
 
 /// One database entry's cache.
@@ -318,10 +322,10 @@ impl Cache {
     /// It is the one entry point a read-through takes, so that the choice
     /// `FR-CDOC-007` and `FR-CDOC-008` make between a collection and a member
     /// is stated where the command decides it and applied in one place here.
-    pub(crate) fn look(&self, look: Look<'_>) -> Option<Loaded> {
+    pub(crate) fn look(&self, look: &Look<'_>) -> Option<Loaded> {
         match look {
             Look::Everything => self.everything(),
-            Look::Collection(collection) => self.collection(collection),
+            Look::Collection(collection) => self.collection(*collection),
             Look::Table(name) => self.table(name),
             Look::View(name) => self.view(name),
             Look::Routine(kind, name) => self.routine(kind, name),
@@ -360,7 +364,7 @@ impl Cache {
     /// holds one of the two answers, and a cache that holds both puts the
     /// ambiguity of `FR-SCH-010` in the caller's hands exactly as a server read
     /// does.
-    pub(crate) fn routine(&self, kind: RoutineKind, name: &str) -> Option<Loaded> {
+    pub(crate) fn routine(&self, kind: &RoutineKind<'_>, name: &str) -> Option<Loaded> {
         let layout = self.layout.as_ref()?;
         self.member(Collection::Routines, layout.routine(kind, name)?)
     }
@@ -599,7 +603,7 @@ impl Cache {
     }
 
     /// The file one routine is held in, for [`Cache::clean_one`].
-    pub(crate) fn routine_file(&self, kind: RoutineKind, name: &str) -> Option<PathBuf> {
+    pub(crate) fn routine_file(&self, kind: &RoutineKind<'_>, name: &str) -> Option<PathBuf> {
         self.layout.as_ref()?.routine(kind, name)
     }
 
@@ -765,7 +769,7 @@ fn routine_file(layout: &Layout, routine: &crate::model::routine::Routine<'_>) -
     routine
         .restricted
         .is_none()
-        .then(|| layout.routine(routine.kind, &routine.name))?
+        .then(|| layout.routine(&routine.kind, &routine.name))?
 }
 
 /// Replaces one collection with `members`, and answers whether it may be

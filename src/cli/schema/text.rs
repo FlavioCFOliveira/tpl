@@ -256,9 +256,14 @@ pub(super) fn table<W: std::io::Write>(out: W, table: &TableDocument<'_>) -> Res
                         .collect::<Vec<&str>>()
                         .join(", "),
                 ),
+                // FR-CTX-006: a key that names no table to reference carries
+                // `null` where the embedded table stands, and the `text` form
+                // shows the same absence it shows everywhere else.
                 Cow::Owned(format!(
                     "{}({})",
-                    key.referenced_table.name,
+                    key.referenced_table
+                        .as_ref()
+                        .map_or(NULL, |referenced| referenced.name.as_ref()),
                     key.columns
                         .iter()
                         .map(|pair| pair.referenced_column.as_ref())
@@ -372,7 +377,7 @@ pub(super) fn routine<W: std::io::Write>(out: W, routine: &Routine<'_>) -> Resul
         [text("security_type"), text(&routine.security_type)],
         [text("definer"), text(&routine.definer)],
         [text("comment"), text(&routine.comment)],
-        [text("body"), text(&routine.body)],
+        [text("body"), optional(routine.body.as_deref())],
     ];
     sections.table(&Table::new(PROPERTY, &own, Order::AsGiven))?;
 

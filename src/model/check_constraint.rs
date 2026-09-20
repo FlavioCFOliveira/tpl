@@ -19,50 +19,25 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
-/// The catalogue's value for a constraint declared on the table.
-const TABLE_LEVEL: &str = "Table";
-
-/// The catalogue's value for one declared on a column.
-const COLUMN_LEVEL: &str = "Column";
-
-/// The level a `CHECK` constraint is declared at (`FR-CAT-046`).
-///
-/// `FR-CAT-046` fixes the level as admitting **exactly two values** and records
-/// that no third was observed over the fixture's 24 constraints on any of the
-/// four series. Note the case: the catalogue writes them mixed, and the
-/// spelling is contract surface once the level reaches the document.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub enum ConstraintLevel {
-    /// Declared on the table, with a name the DDL gave. 22 of the fixture's 24.
-    #[serde(rename = "Table")]
-    Table,
-
-    /// Declared on a column, and therefore named after that column. 2 of 24.
-    #[serde(rename = "Column")]
-    Column,
-}
-
-impl ConstraintLevel {
-    /// Reads the level from the catalogue's level field.
+catalogued! {
+    /// The level a `CHECK` constraint is declared at (`FR-CAT-046`).
     ///
-    /// [`None`] for any other value, which `FR-CAT-046` observed none of.
-    #[must_use]
-    pub fn from_catalogue(field: &str) -> Option<Self> {
-        match field {
-            TABLE_LEVEL => Some(Self::Table),
-            COLUMN_LEVEL => Some(Self::Column),
-            _ => None,
-        }
-    }
-
-    /// The spelling the catalogue writes, in the catalogue's own case.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Table => TABLE_LEVEL,
-            Self::Column => COLUMN_LEVEL,
-        }
+    /// `FR-CAT-046` fixes the level as admitting **exactly two values** and
+    /// records that no third was observed over the fixture's 24 constraints on
+    /// any of the four series. Note the case: the catalogue writes them mixed,
+    /// and the spelling is contract surface once the level reaches the
+    /// document.
+    ///
+    /// *The set is closed by that observation and not by the catalogue.* The
+    /// field is declared `varchar(6)` and `NOT NULL` on all four series, never
+    /// an `ENUM`, so a third value is carried verbatim under `FR-CAT-055`.
+    ConstraintLevel from "LEVEL" {
+        /// Declared on the table, with a name the DDL gave. 22 of the
+        /// fixture's 24.
+        Table = "Table",
+        /// Declared on a column, and therefore named after that column. 2 of
+        /// 24.
+        Column = "Column",
     }
 }
 
@@ -76,7 +51,7 @@ pub struct CheckConstraint<'a> {
     pub name: Cow<'a, str>,
 
     /// Whether the constraint is declared on the table or on a column.
-    pub level: ConstraintLevel,
+    pub level: ConstraintLevel<'a>,
 
     /// The clause, as the catalogue rewrote it: identifiers backtick-quoted
     /// and operators lower-cased.
@@ -95,17 +70,52 @@ mod tests {
         // no third value on any of the four series.
         assert_eq!(
             ConstraintLevel::from_catalogue("Table"),
-            Some(ConstraintLevel::Table)
+            ConstraintLevel::Table
         );
         assert_eq!(
             ConstraintLevel::from_catalogue("Column"),
-            Some(ConstraintLevel::Column)
+            ConstraintLevel::Column
         );
-        assert_eq!(ConstraintLevel::from_catalogue("TABLE"), None);
-        assert_eq!(ConstraintLevel::from_catalogue("column"), None);
-        assert_eq!(ConstraintLevel::from_catalogue(""), None);
         assert_eq!(ConstraintLevel::Table.name(), "Table");
         assert_eq!(ConstraintLevel::Column.name(), "Column");
+        assert_eq!(ConstraintLevel::Table.recorded(), Some("Table"));
+    }
+
+    #[test]
+    fn fr_cat_055_a_level_outside_the_recorded_two_is_carried_and_is_not_a_refusal() {
+        // FR-CAT-055: the catalogue declares this field `varchar(6)` and never
+        // an `ENUM`, so nothing but the observation of FR-CAT-046 closes the
+        // set. A third value is carried as the catalogue wrote it, case
+        // included — the reading is exact, so `TABLE` is not `Table`.
+        for outside in ["TABLE", "column", "", "Row"] {
+            let carried = ConstraintLevel::from_catalogue(outside);
+
+            assert_eq!(carried, ConstraintLevel::Unrecorded(Cow::Borrowed(outside)));
+            assert_eq!(carried.name(), outside);
+            assert_eq!(
+                carried.recorded(),
+                None,
+                "an unrecorded level has no spelling a requirement fixes"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_cat_055_a_level_round_trips_through_the_document_whether_recorded_or_not() {
+        // FR-CAT-055: the document carries the catalogue's own string, so a
+        // value a server newer than the window returned survives the cache.
+        for level in [
+            ConstraintLevel::Table,
+            ConstraintLevel::Column,
+            ConstraintLevel::Unrecorded(Cow::Borrowed("Assertion")),
+        ] {
+            let written = serde_json::to_string(&level).expect("a level serialises");
+            let read: ConstraintLevel<'_> =
+                serde_json::from_str(&written).expect("a level reads back");
+
+            assert_eq!(written, format!("\"{}\"", level.name()));
+            assert_eq!(read, level);
+        }
     }
 
     #[test]

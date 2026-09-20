@@ -31,41 +31,34 @@ use serde::{Deserialize, Serialize};
 use super::column_type::ColumnType;
 use super::restricted::Restricted;
 
-/// Whether a routine is a procedure or a function (`FR-CAT-016`).
-///
-/// `FR-CAT-008` covers the two together and `FR-CAT-016` requires each object
-/// to state which it is. The two spellings below are the catalogue's; the lower
-/// case forms `procedure:` and `function:` that `FR-SCH-008` accepts on the
-/// command line are a matter for the parser and not for the model.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-#[non_exhaustive]
-pub enum RoutineKind {
-    /// A stored procedure. It has no return type.
-    Procedure,
-
-    /// A stored function.
-    Function,
-}
-
-impl RoutineKind {
-    /// Reads the kind from the routine-type field.
-    #[must_use]
-    pub fn from_catalogue(field: &str) -> Option<Self> {
-        match field {
-            "PROCEDURE" => Some(Self::Procedure),
-            "FUNCTION" => Some(Self::Function),
-            _ => None,
-        }
-    }
-
-    /// The spelling the catalogue writes, which is what the document carries.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Procedure => "PROCEDURE",
-            Self::Function => "FUNCTION",
-        }
+catalogued! {
+    /// Whether a routine is a procedure or a function (`FR-CAT-016`).
+    ///
+    /// `FR-CAT-008` covers the two together and `FR-CAT-016` requires each
+    /// object to state which it is. The two spellings below are the
+    /// catalogue's; the lower-case forms `procedure:` and `function:` that
+    /// `FR-SCH-008` accepts on the command line are a matter for the parser and
+    /// not for the model, and `FR-CAT-016` states in its own text that the two
+    /// strings are not the same string.
+    ///
+    /// *The set is closed by an observation and not by the catalogue.* The
+    /// routine-type field is declared `varchar(13)` and `NOT NULL` on all four
+    /// series, never an `ENUM`, so `FR-CAT-016` promises the two strings **on a
+    /// server whose `standing` is `supported`** and `FR-CAT-055` carries a
+    /// third verbatim.
+    ///
+    /// **A third kind is carried in the document and is not reachable by a
+    /// qualified name.** `FR-SCH-008` admits the two prefixes and no third, and
+    /// `FR-CDOC-014` builds a cache path from the same two, so
+    /// [`recorded`](Self::recorded) answers [`None`] for it and both of those
+    /// callers stop there. Its bare name still reaches it, per `FR-SCH-010`.
+    /// That consequence is `FR-CAT-055`'s own, stated in the requirement rather
+    /// than inferred here.
+    RoutineKind from "ROUTINE_TYPE" {
+        /// A stored procedure. It has no return type.
+        Procedure = "PROCEDURE",
+        /// A stored function.
+        Function = "FUNCTION",
     }
 }
 
@@ -101,7 +94,7 @@ pub struct Routine<'a> {
     pub name: Cow<'a, str>,
 
     /// Whether it is a procedure or a function (`FR-CAT-016`).
-    pub kind: RoutineKind,
+    pub kind: RoutineKind<'a>,
 
     /// The return type of a function, or [`None`] in full for a procedure
     /// (`FR-CAT-048`).
@@ -113,8 +106,17 @@ pub struct Routine<'a> {
     pub parameters: Vec<RoutineParameter<'a>>,
 
     /// The body **as written**, with newlines and identifier case preserved
-    /// (`FR-CAT-017`) — and **not** rewritten as a view definition is.
-    pub body: Cow<'a, str>,
+    /// (`FR-CAT-017`) — and **not** rewritten as a view definition is — or
+    /// [`None`] where the catalogue returned SQL `NULL` (`FR-CAT-056`).
+    ///
+    /// The field is declared nullable, `longtext`, on all four series, and was
+    /// populated on all seven routines of the fixture for a privileged reader.
+    /// SQL `NULL` is what a reader without the privilege receives, so an absent
+    /// body is also an incomplete routine under `FR-PRIV-017` and the object
+    /// carries the `restricted` marking of `FR-PRIV-016` beside it. The two are
+    /// one observation read twice: `null` is what the model carries, and the
+    /// marking is what says why.
+    pub body: Option<Cow<'a, str>>,
 
     /// The routine body kind, carried verbatim. It read `SQL` on all seven
     /// routines of the fixture.
@@ -185,7 +187,10 @@ mod tests {
         })
     }
 
-    fn routine(kind: RoutineKind, return_type: Option<ColumnType<'static>>) -> Routine<'static> {
+    fn routine(
+        kind: RoutineKind<'static>,
+        return_type: Option<ColumnType<'static>>,
+    ) -> Routine<'static> {
         Routine {
             name: Cow::Borrowed("sp_book_consignment"),
             kind,
@@ -195,7 +200,7 @@ mod tests {
                 mode: Cow::Borrowed("IN"),
                 parameter_type: decimal(),
             }],
-            body: Cow::Borrowed("BEGIN\n  SELECT 1;\nEND"),
+            body: Some(Cow::Borrowed("BEGIN\n  SELECT 1;\nEND")),
             body_kind: Cow::Borrowed("SQL"),
             parameter_style: Cow::Borrowed("SQL"),
             is_deterministic: false,
@@ -212,15 +217,72 @@ mod tests {
     }
 
     #[test]
-    fn fr_cat_008_the_two_kinds_round_trip_and_nothing_else_is_a_kind() {
+    fn fr_cat_008_the_two_kinds_round_trip_and_nothing_else_is_a_recorded_kind() {
         // FR-CAT-008 covers procedures and functions together; FR-CAT-016
-        // requires each object to state which it is.
+        // requires each object to state which it is, in the catalogue's own
+        // upper case.
         for kind in [RoutineKind::Procedure, RoutineKind::Function] {
-            assert_eq!(RoutineKind::from_catalogue(kind.name()), Some(kind));
+            assert_eq!(RoutineKind::from_catalogue(kind.name()), kind.clone());
+            assert_eq!(kind.recorded(), Some(kind.name()));
         }
 
-        assert_eq!(RoutineKind::from_catalogue("TRIGGER"), None);
-        assert_eq!(RoutineKind::from_catalogue("procedure"), None);
+        // FR-CAT-016 states that the emitted value is not the lower-case
+        // prefix FR-SCH-008 admits on the command line, and the reading is
+        // exact: a caller composing a qualified name folds the case itself.
+        assert_eq!(
+            RoutineKind::from_catalogue("procedure"),
+            RoutineKind::Unrecorded(Cow::Borrowed("procedure"))
+        );
+    }
+
+    #[test]
+    fn fr_cat_055_a_kind_outside_the_recorded_two_is_carried_and_has_no_qualified_form() {
+        // FR-CAT-055: the routine-type field is `varchar(13)` and never an
+        // `ENUM`, so FR-CAT-016 promises the two strings on a supported server
+        // only. A third kind is carried in the document, and the requirement
+        // names the one place it is not reachable — the qualified name of
+        // FR-SCH-008, which `recorded` is what closes.
+        let package = RoutineKind::from_catalogue("PACKAGE");
+
+        assert_eq!(package, RoutineKind::Unrecorded(Cow::Borrowed("PACKAGE")));
+        assert_eq!(package.name(), "PACKAGE");
+        assert_eq!(package.recorded(), None);
+    }
+
+    #[test]
+    fn fr_cat_055_a_kind_round_trips_through_the_document_whether_recorded_or_not() {
+        // FR-CAT-055: what the server said is what the cache reads back.
+        for kind in [
+            RoutineKind::Procedure,
+            RoutineKind::Function,
+            RoutineKind::Unrecorded(Cow::Borrowed("PACKAGE")),
+        ] {
+            let written = serde_json::to_string(&kind).expect("a kind serialises");
+            let read: RoutineKind<'_> = serde_json::from_str(&written).expect("a kind reads back");
+
+            assert_eq!(written, format!("\"{}\"", kind.name()));
+            assert_eq!(read, kind);
+        }
+    }
+
+    #[test]
+    fn fr_cat_056_an_absent_body_is_null_rather_than_the_empty_string() {
+        // FR-CAT-056: the routine definition is declared nullable on all four
+        // series, and SQL `NULL` is what a reader without the privilege
+        // receives. The model carries `null`, and FR-PRIV-017's marking beside
+        // it is what says why — which an empty string could not distinguish
+        // from a body that is genuinely empty.
+        let withheld = Routine {
+            body: None,
+            restricted: Restricted::new(vec![Cow::Borrowed("body")]),
+            ..routine(RoutineKind::Procedure, None)
+        };
+
+        assert_eq!(withheld.body, None);
+
+        let written = serde_json::to_string(&withheld).expect("a routine serialises");
+
+        assert!(written.contains(r#""body":null"#), "{written}");
     }
 
     #[test]
@@ -270,7 +332,17 @@ mod tests {
         // definition, which the server rewrites.
         let procedure = routine(RoutineKind::Procedure, None);
 
-        assert!(procedure.body.contains('\n'));
-        assert!(procedure.body.starts_with("BEGIN"));
+        assert!(
+            procedure
+                .body
+                .as_deref()
+                .is_some_and(|body| body.contains('\n'))
+        );
+        assert!(
+            procedure
+                .body
+                .as_deref()
+                .is_some_and(|body| body.starts_with("BEGIN"))
+        );
     }
 }

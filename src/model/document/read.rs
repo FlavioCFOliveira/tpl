@@ -95,7 +95,11 @@ fn table(document: TableDocument<'_>) -> Result<Table<'_>, ContextFault> {
             .map(|key| ForeignKey {
                 name: key.name,
                 columns: key.columns.into_owned(),
-                referenced_table: key.referenced_table.name,
+                // The embedding is undone by taking the name the embedded
+                // object was built from, and `null` there is a key that named
+                // no table, per `FR-CTX-006` and `FR-CAT-056`: it reads back
+                // as the `None` the model carries.
+                referenced_table: key.referenced_table.map(|referenced| referenced.name),
                 referenced_key: key.referenced_key,
                 match_option: key.match_option,
                 on_update: key.on_update,

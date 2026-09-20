@@ -131,10 +131,18 @@ pub(crate) type TableDocument<'a> = TableShape<'a, OutgoingKey<'a>, IncomingKey<
 
 /// A table one hop in: its references are names, per `FR-CTX-008`.
 ///
-/// This alias is where a traversal stops. Both reference collections hold
-/// [`Cow<'a, str>`](Cow), which carries no table, so no value of this type can
-/// lead anywhere.
-pub(crate) type EmbeddedTable<'a> = TableShape<'a, Cow<'a, str>, Cow<'a, str>>;
+/// This alias is where a traversal stops. Both reference collections hold a
+/// name, which carries no table, so no value of this type can lead anywhere.
+///
+/// The outgoing side is `Option<Cow<'a, str>>` and the incoming side is not.
+/// A key that names no referenced table — the case `FR-CAT-056` records and
+/// `FR-CTX-006` fixes the document's answer to — contributes an entry with no
+/// name to the collection of the table that declares it, because the entry is
+/// one per key and dropping it would present an embedded table with fewer keys
+/// than it has. The incoming side cannot meet that case: an entry is there
+/// **because** a key named this table, so the referencing table always has a
+/// name.
+pub(crate) type EmbeddedTable<'a> = TableShape<'a, Option<Cow<'a, str>>, Cow<'a, str>>;
 
 /// One table of the document, parameterised by what a reference resolves to
 /// (`FR-CAT-009` … `FR-CAT-015`, `FR-CTX-006` … `FR-CTX-010`).
@@ -215,15 +223,27 @@ impl<F, I> Named for TableShape<'_, F, I> {
 }
 
 /// A foreign key at the first hop: the referenced table is embedded in full,
-/// per `FR-CTX-006` and `FR-CTX-007`.
-pub(crate) type OutgoingKey<'a> = ForeignKeyShape<'a, EmbeddedTable<'a>>;
+/// per `FR-CTX-006` and `FR-CTX-007`, or is `null`.
+///
+/// `null` is the amendment `FR-CTX-006` took in the twenty-seventh edition,
+/// and it is the one case with no first hop: a key whose `referenced_table` is
+/// `null` under `FR-CAT-056` names no table to embed, so the key is still
+/// carried — with its name, its columns and its rules — and the place the
+/// embedded table occupies carries `null`, per `FR-OUT-012`. The key is
+/// **emitted rather than omitted**, because `FR-SEM-012` fails a render when a
+/// template reads a field that is not there, so a template written against
+/// every other key in the document would fail on this one.
+pub(crate) type OutgoingKey<'a> = ForeignKeyShape<'a, Option<EmbeddedTable<'a>>>;
 
-/// A foreign key whose referenced table is a name.
+/// A foreign key whose referenced table is a name, or `null`.
 ///
 /// It is the key carried inside an [`IncomingKey`], where the referenced table
 /// is the table carrying `referenced_by` — already at hand, and one hop further
-/// than `FR-CTX-009` admits.
-pub(crate) type NamedKey<'a> = ForeignKeyShape<'a, Cow<'a, str>>;
+/// than `FR-CTX-009` admits. It is nevertheless an [`Option`] on the same terms
+/// as [`OutgoingKey`], because it is the same key: one shape is filled from one
+/// model field, and giving the two depths different nullability would be a
+/// second place for the same fact.
+pub(crate) type NamedKey<'a> = ForeignKeyShape<'a, Option<Cow<'a, str>>>;
 
 /// One foreign key of the document, parameterised by what its referenced table
 /// resolves to (`FR-CAT-045`).
@@ -243,22 +263,25 @@ pub(crate) struct ForeignKeyShape<'a, R> {
     #[serde(borrow)]
     pub(crate) columns: Cow<'a, [ForeignKeyColumn<'a>]>,
 
-    /// The referenced table: an object at the first hop, a name beyond it.
+    /// The referenced table: an object at the first hop, a name beyond it, and
+    /// `null` at either depth where the key names none (`FR-CTX-006`,
+    /// `FR-CAT-056`).
     pub(crate) referenced_table: R,
 
-    /// The key on the referenced table the foreign key points at.
+    /// The key on the referenced table the foreign key points at, or `null`
+    /// where the catalogue returned SQL `NULL` (`FR-CAT-056`).
     #[serde(borrow)]
-    pub(crate) referenced_key: Cow<'a, str>,
+    pub(crate) referenced_key: Option<Cow<'a, str>>,
 
     /// The match option, carried verbatim.
     #[serde(borrow)]
     pub(crate) match_option: Cow<'a, str>,
 
     /// The `ON UPDATE` rule.
-    pub(crate) on_update: ReferentialAction,
+    pub(crate) on_update: ReferentialAction<'a>,
 
     /// The `ON DELETE` rule.
-    pub(crate) on_delete: ReferentialAction,
+    pub(crate) on_delete: ReferentialAction<'a>,
 }
 
 impl<R> Named for ForeignKeyShape<'_, R> {

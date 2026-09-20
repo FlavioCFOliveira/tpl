@@ -42,19 +42,24 @@ const PROCEDURE: &str = "procedure";
 const FUNCTION: &str = "function";
 
 /// What a token naming one routine resolved to (`FR-SCH-008`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// It is [`Clone`] and not [`Copy`], because [`RoutineKind`] carries the
+/// catalogue's own string for a kind outside the recorded two, per
+/// `FR-CAT-055`. Only the two recorded kinds are ever built here: a qualified
+/// token carries one of the two prefixes `FR-SCH-008` admits and no third.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Wanted<'a> {
     /// A bare name, which may denote a procedure **and** a function — the
     /// ambiguity `FR-SCH-010` refuses.
     Bare(&'a str),
 
     /// A name qualified by one of the two prefixes.
-    Qualified(RoutineKind, &'a str),
+    Qualified(RoutineKind<'a>, &'a str),
 }
 
 impl<'a> Wanted<'a> {
     /// The routine name, without any qualifying prefix.
-    const fn name(self) -> &'a str {
+    const fn name(&self) -> &'a str {
         match self {
             Self::Bare(name) | Self::Qualified(_, name) => name,
         }
@@ -92,7 +97,14 @@ pub(crate) fn routine_token<'t>(
         // name may.
         _ => return Ok(Wanted::Bare(token)),
     };
-    let lower = lower(kind);
+    // A kind with no lower-case spelling is not a prefix `FR-SCH-008` admits,
+    // so the token is a bare name on the same terms as the arm above. The arm
+    // is unreachable from the match that produced `kind` — both of its arms
+    // yield a recorded kind — and it is written as a degradation rather than
+    // as an `expect` so that this module carries no panic.
+    let Some(lower) = lower(&kind) else {
+        return Ok(Wanted::Bare(token));
+    };
 
     if prefix != lower {
         return Err(Error::RoutinePrefixNotLowerCase {
@@ -106,12 +118,15 @@ pub(crate) fn routine_token<'t>(
     Ok(Wanted::Qualified(kind, name))
 }
 
-/// The lower-case spelling of a routine kind (`FR-SCH-008`).
+/// The lower-case spelling of a routine kind (`FR-SCH-008`), or [`None`] where
+/// the kind has none.
 ///
 /// It is the spelling the cache composes a path from, per `FR-CDOC-014`, and
 /// is read from the one place that states it so that the command line and the
-/// path cannot drift apart.
-const fn lower(kind: RoutineKind) -> &'static str {
+/// path cannot drift apart. [`None`] is the kind outside the recorded two that
+/// `FR-CAT-055` carries and that neither this requirement nor `FR-CDOC-014`
+/// gives a prefix.
+fn lower(kind: &RoutineKind<'_>) -> Option<&'static str> {
     crate::cache::paths::lower(kind)
 }
 
@@ -200,7 +215,7 @@ pub(crate) fn view<'a, 'd>(
 /// back short.
 pub(crate) fn routine<'a, 'd>(
     document: &'a DatabaseDocument<'d>,
-    wanted: Wanted<'_>,
+    wanted: &Wanted<'_>,
     at: Sought<'_>,
     invocation: &'static str,
 ) -> Result<&'a Routine<'d>, Error> {
@@ -209,7 +224,12 @@ pub(crate) fn routine<'a, 'd>(
         routine.name == name
             && match wanted {
                 Wanted::Bare(_) => true,
-                Wanted::Qualified(kind, _) => routine.kind == kind,
+                // The comparison is over the whole value, so a kind outside
+                // the recorded two never matches a qualified token: no such
+                // token can be built. That is `FR-CAT-055`'s consequence
+                // reaching the lookup, and the bare form above is what still
+                // reaches such a routine.
+                Wanted::Qualified(kind, _) => &routine.kind == kind,
             }
     });
 
@@ -369,8 +389,8 @@ mod tests {
     fn fr_sch_008_the_prefix_and_the_cached_path_carry_one_spelling() {
         // FR-CDOC-014 and FR-SCH-008 are the same rule at two layers, and the
         // spelling is read from one place so the two cannot drift.
-        assert_eq!(super::lower(RoutineKind::Procedure), "procedure");
-        assert_eq!(super::lower(RoutineKind::Function), "function");
+        assert_eq!(super::lower(&RoutineKind::Procedure), Some("procedure"));
+        assert_eq!(super::lower(&RoutineKind::Function), Some("function"));
     }
 
     /// Where every lookup below was made.
@@ -427,7 +447,7 @@ mod tests {
         };
         let document = context(&model).expect("the model carries every reference");
 
-        let refused = super::routine(&document, Wanted::Bare("calc_vat"), at(), INVOCATION)
+        let refused = super::routine(&document, &Wanted::Bare("calc_vat"), at(), INVOCATION)
             .expect_err("the bare name matches both");
         let rendered = crate::diagnostics::rendered(&refused);
 
@@ -447,7 +467,7 @@ mod tests {
         ] {
             let wanted = routine_token(written, INVOCATION).expect("a qualified name");
             let found =
-                super::routine(&document, wanted, at(), INVOCATION).expect("the object is there");
+                super::routine(&document, &wanted, at(), INVOCATION).expect("the object is there");
 
             assert_eq!(found.kind, kind, "{written}");
         }

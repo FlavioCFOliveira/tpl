@@ -83,24 +83,21 @@ const PROCEDURE: &str = "sp_book_consignment";
 /// The eleven statements a full catalogue read issues (`NFR-PERF-001`).
 const FULL_READ: i64 = 11;
 
+/// The leading token of the one diagnostic line per catalogue query.
+///
+/// `FR-GLOB-017` constrains the existence of the line and its
+/// distinguishability, not its wording, and `NFR-DET-001` puts stderr outside
+/// the contract — so this reads the token the emitter writes and nothing after
+/// it.
+const QUERY_TOKEN: &str = "query:";
+
 /// The `.tpl/.cfg` a project below carries, reaching `address` as `account`.
 ///
 /// The transport is `disabled` because it is not this file's subject: the five
 /// modes of `FR-CONF-013` are exercised where the connection is made, and an
 /// entry here asks for the one that adds nothing to what is under test.
 fn configuration(server: &Server, account: (&str, &str)) -> String {
-    let (host, port) = server
-        .address()
-        .rsplit_once(':')
-        .expect("status.sh --export prints host:port");
-    let (user, password) = account;
-
-    format!(
-        "[core]\ndatabase = \"{ENTRY}\"\n\n\
-         [database.{ENTRY}]\nhost = \"{host}\"\nport = {port}\n\
-         user = \"{user}\"\npassword = \"{password}\"\n\
-         database = \"{SCHEMA}\"\ntls = \"disabled\"\n"
-    )
+    fixture::configuration(server, ENTRY, SCHEMA, account)
 }
 
 /// A sandbox holding a project that reaches `server` as `account`.
@@ -1368,4 +1365,337 @@ fn fr_cache_024_the_cache_arm_names_a_routine_by_the_same_rules_the_schema_arm_d
     );
     assert!(!routines.join(format!("procedure.{FUNCTION}.json")).exists());
     assert!(routines.join(format!("function.{FUNCTION}.json")).exists());
+}
+
+// ------------------------------------------------- the reduction of info ---
+
+#[test]
+fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() {
+    // FR-SCH-031 as the twenty-seventh edition amended it: `data.database` is
+    // a **named subset** — `name`, `charset`, `collation` and the `server`
+    // object — and it does not carry the three collections of FR-CTX-035. The
+    // requirement states the consequence in its own text: `tpl schema info
+    // --format json` and `tpl schema dump` SHALL NOT emit the same bytes.
+    //
+    // The reversed reading had made them byte-identical, which cost a calling
+    // agent the whole model to ask a database's name and left two of the eight
+    // subcommands indistinguishable to a caller that reads only the bytes.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let sandbox = project(server, ROOT);
+        let name = server.name();
+
+        let info = document(
+            &sandbox,
+            &[
+                "schema",
+                "info",
+                "--format",
+                "json",
+                "--direct",
+                "--no-cache",
+            ],
+        );
+        let database = info["data"]["database"]
+            .as_object()
+            .unwrap_or_else(|| panic!("{name}: data.database is not an object: {info}"));
+
+        // Exactly four members, and the four FR-SCH-031 names. The count is
+        // asserted beside the membership because a fifth member is the defect
+        // the amendment removed.
+        //
+        // The membership is read from the parsed document and the **order**
+        // from the bytes below: `preserve_order` is off, per FR-OUT-013, so a
+        // parsed object carries its keys sorted and says nothing about the
+        // order they were emitted in — which is the order `OD-18` fixes.
+        let members: Vec<&str> = database.keys().map(String::as_str).collect();
+
+        assert_eq!(
+            members,
+            ["charset", "collation", "name", "server"],
+            "{name}: FR-SCH-031 fixes exactly these four members"
+        );
+
+        for absent in ["tables", "views", "routines"] {
+            assert!(
+                !database.contains_key(absent),
+                "{name}: info carried {absent}, which FR-SCH-031 withholds"
+            );
+        }
+
+        // Every member is the same member, under the same name and with the
+        // same value, that the context document carries — which is the other
+        // half of what FR-SCH-031 promises a caller.
+        let dump = document(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+
+        for shared in ["name", "charset", "collation", "server"] {
+            assert_eq!(
+                info["data"]["database"][shared], dump["data"]["database"][shared],
+                "{name}: {shared} differs between the two commands"
+            );
+        }
+
+        // And the two do not emit the same bytes, which is the sentence the
+        // requirement carries in bold.
+        let info_bytes = succeeds(
+            &sandbox,
+            &[
+                "schema",
+                "info",
+                "--format",
+                "json",
+                "--direct",
+                "--no-cache",
+            ],
+        );
+        let dump_bytes = succeeds(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+
+        // The emitted key order is FR-CTX-036's, with the collections removed
+        // from the end, per OD-18 — read where it is observable, in the bytes.
+        let mut at = 0;
+
+        for key in ["\"name\"", "\"charset\"", "\"collation\"", "\"server\""] {
+            let found = info_bytes[at..]
+                .find(key)
+                .unwrap_or_else(|| panic!("{name}: {key} is out of order in {info_bytes}"));
+
+            at += found + key.len();
+        }
+
+        assert_ne!(
+            info_bytes, dump_bytes,
+            "{name}: info and dump emitted the same bytes"
+        );
+        assert!(
+            dump_bytes.len() > info_bytes.len(),
+            "{name}: the dump carries the three collections and info does not"
+        );
+    }
+}
+
+// ------------------------------------ the diagnostic line per catalogue query ---
+
+#[test]
+fn fr_glob_017_one_diagnostic_line_per_catalogue_query_and_none_at_the_default_level() {
+    // FR-GLOB-017: at INFO the system writes exactly one line per catalogue
+    // query it issues, in a form distinguishable from every other diagnostic
+    // line. NFR-PERF-008 is what that rule is for — it makes the query count
+    // observable from outside the process, which is what lets NFR-PERF-001 and
+    // NFR-PERF-002 be checked at all.
+    //
+    // The count is asserted against the eleven statements the server itself
+    // receives, so the two instruments are read against each other rather than
+    // against a number written twice.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_glob_017_one_diagnostic_line_per_catalogue_query_and_none_at_the_default_level",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let sandbox = project(server, ROOT);
+        let name = server.name();
+
+        fixture::statements_on(server);
+        let verbose = run(
+            &sandbox,
+            &["schema", "dump", "--direct", "--no-cache", "-v"],
+        );
+        fixture::statements_off(server);
+
+        assert_eq!(verbose.code, Some(0), "{name}: {}", verbose.err);
+
+        let lines = verbose
+            .err
+            .lines()
+            .filter(|line| line.starts_with(QUERY_TOKEN))
+            .count();
+        let received = fixture::statements_count(server, &["--user", ROOT.0, "--catalogue"]);
+
+        assert_eq!(
+            lines as i64, FULL_READ,
+            "{name}: {lines} diagnostic line(s) for a full read:\n{}",
+            verbose.err
+        );
+        assert_eq!(
+            lines as i64, received,
+            "{name}: the process reported {lines} queries and the server received {received}"
+        );
+
+        // FR-ERR-013 and FR-GLOB-018: no credential and no driver message. The
+        // whole of stderr is read, not only the query lines, because the
+        // prohibition is over the stream.
+        for forbidden in [ROOT.1, "password", "tls", "sqlx"] {
+            assert!(
+                !verbose
+                    .err
+                    .to_lowercase()
+                    .contains(&forbidden.to_lowercase()),
+                "{name}: the diagnostic stream carried {forbidden:?}:\n{}",
+                verbose.err
+            );
+        }
+
+        // The default level is below INFO, per FR-GLOB-014, so the same read
+        // writes none of them.
+        let quiet = run(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+
+        assert_eq!(quiet.code, Some(0), "{name}: {}", quiet.err);
+        assert_eq!(
+            quiet
+                .err
+                .lines()
+                .filter(|line| line.starts_with(QUERY_TOKEN))
+                .count(),
+            0,
+            "{name}: a run at the default level wrote a catalogue-query line:\n{}",
+            quiet.err
+        );
+
+        // The control: the same invocation at INFO did write them, so the
+        // silence above is an observation rather than a stream nobody reads.
+        assert!(
+            lines > 0,
+            "{name}: the INFO run wrote nothing, so the default run's silence establishes nothing"
+        );
+    }
+}
+
+// ------------------------------------------------- FR-SRV-026, FR-SRV-029 ---
+
+/// The field the divergence register of `FR-SRV-036` holds, on every view,
+/// routine and trigger.
+///
+/// `FR-SRV-039` passes it through, so it differs between `10.11` and the other
+/// three from identical DDL; `FR-SRV-026` excepts exactly the fields that
+/// register names, and a field that differs without a row there is a failure
+/// of that requirement rather than an instance of its exception.
+const PASSED_THROUGH: &str = "collation_connection";
+
+/// What every value of a registered field is replaced by before the four
+/// documents are compared.
+const REGISTERED: &str = "<registered under FR-SRV-039>";
+
+/// Replaces every registered value in `document`, in place, wherever it sits.
+///
+/// It walks the whole document rather than the paths the register names,
+/// because `collation_connection` sits on three object kinds and inside two
+/// levels of embedding, and a walk cannot miss one the way a list of paths can.
+fn normalise(document: &mut serde_json::Value) {
+    match document {
+        serde_json::Value::Object(members) => {
+            for (key, value) in members.iter_mut() {
+                if key == PASSED_THROUGH {
+                    *value = serde_json::Value::String(REGISTERED.to_owned());
+                } else {
+                    normalise(value);
+                }
+            }
+        }
+        serde_json::Value::Array(members) => {
+            for member in members.iter_mut() {
+                normalise(member);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn fr_srv_029_the_same_ddl_yields_the_same_document_on_every_series_of_the_window() {
+    // FR-SRV-029 with FR-SRV-026: for a database created from the same
+    // accepted DDL on each series of FR-SRV-015, the document is
+    // byte-identical across the four, except for the fields `null` under
+    // FR-SRV-004, the `server` object of FR-SRV-028, and the values passed
+    // through under FR-SRV-039.
+    //
+    // This is what "properly supported" means, stated so that it can be tested
+    // rather than reviewed: a normalisation that is merely intended is
+    // indistinguishable from one that is absent until four documents are
+    // diffed. The fixture's DDL is DDL all four accept, which is the
+    // requirement's own consequence for `scripts/mariadb/`.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_srv_029_the_same_ddl_yields_the_same_document_on_every_series_of_the_window",
+    ) else {
+        return;
+    };
+
+    let mut documents: Vec<(&str, serde_json::Value, serde_json::Value)> = Vec::new();
+
+    for server in series {
+        let sandbox = project(server, ROOT);
+        let raw = document(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+
+        let mut compared = raw["data"]["database"].clone();
+
+        // FR-SRV-028: the `server` object carries the version, the series and
+        // the standing of the server that was read, so it differs by
+        // construction and is the requirement's first named exception.
+        compared
+            .as_object_mut()
+            .expect("the database object is an object")
+            .remove("server")
+            .expect("FR-CTX-031 puts a server object on every document");
+
+        let unnormalised = compared.clone();
+        normalise(&mut compared);
+
+        documents.push((server.name(), unnormalised, compared));
+    }
+
+    assert!(
+        documents.len() > 1,
+        "the equivalence needs more than one series to compare"
+    );
+
+    // The control: before the registered field is normalised the four are
+    // **not** all equal, so the comparison below is a live one rather than one
+    // over documents that could not differ. FR-SRV-038's difference in the
+    // servers' own default collations is what produces it.
+    let differs = documents
+        .iter()
+        .any(|(_, unnormalised, _)| *unnormalised != documents[0].1);
+
+    assert!(
+        differs,
+        "no two series differed before normalisation, so the register's exception \
+         is not being exercised and this comparison establishes nothing"
+    );
+
+    // And after it, every one of the four is the same document.
+    let (first, _, expected) = &documents[0];
+
+    for (name, _, compared) in &documents[1..] {
+        assert_eq!(
+            compared, expected,
+            "{name} and {first} produced different documents from the same DDL. \
+             FR-SRV-026 excepts only the fields `null` under FR-SRV-004, the server object, \
+             and the values the register of FR-SRV-036 names; a field that differs without a \
+             row there is a failure of that requirement, not an instance of its exception."
+        );
+    }
+
+    // The exception is bounded to the fields the register names: the field
+    // that was normalised did carry a value, so the normalisation is not
+    // silently erasing an absent one.
+    for (name, unnormalised, _) in &documents {
+        let carried = unnormalised["routines"]
+            .as_array()
+            .expect("the document carries a routines collection")
+            .first()
+            .and_then(|routine| routine[PASSED_THROUGH].as_str());
+
+        assert!(
+            carried.is_some_and(|value| !value.is_empty()),
+            "{name}: {PASSED_THROUGH} carried nothing, so normalising it hid no difference"
+        );
+    }
 }

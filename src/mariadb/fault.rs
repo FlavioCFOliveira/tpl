@@ -134,7 +134,13 @@ const DATABASE_ACCESS_DENIED: u16 = 1044;
 const UNKNOWN_DATABASE: u16 = 1049;
 
 /// The property `FR-PRIV-021` reports unreadable, as its `cause` line names it.
-const METADATA: &str = "metadata";
+///
+/// It is `pub(crate)` because two paths reach that one condition and the
+/// requirement gives it one `cause`: the handshake classifies the `1049` and
+/// `1044` packets here, and [`crate::mariadb::catalogue`]'s fold reports a
+/// schema catalogue that returned no row. A second literal would be a second
+/// thing that can be wrong.
+pub(crate) const METADATA: &str = "metadata";
 
 /// The condition a failure to open the session is reported as.
 ///

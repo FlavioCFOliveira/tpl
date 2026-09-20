@@ -127,7 +127,9 @@ struct StatusData<'a> {
 ///
 /// The absence of all three flags is not an error: it is the whole-catalogue
 /// form both requirements give it.
-#[derive(Debug, Clone, Copy)]
+///
+/// It is [`Clone`] and not [`Copy`], for the reason [`named::Wanted`] is.
+#[derive(Debug, Clone)]
 enum Wanted<'a> {
     /// No object flag: the whole catalogue of the selected entry.
     Everything,
@@ -249,7 +251,7 @@ fn load(globals: &Globals, object: &local::Object, caching: &local::Caching) -> 
             );
         }
         Wanted::Routine(token) => {
-            let found = named::routine(&document, token, sought(&opened, &document), LOAD)?;
+            let found = named::routine(&document, &token, sought(&opened, &document), LOAD)?;
 
             opened.cache.write(
                 &only(&document, Vec::new(), Vec::new(), vec![found.clone()]),
@@ -288,11 +290,11 @@ fn clean(globals: &Globals, object: &local::Object) -> Result<(), Error> {
         Wanted::Table(name) => cache.clean_one(Collection::Tables, cache.table_file(name)),
         Wanted::View(name) => cache.clean_one(Collection::Views, cache.view_file(name)),
         Wanted::Routine(named::Wanted::Qualified(kind, name)) => {
-            cache.clean_one(Collection::Routines, cache.routine_file(kind, name))
+            cache.clean_one(Collection::Routines, cache.routine_file(&kind, name))
         }
         Wanted::Routine(named::Wanted::Bare(name)) => {
-            let procedure = cache.routine_file(RoutineKind::Procedure, name);
-            let function = cache.routine_file(RoutineKind::Function, name);
+            let procedure = cache.routine_file(&RoutineKind::Procedure, name);
+            let function = cache.routine_file(&RoutineKind::Function, name);
 
             // FR-CACHE-024 and FR-SCH-010: a bare name that reaches both
             // namespaces is refused rather than resolved in favour of either.
