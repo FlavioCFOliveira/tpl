@@ -336,6 +336,21 @@ pub fn statements_count(server: &Server, filters: &[&str]) -> i64 {
         .unwrap_or_else(|failure| panic!("observe.sh statements dump printed {value:?}: {failure}"))
 }
 
+/// The statements the record holds, as text, under `filters`.
+///
+/// This is `observe.sh statements dump <server> [filters]` without `--count`:
+/// one line per statement, carrying the thread, the command type and the
+/// statement itself with its line breaks flattened. It is what a test reads
+/// when the **content** of what the server received is the subject —
+/// `FR-SCH-013`, which forbids a pattern to be sent at all, is the case the
+/// count cannot answer.
+pub fn statements_text(server: &Server, filters: &[&str]) -> String {
+    let mut arguments = vec!["statements", "dump", server.name()];
+    arguments.extend_from_slice(filters);
+
+    String::from_utf8_lossy(&observe(&arguments).stdout).into_owned()
+}
+
 /// The syscall trace of a process: the files it opens and the sockets it
 /// connects.
 ///

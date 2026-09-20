@@ -6,11 +6,13 @@
 //! and the binary parses the invocation, dispatches, and maps the resulting
 //! error to an exit status.
 //!
-//! At this commit the tool opens the one connection it is allowed, settles the
-//! session on it, and **reads the catalogue into the model**; no command
-//! reaches any of it yet. [`run`] is the entry point the binary calls,
-//! [`install_panic_hook`] is the process setup it performs first, and [`Error`]
-//! is the value every module reports failure through.
+//! At this commit the **first arm reads**: the eight `schema` subcommands and
+//! the three of `tpl cache` resolve a database entry, consult the store under
+//! `.tpl/.cache/`, open the one connection they are allowed where the store
+//! does not answer, read the catalogue into the model, and present it. [`run`]
+//! is the entry point the binary calls, [`install_panic_hook`] is the process
+//! setup it performs first, and [`Error`] is the value every module reports
+//! failure through.
 //!
 //! | Module | What it owns |
 //! |---|---|
@@ -23,12 +25,14 @@
 //! | `model::document` | The one document that carries the model in both directions: the collection shape of `FR-CTX-003` … `FR-CTX-005`, the one-hop embedding of `FR-CTX-006` … `FR-CTX-010`, the orderings of `NFR-DET-002`, and the read-back `FR-CTX-033` admits |
 //! | `mariadb` | The one connection of `NFR-PERF-004`, the TLS mode of `FR-CONF-037` and `ADR-002`, the read-only session of `FR-SRV-008` … `FR-SRV-011`, the version probe of `FR-SRV-002` with the window of `FR-SRV-015`, and the classification `OD-06` drops the driver's error at |
 //! | `mariadb::catalogue` | The fixed repertoire of catalogue queries — one per object kind, whose count `NFR-PERF-001` and `NFR-PERF-002` fix — the common column lists of `FR-SRV-037`, the fold that turns their rows into the model, and the completeness verdict of `FR-PRIV-001` … `FR-PRIV-019` it takes as it folds |
+//! | `cache` | The store of `FR-CACHE-001` … `FR-CACHE-037`: one folder per entry, one file per object written through a rename, the two versions and the completeness record of `FR-CDOC-001` … `FR-CDOC-007`, and a failure in either direction that is a miss rather than a condition |
 //!
-//! A read is therefore already honest about what a reader's privileges did not
-//! reach: an object that came back short carries the `restricted` marking of
-//! `FR-PRIV-016`, and a caller that named one object has the verdict
-//! `FR-PRIV-003` owes `77` for. The render environment, and the commands that
-//! turn that verdict into an exit code, are added by the tasks that follow.
+//! A read is honest about what a reader's privileges did not reach: an object
+//! that came back short carries the `restricted` marking of `FR-PRIV-016`, a
+//! caller that named one receives the `77` of `FR-PRIV-003`, and `FR-CACHE-037`
+//! keeps a marked object out of the store. The render environment, and the two
+//! arms that consume it — `tpl template …` and `tpl render` — are added by the
+//! tasks that follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -36,6 +40,8 @@
 pub mod error;
 
 pub mod model;
+
+pub(crate) mod cache;
 
 pub(crate) mod cli;
 
@@ -45,31 +51,8 @@ pub(crate) mod diagnostics;
 
 pub(crate) mod project;
 
-// Nothing calls this module yet. Every command that reads a server is a later
-// sprint, and `ADR-005` scopes the runtime to this module precisely so that no
-// caller above it exists until one does; `FR-SRV-002` and `FR-SRV-022` require
-// the session, the product and the series to be settled before the first
-// catalogue read, so the connection is built before the reader that uses it.
-#[allow(
-    dead_code,
-    reason = "the commands that read a server are a later sprint, and FR-SRV-002 settles the \
-              session, the product and the series before the first catalogue read — so the \
-              connection exists before the reader that opens one"
-)]
 pub(crate) mod mariadb;
 
-// Four items of this module have no caller yet, and all four wait on the same
-// sprint: `emit` and `emit_table`, which take standard output where the `cfg`
-// arm takes the stream its caller supplies; the `server` and `cache` values of
-// `FR-OUT-026`; and the excepted order of `NFR-DET-002`, which only a catalogue
-// collection carries. One fact explains every one of them, so it is stated once
-// here rather than once per item.
-#[allow(
-    dead_code,
-    reason = "the commands that read a server are a later sprint, and OD-05 places the envelope, \
-              the emitter, the text layout and the writer here, so every one of those commands \
-              depends on them"
-)]
 pub(crate) mod output;
 
 pub use error::Error;

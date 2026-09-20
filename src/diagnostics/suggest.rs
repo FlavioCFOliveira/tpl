@@ -696,6 +696,7 @@ mod tests {
             name: "ordrs".to_owned(),
             entry: "shop".to_owned(),
             database: "shop".to_owned(),
+            nearest: Vec::new(),
         };
         let selected = suggestions("ordrs", ["orders", "customers"], Population::Names);
 

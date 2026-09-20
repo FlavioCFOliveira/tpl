@@ -109,6 +109,16 @@ pub(crate) struct Settings {
     /// The entry these settings came from.
     entry: String,
     /// How that entry was chosen (`FR-GLOB-008`).
+    ///
+    /// Nothing reads it yet. `FR-RND-018` and `FR-RND-019` are what the
+    /// distinction exists for — `--context` is refused beside an entry named on
+    /// the command line and admitted beside one resolved from the file — and
+    /// `tpl render` is the third arm.
+    #[allow(
+        dead_code,
+        reason = "FR-RND-018 and FR-RND-019 are the only readers of the distinction, and \
+                  tpl render is a later sprint"
+    )]
     selection: Selection,
     /// The host, where the entry names one.
     host: Option<String>,
@@ -137,6 +147,11 @@ impl Settings {
     }
 
     /// How that entry was chosen.
+    #[allow(
+        dead_code,
+        reason = "FR-RND-018 and FR-RND-019 are the only readers of the distinction, and \
+                  tpl render is a later sprint"
+    )]
     pub(crate) const fn selection(&self) -> Selection {
         self.selection
     }

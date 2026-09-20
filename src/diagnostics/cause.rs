@@ -83,6 +83,31 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "the invocation supplies both '{first}' and '{second}'; exactly one of the two may be \
              given"
         )),
+        // FR-SCH-008: the cause names the token as written and the spelling
+        // expected. The token is reproduced byte for byte, per FR-CLI-020, and
+        // is escaped on the way out by the emitter, per FR-ERR-024.
+        Error::RoutinePrefixNotLowerCase { token, prefix, .. } => Cow::Owned(format!(
+            "'{token}' carries the qualifying prefix '{prefix}' in a spelling other than lower \
+             case; tpl accepts 'procedure:' and 'function:' and no other spelling of either"
+        )),
+        // FR-SCH-010: both candidates, named in the qualified form of
+        // FR-SCH-008.
+        Error::AmbiguousRoutineName {
+            name,
+            entry,
+            database,
+            ..
+        } => Cow::Owned(format!(
+            "database '{database}', read through database entry '{entry}', holds both \
+             'procedure:{name}' and 'function:{name}', and tpl resolves a bare name in favour of \
+             neither"
+        )),
+        // FR-CACHE-019: the flag is declared by the command and contradicts
+        // what the command does.
+        Error::LoadWithoutStoring => Cow::Borrowed(
+            "'tpl cache load' reads the server in order to store what it read, so an invocation \
+             that forbids the store asks the command to do nothing",
+        ),
         Error::MalformedValue {
             parameter,
             value,
@@ -230,6 +255,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             name,
             entry,
             database,
+            ..
         } => Cow::Owned(format!(
             "no row of INFORMATION_SCHEMA matches {kind} '{name}' in database '{database}', read \
              through database entry '{entry}'"
@@ -475,6 +501,15 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                  and the read-back of @@session.tx_read_only did not confirm it"
             )),
         },
+        // FR-CONF-040 and FR-CONF-041: the cause names the file, the entry and
+        // the key the entry does not carry.
+        Error::EntryKeyMissing {
+            entry, key, file, ..
+        } => Cow::Owned(format!(
+            "{} declares database entry '{entry}' without '{key}', and this command cannot be run \
+             without it",
+            file.display()
+        )),
         Error::NoDatabaseEntrySelected { file } => Cow::Owned(format!(
             "neither -d/--database nor core.database in {} names an entry, and this command reads \
              the catalogue through one",

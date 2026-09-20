@@ -414,14 +414,44 @@ pub(crate) enum Scope<'a> {
     Everything,
 
     /// One table, with everything `FR-CAT-053` gives a table.
+    ///
+    /// No command constructs it. `FR-CTX-006` and `FR-CTX-010` embed, in full,
+    /// the table at each end of every foreign key and `FR-CTX-023` requires
+    /// every referenced object to be present, so a plan that reads one table
+    /// row returns that table's keys without the tables they name and the
+    /// document cannot be built from it. The plan is kept because it is the
+    /// repertoire's own statement of what a named table read would issue, and
+    /// the gap is reported rather than papered over.
+    #[allow(
+        dead_code,
+        reason = "a one-table plan cannot produce the embedding FR-CTX-006 and FR-CTX-010 fix, \
+                  so every command reads the whole catalogue; the plan is the repertoire's \
+                  record of the narrowed read and the gap is reported"
+    )]
     Table(&'a str),
 
     /// One view.
+    ///
+    /// No command constructs it either, and for one reason rather than two:
+    /// `FR-SCH-010` draws a nearest-match suggestion from the objects of that
+    /// kind that do exist, which only a collection read has in hand.
+    #[allow(
+        dead_code,
+        reason = "FR-SCH-010 draws its suggestion from the objects of that kind that exist, \
+                  which a narrowed plan does not read"
+    )]
     View(&'a str),
 
     /// One routine. [`None`] for the kind is the bare name of `FR-SCH-008`,
     /// which may match a procedure **and** a function; the caller decides what
     /// two matches mean, per `FR-SCH-010`.
+    ///
+    /// No command constructs it, for the reason [`Scope::View`] gives.
+    #[allow(
+        dead_code,
+        reason = "FR-SCH-010 draws its suggestion from the objects of that kind that exist, \
+                  which a narrowed plan does not read"
+    )]
     Routine {
         /// The routine's name, without the qualifying prefix.
         name: &'a str,

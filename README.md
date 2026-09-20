@@ -19,12 +19,12 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 > | `tpl cfg get`, `set`, `unset`, `list` | **works** |
 > | `tpl cfg database add`, `list`, `show`, `update`, `remove` | **works** |
 > | `tpl cfg database test` | not written — it is the one `cfg` subcommand that opens a connection |
-> | `tpl schema …` — eight subcommands | not written |
+> | `tpl schema info`, `tables`, `table`, `views`, `view`, `routines`, `routine`, `dump` | **works** |
+> | `tpl cache load`, `clean`, `status` | **works** |
 > | `tpl template …` — four subcommands | not written |
 > | `tpl render` | not written |
-> | `tpl cache …` — three subcommands | not written |
 >
-> **`tpl` connects to nothing yet.** No command opens a socket. It knows where it *would* connect — a project, a configuration file, a named database entry with its credentials and TLS settings — and stops there.
+> **The first arm connects.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. `tpl cfg database test` is still the one `cfg` subcommand that has no implementation.
 >
 > The command tree is complete even where the commands are not: every node parses, every node has help, and `tpl help --format json` publishes the whole surface. A node whose work is not written exits `70` (`EX_SOFTWARE`) naming its own command path, which is a defect only in the sense that it is not yet built.
 
@@ -56,7 +56,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 | 2 | Explore the templates | `tpl template …` | Reads and presents the templates under `.tpl/templates/` |
 | 3 | Render | `tpl render …` | Reads the database, reads the template, renders it, and prints the result |
 
-**None of the three is written yet.** They are specified in full — see [Where the truth lives](#where-the-truth-lives) — and the fourth group, `tpl cfg …`, which maintains the project's configuration, is.
+**The first of the three is written.** The second and the third are specified in full and have no implementation — see [Where the truth lives](#where-the-truth-lives) — and the two groups that stand beside them are: `tpl cfg …`, which maintains the project's configuration, and `tpl cache …`, which loads, cleans and reports on the catalogue cache the first arm reads through.
 
 Two properties bound the tool, and both are permanent.
 
@@ -114,9 +114,22 @@ tpl cfg database show shop
 
 # 5. Learn the whole command surface in one call.
 tpl help --format json
+
+# 6. Read the structure of the default database. The first of these opens one
+#    connection and stores what it read under .tpl/.cache/; the rest are served
+#    from there and open none.
+tpl schema tables
+tpl schema tables --pattern 'order%' --format json
+tpl schema table orders
+tpl schema dump --pretty > context.json
+
+# 7. Manage that store directly.
+tpl cache status
+tpl cache load
+tpl cache clean
 ```
 
-Steps 4 and 5 are read commands and accept `--format json` and `--pretty`. Steps 1 to 3 write and print nothing on success: the exit code is the message.
+Steps 4, 5 and 6 are read commands and accept `--format json` and `--pretty`, except `tpl schema dump`, which emits JSON and nothing else. Steps 1 to 3 and step 7 write and print nothing on success: the exit code is the message.
 
 ---
 

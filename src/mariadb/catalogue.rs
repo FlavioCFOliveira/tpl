@@ -56,7 +56,7 @@
 //! where every other one is, by the binary, and no command that names an object
 //! exists yet to ask for it.
 
-mod completeness;
+pub(crate) mod completeness;
 mod fold;
 mod row;
 mod statements;
@@ -68,9 +68,12 @@ mod statements;
 // header records, and it is declared here rather than inside the test module
 // because a `#[path]` inside an inline module resolves through a directory
 // that does not exist.
+// It is `pub(super)` because `super::fault` reaches the same harness and must
+// not declare it a second time: two `#[path]` items over one file are two
+// modules over one file.
 #[cfg(test)]
 #[path = "../../tests/support/fixture.rs"]
-mod fixture;
+pub(super) mod fixture;
 
 use std::panic::Location;
 
@@ -108,6 +111,15 @@ pub(crate) struct Catalogue {
     /// count of a read is observable from the value the read produced, so a
     /// test names what the process did rather than what the plan said it would
     /// do. The cost is one vector of at most eleven `&'static str`.
+    ///
+    /// It is read by the assertions of `NFR-PERF-001` and `NFR-PERF-002` and
+    /// by nothing the process does, which is what it is for: the count is a
+    /// property of the read, observed from the value the read produced.
+    #[allow(
+        dead_code,
+        reason = "it exists to be observed by the assertions of NFR-PERF-001 and NFR-PERF-002, \
+                  and a process that acted on it would be acting on its own plan"
+    )]
     issued: Vec<&'static str>,
 
     /// The rows of each read, in the slot [`Read::slot`] gives it. A read the
@@ -131,6 +143,11 @@ impl Catalogue {
     }
 
     /// The statements this read issued, in the order they were issued.
+    #[allow(
+        dead_code,
+        reason = "it exists to be observed by the assertions of NFR-PERF-001 and NFR-PERF-002, \
+                  and a process that acted on it would be acting on its own plan"
+    )]
     pub(crate) fn statements(&self) -> &[&'static str] {
         &self.issued
     }
@@ -1429,19 +1446,31 @@ mod tests {
 
                 assert_eq!(refused.exit_code(), 77);
 
-                let table = read_reduced(server, Scope::Table("consignment"));
-                let table = table.model().expect("the rows fold");
-                let refused = completeness::of_table(&table.tables[0])
+                // The table verdict is taken over the document's own table,
+                // which is the shape every caller of it holds; the read is a
+                // whole one because `FR-CTX-006` embeds the table at each end
+                // of every foreign key and a narrowed plan returns the keys
+                // without those tables.
+                let read = read_reduced(server, Scope::Everything);
+                let model = read.model().expect("the rows fold");
+                let document = crate::model::document::context(&model)
+                    .expect("a whole read carries every table its keys name");
+                let named = |wanted: &str| {
+                    document
+                        .tables
+                        .iter()
+                        .find(|table| table.name == wanted)
+                        .unwrap_or_else(|| panic!("the fixture carries {wanted}"))
+                };
+
+                let refused = completeness::of_table(named("consignment"))
                     .expect_err("the referential rules did not come back");
 
                 assert_eq!(refused.exit_code(), 77);
 
                 // FR-PRIV-007 from the caller's side: a table the shortfall
                 // did not reach answers the same read with no verdict at all.
-                let whole = read_reduced(server, Scope::Table("audit_event"));
-                let whole = whole.model().expect("the rows fold");
-
-                assert!(completeness::of_table(&whole.tables[0]).is_ok());
+                assert!(completeness::of_table(named("audit_event")).is_ok());
             },
         );
     }

@@ -15,19 +15,19 @@
 //!
 //! # What is observable today, and what is not
 //!
-//! No command of `tpl` opens a connection yet: everything under `schema`,
-//! `template`, `render`, `cache` and `cfg database test` exits `70`. Two
-//! requirements are therefore reachable now, and observing them is what proves
-//! the instruments work:
+//! Two requirements are observed **here**, and they are the two about commands
+//! that must reach no server at all:
 //!
 //! | Requirement | The property |
 //! |---|---|
 //! | `NFR-PERF-005` | The commands of `FR-PROJ-025` open no connection, perform no project discovery, and read no configuration file |
 //! | `NFR-PERF-006` | A command that requires no catalogue data opens no connection |
 //!
-//! The seven other requirements the register holds to this standard —
-//! `NFR-PERF-001` through `-004`, `FR-SRV-012`, `-013` and `-014` — need a
-//! catalogue reader, and none exists.
+//! `NFR-PERF-001` and `NFR-PERF-003` are observed with the same instruments in
+//! [`schema_and_cache`](../schema_and_cache/index.html), where the commands
+//! that do read a catalogue live. `NFR-PERF-002` and `NFR-PERF-004`, and
+//! `FR-SRV-012`, `-013` and `-014`, are not yet observed from outside the
+//! process.
 //!
 //! # Every negative assertion carries a control
 //!

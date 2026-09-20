@@ -67,7 +67,7 @@ use crate::error::{ContextFault, Error, Position};
 use crate::model::database::Database;
 use crate::output::{Document, Source};
 
-pub(crate) use shape::ContextData;
+pub(crate) use shape::{ContextData, DatabaseDocument};
 
 /// The rule a document that is JSON and not this contract has failed.
 ///
@@ -94,6 +94,26 @@ pub(crate) fn dump<'a>(
     source: Source,
 ) -> Result<Document<ContextData<'a>>, Error> {
     Ok(Document::new(source, build::context(database)?))
+}
+
+/// Builds the `database` object a read produced, without enveloping it.
+///
+/// It is the half of [`dump`] that the seven `schema` subcommands which are not
+/// `dump` need: each of them presents a **part** of this object — one
+/// collection, per `FR-SCH-032`, or one member of one, per `FR-SCH-033` — and
+/// each part is the same shape here as it is in the dump, which is what makes
+/// `BR-SCH-001` hold across the eight. The envelope those commands put round
+/// their own part is [`Document`], composed where the part is chosen.
+///
+/// `cache` is the other caller: `FR-CACHE-030` writes each member of this
+/// object to its own file, so the object is what a write is taken from and
+/// what a read reassembles.
+///
+/// # Errors
+///
+/// Returns what [`dump`] returns, for the same condition.
+pub(crate) fn context<'a>(database: &'a Database<'a>) -> Result<DatabaseDocument<'a>, Error> {
+    Ok(build::context(database)?.database)
 }
 
 /// Reads a `--context` document back as a model.

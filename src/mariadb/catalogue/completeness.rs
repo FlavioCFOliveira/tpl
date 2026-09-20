@@ -81,9 +81,9 @@ use std::panic::Location;
 
 use crate::error::{CatalogueObjectKind, Error};
 use crate::model::document::order;
+use crate::model::document::shape::TableDocument;
 use crate::model::restricted::Restricted;
 use crate::model::routine::Routine;
-use crate::model::table::Table;
 use crate::model::view::View;
 
 /// The invariant a marking naming a property this reader cannot name violates.
@@ -239,20 +239,24 @@ pub(super) fn no_row(rule: Option<usize>) -> bool {
 
 /// The verdict on a table a caller named (`FR-PRIV-003`, `FR-PRIV-004`).
 ///
+/// It is taken over the **document's** table and not the model's, which is the
+/// one shape every caller of it holds: a named read is served from the cache or
+/// from a server, per `FR-CACHE-006`, and only one of the two ever produces a
+/// model. `FR-PRIV-016` puts the marking on the object in either case, so the
+/// verdict reads the same field whichever source answered.
+///
 /// # Errors
 ///
 /// Returns [`Error::PropertyNotReadable`], whose code is `77`, where the table
 /// is marked incomplete. The caller returns it rather than the table:
 /// `FR-PRIV-004` bars a partial object from answering a request that named it.
 #[track_caller]
-#[allow(
-    dead_code,
-    reason = "FR-PRIV-003 names four callers — tpl schema table, view and routine, and a \
-              tpl render object flag — and none of the four exists yet; the verdict is the \
-              contract they are written against, and this task is barred from adding them"
-)]
-pub(crate) fn of_table(table: &Table<'_>) -> Result<(), Error> {
-    verdict(CatalogueObjectKind::Table, table.name(), table.restricted())
+pub(crate) fn of_table(table: &TableDocument<'_>) -> Result<(), Error> {
+    verdict(
+        CatalogueObjectKind::Table,
+        &table.name,
+        table.restricted.as_ref(),
+    )
 }
 
 /// The verdict on a view a caller named (`FR-PRIV-003`, `FR-PRIV-004`).
@@ -263,12 +267,6 @@ pub(crate) fn of_table(table: &Table<'_>) -> Result<(), Error> {
 /// is marked incomplete — which for a view is the unreadable definition of
 /// `FR-PRIV-011`.
 #[track_caller]
-#[allow(
-    dead_code,
-    reason = "FR-PRIV-003 names four callers — tpl schema table, view and routine, and a \
-              tpl render object flag — and none of the four exists yet; the verdict is the \
-              contract they are written against, and this task is barred from adding them"
-)]
 pub(crate) fn of_view(view: &View<'_>) -> Result<(), Error> {
     verdict(
         CatalogueObjectKind::View,
@@ -288,12 +286,6 @@ pub(crate) fn of_view(view: &View<'_>) -> Result<(), Error> {
 /// catalogue user is usually granted, so such a reader receives `77` for every
 /// routine of the database rather than a stub.
 #[track_caller]
-#[allow(
-    dead_code,
-    reason = "FR-PRIV-003 names four callers — tpl schema table, view and routine, and a \
-              tpl render object flag — and none of the four exists yet; the verdict is the \
-              contract they are written against, and this task is barred from adding them"
-)]
 pub(crate) fn of_routine(routine: &Routine<'_>) -> Result<(), Error> {
     verdict(
         CatalogueObjectKind::Routine,
@@ -353,9 +345,10 @@ fn verdict(
 mod tests {
     use super::{Marking, Property, empty_string, no_row, of_routine, of_table, of_view, sql_null};
     use crate::error::Error;
+    use crate::model::document::shape::TableDocument;
     use crate::model::restricted::Restricted;
     use crate::model::routine::{Routine, RoutineKind};
-    use crate::model::table::{Table, TableParts, TableType};
+    use crate::model::table::TableType;
     use crate::model::view::View;
     use std::borrow::Cow;
 
@@ -398,13 +391,24 @@ mod tests {
         }
     }
 
-    /// A table carrying `restricted` and nothing else worth naming.
-    fn table(restricted: Option<Restricted<'static>>) -> Table<'static> {
-        Table::assemble(TableParts {
+    /// A table of the document carrying `restricted` and nothing else worth
+    /// naming.
+    fn table(restricted: Option<Restricted<'static>>) -> TableDocument<'static> {
+        TableDocument {
+            name: Cow::Borrowed("consignment"),
+            table_type: TableType::Base,
+            engine: None,
+            collation: None,
+            comment: Cow::Borrowed(""),
+            columns: Cow::Owned(Vec::new()),
+            indexes: Cow::Owned(Vec::new()),
+            primary_key: None,
+            foreign_keys: Vec::new(),
+            referenced_by: Vec::new(),
+            triggers: Cow::Owned(Vec::new()),
+            check_constraints: Cow::Owned(Vec::new()),
             restricted,
-            ..TableParts::new(Cow::Borrowed("consignment"), TableType::Base)
-        })
-        .expect("a table with no keys satisfies FR-CAT-044 vacuously")
+        }
     }
 
     #[test]

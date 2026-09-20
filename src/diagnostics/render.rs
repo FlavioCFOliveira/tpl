@@ -428,6 +428,7 @@ mod tests {
             name: "ordrs".to_owned(),
             entry: "shop".to_owned(),
             database: "shop_prod".to_owned(),
+            nearest: Vec::new(),
         });
 
         assert_eq!(
@@ -856,6 +857,7 @@ mod tests {
                 name: HOSTILE.to_owned(),
                 entry: hostile_entry,
                 database: HOSTILE.to_owned(),
+                nearest: vec![HOSTILE.to_owned()],
             },
             Error::UndefinedVariable {
                 name: HOSTILE.to_owned(),
@@ -997,6 +999,7 @@ mod tests {
                 name: hostile(),
                 entry: hostile(),
                 database: hostile(),
+                nearest: vec![hostile()],
             },
             Error::TemplateNotFound {
                 name: hostile(),
@@ -1272,6 +1275,7 @@ mod tests {
             name: "ordrs".to_owned(),
             entry: "shop".to_owned(),
             database: "shop".to_owned(),
+            nearest: Vec::new(),
         });
 
         assert_eq!(

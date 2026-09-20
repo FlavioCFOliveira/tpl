@@ -163,6 +163,44 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 Cow::Borrowed("give one of the two flags named above, and not both")
             }
         }
+        // FR-SCH-008 fixes this line: the same invocation, with the prefix in
+        // lower case. The invocation below `tpl` is a spelling this corpus
+        // enumerates and the routine name is not, so the name is tested under
+        // FR-ERR-022 and the whole command is dropped under FR-ERR-023 where
+        // it falls outside the set.
+        Error::RoutinePrefixNotLowerCase {
+            prefix,
+            name,
+            invocation,
+            ..
+        } => {
+            if admits(name) {
+                Cow::Owned(format!("write it as: tpl {invocation} {prefix}:{name}"))
+            } else {
+                Cow::Borrowed(
+                    "write the qualifying prefix in lower case: 'procedure:' or 'function:'",
+                )
+            }
+        }
+        // FR-SCH-010 refuses the bare name and names both candidates in the
+        // `cause`; the hint is the runnable command FR-ERR-009 asks for, which
+        // is the same invocation qualified.
+        Error::AmbiguousRoutineName {
+            name, invocation, ..
+        } => {
+            if admits(name) {
+                Cow::Owned(format!(
+                    "name the kind you mean: tpl {invocation} procedure:{name}"
+                ))
+            } else {
+                Cow::Borrowed("name the kind you mean, with the prefix 'procedure:' or 'function:'")
+            }
+        }
+        // FR-CACHE-018 accepts `--direct` on this command and ignores it, so
+        // the line names the invocation that does what the caller asked for.
+        Error::LoadWithoutStoring => Cow::Borrowed(
+            "load the cache with: tpl cache load, or read without storing with: tpl schema dump --no-cache",
+        ),
         Error::MalformedValue { .. } => {
             Cow::Borrowed("show what the command accepts with: tpl help <command>")
         }
@@ -237,17 +275,35 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         },
 
         // ------------------------------------------------------------ 66 ---
-        Error::CatalogueObjectNotFound { kind, entry, .. } => {
-            let listing = listing(*kind);
-            if admits(entry) {
-                Cow::Owned(format!(
+        // The kind is always one of the three FR-SCH-010 names, so `listing`
+        // always answers here; the fourth kind reaches `77` under FR-PRIV-021
+        // and never this arm. The fall-through is the generic advice rather
+        // than an invariant, because a hint is not the place to raise one.
+        //
+        // FR-SCH-010 obliges the nearest-match half over the objects of that
+        // kind that do exist. The population is the reader's, because
+        // FR-ERR-021's populations belong to the components that own them; the
+        // line is composed here from what the variant carries, and an object
+        // name is a value this corpus does not fix, so FR-ERR-022 governs it
+        // by the character set and FR-ERR-023 drops a candidate outside it.
+        Error::CatalogueObjectNotFound {
+            kind,
+            entry,
+            nearest,
+            ..
+        } => {
+            let generic = match listing(*kind) {
+                Some(listing) if admits(entry) => Cow::Owned(format!(
                     "list the available {listing} with: tpl -d {entry} schema {listing}"
-                ))
-            } else {
-                Cow::Owned(format!(
+                )),
+                Some(listing) => Cow::Owned(format!(
                     "list the available {listing} with: tpl schema {listing}"
-                ))
-            }
+                )),
+                None => Cow::Borrowed("name an object that exists, then run the command again"),
+            };
+            let admitted = admitted(nearest, admits);
+
+            Cow::Owned(suggest::hint_line(admitted.iter().copied(), &generic).into_owned())
         }
         Error::TemplateNotFound { .. } => {
             Cow::Borrowed("list the project's templates with: tpl template list")
@@ -441,6 +497,27 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 update_entry(entry)
             ))
         }
+        // FR-CONF-040 and FR-CONF-041 each fix this line: the flag of
+        // `FR-CFG-027` that writes the key the entry does not carry, on the
+        // command that updates the entry. The entry name is a value this
+        // corpus does not fix, so it is filled in only where `FR-ERR-022`
+        // admits it and the placeholder stands otherwise, per `FR-ERR-023`.
+        Error::EntryKeyMissing {
+            entry,
+            flag,
+            placeholder,
+            ..
+        } => {
+            if admits(entry) {
+                Cow::Owned(format!(
+                    "tpl cfg database update {entry} {flag} {placeholder}"
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "tpl cfg database update <entry> {flag} {placeholder}"
+                ))
+            }
+        }
         Error::NoDatabaseEntrySelected { .. } => Cow::Borrowed(
             "select an entry with -d, or set a default with: tpl cfg set core.database <entry>",
         ),
@@ -622,12 +699,25 @@ pub(super) fn admits_flag(flag: &str) -> bool {
     !name.is_empty() && name.split('-').all(admits)
 }
 
-/// The subcommand that lists the population a catalogue object was sought in.
-const fn listing(kind: CatalogueObjectKind) -> &'static str {
+/// The subcommand that lists the population a catalogue object was sought in,
+/// or [`None`] where the kind has no population this system reads.
+///
+/// Three of the four kinds have one, and they are the three `FR-SCH-010`
+/// reaches with a `66`. The fourth does not: `FR-PRIV-021` rejects `66` for a
+/// database precisely because "the population of databases is one this system
+/// never reads", so there is no listing subcommand to name and the caller is
+/// sent to `.tpl/.cfg`, where the database a read covers is fixed by
+/// `FR-CONF-041`.
+///
+/// It returns an [`Option`] rather than naming a command for the fourth kind,
+/// because `FR-ERR-012` forbids vague advice and a hint naming a subcommand
+/// that does not exist is worse than vague.
+const fn listing(kind: CatalogueObjectKind) -> Option<&'static str> {
     match kind {
-        CatalogueObjectKind::Table => "tables",
-        CatalogueObjectKind::View => "views",
-        CatalogueObjectKind::Routine => "routines",
+        CatalogueObjectKind::Table => Some("tables"),
+        CatalogueObjectKind::View => Some("views"),
+        CatalogueObjectKind::Routine => Some("routines"),
+        CatalogueObjectKind::Database => None,
     }
 }
 

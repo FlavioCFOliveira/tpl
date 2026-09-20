@@ -96,6 +96,16 @@ pub(crate) struct Session {
     server: Server<'static>,
 
     /// The database entry this connection was opened from.
+    ///
+    /// Nothing reads it yet: every condition this module raises names the
+    /// entry from the [`Target`] it was given, which carries it borrowed, and
+    /// the one caller that holds an open session names it from the settings it
+    /// resolved.
+    #[allow(
+        dead_code,
+        reason = "every condition names the entry from the Target it was given, and the caller \
+                  that holds a session names it from the settings it resolved"
+    )]
     entry: String,
 }
 
@@ -106,6 +116,11 @@ impl Session {
     }
 
     /// The database entry this connection was opened from.
+    #[allow(
+        dead_code,
+        reason = "every condition names the entry from the Target it was given, and the caller \
+                  that holds a session names it from the settings it resolved"
+    )]
     pub(crate) fn entry(&self) -> &str {
         &self.entry
     }

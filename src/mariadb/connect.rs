@@ -336,11 +336,16 @@ pub(super) fn open(
         match timeout(bound.remaining(), MySqlConnection::connect_with(&options)).await {
             Err(_) => Err(fault::expired(NetworkPhase::TcpConnect, host, port, bound)),
             Ok(Ok(connection)) => Ok(connection),
+            // The database is the one the entry names, per `FR-CONF-041`, and
+            // it is passed because the handshake is where a packet about it
+            // arrives: the connection carries the database, so a server that
+            // will not show it refuses the connection rather than a statement.
             Ok(Err(driver)) => Err(fault::connecting(
                 &driver,
                 host,
                 port,
                 options.get_username(),
+                target.database,
             )),
         }
     })
