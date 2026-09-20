@@ -53,8 +53,13 @@
 //! `FR-PRIV-003` answers a caller that named one object with `77`, and
 //! [`completeness::of_table`], [`completeness::of_view`] and
 //! [`completeness::of_routine`] produce that verdict; the exit code is emitted
-//! where every other one is, by the binary, and no command that names an object
-//! exists yet to ask for it.
+//! where every other one is, by the binary. The callers exist: the three
+//! subcommands of `tpl schema` that name an object — `table`, `view` and
+//! `routine` — take that verdict in `crate::cli::schema::named` once the object
+//! they were given has been found, so an object that came back short is the
+//! `77` of `FR-PRIV-003` rather than a document with a hole in it. The other
+//! five of the eight read the same model and name no object, so `FR-PRIV-016`'s
+//! marking is the whole of what a shortfall does to them.
 
 pub(crate) mod completeness;
 mod fold;

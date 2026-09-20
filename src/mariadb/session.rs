@@ -69,6 +69,15 @@ const PROBE: &str = "SELECT VERSION()";
 /// The value `@@session.tx_read_only` reports for a session that is read only.
 const ENFORCED: i64 = 1;
 
+/// The value `@@session.tx_read_only` reports for a session that is not read
+/// only, which is the answer the seam of [`misreport_read_back`] presents.
+///
+/// It is the answer a server would give if it had accepted the statement of
+/// `FR-SRV-008` and not applied it — the condition `FR-SRV-009` exists to
+/// catch, and the one no supported MariaDB produces.
+#[cfg(test)]
+const NOT_ENFORCED: i64 = 0;
+
 /// The product marker `FR-SRV-041` tests the version string for.
 const MARKER: &str = "MariaDB";
 
@@ -191,6 +200,17 @@ fn enforce(
         .ok_or_else(disagreed)?
         .try_get::<i64, _>(0)
         .map_err(|_| disagreed())?;
+
+    // The seam `FR-SRV-013` authorises, which exists in this system's own test
+    // configuration alone. It replaces the answer the session gave with one
+    // that does not confirm the setting, so what the condition below decides is
+    // the decision under test rather than a branch a test stepped around.
+    #[cfg(test)]
+    let reported = if misreporting() {
+        NOT_ENFORCED
+    } else {
+        reported
+    };
 
     if reported == ENFORCED {
         Ok(())
@@ -322,15 +342,98 @@ pub(super) fn start(
     probe(runtime, connection, target, clock)
 }
 
+/// Whether this thread's read-back is presented with an answer that does not
+/// confirm the setting.
+#[cfg(test)]
+fn misreporting() -> bool {
+    MISREPORTED.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Whether [`misreport_read_back`] is installed on this thread.
+    ///
+    /// It is **thread-local** because `libtest` runs the tests of one binary on
+    /// parallel threads, and a process-wide value would decide the read-only
+    /// verdict of a connection another test was opening. The value is read on
+    /// the thread that calls [`enforce`], which is the thread that opened the
+    /// connection: [`run`] blocks on the runtime from the caller's thread and
+    /// the comparison against [`ENFORCED`] is made outside it.
+    static MISREPORTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Presents this thread's read-back with an answer that does not confirm the
+/// setting, until the answer is dropped (`FR-SRV-013`).
+///
+/// `FR-SRV-013` requires the read-back of `FR-SRV-009` to be verified in both
+/// of its outcomes, each by the test form that can reach it, and the failing
+/// outcome is reachable by no other means. **No server produces it**: the
+/// requirement records three fixture conditions that were tried, and under each
+/// of them the session still reported the setting back, because a server that
+/// accepts the statement of `FR-SRV-008` and does not apply it is defective
+/// rather than configured. **No arrangement outside the process reaches it
+/// either**: a seam on `FR-ERR-031`'s terms is reachable only from within this
+/// system's own test configuration, and an integration test drives the binary
+/// the project distributes, which carries no such seam. The requirement
+/// therefore authorises this one, in its own text, and `BR-SRV-003` states the
+/// exception it takes against the rule it excepts from.
+///
+/// `#[cfg(test)]` is the whole of that reachability rule, per `OD-21`, on the
+/// same terms as [`super::window::narrow_to`]. The item is not compiled into
+/// the artefact `cargo build` produces; an integration test links the library
+/// compiled without that configuration and cannot see it either; and it appears
+/// in no help text, in no JSON command tree of `FR-HELP-016` and in no command
+/// tree of `FR-CLI-002`, because it is not a node of any tree. `FR-ERR-031`
+/// rejects by name every mechanism that would reach it from outside the process
+/// — a command or a flag, an environment variable, a build selected by a
+/// feature — and each of those is rejected here for the same reason.
+/// `FR-SRV-011` is untouched by it: the three statements of `FR-SRV-006` are
+/// still issued, once each, in the order `FR-SRV-042` fixes, and what this
+/// changes is the answer the second of them is taken to have given.
+///
+/// The answer restores the previous state when it is dropped, including on the
+/// unwind of a failing assertion, so a misreported read-back cannot outlive the
+/// body that asked for it.
+#[cfg(test)]
+#[must_use]
+fn misreport_read_back() -> Misreport {
+    Misreport {
+        restore: MISREPORTED.with(|misreported| misreported.replace(true)),
+    }
+}
+
+/// The misreporting [`misreport_read_back`] installed, which is undone when
+/// this is dropped.
+#[cfg(test)]
+#[derive(Debug)]
+struct Misreport {
+    /// What the thread's state was before.
+    restore: bool,
+}
+
+#[cfg(test)]
+impl Drop for Misreport {
+    fn drop(&mut self) {
+        MISREPORTED.with(|misreported| misreported.set(self.restore));
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ENFORCED, MARKER, PROBE, READ_BACK, READ_ONLY, resolve};
-    use crate::error::Error;
+    use super::{ENFORCED, MARKER, PROBE, READ_BACK, READ_ONLY, misreport_read_back, resolve};
+    use crate::error::{Error, ReadOnlyFault};
     use crate::mariadb::connect::Target;
     use crate::model::server::Standing;
     use crate::project::config;
     use crate::project::scratch::Scratch;
     use crate::project::settings::{self, Settings};
+
+    // The harness is asked rather than restated, for the reason
+    // `super::super::catalogue` gives where it declares the module: one file
+    // reached by two `#[path]` items is two modules over one file, which
+    // `clippy::duplicate_mod` refuses, so this **uses** the module declared
+    // there rather than declaring it again.
+    use crate::mariadb::catalogue::fixture;
 
     /// A lookup that defines nothing.
     fn nothing(_: &str) -> Option<String> {
@@ -523,5 +626,184 @@ mod tests {
         assert_eq!(server.version(), "11.8.9-MariaDB-ubu2404");
         assert_eq!(server.series(), "11.8");
         assert_eq!(server.standing(), Standing::Supported);
+    }
+
+    // ------------------------------------------- against the fixture ---
+
+    /// The privileged account of the fixture.
+    const ROOT: (&str, &str) = ("root", "tpl-root");
+
+    /// The database entry the body below reaches a fixture server through.
+    const FIXTURE_ENTRY: &str = "fixture";
+
+    /// The schema every fixture server carries.
+    const FIXTURE_SCHEMA: &str = "freight";
+
+    /// The settings that reach `server` as the privileged account.
+    ///
+    /// The document is composed by the harness's own helper, so no port and no
+    /// address is written in Rust: the inventory is asked of
+    /// `scripts/mariadb/`, which is the only way a test reaches the fixture.
+    fn reaching(scratch: &Scratch, server: &fixture::Server) -> Settings {
+        let file = scratch.file(
+            ".cfg",
+            &fixture::configuration(server, FIXTURE_ENTRY, FIXTURE_SCHEMA, ROOT),
+        );
+        let configuration = config::load(&file).expect("the document is valid");
+
+        settings::resolve(
+            &configuration,
+            Some(FIXTURE_ENTRY),
+            &settings::clock(None),
+            &nothing,
+        )
+        .expect("the entry resolves")
+    }
+
+    /// The statement text of each row the server's record holds for the account
+    /// under test, in the order the server received them.
+    ///
+    /// `observe.sh statements dump` prints a thread, a command type and the
+    /// statement; this keeps the last, because what is asserted below is which
+    /// statements arrived and which did not.
+    fn received(server: &fixture::Server) -> Vec<String> {
+        fixture::statements_text(server, &["--user", ROOT.0])
+            .lines()
+            .skip(1)
+            .filter_map(|row| row.splitn(3, '\t').nth(2))
+            .map(|statement| statement.trim().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn fr_srv_013_a_read_back_that_does_not_confirm_is_refused_before_the_catalogue() {
+        // FR-SRV-013's **failing** outcome: a read-back that does not confirm
+        // the setting. The requirement verifies each outcome by the test form
+        // that can reach it, and this one is reachable by no other means —
+        // no server produces it, and no arrangement outside the process
+        // presents it — so the requirement authorises the seam of FR-ERR-031
+        // in its own text and BR-SRV-003 yields for this clause alone.
+        //
+        // **The body is a unit test and not an integration test** because that
+        // seam is `#[cfg(test)]`: an integration test links the library
+        // compiled without that configuration and cannot see it.
+        //
+        // **It is bound to no series**, unlike the confirming outcome, which
+        // FR-SRV-013 binds to every series of FR-SRV-015. The binding exists
+        // there because the spelling FR-SRV-009 names is discriminated by
+        // exactly one series of the window; here the answer is not the
+        // server's, so no series can be named for it. One real server is used
+        // all the same, so that the connection start under test is the real one
+        // — a real handshake, the real statement of FR-SRV-008 and the real
+        // read-back of FR-SRV-009 — and only the answer is replaced.
+        //
+        // **What this does not establish**, per the requirement's own
+        // consequence note: no invocation of the distributed binary is observed
+        // refusing on a read-back that did not confirm, and no server is
+        // observed producing one. What is observed is the decision itself, in
+        // process, and separately the step from a condition to the exit status
+        // it carries — `78` (EX_CONFIG), which BR-ERR-001 obliges to have an
+        // integration test and which other producing conditions of that code
+        // reach from an invocation. The composition of the two is reasoned
+        // rather than executed.
+        let Some(series) = fixture::series(
+            "fr_srv_013_a_read_back_that_does_not_confirm_is_refused_before_the_catalogue",
+        ) else {
+            return;
+        };
+        let _exclusive = fixture::exclusive();
+
+        let server = series
+            .first()
+            .expect("the gate exited 0, so the inventory named a server");
+        let name = server.name();
+
+        let scratch = Scratch::new();
+        let resolved = reaching(&scratch, server);
+        let target = Target::of(&resolved).expect("the entry names a host");
+        let clock = settings::clock(None);
+
+        fixture::statements_on(server);
+
+        let condition = {
+            // The seam is installed for the connection start and for nothing
+            // else: the guard is dropped with this block, so a later body on
+            // this thread reads the answer the server gave.
+            let _misreported = misreport_read_back();
+
+            crate::mariadb::open(&target, &clock)
+                .map(crate::mariadb::Session::close)
+                .expect_err("the read-back was presented with an answer that does not confirm")
+        };
+
+        fixture::statements_off(server);
+
+        let statements = received(server);
+
+        // FR-SRV-010 gives both halves of the read-only pair one code, and
+        // FR-ERR-034 obliges the `cause` line to separate them. This is the
+        // half **this read-back** decides, and it is distinct from the half a
+        // statement the server refuses would produce.
+        match condition {
+            Error::ReadOnlySessionNotEnforced { ref entry, fault } => {
+                assert_eq!(entry, FIXTURE_ENTRY, "{name}");
+                assert_eq!(fault, ReadOnlyFault::ReadBackDisagreed, "{name}");
+                assert_ne!(fault, ReadOnlyFault::NotApplied, "{name}");
+            }
+            ref other => panic!("{name}: expected the read-back half of FR-SRV-010, got {other:?}"),
+        }
+
+        assert_eq!(
+            condition.exit_code(),
+            78,
+            "{name}: {condition:?} — FR-SRV-010 with FR-ERR-006 fixes 78 (EX_CONFIG)"
+        );
+
+        // The control, and it comes first: the record held what this attempt
+        // issued, so the two absences below are observations rather than an
+        // empty log. Both statements of the read-only pair were really sent —
+        // the seam replaces the answer, not the statement.
+        assert!(
+            statements.iter().any(|statement| statement == READ_ONLY),
+            "{name}: the statement record held nothing this attempt issued"
+        );
+        assert!(
+            statements.iter().any(|statement| statement == READ_BACK),
+            "{name}: the read-back was not issued"
+        );
+
+        // `enforce` fails before `probe`: the version probe of FR-SRV-002 is
+        // the third statement of FR-SRV-042's order and is never reached.
+        assert!(
+            !statements.iter().any(|statement| statement == PROBE),
+            "{name}: the version probe followed a read-back that did not confirm"
+        );
+
+        // And before the fourth kind of FR-SRV-006's closed list, which is what
+        // FR-SRV-010 requires of this condition: the catalogue is not read.
+        assert!(
+            !statements
+                .iter()
+                .any(|statement| statement.contains("INFORMATION_SCHEMA")),
+            "{name}: a catalogue statement was issued: {statements:?}"
+        );
+    }
+
+    #[test]
+    fn fr_srv_013_the_seam_is_installed_for_one_body_and_restores_what_it_replaced() {
+        // The seam of FR-ERR-031 is a test hook, and a test hook that outlived
+        // the body that asked for it would decide the read-only verdict of a
+        // connection another body opened. The guard restores on drop, so the
+        // state is false before, true within, and false after — including on
+        // the unwind of a failing assertion, which is what `Drop` gives it.
+        assert!(!super::misreporting());
+
+        {
+            let _misreported = misreport_read_back();
+
+            assert!(super::misreporting());
+        }
+
+        assert!(!super::misreporting());
     }
 }

@@ -756,12 +756,18 @@ fn fr_srv_013_the_read_back_confirms_the_setting_on_every_series_of_the_window()
     // does not exist on 10.11, difference 12 of FR-SRV-038, so a test that ran
     // anywhere else would pass under either spelling.
     //
-    // **This is the confirming outcome only.** The failing outcome — a session
-    // the server will not set read only — could not be produced by any server
-    // of this fixture, and `scripts/mariadb/README.md` records the three
-    // attempts under *What could not be instrumented*. No real MariaDB accepts
-    // the statement and declines to apply it, which is what makes FR-SRV-009
-    // worth having and what makes its failing half unobservable here.
+    // **This body carries the confirming outcome of FR-SRV-013**, which that
+    // requirement assigns to it by name: the outcome is verified by an
+    // integration test that observes, on the server, that the read-back is
+    // issued and that the value the session reports confirms the setting, and
+    // it is an observation made from outside the process, per BR-SRV-003. It is
+    // the half that carries the whole of what FR-SRV-013 promises about the
+    // statement the process **sends**. The failing outcome is the other half,
+    // and the requirement assigns it to the only form that can reach it — a
+    // unit test in `src/mariadb/session.rs`, driven through the seam FR-SRV-013
+    // authorises on FR-ERR-031's terms, because no server produces a read-back
+    // that does not confirm and no arrangement outside the process presents
+    // one.
     let _guard = fixture::exclusive();
     let Some(series) = fixture::series(
         "fr_srv_013_the_read_back_confirms_the_setting_on_every_series_of_the_window",

@@ -633,7 +633,7 @@ the instrument per row on the same terms.
 | 5 | `NFR-PERF-005` | The commands of `FR-PROJ-025` touch nothing | Split by clause and by target: [connections](#the-connections-a-server-accepts) for the connection clause, on all four targets; a differential run for the discovery and configuration clauses, on all four; [files opened](#the-files-a-process-opens) for those same two clauses **as syscalls**, on the two Linux targets only |
 | 6 | `NFR-PERF-006` | A command needing no catalogue opens no connection | [connections](#the-connections-a-server-accepts) |
 | 7 | `FR-SRV-012` | The closed statement list of `FR-SRV-006` | [statements](#the-statements-a-server-receives) |
-| 8 | `FR-SRV-013` | The read-only read-back, in both outcomes | [statements](#the-statements-a-server-receives), and the value the session reports |
+| 8 | `FR-SRV-013` | The read-only read-back, in its confirming outcome | [statements](#the-statements-a-server-receives), and the value the session reports |
 | 9 | `FR-SRV-014` | The connection count, from the server side | [connections](#the-connections-a-server-accepts) |
 
 Rows 4 and 9 name one property between them, so the nine requirements need
@@ -697,10 +697,10 @@ statement outside the closed list shows up as a statement outside the closed
 list. That is the second half of what the instrument has to do, and the half a
 test for "four kinds and no fifth" depends on.
 
-**`FR-SRV-012`, end to end.** `probe-session.sql` issues the connection-start
-sequence of `FR-SRV-006` — the version probe, the read-only session statement,
-the read-back, then a catalogue read — and stood in for `tpl` while the reader
-was being built:
+**`FR-SRV-012`, end to end.** `probe-session.sql` issues the four kinds of
+statement `FR-SRV-006` admits — the version probe, the read-only session
+statement, the read-back, then a catalogue read, in that order, which is the
+script's own — and stood in for `tpl` while the reader was being built:
 
 ```sh
 ./observe.sh statements on 11.8
@@ -720,10 +720,20 @@ thread_id	command_type	statement
 11	Quit
 ```
 
-Four kinds and no fifth; the three connection-start statements once each, in the
-order the list states; and one connection. **Identical on all four series and on
-the `--skip-ssl` server** apart from the thread id — the same run against all
-five, reduced to the row count and the statements:
+Four kinds and no fifth; the three connection-start statements once each; and
+one connection. **The order in the dump is the script's, and is not the order
+that governs.** `FR-SRV-042` fixes that order — the read-only session
+statement, its read-back immediately after, then the version probe — and the
+table of `FR-SRV-006` states none at all, so neither is the list this dump can
+be read against for sequence. `probe-session.sql` sends the version probe
+first, which is the reverse of `FR-SRV-042`, and it is a substitute rather than
+the client under test: what this run establishes is the instrument, the four
+kinds, their count and the one connection. The order `tpl` itself sends is
+asserted against `FR-SRV-042` by the test suite, in the same record.
+
+**Identical on all four series and on the `--skip-ssl` server** apart from the
+thread id — the same run against all five, reduced to the row count and the
+statements:
 
 ```
   10.11  rows=6  SELECT VERSION() | SET SESSION TRANSACTION READ O... | SELECT @@session.tx_read_only | SELECT COUNT(*) FROM INFORMATI...
@@ -934,10 +944,12 @@ builds the image `observe.sh` uses; it is `alpine:3.24` with `strace` and
 
 Three things, recorded here rather than left to be discovered later.
 
-**The failing outcome of `FR-SRV-013`.** The requirement asks for both outcomes
-of the read-back: the setting taking effect, and the setting failing to take
-effect. The first is observed above. The second could not be produced by any
-server in this fixture, and these are the attempts:
+**The failing outcome of `FR-SRV-013`.** That requirement assigns each outcome
+of the read-back to the test form that can reach it, and this fixture's is the
+confirming one, observed above. The failing one — a read-back that does not
+confirm the setting — could not be produced by any server here, and the
+requirement records the same three attempts itself, with the bound on what they
+establish. These are them:
 
 | Tried | What happened |
 |---|---|
@@ -947,9 +959,12 @@ server in this fixture, and these are the attempts:
 
 A server that accepts the statement and does not apply it is exactly the case
 `FR-SRV-009` exists to catch, and no real MariaDB behaves that way. Producing it
-needs a fault-injection seam in `tpl`, not a container. What the fixture
-establishes is the instrument: the statement is visible in the log and the value
-is readable from the session, so whichever outcome occurs is observable.
+needs a seam in `tpl`, not a container, and `FR-SRV-013` authorises one on the
+terms of `FR-ERR-031` — reachable only from within the system's own test
+configuration — so that outcome is verified in process and nothing is owed to
+this fixture for it. What the fixture establishes is the instrument: the
+statement is visible in the log and the value is readable from the session, so
+whichever outcome occurs is observable.
 
 **Rows 1 and 2 conclusively.** The instrument counts catalogue queries and the
 count above is real, but `NFR-PERF-001` compares a count over `WL-001` with a
