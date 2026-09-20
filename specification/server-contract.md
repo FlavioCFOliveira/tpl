@@ -1,7 +1,7 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-20
 related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md]
 ---
 
@@ -1753,10 +1753,26 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   connection-start statements exactly once each, observed on the server under
   `BR-SRV-003`.
 
-- **FR-SRV-013**: The read-back of `FR-SRV-009` SHALL be verified by an
-  integration test that exercises both outcomes: the setting taking effect, and
-  the setting failing to take effect. The test SHALL be executed against every
-  series of `FR-SRV-015`.
+- **FR-SRV-013**: The read-back of `FR-SRV-009` SHALL be verified in both of
+  its outcomes, each by the test form that can reach it.
+
+  The **confirming** outcome — the setting taking effect — SHALL be verified by
+  an integration test that observes, on the server, that the read-back is
+  issued and that the value the session reports confirms the setting. That test
+  SHALL be executed against every series of `FR-SRV-015`, and it is an
+  observation made from outside the process, per `BR-SRV-003`.
+
+  The **failing** outcome — a read-back that does not confirm the setting —
+  SHALL be verified in process, and not by an integration test, through a seam
+  on the terms of `FR-ERR-031`: reachable only from within the system's own
+  test configuration, reachable from no invocation of the binary the project
+  distributes, and appearing in no help text, in the JSON command tree of
+  `FR-HELP-016`, or in the command tree of `FR-CLI-002`. The seam SHALL present
+  the read-back with an answer that does not confirm the setting, and the test
+  SHALL assert that the system produces the condition of `FR-SRV-010` in the
+  half of it this read-back decides, and issues no catalogue statement. For
+  that outcome alone this requirement takes an exception to `BR-SRV-003`, which
+  states it in its own text.
 
   *Amended in the tenth edition: the test is bound to every series.* The
   requirement named no server, and on this requirement the series is the whole
@@ -1765,6 +1781,112 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   under either spelling. A verification that cannot fail on the defect it
   exists to catch is not a verification. The binding is the one `FR-SRV-029`
   already states for the equivalence test, in the same words.
+
+  *Amended in the twenty-eighth edition: the failing outcome is produced in
+  process, because nothing outside the process can produce it.* The requirement
+  demanded one integration test exercising both outcomes, and neither route to
+  the second existed. **No server produces it**, which the observation below
+  records. **No admissible seam reaches it either**: a seam on `FR-ERR-031`'s
+  terms is reachable only from within the system's own test configuration, and
+  an integration test drives the binary the project distributes, which carries
+  no such seam. The two halves of this requirement could therefore not both be
+  satisfied as written. What yields is the **form** of the failing half's test,
+  and nothing else: that outcome is still verified, the seam is authorised
+  here, in this requirement's own text, rather than left to be inferred, and
+  the confirming half is unchanged — still observed on the server, and still
+  bound to every series of `FR-SRV-015`. The tenth edition's binding is
+  undiminished and now attaches where it can act, on the half that reaches a
+  server; the failing half reaches none, so no series can be named for it. This
+  is the resolution `FR-SRV-035` took in the eighth edition for the same
+  collision, in the same shape — the requirement names the seam, names the test
+  form, and states what the form does not establish.
+
+  *Observed.* Against the fixture of `scripts/mariadb/`, on 2026-09-20, by the
+  pass that wrote the confirming half. Three conditions were tried, and under
+  each of them the read-back still confirmed the setting:
+
+  | Tried | What the session reported |
+  |---|---|
+  | An open transaction before the read-only session statement | The statement is accepted on all four series of `FR-SRV-015`, and the read-back still answers the enforced value. MariaDB does not refuse it |
+  | The same as the reduced-grant reader | Accepted; the read-back still answers the enforced value |
+  | A server already read only at the global level | `@@global.read_only` is `0` on the fixture, and setting it governs the global state rather than whether a **session** setting took effect, so it cannot make the read-back disagree |
+
+  *Bounded claim.* Three conditions, on the fixture as it stood on that date,
+  the first of them on each of the four series; nothing was observed about a
+  server outside the window of `FR-SRV-015`, and no exhaustive search of server
+  configurations was made. One further candidate was reasoned against rather
+  than observed, and is recorded so that it is not tried again: a server-side
+  `init_connect`, which the server runs **before** the client's own statements
+  and which therefore cannot reach a setting the client makes after it.
+
+  *Nothing is owed to the record of differences.* The four series behaved
+  identically under the condition that was tried on all four, so this occasion
+  observed **no** difference between them and owes no row to `FR-SRV-038` and
+  no row to the register of `FR-SRV-036`. The negative is written here, beside
+  the observation, so that a sweep of the corpus for observations recorded
+  outside the record that owns them — the check the thirteenth edition
+  added — meets an answer rather than a question.
+
+  *The exception, stated against the rule it excepts from.* `BR-SRV-003`
+  requires all three of `FR-SRV-012` through `FR-SRV-014` to be observed from
+  outside the process, on the server, and this requirement is one of the three.
+  The exception is the failing outcome and nothing besides. Everything this
+  requirement promises about the statement the process **sends** — that the
+  read-back is issued, in the spelling `FR-SRV-009` names, in the position
+  `FR-SRV-042` fixes — lies in the confirming half, and is observed on the
+  server on every series. What the failing half verifies is not what the
+  process sends but what it **does with the answer it receives**, and no server
+  can show that: a server that accepts the read-only session statement and does
+  not apply it is exactly the case `FR-SRV-009` exists to catch, and no
+  supported MariaDB behaves that way. `BR-SRV-003` yields for that clause
+  alone, in its own text, as `BR-ERR-001` does for `70`.
+
+  *Consequence, stated plainly.* No invocation of the distributed binary is
+  observed refusing on a read-back that did not confirm, and no server is
+  observed producing one. What is observed is the decision itself, in process,
+  and separately the step from a condition to the exit status it carries —
+  `78` (`EX_CONFIG`), which `BR-ERR-001` obliges to have an integration test
+  and which other producing conditions of that code reach from an invocation.
+  The composition of the two is reasoned rather than executed. That is weaker
+  than the confirming half of this requirement, and it is the price of the
+  condition being one no server produces — which is the same limit
+  `FR-ERR-031` states for `70` and `FR-SRV-035` for the marked read.
+
+  *What would change this.* A server inside the window that accepts the
+  read-only session statement and does not apply it. Were one ever observed,
+  the failing outcome would be producible from outside the process, the second
+  half of this requirement would return to the form of the first, and the
+  exception to `BR-SRV-003` would be withdrawn with the seam.
+
+  *Rejected.* Withdrawing the demand for the failing outcome and leaving it
+  with no test of any kind. It is the branch of `FR-SRV-010` this read-back
+  decides, and it is the detecting half of the strongest guarantee this tool
+  makes, per `BR-SRV-002`: the condition `FR-SRV-009` exists to catch is
+  precisely the one no fixture can stage, so a path that is never exercised
+  would first run on the day it matters. The ground is `BR-ERR-001`'s for `70`
+  — a code no test exercises is a code nobody has confirmed the binary can
+  return — and it applies with more force here, because the terms on which a
+  seam is admitted are already stated, in `FR-ERR-031`, and this corpus has
+  accepted them twice.
+
+  *Also rejected.* Naming a fixture condition concretely. The three above were
+  tried and none produces it, and the reason is not that the right server
+  setting has yet to be found: a server that accepts the statement and does not
+  apply it is **defective**, not configured, so there is no state a conforming
+  MariaDB can be put into that produces the outcome. A requirement that named
+  such a condition would mandate a test the fixture can never run, which is the
+  defect this amendment exists to end.
+
+  *Also rejected.* A stand-in between the reader and the server, rewriting the
+  read-back's answer. It is possible in principle — `FR-SRV-041` states that a
+  server determined to pass as MariaDB will pass — and it is refused on
+  `FR-SRV-035`'s ground: it obliges the project to implement and maintain
+  enough of the MariaDB wire protocol to rewrite one result set, for one
+  assertion, and to keep it true across four series. It also buys less than it
+  looks: what the reader would then be observed against is an artefact this
+  project wrote, so the observation satisfies `BR-SRV-003`'s letter — outside
+  the process — while abandoning its substance, which is that the observation
+  is made on a server.
 
 - **FR-SRV-014**: The connection count of an invocation SHALL be as fixed by
   `NFR-PERF-004`, and SHALL be verifiable from the server side.
@@ -1840,9 +1962,27 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   servers.
 
 - **BR-SRV-003**: All three of `FR-SRV-012` through `FR-SRV-014` are
-  observations made from outside the process, on the server. A promise about what
-  a process sends that can only be checked by reading that process's own source
-  is not a promise a caller can rely on.
+  observations made from outside the process, on the server. The failing
+  outcome of `FR-SRV-013` is the one exception, stated here rather than left to
+  be inferred: no arrangement outside the process can present the read-back
+  with an answer that does not confirm the setting, so that outcome alone is
+  verified in process, through the seam `FR-SRV-013` authorises on the terms of
+  `FR-ERR-031`. A promise about what a process sends that can only be checked
+  by reading that process's own source is not a promise a caller can rely on.
+
+  *Amended in the twenty-eighth edition: the one exception is named.* The rule
+  required all three to be observed on the server while `FR-SRV-013` demanded
+  an outcome no server produces, so the two could not both be satisfied and the
+  test `FR-SRV-013` mandated could not be written. This rule yields, for that
+  one clause. It is unchanged over `FR-SRV-012`, over `FR-SRV-014`, and over
+  the confirming outcome of `FR-SRV-013`, which carries the whole of what that
+  requirement promises about the statement the process **sends** and is
+  observed on the server at every series of `FR-SRV-015`. The ground stated
+  above is untouched: what yields is not a claim about what is sent, but the
+  verification of what the process does with the answer it receives, which no
+  server can show. `FR-SRV-013` states the exception against this rule, records
+  the three fixture conditions that failed to produce the outcome, and states
+  what the in-process form does not establish.
 
   *What this rule reaches, stated in the eighth edition.* It reaches the three
   requirements it names, which are promises about the statements `tpl` sends

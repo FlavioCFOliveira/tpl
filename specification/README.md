@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty-seven editions. All are in force;
+The specification has been written in twenty-eight editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -557,8 +557,16 @@ it, and one difference joins the observation record.
 - **The verification is bound to every series** — `FR-SRV-013`. The test that
   exercises the read-back named no server, and exactly one series of the window
   discriminates the two spellings, so a test that runs anywhere else passes
-  under either. It now runs against every series of `FR-SRV-015`, in the words
+  under either. It was bound to every series of `FR-SRV-015`, in the words
   `FR-SRV-029` already used.
+
+  *Corrected in the twenty-eighth edition.* The clause read that the test
+  "now runs against every series", in the present tense and over the whole of
+  `FR-SRV-013`. The twenty-eighth edition splits that requirement by the test
+  form that can reach each of its two outcomes, and the binding attaches to the
+  half that reaches a server: the confirming outcome runs against every series,
+  and the failing outcome runs against none, in process. The binding is
+  undiminished — what changed is which half carries it.
 - **The record of differences grows from eleven to twelve** — `FR-SRV-038`.
   The presence of `transaction_read_only` is difference 12. It reaches no
   field of the model, so the register of `FR-SRV-036` keeps its two rows; and
@@ -2346,6 +2354,102 @@ cross-schema foreign key, for the reason `FR-CAT-057` states.
 **Three identifiers are assigned** — `FR-CAT-055`, `FR-CAT-056` and
 `FR-CAT-057` — and none is retired.
 
+### Twenty-eighth edition — a test with no route to half of what it demanded
+
+The first arm's verification from outside the process was written, and it met a
+requirement it could not satisfy. `FR-SRV-013` demanded **one integration
+test** exercising **both** outcomes of the read-back of `FR-SRV-009`, and
+neither route to the failing outcome existed. No server produces it: a server
+that accepts the read-only session statement and does not apply it is the case
+`FR-SRV-009` exists to catch, and no supported MariaDB behaves that way, which
+three attempts against the fixture confirmed. No admissible seam reaches it
+either: a seam on `FR-ERR-031`'s terms is reachable only from within the
+system's own test configuration, and an integration test drives the distributed
+binary, which carries no such seam. The confirming half was delivered, on all
+four series, observed from the server; the other half was reported rather than
+faked, which is what made this edition possible.
+
+**Nothing here changes what `tpl` does.** One requirement is amended, one rule
+yields for one clause, one count follows it, and **no identifier is assigned or
+retired**. No requirement is withdrawn, no exit code is added or withdrawn, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **`FR-SRV-013` is split by the test form that can reach each outcome** —
+  [server-contract.md](server-contract.md). The confirming outcome keeps the
+  integration test, keeps the tenth edition's binding to every series of
+  `FR-SRV-015`, and is observed on the server. The failing outcome is verified
+  **in process**, through a seam the requirement now authorises in its own
+  text, on `FR-ERR-031`'s terms — reachable from no invocation of the
+  distributed binary and absent from every published surface — which presents
+  the read-back with an answer that does not confirm the setting, so that the
+  test can assert the condition of `FR-SRV-010` and that no catalogue statement
+  follows. What yields is the **form** of that half's test and nothing else.
+  This is `FR-SRV-035`'s resolution of the eighth edition, in the same shape
+  and for the same collision: name the seam, name the test form, and state what
+  the form does not establish.
+- **`BR-SRV-003` states the exception in its own text** — the same file. That
+  rule names `FR-SRV-012` through `FR-SRV-014` and requires all three to be
+  observed outside the process, on the server, so `FR-SRV-013` is inside it and
+  the answer could not be left to inference. It yields for the failing outcome
+  alone, in the shape `BR-ERR-001` uses for `70`. It is unchanged over
+  `FR-SRV-012`, over `FR-SRV-014`, and over the confirming outcome — which
+  carries the whole of what `FR-SRV-013` promises about the statement the
+  process **sends**. What yields is the verification of what the process does
+  with the answer it **receives**, and no server can show that.
+- **The count in `BR-SCH-004`'s precedent list follows** —
+  [schema-commands.md](schema-commands.md). It said `FR-SRV-012` and
+  `FR-SRV-013` "mandate two for the read-only promise", one test each. They
+  mandate three. Only the count changes, and nothing about the round-trip that
+  rule mandates or what it still waits on.
+- **`FR-SRV-013` joins the requirements that state a limit on evidence** —
+  *[Writing conventions](#writing-conventions)*. It carries the note shapes
+  that family uses and states what its in-process half leaves unobserved: no
+  invocation of the distributed binary is observed refusing on a read-back that
+  did not confirm, and no server is observed producing one. The enumeration
+  there goes from three to four.
+- **The tenth edition's entry above is corrected where it spoke in the present
+  tense.** It said the test "now runs against every series", over the whole of
+  `FR-SRV-013`. The binding attaches to the half that reaches a server, and the
+  entry now says so. The binding itself is undiminished.
+
+**One observation, and one that cannot be made.** The three fixture conditions
+were tried on 2026-09-20, through the harness, by the pass that wrote the
+confirming half — an open transaction before the read-only statement, the same
+as the reduced-grant reader, and the global read-only flag — and under each the
+read-back still confirmed the setting. The first was tried on all four series.
+`FR-SRV-013` records them with their bound, and records the one further
+candidate that was reasoned against rather than observed, so that it is not
+tried again. It adds **no row** to the record of `FR-SRV-038` and **no row** to
+the register of `FR-SRV-036`: a condition no server enters is not a difference
+between the series, and no field of the model is in question. What cannot be
+observed is the failing outcome itself, for the reason `FR-SRV-013` states.
+
+**What found it.** Not one of the five validation rules below. The instrument
+was **writing the verification against this corpus** — the outside-the-process
+observation the first arm owes — which is the instrument of the twentieth,
+twenty-first, twenty-second, twenty-fourth, twenty-fifth and twenty-seventh
+editions, turned for the first time on the tests rather than on the commands.
+The eighth edition met this defect's twin by reading requirement against
+requirement, and did not meet this one: `FR-SRV-035` authorised a seam and
+demanded an integration test in the same breath, so its collision was on the
+page, while `FR-SRV-013` authorises no seam at all and its two halves read as
+one coherent demand until somebody has to produce the second. A requirement
+that mandates a test can be internally coherent, correctly cross-referenced,
+counted right and impossible to satisfy, and the reading that finds it is an
+attempt to write the test.
+
+**Three options were rejected and each is recorded in `FR-SRV-013` with its
+reason.** Withdrawing the failing half, which would leave the branch of
+`FR-SRV-010` that this read-back decides with no test of any kind, on
+`BR-ERR-001`'s ground for `70`. Naming a fixture condition, which no
+configuration of a conforming server can supply, because the outcome is a
+defect in a server rather than a state a server can be put into. And a stand-in
+between the reader and the server rewriting the read-back's answer, refused on
+`FR-SRV-035`'s ground — an impostor of the wire protocol, maintained across
+four series, for one assertion — and because an observation made against an
+artefact this project wrote satisfies `BR-SRV-003`'s letter while abandoning
+its substance.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -2487,12 +2591,14 @@ because they constrain the whole module rather than one interaction.
   members cite each other. A limit on the **evidence** for a guarantee — the
   observation that cannot be made, rather than the promise that cannot be kept
   — takes the same note shapes, as many of them as it has content for, without
-  joining that family, because it qualifies a different kind of claim. Three
+  joining that family, because it qualifies a different kind of claim. Four
   requirements are written this way:
   `FR-ERR-031`, where no invocation of the distributed binary is observed
   returning `70`; `NFR-PERF-005`, where the file-open observation is made
-  on the Linux targets and not on the macOS ones; and `FR-PRIV-021`, where no
-  invocation is observed producing a schema read that returns no row.
+  on the Linux targets and not on the macOS ones; `FR-PRIV-021`, where no
+  invocation is observed producing a schema read that returns no row; and
+  `FR-SRV-013`, where no server is observed producing a read-back that does not
+  confirm the read-only session, so that half of it is exercised in process.
 
 ## Status legend
 
@@ -2842,6 +2948,20 @@ trigger, in the terms the eighth edition used for `FR-CONF-038`, and no
 requirement of this corpus is waiting on it: `FR-CAT-057` is complete on its
 own terms today. The item below was untouched by this edition and stays
 outstanding.
+
+The twenty-eighth edition adds no obligation of either kind, and records none
+as discharged. It settles the one requirement the first arm's verification from
+outside the process could not satisfy: `FR-SRV-013` demanded an integration
+test over both outcomes of the read-back, and the failing outcome is reachable
+from no server and from no seam an integration test can see. That half is now
+verified in process, through a seam the requirement authorises on
+`FR-ERR-031`'s terms; `BR-SRV-003` yields for that clause in its own text, and
+`BR-SCH-004`'s count follows. None of the five rules below would have found it:
+the requirement was internally coherent, correctly cross-referenced and counted
+right, and what found it was writing the test it mandates. The test form it now
+names is owed by the code that carries the read-back, which is work a
+requirement in force obliges rather than debt of this corpus. The item below
+was untouched by this edition and stays outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.

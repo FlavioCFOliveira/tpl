@@ -285,8 +285,8 @@ tpl schema dump                        The whole database as one JSON document
   when the document shape changes. The precedents are `BR-ERR-001`, which
   mandates a test per exit code, `BR-HELP-001` and `BR-HELP-003`, which mandate
   four for the help forms and the command tree, and `FR-SRV-012` and
-  `FR-SRV-013`, which mandate two for the read-only promise. The round-trip was
-  the only contract with none.
+  `FR-SRV-013`, which mandate three for the read-only promise. The round-trip
+  was the only contract with none.
 
   *Accepted cost.* The test needs the container of
   [performance-requirements.md](performance-requirements.md), which now
@@ -315,6 +315,14 @@ tpl schema dump                        The whole database as one JSON document
   determinism property `NFR-DET-001` already owns. The whole subject of this
   rule is that a render from a dump and a render from a live read agree, and
   neither render can be performed.
+
+  *Amended in the twenty-eighth edition: the count in the precedent list
+  follows the requirement it counts.* The clause said **two**, one test each,
+  which was true until `FR-SRV-013` was split by the test form that can reach
+  each of its two outcomes: its confirming outcome is an integration test
+  against every series, its failing outcome an in-process test through the seam
+  that requirement authorises, and `FR-SRV-012` is unchanged. Only the count
+  changes here, and nothing about this rule or the round-trip it mandates.
 
 ## Flags and output
 
