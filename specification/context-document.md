@@ -1,7 +1,7 @@
 ---
 title: The Context Document
 status: approved
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-20
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
 ---
 
@@ -71,7 +71,43 @@ variable is bound to a source, which is
 ## Reference depth
 
 - **FR-CTX-006**: A foreign key SHALL embed the table it references, one level
-  deep.
+  deep. WHERE a key names no table to reference — its `referenced_table` being
+  `null`, per `FR-CAT-056` — the key SHALL still be carried, with its name, its
+  columns and its rules, and the place the embedded table occupies SHALL carry
+  `null`, per `FR-OUT-012`.
+
+  *Amended in the twenty-seventh edition: the one case with no first hop.* The
+  requirement was written over a key that names a table, which is every key the
+  fixture holds and every key any server has been observed to return.
+  `FR-CAT-056` records that the catalogue **declares** the referenced table name
+  nullable, so the model has a shape for a key that names none, and this
+  requirement had no reading for it: a reader could carry the key without an
+  embedding, carry it with `null`, or drop it, and the three build different
+  documents. Nothing about a key that names a table changes.
+
+  *`FR-CTX-005` is not contradicted, and this states why once.* That
+  requirement reserves `null` for an absent scalar so that a consumer may test
+  a **collection** for emptiness without first testing it for nullity, and
+  `FR-CTX-004` is the half that makes an empty collection `[]`. The embedding
+  is neither: it is one object at one key, and an absent one is the case
+  `FR-OUT-012` governs — emitted as `null` rather than omitted, so that
+  `FR-SEM-012` does not fail a template that reads through it.
+
+  *Why this does not weaken `FR-CTX-023`.* A key with no referenced table
+  references no object, so there is no object for the document to be missing.
+  The other way a reference could dangle — a key naming a table in another
+  schema — cannot arise either: `FR-CAT-057` excludes a cross-schema foreign
+  key from the model in both directions, so every table a carried key names is
+  a table of the database the read covers.
+
+  *Rejected: dropping such a key from the document.* It presents a table with
+  one constraint fewer than the server holds, at exit `0`, and the key's name,
+  its columns and its two rules are facts the catalogue did return. *Also
+  rejected: omitting the embedding key from the object.* `FR-SEM-012` fails a
+  render when a template reads a field that is not there, so a template written
+  against every other key in the document would fail on this one — which is the
+  argument `BR-SRV-008` used to make `standing` unconditional, arriving here
+  and answered the same way.
 
 - **FR-CTX-007**: The embedded table SHALL carry its columns, its indexes, and
   its primary key in full.
@@ -643,6 +679,16 @@ variable is bound to a source, which is
   *Narrowed* `OQ-024` to the **metadata fields** of the `database` object,
   which `FR-CTX-036` now fixes.
 
+  *One command emits a reduction of this object, and it is named here so that
+  a reader arriving from this file is told once.* `FR-SCH-031` gives
+  `tpl schema info` a `database` value carrying the three metadata fields of
+  `FR-CTX-036` and the `server` object of `FR-CTX-031`, and **not** these three
+  collections. It is that object with three members removed: every member it
+  does carry is this member, under this name, with this value. Nothing about
+  this requirement changes — it fixes the document `tpl schema dump` emits and
+  `tpl render --context` consumes, per `FR-CTX-001`, and `tpl schema info`
+  emits neither.
+
 - **FR-CTX-036**: The `database` object SHALL carry exactly three metadata
   fields beside the `server` object of `FR-CTX-031` and the three collections
   of `FR-CTX-035`:
@@ -780,6 +826,17 @@ emits — `FR-SCH-018` keeps them out of it.
 
 - **FR-CTX-023**: WHEN the document is produced by a server read, every object
   referenced from another object in it SHALL be present in it.
+
+  *Amended in the twenty-seventh edition: the two requirements that make this
+  satisfiable are named.* The promise was stated and nothing said what keeps
+  it. Two things do, and both are outside this file. `FR-CAT-057` excludes a
+  foreign key that crosses a schema boundary, in either direction, so no
+  carried key names a table the read does not cover; and `FR-CTX-006` as
+  amended carries a key that names no table at all without an embedding, so
+  there is no reference for that case either. A third is inside this file:
+  `FR-CTX-008` cuts an embedded table's own keys to names, so the population a
+  reference can point into is the document's own `tables` collection and
+  nothing deeper. Nothing this requirement promises changes.
 
 - **FR-CTX-024**: The document SHALL NOT promise to be a point-in-time snapshot,
   and the specification SHALL state that it is not one.

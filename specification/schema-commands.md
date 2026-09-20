@@ -1,8 +1,8 @@
 ---
 title: Schema Commands (First Arm)
 status: approved
-last-reviewed: 2026-09-18
-related: [cli-contract.md, cache-commands.md, output-formats.md, render-command.md]
+last-reviewed: 2026-09-20
+related: [cli-contract.md, cache-commands.md, output-formats.md, context-document.md, render-command.md]
 ---
 
 # Schema Commands (First Arm)
@@ -16,7 +16,8 @@ reads through the catalogue cache.
 ## Scope
 
 In scope: the eight subcommands, their arguments and flags, the `--pattern`
-filter, the shape of the dump document, and the ordering and format of the
+filter, the shape of the dump document, the shape of the `tpl schema info`
+document and how it differs from the dump, and the ordering and format of the
 result.
 
 Out of scope: the content of the catalogue itself — which fields a table, view,
@@ -406,12 +407,32 @@ tpl schema dump                        The whole database as one JSON document
   `json` output in the envelope of `FR-OUT-024`.
 
 - **FR-SCH-031**: The `data` of `tpl schema info` SHALL be an object carrying
-  one key, `database`, whose value is the metadata of the selected database.
+  one key, `database`, whose value carries exactly four members and no others:
+  the three metadata fields `FR-CTX-036` fixes — `name`, `charset`, and
+  `collation` — and the `server` object `FR-CTX-031` fixes. It SHALL NOT carry
+  the collections `tables`, `views`, and `routines` of `FR-CTX-035`.
 
-  *The field list is fixed by `FR-CTX-036`*: three metadata fields — `name`,
-  `charset`, and `collation` — beside the `server` object of `FR-CTX-031` and
-  the three collections of `FR-CTX-035`. The envelope and the `data` key are
-  fixed here.
+  ```json
+  {"schema_version":1,"source":"server","data":{"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{"version":"11.4.13-MariaDB-ubu2404","series":"11.4","standing":"supported"}}}}
+  ```
+
+  **`tpl schema info --format json` and `tpl schema dump` SHALL NOT emit the
+  same bytes.** The two commands answer different questions, and this
+  requirement is the one that keeps them apart.
+
+  **How this object relates to the one `FR-CTX-001` fixes.** Every member it
+  carries is the same member, under the same name and with the same value, that
+  the `database` object of the context document carries: a caller reading
+  `data.database.name`, `.charset`, `.collation` or `.server` receives the same
+  answer from `tpl schema info` and from `tpl schema dump`. This object is that
+  object **without** the three collections, and it is the only place this
+  corpus emits a reduction of it. `FR-CTX-001`, `FR-CTX-035` and `FR-CTX-036`
+  are unchanged: they fix the context document, which is what
+  `tpl schema dump` emits under `FR-SCH-034` and what `tpl render --context`
+  consumes under `FR-SCH-036`, and `tpl schema info` emits neither.
+
+  The envelope and the `data` key are fixed here, per `FR-SCH-030` and
+  `FR-OUT-024`.
 
   *Amended in the fourth edition.* One field of that object is now fixed:
   `server`, carrying the probed version, the series, and the standing, per
@@ -419,16 +440,64 @@ tpl schema dump                        The whole database as one JSON document
   catalogue field — it comes from the version probe of `FR-SRV-002` — so
   `BR-CTX-006` could fix it without observing anything.
 
-  *Amended in the fifth edition.* Three more are fixed: the collections
-  `tables`, `views`, and `routines`, per `FR-CTX-035`. They are outside
-  `OQ-024` for the same reason — a collection is a structural rule of
-  [context-document.md](context-document.md), not a catalogue field.
+  *Amended in the fifth edition, and reversed in the twenty-seventh.* That
+  edition read three more fields into this requirement — the collections
+  `tables`, `views`, and `routines`, per `FR-CTX-035` — on the ground that they
+  are outside `OQ-024` because a collection is a structural rule of
+  [context-document.md](context-document.md) rather than a catalogue field.
+  The ground was sound about `FR-CTX-035`; the step from it to this
+  requirement was not. It is recorded rather than deleted, because the reading
+  it created stood for twenty-two editions.
 
   *Amended in the seventh edition, and the gap is closed.* The schema
   catalogue was observed against all four series and returns six columns.
   `FR-CTX-036` takes three of them as the metadata fields and states, field by
   field, why the other three are not carried. `OQ-024` is now listed under
   [Closed](open-questions.md#closed).
+
+  *Amended in the twenty-seventh edition: two commands were emitting the same
+  bytes.* Reading this requirement against its own amendments showed that the
+  fifth edition's step had made `tpl schema info --format json` emit, byte for
+  byte, what `tpl schema dump` emits: the collections are the whole of the
+  model, so a `database` object carrying them is the dump. `FR-SCH-002`
+  provides eight subcommands and `FR-SCH-016` gives one of them the whole
+  database; a second command emitting the same document is not a second
+  command, which is the argument `FR-SCH-019` already made in this file about
+  a flag with a single permitted value. The reduction is what this requirement
+  always described — `tpl schema info` reports **the metadata of the selected
+  database**, per `FR-SCH-003` — and the amendment restores that reading with
+  the field list stated rather than delegated.
+
+  *Rejected: leaving the collections in and accepting the byte-identity.* It
+  costs a calling agent the whole model to ask a database's name and its
+  server's standing, on the command whose line in the surface above reads
+  *Database metadata*, and it leaves two of the eight subcommands
+  indistinguishable to a caller that reads only the bytes. It also makes
+  `tpl schema info` the most expensive command of this arm while presenting the
+  least, which no reader of that surface would predict.
+
+  *Rejected: giving `tpl schema info` a key of its own beside `database`, or a
+  count of each collection.* A count is derivable from the three listings of
+  `FR-SCH-032` and from the dump, and inventing a field the model does not
+  carry would put a number in the plumbing contract that no requirement of
+  [catalogue-coverage.md](catalogue-coverage.md) fixes. The `text` form of this
+  command is not a contract, per `FR-SCH-027` and `FR-OUT-004`, and what it
+  chooses to show is outside this requirement.
+
+  *Rejected: composing a reduced object under a different key, so that
+  `data.database` always means the whole object.* It would cost a caller the
+  one property this amendment preserves — that `data.database.name` answers the
+  same from either command — and `FR-OUT-031` names the key for the kind in the
+  singular, which for a database is `database`.
+
+  *Accepted cost, stated plainly.* Two shapes are emitted under the key
+  `database`, distinguished by the command that produced them and by nothing in
+  the envelope. A caller that reads `data.database.tables` from
+  `tpl schema info` finds no such key, and `FR-SEM-012` would fail a template
+  that did — though no template reads this document, because
+  `tpl render --context` takes the dump and refuses anything else, per
+  `FR-SCH-036`. The cost is one sentence in a caller's notes; the cost of the
+  rejected option is the whole model on every metadata query.
 
 - **FR-SCH-032**: The `data` of `tpl schema tables`, `tpl schema views`, and
   `tpl schema routines` SHALL follow `FR-OUT-030`, carrying one key named for

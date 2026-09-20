@@ -1,7 +1,7 @@
 ---
 title: Catalogue Coverage
 status: approved
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-20
 related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md]
 ---
 
@@ -22,11 +22,13 @@ The model is the same whatever the source. A live read, a cached read, and a
 
 In scope: the covered object kinds, the properties of each, the catalogue field
 list behind each and the rule by which a field list becomes a property list,
-the closed exclusion of volatile catalogue fields, the closed exclusion of
-fields whose meaning differs between supported series, the enumerated
-exclusions of whole features, the observed catalogue behaviour that constrains
-what the model can carry, and the position of coverage filtering relative to
-`--pattern`.
+the rule for a catalogue value outside a set this file records as closed, what
+the model carries where a field it carries returns SQL `NULL`, the closed
+exclusion of volatile catalogue fields, the closed exclusion of fields whose
+meaning differs between supported series, the enumerated exclusions of whole
+features and of the foreign key that crosses a schema boundary, the observed
+catalogue behaviour that constrains what the model can carry, and the position
+of coverage filtering relative to `--pattern`.
 
 Out of scope: how the model is encoded as JSON, which belongs to
 [context-document.md](context-document.md); which statements read it, which
@@ -166,8 +168,10 @@ of any catalogue query, which this specification does not state.
 
 - **FR-CAT-016**: A routine SHALL carry `kind`, stating whether it is a
   procedure or a function. The value SHALL be the catalogue's own routine-type
-  string, carried unchanged, and SHALL therefore be exactly one of the two
-  strings `PROCEDURE` and `FUNCTION`.
+  string, carried unchanged, and WHERE the server's `standing` is `supported`,
+  per `FR-CTX-034`, it SHALL be exactly one of the two strings `PROCEDURE` and
+  `FUNCTION`. A value outside those two is carried unchanged under
+  `FR-CAT-055`.
 
   *Amended in the twenty-third edition: the emitted value is stated.* The
   requirement read "A routine SHALL state its kind: procedure or function",
@@ -195,6 +199,19 @@ of any catalogue query, which this specification does not state.
   neither this requirement nor `FR-SCH-008` governed. Nothing about the field
   changes: it carries the catalogue's own string, in upper case, as the
   twenty-third edition fixed it.
+
+  *Amended in the twenty-seventh edition: the word "therefore" is given the
+  server it depends on.* The first paragraph read that the value carries the
+  catalogue's string unchanged and **SHALL therefore be exactly one of the two
+  strings**, which is true of every series of `FR-SRV-015` and is not a
+  property of the field. The routine-type column is declared `varchar(13)` and
+  not an `ENUM`, on all four series, so nothing but the observation of
+  `FR-CAT-048` closes the set. The sentence now reads: the value SHALL be
+  exactly one of the two strings **on a server whose `standing` is
+  `supported`**, per `FR-CTX-034`; a third string is carried unchanged under
+  `FR-CAT-055`, which also states the one place a third kind is not reachable —
+  the qualified name of `FR-SCH-008`. Nothing about a supported server changes,
+  and the two strings are the same two.
 
   *Rejected.* Carrying `kind` in lower case so that it equals the prefix
   `FR-SCH-008` admits. It would make `kind` the only enumerated catalogue
@@ -406,6 +423,167 @@ requirement says otherwise.
   granularity, and at field granularity it is worse: the judgement is made
   once, by whoever writes the requirement, and a template author who needs the
   field has no way to recover it.
+
+- **FR-CAT-055**: IF a catalogue field this file records as taking a closed
+  set of values returns a value outside that set, THEN the system SHALL carry
+  the catalogue's own string unchanged. It SHALL NOT substitute a recorded
+  value, SHALL NOT drop the object the field belongs to, SHALL NOT refuse the
+  read, and SHALL NOT change the exit code on account of it.
+
+  The rule reaches **six model properties over five value sets**, and no
+  others:
+
+  | Model property | Value set | Recorded by |
+  |---|---|---|
+  | `on_update`, `on_delete` | the four referential actions | `FR-CAT-045`, with `FR-CAT-033` |
+  | `level` | `Table` and `Column` | `FR-CAT-046`, with `FR-CAT-037` |
+  | `event` | `INSERT`, `UPDATE`, `DELETE` | `FR-CAT-050` |
+  | `timing` | `BEFORE`, `AFTER` | `FR-CAT-050` |
+  | `kind` | `PROCEDURE` and `FUNCTION` | `FR-CAT-016` |
+
+  **`table_type` is not one of them**, and the difference is the field's job
+  rather than its shape. `FR-CAT-001` through `FR-CAT-006` make that value a
+  coverage predicate, so a value outside the set `FR-CAT-031` records selects
+  no covered kind and the object is not presented — which is the same outcome
+  `FR-CAT-004` and `FR-CAT-005` produce for a value the set does hold. Every
+  other enumerated-looking field the model carries — a foreign key's
+  `match_option`, a trigger's `orientation`, a view's `check_option`,
+  `is_updatable` and `security_type`, a routine's `body_kind`,
+  `parameter_style`, `is_deterministic`, `sql_data_access` and
+  `security_type`, and a parameter's `mode` — is already carried as the
+  catalogue's own string under a bounded claim, so this requirement changes
+  nothing for it.
+
+  *Observed, 2026-09-20, against all four series of `FR-SRV-015` through the
+  harness of `scripts/mariadb/`.* **The catalogue does not close any of the
+  five sets.** Every field behind them is declared a plain `varchar` and
+  `NOT NULL`, never an `ENUM`: the referential-constraint table's update rule
+  and delete rule at `varchar(64)`, the check-constraint table's level at
+  `varchar(6)`, the trigger table's timing at `varchar(6)`, and the routine
+  table's routine type at `varchar(13)` — all identically on all four series.
+  The trigger table's event column is the one that is **not** identical:
+  `varchar(6)` on `10.11`, `11.4` and `11.8` and `varchar(20)` on `12.3`,
+  which is difference 9 of `FR-SRV-038`, re-confirmed by this reading. The
+  table catalogue's table type, which the clause above excepts, is
+  `varchar(64)` and `NOT NULL` on all four. The five sets are therefore closed
+  by the observations that recorded them and by nothing the server declares,
+  and the declared width behind one of them has already grown inside the
+  window.
+
+  *Rationale, and it is `FR-SRV-031` read in its own terms.* The one
+  foreseeable trigger for a value outside a set is a server newer than the
+  window, and that server is one this corpus promises to **read and mark**, not
+  to refuse: `FR-SRV-031` reads it, `FR-SRV-032` carries the marking in the
+  document, and `FR-SRV-033` states that such a document promises the shape of
+  `FR-SRV-005` and no more — naming, in its own text, a field whose meaning
+  may have changed. A value outside a recorded set is that case arriving, so
+  the treatment `FR-SRV-033` already describes is the treatment it gets.
+  `standing` is the field that says the read is unverified, and there is no
+  second thing for an exit code to add.
+
+  *Rejected: refusing with `70` (`EX_SOFTWARE`).* It is what the first
+  implementation of the reader does, and it is wrong on two counts.
+  `FR-ERR-030` closes `70` to a panic and to an invariant the system detects
+  **in itself**, and nothing about `tpl` is defective when a server returns a
+  value `tpl` has not seen — the same correction `FR-PRIV-021` made in the
+  twenty-fifth edition for a schema catalogue that returns no row. And the
+  `70` row of `FR-ERR-001` tells the caller the condition is not fixable by
+  them, which makes a whole database unreadable on account of one rule of one
+  key on a server whose only fault is being newer than the binary. That is the
+  outcome `FR-SRV-031` rejected when it rejected refusing with `78`.
+
+  *Rejected: substituting the nearest recorded value.* It puts a value in the
+  document the server did not state, at exit `0`. *Also rejected: dropping the
+  object that carries the field.* It presents a table without a foreign key it
+  has, also at exit `0`. Both are the silent corruption the amendment to
+  `NFR-DET-002` names as the class of failure this corpus works hardest to
+  prevent, and neither is distinguishable by a caller from a correct read.
+
+  *Consequence, stated plainly.* The values each requirement records remain
+  what a **supported** series returns, and a template that branches on them
+  branches correctly on every server of `FR-SRV-015`. A value outside a set on
+  a server whose `standing` is `supported` falsifies the requirement that
+  recorded the set, in the way the fourth provenance of the
+  [README](README.md#provenance) makes every observation falsifiable; it is
+  answered by a second observation and an amendment, not by an exit code.
+
+  *One consequence reaches beyond the document, and it reaches `kind` alone.*
+  `FR-SCH-008` admits the two qualified prefixes `procedure:` and `function:`
+  and no third, and `FR-CDOC-014` builds a cache path from the same two. A
+  routine whose kind is outside the two is therefore carried in the document
+  and is **not reachable by a qualified name**; its bare name still reaches it
+  unless it is ambiguous, per `FR-SCH-010`. Widening either of those two
+  requirements is a change to them and not an inference from this one.
+
+- **FR-CAT-056**: Six catalogue fields the model carries are declared to admit
+  SQL `NULL`. The model SHALL carry each as this table states, and SHALL NOT
+  substitute the empty string for any of them:
+
+  | Catalogue field | Model property | Declared | Observed over the fixture | What the model carries for SQL `NULL` |
+  |---|---|---|---|---|
+  | trigger definer | `definer`, `FR-CAT-050` | nullable, `varchar(384)` | populated on all 6 triggers | `null` |
+  | trigger action statement | `statement`, `FR-CAT-050` | nullable, `longtext` | populated on all 6 triggers | `null` |
+  | routine definition | `body`, `FR-CAT-048` and `FR-CAT-017` | nullable, `longtext` | populated on all 7 routines | `null`, and the routine is incomplete per `FR-PRIV-017` |
+  | referential-constraint unique-constraint name | `referenced_key`, `FR-CAT-045` | nullable, `varchar(64)` | populated on all 15 rules | `null` |
+  | referential-constraint referenced table name | `referenced_table`, `FR-CAT-045` | nullable, `varchar(64)` | populated on all 15 rules | `null`, and see the clause below |
+  | key-column referenced column name | `referenced_column`, `FR-CAT-045` | nullable, `varchar(64)` | populated on all 17 rows the read presents, SQL `NULL` on the other 37 | no row carrying one reaches the model — see the clause below |
+
+  `null` is the absent scalar of `FR-CTX-005`, emitted rather than omitted per
+  `FR-OUT-012`. None of the six is the *nothing observed* case of
+  `BR-CAT-005`: each was populated on every row the read presents, so each is
+  carried, and this requirement fixes only what happens when one is not.
+
+  **The last row is settled by the read's population rather than by a value.**
+  The key-column table carries one row per column of **every** key, and its
+  referenced-column field is SQL `NULL` on every row that is not a foreign
+  key's. `FR-CAT-045` restricts the read to the rows that name a referenced
+  table, and those are exactly the rows on which the field is populated, so
+  the substitution has no reachable case. The model carries a string there,
+  not an absent scalar.
+
+  **The fifth row has a structural consequence and the others do not.** A key
+  whose referenced table is `null` names no table, so `FR-CTX-006` has nothing
+  to embed and the key contributes to no table's `referenced_by` under
+  `FR-CAT-013`; it is carried on the referencing table with its name, its
+  columns and its rules. `FR-CTX-006` states the same limit from the
+  document's side.
+
+  *Observed, 2026-09-20, against all four series of `FR-SRV-015` through the
+  harness of `scripts/mariadb/`.* All six fields are declared nullable, with
+  the declared types above, identically on all four series. Over the `freight`
+  schema, identically on all four series: the trigger definer and action
+  statement are populated on all 6 trigger rows; the routine definition is
+  populated on all 7 routine rows for a privileged reader; the
+  unique-constraint name and the referenced table name are populated on all 15
+  referential-constraint rows; and the referenced column name is SQL `NULL` on
+  37 of the 54 key-column rows and populated on all 17 of the rows a foreign
+  key contributes.
+
+  *Bounded claim.* **No row of the fixture returns SQL `NULL` in any of the
+  first five fields**, so what this requirement fixes for them is a shape the
+  model must have and not a value that has been seen. The declaration is the
+  evidence: a field the catalogue declares nullable is one a server may return
+  `NULL` in, and a model that cannot represent that has a gap whether or not
+  the fixture reaches it. Admitting the absence costs a `null` a caller already
+  has to handle under `FR-OUT-012`; refusing it costs a wrong value with no
+  way back.
+
+  *Rejected: substituting the empty string, which is what the first
+  implementation of the reader does for five of the six.* It makes an absent
+  value indistinguishable from a present empty one, which is precisely the
+  distinction `FR-PRIV-011` depends on for a view definition and `FR-CAT-048`
+  records twice over for a routine's two absent-value shapes — the data-type
+  field empty and the DTD identifier `NULL`, side by side and different. It is
+  worst for the routine body, where the empty string is the substitution and
+  `FR-PRIV-017` makes SQL `NULL` there a **missing privilege**: the two cases
+  a reader most needs apart would arrive identical.
+
+  *Also rejected: declaring the five fields `NOT NULL` in the model on the
+  strength of the fixture.* The fixture populating a field on every row it has
+  is not the catalogue promising to, and the catalogue's own declaration says
+  the opposite. Writing the stronger claim down would be the inference the
+  fourth provenance of the [README](README.md#provenance) forbids, pointing
+  the other way.
 
 ### Comments and defaults
 
@@ -724,8 +902,27 @@ requirement says otherwise.
   carried as the catalogue returns it; no second value was observed. Every
   foreign key of the fixture also references a table in the
   same database, so the referenced schema field was observed to hold the
-  database's own name on all fifteen rows and never anything else. What the
-  model does with a foreign key that crosses schemas has not been observed.
+  database's own name on all fifteen rows and never anything else. What a
+  cross-schema foreign key returns has not been observed.
+
+  *Amended in the twenty-seventh edition: the bounded claim's last sentence
+  said what the model does and named no requirement that said it.* The
+  sentence read *What the model does with a foreign key that crosses schemas
+  has not been observed*, which left a reader to conclude that the model does
+  something and that nobody had looked. `FR-CAT-057` settles it: the model
+  does not cover such a key, in either direction, and the referenced-schema
+  field of the key-column table above is the field that detects the outgoing
+  one. The claim that remains bounded is the catalogue's, not the model's, and
+  the sentence now says which.
+
+  *Two further bounds, added by `FR-CAT-056` and `FR-CAT-055`.* The
+  unique-constraint name and the referenced table name of the rules table, and
+  the referenced column name of the key-column table, are all **declared
+  nullable** by the catalogue, and `FR-CAT-056` fixes what the model carries
+  when one arrives absent. The four rule spellings above are closed by this
+  observation and by nothing the server declares: the update-rule and
+  delete-rule fields are `varchar(64)`, not an `ENUM`, and `FR-CAT-055` fixes
+  what the model does with a fifth spelling.
 
 - **FR-CAT-046**: The catalogue field list for a `CHECK` constraint SHALL be
   taken to be the following, and the level SHALL be taken to admit exactly two
@@ -751,6 +948,11 @@ requirement says otherwise.
   rows in the constraint table beside it, so it knows every check constraint
   and cannot know which table-level constraints exist. That asymmetry is
   recorded in `FR-PRIV-018` and is why no cross-check is available here.
+
+  *The two values are closed by this observation and by nothing the server
+  declares.* The level field is `varchar(6)` and `NOT NULL`, not an `ENUM`, on
+  all four series, observed 2026-09-20. `FR-CAT-055` fixes what the model does
+  with a third value.
 
 ### Tables
 
@@ -967,6 +1169,16 @@ requirement says otherwise.
   other absent value populated. The model emits the whole return type as
   `null` for a procedure, per `FR-CTX-005`.
 
+  *A third absent-value shape reaches the body, and it is a privilege rather
+  than a kind of routine.* The routine-definition field is **declared
+  nullable**, `longtext`, on all four series, observed 2026-09-20. SQL `NULL`
+  there is the missing privilege of `FR-PRIV-017`, and `FR-CAT-056` fixes what
+  `body` carries when it arrives: `null`, and not the empty string, which is
+  what a genuinely empty body would carry. The routine-type field beside it is
+  `varchar(13)` and `NOT NULL`, not an `ENUM`, so the two kinds recorded above
+  are closed by this observation alone and `FR-CAT-055` fixes what the model
+  does with a third.
+
   *Closes* `OQ-037`, with `FR-PRIV-017`, now listed
   under [Closed](open-questions.md#closed), and with it
   `OQ-010`'s routine fragment.
@@ -1066,6 +1278,17 @@ requirement says otherwise.
   it. All six event-and-timing combinations **were** exercised, so that field
   pair is not bounded.
 
+  *Amended in the twenty-seventh edition: three further bounds, and none
+  changes what a supported server produces.* The event and the timing are
+  closed by the observation above and by nothing the server declares — the
+  event field is `varchar(6)` on `10.11`, `11.4` and `11.8` and `varchar(20)`
+  on `12.3`, which is difference 9 of `FR-SRV-038`, and the timing field is
+  `varchar(6)` on all four; neither is an `ENUM`. `FR-CAT-055` fixes what the
+  model does with a value outside either set. The definer and the action
+  statement are both **declared nullable**, and `FR-CAT-056` fixes what the
+  model carries when one arrives absent; no row of the fixture returned one.
+  Observed 2026-09-20, against all four series.
+
   *Closes* `OQ-039`, now listed under
   [Closed](open-questions.md#closed), and with it
   `OQ-010`'s trigger fragment. With
@@ -1090,12 +1313,95 @@ one of these is a change to this file, not a defect report.
 
 - **FR-CAT-023**: The model SHALL NOT cover spatial reference identifiers.
 
+- **FR-CAT-057**: The model SHALL NOT cover a foreign key that crosses a
+  schema boundary, in either direction, and the system SHALL NOT read a second
+  schema in order to cover one.
+
+  | The key | What the catalogue shows the read | What the model does |
+  |---|---|---|
+  | Declared in the database the read covers, referencing a table in another schema | the key-column rows and the referential rule are both returned, with the referenced-schema field naming the other schema | the key is **not carried** on the referencing table |
+  | Declared in another schema, referencing a table in the database the read covers | nothing: the read is filtered on the schema the key is declared in, per `FR-CAT-052` | the key is **not carried** under `referenced_by`, and the read never sees it |
+
+  The referenced-schema field the first row turns on is the one `FR-CAT-045`
+  records on the key-column table. The database a read covers is the one the
+  selected entry names, per `FR-CONF-041`.
+
+  *Rationale.* `FR-CTX-006` and `FR-CTX-010` embed the table at **each** end of
+  every foreign key, in full, and `FR-CTX-023` requires every object a document
+  references to be present in it. A table in another schema is in no model this
+  read builds, so a carried cross-schema key is a reference with nothing at the
+  other end — the one condition those three requirements between them forbid.
+  The exclusion is therefore what keeps the embedding materialisable, and it is
+  stated here rather than discovered at the moment a document is built.
+
+  *Rejected: reading the referenced schema so that the key can be embedded.*
+  One invocation would present objects of a database the selected entry does
+  not name, against `FR-CONF-041`; the completeness of `FR-PRIV-001` would be
+  claimed over a population nothing in the configuration bounds; and the read
+  would follow the reference graph wherever it led, which is the traversal of
+  unbounded depth `BR-CTX-001` refused at one hop.
+
+  *Rejected: carrying the key with the referenced table as a bare name and no
+  embedding.* It makes the document's depth depend on which side of a schema
+  boundary a table happens to sit, so a template author could no longer know,
+  without inspecting the database, how deep the object in hand goes — which is
+  the depth that adapts to the graph that `BR-CTX-001` chose one constant depth
+  over.
+
+  *Rejected: refusing the read.* A database would become unreadable on account
+  of a key naming something `tpl` was never asked for, which is a larger loss
+  than the one relation the exclusion drops, and no exit code of `FR-ERR-001`
+  describes it.
+
+  *Accepted cost, stated because it is silent.* A table that references, or is
+  referenced from, another schema is presented as having one relation fewer
+  than the server holds, at exit `0`, and nothing in the document says so.
+  `FR-PRIV-002` is not engaged: the property was read and excluded, not
+  withheld. This is an exclusion and therefore a decision, in the terms this
+  section opens with, and admitting the feature is a change to this
+  requirement.
+
+  **The behaviour is excluded rather than recorded, because it could not be
+  observed.** The fixture of `scripts/mariadb/` declares one user schema,
+  `freight`, and carries no cross-schema foreign key. Observed on 2026-09-20
+  against all four series of `FR-SRV-015`, through the harness of that
+  directory: the schema catalogue returns `freight` beside the four the server
+  ships; the key-column table returns **17** foreign-key rows across the whole
+  server, every one of them with the referencing and the referenced schema both
+  `freight`; and the referential-constraint table returns **15** rows across
+  the whole server, none of them with the constraint schema differing from the
+  unique-constraint schema. Identically on all four series. What a cross-schema
+  key returns is therefore unknown to this corpus, and this requirement makes
+  no claim about it: it names a feature the model does not cover, which
+  `BR-CAT-001` and the five exclusions above it establish needs no observation.
+
+  *What would change this.* A second schema in the fixture's DDL — one table in
+  it referenced by a table of `freight`, and one table in it referencing a
+  table of `freight` — which would show, on each series, what the
+  referenced-schema field holds on an outgoing cross-schema key, whether the
+  referential rule for it is returned at all, and whether the unique-constraint
+  name of `FR-CAT-056` is populated when the referenced table is not the
+  reader's own schema. Until that exists, admitting the feature would mean
+  writing down behaviour nobody has seen.
+
 - **BR-CAT-001**: The covered set was chosen over a narrower classic core —
   tables, columns, indexes, keys, views, routines — because `CHECK` constraints,
   routine parameters, and the incoming side of a foreign key are all information
   a code generator needs and none of them can be recovered from what the
-  narrower set holds. The five exclusions above are features whose absence a
-  generator can notice and work around; the three additions are not.
+  narrower set holds. The five whole-feature exclusions above — `FR-CAT-019`
+  through `FR-CAT-023` — are features whose absence a generator can notice and
+  work around; the three additions are not.
+
+  *Amended in the twenty-seventh edition: the five are named, and the sixth
+  exclusion beside them is placed.* The sentence counted the exclusions above
+  it, and `FR-CAT-057` joined them, so the count had to be either corrected or
+  pinned to the requirements it was written over. It is pinned, because the two
+  kinds are not alike: those five remove a whole feature, and `FR-CAT-057`
+  removes one case of a feature this rule counts among the **additions** — the
+  incoming side of a foreign key. That narrowing is real and is stated in its
+  own *Accepted cost*: the incoming side remains reachable for every key of the
+  database a read covers, which is every key the model has ever been observed
+  to carry, and it is not reachable across a schema boundary.
 
 ## Volatile fields
 

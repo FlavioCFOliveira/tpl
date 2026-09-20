@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-20
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty-six editions. All are in force;
+The specification has been written in twenty-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -2205,6 +2205,147 @@ recorded outside this corpus is brought inside it, because it decides an
 observable message and is therefore a requirement by the test
 [Writing conventions](#writing-conventions) states.
 
+### Twenty-seventh edition — four answers the first arm had to choose for itself
+
+The first arm was built. Its eight `tpl schema` subcommands and the catalogue
+cache beneath them landed at `db7337d`, and building them ran into four
+questions this corpus does not answer. Each was resolved by a choice no
+requirement authorises, each choice is now visible in code, and each was
+reported rather than written in — which is what made this edition possible: the
+four are answered here, and the code follows.
+
+**Three requirements are added, thirteen are amended, and no identifier is
+retired.** No exit code is added or withdrawn, no requirement is withdrawn, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A catalogue value outside a closed enumeration was refused** —
+  [catalogue-coverage.md](catalogue-coverage.md). Five value sets are fixed
+  from an observation of all four series — the referential action of
+  `FR-CAT-045`, the level of `FR-CAT-046`, the event and the timing of
+  `FR-CAT-050`, the kind of `FR-CAT-016` — and the model has a shape for the
+  recorded values and no other. The one foreseeable trigger for a sixth is a
+  server newer than the window, which `FR-SRV-031` says shall be **read and
+  marked**. A refusal there contradicts the promise outright, and it does it
+  with `70`, which `FR-ERR-030` closes to a panic and to an invariant the
+  system detects **in itself**. `FR-CAT-055` carries the catalogue's own string
+  unchanged instead, changing no exit code, and states the one consequence that
+  reaches beyond the document: a routine kind outside the two is not reachable
+  by the qualified name of `FR-SCH-008`. `FR-CAT-016` is amended with it,
+  because it said the value SHALL "therefore" be one of two strings — true of
+  every supported series and not a property of a field the catalogue declares
+  `varchar(13)`. Refusing was rejected for the two reasons above; substituting
+  the nearest recorded value and dropping the object were rejected because both
+  are wrong documents at exit `0`.
+- **Six fields the catalogue declares nullable had no shape for an absent
+  value** — the same file. `FR-CAT-056` records the declaration of each, over
+  all four series, and fixes what the model carries: `null`, per `FR-CTX-005`
+  and `FR-OUT-012`, for a trigger's definer and statement, a routine's body,
+  and a foreign key's referenced key and referenced table; and, for a key
+  column's referenced column, the observation that the read's own population
+  excludes every row on which the field is absent. Substituting the empty
+  string was rejected — it is what the first implementation does for five of
+  the six, and it makes an absent value indistinguishable from a present empty
+  one, which is the distinction `FR-PRIV-011` depends on and which matters most
+  for the routine body, where SQL `NULL` is the missing privilege of
+  `FR-PRIV-017`. Declaring the five `NOT NULL` on the strength of the fixture
+  was rejected as the inference the fourth [provenance](#provenance) forbids,
+  pointing the other way. `FR-CTX-006` gains the one structural case: a key
+  that names no table has no first hop.
+- **The cross-schema foreign key is excluded, and the observation that would
+  have recorded it could not be made** — the same file. `FR-CAT-057` excludes
+  such a key in both directions and forbids reading a second schema to carry
+  one, because `FR-CTX-006` and `FR-CTX-010` embed the table at **each** end in
+  full and `FR-CTX-023` requires every referenced object to be present. Reading
+  the referenced schema was rejected against `FR-CONF-041` and `FR-PRIV-001`;
+  carrying the key as a bare name was rejected as the depth that adapts to the
+  graph `BR-CTX-001` refused; refusing the read was rejected as a loss larger
+  than the one it prevents. The exclusion is a decision and needs no
+  observation — but the attempt is recorded with it, because the requirement
+  would otherwise look like one that had been observed. The fixture declares
+  **one** user schema and carries no cross-schema key, verified on 2026-09-20
+  against all four series, and the DDL that would settle the behaviour is named
+  in the requirement's *What would change this*.
+- **`FR-PRIV-019` said "the table" and its antecedent named two** —
+  [privileges-and-completeness.md](privileges-and-completeness.md). A key column
+  that names a referenced table under no referential-constraint row costs the
+  **referencing** table its `foreign_keys`, per `FR-CAT-012`, and the
+  **referenced** table its `referenced_by`, per `FR-CAT-013`. Both are marked.
+  `FR-PRIV-002` is unconditional, and marking the referencing end alone would
+  present an empty `referenced_by` as a complete answer at exit `0` — the exact
+  failure this file exists to prevent, arriving from the end nobody was looking
+  at. Marking either end alone was rejected; a single marking on the document
+  was already forbidden by `FR-PRIV-006`. The accepted cost is stated: one lost
+  rules row marks two objects, which over the fixture is 14 marked tables for
+  15 lost rules.
+- **Two populations wore one number** — the same file. `FR-PRIV-018`'s counts
+  and `FR-PRIV-019`'s *all 54 rows* are taken over the **unfiltered**
+  key-column table, while the read `FR-CAT-045` specifies sees **17** — the rows
+  naming a referenced table. Both numbers are correct over the population each
+  was taken over, and nothing said which. `FR-PRIV-018` now names the
+  population beside every count: the key-column table has two, and every other
+  catalogue table this file names has one.
+- **A rationale argued against the only implementation its own corpus allows** —
+  [performance-requirements.md](performance-requirements.md). `NFR-PERF-002`
+  fixes a **statement count** and its rationale named whole-catalogue *reading*
+  as the defect, which `FR-CTX-006`, `FR-CTX-010` and `FR-CTX-023` between them
+  make unavoidable: a read returning one table's rows returns that table's keys
+  without the tables they name, and no document can be built from it. The
+  requirement now states that the rows MAY be the whole catalogue, replaces the
+  rationale rather than softening it, and states what a narrow read would have
+  to return so that the option stays open — every table at either end of one of
+  the named table's keys, in full, and no further, because `FR-CTX-008` cuts at
+  the first hop. Obliging a narrow read was rejected: the neighbours are not
+  known until the key rows have been read, and choosing between a second
+  dependent round and a self-join is an architecture decision this corpus does
+  not make.
+- **Two commands were emitting the same bytes** —
+  [schema-commands.md](schema-commands.md). `FR-SCH-031` read `info`'s `data`
+  as the `database` object, and the fifth edition's amendment had put the three
+  collections of `FR-CTX-035` into it — which is the whole of the model, so
+  `tpl schema info --format json` emitted, byte for byte, what
+  `tpl schema dump` emits. The step was mechanical and its consequence was
+  never stated. `FR-SCH-031` now fixes four members and no others — `name`,
+  `charset`, `collation` and the `server` object — says in its own text that
+  the two commands SHALL NOT emit the same bytes, and states how the reduced
+  object relates to the one `FR-CTX-001` fixes: every member it carries is that
+  member, under that name, with that value. `FR-CTX-001`, `FR-CTX-035` and
+  `FR-CTX-036` are unchanged, and `FR-CTX-035` names the one reduction so that
+  a reader arriving from either file is told once. Keeping the collections and
+  accepting the byte-identity was rejected — it costs a caller the whole model
+  to ask a database's name, on the command whose help line reads *Database
+  metadata*; inventing a count field was rejected as surface no requirement of
+  [catalogue-coverage.md](catalogue-coverage.md) fixes; a different key was
+  rejected because it would cost the one property the reduction preserves.
+
+**What found them.** Not one of the five validation rules below. All four
+questions were raised by **writing the first arm against this corpus** — the
+instrument that produced the twentieth, twenty-first, twenty-second,
+twenty-fourth and twenty-fifth editions, reaching further than it had before
+because this time the arm was finished. Each of the four is a place where two
+requirements in force gave an implementer two readings and no rule, which is
+the shape no rule that re-reads a register can find. The second and third rules
+did the rest of the work once the questions were in hand: `FR-CAT-055` and
+`FR-CAT-056` cite the observation that establishes them, and `FR-PRIV-018` is
+assembled from the populations its numbers were taken over rather than from the
+numbers.
+
+**One observation occasion, and one observation that could not be made.** The
+four images of `scripts/mariadb/` were run on 2026-09-20, through the harness,
+as the privileged reader and as the reduced-grant reader in turn. It recorded
+the declared type and nullability of every field the three new requirements
+name; the two populations of the key-column table, filtered and unfiltered; and
+the schema population of each server. It re-confirmed difference 9 of
+`FR-SRV-038` — the trigger event column at `varchar(20)` on `12.3` and
+`varchar(6)` on the other three — which is now cited by `FR-CAT-055` as
+evidence that a supported series has already widened a field behind a closed
+set. It adds **no row** to the record of `FR-SRV-038` and **no row** to the
+register of `FR-SRV-036`: every difference it met was already recorded, and
+every field it names was already carried. What it could not observe is the
+cross-schema foreign key, for the reason `FR-CAT-057` states.
+
+**Three identifiers are assigned** — `FR-CAT-055`, `FR-CAT-056` and
+`FR-CAT-057` — and none is retired.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -2685,6 +2826,22 @@ technical open decision that held it is a matter for the owner of
 `docs/spec-technical/`, which this corpus does not write, and nothing here waits
 on that: `FR-ERR-039` is complete on its own terms. The item below was untouched
 by this edition and stays outstanding.
+
+The twenty-seventh edition adds no obligation inside this corpus and **one
+outside it**, and records none as discharged. It answers the four questions the
+finished first arm had to choose for itself, and each answer is a statement the
+code at `db7337d` now contradicts, which is a matter for the owner of that code
+and not debt of this corpus: a requirement is not owed work because an
+implementation predates it. The obligation outside this corpus is the
+observation `FR-CAT-057` could not make. **The fixture of `scripts/mariadb/`
+declares one user schema and carries no cross-schema foreign key**, so what a
+server returns for one is unknown here; the requirement excludes the feature,
+which needs no observation, and names the DDL that would settle the behaviour
+if the exclusion is ever revisited. It is fixture work with an owner and a
+trigger, in the terms the eighth edition used for `FR-CONF-038`, and no
+requirement of this corpus is waiting on it: `FR-CAT-057` is complete on its
+own terms today. The item below was untouched by this edition and stays
+outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.
