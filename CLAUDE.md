@@ -10,18 +10,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 >
 > **NÃO ESTÁS AUTORIZADO A CORRER MAIS DO QUE UM SUBAGENTE EM SIMULTÂNEO.**
 >
-> O paralelismo exige que **ambas** as condições se verifiquem. Falhar uma basta para ser proibido:
+> O padrão é **um único subagente em paralelo à conversa principal**. Usam-se **todos** os subagentes
+> que o objectivo exigir, mas **em série** — nunca em paralelo.
 >
-> 1. **Autorização expressa e clara do utilizador**, dada para o pedido em causa.
-> 2. **Os tokens dos subagentes adicionais NÃO são cobrados ao utilizador.**
+> **O paralelismo exige uma única condição: autorização expressa e clara do utilizador**, dada para
+> o pedido em causa. Sem ela, é proibido.
 >
-> **A condição 2 não se presume — prova-se.** Não havendo prova de que os tokens adicionais não são
-> cobrados, a condição **não** está satisfeita e o paralelismo mantém-se proibido. O custo de um
-> subagente é do utilizador até se demonstrar o contrário, e a dúvida resolve-se sempre em série.
->
-> *Estado conhecido em 2026-09-18:* cada conclusão de subagente reporta `subagent_tokens` debitados
-> contra a sessão, o que indica que **são** cobrados. Enquanto assim for, a condição 2 nunca se
-> verifica e o paralelismo é **proibido em absoluto** — a autorização do utilizador, sozinha, não basta.
+> Dada a autorização, o paralelismo é **excepção**: vale só para o pedido em causa e a autorização
+> **é sempre revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização
+> de paralelismo não abre precedente para as tarefas seguintes.
 >
 > **Antes de lançar um subagente, verificar que nenhum outro está vivo.** A verificação é por
 > **listagem dos agentes**, não pela memória do que foi lançado nem pela notificação do anterior:
@@ -94,8 +91,8 @@ Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desen
 |---|---|
 | Só se trabalha sobre **tarefa aberta**: no sprint `OPEN` e em `DOING` com `--commit-open` | **PARAR** e abri-la pela skill `roadmap-manager` |
 | **Nenhuma tarefa é executada directamente** — delega-se a um subagente, e a cada peça de trabalho o seu | **PARAR** e escolher o subagente |
-| **REGRA ZERO — um subagente de cada vez**, nunca em paralelo. Listar os agentes antes de cada lançamento | **PARAR** e serializar. O paralelismo exige **autorização expressa** do utilizador **e** que os tokens adicionais **não lhe sejam cobrados** — as duas, provadas, ou é proibido |
-| Trabalho com **proximidade funcional ou técnica substancial** faz-se num **único esforço**, e cada natureza de trabalho de uma só vez | **PARAR** e reagrupar. Juntar tarefas é planeamento, e exige confirmação do utilizador |
+| **REGRA ZERO — um subagente de cada vez**, nunca em paralelo. Listar os agentes antes de cada lançamento | **PARAR** e serializar. O paralelismo exige **autorização expressa** do utilizador — única condição — e é excepção revogada no fim da tarefa |
+| A **procura de sinergia e convergência é por defeito** e nunca se espera do utilizador; trabalho com **objectivos complementares** ou **proximidade funcional ou técnica substancial** faz-se num **único esforço**, e cada natureza de trabalho de uma só vez | **PARAR** e reagrupar. Juntar tarefas é planeamento, e exige confirmação do utilizador |
 | Escrita no Git **só** pela skill `gitflow` | **PARAR**. Nunca um `git commit` avulso, por trivial que seja |
 | Tarefas, sprints e comentários **só** pela skill `roadmap-manager` | **PARAR**. Nunca `rmp` invocado do Bash |
 | Conhecimento sobre o código **só** pela skill `knowledge-authority` | **PARAR**. Nunca `rmp graph …` directamente |
@@ -119,21 +116,33 @@ Correr esta verificação antes de qualquer trabalho. Um "não" em qualquer pont
 2. **Existe tarefa no `rmp` para este trabalho?** Se não — **PARAR** e criá-la pela skill `roadmap-manager`. Não se executa trabalho sem tarefa.
 3. **A tarefa está no sprint `OPEN`?** Se está em `BACKLOG`, ou num sprint `PENDING` ou `CLOSED` — **PARAR**. Trazê-la para o sprint aberto é acção de planeamento e **exige confirmação do utilizador**.
 4. **A tarefa está em `DOING`, aberta com `--commit-open <hash>`?** Se não, abrir agora, com o hash real de `git rev-parse HEAD`.
-5. **Há sinergia por aproveitar?** Verificar se outras tarefas — no `rmp` ou fora dele — têm proximidade funcional ou técnica substancial com esta. Havendo, **PARAR**: propor ao utilizador juntá-las num único esforço e esperar pela decisão.
+5. **Há sinergia ou convergência por aproveitar?** Verificar **sempre**, sem esperar que o utilizador o peça, se outras tarefas — no `rmp` ou fora dele — têm objectivos complementares ou proximidade funcional ou técnica substancial com esta. Havendo, **PARAR**: propor ao utilizador juntá-las num único esforço e esperar pela decisão.
 6. **Que subagente executa cada peça do trabalho?** Decompor a tarefa e escolher por peça, avaliando os agentes efectivamente instalados. Sem especialista óbvio, o de propósito geral — **nunca** execução directa.
 7. **O âmbito está fechado?** O briefing é o que a tarefa define — título, descrição, requisitos, comentários — e mais nada. O que se descobrir fora dele **regista-se; não se executa**.
 8. **Durante o trabalho**, escrever o log à medida: `DECISION` com as opções rejeitadas, `FINDING` com o que se descobriu, `TEST` com a verificação e o resultado.
 9. **Ao fechar**, commit primeiro pela skill `gitflow`, depois `--commit-close <hash>` com o hash real desse commit.
 
-## Sinergia do Esforço
+## Sinergia e Convergência do Esforço
 
-**A procura de sinergia é permanente e vale em toda a forma de trabalhar neste projecto.** Antes de planear, antes de decompor e antes de delegar, a pergunta é a mesma: que trabalho pode ser feito **de uma só vez**, em benefício de mais do que uma tarefa?
+> **Rentabilizar o esforço, entregando o máximo com o mínimo de trabalho.**
+
+**A procura de sinergia e de convergência é o modo de trabalho por defeito**, é permanente, e vale em toda a forma de trabalhar neste projecto. Antes de planear, antes de decompor e antes de delegar, a pergunta é a mesma: que trabalho pode ser feito **de uma só vez**, em benefício de mais do que uma tarefa?
+
+**Um objectivo atinge-se no menor número de tarefas ou de iterações possível**, maximizando os recursos internos disponíveis, para que a entrega seja mais rápida e custe menos ao utilizador.
+
+**NÃO DEVE SER NECESSÁRIO o utilizador pedir para procurar convergências e sinergias.** A procura nunca se espera dele: dar por si a executar tarefa a tarefa sem ter procurado o que as junta é motivo para **PARAR** e procurar. O que continua a exigir **confirmação do utilizador** é **juntar** as tarefas, nos termos de **Entre tarefas**, mais abaixo — procurar é por defeito, decidir é dele.
+
+### A sinergia melhora o trabalho — nunca o piora
+
+O esforço agrupado entrega trabalho **melhor** do que a execução tarefa a tarefa, e **NUNCA pior**: mais rápido **sem custar qualidade**. Agrega-se o trabalho da mesma natureza onde isso **encurta o trabalho sem prejudicar a entrega**; onde prejudicasse, não se agrega.
 
 ### Entre tarefas
 
-Identificadas tarefas — no `rmp` ou fora dele — cuja **proximidade funcional ou técnica é substancial**, juntam-se num **único esforço de desenvolvimento**, para que um trabalho sirva várias. Deixar tarefas próximas seguirem caminhos separados é desperdício, e é motivo para **PARAR** e reagrupar.
+**A convergência procura-se nos objectivos individuais de cada tarefa.** Objectivos complementares, proximidade funcional e proximidade técnica convertem-se, todos, num **único esforço optimizado**.
 
-Juntar tarefas é **acção de planeamento** e **exige confirmação do utilizador**: propõe-se, identificando as tarefas e a proximidade que as junta, e espera-se pela decisão. Identificar sinergia **NUNCA** é autorização para começar o trabalho das outras tarefas — é **Proactividade**, mais abaixo, e vale aqui sem alteração.
+Identificadas tarefas — no `rmp` ou fora dele — cujos **objectivos são complementares** ou cuja **proximidade funcional ou técnica é substancial**, juntam-se num **único esforço de desenvolvimento**, para que um trabalho sirva várias. Deixar tarefas próximas seguirem caminhos separados é desperdício, e é motivo para **PARAR** e reagrupar.
+
+Juntar tarefas é **acção de planeamento** e **exige confirmação do utilizador**: propõe-se, identificando as tarefas e a convergência ou proximidade que as junta, e espera-se pela decisão. Identificar sinergia **NUNCA** é autorização para começar o trabalho das outras tarefas — é **Proactividade**, mais abaixo, e vale aqui sem alteração.
 
 As condições de **Nenhum trabalho fora de uma tarefa aberta** não se dispensam: cada tarefa do esforço pertence ao sprint `OPEN` e está em `DOING`, aberta com `--commit-open <hash>`.
 
@@ -171,7 +180,7 @@ As indicações de agente já escritas noutras secções deste ficheiro — `rus
 
 **A delegação não é só por tarefa — é por cada peça de trabalho dentro dela.** Aberta a tarefa, o trabalho que ela contém é **decomposto**, e para **cada peça** escolhe-se o subagente mais adequado, avaliado contra os agentes efectivamente instalados na máquina nesse momento, nos termos da secção anterior.
 
-**A decomposição é por natureza do trabalho, nunca por fragmento.** Todo o trabalho da mesma natureza vai numa **única delegação** ao mesmo subagente — nunca em delegações sucessivas sobre pedaços do mesmo problema. É o que **Sinergia do Esforço** exige.
+**A decomposição é por natureza do trabalho, nunca por fragmento.** Todo o trabalho da mesma natureza vai numa **única delegação** ao mesmo subagente — nunca em delegações sucessivas sobre pedaços do mesmo problema. É o que **Sinergia e Convergência do Esforço** exige.
 
 Uma tarefa que atravesse vários tipos de trabalho — especificação, código, testes, desempenho, segurança, documentação — usa **vários subagentes**, um por tipo, cada um com **todo** o trabalho desse tipo, e **SEMPRE em série**, nos termos de **Um de cada vez — nunca em paralelo**, mais abaixo.
 
@@ -185,7 +194,7 @@ Cada tarefa é executada sob um **âmbito fechado, objectivo e focado exclusivam
 
 O subagente **NUNCA** alarga o âmbito, **NUNCA** aproveita a passagem para corrigir o que encontra pelo caminho, e **NUNCA** antecipa a tarefa seguinte. O que descobrir fora do âmbito regista-se como comentário ou como nova tarefa, através da skill `roadmap-manager`; não se executa. Perante a tentação de o corrigir já, **PARAR** e registar.
 
-Um esforço que junte várias tarefas tem por âmbito a união dos âmbitos delas, fixada no momento em que o utilizador o autoriza e fechada a partir daí. **Sinergia do Esforço** decide-se antes de executar; durante a execução **NUNCA** é porta para alargar âmbito.
+Um esforço que junte várias tarefas tem por âmbito a união dos âmbitos delas, fixada no momento em que o utilizador o autoriza e fechada a partir daí. **Sinergia e Convergência do Esforço** decide-se antes de executar; durante a execução **NUNCA** é porta para alargar âmbito.
 
 O que aqui se exige ao subagente, **Proactividade**, mais abaixo, exige à sessão inteira.
 
@@ -193,7 +202,7 @@ O que aqui se exige ao subagente, **Proactividade**, mais abaixo, exige à sess�
 
 > Esta secção desenvolve a **REGRA ZERO**, no topo deste ficheiro. Onde parecerem divergir, governa a Regra Zero.
 
-**NUNCA correr mais do que um subagente em simultâneo.** Podem usar-se tantos quantos a tarefa exigir, mas SEMPRE **em série**: lançar um, esperar que termine, avaliar o resultado, e só então lançar o seguinte. Dar por si prestes a lançar dois — **PARAR** e serializar.
+**NUNCA correr mais do que um subagente em simultâneo.** **Devem** usar-se todos os subagentes que o objectivo exigir, mas SEMPRE **em série**: lançar um, esperar que termine, avaliar o resultado, e só então lançar o seguinte. Dar por si prestes a lançar dois — **PARAR** e serializar.
 
 #### O gate de lançamento
 
@@ -208,9 +217,9 @@ Encontrado outro agente vivo — **PARAR** e esperar que termine. **NUNCA** lan�
 
 Esta regra sobrepõe-se a qualquer heurística por defeito que favoreça paralelismo, incluindo o hábito de agrupar várias invocações independentes na mesma mensagem para correrem em concorrência, e a orquestração por workflows, que faz fan-out de agentes. Neste projecto o padrão é execução em série, e é o padrão que prevalece na dúvida.
 
-Só o utilizador pode autorizar execução em paralelo, e **a autorização sozinha não chega**: acresce-lhe a segunda condição da **REGRA ZERO** — os tokens dos subagentes adicionais **não são cobrados ao utilizador**, e isso **prova-se, não se presume**. Sem prova, a condição não está satisfeita e a série mantém-se, mesmo com autorização dada.
+Só o utilizador pode autorizar execução em paralelo, e essa **autorização expressa e clara, dada para o pedido em causa, é a única condição** que levanta a proibição — é o que fixa a **REGRA ZERO**. Sem ela, a série mantém-se, seja qual for o argumento.
 
-Verificadas as duas, é ainda **excepcional**: cumpre-se para o pedido em causa, e a autorização **é revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização de paralelismo não abre precedente para as tarefas seguintes.
+Dada a autorização, o paralelismo é ainda **excepcional**: cumpre-se para o pedido em causa, e a autorização **é revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização de paralelismo não abre precedente para as tarefas seguintes.
 
 **Nunca invocar o custo como argumento para paralelizar.** A regra existe para proteger o custo do utilizador; usá-la ao contrário — *é mais rápido, logo mais barato* — é quebrá-la.
 
@@ -245,6 +254,8 @@ Identificada uma necessidade fora do âmbito do trabalho em execução:
 
 Retomar o trabalho em curso é o comportamento por defeito; iniciar o trabalho descoberto exige decisão do utilizador. Aproveitar a passagem para corrigir o que se encontra pelo caminho, antecipar a tarefa seguinte e acrescentar o que ninguém pediu são violações da mesma regra.
 
+**Procurar sinergia e convergência não é iniciar trabalho**, e por isso não cai nesta proibição: procura-se **sempre**, por defeito, sem esperar que o utilizador o peça. O que exige decisão dele é **juntar** as tarefas e **executar** o que se descobriu, nos termos de **Sinergia e Convergência do Esforço**.
+
 ## Completude
 
 **É proibido entregar trabalho parcial.** O que se inicia executa-se na sua plenitude: **NUNCA** deixar uma tarefa a meio, **NUNCA** dar por concluído o que está por acabar.
@@ -257,7 +268,7 @@ Isto impõe três coisas, e nenhuma se dispensa:
 
 Um trabalho que não caiba por inteiro no âmbito da tarefa não se entrega pela metade: **PARAR** e levar a questão ao utilizador.
 
-Um esforço que junte várias tarefas só está concluído quando **todas** elas estão: **Sinergia do Esforço** agrupa o trabalho, nunca dispensa parte dele.
+Um esforço que junte várias tarefas só está concluído quando **todas** elas estão: **Sinergia e Convergência do Esforço** agrupa o trabalho, nunca dispensa parte dele.
 
 ## Skills Obrigatórias
 
