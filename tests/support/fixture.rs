@@ -271,6 +271,32 @@ pub fn notice(text: &str) {
     }
 }
 
+/// A `.tpl/.cfg` naming one database entry that reaches `server` as `account`.
+///
+/// `entry` is the entry name and `schema` the server-side database it selects,
+/// per `FR-CONF-041`. The transport is `disabled` because the five modes of
+/// `FR-CONF-013` are exercised where the connection is made, and a body that
+/// is about something else asks for the one mode that adds nothing to what is
+/// under test.
+///
+/// The address is the harness's own answer, split here rather than written:
+/// no port is written in Rust anywhere in this module, and this composes the
+/// file from what `status.sh --export` printed.
+pub fn configuration(server: &Server, entry: &str, schema: &str, account: (&str, &str)) -> String {
+    let (host, port) = server
+        .address()
+        .rsplit_once(':')
+        .expect("status.sh --export prints host:port");
+    let (user, password) = account;
+
+    format!(
+        "[core]\ndatabase = \"{entry}\"\n\n\
+         [database.{entry}]\nhost = \"{host}\"\nport = {port}\n\
+         user = \"{user}\"\npassword = \"{password}\"\n\
+         database = \"{schema}\"\ntls = \"disabled\"\n"
+    )
+}
+
 // ------------------------------------------------------- the three instruments ---
 
 /// The server's connection record: the count of connections it has accepted
@@ -334,6 +360,21 @@ pub fn statements_count(server: &Server, filters: &[&str]) -> i64 {
         .trim()
         .parse()
         .unwrap_or_else(|failure| panic!("observe.sh statements dump printed {value:?}: {failure}"))
+}
+
+/// The statements the record holds, as text, under `filters`.
+///
+/// This is `observe.sh statements dump <server> [filters]` without `--count`:
+/// one line per statement, carrying the thread, the command type and the
+/// statement itself with its line breaks flattened. It is what a test reads
+/// when the **content** of what the server received is the subject —
+/// `FR-SCH-013`, which forbids a pattern to be sent at all, is the case the
+/// count cannot answer.
+pub fn statements_text(server: &Server, filters: &[&str]) -> String {
+    let mut arguments = vec!["statements", "dump", server.name()];
+    arguments.extend_from_slice(filters);
+
+    String::from_utf8_lossy(&observe(&arguments).stdout).into_owned()
 }
 
 /// The syscall trace of a process: the files it opens and the sockets it

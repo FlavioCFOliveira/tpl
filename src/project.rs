@@ -36,15 +36,9 @@ pub(crate) mod secret;
 pub(crate) mod trust;
 
 // `tpl cfg …` maintains the file and never resolves it — `FR-CFG-014` forbids
-// it to — and the commands that do resolve it are the ones that open a
-// connection, which is a later sprint. The resolution is delivered now because
-// `FR-CONF-004`, `FR-CONF-029` and `FR-GLOB-004` through `FR-GLOB-008` are this
-// sprint's, and it is exercised by its own tests until a command reaches it.
-#[allow(
-    dead_code,
-    reason = "the commands that open a connection are a later sprint; this module is the \
-              resolution FR-CONF-029 fixes and the settings that connection will need"
-)]
+// it to. The commands that resolve it are the ones that read a catalogue: the
+// eight `schema` subcommands and the three of `tpl cache`, which reach this
+// module through `cli::source`.
 pub(crate) mod settings;
 
 #[cfg(test)]
@@ -108,6 +102,15 @@ impl Project {
         })?;
 
         Self::open(explicit, &start)
+    }
+
+    /// The `.tpl` folder itself, canonical per `FR-PROJ-009`.
+    ///
+    /// It is what the catalogue cache is laid out under: `FR-CACHE-001` puts
+    /// the store at `.tpl/.cache/`, so [`crate::cache`] is given this path and
+    /// composes the rest.
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
     }
 
     /// The path of `.tpl/.cfg`.

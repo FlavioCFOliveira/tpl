@@ -20,64 +20,52 @@
 //! `FR-CAT-033` observed that `SET DEFAULT` is accepted by all four series
 //! without error or warning and then reported as `RESTRICT`, and that
 //! `SHOW CREATE TABLE` omits the clause. It is unrepresentable rather than
-//! unsupported, so [`ReferentialAction`] has four variants: a generator written
-//! against a fifth would carry a branch that never executes.
+//! unsupported, so [`ReferentialAction`] gives it no recorded variant: a
+//! generator written against a fifth rule would carry a branch that never
+//! executes.
+//!
+//! *What the module no longer refuses is a rule it has not seen.* The four
+//! recorded spellings are what a server of `FR-SRV-015` returns, and the
+//! catalogue declares both rule fields a plain `varchar(64)`, so nothing but
+//! that observation closes the set. `FR-CAT-055` fixes the case it does not
+//! close: a fifth spelling is carried as the catalogue's own string, under
+//! [`ReferentialAction::Unrecorded`], and neither the object nor the exit code
+//! moves on account of it.
+//!
+//! *The third thing is a key that names no table.* `FR-CAT-056` records that
+//! the referential-constraint table declares its referenced-table name and its
+//! unique-constraint name **nullable** on all four series, and both reach the
+//! model as [`Option`] rather than as the empty string a `Cow` would have had
+//! to carry. `FR-CTX-006` fixes what the document does with the first of them:
+//! the key is carried whole and the place its embedded table occupies carries
+//! `null`.
 
 use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
-/// The referential action of `ON UPDATE` and `ON DELETE` (`FR-CAT-045`).
-///
-/// The four spellings are contract surface, upper case, with a single space in
-/// `NO ACTION`. `SET DEFAULT` is not among them, per `FR-CAT-033`, and has no
-/// variant to be written into.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub enum ReferentialAction {
-    /// The change is applied to the referencing rows.
-    #[serde(rename = "CASCADE")]
-    Cascade,
-
-    /// The change is refused, by the standard's spelling.
-    #[serde(rename = "NO ACTION")]
-    NoAction,
-
-    /// The change is refused, by MariaDB's own spelling.
-    #[serde(rename = "RESTRICT")]
-    Restrict,
-
-    /// The referencing columns are set to `NULL`.
-    #[serde(rename = "SET NULL")]
-    SetNull,
-}
-
-impl ReferentialAction {
-    /// Reads the action from the update-rule or delete-rule field.
+catalogued! {
+    /// The referential action of `ON UPDATE` and `ON DELETE` (`FR-CAT-045`).
     ///
-    /// [`None`] for any other value. The four the catalogue was observed to
-    /// return are the four variants, so a [`None`] here is a value no read of a
-    /// supported series has produced.
-    #[must_use]
-    pub fn from_catalogue(field: &str) -> Option<Self> {
-        match field {
-            "CASCADE" => Some(Self::Cascade),
-            "NO ACTION" => Some(Self::NoAction),
-            "RESTRICT" => Some(Self::Restrict),
-            "SET NULL" => Some(Self::SetNull),
-            _ => None,
-        }
-    }
-
-    /// The spelling `FR-CAT-045` fixes, which is what the document carries.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Cascade => "CASCADE",
-            Self::NoAction => "NO ACTION",
-            Self::Restrict => "RESTRICT",
-            Self::SetNull => "SET NULL",
-        }
+    /// The four spellings are contract surface, upper case, with a single space
+    /// in `NO ACTION`. `SET DEFAULT` is not among them, per `FR-CAT-033`, and
+    /// has no variant to be written into: it is unrepresentable rather than
+    /// unsupported, because all four series accept it and then report
+    /// `RESTRICT`, so no read can return it.
+    ///
+    /// *The set is closed by an observation and not by the catalogue.* Both
+    /// rule fields are declared `varchar(64)` and `NOT NULL` on all four
+    /// series, never an `ENUM`, so a value outside the four is carried verbatim
+    /// under `FR-CAT-055` rather than refused.
+    ReferentialAction from "UPDATE_RULE` and `DELETE_RULE" {
+        /// The change is applied to the referencing rows.
+        Cascade = "CASCADE",
+        /// The change is refused, by the standard's spelling.
+        NoAction = "NO ACTION",
+        /// The change is refused, by MariaDB's own spelling.
+        Restrict = "RESTRICT",
+        /// The referencing columns are set to `NULL`.
+        SetNull = "SET NULL",
     }
 }
 
@@ -94,6 +82,14 @@ pub struct ForeignKeyColumn<'a> {
     pub column: Cow<'a, str>,
 
     /// The referenced column, a column of [`ForeignKey::referenced_table`].
+    ///
+    /// The catalogue declares it nullable and returns SQL `NULL` on every row
+    /// that is not a foreign key's — 37 of the fixture's 54 key-column rows.
+    /// None of those rows reaches the model: `FR-CAT-045` restricts the read to
+    /// the rows that name a referenced table, and `FR-CAT-056` records that
+    /// those are exactly the rows on which this field is populated, all 17 of
+    /// them. The field is therefore a string and not an [`Option`], and the
+    /// reason is the read's population rather than a value.
     #[serde(borrow)]
     pub referenced_column: Cow<'a, str>,
 }
@@ -114,27 +110,38 @@ pub struct ForeignKey<'a> {
     /// by the referencing column's ordinal position.
     pub columns: Vec<ForeignKeyColumn<'a>>,
 
-    /// The referenced table — **the table only**, without a schema.
+    /// The referenced table — **the table only**, without a schema — or
+    /// [`None`] where the catalogue named none (`FR-CAT-056`).
     ///
     /// The model carries the name. The one-level-deep embedding of
     /// `FR-CTX-006` is a rule of the document, applied where the document is
     /// shaped, and it resolves this name against the model it was built from.
-    pub referenced_table: Cow<'a, str>,
+    ///
+    /// The field is declared nullable, `varchar(64)`, on all four series, and
+    /// was populated on all fifteen rules of the fixture. A key that names no
+    /// table is still carried, with its name, its columns and its rules, per
+    /// `FR-CTX-006`; what it has no part in is the incoming direction, because
+    /// `FR-CAT-013` carries a key on the table it names and this key names
+    /// none.
+    pub referenced_table: Option<Cow<'a, str>>,
 
     /// The key on the referenced table the foreign key points at, read from
-    /// the unique-constraint name field. It read `PRIMARY` on all fifteen keys
-    /// of the fixture.
-    pub referenced_key: Cow<'a, str>,
+    /// the unique-constraint name field, or [`None`] where the catalogue
+    /// returned SQL `NULL` (`FR-CAT-056`).
+    ///
+    /// The field is declared nullable, `varchar(64)`, on all four series. It
+    /// read `PRIMARY` on all fifteen keys of the fixture.
+    pub referenced_key: Option<Cow<'a, str>>,
 
     /// The match option, carried verbatim. It read `NONE` on all fifteen, and
     /// no second value was observed.
     pub match_option: Cow<'a, str>,
 
     /// The `ON UPDATE` rule.
-    pub on_update: ReferentialAction,
+    pub on_update: ReferentialAction<'a>,
 
     /// The `ON DELETE` rule.
-    pub on_delete: ReferentialAction,
+    pub on_delete: ReferentialAction<'a>,
 }
 
 /// A foreign key seen from the table it references (`FR-CAT-013`).
@@ -180,8 +187,8 @@ mod tests {
         ForeignKey {
             name: Cow::Borrowed(name),
             columns,
-            referenced_table: Cow::Borrowed("consignment"),
-            referenced_key: Cow::Borrowed("PRIMARY"),
+            referenced_table: Some(Cow::Borrowed("consignment")),
+            referenced_key: Some(Cow::Borrowed("PRIMARY")),
             match_option: Cow::Borrowed("NONE"),
             on_update: ReferentialAction::Cascade,
             on_delete: ReferentialAction::Restrict,
@@ -210,7 +217,8 @@ mod tests {
     fn fr_cat_045_the_four_reachable_rule_spellings_round_trip_and_set_default_is_not_one() {
         // FR-CAT-045 fixes four spellings as contract surface. FR-CAT-033
         // observed that `SET DEFAULT` is accepted, discarded silently, and
-        // reported as `RESTRICT`, so no read can return it.
+        // reported as `RESTRICT`, so no read can return it — which is why it
+        // has no recorded variant to be written into.
         for action in [
             ReferentialAction::Cascade,
             ReferentialAction::NoAction,
@@ -219,13 +227,76 @@ mod tests {
         ] {
             assert_eq!(
                 ReferentialAction::from_catalogue(action.name()),
-                Some(action)
+                action.clone()
             );
+            assert_eq!(action.recorded(), Some(action.name()));
         }
 
-        assert_eq!(ReferentialAction::from_catalogue("SET DEFAULT"), None);
-        assert_eq!(ReferentialAction::from_catalogue("NO_ACTION"), None);
-        assert_eq!(ReferentialAction::from_catalogue("cascade"), None);
+        assert_eq!(
+            ReferentialAction::from_catalogue("SET DEFAULT").recorded(),
+            None,
+            "SET DEFAULT has no recorded variant, per FR-CAT-033"
+        );
+    }
+
+    #[test]
+    fn fr_cat_055_a_rule_outside_the_recorded_four_is_carried_and_is_not_a_refusal() {
+        // FR-CAT-055: both rule fields are `varchar(64)` and never an `ENUM`
+        // on any of the four series, so nothing the server declares closes the
+        // set. A fifth spelling is carried as the catalogue wrote it — the
+        // read does not fail, the key is not dropped, and the reading is exact
+        // in case and in spacing.
+        for outside in ["SET DEFAULT", "NO_ACTION", "cascade", ""] {
+            let carried = ReferentialAction::from_catalogue(outside);
+
+            assert_eq!(
+                carried,
+                ReferentialAction::Unrecorded(Cow::Borrowed(outside))
+            );
+            assert_eq!(carried.name(), outside);
+            assert_eq!(carried.recorded(), None);
+        }
+    }
+
+    #[test]
+    fn fr_cat_055_a_rule_round_trips_through_the_document_whether_recorded_or_not() {
+        // FR-CAT-055 with FR-SRV-031: a document written from a server newer
+        // than the window carries what that server said, and the cache reads
+        // it back unchanged.
+        for action in [
+            ReferentialAction::Cascade,
+            ReferentialAction::NoAction,
+            ReferentialAction::Restrict,
+            ReferentialAction::SetNull,
+            ReferentialAction::Unrecorded(Cow::Borrowed("SET DEFAULT")),
+        ] {
+            let written = serde_json::to_string(&action).expect("a rule serialises");
+            let read: ReferentialAction<'_> =
+                serde_json::from_str(&written).expect("a rule reads back");
+
+            assert_eq!(written, format!("\"{}\"", action.name()));
+            assert_eq!(read, action);
+        }
+    }
+
+    #[test]
+    fn fr_cat_056_a_key_that_names_no_table_and_no_unique_constraint_is_still_a_key() {
+        // FR-CAT-056: both fields are declared nullable on all four series and
+        // reach the model as `None` rather than as the empty string.
+        // FR-CTX-006 requires such a key to be carried whole all the same —
+        // its name, its columns and its rules are facts the catalogue did
+        // return.
+        let unresolved = ForeignKey {
+            referenced_table: None,
+            referenced_key: None,
+            ..key("fk_leg_consignment", vec![pair("consignment_id", "")])
+        };
+
+        assert_eq!(unresolved.referenced_table, None);
+        assert_eq!(unresolved.referenced_key, None);
+        assert_eq!(unresolved.name, "fk_leg_consignment");
+        assert_eq!(unresolved.columns.len(), 1);
+        assert_eq!(unresolved.on_update, ReferentialAction::Cascade);
     }
 
     #[test]
@@ -243,7 +314,10 @@ mod tests {
         };
 
         assert_eq!(incoming.table, "consignment_leg");
-        assert_eq!(incoming.key.referenced_table, "consignment");
+        assert_eq!(
+            incoming.key.referenced_table,
+            Some(Cow::Borrowed("consignment"))
+        );
         assert_eq!(incoming.key, outgoing);
     }
 }

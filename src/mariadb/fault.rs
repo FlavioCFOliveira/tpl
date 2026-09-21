@@ -10,18 +10,61 @@
 //!
 //! | What the driver returned | What it becomes | Forced by |
 //! |---|---|---|
-//! | An error packet during the handshake | [`Error::AuthenticationRefused`], `77` | The server refused this connection for these credentials |
+//! | An error packet during the handshake, about the **database** | [`Error::PropertyNotReadable`], `77` | `FR-PRIV-021`: the reader was not shown the database the entry names |
+//! | Any other error packet during the handshake | [`Error::AuthenticationRefused`], `77` | The server refused this connection for these credentials |
 //! | A TLS failure | [`Error::TlsHandshakeFailed`], `69` | `FR-ERR-034`, the `69` row, which names the TLS handshake as a phase |
 //! | Anything else, once the address is known | [`Error::ConnectionRefused`], `69` | The session did not open, and `FR-ERR-001` puts an unavailable server on `69` |
 //! | A phase that outlived its bound | [`Error::NetworkDeadlineExceeded`], `69` | `FR-ERR-027`, `FR-GLOB-012`, `FR-GLOB-013` |
 //!
-//! *The driver's error is read for its discriminant and for nothing else.*
+//! *The driver's error is read for its discriminants and for nothing else.*
 //! Point 3 of `OD-12` separates the TCP connect from the TLS handshake by the
 //! driver's own variant rather than by the call site, because
 //! `MySqlConnectOptions` has no method that accepts an already-connected
-//! socket and one call therefore covers both phases. The discriminant is the
-//! whole of what is read: no message, no code and no chain crosses this
-//! boundary.
+//! socket and one call therefore covers both phases. Three discriminants are
+//! read in all — the driver's variant, the I/O kind on one of them, and the
+//! server's **error number** on an error packet — and nothing else crosses
+//! this boundary: no message, no SQLSTATE string and no chain is carried out
+//! of this module, which is what `FR-GLOB-018` and `OD-06` require.
+//!
+//! # The two `77`s of the handshake, and what separates them
+//!
+//! An error packet during the handshake used to become
+//! [`Error::AuthenticationRefused`] whatever it said, which told a caller whose
+//! entry names a database the server does not hold that **its credentials were
+//! refused**. They were accepted. `FR-PRIV-021` gives that condition its own
+//! `77`, naming the database and stating that its metadata could not be read,
+//! and the two are separated here because the handshake is where the condition
+//! arrives: `FR-CONF-041` puts the database on the connection, so the server
+//! refuses the connection and the schema catalogue is never reached.
+//!
+//! *Observed against `scripts/mariadb/` on 2026-09-18, on all four series of
+//! `FR-SRV-015` — `10.11.19`, `11.4.13`, `11.8.9` and `12.3.3` — with the
+//! reading identical on every one of them:*
+//!
+//! | What was attempted | Error number | SQLSTATE |
+//! |---|---|---|
+//! | A user the server does not know | `1045` | `28000` |
+//! | A user it knows, with the wrong password | `1045` | `28000` |
+//! | A database the server does not hold | `1049` | `42000` |
+//! | A database the reader holds no grant on | `1044` | `42000` |
+//!
+//! **The two numbers this module reads are `1044` and `1049`, and they are
+//! exactly the two explanations `FR-PRIV-021` declines to separate** — a reader
+//! who may not see the database, and a database that is not there. That is why
+//! one condition carries both: the requirement states that the catalogue offers
+//! no second view to tell them apart, and neither does the handshake.
+//!
+//! *Rejected: separating on SQLSTATE `42000`.* It covers both numbers and is
+//! the coarser reading — `42000` is the server's general class for *syntax
+//! error or access rule violation*, so a future handshake packet in that class
+//! that is about neither the database nor the credentials would be reported as
+//! a database the reader could not see. `FR-ERR-034` bans a `cause` that would
+//! read identically for a different failure, and the two numbers are the
+//! narrowest discriminant that covers the observation and nothing beyond it.
+//!
+//! *Rejected: reading the driver's message for the database name.* The name is
+//! already in hand — it is what the entry named, per `FR-CONF-041` — and
+//! `FR-GLOB-018` bars the message from every stream at every verbosity.
 //!
 //! **The variant alone is not enough, and the observation that settles it was
 //! owed.** `OD-12` recorded that whether a TLS failure reaches `tpl` as
@@ -64,21 +107,72 @@
 //! than filled: a fifth condition is a change to `FR-ERR-001` and to
 //! `FR-ERR-034` together, which this module may not make.
 
+// The harness is asked rather than restated, for the reason
+// `super::catalogue` gives where it declares the same module: the gate, the
+// inventory and the address of each server come from `scripts/mariadb/`, and
+// `#[path]` is what reaches a file that must not become a test target of its
+// own. It is **used** from there rather than declared a second time: one file
+// reached by two `#[path]` items is two modules over one file, which
+// `clippy::duplicate_mod` refuses and which would give the harness's own
+// `OnceLock` gate two instances in one binary.
+#[cfg(test)]
+use super::catalogue::fixture;
+
+use sqlx::mysql::MySqlDatabaseError;
+
 use crate::deadline::Bound;
-use crate::error::{Error, NetworkPhase};
+use crate::error::{CatalogueObjectKind, Error, NetworkPhase};
+
+/// The server's error number for a database the reader holds no grant on.
+///
+/// Observed on all four series on 2026-09-18, under this module's own table.
+const DATABASE_ACCESS_DENIED: u16 = 1044;
+
+/// The server's error number for a database the server does not hold.
+///
+/// Observed on all four series on 2026-09-18, under this module's own table.
+const UNKNOWN_DATABASE: u16 = 1049;
+
+/// The property `FR-PRIV-021` reports unreadable, as its `cause` line names it.
+///
+/// It is `pub(crate)` because two paths reach that one condition and the
+/// requirement gives it one `cause`: the handshake classifies the `1049` and
+/// `1044` packets here, and [`crate::mariadb::catalogue`]'s fold reports a
+/// schema catalogue that returned no row. A second literal would be a second
+/// thing that can be wrong.
+pub(crate) const METADATA: &str = "metadata";
 
 /// The condition a failure to open the session is reported as.
 ///
 /// `user` is the user actually presented to the server, which the caller reads
 /// back from the options it composed rather than from the entry, so that a
-/// refusal names what was sent.
-pub(crate) fn connecting(error: &sqlx::Error, host: &str, port: u16, user: &str) -> Error {
-    // Every error packet a server sends during the handshake refuses the
-    // connection for the credentials presented — access denied for the user,
-    // for the database it named, for the host it came from, or for the
-    // authentication plugin it offered. All four are `77` (`EX_NOPERM`) and
-    // none of them is an availability failure.
-    if matches!(error, sqlx::Error::Database(_)) {
+/// refusal names what was sent. `database` is the one the selected entry names,
+/// per `FR-CONF-041`, and is [`None`] where the entry names none — in which
+/// case no packet about a database can arrive, because none was sent.
+///
+/// The two `77`s this produces are separated by the server's error number, for
+/// the reason and on the evidence this module's own documentation records.
+pub(crate) fn connecting(
+    error: &sqlx::Error,
+    host: &str,
+    port: u16,
+    user: &str,
+    database: Option<&str>,
+) -> Error {
+    // An error packet a server sends during the handshake refuses the
+    // connection, and the two things it can refuse it over are the credentials
+    // presented and the database named. Both are `77` (`EX_NOPERM`) and
+    // neither is an availability failure; which of the two it was decides
+    // which `cause` the caller reads.
+    if let sqlx::Error::Database(returned) = error {
+        if let (Some(database), true) = (database, about_the_database(returned.as_ref())) {
+            return Error::PropertyNotReadable {
+                kind: CatalogueObjectKind::Database,
+                object: database.to_owned(),
+                property: METADATA,
+            };
+        }
+
         return Error::AuthenticationRefused {
             user: user.to_owned(),
             host: host.to_owned(),
@@ -86,6 +180,21 @@ pub(crate) fn connecting(error: &sqlx::Error, host: &str, port: u16, user: &str)
     }
 
     speaking(error, host, port)
+}
+
+/// Whether an error packet refuses the **database** rather than the
+/// credentials (`FR-PRIV-021`).
+///
+/// The two numbers are the two explanations that requirement declines to
+/// separate, and they are read from the driver's MySQL-specific error type
+/// because the number is the discriminant and the trait above it carries only
+/// SQLSTATE — which this module's documentation records as the coarser
+/// reading. A packet the driver reports without a number of this type is not
+/// one of the two, and falls to the credential refusal.
+fn about_the_database(returned: &dyn sqlx::error::DatabaseError) -> bool {
+    returned
+        .try_downcast_ref::<MySqlDatabaseError>()
+        .is_some_and(|packet| matches!(packet.number(), DATABASE_ACCESS_DENIED | UNKNOWN_DATABASE))
 }
 
 /// The condition a failure of a statement on an open session is reported as.
@@ -145,15 +254,20 @@ pub(crate) fn expired(phase: NetworkPhase, host: &str, port: u16, bound: Bound) 
 
 #[cfg(test)]
 mod tests {
+    use super::fixture;
     use super::{connecting, expired, speaking};
     use crate::deadline::{Bound, Seconds};
-    use crate::error::{DeadlineBound, Error, NetworkPhase};
+    use crate::error::{CatalogueObjectKind, DeadlineBound, Error, NetworkPhase};
     use std::io;
     use std::num::NonZeroU64;
 
     /// The host and port every condition below names.
     const HOST: &str = "db.example.com";
     const PORT: u16 = 3306;
+
+    /// The database the selected entry names (`FR-CONF-041`), which every
+    /// condition below is classified against.
+    const DATABASE: &str = "freight";
 
     /// A driver error of the kind an unreachable server produces.
     fn unreachable() -> sqlx::Error {
@@ -178,7 +292,7 @@ mod tests {
     fn fr_err_034_a_tls_failure_is_reported_as_the_tls_handshake_phase() {
         // FR-ERR-034, the 69 row: the cause names the phase that failed, and
         // OD-12 point 3 derives it from the driver's discriminant.
-        let condition = connecting(&refused_tls(), HOST, PORT, "alice");
+        let condition = connecting(&refused_tls(), HOST, PORT, "alice", Some(DATABASE));
 
         assert!(matches!(condition, Error::TlsHandshakeFailed { .. }));
         assert_eq!(condition.exit_code(), 69);
@@ -191,7 +305,13 @@ mod tests {
         // return an I/O error of kind InvalidData rather than the driver's own
         // TLS variant. Reported as the TCP connect it would send a caller to
         // check a server that is listening.
-        let condition = connecting(&untrusted_certificate(), HOST, PORT, "alice");
+        let condition = connecting(
+            &untrusted_certificate(),
+            HOST,
+            PORT,
+            "alice",
+            Some(DATABASE),
+        );
 
         assert!(matches!(condition, Error::TlsHandshakeFailed { .. }));
         assert_eq!(condition.exit_code(), 69);
@@ -212,7 +332,7 @@ mod tests {
 
             assert!(
                 matches!(
-                    connecting(&driver, HOST, PORT, "alice"),
+                    connecting(&driver, HOST, PORT, "alice", Some(DATABASE)),
                     Error::ConnectionRefused { .. }
                 ),
                 "{kind:?}"
@@ -222,7 +342,7 @@ mod tests {
 
     #[test]
     fn fr_err_001_a_server_that_does_not_answer_is_unavailable_rather_than_misconfigured() {
-        let condition = connecting(&unreachable(), HOST, PORT, "alice");
+        let condition = connecting(&unreachable(), HOST, PORT, "alice", Some(DATABASE));
 
         assert!(matches!(condition, Error::ConnectionRefused { .. }));
         assert_eq!(condition.exit_code(), 69);
@@ -233,7 +353,7 @@ mod tests {
         // FR-GLOB-018 and OD-06: the driver's own text reaches no stream,
         // because the value it lived on is dropped at this boundary.
         let driver = sqlx::Error::Tls("a message the driver composed".into());
-        let condition = connecting(&driver, HOST, PORT, "alice");
+        let condition = connecting(&driver, HOST, PORT, "alice", Some(DATABASE));
 
         assert!(!format!("{condition}").contains("a message the driver composed"));
         assert!(!format!("{condition:?}").contains("a message the driver composed"));
@@ -268,5 +388,178 @@ mod tests {
             }
             other => panic!("expected a deadline, got {other:?}"),
         }
+    }
+
+    // ------------------------------------------- against the fixture ---
+
+    /// The privileged account of the fixture, which every database is visible
+    /// to.
+    const ROOT: (&str, &str) = ("root", "tpl-root");
+
+    /// The reduced-grant reader, which holds `SELECT, EXECUTE ON freight.*`
+    /// and nothing else — so `mysql` is a database it may not see.
+    const REDUCED: (&str, &str) = ("tpl_reader", "tpl-reader-pw");
+
+    /// A database no server of the fixture holds.
+    const ABSENT: &str = "a_database_no_server_of_the_fixture_holds";
+
+    /// A database every server holds and the reduced reader holds no grant on.
+    const UNGRANTED: &str = "mysql";
+
+    /// The schema the fixture carries, which every server shows to both
+    /// accounts above.
+    const PRESENT: &str = "freight";
+
+    /// The condition opening a connection to `server` produces, as the whole
+    /// path produces it.
+    ///
+    /// It goes through [`crate::mariadb::open`] rather than through
+    /// [`connecting`] directly, because the subject is the classification
+    /// **reached from a real handshake**: a unit test over a hand-built driver
+    /// error would assert what this module does with a value this module also
+    /// invented.
+    fn opening(
+        server: &fixture::Server,
+        account: (&str, &str),
+        database: &str,
+    ) -> Result<(), Error> {
+        use crate::mariadb::connect::Target;
+        use crate::project::config;
+        use crate::project::scratch::Scratch;
+        use crate::project::settings;
+
+        let (host, port) = server
+            .address()
+            .rsplit_once(':')
+            .expect("status.sh --export prints host:port");
+        let (user, password) = account;
+
+        let scratch = Scratch::new();
+        let file = scratch.file(
+            ".cfg",
+            &format!(
+                "[database.fixture]\nhost = \"{host}\"\nport = {port}\n\
+                 user = \"{user}\"\npassword = \"{password}\"\n\
+                 database = \"{database}\"\ntls = \"disabled\"\n"
+            ),
+        );
+        let configuration = config::load(&file).expect("the document is valid");
+        let resolved = settings::resolve(
+            &configuration,
+            Some("fixture"),
+            &settings::clock(None),
+            &|_: &str| None,
+        )
+        .expect("the entry resolves");
+        let target = Target::of(&resolved).expect("the entry names a host");
+
+        crate::mariadb::open(&target, &settings::clock(None)).map(super::super::Session::close)
+    }
+
+    /// Runs `body` against every series of `FR-SRV-015`, or reports the skip.
+    fn on_every_series(test: &str, body: impl Fn(&fixture::Server)) {
+        let Some(series) = fixture::series(test) else {
+            return;
+        };
+        let _exclusive = fixture::exclusive();
+
+        for server in series {
+            body(server);
+        }
+    }
+
+    #[test]
+    fn fr_priv_021_a_database_the_server_does_not_hold_is_not_a_refused_credential() {
+        // FR-PRIV-021, observed on all four series on 2026-09-18: the server
+        // answers error 1049 and the credentials were accepted, so the caller
+        // is told which database it could not read rather than that its
+        // credentials were refused.
+        on_every_series(
+            "fr_priv_021_a_database_the_server_does_not_hold_is_not_a_refused_credential",
+            |server| {
+                let condition = opening(server, ROOT, ABSENT).expect_err("the database is absent");
+
+                assert_eq!(condition.exit_code(), 77, "{}", server.name());
+                match &condition {
+                    Error::PropertyNotReadable {
+                        kind,
+                        object,
+                        property,
+                    } => {
+                        assert_eq!(*kind, CatalogueObjectKind::Database, "{}", server.name());
+                        assert_eq!(object, ABSENT, "{}", server.name());
+                        assert_eq!(*property, "metadata", "{}", server.name());
+                    }
+                    other => panic!("{}: expected FR-PRIV-021, got {other:?}", server.name()),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn fr_priv_021_a_database_the_reader_may_not_see_reaches_the_same_condition() {
+        // FR-PRIV-021 declines to separate the two explanations, and the
+        // handshake offers no way to: error 1044 for a database the reader
+        // holds no grant on, 1049 for one that is not there. Observed on all
+        // four series on 2026-09-18.
+        on_every_series(
+            "fr_priv_021_a_database_the_reader_may_not_see_reaches_the_same_condition",
+            |server| {
+                let condition =
+                    opening(server, REDUCED, UNGRANTED).expect_err("the grant is absent");
+
+                assert_eq!(condition.exit_code(), 77, "{}", server.name());
+                match &condition {
+                    Error::PropertyNotReadable { kind, object, .. } => {
+                        assert_eq!(*kind, CatalogueObjectKind::Database, "{}", server.name());
+                        assert_eq!(object, UNGRANTED, "{}", server.name());
+                    }
+                    other => panic!("{}: expected FR-PRIV-021, got {other:?}", server.name()),
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn fr_err_034_a_refused_credential_is_still_reported_as_one() {
+        // The 77 row of FR-ERR-034: for authentication, the user and the host
+        // the server refused. Error 1045, observed on all four series on
+        // 2026-09-18, for a password that is wrong and for a user that does
+        // not exist alike — and the separation of FR-PRIV-021 does not reach
+        // either.
+        on_every_series(
+            "fr_err_034_a_refused_credential_is_still_reported_as_one",
+            |server| {
+                for account in [("root", "not-the-password"), ("nobody_at_all", "x")] {
+                    let condition =
+                        opening(server, account, PRESENT).expect_err("the credentials are wrong");
+
+                    assert_eq!(condition.exit_code(), 77, "{}", server.name());
+                    match &condition {
+                        Error::AuthenticationRefused { user, .. } => {
+                            assert_eq!(user, account.0, "{}", server.name());
+                        }
+                        other => panic!(
+                            "{}: expected a refused credential, got {other:?}",
+                            server.name()
+                        ),
+                    }
+                }
+            },
+        );
+    }
+
+    #[test]
+    fn fr_conf_041_a_database_the_entry_names_and_the_reader_can_see_opens() {
+        // The control for the three above: the same path, with the database
+        // FR-CONF-041 puts on the connection present and visible, opens and
+        // classifies nothing.
+        on_every_series(
+            "fr_conf_041_a_database_the_entry_names_and_the_reader_can_see_opens",
+            |server| {
+                opening(server, ROOT, PRESENT).expect("the fixture schema is there");
+                opening(server, REDUCED, PRESENT).expect("the reduced reader holds SELECT on it");
+            },
+        );
     }
 }

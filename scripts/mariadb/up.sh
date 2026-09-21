@@ -122,11 +122,18 @@ wanted() {
 
 main() {
     local name series image container port tls
-    # The inventory is read on file descriptor 3, not on stdin. `docker exec -i`
+    # The inventory is read on file descriptor 9, not on stdin. `docker exec -i`
     # reads stdin, and a loop that feeds itself from stdin hands the rest of its
     # own input to the first such command: the loop then stops after one server,
-    # silently and looking like a filter that matched once.
-    while read -r name series image container port tls <&3; do
+    # silently and looking like a filter that matched once. Descriptor 9 and
+    # not 3: `tpl_mariadb_handshake` opens the TCP port on 3, and `wait_ready`
+    # below calls it once per iteration. It does so inside a command
+    # substitution, whose subshell redirects its own copy of 3 and leaves this
+    # loop's alone, so 3 was latent here rather than broken — and the
+    # descriptor is what keeps the loop from depending on that. `series.env`
+    # documents 3 as the handshake's, and `status.sh` and `down.sh` read the
+    # same inventory on 9 for the same reason.
+    while read -r name series image container port tls <&9; do
         [ -n "$name" ] || continue
         wanted "$name" "$@" || continue
         log "$name"
@@ -134,7 +141,7 @@ main() {
         start_if_absent   "$name" "$series" "$image" "$container" "$port" "$tls"
         wait_ready        "$name" "$series" "$image" "$container" "$port" "$tls"
         verify_clean      "$name" "$series" "$image" "$container" "$port" "$tls"
-    done 3<<< "$TPL_MARIADB_SERVERS"
+    done 9<<< "$TPL_MARIADB_SERVERS"
     log ""
     ./status.sh
 }

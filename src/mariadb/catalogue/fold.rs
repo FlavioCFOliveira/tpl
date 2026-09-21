@@ -45,43 +45,97 @@
 //! fixture's 301 — which are decoded by nothing, because the fold drops each
 //! before it reads a second field.
 //!
-//! # Where the fold refuses
+//! # Where the fold does **not** refuse, and why it used to
 //!
-//! Five catalogue fields are closed enumerations that a requirement fixes from
-//! an observation of all four series: a referential action (`FR-CAT-045`), a
+//! Five catalogue fields take a set of values that a requirement fixed from an
+//! observation of all four series: a referential action (`FR-CAT-045`), a
 //! constraint level (`FR-CAT-046`), a trigger event and a trigger timing
-//! (`FR-CAT-050`), and a routine kind (`FR-CAT-016`). The model has a variant
-//! for each observed value and for no other, so a value outside one of those
-//! sets is a fact the model cannot carry.
+//! (`FR-CAT-050`), and a routine kind (`FR-CAT-016`). The first implementation
+//! of this fold reported a value outside one of those sets as
+//! [`Error::InternalInvariant`], `70`, on the ground that the model had a
+//! variant for each observed value and for no other.
 //!
-//! The fold reports it as [`Error::InternalInvariant`], `70`. The two
-//! alternatives are worse in the same way: substituting a variant puts a value
-//! in the document that the server did not state, and dropping the object
-//! presents a table without a foreign key it has — both at exit `0`, which is
-//! the silent corruption `NFR-DET-002`'s own amendment calls the class of
-//! failure this corpus works hardest to prevent. A `70` says *`tpl` cannot
-//! represent what this server returned*, which is what happened.
+//! **`FR-CAT-055` rejects that reading, and the fold now carries the
+//! catalogue's own string.** Each of the five is an enumeration with a
+//! recorded variant per observed value and one that carries an unrecorded
+//! string verbatim, so a sixth referential action reaches the document as the
+//! server spelled it. The object is not dropped, the read is not refused, and
+//! the exit code does not move on account of it.
 //!
-//! **Its one foreseeable trigger is a server newer than the window.**
-//! `FR-SRV-031` reads such a server and marks it, so a series that added a
-//! sixth referential action would be read up to the row that carries it and
-//! then refused. The cost is recorded here rather than discovered: the
-//! alternative is a document that silently disagrees with the server.
+//! Three grounds, and the requirement states all three:
+//!
+//! | Why `70` was wrong | Stated by |
+//! |---|---|
+//! | `70` is closed to a panic and to an invariant the system detects **in itself**, and nothing about `tpl` is defective when a server returns a value `tpl` has not seen | `FR-ERR-030`, and the same correction `FR-PRIV-021` made for the schema row below |
+//! | The `70` row tells the caller the condition is not fixable by them, which makes a whole database unreadable over one rule of one key | `FR-ERR-001` |
+//! | The one foreseeable server that returns such a value is one newer than the window, and that server is read and **marked** rather than refused | `FR-SRV-031`, `FR-SRV-032`, `FR-SRV-033` |
+//!
+//! The two alternatives the requirement also rejects are the ones a reader
+//! reaches for next, and both are wrong documents at exit `0`: substituting the
+//! nearest recorded value puts a value in the document the server did not
+//! state, and dropping the object that carries the field presents a table
+//! without a foreign key it has. `FR-CTX-034`'s `standing` is the field that
+//! says such a read is unverified, and there is no second thing for an exit
+//! code to add.
+//!
+//! **`table_type` is not one of the five, and the difference is the field's
+//! job.** `FR-CAT-001` through `FR-CAT-006` make that value a coverage
+//! predicate, so a value outside the recorded set selects no covered kind and
+//! the object is presented nowhere — which is what
+//! [`TableType::from_catalogue`] already does and what the section above
+//! describes.
 //!
 //! # Where the fold takes the completeness verdict
 //!
 //! The three checks of [`super::completeness`] are made **here**, on the row,
-//! as the model is built — never on the finished model. Two of the three would
-//! be wrong if they were made later: a routine's body reaches the model as the
-//! empty string whether the catalogue returned SQL `NULL` or an empty body, and
-//! a foreign key whose rules row is missing reaches the model as no foreign key
-//! at all, which is indistinguishable from a table that declares none.
+//! as the model is built — never on the finished model. One of the three would
+//! be wrong if it were made later: a foreign key whose rules row is missing
+//! reaches the model as no foreign key at all, which is indistinguishable from
+//! a table that declares none.
 //!
 //! | Where | Check | Marks | Fixed by |
 //! |---|---|---|---|
 //! | [`views`] | The definition is the empty string | That view, with `definition` | `FR-PRIV-011` |
 //! | [`routine`] | The body is SQL `NULL` | That routine, with `body` | `FR-PRIV-017` |
 //! | [`foreign_keys`] | A key column has no referential-constraint row | The referencing table with `foreign_keys`, and the referenced one with `referenced_by` | `FR-PRIV-019` |
+//!
+//! *The second reason this section used to give has been removed by
+//! `FR-CAT-056`.* A routine's body reached the model as the empty string
+//! whether the catalogue returned SQL `NULL` or an empty body, so a verdict
+//! taken over the folded model could not have told the two apart; the body is
+//! now [`None`] for SQL `NULL` and the model **can** tell them apart. The
+//! verdict is still taken here all the same, because the foreign-key reason
+//! above stands on its own and because moving one of the three checks
+//! elsewhere would put `FR-PRIV-012` in two places.
+//!
+//! # Where the fold drops a key the catalogue did return
+//!
+//! `FR-CAT-057` excludes a foreign key that crosses a schema boundary, in
+//! **both** directions, and bars reading a second schema in order to cover one.
+//! The two directions are excluded in two different places:
+//!
+//! | Direction | Excluded by |
+//! |---|---|
+//! | Declared in another schema, referencing a table this read covers | The `TABLE_SCHEMA = ?` predicate of the key-column statement — the read never sees the row |
+//! | Declared in this schema, referencing a table in another | [`foreign_keys`], on the referenced-schema field the statement now selects |
+//!
+//! The first was an accident of the statement's filter and is now a
+//! requirement; the second needed the field, because a rules row for an
+//! outgoing cross-schema key **is** returned — its constraint is declared here
+//! — and nothing else on either row says where the referenced table lives.
+//!
+//! *The ground is `FR-CTX-006`, `FR-CTX-010` and `FR-CTX-023` together.* They
+//! embed the table at each end of every key in full and require every object a
+//! document references to be present in it, and a table in another schema is in
+//! no model this read builds. A carried cross-schema key is therefore a
+//! reference with nothing at the other end — the one condition those three
+//! forbid — so the exclusion is what keeps the embedding materialisable.
+//!
+//! *`FR-PRIV-002` is not engaged, and the cost is silent.* A table at either
+//! end of a cross-schema key is presented with one relation fewer than the
+//! server holds, at exit `0`, and nothing in the document says so: the property
+//! was read and excluded, not withheld. `FR-CAT-057` accepts that cost in its
+//! own text, which is why no marking is written here.
 //!
 //! Because the fold is the one path every read takes, `FR-PRIV-012` holds for
 //! the narrowed reads and for the dump without a call site of their own. No
@@ -98,7 +152,8 @@ use super::Catalogue;
 use super::completeness::{self, Marking, Property};
 use super::row::{count, maybe_count, maybe_signed, maybe_text, signed, text, text_or_empty};
 use super::statements::Read;
-use crate::error::Error;
+use crate::error::{CatalogueObjectKind, Error};
+use crate::mariadb::fault;
 use crate::model::check_constraint::{CheckConstraint, ConstraintLevel};
 use crate::model::column::{Column, Generated, GeneratedStorage};
 use crate::model::column_default::ColumnDefault;
@@ -132,17 +187,35 @@ const NOT_IGNORED: &str = "NO";
 /// The value a `YES`/`NO` field takes for yes.
 const YES: &str = "YES";
 
-/// The invariant an absent schema row violates.
-const SCHEMA_ROW: &str = "the schema a connection selected has a row in the schema catalogue";
-
-/// The invariant a catalogue value outside a closed enumeration violates.
-const ENUMERATED: &str =
-    "every enumerated catalogue value is one the requirement that fixes it records";
-
 /// The invariant a key naming a column its table does not carry violates
 /// (`FR-CAT-044`).
 const KEY_NAMES_A_CARRIED_COLUMN: &str =
     "a key the catalogue reports names a column the same table's column list carries";
+
+/// Whether a foreign key crosses a schema boundary (`FR-CAT-057`).
+///
+/// `referenced` is the referenced-schema field of a key-column row and
+/// `covered` is the database the read covers, per `FR-CONF-041`. Only the
+/// **outgoing** direction reaches this predicate: the incoming one returns no
+/// row at all, because the statement is filtered on the schema the key is
+/// declared in.
+///
+/// SQL `NULL` is **not** a crossing. A referenced schema that names nothing
+/// names no *other* schema, so the key stays in the model and `FR-CAT-056`
+/// governs what it carries; excluding it here would drop a key `FR-CTX-006`
+/// requires to be presented, and would do so on a field that says nothing
+/// about where the referenced table is.
+///
+/// It is a free function over the two values rather than a branch inside the
+/// fold so that the decision is exercised without a server, on the same terms
+/// as the three checks of [`super::completeness`]. No read of the fixture
+/// reaches the true case — observed on 2026-09-20 on all four series of
+/// `FR-SRV-015`, where every one of the 17 foreign-key rows names `freight` at
+/// both ends — which is what `FR-CAT-057` records and why the requirement
+/// states the feature is excluded rather than observed.
+fn crosses_a_schema(referenced: Option<&str>, covered: &str) -> bool {
+    referenced.is_some_and(|named| named != covered)
+}
 
 /// The condition a fact the model cannot represent produces.
 const fn refused(invariant: &'static str, location: &'static Location<'static>) -> Error {
@@ -226,8 +299,18 @@ struct Rule<'a> {
     table: &'a str,
 
     /// The referenced table — the table `FR-CAT-013` carries it on, from the
-    /// other end.
-    referenced_table: &'a str,
+    /// other end — or [`None`] where the rules row named none (`FR-CAT-056`).
+    referenced_table: Option<&'a str>,
+
+    /// Whether the key crosses a schema boundary and is therefore excluded
+    /// from the model in both directions (`FR-CAT-057`).
+    ///
+    /// It is decided on the **key-column** rows, which are the only rows of the
+    /// two reads that carry the referenced schema, and it is recorded here
+    /// because the rules row is what the key is finally built from: a key
+    /// excluded on one of its columns must not reach a table through its rule
+    /// either, or the document would carry a key with no columns.
+    crosses_a_schema: bool,
 
     /// The key itself, whose column list the second read fills.
     key: ForeignKey<'a>,
@@ -237,21 +320,42 @@ struct Rule<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`Error::InternalInvariant`] where the catalogue returned a value
-/// the model cannot represent — a decode that failed, an enumerated value
-/// outside the set its requirement fixes, a key naming a column its table does
-/// not carry (`FR-CAT-044`), or no row at all in the schema catalogue. Every
-/// one of them is a `70` for the reason [`super::row`] records: the field
-/// lists were observed on all four series of `FR-SRV-015`, so a shape outside
-/// them is a defect in this reader's model of the catalogue rather than a
-/// condition the caller can act on.
+/// Returns [`Error::InternalInvariant`] — `70` — where the catalogue returned a
+/// value the model cannot represent: a decode that failed, or a key naming a
+/// column its table does not carry (`FR-CAT-044`). Both are a `70` for the
+/// reason [`super::row`] records — the field lists were observed on all four
+/// series of `FR-SRV-015`, so a shape outside them is a defect in this reader's
+/// model of the catalogue rather than a condition the caller can act on.
+///
+/// Returns [`Error::PropertyNotReadable`] — `77` — where the schema catalogue
+/// returned no row for the database the read covers. `FR-PRIV-021` fixes that
+/// code and rejects the `70` this fold used to report in its own words: the
+/// shortfall is in what the reader was shown, not in `tpl`, and the caller can
+/// fix it with a grant or by correcting `database.<name>.database`. The
+/// condition is not reachable through the distributed binary today, because
+/// `FR-CONF-041` puts the database on the connection and the handshake
+/// classifies `1049` and `1044` first — [`super::super::fault`] routes that
+/// pair to this same condition — but the divergence between this path and that
+/// one is the one route by which a later change would resurrect the rejected
+/// `70`.
+///
+/// An enumerated value outside the set its requirement fixes is **no longer**
+/// among them: `FR-CAT-055` carries it verbatim, per this module's own header.
 pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'_>, Error> {
     let schema = catalogue.rows(Read::Schema);
-    let row = schema.first().ok_or_else(|| Error::InternalInvariant {
-        invariant: SCHEMA_ROW,
-        location: Location::caller(),
-    })?;
+    let Some(row) = schema.first() else {
+        // FR-PRIV-021. The `cause` names the database and states that its
+        // metadata could not be read, and the database is the one the selected
+        // entry names, per FR-CONF-041 — which is the name this read was
+        // issued with, so the condition always has an instance to name.
+        return Err(Error::PropertyNotReadable {
+            kind: CatalogueObjectKind::Database,
+            object: catalogue.schema().to_owned(),
+            property: fault::METADATA,
+        });
+    };
 
+    let name = text(row, "SCHEMA_NAME")?;
     let mut tables = tables(catalogue.rows(Read::Tables))?;
 
     columns(catalogue.rows(Read::Columns), &mut tables)?;
@@ -259,13 +363,14 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'_>, Error> {
     foreign_keys(
         catalogue.rows(Read::ForeignKeyRules),
         catalogue.rows(Read::KeyColumns),
+        name,
         &mut tables,
     )?;
     checks(catalogue.rows(Read::Checks), &mut tables)?;
     triggers(catalogue.rows(Read::Triggers), &mut tables)?;
 
     Ok(Database {
-        name: Cow::Borrowed(text(row, "SCHEMA_NAME")?),
+        name: Cow::Borrowed(name),
         charset: Cow::Borrowed(text(row, "DEFAULT_CHARACTER_SET_NAME")?),
         collation: Cow::Borrowed(text(row, "DEFAULT_COLLATION_NAME")?),
         server: catalogue.server().clone(),
@@ -467,9 +572,15 @@ fn index<'a>(row: &'a MySqlRow, name: &'a str, first: IndexColumn<'a>) -> Result
 /// column that names a referenced table under no rules row is the third shape
 /// of `FR-PRIV-018` — zero rows — seen from the only place the catalogue offers
 /// a second view of the same population.
+///
+/// `schema` is the database the read covers, and it is here for one reason:
+/// `FR-CAT-057` excludes a key whose referenced table lives in another schema,
+/// and the referenced-schema field of the key-column row is the only place
+/// either read says where that table is.
 fn foreign_keys<'a>(
     rules: &'a [MySqlRow],
     key_columns: &'a [MySqlRow],
+    schema: &str,
     tables: &mut Tables<'a>,
 ) -> Result<(), Error> {
     let mut carried = Vec::with_capacity(rules.len());
@@ -492,6 +603,27 @@ fn foreign_keys<'a>(
     for row in key_columns {
         let table = text(row, "TABLE_NAME")?;
         let key = (table, text(row, "CONSTRAINT_NAME")?);
+        let at = positions.find(key);
+
+        // FR-CAT-057, the outgoing direction. A referenced schema that is named
+        // and is not the one this read covers puts the referenced table outside
+        // every model this read builds, so the key is excluded here and its
+        // rules row is excluded with it — before the cross-check below, because
+        // an excluded key is not a property the reader lost but one the model
+        // does not cover, and `FR-PRIV-002` is not engaged by it.
+        //
+        // A referenced schema that is SQL `NULL` names no other schema and is
+        // not this case: the key is carried, and `FR-CAT-056` governs what it
+        // carries. Dropping it here would drop a key `FR-CTX-006` requires to
+        // be presented.
+        if crosses_a_schema(maybe_text(row, "REFERENCED_TABLE_SCHEMA")?, schema) {
+            if let Some(rule) = at.and_then(|at| carried.get_mut(at)) {
+                rule.crosses_a_schema = true;
+            }
+
+            continue;
+        }
+
         // FR-PRIV-019's antecedent, read as the field it is stated over. The
         // statement already restricts the read to rows that name a referenced
         // table, per `FR-CAT-045`, so this is the name the other end is marked
@@ -499,9 +631,12 @@ fn foreign_keys<'a>(
         let referenced = maybe_text(row, "REFERENCED_TABLE_NAME")?;
         let pair = ForeignKeyColumn {
             column: Cow::Borrowed(text(row, "COLUMN_NAME")?),
-            referenced_column: Cow::Borrowed(text_or_empty(row, "REFERENCED_COLUMN_NAME")?),
+            // FR-CAT-056: `text` and not `text_or_empty`. The statement selects
+            // exactly the rows on which this field is populated — all 17 of the
+            // fixture's 54 — so no row carrying SQL `NULL` reaches the model
+            // and there is no absence to substitute for.
+            referenced_column: Cow::Borrowed(text(row, "REFERENCED_COLUMN_NAME")?),
         };
-        let at = positions.find(key);
 
         // FR-PRIV-019: the column names a table it references, and no rules row
         // describes the constraint it belongs to. The two observations
@@ -533,12 +668,22 @@ fn foreign_keys<'a>(
     mark(unreadable, tables);
 
     for rule in carried {
+        // FR-CAT-057: excluded in both directions, so the rule contributes to
+        // neither collection.
+        if rule.crosses_a_schema {
+            continue;
+        }
+
         // FR-CAT-013 carries the same key on the referenced table, so the two
         // directions are two values. The clone is the second of them: the
         // model presents one key from two ends, and building it a second time
         // from the rows would allocate the same column list again for no
         // clearer result.
-        if let Some(at) = tables.position(rule.referenced_table)
+        //
+        // A key that names no referenced table has no other end to be carried
+        // on, which `FR-CAT-056` states and `FR-CTX-006` reads from the
+        // document's side: it is carried on the referencing table alone.
+        if let Some(at) = rule.referenced_table.and_then(|name| tables.position(name))
             && let Some(table) = tables.at(at)
         {
             table.referenced_by.push(IncomingForeignKey {
@@ -579,22 +724,25 @@ fn mark(unreadable: BTreeMap<&str, Marking>, tables: &mut Tables<'_>) {
 }
 
 /// One foreign key's rules row, with an empty column list (`FR-CAT-045`).
+///
+/// The two rule fields are read through `FR-CAT-055`'s total reading: a
+/// spelling outside the four `FR-CAT-033` recorded is carried as the catalogue
+/// wrote it rather than refused. The two nullable fields are read through
+/// `FR-CAT-056`'s: SQL `NULL` reaches the model as [`None`], not as the empty
+/// string.
 fn rule<'a>(row: &'a MySqlRow, table: &'a str, name: &'a str) -> Result<Rule<'a>, Error> {
-    let location = Location::caller();
-    let action = |field: &str| {
-        ReferentialAction::from_catalogue(text(row, field)?)
-            .ok_or_else(|| refused(ENUMERATED, location))
-    };
-    let referenced_table = text_or_empty(row, "REFERENCED_TABLE_NAME")?;
+    let action = |field: &str| Ok(ReferentialAction::from_catalogue(text(row, field)?));
+    let referenced_table = maybe_text(row, "REFERENCED_TABLE_NAME")?;
 
     Ok(Rule {
         table,
         referenced_table,
+        crosses_a_schema: false,
         key: ForeignKey {
             name: Cow::Borrowed(name),
             columns: Vec::new(),
-            referenced_table: Cow::Borrowed(referenced_table),
-            referenced_key: Cow::Borrowed(text_or_empty(row, "UNIQUE_CONSTRAINT_NAME")?),
+            referenced_table: referenced_table.map(Cow::Borrowed),
+            referenced_key: maybe_text(row, "UNIQUE_CONSTRAINT_NAME")?.map(Cow::Borrowed),
             match_option: Cow::Borrowed(text(row, "MATCH_OPTION")?),
             on_update: action("UPDATE_RULE")?,
             on_delete: action("DELETE_RULE")?,
@@ -613,8 +761,8 @@ fn checks<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Error
         };
         let constraint = CheckConstraint {
             name: Cow::Borrowed(text(row, "CONSTRAINT_NAME")?),
-            level: ConstraintLevel::from_catalogue(text(row, "LEVEL")?)
-                .ok_or_else(|| refused(ENUMERATED, Location::caller()))?,
+            // FR-CAT-055: a third level is carried as the catalogue wrote it.
+            level: ConstraintLevel::from_catalogue(text(row, "LEVEL")?),
             clause: Cow::Borrowed(text(row, "CHECK_CLAUSE")?),
         };
 
@@ -645,22 +793,22 @@ fn triggers<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Err
 }
 
 /// One trigger (`FR-CAT-050`).
+///
+/// The event and the timing are read through `FR-CAT-055`'s total reading, and
+/// the action statement and the definer through `FR-CAT-056`'s: both are
+/// declared nullable on all four series and reach the model as [`Option`].
 fn trigger(row: &MySqlRow) -> Result<Trigger<'_>, Error> {
-    let location = Location::caller();
-
     Ok(Trigger {
         name: Cow::Borrowed(text(row, "TRIGGER_NAME")?),
-        event: TriggerEvent::from_catalogue(text(row, "EVENT_MANIPULATION")?)
-            .ok_or_else(|| refused(ENUMERATED, location))?,
-        timing: TriggerTiming::from_catalogue(text(row, "ACTION_TIMING")?)
-            .ok_or_else(|| refused(ENUMERATED, location))?,
+        event: TriggerEvent::from_catalogue(text(row, "EVENT_MANIPULATION")?),
+        timing: TriggerTiming::from_catalogue(text(row, "ACTION_TIMING")?),
         action_order: signed(row, "ACTION_ORDER")?,
-        statement: Cow::Borrowed(text_or_empty(row, "ACTION_STATEMENT")?),
+        statement: maybe_text(row, "ACTION_STATEMENT")?.map(Cow::Borrowed),
         orientation: Cow::Borrowed(text(row, "ACTION_ORIENTATION")?),
         old_row_alias: Cow::Borrowed(text(row, "ACTION_REFERENCE_OLD_ROW")?),
         new_row_alias: Cow::Borrowed(text(row, "ACTION_REFERENCE_NEW_ROW")?),
         sql_mode: Cow::Borrowed(text(row, "SQL_MODE")?),
-        definer: Cow::Borrowed(text_or_empty(row, "DEFINER")?),
+        definer: maybe_text(row, "DEFINER")?.map(Cow::Borrowed),
         character_set_client: Cow::Borrowed(text(row, "CHARACTER_SET_CLIENT")?),
         collation_connection: Cow::Borrowed(text(row, "COLLATION_CONNECTION")?),
         database_collation: Cow::Borrowed(text(row, "DATABASE_COLLATION")?),
@@ -792,15 +940,16 @@ fn routines<'a>(
 }
 
 /// One routine, with an empty parameter list (`FR-CAT-048`, `FR-PRIV-017`).
-fn routine<'a>(row: &'a MySqlRow, name: &'a str, declared: &str) -> Result<Routine<'a>, Error> {
-    let kind = RoutineKind::from_catalogue(declared)
-        .ok_or_else(|| refused(ENUMERATED, Location::caller()))?;
-    // FR-PRIV-017, the second shape of FR-PRIV-018. The **nullity** is the
-    // observation, and it is read from the row rather than from the model:
-    // `Routine::body` cannot carry SQL `NULL`, and the empty string it becomes
-    // is what a body that is genuinely empty carries too, so a verdict taken
-    // over the folded model could not tell the two apart. The substitution
-    // itself is unchanged and stays the recorded limit `super::row` states.
+fn routine<'a>(row: &'a MySqlRow, name: &'a str, declared: &'a str) -> Result<Routine<'a>, Error> {
+    // FR-CAT-055: a third kind is carried as the catalogue wrote it. It is not
+    // reachable by the qualified name of `FR-SCH-008`, which is that
+    // requirement's own stated consequence and is enforced where a qualified
+    // name is composed rather than here.
+    let kind = RoutineKind::from_catalogue(declared);
+    // FR-PRIV-017, the second shape of FR-PRIV-018. The nullity is the
+    // observation, and it is both what the model carries under `FR-CAT-056`
+    // and what the marking is taken from: `null` says the body is absent and
+    // the marking says why it is absent.
     let body = maybe_text(row, "ROUTINE_DEFINITION")?;
     let mut marking = Marking::default();
 
@@ -808,20 +957,29 @@ fn routine<'a>(row: &'a MySqlRow, name: &'a str, declared: &str) -> Result<Routi
         marking.record(Property::Body);
     }
 
+    // FR-CAT-048: a procedure has no return type, and the model emits it as
+    // `null` in full. The two absent-value shapes the catalogue writes beside
+    // each other — the empty string in the data-type field and SQL `NULL` in
+    // the DTD identifier — are not read for the answer, because the kind
+    // already gives it.
+    //
+    // A kind outside the recorded two is read as the row states it rather than
+    // as an absence: `FR-CAT-048` gives `null` to a **procedure**, and an
+    // unrecorded kind is not one, so substituting an absent return type for it
+    // would put in the document a fact the server did not state. *Rejected:
+    // `null` for every kind but `FUNCTION`*, which reads that requirement as
+    // naming a default rather than a case.
+    let return_type = match &kind {
+        RoutineKind::Procedure => None,
+        _ => Some(declared_type(row)?),
+    };
+
     Ok(Routine {
         name: Cow::Borrowed(name),
         kind,
-        // FR-CAT-048: a procedure has no return type, and the model emits it
-        // as `null` in full. The two absent-value shapes the catalogue writes
-        // beside each other — the empty string in the data-type field and SQL
-        // `NULL` in the DTD identifier — are not read for the answer, because
-        // the kind already gives it.
-        return_type: match kind {
-            RoutineKind::Procedure => None,
-            RoutineKind::Function => Some(declared_type(row)?),
-        },
+        return_type,
         parameters: Vec::new(),
-        body: Cow::Borrowed(body.unwrap_or_default()),
+        body: body.map(Cow::Borrowed),
         body_kind: Cow::Borrowed(text(row, "ROUTINE_BODY")?),
         parameter_style: Cow::Borrowed(text(row, "PARAMETER_STYLE")?),
         is_deterministic: yes(row, "IS_DETERMINISTIC")?,
@@ -860,4 +1018,39 @@ fn declared_type(row: &MySqlRow) -> Result<ColumnType<'_>, Error> {
         charset: maybe_text(row, "CHARACTER_SET_NAME")?,
         collation: maybe_text(row, "COLLATION_NAME")?,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::crosses_a_schema;
+
+    #[test]
+    fn fr_cat_057_a_key_referencing_another_schema_crosses_a_boundary_and_one_referencing_none_does_not()
+     {
+        // FR-CAT-057 excludes a foreign key that crosses a schema boundary in
+        // both directions. The outgoing direction is decided here, on the
+        // referenced-schema field the key-column statement selects.
+        assert!(
+            crosses_a_schema(Some("billing"), "freight"),
+            "a key naming a table in another schema is excluded: the embedding of FR-CTX-006 \
+             and FR-CTX-010 has nothing at the other end, which FR-CTX-023 forbids"
+        );
+
+        // The schema the read covers is not a crossing, which is every key the
+        // fixture holds.
+        assert!(!crosses_a_schema(Some("freight"), "freight"));
+
+        // SQL `NULL` names no other schema. FR-CAT-056 gives that key a
+        // `referenced_table` of `null` and FR-CTX-006 requires it to be carried
+        // all the same, so reading the absence as a crossing would drop a key
+        // the corpus obliges the document to present.
+        assert!(!crosses_a_schema(None, "freight"));
+
+        // The comparison is byte-wise, as every other name comparison in this
+        // reader is: MariaDB schema names are case-sensitive on the platforms
+        // `NFR-PERF-018` names, and folding here would silently admit a key
+        // this requirement excludes.
+        assert!(crosses_a_schema(Some("FREIGHT"), "freight"));
+        assert!(crosses_a_schema(Some(""), "freight"));
+    }
 }

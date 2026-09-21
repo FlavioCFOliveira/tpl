@@ -450,7 +450,7 @@ Out of scope: the wording of any individual message.
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
   | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or the structural rule of [context-document.md](context-document.md) it failed. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012` |
   | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, or the key space of `FR-CONF-002` |
-  | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, or catalogue query — the host and port attempted, and what that phase returned |
+  | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
   | `74` | The path or stream that failed, the operation attempted on it, and what the filesystem or the stream returned |
@@ -484,6 +484,16 @@ Out of scope: the wording of any individual message.
   the row obliges is otherwise unchanged: the fact — an invariant or a panic —
   and where it happened. "Where" is the location the condition arose at, not
   the text a panic carried.
+
+  *Amended in the twenty-fifth edition: the `69` row names a fifth phase.* It
+  named four, and one statement this system issues belonged to none of them.
+  The version probe of `FR-SRV-002` is issued on an open session, after the
+  three network phases have completed and before any catalogue statement, so a
+  probe that fails because the session did not hold had no phase its `cause`
+  could name — and naming one of the other four would be a `cause` that is
+  false of the failure it reports, which the paragraph above bans. `FR-ERR-036`
+  states the condition; this row states what its `cause` must carry. No code
+  changes, and the other four phases are as the first edition left them.
 
 - **FR-ERR-011**: A template error SHALL carry the template name, the line, the
   column, and the chain of underlying template-engine errors.
@@ -569,11 +579,101 @@ Out of scope: the wording of any individual message.
   most three suggestions, drawn from names within an edit distance of two,
   ordered by distance and then by name.
 
+- **FR-ERR-039**: The edit distance of `FR-ERR-019` SHALL be the **restricted**
+  Damerau-Levenshtein distance — optimal string alignment — in which the
+  insertion, the deletion and the substitution of one character, and the
+  transposition of two **adjacent** characters, each cost one, and no substring
+  is edited more than once.
+
+  *The variant decides which candidates are offered, not merely how they are
+  ranked.* `FR-ERR-019` admits a candidate by its distance, and the two forms
+  of the Damerau-Levenshtein distance disagree inside the threshold that
+  requirement fixes. They part company only where a further edit falls between
+  the two transposed characters, and the canonical pair of that shape is `ca`
+  against `abc`: **three** steps under the restricted form and **two** under
+  the unrestricted one. Naming the family and not the member therefore admitted
+  two conforming implementations that offer different candidates for the same
+  invocation.
+
+  *The property the transposition exists for holds under both forms*, and is
+  why a plain Levenshtein distance is not the measure: `ordres` is one step
+  from `orders`, where plain Levenshtein reports two, so the commonest typing
+  slip of all stays inside the threshold.
+
+  *Rejected: the unrestricted form, which admits the pair above at two.* What
+  it buys is the candidates in which a caller transposed two characters **and**
+  edited between them — two slips in one name, which a threshold of two is
+  already at the edge of admitting. What it costs is that the distance can no
+  longer be computed from a bounded window of the comparison: the unrestricted
+  form reaches back to an arbitrary earlier position and holds the whole
+  comparison, plus an index over the alphabet of both names. `BR-PERF-004`
+  makes this a budgeted path — a `66` over `WL-001` compares against 200 names
+  — and a wrong invocation is the invocation a calling agent makes most often
+  while it is finding its way.
+
+- **FR-ERR-038**: The system SHALL compare a supplied name against a candidate
+  over the characters as written, and SHALL NOT fold case, of ASCII or of any
+  other range, before measuring the distance of `FR-ERR-039`.
+
+  **Where this corpus folds ASCII case it says so, and it does not say so
+  here.** `FR-SCH-014` folds it for the `--pattern` filter and `FR-ENV-031`
+  for the word-list tokeniser, each to widen what a comparison accepts, and
+  `FR-SCH-008` folds it to **detect** a qualified prefix spelled in the wrong
+  case and then refuses the token. None of the three reaches this path, and it
+  is stated here so that a reader arriving from any of them is told once.
+
+  *Accepted cost.* A name differing from the one that exists in more than two
+  letters' case alone — `ORDER_ITEMS` against `order_items` — falls outside the
+  threshold and is not offered. The caller receives the generic hint, which is
+  the listing command, so the name is still recoverable in one further
+  invocation — the same cost `FR-ERR-023` already accepts for a candidate its
+  character set refuses.
+  A single-letter slip — `Orders` against `orders` — is at distance one and is
+  offered.
+
+  *Rejected: folding ASCII case before measuring, as `FR-SCH-014` folds it for
+  `--pattern`.* The two rules answer different questions. `--pattern` selects
+  the set the caller asked for and shows everything it admits, so folding
+  widens a listing the caller then reads; this is a ranking under a threshold,
+  so folding changes which candidates are offered **at all** and in which order
+  `FR-ERR-019` presents them. And it would place a name differing only in case
+  at distance **zero** — the measure calling the candidate the supplied name,
+  beneath an `error` line stating that the supplied name does not exist.
+  `FR-ERR-010` reads an overlap between those two lines as the reader's signal
+  that both are about the same thing; a distance of zero makes them disagree
+  instead.
+
 - **FR-ERR-020**: IF no candidate is within that distance, THEN the system SHALL
   omit the suggestion entirely rather than offer a poor one.
 
 - **FR-ERR-021**: Suggestions SHALL apply to tables, views, routines, templates,
   database entries, commands, flags, and configuration keys.
+
+- **FR-ERR-037**: WHERE a suggestion names more than one candidate, the system
+  SHALL write all of them inside the one `did you mean` question of
+  `FR-ERR-008`, each between single quotation marks, separating every pair but
+  the last with `, ` and the last pair with ` or `. They SHALL appear in the
+  order `FR-ERR-019` fixes.
+
+  ```
+  hint:  did you mean 'orders'? list the available tables with: tpl -d shop schema tables
+  hint:  did you mean 'aorders' or 'orderz'? list the available tables with: tpl -d shop schema tables
+  hint:  did you mean 'aorders', 'orderz' or 'border'? list the available tables with: tpl -d shop schema tables
+  ```
+
+  `FR-ERR-008` shows one candidate and `FR-ERR-019` admits three, and between
+  them nothing said how two or three are written. The three lines above are one
+  sentence at the three cardinalities that requirement admits.
+
+  *Rejected: separating every pair with `, `, the last included.* It reads as
+  an enumeration where what is meant is a choice, and the caller must take
+  exactly one of the three; ` or ` is the word that says so, on the line
+  `FR-ERR-009` makes the one they act on.
+
+  *Rejected: one line per candidate.* `FR-ERR-008` fixes the message at four
+  labelled lines, and `FR-ERR-024` escapes the newline in every interpolated
+  value precisely so that no value can forge a fifth. A system that emits one
+  itself spends that guarantee on formatting.
 
 ## Safe hints
 
@@ -709,6 +809,56 @@ Out of scope: the wording of any individual message.
 - **FR-ERR-027**: WHEN a deadline is exceeded, the system SHALL exit with the
   code of the phase: `69` for DNS resolution, TCP connect, TLS handshake, or a
   catalogue query; `78` for `password_command`; `65` for render.
+
+## A session that opens and does not hold
+
+- **FR-ERR-036**: IF a statement fails on a session that has opened, and the
+  failure is neither a deadline under `FR-ERR-027` nor a condition another
+  requirement routes elsewhere, THEN the system SHALL exit `69`
+  (`EX_UNAVAILABLE`), and the `cause` line SHALL name the phase the statement
+  belongs to — the version probe of `FR-SRV-002`, or the catalogue query — per
+  the `69` row of `FR-ERR-034`. It SHALL NOT name DNS resolution, TCP connect,
+  or the TLS handshake, each of which completed before the session opened.
+
+  The conditions other requirements route elsewhere are the three of step 5 of
+  `FR-ERR-006`, and all three are `78`: the read-only session statement and its
+  read-back, under `FR-SRV-010`, which is `78` whether the server refused the
+  statement or the session did not survive it, because a setting that cannot be
+  applied is a setting that cannot be applied; the product check of
+  `FR-SRV-003`; and the version-window check of `FR-SRV-020`. What is left for
+  this requirement is therefore the other two statements of `FR-SRV-006` — the
+  version probe, whose own verdicts `FR-SRV-003` and `FR-SRV-020` reach only
+  when the probe answered, and the catalogue read.
+
+  *Rationale.* `69` is right and was never in question — the session did not
+  hold, the server is unreachable for this invocation, and the caller's next
+  step is the one that row of `FR-ERR-001` states, which the read-only promise
+  of `FR-SRV-006` makes safe to take: the operation is read-only and therefore
+  repeatable. What was missing is the phase. A `cause` that named the TCP
+  connect for a session that had already connected, authenticated, been set
+  read only and been probed sends a caller to check whether the server is
+  listening, and it is; and it is a wording equally true of a different
+  failure, which `FR-ERR-034` bans in terms.
+
+  *Added in the twenty-fifth edition.* The four conditions of `69` this corpus
+  stated were a name that did not resolve, a connection that was refused, a
+  TLS handshake that failed, and a deadline. A session that opens and then
+  stops answering — a connection dropped mid-statement, a protocol fault — is
+  none of the four, and it was reported as the second of them, which is the
+  right code under a `cause` line that is false.
+
+  *Rejected: a tenth code for a session that did not hold.* `FR-ERR-001`
+  closes the code set in terms, and the caller's next step here is the one
+  every other `69` carries. `FR-ERR-002` admits two conditions on one code
+  exactly where that holds, and obliges the `cause` to separate them for a
+  reader — which is what this requirement does.
+
+  *Rejected: leaving the condition unstated and the phase to the
+  implementation.* It is how the defect arose: with no requirement naming the
+  phase, the nearest condition in force was the refused connection, and its
+  `cause` was emitted for a failure it does not describe. A phase a caller
+  reads is contract under `FR-ERR-034`, and this corpus states it rather than
+  letting the choice of a nearest neighbour decide it.
 
 ## Template codes
 

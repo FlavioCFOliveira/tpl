@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-18
 related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
@@ -985,8 +985,18 @@ more; and the last entry, `OQ-042`, closed on a stated limit in `FR-SRV-041`
 rather than on evidence, because the server it wanted is not one a fixture of
 MariaDB servers can hold. **No open question is blocked by this entry, and
 none is open at all.** The mandated tests of `BR-SCH-004`, `FR-SRV-029` and
-`BR-SEC-003` are blocked only by `tpl` not existing, and of the five budgets
-that needed a fixture, those over `WL-001` still need `seed-bench.sql`.
+`BR-SEC-003` are not blocked by this entry either, and of the five budgets that
+needed a fixture, those over `WL-001` still need `seed-bench.sql`.
+
+*Corrected in the twenty-sixth edition.* The sentence above said those three
+tests were "blocked only by `tpl` not existing". The binary exists, so the
+clause named a condition that does not hold, and what this entry is entitled to
+say about the three is only that its own absence does not block them: what each
+of them waits on is the command it drives. `BR-SCH-004` records its own block,
+in [schema-commands.md](schema-commands.md), and the same claim in the
+*Maintenance debt* section of [README.md](README.md) is corrected with it. The
+debt of this entry is unchanged — `seed-bench.sql`, and the two lines that name
+it.
 
 *Amended in the seventh edition.* What this entry still owes is unchanged and
 is now the whole of it: one line of the project-structure tree, one line of

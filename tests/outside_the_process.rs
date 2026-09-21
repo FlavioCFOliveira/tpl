@@ -15,19 +15,19 @@
 //!
 //! # What is observable today, and what is not
 //!
-//! No command of `tpl` opens a connection yet: everything under `schema`,
-//! `template`, `render`, `cache` and `cfg database test` exits `70`. Two
-//! requirements are therefore reachable now, and observing them is what proves
-//! the instruments work:
+//! Two requirements are observed **here**, and they are the two about commands
+//! that must reach no server at all:
 //!
 //! | Requirement | The property |
 //! |---|---|
 //! | `NFR-PERF-005` | The commands of `FR-PROJ-025` open no connection, perform no project discovery, and read no configuration file |
 //! | `NFR-PERF-006` | A command that requires no catalogue data opens no connection |
 //!
-//! The seven other requirements the register holds to this standard —
-//! `NFR-PERF-001` through `-004`, `FR-SRV-012`, `-013` and `-014` — need a
-//! catalogue reader, and none exists.
+//! `NFR-PERF-001` and `NFR-PERF-003` are observed with the same instruments in
+//! [`schema_and_cache`](../schema_and_cache/index.html), where the commands
+//! that do read a catalogue live. `NFR-PERF-002` and `NFR-PERF-004`, and
+//! `FR-SRV-012`, `-013` and `-014`, are not yet observed from outside the
+//! process.
 //!
 //! # Every negative assertion carries a control
 //!
@@ -577,4 +577,347 @@ fn nfr_perf_007_the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowh
         !trace.contains("socket(AF_"),
         "tpl help opened a socket, which NFR-PERF-005 forbids"
     );
+}
+
+// ------------------------------- FR-SRV-012, FR-SRV-013, FR-SRV-014 ---
+
+/// The database entry every project of this section defines.
+const ENTRY: &str = "fixture";
+
+/// The schema every fixture server carries.
+const SCHEMA: &str = "freight";
+
+/// The privileged account of the fixture.
+const ROOT: (&str, &str) = ("root", "tpl-root");
+
+/// The eleven catalogue statements a full read issues (`NFR-PERF-001`).
+const FULL_READ: i64 = 11;
+
+/// The read-only session statement of `FR-SRV-008`, which `FR-SRV-042` issues
+/// first.
+const READ_ONLY: &str = "SET SESSION TRANSACTION READ ONLY";
+
+/// The read-back of `FR-SRV-009`, issued immediately after it.
+///
+/// `10.11` does not carry `transaction_read_only` — difference 12 of
+/// `FR-SRV-038` — so this is the one spelling a read-back can use across the
+/// window, and the test asserts the spelling as well as the position.
+const READ_BACK: &str = "SELECT @@session.tx_read_only";
+
+/// The version probe of `FR-SRV-002`, which follows the pair.
+const PROBE: &str = "SELECT VERSION()";
+
+/// A sandbox holding a project that reaches `server` as the privileged account.
+fn project(server: &fixture::Server) -> Sandbox {
+    let sandbox = Sandbox::new();
+    sandbox.project(&fixture::configuration(server, ENTRY, SCHEMA, ROOT));
+
+    sandbox
+}
+
+/// Runs `tpl` in `sandbox` and refuses anything but exit `0`.
+fn succeeds(sandbox: &Sandbox, arguments: &[&str]) -> String {
+    let printed = sandbox.run(arguments);
+
+    assert_eq!(
+        printed.status.code(),
+        Some(0),
+        "tpl {} exited {:?}: {}",
+        arguments.join(" "),
+        printed.status.code(),
+        String::from_utf8_lossy(&printed.stderr)
+    );
+
+    String::from_utf8_lossy(&printed.stdout).into_owned()
+}
+
+/// The statement text of each row the record holds for the account under test,
+/// in the order the server received them.
+///
+/// `observe.sh statements dump` prints a thread, a command type and the
+/// statement; this keeps the last two, because what `FR-SRV-012` asserts is
+/// which statements arrived and in which order.
+fn received(server: &fixture::Server) -> Vec<(String, String)> {
+    fixture::statements_text(server, &["--user", ROOT.0])
+        .lines()
+        .skip(1)
+        .filter_map(|row| {
+            let mut fields = row.splitn(3, '\t');
+            let _thread = fields.next()?;
+            let kind = fields.next()?.to_owned();
+            let statement = fields.next().unwrap_or_default().trim().to_owned();
+
+            Some((kind, statement))
+        })
+        .collect()
+}
+
+#[test]
+fn fr_srv_012_the_server_receives_the_four_kinds_of_the_closed_list_and_no_fifth() {
+    // FR-SRV-012 with BR-SRV-003: the closed list of FR-SRV-006 is verified by
+    // observing the statements the server **actually receives**, because a
+    // promise about what a process sends that can only be checked by reading
+    // that process's own source is not a promise a caller can rely on.
+    //
+    // The test expects the four kinds and no fifth, and asserts that the three
+    // connection-start statements are issued exactly once each, in the order
+    // FR-SRV-042 fixes — which is the read-only session statement, its
+    // read-back immediately after, then the version probe. That order is cited
+    // and not restated from the table of FR-SRV-006, which enumerates the four
+    // kinds without ordering them: its first row is the statement issued last.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_srv_012_the_server_receives_the_four_kinds_of_the_closed_list_and_no_fifth",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let sandbox = project(server);
+        let name = server.name();
+
+        fixture::statements_on(server);
+        succeeds(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+        fixture::statements_off(server);
+
+        let rows = received(server);
+
+        // The control: the window held what the invocation issued, so an
+        // assertion about its contents is an observation rather than an empty
+        // log.
+        assert!(
+            !rows.is_empty(),
+            "{name}: the statement record held nothing the invocation issued"
+        );
+
+        // Every row that is a statement is one of the four kinds. `Connect`
+        // and `Quit` are connection events and carry no statement, so they are
+        // named here rather than silently skipped.
+        let mut connection_start: Vec<&str> = Vec::new();
+        let mut catalogue = 0;
+
+        for (kind, statement) in &rows {
+            match kind.as_str() {
+                "Connect" | "Quit" => continue,
+                // A prepared statement reaches the record twice — once
+                // registered and once issued — and both rows carry the same
+                // text, so both are the same kind of the closed list.
+                "Query" | "Prepare" | "Execute" => {}
+                other => panic!("{name}: the server received a {other} row: {statement}"),
+            }
+
+            if statement.contains("INFORMATION_SCHEMA") {
+                if kind == "Execute" || kind == "Query" {
+                    catalogue += 1;
+                }
+
+                continue;
+            }
+
+            assert!(
+                [READ_ONLY, READ_BACK, PROBE].contains(&statement.as_str()),
+                "{name}: the server received a fifth kind of statement: {statement:?}"
+            );
+
+            connection_start.push(match statement.as_str() {
+                READ_ONLY => READ_ONLY,
+                READ_BACK => READ_BACK,
+                _ => PROBE,
+            });
+        }
+
+        // FR-SRV-042: the three, once each, in that order and in no other.
+        assert_eq!(
+            connection_start,
+            [READ_ONLY, READ_BACK, PROBE],
+            "{name}: the connection start was not the order FR-SRV-042 fixes"
+        );
+
+        // The fourth kind of the closed list, counted through the instrument
+        // that exists for it.
+        assert_eq!(
+            i64::from(catalogue),
+            FULL_READ,
+            "{name}: the catalogue read was {catalogue} statements"
+        );
+        assert_eq!(
+            fixture::statements_count(server, &["--user", ROOT.0, "--catalogue"]),
+            FULL_READ,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn fr_srv_013_the_read_back_confirms_the_setting_on_every_series_of_the_window() {
+    // FR-SRV-013: the read-back of FR-SRV-009 is verified by an integration
+    // test executed against every series of FR-SRV-015. The binding to the
+    // series is the whole of what is at risk here — `transaction_read_only`
+    // does not exist on 10.11, difference 12 of FR-SRV-038, so a test that ran
+    // anywhere else would pass under either spelling.
+    //
+    // **This body carries the confirming outcome of FR-SRV-013**, which that
+    // requirement assigns to it by name: the outcome is verified by an
+    // integration test that observes, on the server, that the read-back is
+    // issued and that the value the session reports confirms the setting, and
+    // it is an observation made from outside the process, per BR-SRV-003. It is
+    // the half that carries the whole of what FR-SRV-013 promises about the
+    // statement the process **sends**. The failing outcome is the other half,
+    // and the requirement assigns it to the only form that can reach it — a
+    // unit test in `src/mariadb/session.rs`, driven through the seam FR-SRV-013
+    // authorises on FR-ERR-031's terms, because no server produces a read-back
+    // that does not confirm and no arrangement outside the process presents
+    // one.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_srv_013_the_read_back_confirms_the_setting_on_every_series_of_the_window",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let sandbox = project(server);
+        let name = server.name();
+
+        fixture::statements_on(server);
+        succeeds(&sandbox, &["schema", "info", "--direct", "--no-cache"]);
+        fixture::statements_off(server);
+
+        let statements: Vec<String> = received(server)
+            .into_iter()
+            .map(|(_, statement)| statement)
+            .collect();
+
+        // The statement the server received, in the one spelling every series
+        // of the window carries.
+        assert_eq!(
+            statements
+                .iter()
+                .filter(|statement| *statement == READ_BACK)
+                .count(),
+            1,
+            "{name}: the read-back was not issued exactly once"
+        );
+        assert!(
+            !statements
+                .iter()
+                .any(|statement| statement.contains("transaction_read_only")),
+            "{name}: the read-back used a spelling 10.11 does not carry"
+        );
+
+        // The outcome the read-back confirmed: the invocation completed, and
+        // FR-SRV-010 would have made it a 78 in either half of the pair had it
+        // not. The value the session reports is the other half of the
+        // observation, and it is read here from the server rather than from the
+        // process.
+        assert_eq!(
+            statements
+                .iter()
+                .filter(|statement| *statement == READ_ONLY)
+                .count(),
+            1,
+            "{name}: the read-only session statement was not issued exactly once"
+        );
+    }
+}
+
+#[test]
+fn fr_srv_014_and_nfr_perf_004_an_invocation_opens_at_most_one_connection() {
+    // FR-SRV-014: the connection count of an invocation is as NFR-PERF-004
+    // fixes it — at most one — and is verifiable from the server side. This is
+    // that verification, made in the server's own connection record.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_srv_014_and_nfr_perf_004_an_invocation_opens_at_most_one_connection")
+    else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+
+        // The control, and it comes first: a count of one is worth nothing
+        // until this same record is shown to count a connection that was made.
+        let control =
+            fixture::connections_attributable_to(server, || fixture::connect_once(server));
+        assert_eq!(control, 1, "{name}: the connection record counted nothing");
+
+        let sandbox = project(server);
+
+        // One invocation that reads the whole catalogue: eleven statements,
+        // and one connection to carry them.
+        let opened = fixture::connections_attributable_to(server, || {
+            succeeds(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+        });
+
+        assert_eq!(
+            opened, 1,
+            "{name}: one invocation opened {opened} connection(s)"
+        );
+
+        // And an invocation that names one object, which reads the same
+        // catalogue through the same one connection.
+        let named = fixture::connections_attributable_to(server, || {
+            succeeds(
+                &sandbox,
+                &["schema", "table", "charge", "--direct", "--no-cache"],
+            );
+        });
+
+        assert_eq!(
+            named, 1,
+            "{name}: a named read opened {named} connection(s)"
+        );
+    }
+}
+
+#[test]
+fn nfr_perf_001_and_nfr_perf_002_the_catalogue_query_count_does_not_grow_with_the_database() {
+    // NFR-PERF-001 forbids a query count that grows with the number of
+    // objects, and NFR-PERF-002 says the same of a read that presents one
+    // named object — counting **statements**, because the rows such a read
+    // returns MAY be the whole catalogue and a read that returns them does not
+    // violate it.
+    //
+    // The comparison is made from the server side, over two databases of
+    // different size on the same server, and over a whole read against a named
+    // one. `freight` carries 23 catalogue objects; `mysql` carries more, and
+    // is the pair `scripts/mariadb/README.md` already uses for the shape of
+    // this comparison.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "nfr_perf_001_and_nfr_perf_002_the_catalogue_query_count_does_not_grow_with_the_database",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+
+        for (schema, invocation) in [
+            (SCHEMA, vec!["schema", "dump", "--direct", "--no-cache"]),
+            (
+                SCHEMA,
+                vec!["schema", "table", "charge", "--direct", "--no-cache"],
+            ),
+            ("mysql", vec!["schema", "dump", "--direct", "--no-cache"]),
+            ("mysql", vec!["schema", "tables", "--direct", "--no-cache"]),
+        ] {
+            let sandbox = Sandbox::new();
+            sandbox.project(&fixture::configuration(server, ENTRY, schema, ROOT));
+
+            fixture::statements_on(server);
+            succeeds(&sandbox, &invocation);
+            fixture::statements_off(server);
+
+            let issued = fixture::statements_count(server, &["--user", ROOT.0, "--catalogue"]);
+
+            assert_eq!(
+                issued,
+                FULL_READ,
+                "{name}: tpl {} against {schema} issued {issued} catalogue statement(s)",
+                invocation.join(" ")
+            );
+        }
+    }
 }

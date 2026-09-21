@@ -27,9 +27,25 @@
 //! `FR-CACHE-027` gives `status` `--format` and `--pretty`, and gives them to
 //! neither of the other two.
 
-use clap::{Args, Subcommand};
+use std::borrow::Cow;
+use std::io::Write;
 
+use clap::{Args, Subcommand};
+use serde::Serialize;
+
+use super::globals::Globals;
+use super::layout;
 use super::local;
+use super::schema::named;
+use super::source::{self, Opened, Reader};
+use crate::cache::paths::Collection;
+use crate::cache::{Cache as Store, Covered, Held, Status};
+use crate::error::Error;
+use crate::model::document::shape::TableDocument;
+use crate::model::document::{self, DatabaseDocument};
+use crate::model::routine::{Routine, RoutineKind};
+use crate::model::view::View;
+use crate::output::{Document, Form, Order, Source, Table};
 
 /// The `tpl cache` group node.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
@@ -67,4 +83,362 @@ pub(crate) enum Command {
         #[command(flatten)]
         output: local::Output,
     },
+}
+
+/// The invocation of `FR-ERR-022` the routine token of `tpl cache load` belongs
+/// to.
+///
+/// It carries the flag as well as the command path, because `FR-CACHE-024`
+/// names the object by flag here where `FR-SCH-005` names it positionally: the
+/// hint of a refusal is the same invocation corrected, per `FR-ERR-009`, and an
+/// invocation without its flag is not the same one.
+const LOAD: &str = "cache load --routine";
+
+/// The invocation the routine token of `tpl cache clean` belongs to.
+const CLEAN: &str = "cache clean --routine";
+
+/// The columns of the collection part of `tpl cache status`.
+const COLLECTIONS: [&str; 3] = ["NAME", "COUNT", "WHOLE"];
+
+/// The heading that part is written under.
+const COLLECTIONS_HEADING: &str = "COLLECTIONS";
+
+/// The `data` of `tpl cache status` (`FR-CACHE-034`).
+///
+/// Exactly the three keys that requirement fixes, in the order it writes them;
+/// `OD-18` makes the field order the key order, so the shape is stated once, in
+/// this type.
+#[derive(Debug, Serialize)]
+struct StatusData<'a> {
+    /// The name of the selected database entry.
+    entry: &'a str,
+
+    /// The load time from `meta.json`, per `FR-CDOC-013`, or `null` where the
+    /// cache is empty, per `FR-CACHE-035`.
+    loaded_at: Option<&'a str>,
+
+    /// One object per collection, carrying its name, its count and whether it
+    /// was loaded whole, per `FR-CDOC-006`.
+    collections: &'a [Held],
+}
+
+/// Which object `tpl cache load` and `tpl cache clean` were given
+/// (`FR-CACHE-022`, `FR-CACHE-023`, `FR-CACHE-024`).
+///
+/// The absence of all three flags is not an error: it is the whole-catalogue
+/// form both requirements give it.
+///
+/// It is [`Clone`] and not [`Copy`], for the reason [`named::Wanted`] is.
+#[derive(Debug, Clone)]
+enum Wanted<'a> {
+    /// No object flag: the whole catalogue of the selected entry.
+    Everything,
+    /// `--table <name>`.
+    Table(&'a str),
+    /// `--view <name>`.
+    View(&'a str),
+    /// `--routine <name>`, in either the bare or a qualified form.
+    Routine(named::Wanted<'a>),
+}
+
+impl<'a> Wanted<'a> {
+    /// What `object` names, for the command at `invocation`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::MutuallyExclusiveFlags`] — `64` — where more than one
+    /// kind was given: `FR-CACHE-024` names **an** individual object, and two
+    /// kinds in one invocation name none. Returns
+    /// [`Error::RoutinePrefixNotLowerCase`] for the token shape `FR-SCH-008`
+    /// refuses, which is decided without a server and therefore precedes
+    /// everything else this command does.
+    fn of(object: &'a local::Object, invocation: &'static str) -> Result<Self, Error> {
+        let given: [(&'static str, Option<&'a String>); 3] = [
+            ("--table", object.table.first()),
+            ("--view", object.view.first()),
+            ("--routine", object.routine.first()),
+        ];
+        let mut named = given.iter().filter(|(_, value)| value.is_some());
+
+        let Some((first, value)) = named.next() else {
+            return Ok(Self::Everything);
+        };
+
+        if let Some((second, _)) = named.next() {
+            return Err(Error::MutuallyExclusiveFlags {
+                first: (*first).to_owned(),
+                second: (*second).to_owned(),
+            });
+        }
+
+        let name = value.map_or("", String::as_str);
+
+        Ok(match *first {
+            "--table" => Self::Table(name),
+            "--view" => Self::View(name),
+            _ => Self::Routine(named::routine_token(name, invocation)?),
+        })
+    }
+}
+
+/// Runs one `cache` subcommand.
+///
+/// # Errors
+///
+/// Returns what each subcommand's own function returns.
+pub(crate) fn run<W: Write>(
+    out: &mut W,
+    globals: &Globals,
+    command: &Command,
+) -> Result<(), Error> {
+    match command {
+        Command::Load { object, caching } => load(globals, object, caching),
+        Command::Clean { object } => clean(globals, object),
+        Command::Status { output } => status(out, globals, output),
+    }
+}
+
+/// Reads the catalogue and stores it (`FR-CACHE-022`).
+///
+/// With no object flag the whole catalogue of the selected entry is stored;
+/// with one, that object alone. The command always reaches the server, which is
+/// why `FR-CACHE-018` accepts `--direct` and ignores it, and `FR-CACHE-019`
+/// refuses `--no-cache` outright.
+///
+/// It writes nothing to standard output. `FR-CACHE-027` gives `--format` to
+/// `status` and to neither of the other two, so this command has no
+/// representation to answer in and `BR-CLI-004` leaves stdout empty.
+///
+/// # Errors
+///
+/// Returns [`Error::LoadWithoutStoring`] — `64` — for `--no-cache`, per
+/// `FR-CACHE-019`; what [`Wanted::of`] returns for the object flags; what the
+/// read returns; and the `66` of `FR-SCH-010` where the named object does not
+/// exist.
+fn load(globals: &Globals, object: &local::Object, caching: &local::Caching) -> Result<(), Error> {
+    // FR-CACHE-019, and FR-ERR-006 step 1: a contradiction between a flag the
+    // command declares and what the command does is decided from the
+    // invocation alone, before anything is discovered or opened.
+    if caching.no_cache {
+        return Err(Error::LoadWithoutStoring);
+    }
+
+    let wanted = Wanted::of(object, LOAD)?;
+    // FR-CACHE-018: `--direct` is accepted and ignored, because reading the
+    // server is what the command does — so the lookup is suppressed whatever
+    // the invocation said.
+    let reader = Reader::new(globals, None);
+    let opened = reader.open()?;
+    let catalogue = reader.fetch(&opened)?;
+    let model = catalogue.model()?;
+    let document = document::context(&model)?;
+    match wanted {
+        Wanted::Everything => opened.cache.write(&document, Covered::Everything),
+        Wanted::Table(name) => {
+            let found = named::table(&document, name, sought(&opened, &document))?;
+
+            opened.cache.write(
+                &only(&document, vec![found.clone()], Vec::new(), Vec::new()),
+                Covered::One(Collection::Tables),
+            );
+        }
+        Wanted::View(name) => {
+            let found = named::view(&document, name, sought(&opened, &document))?;
+
+            opened.cache.write(
+                &only(&document, Vec::new(), vec![found.clone()], Vec::new()),
+                Covered::One(Collection::Views),
+            );
+        }
+        Wanted::Routine(token) => {
+            let found = named::routine(&document, &token, sought(&opened, &document), LOAD)?;
+
+            opened.cache.write(
+                &only(&document, Vec::new(), Vec::new(), vec![found.clone()]),
+                Covered::One(Collection::Routines),
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Removes cached data for the selected entry (`FR-CACHE-023`).
+///
+/// It reaches no server: `FR-CACHE-009` does not list it among the commands
+/// that read through the cache, and `FR-CACHE-020` gives it neither cache flag.
+/// The entry is therefore selected and not resolved, which is also what keeps
+/// the `password_command` of `FR-CONF-023` from running for a command that
+/// authenticates to nothing.
+///
+/// # Errors
+///
+/// Returns what the project, the configuration and the selection return; what
+/// [`Wanted::of`] returns for the object flags; [`Error::AmbiguousRoutineName`]
+/// — `64` — where a bare routine name reaches two stored objects, per
+/// `FR-CACHE-024`; and [`Error::ProjectFileUnwritable`] where the removal
+/// failed.
+fn clean(globals: &Globals, object: &local::Object) -> Result<(), Error> {
+    let wanted = Wanted::of(object, CLEAN)?;
+    let reader = Reader::new(globals, None);
+    let (project, configuration) = source::project(reader.tpl_dir())?;
+    let entry = source::entry_of(&configuration, reader.requested())?;
+    let cache = Store::of(project.root(), entry);
+
+    match wanted {
+        Wanted::Everything => cache.clean(),
+        Wanted::Table(name) => cache.clean_one(Collection::Tables, cache.table_file(name)),
+        Wanted::View(name) => cache.clean_one(Collection::Views, cache.view_file(name)),
+        Wanted::Routine(named::Wanted::Qualified(kind, name)) => {
+            cache.clean_one(Collection::Routines, cache.routine_file(&kind, name))
+        }
+        Wanted::Routine(named::Wanted::Bare(name)) => {
+            let procedure = cache.routine_file(&RoutineKind::Procedure, name);
+            let function = cache.routine_file(&RoutineKind::Function, name);
+
+            // FR-CACHE-024 and FR-SCH-010: a bare name that reaches both
+            // namespaces is refused rather than resolved in favour of either.
+            // The population here is what the store holds, because that is
+            // what the command acts on.
+            if Store::holds(procedure.as_deref()) && Store::holds(function.as_deref()) {
+                return Err(Error::AmbiguousRoutineName {
+                    name: name.to_owned(),
+                    entry: entry.to_owned(),
+                    // The store says which database it was read from. A store
+                    // that holds two routine files and no readable metadata
+                    // has been altered by hand, and the entry name is the one
+                    // instance left to name.
+                    database: cache.database().unwrap_or_else(|| entry.to_owned()),
+                    invocation: CLEAN,
+                });
+            }
+
+            let held = if Store::holds(procedure.as_deref()) {
+                procedure
+            } else {
+                function
+            };
+
+            cache.clean_one(Collection::Routines, held)
+        }
+    }
+}
+
+/// Reports what the cache holds (`FR-CACHE-025`, `FR-CACHE-034`).
+///
+/// `source` is `project` and not `cache`, per `FR-CACHE-034`: the command
+/// reports **on** the store rather than being served **from** it. An empty
+/// store is a success, per `FR-CACHE-026` and `FR-OUT-033`, and carries
+/// `loaded_at` `null` with an empty collection array, per `FR-CACHE-035`.
+///
+/// # Errors
+///
+/// Returns what the project, the configuration and the selection return, and
+/// [`Error::StdoutUnwritable`] where the stream refused the write.
+fn status<W: Write>(out: &mut W, globals: &Globals, output: &local::Output) -> Result<(), Error> {
+    let reader = Reader::new(globals, None);
+    let (project, configuration) = source::project(reader.tpl_dir())?;
+    let entry = source::entry_of(&configuration, reader.requested())?;
+    let held = Store::of(project.root(), entry).status();
+
+    let format = output
+        .format
+        .first()
+        .copied()
+        .unwrap_or(local::Format::Text);
+    let form = if output.pretty.pretty {
+        Form::Indented
+    } else {
+        Form::Compact
+    };
+
+    match format {
+        local::Format::Text => text(out, entry, &held),
+        local::Format::Json => crate::output::emit_to(
+            out,
+            &Document::new(
+                Source::Project,
+                StatusData {
+                    entry,
+                    loaded_at: held.loaded_at.as_deref(),
+                    collections: &held.collections,
+                },
+            ),
+            form,
+        ),
+    }
+}
+
+/// Writes the `text` form of `tpl cache status`.
+///
+/// Two parts: the entry and the load time, which are properties of the store,
+/// and the collections, which are its contents. The second is written even when
+/// it is empty, because it **is** the result of this command and `FR-OUT-034`
+/// requires an empty result to print its header row and nothing beneath it.
+///
+/// # Errors
+///
+/// Returns [`Error::StdoutUnwritable`] where the stream refused the write.
+fn text<W: Write>(out: &mut W, entry: &str, held: &Status) -> Result<(), Error> {
+    let own: Vec<[layout::Cell<'_>; 2]> = vec![
+        [layout::text("entry"), layout::text(entry)],
+        [
+            layout::text("loaded_at"),
+            layout::optional(held.loaded_at.as_deref()),
+        ],
+    ];
+    let collections: Vec<[layout::Cell<'_>; 3]> = held
+        .collections
+        .iter()
+        .map(|collection| {
+            [
+                layout::text(collection.name),
+                layout::count(collection.count),
+                layout::flag(collection.whole),
+            ]
+        })
+        .collect();
+
+    let mut sections = layout::Sections::default();
+    sections.table(&Table::new(layout::PROPERTY, &own, Order::AsGiven))?;
+    sections.heading(COLLECTIONS_HEADING);
+    sections.table(&Table::new(COLLECTIONS, &collections, Order::AsGiven))?;
+
+    layout::emit(out, &sections)
+}
+
+/// The `database` object narrowed to the members a named load stores.
+///
+/// `FR-CACHE-022` and `FR-CACHE-024` make `tpl cache load --table orders` store
+/// that table and nothing else, and [`Cache::write`] stores every member the
+/// document it is given carries — so the narrowing is done here, on the
+/// document, rather than by a second store path.
+///
+/// The metadata travels with it because `FR-SCH-025` obliges `tpl schema info`
+/// to read through the cache too, and the database's own three fields and the
+/// `server` object of `FR-CTX-031` belong to no collection.
+fn only<'d>(
+    document: &DatabaseDocument<'d>,
+    tables: Vec<TableDocument<'d>>,
+    views: Vec<View<'d>>,
+    routines: Vec<Routine<'d>>,
+) -> DatabaseDocument<'d> {
+    DatabaseDocument {
+        name: document.name.clone(),
+        charset: document.charset.clone(),
+        collation: document.collation.clone(),
+        server: document.server.clone(),
+        tables,
+        views: Cow::Owned(views),
+        routines: Cow::Owned(routines),
+    }
+}
+
+/// Where a named load was made, for the conditions whose `cause` names the
+/// population.
+fn sought<'a>(opened: &'a Opened, document: &'a DatabaseDocument<'_>) -> named::Sought<'a> {
+    named::Sought {
+        entry: opened.entry(),
+        database: &document.name,
+    }
 }

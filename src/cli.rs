@@ -46,22 +46,24 @@
 //! another — `FR-OUT-009`, `FR-RND-005`, `FR-CFG-016`, `FR-CFG-029` — is not
 //! declared here, for the reason [`globals`] gives for `FR-CLI-015`: a refusal
 //! written in the parser's words is a refusal the caller never reads in the
-//! four labelled lines of `FR-ERR-008`.
+//! four labelled lines of `FR-ERR-008`. The first of the four is applied by
+//! [`rules`], over the declarations of this tree, and reaches every node that
+//! declares both flags without naming one of them.
 //!
 //! # The interim arrangement
 //!
 //! One thing in this module is deliberately provisional, and it is named here
 //! so that it is not mistaken for finished work.
 //!
-//! **A leaf whose work is a later sprint reports `70`.** Every leaf of the tree
-//! parses today and all but two of them act on nothing. [`route`] gives each
+//! **A leaf whose work is a later sprint reports `70`.** [`route`] gives each
 //! such leaf an arm that returns [`Error::InternalInvariant`] naming its
 //! command path, which `FR-ERR-001` makes exit `70` — the code for a condition
 //! the caller cannot have caused and cannot correct, which is exactly what a
 //! parsed command with no implementation is. The arrangement is an arm per leaf
 //! rather than one catch-all so that each later sprint replaces **its own**
 //! entry, and so that the arm it must replace is named by its path rather than
-//! found by reading.
+//! found by reading. What remains under it is the four `template` subcommands,
+//! `tpl render`, and `tpl cfg database test`.
 //!
 //! Nothing else is provisional here.
 //!
@@ -92,8 +94,9 @@
 //! `FR-ERR-006` makes argument parsing step 1 of the validation order, for
 //! every command without exception, and the step is three things in one:
 //! whatever the parser refuses, which [`intercept`] re-renders per `OD-08`;
-//! then the repetition of `FR-CLI-014`; then the pair of `FR-CLI-015`.
-//! [`rules`] owns the last two and states the order among the three.
+//! then the repetition of `FR-CLI-014`; then the pair of `FR-CLI-015`; then
+//! `--pretty` without `--format json`, per `FR-OUT-009`. [`rules`] owns the
+//! last three and states the order among the four.
 //!
 //! Two of the six rules are the parser's own behaviour, and are therefore
 //! asserted here rather than implemented: `FR-CLI-017` terminates the arguments
@@ -106,9 +109,11 @@ mod cfg;
 mod globals;
 mod help;
 mod intercept;
+mod layout;
 mod local;
 mod rules;
 mod schema;
+mod source;
 mod template;
 
 use std::ffi::OsString;
@@ -417,6 +422,12 @@ fn interpret(
 
     rules::refuse_both_verbosities(&globals)?;
 
+    // Before the two flag forms are answered, because `FR-ERR-006` runs step 1
+    // "for every command without exception": `tpl schema tables --help
+    // --pretty` is `64` for the same reason an unknown flag on `tpl --help`
+    // is.
+    rules::refuse_pretty_without_json(tree, matches)?;
+
     if globals.help || globals.version {
         return Ok(requested(globals, matches));
     }
@@ -498,6 +509,7 @@ fn flagged(argv: &[OsString]) -> Result<Option<Invocation>, Error> {
 
     rules::refuse_repetition(&waived, &matches)?;
     rules::refuse_both_verbosities(&globals)?;
+    rules::refuse_pretty_without_json(&waived, &matches)?;
 
     Ok(Some(requested(globals, &matches)))
 }
@@ -620,16 +632,9 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
     match command {
         None => node_help(out, &[]),
 
-        Some(Command::Schema(schema)) => match &schema.command {
+        Some(Command::Schema(read)) => match &read.command {
             None => node_help(out, &["schema"]),
-            Some(schema::Command::Info { .. }) => not_yet_implemented!("tpl schema info"),
-            Some(schema::Command::Tables { .. }) => not_yet_implemented!("tpl schema tables"),
-            Some(schema::Command::Table { .. }) => not_yet_implemented!("tpl schema table"),
-            Some(schema::Command::Views { .. }) => not_yet_implemented!("tpl schema views"),
-            Some(schema::Command::View { .. }) => not_yet_implemented!("tpl schema view"),
-            Some(schema::Command::Routines { .. }) => not_yet_implemented!("tpl schema routines"),
-            Some(schema::Command::Routine { .. }) => not_yet_implemented!("tpl schema routine"),
-            Some(schema::Command::Dump { .. }) => not_yet_implemented!("tpl schema dump"),
+            Some(command) => schema::run(out, &invocation.globals, command),
         },
 
         Some(Command::Template(template)) => match &template.command {
@@ -642,11 +647,9 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
 
         Some(Command::Render { .. }) => not_yet_implemented!("tpl render"),
 
-        Some(Command::Cache(cache)) => match &cache.command {
+        Some(Command::Cache(store)) => match &store.command {
             None => node_help(out, &["cache"]),
-            Some(cache::Command::Load { .. }) => not_yet_implemented!("tpl cache load"),
-            Some(cache::Command::Clean { .. }) => not_yet_implemented!("tpl cache clean"),
-            Some(cache::Command::Status { .. }) => not_yet_implemented!("tpl cache status"),
+            Some(command) => cache::run(out, &invocation.globals, command),
         },
 
         Some(Command::Cfg(config)) => {
@@ -817,15 +820,28 @@ mod tests {
         (&["version"], &[]),
     ];
 
-    /// The leaves this sprint implements, which have left the interim `70`.
+    /// The leaves that have left the interim `70`.
     ///
     /// `tpl help` prints the help of the node its path names, in either of the
     /// two representations of `FR-HELP-001`, and `tpl version` prints the line
     /// of `FR-HELP-005`. `tpl init` creates the five artefacts of
     /// `FR-PROJ-017`, and the nine `cfg` subcommands that do not contact a
-    /// server maintain `.tpl/.cfg`. Every other leaf is still the arrangement
-    /// this module's own documentation describes.
-    const IMPLEMENTED: [&[&str]; 12] = [
+    /// server maintain `.tpl/.cfg`. The eight `schema` subcommands read the
+    /// catalogue through the cache, per `FR-SCH-025`, and the three of
+    /// `tpl cache` load, clean and report on it. Every other leaf is still the
+    /// arrangement this module's own documentation describes.
+    const IMPLEMENTED: [&[&str]; 23] = [
+        &["schema", "info"],
+        &["schema", "tables"],
+        &["schema", "table"],
+        &["schema", "views"],
+        &["schema", "view"],
+        &["schema", "routines"],
+        &["schema", "routine"],
+        &["schema", "dump"],
+        &["cache", "load"],
+        &["cache", "clean"],
+        &["cache", "status"],
         &["help"],
         &["version"],
         &["init"],

@@ -45,6 +45,25 @@ usage() {
 # is logged too; `dump` therefore drops connections made over the Unix socket by
 # default, which is how this script and up.sh reach the server and is not how
 # anything under test reaches it. --all keeps them.
+#
+# --catalogue admits two command types, and the count is what decides which.
+# A client may send one statement in either of two ways, and the general log
+# spells the two differently:
+#
+#   Query                     the text protocol: one row per statement issued
+#   Prepare, then Execute     the binary protocol: one Prepare per distinct
+#                             statement text, and one Execute per issue of it
+#
+# `tpl` uses the binary protocol for every catalogue statement and the text
+# protocol for the three connection-start statements, so both spellings occur
+# in one window and a filter naming one kind alone sees part of the read. The
+# filter therefore admits Query and Execute, which are the two rows that mean
+# *a statement was issued*, and excludes Prepare, which means *a statement text
+# was registered*: a statement issued twice on one connection is prepared once
+# and executed twice, so counting Prepare counts texts rather than issues, and
+# admitting both Prepare and Execute would count every prepared statement
+# twice. Observed on 2026-09-20, on all four series: `tpl schema dump` leaves
+# 11 Prepare rows and 11 Execute rows, and this filter returns 11.
 # --------------------------------------------------------------------------
 
 statements_on() {
@@ -72,7 +91,8 @@ statements_dump() {
             --user)      shift; where="$where AND user_host LIKE '%[$1]%'" ;;
             --kind)      shift; where="$where AND command_type = '$1'" ;;
             --queries)   where="$where AND command_type = 'Query'" ;;
-            --catalogue) where="$where AND command_type = 'Query'
+            # Query and Execute, never Prepare: the header records why.
+            --catalogue) where="$where AND command_type IN ('Query', 'Execute')
                                 AND argument LIKE '%INFORMATION_SCHEMA%'" ;;
             --count)     count=yes ;;
             *) die "unknown filter for statements dump: $1" ;;

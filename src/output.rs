@@ -62,7 +62,7 @@ use serde::Serialize;
 use crate::error::Error;
 use writer::Writer;
 
-pub(crate) use envelope::{Collection, Document, Source};
+pub(crate) use envelope::{Collection, Document, SCHEMA_VERSION, Source};
 pub(crate) use json::Form;
 pub(crate) use text::{Order, Table};
 
@@ -86,6 +86,12 @@ pub(crate) use text::{Order, Table};
 /// reason. A consumer that closed stdout **before** the first byte is not a
 /// failure at all: `FR-ERR-025` makes it a silent success and this returns
 /// `Ok(())`.
+#[allow(
+    dead_code,
+    reason = "every command takes the stream it writes to as a parameter, so that a test drives \
+              it without a process; the process locks standard output once, in cli's dispatch, \
+              and hands that handle down"
+)]
 pub(crate) fn emit<T: Serialize>(document: &Document<T>, form: Form) -> Result<(), Error> {
     emit_to(std::io::stdout().lock(), document, form)
 }
@@ -178,6 +184,12 @@ pub(crate) fn emit_verbatim<W: std::io::Write>(stream: W, text: &str) -> Result<
 /// this path at all: `FR-ERR-025` makes a cut listing a silent success — "in
 /// `text`, a cut listing is exactly what `head` asked for" — and this returns
 /// `Ok(())`.
+#[allow(
+    dead_code,
+    reason = "every command takes the stream it writes to as a parameter, so that a test drives \
+              it without a process; the process locks standard output once, in cli's dispatch, \
+              and hands that handle down"
+)]
 pub(crate) fn emit_table<C, const COLUMNS: usize>(
     table: &Table<'_, C, COLUMNS>,
 ) -> Result<(), Error>

@@ -56,7 +56,18 @@ impl fmt::Display for Position {
 ///
 /// `FR-ERR-034` obliges the `cause` line of a `66` to name it, and the `cause`
 /// line of a `77` to name the object whose property could not be read.
+///
+/// **The two obligations range over different populations, and the fourth
+/// variant is why.** A `66` is reached for the three object kinds
+/// `FR-SCH-010` names, and for those alone. A `77` under `FR-PRIV-021` is
+/// reached for the **database** itself, whose own metadata the reader could
+/// not read, and that requirement rejects `66` for it in as many words: the
+/// nearest-match suggestion a `66` carries is drawn from a population, and the
+/// population of databases is one this system never reads. [`Self::Database`]
+/// therefore has no listing subcommand, which is the one place the difference
+/// shows — see `listing` in the crate's own `diagnostics` module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CatalogueObjectKind {
     /// A base table.
     Table,
@@ -64,6 +75,11 @@ pub enum CatalogueObjectKind {
     View,
     /// A stored procedure or function.
     Routine,
+    /// The database a read covers, per `FR-CONF-041` (`FR-PRIV-021`).
+    ///
+    /// It reaches a `77` and never a `66`, for the reason this type's own
+    /// documentation gives.
+    Database,
 }
 
 impl fmt::Display for CatalogueObjectKind {
@@ -72,6 +88,7 @@ impl fmt::Display for CatalogueObjectKind {
             Self::Table => "table",
             Self::View => "view",
             Self::Routine => "routine",
+            Self::Database => "database",
         };
         f.write_str(name)
     }
@@ -400,6 +417,62 @@ pub enum Error {
         second: String,
     },
 
+    /// A token naming one routine whose qualifying prefix is spelled in a case
+    /// other than lower (`FR-SCH-008`).
+    ///
+    /// The requirement fixes `procedure:` and `function:` and "no other
+    /// spelling of either", and refuses a token whose prefix folds to one of
+    /// the two without being written in lower case. It is decided from the
+    /// token alone, so it precedes every catalogue read, at step 1 of
+    /// `FR-ERR-006`.
+    #[error("'{token}' does not carry its prefix in lower case")]
+    RoutinePrefixNotLowerCase {
+        /// The token as written, never normalised (`FR-CLI-020`).
+        token: String,
+        /// The prefix the token folds to — `procedure` or `function`, in the
+        /// lower case `FR-SCH-008` fixes.
+        prefix: &'static str,
+        /// The routine name the token carries after the first colon, as
+        /// written. It is a value this corpus does not fix, so `FR-ERR-022`
+        /// governs it and `FR-ERR-023` drops it from the hint where it falls
+        /// outside the character set.
+        name: String,
+        /// The invocation the token was given to, below `tpl`, as a literal of
+        /// `FR-ERR-022` — `schema routine`, `cache load --routine`, or
+        /// `cache clean --routine`.
+        invocation: &'static str,
+    },
+
+    /// A bare routine name that names both a procedure and a function
+    /// (`FR-SCH-010`).
+    ///
+    /// `FR-SCH-010` refuses it rather than resolving it: a first-wins rule
+    /// would make one of the two objects permanently unreachable through a
+    /// bare name, and which one it was would depend on the order the catalogue
+    /// returned them.
+    #[error("routine '{name}' names both a procedure and a function")]
+    AmbiguousRoutineName {
+        /// The bare name as written.
+        name: String,
+        /// The database entry of `.tpl/.cfg` the read was made through.
+        entry: String,
+        /// The server-side database the two objects were found in.
+        database: String,
+        /// The invocation the token was given to, below `tpl`, as a literal of
+        /// `FR-ERR-022`.
+        invocation: &'static str,
+    },
+
+    /// `--no-cache` given to `tpl cache load` (`FR-CACHE-019`).
+    ///
+    /// The flag is declared by the command, per `FR-CACHE-017`, and refused by
+    /// it: loading without storing is a contradiction between a flag the
+    /// command declares and what the command does. Not declaring it would
+    /// report the contradiction as an unknown flag, which says the wrong
+    /// thing.
+    #[error("'--no-cache' cannot be given to 'tpl cache load'")]
+    LoadWithoutStoring,
+
     /// A value that does not conform to the type its parameter declares: a
     /// flag value (`FR-ERR-001`, the `64` row) or a `tpl cfg set` value
     /// (`FR-CFG-010`).
@@ -540,6 +613,11 @@ pub enum Error {
         entry: String,
         /// The server-side database it was sought in — the other half.
         database: String,
+        /// The nearest matches among the objects of that kind the database
+        /// does hold, selected by `FR-ERR-019` and ordered as it fixes. Empty
+        /// where nothing qualified, per `FR-ERR-020`. `FR-SCH-010` obliges the
+        /// suggestion.
+        nearest: Vec<String>,
     },
 
     /// A named template that does not exist under the template root
@@ -729,6 +807,20 @@ pub enum Error {
     /// A property of an object requested by name could not be read, so the
     /// object is incomplete and is not returned in part (`FR-PRIV-003`,
     /// `FR-PRIV-004`, `FR-PRIV-013`).
+    ///
+    /// **It carries `FR-PRIV-021` as well**, with `kind` set to
+    /// [`CatalogueObjectKind::Database`], `object` the database the selected
+    /// entry names per `FR-CONF-041`, and `property` the literal `metadata`.
+    /// That requirement obliges exactly what this variant already states — the
+    /// database named, and that its metadata could not be read — and its
+    /// `77` is this one, per the `77` row of `FR-ERR-034`, which puts *which
+    /// property of which object* on the privilege side of the row.
+    ///
+    /// *A variant of its own was rejected*: it would say the same three things
+    /// through a fourth field, and `FR-PRIV-021` records that the condition
+    /// admits two explanations it does not separate — a reader who may not see
+    /// the database, and a database that is not there — so there is nothing a
+    /// second variant could carry that this one cannot.
     #[error("the {property} of {kind} '{object}' could not be read")]
     PropertyNotReadable {
         /// The kind of the object.
@@ -966,6 +1058,32 @@ pub enum Error {
         fault: ReadOnlyFault,
     },
 
+    /// The selected entry does not carry a key the invocation needs
+    /// (`FR-CONF-040`, `FR-CONF-041`).
+    ///
+    /// Two requirements produce it and both are decided where `.tpl/.cfg` is
+    /// open, which is entry resolution: `FR-CONF-040` for an entry that names
+    /// no host, and `FR-CONF-041` for one that names no database while the
+    /// invocation reads the catalogue. `FR-CONF-040` rejects composing either
+    /// refusal further down, where neither the file nor the position that
+    /// declared the entry is in hand.
+    #[error("database entry '{entry}' does not carry '{key}'")]
+    EntryKeyMissing {
+        /// The entry that carries neither the key nor the alternative.
+        entry: String,
+        /// The key the entry does not carry, fully qualified —
+        /// `database.<name>.host` or `database.<name>.database`.
+        key: String,
+        /// The file the entry is declared in; the `78` row of `FR-ERR-034`
+        /// obliges the `cause` to name it.
+        file: PathBuf,
+        /// The flag of `FR-CFG-027` that writes the key, as a literal of
+        /// `FR-ERR-022` — `--host` or `--schema`.
+        flag: &'static str,
+        /// The placeholder the hint writes after that flag, as a literal.
+        placeholder: &'static str,
+    },
+
     /// The command requires a database entry and none is selected — neither
     /// `-d/--database` nor `core.database` (`FR-ERR-004`, `FR-GLOB-006`).
     #[error("no database entry is selected")]
@@ -1106,6 +1224,9 @@ impl Error {
             | Self::InvocationRejected { .. }
             | Self::MissingArgument { .. }
             | Self::MutuallyExclusiveFlags { .. }
+            | Self::RoutinePrefixNotLowerCase { .. }
+            | Self::AmbiguousRoutineName { .. }
+            | Self::LoadWithoutStoring
             | Self::MalformedValue { .. }
             | Self::UnknownConfigurationKey { .. }
             | Self::DatabaseEntryAlreadyExists { .. }
@@ -1163,6 +1284,7 @@ impl Error {
             | Self::PasswordCommandNotExecutable { .. }
             | Self::PasswordCommandFailed { .. }
             | Self::ReadOnlySessionNotEnforced { .. }
+            | Self::EntryKeyMissing { .. }
             | Self::NoDatabaseEntrySelected { .. }
             | Self::ServerNotMariaDb { .. }
             | Self::SeriesNotSupported { .. } => 78,
@@ -1184,7 +1306,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 58;
+    const VARIANT_COUNT: usize = 62;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -1292,6 +1414,25 @@ mod tests {
                 64,
             ),
             (
+                Error::RoutinePrefixNotLowerCase {
+                    token: "PROCEDURE:calc_vat".to_owned(),
+                    prefix: "procedure",
+                    name: "calc_vat".to_owned(),
+                    invocation: "schema routine",
+                },
+                64,
+            ),
+            (
+                Error::AmbiguousRoutineName {
+                    name: "calc_vat".to_owned(),
+                    entry: "shop".to_owned(),
+                    database: "shop".to_owned(),
+                    invocation: "schema routine",
+                },
+                64,
+            ),
+            (Error::LoadWithoutStoring, 64),
+            (
                 Error::MalformedValue {
                     parameter: "--timeout".to_owned(),
                     value: "soon".to_owned(),
@@ -1367,6 +1508,7 @@ mod tests {
                     name: "ordrs".to_owned(),
                     entry: "shop".to_owned(),
                     database: "shop".to_owned(),
+                    nearest: Vec::new(),
                 },
                 66,
             ),
@@ -1616,6 +1758,16 @@ mod tests {
                 },
                 78,
             ),
+            (
+                Error::EntryKeyMissing {
+                    entry: "shop".to_owned(),
+                    key: "database.shop.host".to_owned(),
+                    file: path(),
+                    flag: "--host",
+                    placeholder: "<host>",
+                },
+                78,
+            ),
             (Error::NoDatabaseEntrySelected { file: path() }, 78),
             (
                 Error::ServerNotMariaDb {
@@ -1652,6 +1804,9 @@ mod tests {
             Error::InvocationRejected { .. } => "InvocationRejected",
             Error::MissingArgument { .. } => "MissingArgument",
             Error::MutuallyExclusiveFlags { .. } => "MutuallyExclusiveFlags",
+            Error::RoutinePrefixNotLowerCase { .. } => "RoutinePrefixNotLowerCase",
+            Error::AmbiguousRoutineName { .. } => "AmbiguousRoutineName",
+            Error::LoadWithoutStoring => "LoadWithoutStoring",
             Error::MalformedValue { .. } => "MalformedValue",
             Error::UnknownConfigurationKey { .. } => "UnknownConfigurationKey",
             Error::DatabaseEntryAlreadyExists { .. } => "DatabaseEntryAlreadyExists",
@@ -1695,6 +1850,7 @@ mod tests {
             Error::PasswordCommandNotExecutable { .. } => "PasswordCommandNotExecutable",
             Error::PasswordCommandFailed { .. } => "PasswordCommandFailed",
             Error::ReadOnlySessionNotEnforced { .. } => "ReadOnlySessionNotEnforced",
+            Error::EntryKeyMissing { .. } => "EntryKeyMissing",
             Error::NoDatabaseEntrySelected { .. } => "NoDatabaseEntrySelected",
             Error::ServerNotMariaDb { .. } => "ServerNotMariaDb",
             Error::SeriesNotSupported { .. } => "SeriesNotSupported",
@@ -1810,6 +1966,7 @@ mod tests {
                 name: "ordrs".to_owned(),
                 entry: "shop".to_owned(),
                 database: "shop".to_owned(),
+                nearest: Vec::new(),
             }
             .to_string(),
             "table 'ordrs' does not exist in database 'shop'"

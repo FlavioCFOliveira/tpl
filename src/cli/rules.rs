@@ -1,7 +1,7 @@
 //! The parsing rules `tpl` applies to an invocation the parser accepted.
 //!
 //! `FR-ERR-006` puts argument parsing first in the validation order and runs it
-//! "for every command without exception". Step 1 is therefore three things in
+//! "for every command without exception". Step 1 is therefore four things in
 //! one, in this order:
 //!
 //! | Order | What is decided | Where |
@@ -9,13 +9,16 @@
 //! | 1 | Whatever the parser itself refuses — an unknown command, an unknown flag, a value outside an enumeration | [`super::intercept`] |
 //! | 2 | A flag that carries a single value, given more than once (`FR-CLI-014`) | [`refuse_repetition`] |
 //! | 3 | `-q/--quiet` together with `-v/--verbose` (`FR-CLI-015`) | [`refuse_both_verbosities`] |
+//! | 4 | `--pretty` without `--format json`, on a node that declares both (`FR-OUT-009`) | [`refuse_pretty_without_json`] |
 //!
-//! The order among the three is this module's choice and is stated here because
+//! The order among the four is this module's choice and is stated here because
 //! `FR-ERR-006` fixes the order *between* steps and not within one. A refusal
 //! that is a property of **one** flag precedes a refusal that is a property of
 //! **two**, so `tpl -d a -d b -q -v version` reports the repetition: the
 //! repeated flag is wrong however the rest of the line reads, and the pair is
-//! only wrong as a pair.
+//! only wrong as a pair. The two pair refusals are then ordered by reach: the
+//! pair of `FR-CLI-015` is two **global** flags and is wrong at every node of
+//! the tree, and the pair of `FR-OUT-009` is two local flags of one node.
 //!
 //! `FR-CLI-016` needs no rule of its own. The count saturates twice over — at
 //! `255` in the parser, which the declaration in [`super::globals`] records,
@@ -31,8 +34,28 @@
 use clap::{ArgAction, ArgMatches};
 
 use super::globals::Globals;
+use super::local::Format;
 use crate::diagnostics::verbosity::Level;
 use crate::error::{self, Error};
+
+/// `--pretty`, by the identifier `ArgMatches` is keyed by.
+const PRETTY: &str = "pretty";
+
+/// `--format`, by the identifier `ArgMatches` is keyed by.
+const FORMAT: &str = "format";
+
+/// `--pretty`, in the long form the tree declares it under.
+const PRETTY_FLAG: &str = "--pretty";
+
+/// `--format text`, which is the member `--pretty` excludes.
+///
+/// It is a literal rather than a value interpolated from the invocation.
+/// `--format` takes a closed set of two, per `FR-OUT-001`, and this refusal is
+/// reached only where the value in force is the one that is not `json` — so
+/// there is exactly one spelling the second member can have, and composing it
+/// from the matched value would put a caller-supplied byte on a line
+/// `FR-ERR-024` would then have to escape.
+const FORMAT_TEXT: &str = "--format text";
 
 /// The one flag of the tree that is repeatable by requirement.
 ///
@@ -167,6 +190,85 @@ pub(super) fn refuse_both_verbosities(globals: &Globals) -> Result<(), Error> {
     Ok(())
 }
 
+/// Refuses `--pretty` on a command that declares `--format` and was not given
+/// `--format json` (`FR-OUT-009`).
+///
+/// `--pretty` is declared by the seventeen commands of `FR-GLOB-021`, and the
+/// rule reaches **sixteen** of them: the seventeenth is `tpl schema dump`,
+/// which declares `--pretty` and no `--format` because its only output is JSON,
+/// per `FR-SCH-019`. `FR-OUT-010` and `FR-SCH-020` make `--pretty` stand alone
+/// there, and the guard below is what keeps that case working — the rule is
+/// conditioned on the node declaring **both**, so a node that declares one of
+/// the two is not reached by it at all.
+///
+/// The rule is applied over the **declarations** rather than over a list of
+/// command paths, for the reason [`refuse_repetition`] gives: a node that gains
+/// the pair is governed without anything here changing, and a node that loses
+/// `--format` stops being governed at the same moment it stops being able to
+/// fail. The recursion is the same walk down the matched chain, because
+/// `FR-GLOB-021` keeps both flags out of the global set and each is therefore
+/// matched at the node that declared it.
+///
+/// The value in force is read after [`refuse_repetition`] has run, so there is
+/// at most one occurrence; the declaration in [`super::local`] gives `--format`
+/// a default, so the vector is never empty and its first entry is the format
+/// the invocation resolves to — which is what makes `--pretty` alone, with no
+/// `--format` written at all, the refusal `FR-OUT-009` states it is.
+///
+/// # Errors
+///
+/// Returns [`Error::MutuallyExclusiveFlags`] naming both members of the pair,
+/// which is what the `64` row of `FR-ERR-034` obliges the `cause` line to name,
+/// and [`Error::InternalInvariant`] where the matched tree and the matches
+/// disagree about which nodes exist.
+pub(super) fn refuse_pretty_without_json(
+    command: &clap::Command,
+    matches: &ArgMatches,
+) -> Result<(), Error> {
+    if declares(command, PRETTY) && declares(command, FORMAT) {
+        // `get_flag` and `get_many` are keyed by identifier and panic on an
+        // argument the node does not declare, which is what the guard above
+        // rules out. `get_many` rather than `get_one`: the declaration
+        // accumulates occurrences, per `OD-08`, and only the first is the
+        // format in force.
+        let pretty = matches.get_flag(PRETTY);
+        let format = matches
+            .get_many::<Format>(FORMAT)
+            .and_then(|mut values| values.next().copied())
+            .unwrap_or(Format::Text);
+
+        if pretty && format != Format::Json {
+            return Err(Error::MutuallyExclusiveFlags {
+                first: PRETTY_FLAG.to_owned(),
+                second: FORMAT_TEXT.to_owned(),
+            });
+        }
+    }
+
+    let Some((name, inner)) = matches.subcommand() else {
+        return Ok(());
+    };
+    let Some(child) = command.find_subcommand(name) else {
+        return error::ensure_invariant(
+            false,
+            "a matched subcommand is a node of the tree it was matched against",
+        );
+    };
+
+    refuse_pretty_without_json(child, inner)
+}
+
+/// Whether `command` declares the argument `identifier` names.
+///
+/// The test is over the node's own declarations, so it answers `false` for a
+/// node that a **child** declares the argument on — which is what makes the
+/// walk above visit each node with the arguments that node actually matched.
+fn declares(command: &clap::Command, identifier: &str) -> bool {
+    command
+        .get_arguments()
+        .any(|argument| argument.get_id() == identifier)
+}
+
 /// The diagnostic level the two flags resolve to (`FR-GLOB-014`,
 /// `FR-GLOB-015`, `FR-CLI-016`).
 ///
@@ -180,7 +282,9 @@ pub(super) fn level(globals: &Globals) -> Level {
 
 #[cfg(test)]
 mod tests {
-    use super::{QUIET, REPEATABLE, VERBOSE, level, refuse_both_verbosities};
+    use super::{
+        FORMAT, PRETTY, QUIET, REPEATABLE, VERBOSE, declares, level, refuse_both_verbosities,
+    };
     use crate::cli::globals::Globals;
     use crate::diagnostics::verbosity::Level;
 
@@ -243,5 +347,177 @@ mod tests {
             .expect("render declares --set");
 
         assert_eq!(set.get_long(), Some("set"));
+    }
+
+    /// The seventeen commands of `FR-GLOB-021` that declare `--pretty`, by the
+    /// path a caller writes. Sixteen of them declare `--format` beside it; the
+    /// seventeenth is `tpl schema dump`, per `FR-SCH-019` and `FR-SCH-020`.
+    const DECLARE_PRETTY: [&[&str]; 17] = [
+        &["schema", "info"],
+        &["schema", "tables"],
+        &["schema", "table"],
+        &["schema", "views"],
+        &["schema", "view"],
+        &["schema", "routines"],
+        &["schema", "routine"],
+        &["schema", "dump"],
+        &["template", "list"],
+        &["template", "path"],
+        &["cfg", "get"],
+        &["cfg", "list"],
+        &["cfg", "database", "list"],
+        &["cfg", "database", "show"],
+        &["cfg", "database", "test"],
+        &["cache", "status"],
+        &["help"],
+    ];
+
+    /// The one of the seventeen that declares `--pretty` and no `--format`.
+    const PRETTY_ALONE: &[&str] = &["schema", "dump"];
+
+    /// The node `path` names.
+    fn node(path: &[&str]) -> clap::Command {
+        let mut command = crate::cli::tree();
+
+        for segment in path {
+            command = command
+                .find_subcommand(segment)
+                .unwrap_or_else(|| panic!("{segment} is a node of the tree"))
+                .clone();
+        }
+
+        command
+    }
+
+    /// What `tpl` makes of one argument vector.
+    fn refused(argv: &[&str]) -> Option<crate::error::Error> {
+        let mut vector = vec!["tpl"];
+        vector.extend_from_slice(argv);
+
+        crate::cli::parse(vector).err()
+    }
+
+    #[test]
+    fn fr_glob_021_the_seventeen_commands_that_declare_pretty_are_the_ones_the_table_names() {
+        // FR-GLOB-021: `--pretty` is declared by every command that declares
+        // `--format`, plus `schema dump`. The rule of FR-OUT-009 is
+        // conditioned on a node declaring both, so this is what fixes which
+        // nodes it reaches.
+        for path in DECLARE_PRETTY {
+            let node = node(path);
+
+            assert!(declares(&node, PRETTY), "{path:?} declares --pretty");
+            assert_eq!(
+                declares(&node, FORMAT),
+                path != PRETTY_ALONE,
+                "{path:?} declares --format iff it is not schema dump"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_out_009_pretty_without_format_json_is_refused_on_every_command_that_declares_both() {
+        // FR-OUT-009: on a command that declares `--format`, `--pretty`
+        // requires `--format json`. It is the rule, not a property of one
+        // command, so every one of the sixteen is driven.
+        for path in DECLARE_PRETTY {
+            if path == PRETTY_ALONE {
+                continue;
+            }
+
+            for tail in [vec!["--pretty"], vec!["--pretty", "--format", "text"]] {
+                let mut argv: Vec<&str> = path.to_vec();
+                // The three nodes that take a required operand are given one,
+                // so the refusal under test is reached rather than the
+                // missing-argument one.
+                argv.extend(operands(path));
+                argv.extend(tail);
+
+                let condition =
+                    refused(&argv).unwrap_or_else(|| panic!("{argv:?} is refused by FR-OUT-009"));
+
+                assert_eq!(condition.exit_code(), 64, "{argv:?}");
+                assert!(condition.to_string().contains("--pretty"), "{argv:?}");
+                assert!(condition.to_string().contains("--format text"), "{argv:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn fr_out_009_pretty_with_format_json_is_accepted_on_every_one_of_them() {
+        // The other half of the same requirement, and the control for the test
+        // above: the pair is refused for the value in force and not for the
+        // flag.
+        for path in DECLARE_PRETTY {
+            if path == PRETTY_ALONE {
+                continue;
+            }
+
+            let mut argv: Vec<&str> = path.to_vec();
+            argv.extend(operands(path));
+            argv.extend(["--pretty", "--format", "json"]);
+
+            assert!(refused(&argv).is_none(), "{argv:?} parses");
+        }
+    }
+
+    #[test]
+    fn fr_sch_020_pretty_stands_alone_on_schema_dump() {
+        // FR-SCH-020 and FR-OUT-010: `tpl schema dump --pretty` is valid
+        // without any accompanying `--format`, because the command declares
+        // none. The rule of FR-OUT-009 is conditioned on the node declaring
+        // both, which is what leaves this case untouched.
+        assert!(refused(&["schema", "dump", "--pretty"]).is_none());
+
+        // And `--format` on it is still the unknown-flag 64 of FR-CLI-019,
+        // per FR-SCH-019 — a different refusal, from a different rule.
+        let condition = refused(&["schema", "dump", "--format", "json"])
+            .expect("schema dump declares no --format");
+
+        assert_eq!(condition.exit_code(), 64);
+        assert!(condition.to_string().contains("--format"), "{condition}");
+    }
+
+    #[test]
+    fn fr_err_006_the_rule_runs_before_the_help_form_is_answered() {
+        // FR-ERR-006: step 1 runs "for every command without exception", so a
+        // help form does not excuse it — which is the same reading that makes
+        // an unknown flag on `tpl --help` a 64.
+        for argv in [
+            vec!["help", "--pretty"],
+            vec!["schema", "tables", "--help", "--pretty"],
+            vec!["schema", "table", "--help", "--pretty"],
+        ] {
+            let condition =
+                refused(&argv).unwrap_or_else(|| panic!("{argv:?} is refused by FR-OUT-009"));
+
+            assert_eq!(condition.exit_code(), 64, "{argv:?}");
+        }
+    }
+
+    #[test]
+    fn fr_out_009_a_command_that_declares_neither_flag_is_not_reached() {
+        // The rule is over the declarations: `tpl render` and `tpl init`
+        // declare neither flag, so nothing here governs them and `--pretty` on
+        // either is the unknown-flag 64 of FR-CLI-019 instead.
+        let condition =
+            refused(&["render", "rust/struct", "--pretty"]).expect("render declares no --pretty");
+
+        assert_eq!(condition.exit_code(), 64);
+        assert!(
+            condition.to_string().contains("unknown flag"),
+            "{condition}"
+        );
+    }
+
+    /// The operands `path` requires, which are part of the identity of a node
+    /// that declares one.
+    fn operands(path: &[&str]) -> Vec<&'static str> {
+        match path {
+            ["schema", "table" | "view" | "routine"] => vec!["orders"],
+            ["cfg", "get"] => vec!["core.database"],
+            ["cfg", "database", "show" | "test"] => vec!["shop"],
+            _ => Vec::new(),
+        }
     }
 }

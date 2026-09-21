@@ -25,7 +25,14 @@ use serde::{Deserialize, Serialize, Serializer};
 ///
 /// It is written in one place and read by [`Document::new`] alone, so a
 /// document cannot be emitted carrying a different one.
-const SCHEMA_VERSION: u32 = 1;
+///
+/// It is `pub(crate)` for one further reader, and that reader does not emit
+/// with it: `FR-CDOC-003` makes the `schema_version` of `meta.json` "the same
+/// version the documents in the cache carry under `FR-OUT-011`", and
+/// [`crate::cache`] reads it here rather than writing the number a second time
+/// — which is what keeps a cache written by one binary unreadable by a binary
+/// that emits a different contract.
+pub(crate) const SCHEMA_VERSION: u32 = 1;
 
 /// The name `serialize_struct` is given for [`Collection`].
 ///

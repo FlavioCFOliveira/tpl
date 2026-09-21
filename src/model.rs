@@ -100,6 +100,140 @@
 //! type would have to choose. `FR-CTX-037` and `FR-CTX-018` keep the two
 //! decompositions total, so nothing else here reports failure.
 
+/// Defines an enumeration whose recorded values a requirement fixes and whose
+/// unrecorded ones are carried verbatim (`FR-CAT-055`).
+///
+/// Five catalogue fields take a set of values that a requirement closed from an
+/// observation of all four series of `FR-SRV-015`, and the catalogue closes
+/// none of them: every field behind the five is a plain `varchar` and never an
+/// `ENUM`, so a server outside the window may return a sixth value at any time.
+/// `FR-CAT-055` fixes what happens then — the catalogue's own string is carried
+/// unchanged, the object is not dropped, the read is not refused, and the exit
+/// code does not move — and the shape that obliges all four at once is an
+/// enumeration with a variant for each recorded value and one that carries the
+/// string.
+///
+/// **The macro exists because the five would otherwise be five copies of one
+/// decision.** The reading, the spelling, the serialisation and the read-back
+/// are identical for all five and differ only in the table of spellings, so
+/// they are written once here and each enumeration supplies its own table —
+/// the same reason [`crate::mariadb::catalogue::statements`] writes its column
+/// lists through a macro. A second copy of a rule is a second thing that can
+/// be wrong.
+///
+/// The document is unchanged for every value any server has been observed to
+/// return: a recorded variant serialises to the spelling its requirement fixes,
+/// which is the byte sequence the catalogue itself returned, and only a value
+/// outside the set reaches the carried string. The read-back accepts both, so a
+/// document written from a server newer than the window survives a round trip
+/// through the cache with the value the server stated.
+macro_rules! catalogued {
+    (
+        $(#[$enumeration:meta])*
+        $name:ident from $field:literal {
+            $( $(#[$recorded:meta])* $variant:ident = $spelling:literal, )+
+        }
+    ) => {
+        $(#[$enumeration])*
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        #[non_exhaustive]
+        pub enum $name<'a> {
+            $( $(#[$recorded])* $variant, )+
+
+            /// A value outside the recorded set, carried exactly as the
+            /// catalogue returned it (`FR-CAT-055`).
+            ///
+            /// No read of a series of `FR-SRV-015` has produced one. The
+            /// foreseeable server that would is one newer than the window,
+            /// which `FR-SRV-031` reads and marks rather than refuses, and
+            /// `FR-CTX-034`'s `standing` is the field that says the read is
+            /// unverified. Substituting a recorded value or dropping the
+            /// object that carries the field are the two outcomes `FR-CAT-055`
+            /// rejects by name, both of them being wrong documents at exit `0`.
+            Unrecorded(Cow<'a, str>),
+        }
+
+        impl<'a> $name<'a> {
+            #[doc = concat!(
+                "Reads the value from the catalogue's `", $field, "` field, \
+                 borrowed from the row."
+            )]
+            ///
+            /// It is total, per `FR-CAT-055`: a value outside the recorded set
+            /// is carried rather than refused.
+            #[must_use]
+            pub fn from_catalogue(field: &'a str) -> Self {
+                match field {
+                    $( $spelling => Self::$variant, )+
+                    carried => Self::Unrecorded(Cow::Borrowed(carried)),
+                }
+            }
+
+            /// The same reading over a value the caller owns, which is the
+            /// shape a document read back from disk arrives in.
+            #[must_use]
+            pub fn from_catalogue_owned(field: String) -> Self {
+                match field.as_str() {
+                    $( $spelling => Self::$variant, )+
+                    _ => Self::Unrecorded(Cow::Owned(field)),
+                }
+            }
+
+            /// The spelling the model carries: the one the requirement fixes
+            /// for a recorded value, and the catalogue's own string otherwise.
+            #[must_use]
+            pub fn name(&self) -> &str {
+                match self {
+                    $( Self::$variant => $spelling, )+
+                    Self::Unrecorded(carried) => carried,
+                }
+            }
+
+            /// The recorded spelling, or [`None`] where the value is outside
+            /// the set.
+            ///
+            /// It is [`name`](Self::name) narrowed to the values a requirement
+            /// fixes, for the callers that may use a value only where the
+            /// corpus has written down what it means — composing a path, or
+            /// binding it to a statement that narrows on it. `FR-CAT-055`
+            /// names the one such place a caller can reach: the qualified
+            /// routine name of `FR-SCH-008`, which an unrecorded kind is not
+            /// reachable by.
+            #[must_use]
+            pub const fn recorded(&self) -> Option<&'static str> {
+                match self {
+                    $( Self::$variant => Some($spelling), )+
+                    Self::Unrecorded(_) => None,
+                }
+            }
+        }
+
+        impl serde::Serialize for $name<'_> {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(self.name())
+            }
+        }
+
+        impl<'de, 'a> serde::Deserialize<'de> for $name<'a> {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                // The value is taken as an owned `String` rather than borrowed
+                // from the input. A recorded value becomes a unit variant and
+                // the allocation is dropped at once, which is every value any
+                // server has returned; only the unrecorded one keeps it, and
+                // `FR-CAT-055` records that nothing observed reaches it.
+                <String as serde::Deserialize<'de>>::deserialize(deserializer)
+                    .map(Self::from_catalogue_owned)
+            }
+        }
+    };
+}
+
 pub mod check_constraint;
 pub mod column;
 pub mod column_default;
@@ -300,8 +434,8 @@ mod refusals {
         ForeignKey {
             name: Cow::Borrowed("fk_leg_consignment"),
             columns: vec![foreign_key_column()],
-            referenced_table: Cow::Borrowed("consignment"),
-            referenced_key: Cow::Borrowed(PRIMARY_KEY_NAME),
+            referenced_table: Some(Cow::Borrowed("consignment")),
+            referenced_key: Some(Cow::Borrowed(PRIMARY_KEY_NAME)),
             match_option: Cow::Borrowed("NONE"),
             on_update: ReferentialAction::Cascade,
             on_delete: ReferentialAction::SetNull,
@@ -329,12 +463,14 @@ mod refusals {
             event: TriggerEvent::Insert,
             timing: TriggerTiming::Before,
             action_order: 1,
-            statement: Cow::Borrowed("BEGIN SET NEW.reference = upper(NEW.reference); END"),
+            statement: Some(Cow::Borrowed(
+                "BEGIN SET NEW.reference = upper(NEW.reference); END",
+            )),
             orientation: Cow::Borrowed("ROW"),
             old_row_alias: Cow::Borrowed("OLD"),
             new_row_alias: Cow::Borrowed("NEW"),
             sql_mode: Cow::Borrowed("STRICT_TRANS_TABLES"),
-            definer: Cow::Borrowed("root@localhost"),
+            definer: Some(Cow::Borrowed("root@localhost")),
             character_set_client: Cow::Borrowed("utf8mb4"),
             collation_connection: Cow::Borrowed("utf8mb4_uca1400_ai_ci"),
             database_collation: Cow::Borrowed("utf8mb4_unicode_520_ci"),
@@ -370,7 +506,7 @@ mod refusals {
             kind: RoutineKind::Function,
             return_type: Some(column_type()),
             parameters: vec![routine_parameter()],
-            body: Cow::Borrowed("BEGIN RETURN upper(p_reference); END"),
+            body: Some(Cow::Borrowed("BEGIN RETURN upper(p_reference); END")),
             body_kind: Cow::Borrowed("SQL"),
             parameter_style: Cow::Borrowed("SQL"),
             is_deterministic: true,

@@ -89,8 +89,17 @@ fn document<'a>(
 ) -> Result<TableDocument<'a>, Error> {
     let mut foreign_keys: Vec<OutgoingKey<'a>> = Vec::with_capacity(table.foreign_keys().len());
     for outgoing in table.foreign_keys() {
-        let referenced = find(carried, &outgoing.referenced_table)?;
-        foreign_keys.push(key(outgoing, embedded(referenced)));
+        // FR-CTX-006, as the twenty-seventh edition amended it: a key that
+        // names no table to reference has no first hop, so the embedding site
+        // carries `null` and the key is carried whole beside it. It is the one
+        // shape of this loop that resolves nothing, and `find` is not asked to.
+        let referenced = outgoing
+            .referenced_table
+            .as_deref()
+            .map(|name| find(carried, name))
+            .transpose()?;
+
+        foreign_keys.push(key(outgoing, referenced.map(embedded)));
     }
     order::sort_by_name(&mut foreign_keys);
 
@@ -124,12 +133,25 @@ fn document<'a>(
 /// columns, the indexes and the primary key in full, and the two reference
 /// collections become the names of the tables at the far end.
 fn embedded<'a>(table: &'a Table<'a>) -> EmbeddedTable<'a> {
-    let mut foreign_keys: Vec<Cow<'a, str>> = table
+    let mut foreign_keys: Vec<Option<Cow<'a, str>>> = table
         .foreign_keys()
         .iter()
         .map(|key| key.referenced_table.clone())
         .collect();
-    order::sort_by_name(&mut foreign_keys);
+    // The default rule of `NFR-DET-002` is name, ascending, byte-wise, and an
+    // entry with no name has none to be ordered by. It sorts before every
+    // named one, which is `Option`'s own ordering and is the only rule that
+    // needs no second decision; the named entries keep the byte-wise
+    // comparison the rest of the document is ordered by. The entry is kept
+    // rather than dropped because the collection carries one entry per key,
+    // per `FR-CTX-008`, and dropping it would present an embedded table with
+    // fewer keys than it declares.
+    foreign_keys.sort_by(|left, right| match (left, right) {
+        (None, None) => std::cmp::Ordering::Equal,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (Some(left), Some(right)) => order::compare(left, right),
+    });
 
     let mut referenced_by: Vec<Cow<'a, str>> = table
         .referenced_by()
@@ -179,9 +201,13 @@ fn key<'a, R>(outgoing: &'a ForeignKey<'a>, referenced_table: R) -> ForeignKeySh
         columns: order::as_given(&outgoing.columns),
         referenced_table,
         referenced_key: outgoing.referenced_key.clone(),
+        // The two rules and the match option are cloned rather than copied:
+        // `FR-CAT-055` gives each rule an unrecorded variant that carries the
+        // catalogue's own string, so the type is no longer `Copy`. A recorded
+        // rule clones a unit variant and allocates nothing.
         match_option: outgoing.match_option.clone(),
-        on_update: outgoing.on_update,
-        on_delete: outgoing.on_delete,
+        on_update: outgoing.on_update.clone(),
+        on_delete: outgoing.on_delete.clone(),
     }
 }
 
@@ -218,6 +244,17 @@ mod tests {
     use crate::model::index::PRIMARY_KEY_NAME;
     use crate::model::table::{Table, TableParts, TableType};
     use std::borrow::Cow;
+
+    /// The table an outgoing key embeds, which `FR-CTX-006` requires to be
+    /// there for every key that names one.
+    ///
+    /// The `expect` is the assertion: `None` is the one case that requirement
+    /// admits, and no key of any model below names no table.
+    fn referenced<'a, 'd>(key: &'a super::OutgoingKey<'d>) -> &'a super::EmbeddedTable<'d> {
+        key.referenced_table
+            .as_ref()
+            .expect("every key of a model built here names a table to reference")
+    }
 
     /// The `database` object `model` produces.
     ///
@@ -319,8 +356,8 @@ mod tests {
         assert_eq!(consignment.referenced_by[0].table.name, "consignment_leg");
         assert_eq!(consignment.referenced_by[0].table.columns.len(), 2);
 
-        assert_eq!(leg.foreign_keys[0].referenced_table.name, "consignment");
-        assert_eq!(leg.foreign_keys[0].referenced_table.columns.len(), 4);
+        assert_eq!(referenced(&leg.foreign_keys[0]).name, "consignment");
+        assert_eq!(referenced(&leg.foreign_keys[0]).columns.len(), 4);
     }
 
     #[test]
@@ -331,7 +368,7 @@ mod tests {
         // type.
         let model = fixture::database();
         let database = document(&model);
-        let embedded = &database.tables[1].foreign_keys[0].referenced_table;
+        let embedded = referenced(&database.tables[1].foreign_keys[0]);
 
         assert_eq!(embedded.columns[0].name, "consignment_id");
         assert_eq!(
@@ -363,15 +400,21 @@ mod tests {
         let voyage = &database.tables[1];
 
         assert_eq!(vessel.name, "vessel");
-        let embedded_voyage = &vessel.foreign_keys[0].referenced_table;
+        let embedded_voyage = referenced(&vessel.foreign_keys[0]);
         assert_eq!(embedded_voyage.name, "voyage");
-        assert_eq!(embedded_voyage.foreign_keys, ["vessel"]);
+        assert_eq!(
+            embedded_voyage.foreign_keys,
+            [Some(Cow::Borrowed("vessel"))]
+        );
         assert_eq!(embedded_voyage.referenced_by, ["vessel"]);
 
         assert_eq!(voyage.name, "voyage");
-        let embedded_vessel = &voyage.foreign_keys[0].referenced_table;
+        let embedded_vessel = referenced(&voyage.foreign_keys[0]);
         assert_eq!(embedded_vessel.name, "vessel");
-        assert_eq!(embedded_vessel.foreign_keys, ["voyage"]);
+        assert_eq!(
+            embedded_vessel.foreign_keys,
+            [Some(Cow::Borrowed("voyage"))]
+        );
         assert_eq!(embedded_vessel.referenced_by, ["voyage"]);
     }
 
@@ -385,15 +428,16 @@ mod tests {
         let model = fixture::database_of(vec![vessel(), voyage()]);
         let database = document(&model);
 
-        let outgoing = &database.tables[0].foreign_keys[0].referenced_table;
+        let outgoing = referenced(&database.tables[0].foreign_keys[0]);
         let incoming = &database.tables[0].referenced_by[0].table;
 
         assert_eq!(outgoing.name, "voyage");
         assert_eq!(incoming.name, "voyage");
         assert_eq!(outgoing.referenced_by, ["vessel"]);
-        assert_eq!(incoming.foreign_keys, ["vessel"]);
+        assert_eq!(incoming.foreign_keys, [Some(Cow::Borrowed("vessel"))]);
         assert_eq!(
-            database.tables[0].referenced_by[0].key.referenced_table, "vessel",
+            database.tables[0].referenced_by[0].key.referenced_table,
+            Some(Cow::Borrowed("vessel")),
             "the key beside an embedded table carries its referenced table as a name"
         );
     }
@@ -406,14 +450,14 @@ mod tests {
         let database = document(&model);
         let tariff = &database.tables[0];
 
-        let outgoing = &tariff.foreign_keys[0].referenced_table;
+        let outgoing = referenced(&tariff.foreign_keys[0]);
         assert_eq!(outgoing.name, "tariff");
-        assert_eq!(outgoing.foreign_keys, ["tariff"]);
+        assert_eq!(outgoing.foreign_keys, [Some(Cow::Borrowed("tariff"))]);
         assert_eq!(outgoing.referenced_by, ["tariff"]);
 
         let incoming = &tariff.referenced_by[0].table;
         assert_eq!(incoming.name, "tariff");
-        assert_eq!(incoming.foreign_keys, ["tariff"]);
+        assert_eq!(incoming.foreign_keys, [Some(Cow::Borrowed("tariff"))]);
         assert_eq!(incoming.referenced_by, ["tariff"]);
     }
 

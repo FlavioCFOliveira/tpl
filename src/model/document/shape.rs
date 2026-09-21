@@ -39,6 +39,19 @@
 //! collections and nothing else, which is also why `BR-CTX-001`'s rejected
 //! *summary embedding* — a name, a primary key and column names only — is not
 //! what this is.
+//!
+//! # Why the fields are `pub(crate)`
+//!
+//! They are read outside this module by exactly two callers, and both of them
+//! present what is here rather than deciding it. `cli::schema` reads a
+//! collection out of a built document to answer `tpl schema tables` and its two
+//! siblings, and a table's name, engine, column count and comment to lay out
+//! the `text` listing of `FR-SCH-026`; `cache` writes each member to its own
+//! file and reads it back, per `FR-CACHE-030`. Neither constructs a document —
+//! [`super::build`] is still the only route to one — so what the visibility
+//! widens is the **reading** of a shape this module fixes, and the invariants
+//! `FR-CTX-006` through `FR-CTX-010` state remain properties of the one
+//! builder.
 
 use std::borrow::Cow;
 
@@ -70,7 +83,7 @@ use crate::model::view::View;
 pub(crate) struct ContextData<'a> {
     /// The whole model of the selected database.
     #[serde(borrow)]
-    pub(super) database: DatabaseDocument<'a>,
+    pub(crate) database: DatabaseDocument<'a>,
 }
 
 /// The `database` object (`FR-CTX-035`, `FR-CTX-036`).
@@ -86,31 +99,31 @@ pub(crate) struct ContextData<'a> {
 pub(crate) struct DatabaseDocument<'a> {
     /// The schema's name.
     #[serde(borrow)]
-    pub(super) name: Cow<'a, str>,
+    pub(crate) name: Cow<'a, str>,
 
     /// The schema's default character set.
     #[serde(borrow)]
-    pub(super) charset: Cow<'a, str>,
+    pub(crate) charset: Cow<'a, str>,
 
     /// The schema's default collation.
     #[serde(borrow)]
-    pub(super) collation: Cow<'a, str>,
+    pub(crate) collation: Cow<'a, str>,
 
     /// The server the read was made against (`FR-CTX-031`).
     #[serde(borrow)]
-    pub(super) server: Server<'a>,
+    pub(crate) server: Server<'a>,
 
     /// The tables of `FR-CAT-001`, ordered by name (`NFR-DET-002`).
     #[serde(borrow)]
-    pub(super) tables: Vec<TableDocument<'a>>,
+    pub(crate) tables: Vec<TableDocument<'a>>,
 
     /// The views of `FR-CAT-007`, ordered by name.
     #[serde(borrow)]
-    pub(super) views: Cow<'a, [View<'a>]>,
+    pub(crate) views: Cow<'a, [View<'a>]>,
 
     /// The routines of `FR-CAT-008`, ordered by name.
     #[serde(borrow)]
-    pub(super) routines: Cow<'a, [Routine<'a>]>,
+    pub(crate) routines: Cow<'a, [Routine<'a>]>,
 }
 
 /// A table at the first hop: its references are embedded objects.
@@ -118,10 +131,18 @@ pub(crate) type TableDocument<'a> = TableShape<'a, OutgoingKey<'a>, IncomingKey<
 
 /// A table one hop in: its references are names, per `FR-CTX-008`.
 ///
-/// This alias is where a traversal stops. Both reference collections hold
-/// [`Cow<'a, str>`](Cow), which carries no table, so no value of this type can
-/// lead anywhere.
-pub(crate) type EmbeddedTable<'a> = TableShape<'a, Cow<'a, str>, Cow<'a, str>>;
+/// This alias is where a traversal stops. Both reference collections hold a
+/// name, which carries no table, so no value of this type can lead anywhere.
+///
+/// The outgoing side is `Option<Cow<'a, str>>` and the incoming side is not.
+/// A key that names no referenced table — the case `FR-CAT-056` records and
+/// `FR-CTX-006` fixes the document's answer to — contributes an entry with no
+/// name to the collection of the table that declares it, because the entry is
+/// one per key and dropping it would present an embedded table with fewer keys
+/// than it has. The incoming side cannot meet that case: an entry is there
+/// **because** a key named this table, so the referencing table always has a
+/// name.
+pub(crate) type EmbeddedTable<'a> = TableShape<'a, Option<Cow<'a, str>>, Cow<'a, str>>;
 
 /// One table of the document, parameterised by what a reference resolves to
 /// (`FR-CAT-009` … `FR-CAT-015`, `FR-CTX-006` … `FR-CTX-010`).
@@ -133,33 +154,33 @@ pub(crate) type EmbeddedTable<'a> = TableShape<'a, Cow<'a, str>, Cow<'a, str>>;
 pub(crate) struct TableShape<'a, F, I> {
     /// The table's name, returned unescaped.
     #[serde(borrow)]
-    pub(super) name: Cow<'a, str>,
+    pub(crate) name: Cow<'a, str>,
 
     /// Which of the two covered types it is (`FR-CAT-002`).
-    pub(super) table_type: TableType,
+    pub(crate) table_type: TableType,
 
     /// The storage engine (`FR-SCH-009`).
     #[serde(borrow)]
-    pub(super) engine: Option<Cow<'a, str>>,
+    pub(crate) engine: Option<Cow<'a, str>>,
 
     /// The table's collation (`FR-SCH-009`). There is no character set beside
     /// it: the table catalogue carries none on any of the four series.
     #[serde(borrow)]
-    pub(super) collation: Option<Cow<'a, str>>,
+    pub(crate) collation: Option<Cow<'a, str>>,
 
     /// The comment, the empty string where none was given (`FR-CAT-039`).
     #[serde(borrow)]
-    pub(super) comment: Cow<'a, str>,
+    pub(crate) comment: Cow<'a, str>,
 
     /// The columns, in **ordinal position** order — an exception of
     /// `NFR-DET-002` (`FR-CAT-009`).
     #[serde(borrow)]
-    pub(super) columns: Cow<'a, [Column<'a>]>,
+    pub(crate) columns: Cow<'a, [Column<'a>]>,
 
     /// The indexes, ordered by name, the primary key among them
     /// (`FR-CAT-010`).
     #[serde(borrow)]
-    pub(super) indexes: Cow<'a, [Index<'a>]>,
+    pub(crate) indexes: Cow<'a, [Index<'a>]>,
 
     /// The primary key — the index named `PRIMARY` (`FR-CAT-011`,
     /// `FR-CAT-043`), or `null` where the table has none.
@@ -170,29 +191,29 @@ pub(crate) struct TableShape<'a, F, I> {
     /// spares a template a match on a name, and reading it back would give the
     /// model a second place the two could disagree from.
     #[serde(borrow)]
-    pub(super) primary_key: Option<Index<'a>>,
+    pub(crate) primary_key: Option<Index<'a>>,
 
     /// The outgoing foreign keys, ordered by name (`FR-CAT-012`).
-    pub(super) foreign_keys: Vec<F>,
+    pub(crate) foreign_keys: Vec<F>,
 
     /// The incoming foreign keys (`FR-CAT-013`), ordered by the referencing
     /// table's name and then by the constraint's.
-    pub(super) referenced_by: Vec<I>,
+    pub(crate) referenced_by: Vec<I>,
 
     /// The triggers, ordered by name (`FR-CAT-014`).
     #[serde(borrow)]
-    pub(super) triggers: Cow<'a, [Trigger<'a>]>,
+    pub(crate) triggers: Cow<'a, [Trigger<'a>]>,
 
     /// The `CHECK` constraints, ordered by name (`FR-CAT-015`).
     #[serde(borrow)]
-    pub(super) check_constraints: Cow<'a, [CheckConstraint<'a>]>,
+    pub(crate) check_constraints: Cow<'a, [CheckConstraint<'a>]>,
 
     /// The properties that could not be read (`FR-PRIV-005` … `FR-PRIV-007`).
     ///
     /// The key is absent rather than `null` on a complete table, which is the
     /// one exception `OD-18` admits to `FR-OUT-012`.
     #[serde(borrow, default, skip_serializing_if = "Option::is_none")]
-    pub(super) restricted: Option<Restricted<'a>>,
+    pub(crate) restricted: Option<Restricted<'a>>,
 }
 
 impl<F, I> Named for TableShape<'_, F, I> {
@@ -202,15 +223,27 @@ impl<F, I> Named for TableShape<'_, F, I> {
 }
 
 /// A foreign key at the first hop: the referenced table is embedded in full,
-/// per `FR-CTX-006` and `FR-CTX-007`.
-pub(crate) type OutgoingKey<'a> = ForeignKeyShape<'a, EmbeddedTable<'a>>;
+/// per `FR-CTX-006` and `FR-CTX-007`, or is `null`.
+///
+/// `null` is the amendment `FR-CTX-006` took in the twenty-seventh edition,
+/// and it is the one case with no first hop: a key whose `referenced_table` is
+/// `null` under `FR-CAT-056` names no table to embed, so the key is still
+/// carried — with its name, its columns and its rules — and the place the
+/// embedded table occupies carries `null`, per `FR-OUT-012`. The key is
+/// **emitted rather than omitted**, because `FR-SEM-012` fails a render when a
+/// template reads a field that is not there, so a template written against
+/// every other key in the document would fail on this one.
+pub(crate) type OutgoingKey<'a> = ForeignKeyShape<'a, Option<EmbeddedTable<'a>>>;
 
-/// A foreign key whose referenced table is a name.
+/// A foreign key whose referenced table is a name, or `null`.
 ///
 /// It is the key carried inside an [`IncomingKey`], where the referenced table
 /// is the table carrying `referenced_by` — already at hand, and one hop further
-/// than `FR-CTX-009` admits.
-pub(crate) type NamedKey<'a> = ForeignKeyShape<'a, Cow<'a, str>>;
+/// than `FR-CTX-009` admits. It is nevertheless an [`Option`] on the same terms
+/// as [`OutgoingKey`], because it is the same key: one shape is filled from one
+/// model field, and giving the two depths different nullability would be a
+/// second place for the same fact.
+pub(crate) type NamedKey<'a> = ForeignKeyShape<'a, Option<Cow<'a, str>>>;
 
 /// One foreign key of the document, parameterised by what its referenced table
 /// resolves to (`FR-CAT-045`).
@@ -223,29 +256,32 @@ pub(crate) type NamedKey<'a> = ForeignKeyShape<'a, Cow<'a, str>>;
 pub(crate) struct ForeignKeyShape<'a, R> {
     /// The constraint name the DDL gave.
     #[serde(borrow)]
-    pub(super) name: Cow<'a, str>,
+    pub(crate) name: Cow<'a, str>,
 
     /// The referencing and referenced columns, **paired by position** and in
     /// the order the catalogue states — an exception of `NFR-DET-002`.
     #[serde(borrow)]
-    pub(super) columns: Cow<'a, [ForeignKeyColumn<'a>]>,
+    pub(crate) columns: Cow<'a, [ForeignKeyColumn<'a>]>,
 
-    /// The referenced table: an object at the first hop, a name beyond it.
-    pub(super) referenced_table: R,
+    /// The referenced table: an object at the first hop, a name beyond it, and
+    /// `null` at either depth where the key names none (`FR-CTX-006`,
+    /// `FR-CAT-056`).
+    pub(crate) referenced_table: R,
 
-    /// The key on the referenced table the foreign key points at.
+    /// The key on the referenced table the foreign key points at, or `null`
+    /// where the catalogue returned SQL `NULL` (`FR-CAT-056`).
     #[serde(borrow)]
-    pub(super) referenced_key: Cow<'a, str>,
+    pub(crate) referenced_key: Option<Cow<'a, str>>,
 
     /// The match option, carried verbatim.
     #[serde(borrow)]
-    pub(super) match_option: Cow<'a, str>,
+    pub(crate) match_option: Cow<'a, str>,
 
     /// The `ON UPDATE` rule.
-    pub(super) on_update: ReferentialAction,
+    pub(crate) on_update: ReferentialAction<'a>,
 
     /// The `ON DELETE` rule.
-    pub(super) on_delete: ReferentialAction,
+    pub(crate) on_delete: ReferentialAction<'a>,
 }
 
 impl<R> Named for ForeignKeyShape<'_, R> {
@@ -270,9 +306,9 @@ impl<R> Named for ForeignKeyShape<'_, R> {
 pub(crate) struct IncomingKey<'a> {
     /// The referencing table, embedded one level deep.
     #[serde(borrow)]
-    pub(super) table: EmbeddedTable<'a>,
+    pub(crate) table: EmbeddedTable<'a>,
 
     /// The key itself, as the referencing table carries it.
     #[serde(borrow)]
-    pub(super) key: NamedKey<'a>,
+    pub(crate) key: NamedKey<'a>,
 }

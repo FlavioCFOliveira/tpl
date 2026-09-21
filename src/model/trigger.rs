@@ -25,79 +25,42 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
-/// The statement a trigger fires on (`FR-CAT-050`).
-///
-/// All three were observed, and all six combinations of the three events and
-/// the two timings appear in the fixture — which is why `FR-CAT-050` exempts
-/// this field pair from the bounded claim it records for the rest. The field
-/// pair is also the only place the model learns either fact.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-#[non_exhaustive]
-pub enum TriggerEvent {
-    /// The trigger fires on `INSERT`.
-    Insert,
-
-    /// The trigger fires on `UPDATE`.
-    Update,
-
-    /// The trigger fires on `DELETE`.
-    Delete,
-}
-
-impl TriggerEvent {
-    /// Reads the event from the event-manipulation field.
-    #[must_use]
-    pub fn from_catalogue(field: &str) -> Option<Self> {
-        match field {
-            "INSERT" => Some(Self::Insert),
-            "UPDATE" => Some(Self::Update),
-            "DELETE" => Some(Self::Delete),
-            _ => None,
-        }
-    }
-
-    /// The spelling the catalogue writes, which is what the document carries.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Insert => "INSERT",
-            Self::Update => "UPDATE",
-            Self::Delete => "DELETE",
-        }
+catalogued! {
+    /// The statement a trigger fires on (`FR-CAT-050`).
+    ///
+    /// All three were observed, and all six combinations of the three events
+    /// and the two timings appear in the fixture — which is why `FR-CAT-050`
+    /// exempts this field pair from the bounded claim it records for the rest.
+    /// The field pair is also the only place the model learns either fact.
+    ///
+    /// *The set is closed by that observation and not by the catalogue, and
+    /// this is the one field of the five whose declaration is **not** identical
+    /// across the window*: the event column is `varchar(6)` on `10.11`, `11.4`
+    /// and `11.8` and `varchar(20)` on `12.3`, which is difference 9 of
+    /// `FR-SRV-038`. The declared width behind a recorded set has therefore
+    /// already grown inside the window, and a fourth event is carried verbatim
+    /// under `FR-CAT-055`.
+    TriggerEvent from "EVENT_MANIPULATION" {
+        /// The trigger fires on `INSERT`.
+        Insert = "INSERT",
+        /// The trigger fires on `UPDATE`.
+        Update = "UPDATE",
+        /// The trigger fires on `DELETE`.
+        Delete = "DELETE",
     }
 }
 
-/// When a trigger fires relative to its event (`FR-CAT-050`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-#[non_exhaustive]
-pub enum TriggerTiming {
-    /// The trigger fires before the statement takes effect.
-    Before,
-
-    /// The trigger fires after it.
-    After,
-}
-
-impl TriggerTiming {
-    /// Reads the timing from the action-timing field.
-    #[must_use]
-    pub fn from_catalogue(field: &str) -> Option<Self> {
-        match field {
-            "BEFORE" => Some(Self::Before),
-            "AFTER" => Some(Self::After),
-            _ => None,
-        }
-    }
-
-    /// The spelling the catalogue writes.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Before => "BEFORE",
-            Self::After => "AFTER",
-        }
+catalogued! {
+    /// When a trigger fires relative to its event (`FR-CAT-050`).
+    ///
+    /// The field is declared `varchar(6)` and `NOT NULL` on all four series,
+    /// never an `ENUM`, so a third timing is carried verbatim under
+    /// `FR-CAT-055`.
+    TriggerTiming from "ACTION_TIMING" {
+        /// The trigger fires before the statement takes effect.
+        Before = "BEFORE",
+        /// The trigger fires after it.
+        After = "AFTER",
     }
 }
 
@@ -110,17 +73,23 @@ pub struct Trigger<'a> {
     pub name: Cow<'a, str>,
 
     /// The statement it fires on.
-    pub event: TriggerEvent,
+    pub event: TriggerEvent<'a>,
 
     /// When it fires relative to that statement.
-    pub timing: TriggerTiming,
+    pub timing: TriggerTiming<'a>,
 
     /// The action order, which read `1` on all six triggers of the fixture.
     pub action_order: u64,
 
     /// The body **as written**, with newlines and identifier case preserved —
-    /// unlike a view definition, which the server rewrites.
-    pub statement: Cow<'a, str>,
+    /// unlike a view definition, which the server rewrites — or [`None`] where
+    /// the catalogue returned SQL `NULL` (`FR-CAT-056`).
+    ///
+    /// The field is declared nullable, `longtext`, on all four series. It was
+    /// populated on all six triggers of the fixture, and `FR-PRIV-020` is why
+    /// an absent one is not a privilege marking: a reader without the privilege
+    /// receives no trigger row at all rather than a row with an empty body.
+    pub statement: Option<Cow<'a, str>>,
 
     /// The action orientation, carried verbatim. It read `ROW` on all six, and
     /// no second value was observed.
@@ -136,8 +105,12 @@ pub struct Trigger<'a> {
     /// The session SQL mode in force when the trigger was created.
     pub sql_mode: Cow<'a, str>,
 
-    /// The definer, which read one user across the fixture.
-    pub definer: Cow<'a, str>,
+    /// The definer, or [`None`] where the catalogue returned SQL `NULL`
+    /// (`FR-CAT-056`).
+    ///
+    /// The field is declared nullable, `varchar(384)`, on all four series. It
+    /// read one user on all six triggers of the fixture.
+    pub definer: Option<Cow<'a, str>>,
 
     /// The session character set, passed through verbatim per `FR-SRV-039`.
     pub character_set_client: Cow<'a, str>,
@@ -158,18 +131,18 @@ mod tests {
     use super::{Trigger, TriggerEvent, TriggerTiming};
     use std::borrow::Cow;
 
-    fn trigger(event: TriggerEvent, timing: TriggerTiming) -> Trigger<'static> {
+    fn trigger(event: TriggerEvent<'static>, timing: TriggerTiming<'static>) -> Trigger<'static> {
         Trigger {
             name: Cow::Borrowed("trg_consignment_audit"),
             event,
             timing,
             action_order: 1,
-            statement: Cow::Borrowed("BEGIN\n  SET NEW.updated_at = NOW();\nEND"),
+            statement: Some(Cow::Borrowed("BEGIN\n  SET NEW.updated_at = NOW();\nEND")),
             orientation: Cow::Borrowed("ROW"),
             old_row_alias: Cow::Borrowed("OLD"),
             new_row_alias: Cow::Borrowed("NEW"),
             sql_mode: Cow::Borrowed("STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"),
-            definer: Cow::Borrowed("root@localhost"),
+            definer: Some(Cow::Borrowed("root@localhost")),
             character_set_client: Cow::Borrowed("utf8mb4"),
             collation_connection: Cow::Borrowed("utf8mb4_general_ci"),
             database_collation: Cow::Borrowed("utf8mb4_unicode_520_ci"),
@@ -185,15 +158,57 @@ mod tests {
             TriggerEvent::Update,
             TriggerEvent::Delete,
         ] {
-            assert_eq!(TriggerEvent::from_catalogue(event.name()), Some(event));
+            assert_eq!(TriggerEvent::from_catalogue(event.name()), event);
         }
 
         for timing in [TriggerTiming::Before, TriggerTiming::After] {
-            assert_eq!(TriggerTiming::from_catalogue(timing.name()), Some(timing));
+            assert_eq!(TriggerTiming::from_catalogue(timing.name()), timing);
         }
+    }
 
-        assert_eq!(TriggerEvent::from_catalogue("TRUNCATE"), None);
-        assert_eq!(TriggerTiming::from_catalogue("INSTEAD OF"), None);
+    #[test]
+    fn fr_cat_055_an_event_or_a_timing_outside_the_recorded_set_is_carried_verbatim() {
+        // FR-CAT-055: neither field is an `ENUM` on any series, and the event
+        // column is the one of the five whose declared width already grew
+        // inside the window — `varchar(6)` on three series and `varchar(20)`
+        // on 12.3, difference 9 of FR-SRV-038. A fourth event is carried, not
+        // refused.
+        let truncating = TriggerEvent::from_catalogue("TRUNCATE");
+        let instead = TriggerTiming::from_catalogue("INSTEAD OF");
+
+        assert_eq!(
+            truncating,
+            TriggerEvent::Unrecorded(Cow::Borrowed("TRUNCATE"))
+        );
+        assert_eq!(truncating.name(), "TRUNCATE");
+        assert_eq!(truncating.recorded(), None);
+
+        assert_eq!(
+            instead,
+            TriggerTiming::Unrecorded(Cow::Borrowed("INSTEAD OF"))
+        );
+        assert_eq!(instead.name(), "INSTEAD OF");
+        assert_eq!(instead.recorded(), None);
+    }
+
+    #[test]
+    fn fr_cat_056_the_definer_and_the_statement_are_absent_rather_than_empty() {
+        // FR-CAT-056: both fields are declared nullable on all four series,
+        // and the model carries `null` rather than the empty string — which is
+        // what lets a consumer tell an absent body from an empty one.
+        let absent = Trigger {
+            statement: None,
+            definer: None,
+            ..trigger(TriggerEvent::Insert, TriggerTiming::Before)
+        };
+
+        assert_eq!(absent.statement, None);
+        assert_eq!(absent.definer, None);
+
+        let written = serde_json::to_string(&absent).expect("a trigger serialises");
+
+        assert!(written.contains(r#""statement":null"#), "{written}");
+        assert!(written.contains(r#""definer":null"#), "{written}");
     }
 
     #[test]
@@ -214,7 +229,12 @@ mod tests {
         // FR-CAT-050: newlines and case preserved, unlike a view definition.
         let fired = trigger(TriggerEvent::Update, TriggerTiming::Before);
 
-        assert!(fired.statement.contains('\n'));
-        assert!(fired.statement.contains("BEGIN"));
+        let statement = fired
+            .statement
+            .as_deref()
+            .expect("the fixture states a body");
+
+        assert!(statement.contains('\n'));
+        assert!(statement.contains("BEGIN"));
     }
 }

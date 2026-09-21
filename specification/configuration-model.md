@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-18
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -18,7 +18,8 @@ obtained without being written to disk.
 ## Scope
 
 In scope: the `.cfg` key space, value types and defaults, the strictness with
-which the file is read, entry shape, DSN grammar, the five TLS modes and the
+which the file is read, entry shape, what an entry must describe for a
+connection and a read to be possible, DSN grammar, the five TLS modes and the
 behaviour by which they are distinguished, timeouts, `${VAR}` expansion, and
 `password_command` execution and its failure modes.
 
@@ -240,6 +241,116 @@ tls      = "verify-identity"
 
 - **FR-CONF-008**: The entry name SHALL be a label local to the project. It need
   not match the name of any database on the server.
+
+## What an entry must describe
+
+An entry must supply two facts that have no default: the host to connect to,
+and the database to read. Each is carried either by its own key of
+`FR-CONF-002` or by the `dsn` that stands in for the discrete fields, and an
+entry supplying neither form of one of them describes no connection, or no
+read. `FR-CFG-016` admits an entry created from any one discrete flag, so both
+absences are reachable from a legal invocation. Both are decided at step 4 of
+`FR-ERR-006` — entry resolution — before any connection is opened, and neither
+adds a code: the `78` row of `FR-ERR-001` carries the condition as *invalid
+entry*.
+
+- **FR-CONF-040**: An entry SHALL name a host. IF the entry an invocation
+  selects carries neither `dsn` nor `host`, THEN the system SHALL exit `78`
+  (`EX_CONFIG`) and SHALL NOT open a connection.
+
+  The `cause` SHALL name `.tpl/.cfg`, the entry, and `database.<name>.host` as
+  the key the entry does not carry, per the `78` row of `FR-ERR-034`. The
+  `hint` SHALL carry `tpl cfg database update <entry> --host <host>`, per
+  `FR-ERR-009` and `FR-CFG-027`, built under `FR-ERR-022` and dropped under
+  `FR-ERR-023` where the entry name falls outside the character set that
+  requirement applies to it.
+
+  *Why `dsn` satisfies it.* The grammar of `FR-CONF-009` makes `host`
+  mandatory in a DSN, so an entry defined by `dsn` names a host by carrying
+  one. `FR-CONF-006` makes the two ways of describing a connection mutually
+  exclusive, so exactly one of them answers this requirement for any entry
+  `FR-CONF-007` admits.
+
+  *Added in the twenty-fifth edition.* `FR-CONF-002` gives `host` no default
+  and `FR-CFG-016` requires one discrete flag and not this one, so
+  `tpl cfg database add reporting --user reader` writes an entry that is legal
+  in the file, passes every check `FR-CONF-007` makes, and describes no
+  connection. Nothing in this corpus said what an invocation selecting it
+  produces.
+
+  *Rejected: composing the refusal where the connection is assembled.* That is
+  where the absence is met — the layer that resolves an entry into the settings
+  a connection is opened from — and it is the one layer that cannot satisfy
+  the `78` row of `FR-ERR-034`, which obliges the `cause` to name the key and
+  the file. Neither the file nor the position that declared the entry is a
+  thing that layer holds. The condition is therefore decided where `.tpl/.cfg`
+  is open, which is entry resolution, and the layer below it is reached only by
+  an entry that has already answered this requirement.
+
+  *Rejected: refusing at step 3, whenever the file carries such an entry.* It
+  refuses a file for an entry no invocation selected, and no `cfg` subcommand
+  is among the commands `FR-PROJ-025` excuses from reading and validating the
+  file — so the `tpl cfg database update` that would repair the entry is itself
+  refused, and `.tpl/.cfg` becomes repairable only by hand. That is the defect
+  the twenty-second edition closed in three places, arriving from the reading
+  side.
+
+  *Rejected: `64`.* The invocation is legal and the file is what is wrong, and
+  `78` is the code that sends a caller to `.tpl/.cfg`, per its row of
+  `FR-ERR-001`. `FR-CFG-048` decides the mirror case the other way for the same
+  reason: there the file is valid and the invocation is not.
+
+- **FR-CONF-041**: The database a read covers SHALL be the one the selected
+  entry names — the `database` key of `FR-CONF-002`, or the `/database` segment
+  of `dsn`, per `FR-CONF-009` — and the system SHALL NOT derive it from any
+  other source. IF the entry an invocation selects names none and the
+  invocation reads the catalogue, THEN the system SHALL exit `78` (`EX_CONFIG`)
+  and SHALL NOT open a connection.
+
+  The `cause` SHALL name `.tpl/.cfg`, the entry, and `database.<name>.database`
+  as the key the entry does not carry, per the `78` row of `FR-ERR-034`. The
+  `hint` SHALL carry `tpl cfg database update <entry> --schema <database>`, per
+  `FR-ERR-009` and `FR-CFG-027`, under the same construction rules as
+  `FR-CONF-040`.
+
+  *What it reaches.* Every `schema` subcommand, which cannot select a database
+  without it; every read `tpl render` makes against a live or cached source;
+  `tpl cache load`; and the privilege probe of `FR-CFG-044`, which is a
+  `SELECT` against `INFORMATION_SCHEMA` restricted to the database the entry
+  names and has nothing to restrict itself to without one.
+  `tpl cfg database test` therefore exits `78` on such an entry, which is one
+  of the four outcomes `FR-CFG-043` already records for that command, and it
+  reports none of the four steps of `FR-CFG-024` — exactly as it reports none
+  of them for an entry `FR-GLOB-007` refuses with `66`, because entry
+  resolution precedes them both.
+
+  *Added in the twenty-fifth edition.* `FR-CONF-002` gives the key no default
+  and no requirement said what its absence produces, so which database a read
+  covers was answerable only by an implementation choosing one. The choice is
+  made here instead, and it is the only source this corpus has: the entry.
+
+  *Rejected: taking the session's own default schema.* Where the entry names a
+  database there is nothing to take that the entry did not supply, and where it
+  names none the session has no default to take, because the entry is what
+  selects one. A default reaching the session another way — a server-side
+  initialisation, a proxy — would decide which database is read without
+  appearing anywhere on the command line or in the file, which is what
+  `BR-CLI-002` exists to prevent, and it would cost a round trip to obtain.
+
+  *Rejected: reading the databases the reader can see and choosing among
+  them.* It is the guess `BR-CONF-004` refuses, made over the one value that
+  decides what the whole document contains, and a wrong guess presents a
+  caller with the structure of a database they did not name. It also costs a
+  second catalogue statement on every read, against the counts `NFR-PERF-001`
+  and `NFR-PERF-002` fix.
+
+  *Rejected: a flag that names the database on the command line.* `-d` and
+  `--database` already name the **entry**, per `FR-GLOB-004`, so a second flag
+  spelt from the same word would be read as the first by everyone who met it;
+  and `FR-GLOB-001` closes the global set at seven. Adding one is a change to
+  the command surface and is not what this gap needs: the file already has a
+  key for the value, and what was missing was the rule that the key is the
+  answer.
 
 ## DSN
 
@@ -650,7 +761,10 @@ tls      = "verify-identity"
   right-hand column of `FR-CONF-038`.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, the code a TLS
   handshake failure produces, and `FR-ERR-034`, which fixes what its `cause`
-  must name.
+  must name; `FR-ERR-006`, at whose fourth step `FR-CONF-040` and `FR-CONF-041`
+  are decided.
+- [schema-commands.md](schema-commands.md) — the arm `FR-CONF-041` supplies
+  with the database every one of its subcommands reads.
 
 ## Open questions
 

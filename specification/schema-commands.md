@@ -1,8 +1,8 @@
 ---
 title: Schema Commands (First Arm)
 status: approved
-last-reviewed: 2026-09-18
-related: [cli-contract.md, cache-commands.md, output-formats.md, render-command.md]
+last-reviewed: 2026-09-20
+related: [cli-contract.md, cache-commands.md, output-formats.md, context-document.md, render-command.md]
 ---
 
 # Schema Commands (First Arm)
@@ -16,7 +16,8 @@ reads through the catalogue cache.
 ## Scope
 
 In scope: the eight subcommands, their arguments and flags, the `--pattern`
-filter, the shape of the dump document, and the ordering and format of the
+filter, the shape of the dump document, the shape of the `tpl schema info`
+document and how it differs from the dump, and the ordering and format of the
 result.
 
 Out of scope: the content of the catalogue itself — which fields a table, view,
@@ -100,6 +101,58 @@ tpl schema dump                        The whole database as one JSON document
   identical. Stated here in the twenty-third edition, with the field, so that
   a reader arriving from either side is told once.
 
+  **The prefix is matched as written, in lower case.** The system SHALL accept
+  `procedure:` and `function:` and no other spelling of either. IF the segment
+  before the first colon of a token that names one routine, folded over ASCII
+  `A-Z` and `a-z` alone as `FR-SCH-014` folds, is `procedure` or `function`
+  while the token does not carry it in lower case, THEN the system SHALL exit
+  `64` (`EX_USAGE`). The `cause` SHALL name the token as written and the
+  spelling expected, per the `64` row of `FR-ERR-034`; the `hint` SHALL carry
+  the same invocation with the prefix in lower case, per `FR-ERR-009`, built
+  under `FR-ERR-022` and dropped under `FR-ERR-023` where the routine name
+  falls outside the character set that requirement applies to it. The token's
+  shape is decidable without a server, so the condition is evaluated at step 1
+  of `FR-ERR-006` and precedes every catalogue read.
+
+  *Amended in the twenty-fifth edition: the casing of the prefix is stated,
+  because the composition the twenty-third edition described produced a token
+  this requirement neither admitted nor refused.* That edition fixed `kind` at
+  `PROCEDURE` and `FUNCTION` and said that a caller composing a qualified name
+  from the field folds the case. `procedure:calc_vat` was admitted in terms and
+  `PROCEDURE:calc_vat` — which is what a caller that reads `kind` from the
+  document and concatenates produces — was governed by nothing: a reader could
+  take it for a prefix this requirement admits in another spelling, or for a
+  bare name. Neither reading was available from the text, and the two build
+  different programs. The obligation to fold now has a stated consequence, and
+  the sentence above is what it always meant.
+
+  *Rejected: matching the prefix case-insensitively, so that every case
+  variant is admitted.* No spelling this corpus fixes is stated to be matched
+  case-insensitively — not a command or its alias, per `FR-CLI-002`; not a
+  flag, per `FR-GLOB-001`; not a TLS mode, per `FR-CONF-013`; not a key of the
+  space of `FR-CONF-002` — so one token folded inside a command line that folds
+  nothing else is a rule every reader has to memorise and every parser has to
+  except. It also widens the set of tokens read as qualified from two spellings
+  to every case variant of two words, and each of them shadows a routine that
+  could legally carry it as a name: this requirement accepts that shadow for
+  two spellings deliberately, and multiplying it buys nothing that one case
+  fold, at the one place a qualified name is composed, does not buy.
+
+  *Rejected: leaving the casing unstated, so that `PROCEDURE:calc_vat` falls
+  through as a bare name.* It is refused, by `FR-SCH-010`, with `66` and a
+  nearest-match suggestion over the routine names that exist — a message
+  reporting that an object of that name is absent, over a population that
+  cannot contain the name the caller meant, when what is wrong is the spelling
+  of a prefix this corpus fixes. That diagnoses the wrong fault, which is what
+  `FR-CONF-034` refuses for a misspelled configuration key and what
+  `FR-ERR-034` bans a `cause` line for.
+
+  *Accepted cost.* A routine whose own name begins with a case variant of
+  `procedure:` or `function:` is not reachable by that name through the four
+  commands above. The cost is already accepted for the two lower-case
+  spellings, by the amendment that introduced them; this widens it to their
+  case variants and to nothing else.
+
 - **FR-SCH-009**: `tpl schema table <name>` SHALL be exhaustive over what the
   catalogue holds for that table: its columns with position, type, nullability,
   default, comment, and generated-column status; its primary key, indexes, and
@@ -118,6 +171,16 @@ tpl schema dump                        The whole database as one JSON document
   `CHECK` constraints are added in the same amendment: `FR-CAT-015` has
   required them since the second edition and this list, written in the first,
   never named them.
+
+  *Amended in the twenty-sixth edition: two of the three now cite the
+  observation that established them.* The engine and the collation were
+  required here from the first edition, and no requirement of this corpus said
+  which catalogue field either is read from or what that field holds — two
+  facts this command must print, fixed nowhere. `FR-CAT-054` records both,
+  observed on 2026-09-18 against all four series of `FR-SRV-015`, and
+  `FR-CAT-053` names it beside them. The comment's absent value was already
+  fixed by `FR-CAT-039`. Nothing this requirement obliges changes: the three
+  are as the seventh edition left them.
 
 - **FR-SCH-010**: IF a named table, view, or routine does not exist in the
   selected database, THEN the system SHALL exit `66` (`EX_NOINPUT`) with a
@@ -222,13 +285,44 @@ tpl schema dump                        The whole database as one JSON document
   when the document shape changes. The precedents are `BR-ERR-001`, which
   mandates a test per exit code, `BR-HELP-001` and `BR-HELP-003`, which mandate
   four for the help forms and the command tree, and `FR-SRV-012` and
-  `FR-SRV-013`, which mandate two for the read-only promise. The round-trip was
-  the only contract with none.
+  `FR-SRV-013`, which mandate three for the read-only promise. The round-trip
+  was the only contract with none.
 
   *Accepted cost.* The test needs the container of
   [performance-requirements.md](performance-requirements.md), which now
-  exists at all four series of `FR-SRV-015`. It is blocked only by `tpl` not
-  existing.
+  exists at all four series of `FR-SRV-015`.
+
+  *Amended in the twenty-sixth edition: the note named a condition that does
+  not hold.* It said the test was blocked only by `tpl` not existing. The
+  binary exists — the package landed at `d8e7e8a` and the repository carries
+  both a library and a binary — so the note named no block at all, on a test
+  this rule mandates. What blocks the test is that **neither half of the
+  round-trip is implemented**: `tpl schema dump`, per `FR-SCH-016`, and
+  `tpl render --context`, per `FR-RND-016`. Both are declared in the command
+  tree and neither executes — each raises the violated-invariant `70` of
+  `FR-ERR-030` instead — as checked at `90af569`. The two halves belong to
+  different arms, the dump to this one and `--context` to the third, so the
+  test becomes writable when the later of the two lands and not before. This
+  note states something about a file this corpus does not own, so it is
+  re-read whenever either command gains an implementation.
+
+  *Rejected: recording that the block is gone.* It is not. The test cannot be
+  written against two commands that neither dump nor render, and a rule that
+  mandates a test owes its reader a note saying what the test waits on.
+
+  *Rejected: writing the dump half now and asserting it against a stored
+  snapshot.* That asserts that the dump has not changed, which is a
+  determinism property `NFR-DET-001` already owns. The whole subject of this
+  rule is that a render from a dump and a render from a live read agree, and
+  neither render can be performed.
+
+  *Amended in the twenty-eighth edition: the count in the precedent list
+  follows the requirement it counts.* The clause said **two**, one test each,
+  which was true until `FR-SRV-013` was split by the test form that can reach
+  each of its two outcomes: its confirming outcome is an integration test
+  against every series, its failing outcome an in-process test through the seam
+  that requirement authorises, and `FR-SRV-012` is unchanged. Only the count
+  changes here, and nothing about this rule or the round-trip it mandates.
 
 ## Flags and output
 
@@ -243,16 +337,38 @@ tpl schema dump                        The whole database as one JSON document
   cache, per `FR-CACHE-006`.
 
 - **FR-SCH-026**: In `text` output, a listing SHALL be presented as aligned
-  columns under a header row:
+  columns under a header row, laid out by the following rule and by no other:
+
+  1. One column per field, in a fixed order, under a header row carrying each
+     field's name in upper case. The fields and their order are a property of
+     the listing rather than of this rule; for `tpl schema tables` they are
+     those shown below.
+  2. Each column SHALL be as wide as the widest cell it holds, its header cell
+     included, measured in the characters a reader is shown — that is, after
+     the escaping of `FR-OUT-018`.
+  3. Every cell SHALL be left-aligned and padded on its right with spaces to
+     its column's width. A column of numbers SHALL be laid out exactly as any
+     other column and SHALL NOT be right-aligned.
+  4. Two adjacent columns SHALL be separated by exactly two spaces.
+  5. A row SHALL end at its last non-empty cell. That cell SHALL carry neither
+     padding nor a separator after it, and no line SHALL carry trailing
+     whitespace.
+  6. Every line, the header row included, SHALL be terminated by one `\n`.
+
+  Applied to a database holding three tables, the rule yields exactly this:
 
   ```
   tpl -d shop schema tables
 
-  NAME          ENGINE  COLUMNS  COMMENT
-  customers     InnoDB        14  Registered buyers
-  order_items   InnoDB         7
-  orders        InnoDB        21  One row per order
+  NAME         ENGINE  COLUMNS  COMMENT
+  customers    InnoDB  14       Registered buyers
+  order_items  InnoDB  7
+  orders       InnoDB  21       One row per order
   ```
+
+  The rows are ordered by name, ascending, byte-wise, per `FR-SCH-028` and
+  `NFR-DET-002`, which is why `order_items` precedes `orders`. A listing with
+  no rows prints the header row and nothing beneath it, per `FR-OUT-034`.
 
   *Amended in the second edition.* The listing previously carried a `ROWS`
   column, which is the server's row estimate. The storage engine revises that
@@ -260,6 +376,36 @@ tpl schema dump                        The whole database as one JSON document
   database differ — which contradicts `NFR-DET-001` and the argument
   `FR-SCH-018` used to keep `now` out of the dump. `COLUMNS` is a structural
   count and is stable. The general rule is `FR-CAT-024`.
+
+  *Amended in the twenty-fifth edition: the rule is stated, and the listing is
+  now the rule applied to its own data.* As it stood, no single layout rule
+  reproduced it. Its `NAME` column was twelve characters wide against a widest
+  cell of eleven; its `COLUMNS` column was seven wide in the header row and
+  eight in the rows beneath it, so the header's `COMMENT` began one column to
+  the left of every comment under it; and it right-aligned `COLUMNS`, which no
+  requirement of this corpus stated. `FR-OUT-006` fixes that the output is
+  aligned columns under a header row and fixes nothing further, and
+  `FR-OUT-004` makes it no contract, so nothing else here could settle the
+  question — and this is the only worked `text` listing this corpus carries.
+  The six clauses above are `FR-OUT-006` made reproducible, and they are stated
+  here, beside the listing that demonstrates them.
+
+  *Rejected: right-aligning a column of numbers, which the listing as it stood
+  did.* It obliges the layout to carry an alignment per column, and obliges
+  this corpus to say of every listing it fixes which of its columns hold
+  numbers — a second field list beside each of the ones
+  [catalogue-coverage.md](catalogue-coverage.md) already fixes, written for a
+  surface `FR-SCH-027` and `FR-OUT-004` declare is not a contract. One rule
+  applied to every cell alike is reproducible by a reader who knows nothing
+  about what a column holds, which is the whole of what a worked listing is
+  for.
+
+  *Rejected: keeping the listing as it stood and stating the rule that
+  produces it.* There is none. It would take three — a width per column that
+  the data does not determine, an alignment per column, and a header row laid
+  out to a different width from the rows beneath it — and none of the three is
+  derivable from the values shown, so a reader could not apply any of them to
+  a second listing.
 
 - **FR-SCH-027**: The `text` output of any `schema` subcommand is not a
   contract, per `FR-OUT-004`. Anything parsing a listing must use
@@ -269,12 +415,32 @@ tpl schema dump                        The whole database as one JSON document
   `json` output in the envelope of `FR-OUT-024`.
 
 - **FR-SCH-031**: The `data` of `tpl schema info` SHALL be an object carrying
-  one key, `database`, whose value is the metadata of the selected database.
+  one key, `database`, whose value carries exactly four members and no others:
+  the three metadata fields `FR-CTX-036` fixes — `name`, `charset`, and
+  `collation` — and the `server` object `FR-CTX-031` fixes. It SHALL NOT carry
+  the collections `tables`, `views`, and `routines` of `FR-CTX-035`.
 
-  *The field list is fixed by `FR-CTX-036`*: three metadata fields — `name`,
-  `charset`, and `collation` — beside the `server` object of `FR-CTX-031` and
-  the three collections of `FR-CTX-035`. The envelope and the `data` key are
-  fixed here.
+  ```json
+  {"schema_version":1,"source":"server","data":{"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{"version":"11.4.13-MariaDB-ubu2404","series":"11.4","standing":"supported"}}}}
+  ```
+
+  **`tpl schema info --format json` and `tpl schema dump` SHALL NOT emit the
+  same bytes.** The two commands answer different questions, and this
+  requirement is the one that keeps them apart.
+
+  **How this object relates to the one `FR-CTX-001` fixes.** Every member it
+  carries is the same member, under the same name and with the same value, that
+  the `database` object of the context document carries: a caller reading
+  `data.database.name`, `.charset`, `.collation` or `.server` receives the same
+  answer from `tpl schema info` and from `tpl schema dump`. This object is that
+  object **without** the three collections, and it is the only place this
+  corpus emits a reduction of it. `FR-CTX-001`, `FR-CTX-035` and `FR-CTX-036`
+  are unchanged: they fix the context document, which is what
+  `tpl schema dump` emits under `FR-SCH-034` and what `tpl render --context`
+  consumes under `FR-SCH-036`, and `tpl schema info` emits neither.
+
+  The envelope and the `data` key are fixed here, per `FR-SCH-030` and
+  `FR-OUT-024`.
 
   *Amended in the fourth edition.* One field of that object is now fixed:
   `server`, carrying the probed version, the series, and the standing, per
@@ -282,16 +448,64 @@ tpl schema dump                        The whole database as one JSON document
   catalogue field — it comes from the version probe of `FR-SRV-002` — so
   `BR-CTX-006` could fix it without observing anything.
 
-  *Amended in the fifth edition.* Three more are fixed: the collections
-  `tables`, `views`, and `routines`, per `FR-CTX-035`. They are outside
-  `OQ-024` for the same reason — a collection is a structural rule of
-  [context-document.md](context-document.md), not a catalogue field.
+  *Amended in the fifth edition, and reversed in the twenty-seventh.* That
+  edition read three more fields into this requirement — the collections
+  `tables`, `views`, and `routines`, per `FR-CTX-035` — on the ground that they
+  are outside `OQ-024` because a collection is a structural rule of
+  [context-document.md](context-document.md) rather than a catalogue field.
+  The ground was sound about `FR-CTX-035`; the step from it to this
+  requirement was not. It is recorded rather than deleted, because the reading
+  it created stood for twenty-two editions.
 
   *Amended in the seventh edition, and the gap is closed.* The schema
   catalogue was observed against all four series and returns six columns.
   `FR-CTX-036` takes three of them as the metadata fields and states, field by
   field, why the other three are not carried. `OQ-024` is now listed under
   [Closed](open-questions.md#closed).
+
+  *Amended in the twenty-seventh edition: two commands were emitting the same
+  bytes.* Reading this requirement against its own amendments showed that the
+  fifth edition's step had made `tpl schema info --format json` emit, byte for
+  byte, what `tpl schema dump` emits: the collections are the whole of the
+  model, so a `database` object carrying them is the dump. `FR-SCH-002`
+  provides eight subcommands and `FR-SCH-016` gives one of them the whole
+  database; a second command emitting the same document is not a second
+  command, which is the argument `FR-SCH-019` already made in this file about
+  a flag with a single permitted value. The reduction is what this requirement
+  always described — `tpl schema info` reports **the metadata of the selected
+  database**, per `FR-SCH-003` — and the amendment restores that reading with
+  the field list stated rather than delegated.
+
+  *Rejected: leaving the collections in and accepting the byte-identity.* It
+  costs a calling agent the whole model to ask a database's name and its
+  server's standing, on the command whose line in the surface above reads
+  *Database metadata*, and it leaves two of the eight subcommands
+  indistinguishable to a caller that reads only the bytes. It also makes
+  `tpl schema info` the most expensive command of this arm while presenting the
+  least, which no reader of that surface would predict.
+
+  *Rejected: giving `tpl schema info` a key of its own beside `database`, or a
+  count of each collection.* A count is derivable from the three listings of
+  `FR-SCH-032` and from the dump, and inventing a field the model does not
+  carry would put a number in the plumbing contract that no requirement of
+  [catalogue-coverage.md](catalogue-coverage.md) fixes. The `text` form of this
+  command is not a contract, per `FR-SCH-027` and `FR-OUT-004`, and what it
+  chooses to show is outside this requirement.
+
+  *Rejected: composing a reduced object under a different key, so that
+  `data.database` always means the whole object.* It would cost a caller the
+  one property this amendment preserves — that `data.database.name` answers the
+  same from either command — and `FR-OUT-031` names the key for the kind in the
+  singular, which for a database is `database`.
+
+  *Accepted cost, stated plainly.* Two shapes are emitted under the key
+  `database`, distinguished by the command that produced them and by nothing in
+  the envelope. A caller that reads `data.database.tables` from
+  `tpl schema info` finds no such key, and `FR-SEM-012` would fail a template
+  that did — though no template reads this document, because
+  `tpl render --context` takes the dump and refuses anything else, per
+  `FR-SCH-036`. The cost is one sentence in a caller's notes; the cost of the
+  rejected option is the whole model on every metadata query.
 
 - **FR-SCH-032**: The `data` of `tpl schema tables`, `tpl schema views`, and
   `tpl schema routines` SHALL follow `FR-OUT-030`, carrying one key named for
@@ -360,6 +574,12 @@ tpl schema dump                        The whole database as one JSON document
 - [output-formats.md](output-formats.md) — `text` and `json` rules, `--pretty`.
 - [render-command.md](render-command.md) — the `--context` half of the
   dump round-trip.
+- [configuration-model.md](configuration-model.md) — `FR-CONF-041`, which fixes
+  which database a read covers, and `FR-CONF-040`, which refuses an entry that
+  names no host. Every subcommand of this arm depends on the first.
+- [privileges-and-completeness.md](privileges-and-completeness.md) —
+  `FR-PRIV-021`, the outcome where the schema catalogue returns no row for that
+  database.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `64`, `66`, `69`, `77`,
   `78`.
 

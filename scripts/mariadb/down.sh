@@ -39,8 +39,16 @@ wanted() {
     return 1
 }
 
+# Both loops below read the inventory on file descriptor 9, not on stdin, on
+# the same terms `tpl_mariadb_each` and up.sh read it: a command in either body
+# that reads stdin would drain the records still to be read, and the loop would
+# end after the first server — silently, and with exit 0, leaving four
+# containers running while reporting success. `docker rm` and `docker rmi` do
+# not read stdin, so the defect is latent rather than present, and the
+# descriptor is what keeps it that way. Descriptor 9 and not 3:
+# `tpl_mariadb_handshake` opens the TCP port on 3.
 removed=0
-while read -r name series image container port tls; do
+while read -r name series image container port tls <&9; do
     [ -n "$name" ] || continue
     wanted "$name" || continue
     if docker inspect "$container" >/dev/null 2>&1; then
@@ -50,13 +58,13 @@ while read -r name series image container port tls; do
     else
         log "  absent    $container"
     fi
-done <<< "$TPL_MARIADB_SERVERS"
+done 9<<< "$TPL_MARIADB_SERVERS"
 
 if [ "$DROP_IMAGES" = yes ]; then
-    while read -r name series image container port tls; do
+    while read -r name series image container port tls <&9; do
         [ -n "$name" ] || continue
         docker image inspect "$image" >/dev/null 2>&1 && docker rmi "$image" >/dev/null 2>&1 || true
-    done <<< "$TPL_MARIADB_SERVERS"
+    done 9<<< "$TPL_MARIADB_SERVERS"
     log "  images dropped"
 fi
 

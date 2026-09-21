@@ -1,7 +1,7 @@
 ---
 title: Privileges and Completeness
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-20
 related: [catalogue-coverage.md, server-contract.md, context-document.md, errors-and-exit-codes.md]
 ---
 
@@ -26,9 +26,12 @@ says so.
 In scope: the definition of a complete and an incomplete read, the outcome for a
 named object, the outcome for a listing and a dump, the marking of an incomplete
 object and the shape of that marking, the refusal of a marked dump as a context,
-the three shapes a privilege-driven absence takes, the cross-checks that
-distinguish a missing privilege from an absence, and the one place where the
-catalogue makes no such distinction possible.
+the three shapes a privilege-driven absence takes, the population every count
+in this file is taken over, the cross-checks that distinguish a missing
+privilege from an absence, the objects each cross-check marks and the property
+each of them loses, the one place where the catalogue makes no such
+distinction possible, and the outcome where the database a read covers has no
+row in the schema catalogue at all.
 
 Out of scope: which privileges a reader needs, which depends on the server and
 is not stated here; the connection and authentication failures that precede a
@@ -189,6 +192,20 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   | A table's referential rules, and the constraint table beside them | 15 and 68 rows for the fixture | **zero rows** | yes, `FR-PRIV-019` |
   | A table's triggers | 6 rows for the fixture | **zero rows** | **no**, `FR-PRIV-020` |
 
+  **Every count in this file names the population it was taken over**, and one
+  catalogue table has two. A count over a catalogue table is taken over the
+  rows it returns for the database the read covers. A count over the rows the
+  foreign-key cross-check of `FR-PRIV-019` is evaluated over is taken over the
+  **filtered** population `FR-CAT-045` selects: the key-column rows that name a
+  referenced table, which are the only rows a foreign key contributes. For the
+  fixture the two are **54** and **17**, a factor of three apart, which is why
+  the distinction has to be written down rather than inferred from a number.
+
+  Every other catalogue table this file names has one population. For the
+  fixture they return 15 referential-constraint rows, 68 table-constraint rows,
+  24 check-constraint rows, 77 index rows and 6 trigger rows, and no
+  requirement of this corpus selects a subset of any of them.
+
   *Observed.* The reduced-grant reader of the fixture holds
   `SELECT, EXECUTE ON freight.*` and nothing more. It sees all 23 catalogue
   objects and all 7 routine rows; it loses the view definitions to an empty
@@ -196,6 +213,26 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   `INFORMATION_SCHEMA.TABLE_CONSTRAINTS`, `REFERENTIAL_CONSTRAINTS` and
   `TRIGGERS` to zero rows, while `KEY_COLUMN_USAGE` and `CHECK_CONSTRAINTS`
   are unaffected. The behaviour is identical on all four series.
+
+  *Observed, 2026-09-20, against all four series of `FR-SRV-015` through the
+  harness of `scripts/mariadb/`, as the privileged reader and as the
+  reduced-grant reader in turn.* The 17 rows carry 15 distinct
+  table-and-constraint pairs, which is the 15 referential rules exactly; they
+  name 9 distinct referencing tables and 9 distinct referenced tables, whose
+  union is 14 of the fixture's tables. The other 37 key-column rows belong to
+  primary and unique keys, and each of them returns SQL `NULL` in the
+  referenced-table, referenced-schema and referenced-column fields, per
+  `FR-CAT-045`. The reduced-grant reader sees the same 54 and the same 17, and
+  zero rows in `TABLE_CONSTRAINTS` and `REFERENTIAL_CONSTRAINTS`. Identically
+  on all four series.
+
+  *The table-constraint table is observed here and read nowhere.* It is the
+  second table a reduced reader loses entirely, which is why its count belongs
+  in this file; no requirement of
+  [catalogue-coverage.md](catalogue-coverage.md) takes a property from it, and
+  `FR-CAT-043` reads the primary key from the index table instead. Its absence
+  is therefore detectable only through the referential rules beside it, which
+  is what `FR-PRIV-019` detects.
 
   *Rationale.* The first edition of this file assumed one shape of absence and
   wrote one detection for it. There are three, they do not resemble each
@@ -215,6 +252,15 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   rows to it. What it loses is the **referential rule** of every foreign key,
   and only that. The row above is worded accordingly, and `FR-PRIV-019`
   detects exactly the loss that remains.
+
+  *Amended in the twenty-seventh edition: the counts name their population.*
+  The third row above and `FR-PRIV-019` both quote counts of the key-column
+  table taken over the whole table, and no requirement said so. A reader
+  building the cross-check from `FR-PRIV-019`'s *all 54 rows* and finding 17
+  has two readings available — that the statement is wrong, or that the
+  observation is — and the two build different programs. Neither is: the
+  populations are different, and both numbers are correct over the population
+  each was taken over. Nothing about what a reduced reader loses changes.
 
 - **FR-PRIV-011**: IF the catalogue reports a view whose definition is the
   empty string, THEN the system SHALL treat that as a missing privilege and
@@ -263,14 +309,26 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
 - **FR-PRIV-019**: IF the catalogue reports a key column that names a
   referenced table while no referential-constraint row exists for the
   constraint that column belongs to, THEN the system SHALL treat that as a
-  missing privilege and SHALL exit `77` for a named object, or mark the table
-  under `FR-PRIV-005` in a listing or a dump.
+  missing privilege and SHALL exit `77` for a named object, or mark under
+  `FR-PRIV-005` in a listing or a dump.
 
-  *Observed.* The reduced-grant reader receives **zero rows** from
-  `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` and from
-  `REFERENTIAL_CONSTRAINTS`, and **all 54 rows** from `KEY_COLUMN_USAGE`. It
-  therefore sees every foreign-key column and not one foreign-key rule: the
-  table appears structurally whole while its referential semantics are gone.
+  **Two tables lose a property, not one, and each loses a different one.** The
+  key column names both of them, and `FR-CAT-045` presents one foreign key from
+  both ends, so a rules row that is not there costs each end the direction it
+  owns:
+
+  | Table | Named by | Property lost | Required by |
+  |---|---|---|---|
+  | The **referencing** table | the key column's own table | `foreign_keys` | `FR-CAT-012` |
+  | The **referenced** table | the key column's referenced-table field | `referenced_by` | `FR-CAT-013` |
+
+  Each SHALL be marked under `FR-PRIV-005`, with that property named in its
+  `restricted` array, per `FR-PRIV-016`, and per `FR-PRIV-006` each SHALL be
+  marked individually. A table this requirement would mark that the read does
+  not present SHALL NOT be marked, because there is no object to carry the
+  marking; the coverage of `FR-CAT-052` decides which those are. For a named
+  object, per `FR-PRIV-003`, the `77` is produced when **either** end is the
+  object that was named.
 
   *Rationale.* This is the second place the catalogue offers two independent
   views of one population, and it is the one the third edition was waiting
@@ -280,6 +338,106 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   foreign keys, with exit `0`, and a generator would emit a schema with no
   relations at all. That is a larger silent failure than the one
   `FR-PRIV-011` prevents.
+
+  *Rationale for marking both, which is the whole of this amendment.*
+  `FR-PRIV-002` is unconditional: an object is incomplete when any property the
+  model defines for it could not be read, whatever the reason. Marking only the
+  referencing end would leave the referenced table presenting an **empty
+  `referenced_by`** as a complete answer at exit `0` — a table that is
+  referenced reported as referenced by nothing — which is the silent failure
+  this file exists to prevent, arriving from the end nobody was looking at. It
+  is also the failure the *Rationale* above already names: without the check,
+  `FR-CAT-012` **and** `FR-CAT-013` report nothing. That sentence cited
+  `FR-CAT-013` beside `FR-CAT-012` from the edition that wrote it, which
+  supports this reading and never stated it, while the requirement itself said
+  "the table" and its antecedent named two.
+
+  *Rejected: marking the referencing end alone.* It is the reading the shorter
+  wording admitted, and it is wrong for the reason above. *Also rejected:
+  marking the referenced end alone*, which reports the loss on the table that
+  did not declare the key and leaves the declaring table looking as though it
+  declared none. *Also rejected: a single marking on the document*, which
+  `FR-PRIV-006` already forbids and which cannot say which tables are affected.
+
+  *Accepted cost.* One missing rules row marks two objects, so a reduced reader
+  produces more markings than there are lost rules. Over the fixture that is 14
+  marked tables for 15 lost rules — 9 referencing tables and 9 referenced ones,
+  4 of which are both. The alternative is a document in which half the loss is
+  invisible, and `FR-PRIV-016` makes the marking per property precisely so that
+  a caller can tell which half of a relation it lost.
+
+  *Observed, and the count is stated over the population it was taken over,
+  per `FR-PRIV-018`.* The reduced-grant reader receives **zero rows** from
+  `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` and from `REFERENTIAL_CONSTRAINTS`,
+  and **all 54 rows** of the unfiltered `KEY_COLUMN_USAGE` for the database —
+  of which **17** name a referenced table and are the rows this cross-check is
+  evaluated over, per `FR-CAT-045`. It therefore sees every foreign-key column
+  and not one foreign-key rule: the table appears structurally whole while its
+  referential semantics are gone.
+
+  *Amended in the twenty-seventh edition, in two places.* The requirement said
+  the system SHALL "mark the table" while its antecedent names two tables, and
+  it quoted a count of 54 against a population of 17. Both are settled above:
+  both ends are marked, each with the property it lost, and each count names
+  the population it was taken over.
+
+- **FR-PRIV-021**: IF the schema catalogue returns no row for the database a
+  read covers, THEN the system SHALL exit `77` (`EX_NOPERM`), and SHALL NOT
+  present a database whose own metadata it could not read.
+
+  The `cause` SHALL name that database and state that its metadata could not be
+  read, per `FR-PRIV-013` and the `77` row of `FR-ERR-034`. The database a read
+  covers is the one the selected entry names, per `FR-CONF-041`, so the `cause`
+  has an instance to name in every case.
+
+  *The requirement does not claim which of two explanations holds, and says so
+  rather than implying one.* No row for that name is what a reader who may not
+  see the database receives and what a reader of a database that is not there
+  receives, and the catalogue offers no second view of the schema population to
+  separate them — the shape is the zero-rows shape of `FR-PRIV-018`, arriving
+  for the object the whole document describes. `FR-PRIV-010` requires that
+  limit to be stated here, and this is where it is stated. The code is chosen
+  on the caller's next step, which `FR-ERR-002` makes the test: under either
+  explanation the step is to establish that this reader can read that database,
+  which is the step the `77` row of `FR-ERR-001` states.
+
+  *Added in the twenty-fifth edition.* The condition was reported as a violated
+  internal invariant, exit `70`. It is not one. `FR-ERR-030` closes `70` to a
+  panic and to an invariant the system detects in itself, and nothing about
+  `tpl` is defective when a server declines to show a schema: the shortfall is
+  in what the reader was shown, which is the subject of this file. A `70` also
+  tells the caller, per its row of `FR-ERR-001`, that the condition is not
+  fixable by them, when it is — by a grant, or by correcting
+  `database.<name>.database`.
+
+  *Rejected: `66`.* Its row of `FR-ERR-001` sends the caller to list what
+  exists and choose another name, and `tpl` cannot support that step here: the
+  nearest-match suggestion `FR-ERR-005` and `FR-ERR-019` attach to a missing
+  name is drawn from a population, and the population of databases is one this
+  system never reads. Obtaining it is a second catalogue statement on a path
+  whose statement count `NFR-PERF-001` and `NFR-PERF-002` fix. It would also
+  tell a caller whose name is correct that it is not.
+
+  *Consequence, stated plainly, because it is a limit on the evidence rather
+  than on the guarantee.* No invocation of the distributed binary is observed
+  producing this condition, and this corpus does not establish that one can.
+  The requirement exists because a reader can meet the absence of that row and
+  must answer it with something, not because a reachable state has been
+  demonstrated. What can be exercised is this system's own handling of a schema
+  read that returned no row, in process, and the step from that condition to
+  the exit status is the step every condition of `FR-ERR-001` travels — the
+  composition `FR-ERR-031` records for `70`, arriving here for a different
+  reason. `BR-ERR-001` is not weakened by it: `77` has the integration tests
+  that rule mandates, through `FR-PRIV-003` with `FR-PRIV-011`, `FR-PRIV-017`
+  and `FR-PRIV-019`. The other two requirements written this way are
+  `FR-ERR-031` and `NFR-PERF-005`.
+
+  *What would change this.* An observation, against a series of `FR-SRV-015`,
+  of a session that is open and a schema catalogue that returns no row for the
+  database that session was opened against; or a second view of the schema
+  population in the catalogue, which would let the `cause` separate the two
+  explanations. Neither has been made, and this note is what an amendment
+  changes.
 
 - **FR-PRIV-020**: The system SHALL NOT claim to distinguish a table with no
   triggers from a table whose triggers the reader may not see, and this file
@@ -379,6 +537,8 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   completeness the round-trip already depends on.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `77`, and the message
   format.
+- [configuration-model.md](configuration-model.md) — `FR-CONF-041`, which names
+  the database `FR-PRIV-021` reports on.
 - [cache-commands.md](cache-commands.md) — `FR-CACHE-037`, which keeps a marked
   object out of the cache.
 - [cfg-commands.md](cfg-commands.md) — `FR-CFG-044`, whose probe reports

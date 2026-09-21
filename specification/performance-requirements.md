@@ -1,8 +1,8 @@
 ---
 title: Performance Requirements
 status: approved
-last-reviewed: 2026-09-11
-related: [server-contract.md, cache-documents.md, global-flags.md, catalogue-coverage.md, project-and-discovery.md]
+last-reviewed: 2026-09-20
+related: [server-contract.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md]
 ---
 
 # Performance Requirements
@@ -64,10 +64,55 @@ would satisfy a budget.
 
 - **NFR-PERF-002**: The number of catalogue queries the system issues to read
   one named object SHALL NOT depend on the number of objects in the database.
+  The **rows** such a read returns MAY be the whole catalogue, and a read that
+  returns them SHALL NOT be taken to violate this requirement.
 
-  *Rationale.* Reading the whole catalogue to answer `tpl schema table orders`
-  is the mirror-image defect of the N+1, and it is the more likely one once the
-  full-read path exists.
+  *Rationale.* This is the mirror image of the N+1, stated so that it can be
+  checked rather than reviewed, and what it counts is statements. A reader that
+  issues one query per named object passes every correctness test and fails
+  this one.
+
+  *Amended in the twenty-seventh edition, because the rationale argued against
+  what three requirements in force oblige.* It read: *Reading the whole
+  catalogue to answer `tpl schema table orders` is the mirror-image defect of
+  the N+1*. That names the row volume as the defect, and the row volume is not
+  what this requirement fixes — a whole-catalogue read of a fixed number of
+  statements satisfies its words exactly. The three requirements are
+  `FR-CTX-006` and `FR-CTX-010`, which embed **in full** the table at each end
+  of every foreign key, and `FR-CTX-023`, which requires every object a
+  document references to be present in it. A read that returned one table's
+  rows would return that table's keys without the tables they name, and no
+  document could be built from it. The sentence is replaced rather than
+  softened, because a rationale that condemns the only satisfiable
+  implementation is worse than none.
+
+  *What a narrow read would have to return, stated so that the option stays
+  open.* A read that presents one named table must return, in addition to that
+  table's own rows, the columns, indexes and primary key of **every table at
+  either end of one of its foreign keys** — the tables `FR-CTX-007` and
+  `FR-CTX-010` require to be embedded in full. It need go no further: the
+  embedded tables' own keys are cut to names by `FR-CTX-008`, at the first hop,
+  in both directions, per `FR-CTX-009`. This corpus states no statement
+  repertoire, so nothing here says how those rows are obtained; what it fixes
+  is that a plan returning less than them cannot produce a document, and that a
+  plan returning the whole catalogue is admissible under this requirement.
+
+  *Rejected: obliging a narrow read.* The neighbours of a named table are not
+  known until that table's key rows have been read, so a narrow plan either
+  issues a second, dependent round of statements or joins the catalogue to
+  itself. The first is admissible here — its count still does not depend on the
+  number of objects — and the second has a cost this reader does not control.
+  Neither is forbidden by this requirement and neither is required by it, and
+  choosing between them is an architecture decision rather than a functional
+  one. What was not admissible was leaving a rationale in force that reads as
+  forbidding the only plan the embedding allows today.
+
+  *Accepted cost, stated plainly.* `tpl schema table orders` against a database
+  of two hundred tables reads two hundred tables' rows and presents one. The
+  statement count is unchanged, the wall-clock and memory cost is not, and it
+  is carried by the budgets of `NFR-PERF-014` and by the `WL-002` scalar rather
+  than by this requirement. `BR-CTX-001` and `FR-CTX-010` record the same cost
+  from the document's side, where it was accepted twice over.
 
 - **NFR-PERF-003**: A cache hit SHALL open no connection and SHALL issue no
   catalogue query.
