@@ -15,6 +15,7 @@
 //! | `FR-RND-005`, `FR-RND-011` … `FR-RND-014`, `FR-RND-018`, `FR-RND-027` | Step 1 of `FR-ERR-006` refuses six invocations with `64`, before anything is discovered or opened |
 //! | `FR-RND-020` | A document that is not well-formed JSON, and one that is JSON and not the contract, are each `65` |
 //! | `FR-RND-029`, `FR-RND-032` | A template name and an object name that reach nothing are each `66`, with the nearest-match suggestion of `FR-ERR-019` |
+//! | `FR-ERR-006`, `FR-ERR-007` | Template resolution is the fourth step, so it precedes the entry, the document and the catalogue, and the three costs that follow from the position are each what the requirement records |
 //! | `FR-RND-030`, `FR-RND-031`, `FR-SEM-005`, `FR-SEM-008`, `FR-SEM-014` | Every way a render fails is `65`, naming the template, the line and the column, per `FR-SEM-019` |
 //! | `FR-CTX-029`, `FR-CTX-030` | `now` is one instant per invocation, and a template that does not reference it repeats byte for byte |
 //! | `FR-CTX-026`, `FR-RND-024` | `vars` is this invocation's `--set` flags and nothing else, and a document that carries `vars`, `tpl` or `now` has those values ignored |
@@ -31,10 +32,12 @@
 //! document below is one the product produced, against a fixture server, in the
 //! body that uses it.
 //!
-//! Two bodies need no document and therefore no fixture, and they are the two
-//! about what happens before one is read: the six refusals of step 1, made in a
-//! directory with no project at all, and the two documents that are refused
-//! before anything is bound.
+//! Three bodies need no document and therefore no fixture, and they are the
+//! three about what happens before one is read: the six refusals of step 1,
+//! made in a directory with no project at all; the two documents that are
+//! refused before anything is bound; and the fourth position of `FR-ERR-006`,
+//! whose two no-server costs are each a refusal reached before a document could
+//! matter.
 //!
 //! # What this file does not establish
 //!
@@ -94,6 +97,20 @@ const FORGED: &str = "forged.json";
 
 /// The four labels of `FR-ERR-008`, in the order it fixes.
 const LABELS: [&str; 4] = ["error: ", "cause: ", "hint:  ", "exit:  "];
+
+/// A template name that resolves to nothing, for the bodies about step 4 of
+/// `FR-ERR-006`.
+///
+/// It is one edit away from [`RESOLVES`], so the nearest-match suggestion of
+/// `FR-TMPL-027` has something to find and a refusal that carried none would be
+/// caught.
+const ABSENT: &str = "resolve";
+
+/// The template those same bodies write, which does resolve.
+///
+/// It is the control for [`ABSENT`] and it renders without a model, so a body
+/// may reach step 8 with it in a project that names no database entry.
+const RESOLVES: &str = "resolves";
 
 /// The template the byte-for-byte comparison renders, named as `FR-TMPL-006`
 /// resolves it.
@@ -238,6 +255,63 @@ fn project(server: &Server, templates: &[(&str, &str)]) -> Sandbox {
     sandbox
 }
 
+/// Runs `tpl schema dump | tpl <arguments>` in `sandbox` and returns what each
+/// stage did (`FR-RND-017`).
+///
+/// The two are wired the way a shell wires them: the producer's standard output
+/// **is** the consumer's standard input, one pipe with one writer and one
+/// reader, so neither stage is buffered through this process.
+///
+/// `intercept` reads a single byte from the pipe before the consumer is given
+/// it. It is what makes an observation of `FR-ERR-026` an observation rather
+/// than a race — the read returns only once the producer has emitted a byte,
+/// which is the condition that requirement is written about. With `false`
+/// nothing is read and the pipeline is exactly the one `FR-RND-017` documents.
+///
+/// # Panics
+///
+/// Panics when either stage does not run, and when the interception finds the
+/// producer's stream already at end of file.
+fn piped(sandbox: &Sandbox, arguments: &[&str], intercept: bool) -> (Output, Output) {
+    use std::io::Read as _;
+    use std::process::{Command, Stdio};
+
+    let mut producer = Command::new(env!("CARGO_BIN_EXE_tpl"))
+        .env_clear()
+        .current_dir(sandbox.root())
+        .args(["schema", "dump", "--direct", "--no-cache"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary under test runs");
+
+    let mut document = producer.stdout.take().expect("standard output was piped");
+
+    if intercept {
+        let mut first = [0_u8; 1];
+
+        document
+            .read_exact(&mut first)
+            .expect("the producer emits a document");
+    }
+
+    let consumer = Command::new(env!("CARGO_BIN_EXE_tpl"))
+        .env_clear()
+        .current_dir(sandbox.root())
+        .args(arguments)
+        .stdin(Stdio::from(document))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("the binary under test runs");
+
+    let producer = producer
+        .wait_with_output()
+        .expect("the binary under test terminates");
+
+    (producer, consumer)
+}
+
 /// The same, with a `--context` document produced by the product against
 /// `server` already written at [`CONTEXT`].
 ///
@@ -318,26 +392,31 @@ fn fr_err_006_the_six_refusals_of_step_one_are_64_where_there_is_no_project_at_a
 // ------------------------------------------------------------ FR-RND-020 ---
 
 #[test]
-fn fr_rnd_020_a_document_that_is_not_the_contract_is_65_before_the_template_is_resolved() {
+fn fr_rnd_020_a_document_that_is_not_the_contract_is_65_once_the_template_resolves() {
     // FR-RND-020 in both halves: bytes that are not well-formed JSON, and JSON
     // that is well formed and is not the document contract. Neither needs a
-    // server and neither needs a template, which is the second thing this body
-    // establishes — the template named below exists nowhere, and the condition
-    // is still the document's, because the document is read at step 5 of
-    // FR-ERR-006 and the template name is resolved at step 7.
+    // server.
+    //
+    // **The template has to exist**, and that is the second thing this body
+    // establishes. FR-ERR-006 resolves the template name at step 4 and reads
+    // the document at step 6, so a name that resolves to nothing is reported
+    // first and the document is never read — which is the `66` the body below
+    // this one asserts. Here the name resolves, so the condition reported is
+    // the document's.
     //
     // A project **is** needed: FR-TMPL-023 makes the template root a property
     // of the resolved project and FR-CONF-004 resolves the render deadline from
     // `[core]`, so steps 2 and 3 run on the document path exactly as they run
     // on the other one. The project below names no database entry, so a build
-    // that fell through to step 4 would answer `78` rather than `65`.
+    // that fell through to step 5 would answer `78` rather than `65`.
     let sandbox = Sandbox::new();
     sandbox.project("[core]\n");
+    sandbox.write(&format!(".tpl/templates/{RESOLVES}.jinja"), "{{ 1 }}\n");
 
     for (file, bytes) in [("broken.json", "{ this is not json"), ("bare.json", "{}")] {
         sandbox.write(file, bytes);
 
-        let written = refused(&sandbox, &["render", "nosuch", "--context", file], 65);
+        let written = refused(&sandbox, &["render", RESOLVES, "--context", file], 65);
         let cause = line(&written, LABELS[1]);
 
         // The `65` row of FR-ERR-034 obliges the path the document was read
@@ -351,9 +430,170 @@ fn fr_rnd_020_a_document_that_is_not_the_contract_is_65_before_the_template_is_r
             "the cause did not name the document: {written}"
         );
         assert!(
-            !written.contains("nosuch"),
-            "the refusal named the template, so the document was read after it \
-             rather than before: {written}"
+            !written.contains(RESOLVES),
+            "the refusal named the template, so the condition reported is not \
+             the document's: {written}"
+        );
+    }
+}
+
+// --------------------------- FR-ERR-006, the fourth position and its costs ---
+
+#[test]
+fn fr_err_006_a_template_that_does_not_resolve_is_66_before_the_entry_and_before_the_document() {
+    // FR-ERR-006 puts template resolution at the fourth position, immediately
+    // after `.tpl/.cfg`, and FR-ERR-007 reports the first condition that fails.
+    // The requirement records the two consequences as accepted costs, and this
+    // body is both of them, each beside the control that shows the condition it
+    // now precedes is still there and still reported once the template
+    // resolves.
+    //
+    // Neither needs a server: the project below names no database entry at all,
+    // which is what makes the first control a `78`.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(&format!(".tpl/templates/{RESOLVES}.jinja"), "{{ 1 }}\n");
+    sandbox.write("bad.json", "{}");
+
+    // The first cost: `tpl render nosuch` in a project that selects no entry is
+    // `66`, where it was `78`.
+    let absent = refused(&sandbox, &["render", ABSENT], 66);
+
+    assert!(
+        line(&absent, LABELS[0]).contains(ABSENT),
+        "the refusal did not name the template: {absent}"
+    );
+    assert!(
+        line(&absent, LABELS[2]).contains(RESOLVES),
+        "no nearest match among the project's templates: {absent}"
+    );
+
+    // Its control: the same project and a template that does resolve reaches
+    // step 5 and is refused there, so the `66` above is the order working and
+    // not a `78` that stopped being raised.
+    refused(&sandbox, &["render", RESOLVES], 78);
+
+    // The second cost: `tpl render nosuch --context bad.json` is `66`, where
+    // FR-RND-020 gave it `65`.
+    let document = refused(&sandbox, &["render", ABSENT, "--context", "bad.json"], 66);
+
+    assert!(
+        line(&document, LABELS[0]).contains(ABSENT),
+        "the refusal did not name the template: {document}"
+    );
+    assert!(
+        !document.contains("bad.json"),
+        "the refusal named the document, so it was read before the template \
+         name was judged: {document}"
+    );
+
+    // Its control is the body above: the same document, under a template that
+    // resolves, is the `65` of FR-RND-020. It is asserted here too, over this
+    // very file, so that the pair is one observation.
+    refused(&sandbox, &["render", RESOLVES, "--context", "bad.json"], 65);
+}
+
+#[test]
+fn fr_err_006_under_context_dash_the_producer_is_cut_off_and_the_pair_is_still_66() {
+    // The third cost the fourth position of FR-ERR-006 records, and the only
+    // one visible outside the process: under `--context -` the document is no
+    // longer read before the template name is judged, so the producer of the
+    // pipeline FR-RND-017 documents is **cut off rather than drained**.
+    //
+    // Two things are asserted, and the arrangement differs between them for a
+    // reason stated below.
+    //
+    // 1. What a caller branches on is unchanged. The plain pipeline exits `66`:
+    //    the refusal is the consumer's, it is the rightmost stage, and it is
+    //    therefore what a shell reports with `pipefail` and without it.
+    //
+    // 2. The producer is cut off. FR-ERR-026 makes a stdout closed **after** a
+    //    byte of a JSON document was emitted a `74`, where before this move the
+    //    consumer read the document to end of file and the producer exited `0`.
+    //
+    // **Why the second assertion reads one byte first.** The two halves of the
+    // pair are separate processes and nothing orders them: the consumer refuses
+    // after four cheap steps while the producer is still opening a connection
+    // and reading a catalogue, so in the plain pipeline the producer's first
+    // write finds the reader already gone and no byte of the document was ever
+    // emitted — which is the silent `0` of FR-ERR-025 and not this cost at all.
+    // Reading one byte from the producer's stdout before the consumer is handed
+    // the rest establishes the condition FR-ERR-026 names, as an observation
+    // rather than as a race: the read returns only once a byte has been
+    // emitted. A dump of the fixture is hundreds of kilobytes and nothing
+    // drains the pipe, so the producer is still writing when the consumer
+    // exits.
+    //
+    // The interception is neutral between the two behaviours under test: a
+    // consumer that drained the pipe would let the producer finish and exit
+    // `0`, with one byte fewer to read, and that is what this arrangement
+    // produced before the move.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_err_006_under_context_dash_the_producer_is_cut_off_and_the_pair_is_still_66",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let sandbox = project(server, &[(RESOLVES, "{{ database.name }}\n")]);
+
+        // The plain pipeline, which is what FR-RND-017 writes.
+        let (producer, consumer) = piped(&sandbox, &["render", ABSENT, "--context", "-"], false);
+
+        assert_eq!(
+            code(&consumer),
+            Some(66),
+            "{name}: the consumer of the pipeline did not refuse the template: {}",
+            stderr(&consumer)
+        );
+        assert!(
+            consumer.stdout.is_empty(),
+            "{name}: the refused render wrote {} byte(s) to stdout",
+            consumer.stdout.len()
+        );
+        assert!(
+            producer.status.code().is_some(),
+            "{name}: the producer was signalled rather than exited, so neither \
+             FR-ERR-025 nor FR-ERR-026 decided its status"
+        );
+
+        // The same pipeline with one byte of the document taken first, which is
+        // the condition FR-ERR-026 names.
+        let (producer, consumer) = piped(&sandbox, &["render", ABSENT, "--context", "-"], true);
+
+        assert_eq!(
+            code(&consumer),
+            Some(66),
+            "{name}: the consumer did not refuse the template: {}",
+            stderr(&consumer)
+        );
+        assert_eq!(
+            code(&producer),
+            Some(74),
+            "{name}: a producer cut off part-way through its document did not \
+             exit 74: {}",
+            stderr(&producer)
+        );
+
+        // The control, and it is what the move changed: a consumer that does
+        // drain the same producer leaves it exiting `0`. The template resolves
+        // here, so the document is read to end of file exactly as it was before
+        // template resolution moved.
+        let (producer, consumer) = piped(&sandbox, &["render", RESOLVES, "--context", "-"], false);
+
+        assert_eq!(
+            code(&consumer),
+            Some(0),
+            "{name}: the draining consumer did not render: {}",
+            stderr(&consumer)
+        );
+        assert_eq!(
+            code(&producer),
+            Some(0),
+            "{name}: a drained producer did not exit 0: {}",
+            stderr(&producer)
         );
     }
 }
@@ -463,11 +703,12 @@ fn fr_rnd_016_and_fr_rnd_026_one_template_and_one_object_render_the_same_bytes_f
 
 #[test]
 fn fr_rnd_029_and_fr_rnd_032_a_name_that_reaches_nothing_is_66_with_a_nearest_match() {
-    // Two names, two steps of FR-ERR-006, one exit code. FR-RND-032 is step 6
-    // and FR-RND-029 is step 7, and both take the nearest-match suggestion of
+    // Two names, two steps of FR-ERR-006, one exit code. FR-RND-029 is step 4
+    // and FR-RND-032 is step 7, and both take the nearest-match suggestion of
     // FR-ERR-019 — the `66` row of FR-ERR-034 obliges the population the name
-    // was sought in to be named beside it, which on this path is the document
-    // and the database it describes rather than an entry and a server.
+    // was sought in to be named beside it, which for the object on this path is
+    // the document and the database it describes rather than an entry and a
+    // server.
     let _guard = fixture::exclusive();
     let Some(series) = fixture::series(
         "fr_rnd_029_and_fr_rnd_032_a_name_that_reaches_nothing_is_66_with_a_nearest_match",
@@ -479,8 +720,28 @@ fn fr_rnd_029_and_fr_rnd_032_a_name_that_reaches_nothing_is_66_with_a_nearest_ma
         let name = server.name();
         let (sandbox, _) = documented(server, &[(WHOLE, WHOLE_SOURCE)]);
 
-        // Step 6 first, because it runs first: an object the document does not
-        // carry, misspelled by one byte.
+        // Step 4 first, because it runs first: the object named is one the
+        // document does carry, so nothing but the template can be the
+        // condition.
+        let absent_template = refused(
+            &sandbox,
+            &["render", "whol", "--context", CONTEXT, "--table", TABLE],
+            66,
+        );
+
+        assert!(
+            line(&absent_template, LABELS[0]).contains("whol"),
+            "{name}: {absent_template}"
+        );
+        assert!(
+            line(&absent_template, LABELS[2]).contains(WHOLE),
+            "{name}: no nearest match among the project's templates: \
+             {absent_template}"
+        );
+
+        // Step 7, reached because step 4 passed: the template resolves and the
+        // object is the thing the document does not carry, misspelled by one
+        // byte.
         let absent_object = refused(
             &sandbox,
             &["render", WHOLE, "--context", CONTEXT, "--table", "charg"],
@@ -501,24 +762,6 @@ fn fr_rnd_029_and_fr_rnd_032_a_name_that_reaches_nothing_is_66_with_a_nearest_ma
             line(&absent_object, LABELS[2]).contains(TABLE),
             "{name}: no nearest match for a name one byte from a real one: \
              {absent_object}"
-        );
-
-        // Step 7, reached because step 6 passed: the object is bound and the
-        // template is the thing that does not exist.
-        let absent_template = refused(
-            &sandbox,
-            &["render", "whol", "--context", CONTEXT, "--table", TABLE],
-            66,
-        );
-
-        assert!(
-            line(&absent_template, LABELS[0]).contains("whol"),
-            "{name}: {absent_template}"
-        );
-        assert!(
-            line(&absent_template, LABELS[2]).contains(WHOLE),
-            "{name}: no nearest match among the project's templates: \
-             {absent_template}"
         );
     }
 }
