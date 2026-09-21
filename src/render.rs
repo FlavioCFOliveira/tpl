@@ -274,6 +274,30 @@ mod tests {
     }
 
     #[test]
+    fn fr_sem_021_an_interpolated_boolean_renders_true_or_false_and_never_another_casing() {
+        // FR-SEM-021: `tpl` is a code generator, and `True` is a token Rust,
+        // Go, JSON and SQL all refuse. A template that writes a boolean into a
+        // generated file must produce a file that builds, and must do so
+        // without the author remembering a filter.
+        let scratch = Scratch::new();
+        let environment = project(
+            &scratch,
+            &[("flags.jinja", "{{ yes }} {{ no }} {{ maybe }}")],
+        );
+        let context = context! {
+            yes => true,
+            no => false,
+            maybe => Value::from(1 == 1),
+        };
+
+        let written = environment.render("flags", &context).expect("it renders");
+
+        assert_eq!(written, "true false true");
+        assert!(!written.contains("True"), "{written}");
+        assert!(!written.contains("False"), "{written}");
+    }
+
+    #[test]
     fn fr_sem_012_reading_a_field_that_does_not_exist_fails_the_render() {
         // FR-SEM-012 and FR-SEM-013: absence and `null` are different
         // failures, and this is the one that fails.

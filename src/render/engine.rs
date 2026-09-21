@@ -5,7 +5,7 @@
 //! | Trailing newline | Preserved | `FR-SEM-003` |
 //! | Undefined behaviour | Strict | `FR-SEM-012`, `OD-14` |
 //! | Auto-escaping | Off, for every name | `FR-ENV-026`, `FR-ENV-027` |
-//! | The formatter | `null` writes nothing | `FR-SEM-010`, `FR-SEM-011` |
+//! | The formatter | `null` writes nothing, and a boolean writes `true` or `false` | `FR-SEM-010`, `FR-SEM-011`, `FR-SEM-021` |
 //! | The loader | `tpl`'s own, over one resolution | `FR-TMPL-023` … `FR-TMPL-027`, `OD-15` |
 //!
 //! Everything else is left at the engine's default, which is what `BR-SEM-001`
@@ -22,7 +22,7 @@
 //! and escaping happens only where a template asks for it, through the
 //! registered `escape` of `FR-ENV-028`.
 //!
-//! # The formatter, and the one observation it makes unnecessary
+//! # The formatter, and the two observations it makes unnecessary
 //!
 //! `FR-SEM-010` renders an interpolated `null` as the empty string and
 //! `FR-SEM-011` forbids the words `none` and `null` in its place. Strictness
@@ -32,6 +32,15 @@
 //! whatever the engine would have written, and `FR-SEM-013` is preserved
 //! because an undefined never reaches the formatter at all — strictness fails
 //! it first, which is `FR-SEM-012`.
+//!
+//! `FR-SEM-021` is the same argument over a boolean, and the engine's own
+//! answer is the wrong one: it writes `True` and `False`, which Rust, Go, JSON
+//! and SQL all refuse, so a template writing `{{ column is nullable }}` into a
+//! generated file would produce a file that does not build — at exit `0`, with
+//! nothing to say so. The formatter writes `true` and `false` instead. The
+//! branch is here rather than in a filter because what an interpolated value
+//! turns into is the formatter's subject, and because a filter the author must
+//! remember is exactly the guarantee `FR-SEM-021` rejects.
 //!
 //! # The loader
 //!
@@ -43,11 +52,18 @@
 //! the engine compiles. The engine caches what the loader returns, so each
 //! template is read and parsed once per process.
 
+use minijinja::value::ValueKind;
 use minijinja::{AutoEscape, Environment, ErrorKind, Output, State, UndefinedBehavior, Value};
 
 use super::root::Root;
 use super::surface;
 use crate::error::Error;
+
+/// The spelling `FR-SEM-021` fixes for a true value.
+const TRUE: &str = "true";
+
+/// The spelling `FR-SEM-021` fixes for a false value.
+const FALSE: &str = "false";
 
 /// Builds the engine over `root`.
 ///
@@ -68,7 +84,7 @@ pub(super) fn build(root: Root) -> Environment<'static> {
     // FR-ENV-026, FR-ENV-027.
     engine.set_auto_escape_callback(|_| AutoEscape::None);
 
-    // FR-SEM-010, FR-SEM-011.
+    // FR-SEM-010, FR-SEM-011, FR-SEM-021.
     engine.set_formatter(format);
 
     // FR-ERR-011 obliges the line and the column of a failure, and the engine
@@ -83,7 +99,7 @@ pub(super) fn build(root: Root) -> Environment<'static> {
     engine
 }
 
-/// Writes one interpolated value (`FR-SEM-010`, `FR-SEM-011`).
+/// Writes one interpolated value (`FR-SEM-010`, `FR-SEM-011`, `FR-SEM-021`).
 fn format(
     out: &mut Output<'_>,
     state: &State<'_, '_>,
@@ -91,6 +107,16 @@ fn format(
 ) -> Result<(), minijinja::Error> {
     if value.is_none() {
         return Ok(());
+    }
+
+    // FR-SEM-021: `true` and `false`, and never `True`, `False` or any other
+    // casing. The kind is tested rather than the truthiness, because every
+    // value has a truthiness and only a boolean is the value this requirement
+    // governs.
+    if value.kind() == ValueKind::Bool {
+        let written = if value.is_true() { TRUE } else { FALSE };
+
+        return out.write_str(written).map_err(minijinja::Error::from);
     }
 
     minijinja::escape_formatter(out, state, value)
@@ -150,6 +176,19 @@ mod tests {
             .expect("a defined null does not fail under the strict behaviour");
 
         assert_eq!(written, "[None]");
+    }
+
+    #[test]
+    fn fr_sem_021_the_formatter_is_what_keeps_the_engine_s_casing_out_of_the_output() {
+        // The same observation for a boolean. The engine writes `True` and
+        // `False` — tokens Rust, Go, JSON and SQL all refuse — so the branch
+        // in this module's formatter is load-bearing for FR-SEM-021 rather
+        // than a restatement of what the engine does.
+        let written = stock()
+            .render_str("{{ yes }} {{ no }}", context! { yes => true, no => false })
+            .expect("a boolean does not fail under the strict behaviour");
+
+        assert_eq!(written, "True False");
     }
 
     #[test]

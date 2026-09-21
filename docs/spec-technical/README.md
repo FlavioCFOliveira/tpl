@@ -30,7 +30,14 @@ not been written.
 
 As of 2026-09-18 every entry of `open-decisions.md` is settled and **no document
 waits**. One entry is settled and **interim** — `OD-30`, which records an
-arrangement each later sprint removes one arm of — and it blocks nothing.
+arrangement each later sprint removes one arm of — and it blocks nothing; one
+arm remains.
+
+**One obligation was discharged on 2026-09-21**, when the render work was built:
+`OD-14`'s owed observation, about a **defined** `null` under the engine's strict
+undefined-behaviour setting. The answer was the opposite of the expected one, so
+the entry records what carries the two requirements the setting turned out not
+to decide, and `architecture.md` states it rather than declining to.
 
 **One entry was added on 2026-09-18, against what the model work built.**
 `OD-31` answers four of the five library-shape questions `DIV-032` hands to
@@ -103,7 +110,7 @@ requirements.
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
 | `open-decisions.md` | The decision register: thirty-one settled entries, each carrying its rejected options or citing the record that holds them, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
-| `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. `OD-14`'s owed observation bounds one sentence: the behaviour of a **defined** `null` under `UndefinedBehavior::Strict` may not be asserted until it is verified |
+| `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. Nothing bounds it: `OD-14`'s owed observation was made on 2026-09-21 and the entry records the answer |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
 | `interfaces.md` | The contracts crossing a component boundary, and how each external contract is realised | unblocked |
 | `data-model.md` | The model in memory and everything persisted: `.tpl/.cfg`, `.tpl/.cache/`, `meta.json`, versions, migration | unblocked |
@@ -140,8 +147,8 @@ a built-in default. The connection lifecycle: at most one, opened late, probe th
 read-only set then read-back, closed when the read ends. The catalogue reader
 and the query-count invariants. The cache as a read-through layer. The model as
 the single junction of three sources and three consumers. The render component:
-engine construction, loader, undefined behaviour, auto-escape, context
-assembly. Deadlines on six named blocking phases. Lazy initialisation. The
+engine construction, loader, undefined behaviour, the output formatter,
+auto-escape, context assembly. Deadlines on six named blocking phases. Lazy initialisation. The
 synchronous process and the runtime boundary inside `mariadb/`. The module map
 and the layout conventions. The division inside `project/` and the four
 decisions that produce it: reading apart from resolving, reading apart from
@@ -187,7 +194,7 @@ codes its two callers produce. The `password_command` child and why its parent
 polls. The phase clock's four obligations. The pattern matcher and the
 qualified-routine-name parser. The two directions over the document: which
 emitted types are the model's own and which four are not, the two projections,
-what the read-back checks, and the four things it does not. The five
+the one flattening, what the read-back checks, and the four things it does not. The five
 library-shape questions the functional specification hands to architecture, and
 where each is now answered.
 

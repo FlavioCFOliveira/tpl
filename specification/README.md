@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty-eight editions. All are in force;
+The specification has been written in twenty-nine editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -2450,6 +2450,62 @@ four series, for one assertion — and because an observation made against an
 artefact this project wrote satisfies `BR-SRV-003`'s letter while abandoning
 its substance.
 
+### Twenty-ninth edition — a boolean the engine spelled with a capital, and a rationale its own table disproved
+
+The two arms were joined — a context assembled, a template rendered from it —
+and the first thing the joined tool printed for `{{ column is nullable }}` was
+`True`. No requirement of this corpus said otherwise, so the engine decided it.
+`tpl` generates code, and `True` is a token Rust, Go, JSON and SQL all refuse:
+the tool's default output for one of its own registered tests was a token that
+does not build. The user decided on 2026-09-21 that it must not be, and
+this edition writes the decision in; it is the seventh decision log of
+*[Provenance](#provenance)*. The same pass read `FR-ENV-033` back against its
+own table and found its rationale claiming an identity the table disproves.
+
+**One requirement is added and one rationale is corrected.** `FR-SEM-021` is
+the only identifier assigned; none is retired and none is renumbered, no exit
+code is added or withdrawn, no cell of any table in this corpus moves, and the
+index of [open-questions.md](open-questions.md) stays empty.
+
+- **A boolean interpolated into the output renders `true` or `false`** —
+  [render-semantics.md](render-semantics.md). `FR-SEM-021`, placed beside
+  `FR-SEM-010` and for that rule's reason: what an interpolated value produces
+  is render semantics, and not one of the names the three groups of
+  `FR-ENV-001` partition, so nothing in
+  [template-environment.md](template-environment.md) changes with it. The
+  requirement forbids `True`, `False`, and every other casing. Leaving the
+  rendering to the engine and obliging the template author to write `| lower`
+  or `| json` at each interpolation is rejected in the requirement's own text:
+  that option carries the guarantee group 3 carries, which is none, and the
+  author who forgets the filter receives no signal, because the render succeeds
+  and the wrong token reaches the generated file.
+- **`FR-ENV-033` stops claiming an identity its own table disproves** —
+  [template-environment.md](template-environment.md). The rationale said
+  `snake(pascal(x))` returns `snake(x)` for every `x`. It does not for
+  `order_2_items`, which is a row of that requirement's table: `pascal` gives
+  `Order2Items`, a single word under `FR-ENV-030`, so `snake` gives
+  `order2items`. The table is right, keeps every cell, and `BR-ENV-007` is
+  untouched — the prose was the only thing wrong. The claim is dropped rather
+  than qualified, because the condition under which it holds turns on digits at
+  a boundary and on single-letter words alike — `a_b` gives `AB` and then `ab`,
+  while `a_bc` survives as `ABc` and then `a_bc` — so a qualification short
+  enough to read would have replaced a false claim with one a reader could
+  carry just as far. What stands in its place is the rule: derive the word list
+  of the operand the filter is handed.
+
+**What found them.** Not one of the five validation rules below. Both came from
+**running the joined tool**, which is the first reading of this corpus made
+against output a user can see rather than against another document. The first
+is invisible to every check this corpus can run on itself, because no
+requirement was wrong: what a boolean renders as was unwritten, and an absence
+contradicts nothing — it is found by looking at the bytes, or not at all. The
+second was on the page from the moment the requirement was written, and the
+readings of that file since passed over it, because the sentence that was false
+sat directly beneath a table that was right and read as that table's summary. A
+rationale is prose, and prose beside a test vector is read as description of
+it; this one made a claim the vector refutes in a row the reader has just
+scanned.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -2493,7 +2549,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [catalogue-coverage.md](catalogue-coverage.md) | `CAT` | What enters the model from the catalogue, and what is excluded |
 | [context-document.md](context-document.md) | `CTX` | The structure of the document that carries the model |
 | [template-environment.md](template-environment.md) | `ENV` | Filters, tests, global functions, and what is contract |
-| [render-semantics.md](render-semantics.md) | `SEM` | Whitespace, operands, null versus absence, author-signalled failure |
+| [render-semantics.md](render-semantics.md) | `SEM` | Whitespace, operands, null versus absence, boolean rendering, author-signalled failure |
 | [server-contract.md](server-contract.md) | `SRV` | The supported version window, differences between series, the closed statement list, the read-only promise |
 | [privileges-and-completeness.md](privileges-and-completeness.md) | `PRIV` | Complete and incomplete reads, and how a short read is reported |
 | [cache-documents.md](cache-documents.md) | `CDOC` | Cache versions, completeness records, and the `source` field |
@@ -2612,7 +2668,7 @@ because they constrain the whole module rather than one interaction.
 
 Every requirement in this specification derives from one of three sources:
 
-1. Six decision logs. The first interview settled 53 points about the CLI
+1. Seven decision logs. The first interview settled 53 points about the CLI
    surface; the second settled 28 points about the model, the document, the
    template surface, the server contract, and performance, and recorded four
    defects found in the first edition; the third is the audit of 2026-09-10,
@@ -2622,7 +2678,9 @@ Every requirement in this specification derives from one of three sources:
    thirty-three, four of them against the recommendation; the sixth settled
    the four points the observation raised, one of which — `FR-SRV-039` —
    reversed a recommendation and reordered two values this corpus had held to
-   be compatible. Each
+   be compatible; the seventh, of 2026-09-21, settled the one point the joined
+   arms raised, that a boolean interpolated into a generated file renders
+   `true` and not `True`, which `FR-SEM-021` writes in. Each
    decision carries its own reasoning and the alternatives it rejected; where
    the reasoning explains why a requirement reads as it does, it is preserved in
    the `Rationale`, the `Rejected`, or the `Accepted cost` note under that
@@ -2962,6 +3020,14 @@ right, and what found it was writing the test it mandates. The test form it now
 names is owed by the code that carries the read-back, which is work a
 requirement in force obliges rather than debt of this corpus. The item below
 was untouched by this edition and stays outstanding.
+
+The twenty-ninth edition adds no obligation of either kind, and records none
+as discharged. It writes down what an interpolated boolean produces, which no
+requirement had fixed, and corrects one rationale that claimed an identity its
+own table disproves. Neither touches a fixture, a measurement, or a file this
+corpus does not own. What `FR-SEM-021` now requires is owed by the code that
+renders, which is work a requirement in force obliges rather than debt of this
+corpus. The item below was untouched by this edition and stays outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.

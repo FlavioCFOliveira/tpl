@@ -256,9 +256,18 @@ the reasons that entry records.
 | Property | Where | Forced by |
 |---|---|---|
 | The template root is the boundary of every lookup | The one resolution function | `FR-TMPL-023` |
-| A symbolic link inside the root is refused, read from the entry's own metadata rather than by following it | The same function | `FR-SEC-017`, `FR-TMPL-024`, [`OD-15`](open-decisions.md#od-15--the-template-loader) |
+| A symbolic link is refused at **every component of the name below the canonical root**, not at the final component alone, each read from the entry's own metadata rather than by following it | The same function | `FR-SEC-017`, `FR-TMPL-024`, [`OD-15`](open-decisions.md#od-15--the-template-loader) |
 | The path that was checked is the path that is opened: one canonical form is compared with the root's, and nothing else is opened afterwards | The same function | `FR-SEC-017`, `FR-TMPL-025`, `FR-TMPL-026` |
 | Syntax analysis is reachable without evaluation: no expression evaluated, no function called, no connection opened | `render/`, on the check path | `FR-SEC-018`, `FR-TMPL-017`, `BR-TMPL-001` |
+
+The second row was the final component alone until 2026-09-21. What the narrow
+form admitted was a symlinked **intermediate directory** whose target is inside
+the root — the third row already refuses any chain resolving outside it — so the
+widening closes a **divergence** from `FR-TMPL-024`, which refuses a link
+without qualification, and not an escape from containment. The disagreement it
+produced, and the cost of the walk, are
+[`OD-15`](open-decisions.md#od-15--the-template-loader)'s and are not restated
+here.
 
 ### The four capability prohibitions
 

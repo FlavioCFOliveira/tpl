@@ -21,10 +21,10 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 > | `tpl cfg database test` | not written — it is the one `cfg` subcommand that opens a connection |
 > | `tpl schema info`, `tables`, `table`, `views`, `view`, `routines`, `routine`, `dump` | **works** |
 > | `tpl cache load`, `clean`, `status` | **works** |
-> | `tpl template …` — four subcommands | not written |
-> | `tpl render` | not written |
+> | `tpl template list`, `show`, `check`, `path` | **works** |
+> | `tpl render` | **works** |
 >
-> **The first arm connects.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. `tpl cfg database test` is still the one `cfg` subcommand that has no implementation.
+> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no server at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout. `tpl cfg database test` is the one subcommand that has no implementation.
 >
 > The command tree is complete even where the commands are not: every node parses, every node has help, and `tpl help --format json` publishes the whole surface. A node whose work is not written exits `70` (`EX_SOFTWARE`) naming its own command path, which is a defect only in the sense that it is not yet built.
 
@@ -56,7 +56,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 | 2 | Explore the templates | `tpl template …` | Reads and presents the templates under `.tpl/templates/` |
 | 3 | Render | `tpl render …` | Reads the database, reads the template, renders it, and prints the result |
 
-**The first of the three is written.** The second and the third are specified in full and have no implementation — see [Where the truth lives](#where-the-truth-lives) — and the two groups that stand beside them are: `tpl cfg …`, which maintains the project's configuration, and `tpl cache …`, which loads, cleans and reports on the catalogue cache the first arm reads through.
+**All three are written.** Two groups stand beside them: `tpl cfg …`, which maintains the project's configuration, and `tpl cache …`, which loads, cleans and reports on the catalogue cache the first and third arms read through.
 
 Two properties bound the tool, and both are permanent.
 
@@ -127,9 +127,23 @@ tpl schema dump --pretty > context.json
 tpl cache status
 tpl cache load
 tpl cache clean
+
+# 8. Read the templates the project carries.
+tpl template list
+tpl template show rust/struct
+tpl template check
+
+# 9. Render one of them. The result goes to stdout and nowhere else, so where
+#    it lands is a redirection you write.
+tpl render rust/struct --table orders > src/models/orders.rs
+tpl render docs/table.md --table orders --set title=Orders
+
+# 10. Render without a database, from the document step 6 wrote.
+tpl render rust/struct --context context.json --table orders
+tpl schema dump | tpl render rust/struct --context - --table orders
 ```
 
-Steps 4, 5 and 6 are read commands and accept `--format json` and `--pretty`, except `tpl schema dump`, which emits JSON and nothing else. Steps 1 to 3 and step 7 write and print nothing on success: the exit code is the message.
+Steps 4, 5, 6 and 8 are read commands and accept `--format json` and `--pretty`, except `tpl schema dump`, which emits JSON and nothing else, and `tpl template show` and `tpl template check`, neither of which has a second representation. Steps 1 to 3, step 7 and `tpl template check` write and print nothing on success: the exit code is the message. Steps 9 and 10 write the rendered text and nothing else — `tpl render` has no `--output`, no `--format` and no `--pretty`.
 
 ---
 
@@ -315,7 +329,7 @@ Every blocking phase has a deadline, so an invocation cannot hang with no diagno
 
 `--timeout` is separate. It is an overall budget measured from process start, it has no default, and it does not replace a phase deadline: a phase ends at the first of the two to expire. The diagnostic names which one it was and its resolved value.
 
-**No deadline is reachable from a command today.** The three connection phases, the catalogue query and the render belong to commands that are not written, and `password_command` runs only when the configuration is resolved for a connection, which no written command does. `--timeout` is accepted and the clock starts; nothing yet spends it.
+**Every deadline is now reachable from a command.** The three connection phases and the catalogue query bound a read that misses the cache, `password_command` runs when the configuration is resolved for such a read, and `render_timeout` bounds the one render of `tpl render` — which exits `65` naming which of the two bounds expired and its resolved value.
 
 ---
 

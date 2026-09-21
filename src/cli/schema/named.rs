@@ -2,15 +2,18 @@
 //! that reaches nothing produces, and the `77` a short object owes.
 //!
 //! Three commands of the first arm name an object positionally, per
-//! `FR-SCH-005`, and two of `tpl cache` name one by flag, per `FR-CACHE-024`.
-//! Everything they share is here.
+//! `FR-SCH-005`; two of `tpl cache` name one by flag, per `FR-CACHE-024`; and
+//! `tpl render` binds one by flag, per `FR-RND-003`. Everything they share is
+//! here, and what differs between them is the population — [`Sought`], which
+//! `FR-RND-032` makes a parameter because a render may be reading a document
+//! rather than a catalogue.
 //!
 //! | Rule | Requirement |
 //! |---|---|
 //! | `procedure:<name>` and `function:<name>` are accepted beside a bare name | `FR-SCH-008` |
 //! | The prefix is matched **as written**, in lower case, and any other case is `64` | `FR-SCH-008` |
-//! | A bare name matching both a procedure and a function is `64`, naming both in the qualified form | `FR-SCH-010` |
-//! | A name that reaches no object is `66`, with a nearest-match suggestion over the objects of that kind that do exist | `FR-SCH-010`, `FR-ERR-019` |
+//! | A bare name matching both a procedure and a function is `64`, naming both in the qualified form | `FR-SCH-010`, `FR-RND-032` |
+//! | A name that reaches no object is `66`, with a nearest-match suggestion over the objects of that kind that do exist | `FR-SCH-010`, `FR-RND-032`, `FR-ERR-019` |
 //! | A named object that came back short is `77`, and is not returned in part | `FR-PRIV-003`, `FR-PRIV-004` |
 //!
 //! **The prefix is decided from the token alone**, so it precedes every
@@ -22,6 +25,8 @@
 //! population of a catalogue object is the collection the read produced; the
 //! line the caller reads is composed by [`crate::diagnostics`] from the names
 //! the error carries.
+
+use std::path::Path;
 
 use crate::diagnostics::suggest::{self, Population};
 use crate::error::{CatalogueObjectKind, Error};
@@ -132,23 +137,48 @@ fn lower(kind: &RoutineKind<'_>) -> Option<&'static str> {
 
 /// Where a named read was made, for the two conditions whose `cause` names the
 /// population (`FR-ERR-034`, the `66` and `64` rows).
+///
+/// `FR-RND-023` gives a render two context sources and `FR-RND-032` obliges
+/// both conditions over either, so the population is a **parameter** of this
+/// module rather than an assumption inside it: a catalogue read names the
+/// entry it was opened through and the database it covered, and a `--context`
+/// document names itself and the database it describes.
+///
+/// The two are distinguished rather than merged because `FR-ERR-034` forbids a
+/// `cause` "whose wording would be equally true of a different failure", and
+/// the catalogue wording names `INFORMATION_SCHEMA` and a database entry —
+/// neither of which exists on the document path, where `FR-RND-022` opens no
+/// connection and `FR-RND-019` resolves no entry.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Sought<'a> {
-    /// The database entry of `.tpl/.cfg` the read was made through.
-    pub(crate) entry: &'a str,
+pub(crate) enum Sought<'a> {
+    /// A catalogue read, served by the cache or by a server.
+    Catalogue {
+        /// The database entry of `.tpl/.cfg` the read was made through.
+        entry: &'a str,
 
-    /// The server-side database the object was sought in (`FR-CONF-041`).
-    pub(crate) database: &'a str,
+        /// The server-side database the object was sought in (`FR-CONF-041`).
+        database: &'a str,
+    },
+
+    /// A `--context` document (`FR-RND-016`).
+    Document {
+        /// The document the object was sought in.
+        path: &'a Path,
+
+        /// The database that document describes.
+        database: &'a str,
+    },
 }
 
 /// The table `name` names (`FR-SCH-010`, `FR-PRIV-003`).
 ///
 /// # Errors
 ///
-/// Returns [`Error::CatalogueObjectNotFound`] — `66` — where the database holds
-/// no such table, carrying the nearest matches among the tables it does hold;
-/// and [`Error::PropertyNotReadable`] — `77` — where the table came back short,
-/// per `FR-PRIV-004`.
+/// Returns the `66` [`Sought`] names — [`Error::CatalogueObjectNotFound`] for a
+/// catalogue read and [`Error::ContextObjectNotFound`] for a `--context`
+/// document — where the database holds no such table, carrying the nearest
+/// matches among the tables it does hold; and [`Error::PropertyNotReadable`] —
+/// `77` — where the table came back short, per `FR-PRIV-004`.
 pub(crate) fn table<'a, 'd>(
     document: &'a DatabaseDocument<'d>,
     name: &str,
@@ -209,10 +239,11 @@ pub(crate) fn view<'a, 'd>(
 ///
 /// # Errors
 ///
-/// Returns [`Error::AmbiguousRoutineName`] — `64` — where a bare name matches
-/// both kinds; [`Error::CatalogueObjectNotFound`] — `66` — where it matches
-/// neither; and [`Error::PropertyNotReadable`] — `77` — where the routine came
-/// back short.
+/// Returns the `64` [`Sought`] names — [`Error::AmbiguousRoutineName`] or
+/// [`Error::AmbiguousRoutineInContext`] — where a bare name matches both kinds;
+/// the `66` it names — [`Error::CatalogueObjectNotFound`] or
+/// [`Error::ContextObjectNotFound`] — where it matches neither; and
+/// [`Error::PropertyNotReadable`] — `77` — where the routine came back short.
 pub(crate) fn routine<'a, 'd>(
     document: &'a DatabaseDocument<'d>,
     wanted: &Wanted<'_>,
@@ -249,11 +280,19 @@ pub(crate) fn routine<'a, 'd>(
     })?;
 
     if matched.next().is_some() {
-        return Err(Error::AmbiguousRoutineName {
-            name: name.to_owned(),
-            entry: at.entry.to_owned(),
-            database: at.database.to_owned(),
-            invocation,
+        return Err(match at {
+            Sought::Catalogue { entry, database } => Error::AmbiguousRoutineName {
+                name: name.to_owned(),
+                entry: entry.to_owned(),
+                database: database.to_owned(),
+                invocation,
+            },
+            Sought::Document { path, database } => Error::AmbiguousRoutineInContext {
+                name: name.to_owned(),
+                path: path.to_owned(),
+                database: database.to_owned(),
+                invocation,
+            },
         });
     }
 
@@ -274,13 +313,23 @@ where
     C: IntoIterator<Item = &'n str>,
 {
     let nearest = suggest::suggestions(name, candidates, Population::Names);
+    let nearest: Vec<String> = nearest.names().map(str::to_owned).collect();
 
-    Error::CatalogueObjectNotFound {
-        kind,
-        name: name.to_owned(),
-        entry: at.entry.to_owned(),
-        database: at.database.to_owned(),
-        nearest: nearest.names().map(str::to_owned).collect(),
+    match at {
+        Sought::Catalogue { entry, database } => Error::CatalogueObjectNotFound {
+            kind,
+            name: name.to_owned(),
+            entry: entry.to_owned(),
+            database: database.to_owned(),
+            nearest,
+        },
+        Sought::Document { path, database } => Error::ContextObjectNotFound {
+            kind,
+            name: name.to_owned(),
+            path: path.to_owned(),
+            database: database.to_owned(),
+            nearest,
+        },
     }
 }
 
@@ -395,7 +444,7 @@ mod tests {
 
     /// Where every lookup below was made.
     fn at() -> Sought<'static> {
-        Sought {
+        Sought::Catalogue {
             entry: "shop",
             database: "freight",
         }

@@ -478,6 +478,42 @@ mod tests {
     }
 
     #[test]
+    fn fr_ctx_015_the_decomposed_parts_are_siblings_of_the_raw_type_and_not_nested_under_it() {
+        // FR-CTX-014 gives a column `column_type`; FR-CTX-015 gives it the
+        // eight parts **additionally**. Both therefore read as fields of the
+        // column: `col.data_type`, never `col.column_type.data_type`. The
+        // literal below is the whole of one column, so a part that moved back
+        // under the raw string fails here rather than in a template.
+        let document = compact(&fixture::database());
+
+        assert!(
+            document.contains(
+                r#""position":1,"column_type":"bigint(20) unsigned","data_type":"bigint","#
+            ),
+            "{document}"
+        );
+        assert!(
+            !document.contains(r#""column_type":{"#),
+            "the raw type is a string and carries nothing: {document}"
+        );
+
+        // And the eight parts of FR-CTX-015, each present on the column and
+        // `null` where FR-CTX-017 makes it null.
+        for part in [
+            r#""data_type":"bigint""#,
+            r#""precision":20"#,
+            r#""scale":0"#,
+            r#""length":null"#,
+            r#""unsigned":true"#,
+            r#""charset":null"#,
+            r#""collation":null"#,
+            r#""values":null"#,
+        ] {
+            assert!(document.contains(part), "{part} is absent from {document}");
+        }
+    }
+
+    #[test]
     fn fr_priv_016_a_restricted_marking_is_ordered_by_name_ascending_byte_wise() {
         // FR-PRIV-016 requires the array to be ordered, and the marking keeps
         // the order it was given until it becomes a document collection, which

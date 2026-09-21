@@ -445,6 +445,30 @@ Three properties bind the built system:
   versions the contract independently of the binary, so a binary release moves
   the first number and leaves the second where it stands.
 
+**One shape change on 2026-09-21 left `schema_version` at `1`, deliberately.**
+A column's decomposed type moved from a nested object to nine keys sitting
+beside the column's own
+([interfaces.md](interfaces.md#the-two-directions-over-the-document)). One
+ground decides it, and the second row states what that ground spares.
+
+| Ground | What holds |
+|---|---|
+| The contract did not change; the emitter did | `FR-CTX-014` and `FR-CTX-015` put `column_type` and the eight parts on the **column**. The nested form never matched them, so what happened is a divergence from the contract being closed, not a contract being revised. `FR-OUT-014` has no case to classify, and the release gate over it ([operations.md](operations.md#what-a-breaking-change-is)) has nothing to catch |
+| What the first ground spares | Had it not held, the gate would have obliged a bump. No requirement fixes the **value** of `schema_version`; six files of `/specification` publish documents carrying `1`, and every one of them would have had to move with it |
+
+A cached document written before the change answers nobody wrongly: it carries
+the parts nested where this binary's types read them beside the column, so it
+does not decode, and a file that cannot be decoded is a **miss**
+(`FR-CACHE-033`, `FR-CDOC-004`). The read goes to the server and rewrites it.
+
+**Where the consequence of a classification lives is worth stating once.**
+`FR-OUT-014` marks a change breaking or not breaking and attaches no
+consequence to either; `FR-OUT-011` fixes only what the field versions. The
+consequence — that a breaking change moves the number versioning the surface it
+broke — is this folder's, settled in
+[`OD-03`](open-decisions.md#od-03--versioning-the-binary-the-document-the-cache-the-changelog)
+and enacted in `operations.md`, and it is not a requirement.
+
 Where a bump is enacted in a release, and what a release gate checks, are
 `operations.md`.
 

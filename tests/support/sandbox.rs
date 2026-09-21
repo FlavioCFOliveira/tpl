@@ -192,6 +192,50 @@ impl Sandbox {
 
         command.output().expect("the binary under test runs")
     }
+
+    /// Runs it from the root of the sandbox with `supplied` on its standard
+    /// input, which is then closed.
+    ///
+    /// [`Sandbox::run`] leaves standard input at the null device, which is what
+    /// every other body here wants. One form needs the other: `FR-RND-017`
+    /// makes `tpl render --context -` read the document from standard input,
+    /// and the pipeline it documents is `tpl schema dump | tpl render …`, which
+    /// cannot be exercised by a run that was handed no stream.
+    ///
+    /// The handle is dropped as soon as the bytes are written, because the
+    /// command under test reads its document to end of file before it produces
+    /// anything: a stream left open would leave it waiting for a byte that
+    /// never comes.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the binary under test does not run, and when the stream it
+    /// was given refuses the write.
+    pub fn run_with_stdin(&self, arguments: &[&str], supplied: &[u8]) -> Output {
+        use std::io::Write as _;
+        use std::process::Stdio;
+
+        let mut child = Command::new(env!("CARGO_BIN_EXE_tpl"))
+            .env_clear()
+            .current_dir(&self.root)
+            .args(arguments)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the binary under test runs");
+
+        child
+            .stdin
+            .take()
+            .expect("standard input was piped")
+            .write_all(supplied)
+            .expect("the command under test reads its document to end of file");
+
+        child
+            .wait_with_output()
+            .expect("the binary under test terminates")
+    }
 }
 
 impl Drop for Sandbox {

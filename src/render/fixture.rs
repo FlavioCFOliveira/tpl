@@ -121,13 +121,18 @@ pub(super) fn column_of_absent_table() -> Value {
 }
 
 /// A map that identifies as a column and does not carry `absent`.
+///
+/// The raw type and the decomposed parts are **siblings**, per `FR-CTX-014`
+/// and `FR-CTX-015`, so `column_type` here is the raw string a column carries
+/// and `data_type` stands beside it.
 pub(super) fn column_without(absent: &str) -> Value {
     let whole = context! {
         name => "consignment_id",
         table_name => "consignment",
         nullable => false,
         auto_increment => false,
-        column_type => context! { data_type => "bigint" },
+        column_type => "bigint(20) unsigned",
+        data_type => "bigint",
     };
 
     let kept: BTreeMap<&str, Value> = [
@@ -136,6 +141,7 @@ pub(super) fn column_without(absent: &str) -> Value {
         "nullable",
         "auto_increment",
         "column_type",
+        "data_type",
     ]
     .into_iter()
     .filter(|key| *key != absent)

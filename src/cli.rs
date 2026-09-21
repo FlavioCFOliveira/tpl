@@ -62,8 +62,8 @@
 //! parsed command with no implementation is. The arrangement is an arm per leaf
 //! rather than one catch-all so that each later sprint replaces **its own**
 //! entry, and so that the arm it must replace is named by its path rather than
-//! found by reading. What remains under it is `tpl render` and
-//! `tpl cfg database test`.
+//! found by reading. What remains under it is `tpl cfg database test`, the one
+//! `cfg` subcommand that contacts a server.
 //!
 //! Nothing else is provisional here.
 //!
@@ -111,6 +111,7 @@ mod help;
 mod intercept;
 mod layout;
 mod local;
+mod render;
 mod rules;
 mod schema;
 mod source;
@@ -642,7 +643,23 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
             Some(command) => template::run(out, &invocation.globals, command),
         },
 
-        Some(Command::Render { .. }) => not_yet_implemented!("tpl render"),
+        Some(Command::Render {
+            template,
+            object,
+            set,
+            context,
+            caching,
+        }) => render::run(
+            out,
+            &invocation.globals,
+            &render::Supplied {
+                template,
+                object,
+                set,
+                context,
+                caching,
+            },
+        ),
 
         Some(Command::Cache(store)) => match &store.command {
             None => node_help(out, &["cache"]),
@@ -827,9 +844,11 @@ mod tests {
     /// catalogue through the cache, per `FR-SCH-025`, and the three of
     /// `tpl cache` load, clean and report on it. The four of `tpl template`
     /// list, print, check and locate the project's templates, per
-    /// `FR-TMPL-002`. Every other leaf is still the arrangement this module's
-    /// own documentation describes.
-    const IMPLEMENTED: [&[&str]; 27] = [
+    /// `FR-TMPL-002`. `tpl render` joins the two arms: it assembles the
+    /// context of `FR-RND-023` from a catalogue read or a `--context`
+    /// document and renders one template, once. Every other leaf is still the
+    /// arrangement this module's own documentation describes.
+    const IMPLEMENTED: [&[&str]; 28] = [
         &["schema", "info"],
         &["schema", "tables"],
         &["schema", "table"],
@@ -845,6 +864,7 @@ mod tests {
         &["template", "show"],
         &["template", "check"],
         &["template", "path"],
+        &["render"],
         &["help"],
         &["version"],
         &["init"],
@@ -1384,9 +1404,12 @@ mod tests {
     fn fr_err_030_every_unimplemented_leaf_reports_the_interim_seventy_naming_its_command_path() {
         // The interim arrangement this module documents: a leaf parses, has no
         // implementation, and says so as FR-ERR-030 does — never as a success
-        // and never as a usage error the caller could act on. The two leaves
-        // of IMPLEMENTED have left it, and the test beneath this one holds
-        // them to what they do instead.
+        // and never as a usage error the caller could act on. IMPLEMENTED now
+        // holds twenty-eight of the twenty-nine leaves and this test ranges
+        // over the one that is left, `tpl cfg database test`; what each
+        // implemented leaf does instead is held to its own requirements by
+        // the tests of the module that owns it, which is where its behaviour
+        // is written.
         for (path, operands) in LEAVES {
             if IMPLEMENTED.contains(&path) {
                 continue;

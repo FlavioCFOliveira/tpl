@@ -37,13 +37,17 @@ that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
 shows that it is, under two parents that are not on the emitting path. The
 decision is untouched and the entry records what moved.
 
-Two obligations survive the settlement, and each is named in its own entry
-rather than left to be inferred:
+One obligation survives the settlement, and it is named in its own entry rather
+than left to be inferred:
 
 | Entry | What is owed | To whom |
 |---|---|---|
-| `OD-14` | An observation about a **defined** `null` under `UndefinedBehavior::Strict`, unverified against the engine pin | `technical-writer` |
 | `OD-19` | The record's wording — *owned copy* — against a value whose members are borrowed from the model, and the memory consequence the record draws from it | `adr-guardian` |
+
+**`OD-14`'s obligation was discharged on 2026-09-21**, when the render work made
+the observation it owed. The answer was the opposite of the expected one — a
+defined `null` does not fail under `UndefinedBehavior::Strict`, and the engine
+renders it `None` — and the entry records what the built system does about it.
 
 **Two further obligations were discharged by the ninth edition of
 `/specification`**, at commit `4ad5e8c` of 2026-09-11: `OD-28`'s amendment to
@@ -161,7 +165,7 @@ the reason [README.md](README.md#conventions) gives.
 | [OD-11](#od-11--the-scope-of-the-async-runtime) | The scope of the async runtime | Settled | — |
 | [OD-12](#od-12--how-six-phase-deadlines-are-enforced) | How six phase deadlines are enforced | Settled | — |
 | [OD-13](#od-13--the-engine-pin-and-minijinja-contrib) | The engine pin, and `minijinja-contrib` | Settled | — |
-| [OD-14](#od-14--which-undefined-behaviour-the-engine-is-configured-with) | Which undefined behaviour the engine is configured with | Settled, with an observation owed | `technical-writer` |
+| [OD-14](#od-14--which-undefined-behaviour-the-engine-is-configured-with) | Which undefined behaviour the engine is configured with | Settled | — |
 | [OD-15](#od-15--the-template-loader) | The template loader | Settled | — |
 | [OD-16](#od-16--the-tls-backend-and-the-root-store) | The TLS backend and the root store | Settled | — |
 | [OD-17](#od-17--observability) | Observability | Settled | — |
@@ -180,10 +184,10 @@ the reason [README.md](README.md#conventions) gives.
 | [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled, interim | — |
 | [OD-31](#od-31--the-models-shape-strings-fields-and-the-attribute) | The model's shape: strings, fields, and the attribute | Settled | — |
 
-Twenty-nine entries are settled outright; `OD-14` and `OD-19` each carry an
-observation owed. Twenty-nine and two are the whole of the thirty-one. `OD-30`
-is settled and **interim**: it records an arrangement each later sprint removes
-one arm of, and it is discharged when no arm remains.
+Thirty entries are settled outright; `OD-19` alone carries an observation owed.
+Thirty and one are the whole of the thirty-one. `OD-30` is settled and
+**interim**: it records an arrangement each later sprint removes one arm of, and
+it is discharged when no arm remains — one arm remains.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
@@ -195,10 +199,18 @@ against the source named beside it — vendor documentation on `docs.rs`, the
 crate index, the Rust Edition Guide, the Rust Reference, the Rust Book, the
 Cargo Book, or a file of this repository. Each claim carries the date it was
 verified on: **2026-09-10** for the nineteen entries settled that day,
-**2026-09-11** for everything added since, and **2026-09-18** for the two
-library and format claims `OD-31` rests on and for the dependency-graph reading
-that corrected `OD-18`. Anything not verified says so in its own text. No claim
+**2026-09-11** for everything added since, **2026-09-18** for the two library
+and format claims `OD-31` rests on and for the dependency-graph reading that
+corrected `OD-18`, and **2026-09-21** for the engine behaviour `OD-14` now
+records as observed. Anything not verified says so in its own text. No claim
 rests on recollection.
+
+The last of those has a source of a different kind, and it is named here because
+the difference matters: it is a **test of this repository**, not a page of
+vendor documentation. The behaviour it records is **not confirmed in the
+engine's official documentation** for the pinned line, which is why the entry
+stood unverified for as long as it did; a test asserts it on every run and fails
+where a release of that line changes it.
 
 **An entry reduced to a citation carries no source of its own**, and neither
 its sources nor its unverified points are restated here: both live in the
@@ -972,7 +984,7 @@ there; `ADR-001` is that record.
 
 ## OD-14 — Which undefined behaviour the engine is configured with
 
-**Status: settled, with an observation owed.**
+**Status: settled. The observation this entry owed was made on 2026-09-21.**
 
 **Decision.** `UndefinedBehavior::Strict`.
 
@@ -994,13 +1006,39 @@ stated cost; `Chainable`, which permits the very field access `FR-SEM-012`
 fails and would turn a misspelled field into an empty string in a generated
 file.
 
-**Observation owed against the pin, and it must be recorded before
-`architecture` asserts it.** That a **defined** `null` interpolates as the
-empty string under `Strict`, rather than failing, as `FR-SEM-010` requires and
-`FR-SEM-011` reinforces by forbidding the words `none` and `null` in the
-output. `Strict` governs *undefined* values, and a defined null is a different
-thing — but the distinction has **not been verified** against minijinja 2.24,
-and the two requirements are contradicted outright if it does not hold.
+**Observation made on 2026-09-21, and it is the opposite of what this entry
+expected.** A **defined** `null` does **not** fail under `Strict`, and the
+engine writes the word `None` for it — which `FR-SEM-011` forbids by name.
+`Strict` governs *undefined* values only, so it decides nothing at all about a
+defined `null`.
+
+| Observed | What follows |
+|---|---|
+| A defined `null` renders, and the engine's own rendering of it is `None` | `FR-SEM-010` and `FR-SEM-011` are satisfied by the output formatter `render/` installs, and by nothing in this setting |
+| A field that does not exist fails before any formatter is reached | `FR-SEM-012` and `FR-SEM-013` are this setting's, as this entry decided, and the formatter cannot weaken them |
+
+**The observation is a test, not a citation, and it stands as long as the test
+does.** In `src/render/engine.rs`,
+`tests::fr_sem_011_the_formatter_is_what_keeps_a_null_from_reaching_the_output`
+renders a defined `null` through an engine carrying this setting **and nothing
+else**, and asserts what the engine writes; and
+`tests::fr_sem_012_the_strict_behaviour_is_what_fails_a_field_that_does_not_exist`
+asserts the other half. A release of the pinned line that changed either fails
+the suite rather than passing quietly, which a version-dated citation would not
+have done.
+
+**What it costs, and what it does not.** No requirement is contradicted: the
+built system emits the empty string for a `null`, and `FR-SEM-021` likewise
+emits `true` and `false` where the engine's stock rendering is `True` and
+`False`. What moves is **where** the three requirements are met — the formatter
+of [architecture.md](architecture.md#the-render-component), not the
+undefined-behaviour setting — and one consequence follows, which is why the
+observation is recorded here rather than left in the tests that make it: the
+formatter is load-bearing, and removing it as a restatement of what the engine
+already does would break `FR-SEM-010`, `FR-SEM-011` and `FR-SEM-021` at once.
+
+**Discharged.** This entry owes nothing further, and no passage of this folder
+is bounded by it.
 
 ---
 
@@ -1021,8 +1059,28 @@ constrain it and none of them may be applied twice:
 2. Join the name to the template root of `FR-TMPL-023`.
 3. Canonicalise, per `FR-TMPL-025`.
 4. Re-check the canonical path against the canonicalised root; an escape is `65`, per `FR-TMPL-026`.
-5. Refuse a symbolic link, per `FR-TMPL-024`, by reading the entry's own metadata rather than following it — `std::fs::symlink_metadata`, which "queries the metadata about a file without following symlinks" and "corresponds to the `lstat` function on Unix" (Rust standard library documentation, `std::fs::symlink_metadata`, verified 2026-09-11).
+5. Refuse a symbolic link at **every component of the name below the canonical root, taken in order**, refusing the first that is one, per `FR-TMPL-024`. Each component's own metadata is read rather than followed — `std::fs::symlink_metadata`, which "queries the metadata about a file without following symlinks" and "corresponds to the `lstat` function on Unix" (Rust standard library documentation, `std::fs::symlink_metadata`, verified 2026-09-11).
 6. Open the path that was checked, and no other.
+
+**Step 5 was the final component alone until 2026-09-21, and that was narrower
+than the requirement.** `FR-TMPL-024` refuses a symbolic link inside
+`.tpl/templates/` **without qualification**, and a link is an entry wherever it
+sits in a name. Four facts record the widening, and the second bounds what the
+narrow reading could have cost.
+
+| Fact | What holds |
+|---|---|
+| **Why it changed** | A symlinked **intermediate directory** passes step 4, because its target is inside the root, and passes a check of the final component, because the final component is an ordinary file. One name was therefore renderable and unlistable: the listing never carried it — `FR-TMPL-024` keeps a symlinked entry out of the listing too — so the lookup and the listing disagreed about what a template is |
+| **Nothing escaped containment** | Step 4 is unchanged and already refuses any chain that resolves outside the canonical root. What the narrow step admitted was a link whose target is **inside** the root, which reads a file the caller may already read under its real name. This closes a **divergence** from `FR-TMPL-024`, not a hole |
+| **The root itself is not walked** | Step 4 canonicalises the root, so every component above and including it is already resolved and there is no link left there to find. The walk begins below it and covers exactly the name the caller wrote |
+| **The cost** | N `lstat` calls for an N-component name, where one was made before. A template name is one or two components in practice, and every entry the walk reads was already read by step 3's canonicalisation of the same path |
+
+The decision this entry made is unchanged — one resolution function, `tpl`'s
+own, six steps in this order — and what moved is the breadth of one step. That
+the requirement governs unqualified, rather than the narrower reading the step
+had taken, was decided by the user on 2026-09-21.
+[security.md](security.md#template-containment) carries the same widening in the
+row that states the property.
 
 **Why not wrap `path_loader`.** Wrapping runs `tpl`'s checks on one path and
 lets the engine's helper resolve a second one from the same name, by a rule
@@ -1248,6 +1306,18 @@ type and apply in both directions, so key order is still a property of a type
 and the round trip is still inverse by construction — which is the whole of what
 this entry decided. The shapes are enumerated in
 [interfaces.md](interfaces.md#the-two-directions-over-the-document).
+
+**Amended on 2026-09-21, when the render work read the document back: the
+decomposed type is emitted flattened into the column.** It is still the model's
+own type and is still serialised by the derive, so nothing this entry decided
+moves; what changed is that the type is no longer a **level** of the document.
+`FR-CTX-014` gives a column `column_type` and `FR-CTX-015` gives it the eight
+parts *additionally*, which makes all nine siblings on the column. The key order
+of `FR-OUT-013` is unaffected in substance and gains one rule: the nine keys are
+emitted where the field sits, so a column's order is its own field order with
+the decomposition's spliced in at that position. The derive states both, and no
+writer restates either. Why the change left `schema_version` where it stands is
+[data-model.md](data-model.md#the-four-version-numbers)'s.
 
 **Amended on 2026-09-18 — `indexmap` is in the dependency graph, and its
 presence is irrelevant to this decision.** This entry asserted twice that it is
@@ -1867,18 +1937,17 @@ decides an invariant violation is a `70` and names where it was detected
 trigger of [`OD-21`](#od-21--two-test-seams-that-must-not-be-on-the-published-surface),
 which remains absent from the artefact.
 
-**What a caller observes while it stands.** In the working tree of 2026-09-17,
-above commit `cd6ce7e`: **17 of the 29 leaves exit `70`**, down from 27 at
-`f8f335d` of 2026-09-15. Twelve act — `tpl help`, `tpl version`, `tpl init`, the
-four dotted-key subcommands, and five of the six entry subcommands — and the
-seventeen that remain are the eight of the first arm, the four of the second,
-the render, the three cache subcommands, and the connectivity subcommand, which
-is the one `cfg` leaf that contacts a server (`FR-CFG-005`). The six group nodes
-print their own help and exit `0` (`FR-CLI-007`, `FR-HELP-025`); the two flag
-forms are answered at every node (`FR-GLOB-019`, `FR-GLOB-020`). A `70` from an
-ordinary invocation is therefore still **expected** today and is not the defect
-`FR-ERR-030` otherwise reports — which is the reason this arrangement is
-recorded here rather than left in the code that carries it.
+**What a caller observes while it stands.** At commit `fd33cdf` of 2026-09-21:
+**one of the 29 leaves exits `70`**, down from 17 in the working tree of
+2026-09-17 and 27 at `f8f335d` of 2026-09-15. The one is
+`tpl cfg database test`, the only `cfg` leaf that contacts a server
+(`FR-CFG-005`); the other 28 act, the third arm among them since this commit.
+The six group nodes print their own help and exit `0` (`FR-CLI-007`,
+`FR-HELP-025`); the two flag forms are answered at every node (`FR-GLOB-019`,
+`FR-GLOB-020`). A `70` from an ordinary invocation is therefore still
+**expected** today, on that one path, and is not the defect `FR-ERR-030`
+otherwise reports — which is the reason this arrangement is recorded here rather
+than left in the code that carries it.
 
 **Rejected.**
 
@@ -2007,12 +2076,16 @@ left hunting for an open defect.
 ## What remains
 
 No entry is open, so there is no order of work over the register. What remains
-is two obligations, and each blocks one statement.
+is one obligation, and it blocks one statement.
 
 | Order | What | Owner | Blocks |
 |---|---|---|---|
-| 1 | `OD-14`'s owed observation — that a **defined** `null` interpolates as the empty string under `UndefinedBehavior::Strict`. It is unverified, and `FR-SEM-010` and `FR-SEM-011` are contradicted outright if it does not hold | `technical-writer` | `architecture` may not assert the behaviour until it is verified |
-| 2 | `OD-19`'s owed observation — `ADR-009`'s *owned copy* against a value whose members are borrowed, and the peak-memory consequence the record draws from that word | `adr-guardian` | No document of this folder may read *owned copy* as settling how an embedded value holds its members |
+| 1 | `OD-19`'s owed observation — `ADR-009`'s *owned copy* against a value whose members are borrowed, and the peak-memory consequence the record draws from that word | `adr-guardian` | No document of this folder may read *owned copy* as settling how an embedded value holds its members |
+
+`OD-14`'s obligation, which stood first in this table, was discharged on
+2026-09-21: the observation was made, it went the other way, and the entry
+records both the answer and what in `render/` now carries the two requirements
+it turned out not to decide. `architecture` asserts the behaviour accordingly.
 
 `OD-22`'s residual — the fixture certificate and the harness — was discharged on
 2026-09-11 by tasks #15 and #25, and `operations` and `verification` no longer

@@ -437,7 +437,7 @@ fn only<'d>(
 /// Where a named load was made, for the conditions whose `cause` names the
 /// population.
 fn sought<'a>(opened: &'a Opened, document: &'a DatabaseDocument<'_>) -> named::Sought<'a> {
-    named::Sought {
+    named::Sought::Catalogue {
         entry: opened.entry(),
         database: &document.name,
     }

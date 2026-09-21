@@ -1,0 +1,792 @@
+//! The third arm, exercised as a process.
+//!
+//! `tpl render` joins the other two: it takes a model from one of **two**
+//! sources, a template from the project, and produces exactly one result on
+//! stdout, per `FR-RND-002`. What this file establishes above everything else
+//! is that the result **does not betray which source the model came from**, and
+//! beside it the failure surface of the eight steps `FR-ERR-006` orders, as a
+//! caller meets it: an exit code, the bytes of stdout, and the four labelled
+//! lines of `FR-ERR-008`.
+//!
+//! | Requirement | The property this file establishes |
+//! |---|---|
+//! | `FR-RND-016`, `FR-RND-017`, `FR-RND-026` | One template and one object render the same bytes from a server, from the cache, from a document in a file, and from a document on standard input |
+//! | `FR-RND-021` | The two forms of one document are one contract, which the pipeline of `FR-RND-017` is what exercises |
+//! | `FR-RND-005`, `FR-RND-011` … `FR-RND-014`, `FR-RND-018`, `FR-RND-027` | Step 1 of `FR-ERR-006` refuses six invocations with `64`, before anything is discovered or opened |
+//! | `FR-RND-020` | A document that is not well-formed JSON, and one that is JSON and not the contract, are each `65` |
+//! | `FR-RND-029`, `FR-RND-032` | A template name and an object name that reach nothing are each `66`, with the nearest-match suggestion of `FR-ERR-019` |
+//! | `FR-RND-030`, `FR-RND-031`, `FR-SEM-005`, `FR-SEM-008`, `FR-SEM-014` | Every way a render fails is `65`, naming the template, the line and the column, per `FR-SEM-019` |
+//! | `FR-CTX-029`, `FR-CTX-030` | `now` is one instant per invocation, and a template that does not reference it repeats byte for byte |
+//! | `FR-CTX-026`, `FR-RND-024` | `vars` is this invocation's `--set` flags and nothing else, and a document that carries `vars`, `tpl` or `now` has those values ignored |
+//! | `FR-CACHE-016`, `FR-RND-025` | `--direct --no-cache` renders without touching a file of the store |
+//!
+//! # Why most of this file needs the fixture
+//!
+//! Every body that renders from a `--context` document needs a document, and
+//! the contract a document satisfies is stated in
+//! `specification/context-document.md` and implemented by `tpl schema dump`.
+//! A document written out in Rust here would be a **second statement of that
+//! contract**, in a file that would go on compiling after the contract moved —
+//! which is the failure mode this project refuses everywhere else. So every
+//! document below is one the product produced, against a fixture server, in the
+//! body that uses it.
+//!
+//! Two bodies need no document and therefore no fixture, and they are the two
+//! about what happens before one is read: the six refusals of step 1, made in a
+//! directory with no project at all, and the two documents that are refused
+//! before anything is bound.
+//!
+//! # What this file does not establish
+//!
+//! Two properties, and neither is reachable from an exit code or from the bytes
+//! of a run that succeeded:
+//!
+//! | Property | Requirement |
+//! |---|---|
+//! | A render from a `--context` document opens no connection | `FR-RND-022` |
+//! | A render that fails leaves at most one incomplete result on stdout | `FR-RND-034`, `FR-SEM-020` |
+//!
+//! Both are observed in
+//! [`outside_the_process`](../outside_the_process/index.html), with the
+//! instruments `NFR-PERF-007` fixes: the server's own connection record for the
+//! first, and the process's own file descriptor 1 for the second. The `65` a
+//! failing render exits is asserted **here**; the bytes it did not write are
+//! asserted **there**.
+//!
+//! # The fixture, and what happens without one
+//!
+//! Every server-dependent body here is gated on `scripts/mariadb/status.sh`,
+//! whose exit code is three-valued: `0` runs the body, `1` skips it with a
+//! printed reason, and `2` — half a fixture — fails the run rather than
+//! skipping over it. Those bodies are driven **once per series of
+//! `FR-SRV-015`**, which `FR-SRV-029` requires of a test of cross-series
+//! behaviour: a render assembled from a catalogue is one, because the model it
+//! renders is what a series returned.
+
+#[path = "support/fixture.rs"]
+mod fixture;
+#[path = "support/sandbox.rs"]
+mod sandbox;
+
+use std::process::Output;
+
+use fixture::Server;
+use sandbox::Sandbox;
+
+/// The schema every fixture server carries.
+const SCHEMA: &str = "freight";
+
+/// The database entry every project below defines.
+const ENTRY: &str = "fixture";
+
+/// The privileged account of the fixture, which reads every property.
+const ROOT: (&str, &str) = ("root", "tpl-root");
+
+/// The table every render below binds (`FR-RND-003`).
+const TABLE: &str = "charge";
+
+/// The `--context` document, relative to the sandbox it is written in.
+const CONTEXT: &str = "context.json";
+
+/// The same document with `vars`, `tpl` and `now` planted in it
+/// (`FR-RND-024`).
+const FORGED: &str = "forged.json";
+
+/// The four labels of `FR-ERR-008`, in the order it fixes.
+const LABELS: [&str; 4] = ["error: ", "cause: ", "hint:  ", "exit:  "];
+
+/// The template the byte-for-byte comparison renders, named as `FR-TMPL-006`
+/// resolves it.
+const WHOLE: &str = "whole";
+
+/// Its source.
+///
+/// It is deliberately wide: every collection of `FR-CTX-036`, both reference
+/// directions of `FR-CTX-009`, the decomposed type parts of `FR-CTX-015`, three
+/// of the naming filters and all seven tests of `FR-ENV-014`, including the two
+/// that resolve a column's table against the render context. A comparison over
+/// a narrow template would hold just as well between two sources that agreed
+/// about a name and about nothing else.
+///
+/// It references neither `now` nor anything that varies between two reads of
+/// one server, which is what makes it usable for `FR-CTX-030` as well.
+const WHOLE_SOURCE: &str = "{{ database.name }} {{ database.charset }} {{ database.collation }}
+{{ database.server.version }} {{ database.server.series }} {{ database.server.standing }}
+{%- for t in database.tables %}
+T {{ t.name }} {{ t.table_type }} {{ t.engine }} {{ t.collation }} {{ t.comment }} {{ t.columns | length }} {{ t.indexes | length }} {{ t.foreign_keys | length }} {{ t.referenced_by | length }} {{ t.triggers | length }} {{ t.check_constraints | length }}
+{%- if t.primary_key %} PK {{ t.primary_key.name }} {{ t.primary_key.columns | length }}{% endif %}
+{%- for c in t.columns %}
+C {{ c.position }} {{ c.name | pascal }} {{ c.column_type }} {{ c.data_type }} {{ c.precision }} {{ c.scale }} {{ c.length }} {{ c.unsigned }} {{ c.charset }} {{ c.collation }} {{ c.nullable }} {{ c.auto_increment }} {{ c.invisible }} {{ c is nullable }} {{ c is primary_key }} {{ c is unique }} {{ c is numeric }} {{ c is temporal }} {{ c is textual }}
+{%- endfor %}
+{%- for k in t.foreign_keys %}
+F {{ k.name }} {{ k.match_option }} {{ k.on_update }} {{ k.on_delete }}{% if k.referenced_table %} -> {{ k.referenced_table.name }} {{ k.referenced_table.columns | length }}{% endif %}
+{%- endfor %}
+{%- for r in t.referenced_by %}
+R {{ r.table.name }} {{ r.key.name }}
+{%- endfor %}
+{%- endfor %}
+{%- for v in database.views %}
+V {{ v.name | kebab }} {{ v.is_updatable }} {{ v.check_option }} {{ v.security_type }} {{ v.algorithm }}
+{%- endfor %}
+{%- for r in database.routines %}
+P {{ r.name | snake }} {{ r.kind }} {{ r.parameters | length }} {{ r.is_deterministic }} {{ r.sql_data_access }}
+{%- endfor %}
+BOUND {{ table.name }} {{ table.columns | length }} {{ tpl.version }} {{ vars.title }}
+";
+
+/// The `--set` entry [`WHOLE_SOURCE`] reads, and the value it must carry.
+const TITLE: (&str, &str) = ("title=Charges", "Charges");
+
+/// The exit code of a run.
+fn code(printed: &Output) -> Option<i32> {
+    printed.status.code()
+}
+
+/// What the run wrote to stdout, as text.
+fn stdout(printed: &Output) -> String {
+    String::from_utf8(printed.stdout.clone()).expect("a render of this file writes UTF-8")
+}
+
+/// What the run wrote to stderr, as text.
+fn stderr(printed: &Output) -> String {
+    String::from_utf8(printed.stderr.clone()).expect("a diagnostic is valid UTF-8")
+}
+
+/// Runs `tpl` in `sandbox` and refuses anything but exit `0`, returning stdout.
+fn succeeds(sandbox: &Sandbox, arguments: &[&str]) -> String {
+    let printed = sandbox.run(arguments);
+
+    assert_eq!(
+        code(&printed),
+        Some(0),
+        "tpl {} exited {:?}: {}",
+        arguments.join(" "),
+        code(&printed),
+        stderr(&printed)
+    );
+
+    stdout(&printed)
+}
+
+/// The same, with `supplied` on standard input (`FR-RND-017`).
+fn succeeds_with_stdin(sandbox: &Sandbox, arguments: &[&str], supplied: &str) -> String {
+    let printed = sandbox.run_with_stdin(arguments, supplied.as_bytes());
+
+    assert_eq!(
+        code(&printed),
+        Some(0),
+        "tpl {} exited {:?}: {}",
+        arguments.join(" "),
+        code(&printed),
+        stderr(&printed)
+    );
+
+    stdout(&printed)
+}
+
+/// Asserts that `arguments` is a refusal carrying `expected`: that code, an
+/// empty stdout per `FR-ERR-033`, and the four labelled lines of `FR-ERR-008`
+/// in their order. Returns what reached stderr.
+fn refused(sandbox: &Sandbox, arguments: &[&str], expected: i32) -> String {
+    let printed = sandbox.run(arguments);
+    let written = stderr(&printed);
+    let spelled = arguments.join(" ");
+
+    assert_eq!(
+        code(&printed),
+        Some(expected),
+        "tpl {spelled} did not exit {expected}: {written}"
+    );
+    assert!(
+        printed.stdout.is_empty(),
+        "tpl {spelled} wrote {} bytes to stdout",
+        printed.stdout.len()
+    );
+
+    let lines: Vec<&str> = written.lines().collect();
+
+    assert_eq!(lines.len(), 4, "tpl {spelled} wrote {written:?}");
+    for (line, label) in lines.iter().zip(LABELS) {
+        assert!(line.starts_with(label), "tpl {spelled} wrote {line:?}");
+    }
+
+    written
+}
+
+/// One labelled line of a diagnostic, without its label.
+fn line(written: &str, label: &str) -> String {
+    written
+        .lines()
+        .find(|line| line.starts_with(label))
+        .unwrap_or_else(|| panic!("no {label:?} line in {written:?}"))
+        .trim_start_matches(label)
+        .trim_start()
+        .to_owned()
+}
+
+/// A sandbox holding a project that reaches `server` and carries `templates`,
+/// each written under `.tpl/templates/` with the `.jinja` extension
+/// `FR-TMPL-006` resolves without.
+fn project(server: &Server, templates: &[(&str, &str)]) -> Sandbox {
+    let sandbox = Sandbox::new();
+    sandbox.project(&fixture::configuration(server, ENTRY, SCHEMA, ROOT));
+
+    for (name, source) in templates {
+        sandbox.write(&format!(".tpl/templates/{name}.jinja"), source);
+    }
+
+    sandbox
+}
+
+/// The same, with a `--context` document produced by the product against
+/// `server` already written at [`CONTEXT`].
+///
+/// The document is read with `--direct --no-cache`, which `FR-CACHE-016` makes
+/// the pure read: the store is left untouched, so a body that asserts something
+/// about the cache is not looking at a store this helper wrote.
+///
+/// The dump is returned as well as written, because the standard-input form of
+/// `FR-RND-017` is handed the bytes rather than the path.
+fn documented(server: &Server, templates: &[(&str, &str)]) -> (Sandbox, String) {
+    let sandbox = project(server, templates);
+    let dumped = succeeds(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+
+    sandbox.write(CONTEXT, &dumped);
+
+    (sandbox, dumped)
+}
+
+// ------------------------------------------------ step 1 of FR-ERR-006 ---
+
+#[test]
+fn fr_err_006_the_six_refusals_of_step_one_are_64_where_there_is_no_project_at_all() {
+    // Step 1 of FR-ERR-006 is decided from the invocation alone, so it
+    // precedes project discovery, the trust checks and `.tpl/.cfg`. The
+    // sandbox below therefore holds **nothing**: no project, no template, no
+    // configuration and no document — and a build that read any of them first
+    // would answer `78` for a project it could not find rather than the `64`
+    // each of these six owes.
+    //
+    // The `64` row of FR-ERR-034 obliges the refusal to name what did not
+    // conform, so each case asserts the tokens at fault appear in the
+    // diagnostic. The wording around them is not asserted: NFR-DET-001 puts
+    // stderr outside the contract.
+    let sandbox = Sandbox::new();
+
+    for (arguments, named) in [
+        // FR-RND-005: two kinds of object flag name no object.
+        (
+            &["render", WHOLE, "--table", "orders", "--view", "v_sales"][..],
+            &["--table", "--view"][..],
+        ),
+        // FR-RND-014: the same key twice, refused rather than last-wins.
+        (
+            &["render", WHOLE, "--set", "title=one", "--set", "title=two"][..],
+            &["title"][..],
+        ),
+        // FR-RND-012 and FR-RND-013: a dotted key is refused, never split.
+        (
+            &["render", WHOLE, "--set", "db.host=1"][..],
+            &["db.host=1"][..],
+        ),
+        // FR-RND-011: an argument that is not a pair at all.
+        (&["render", WHOLE, "--set", "novalue"][..], &["novalue"][..]),
+        // FR-RND-018: two conflicting context sources.
+        (
+            &["-d", "shop", "render", WHOLE, "--context", CONTEXT][..],
+            &["--context", "--database"][..],
+        ),
+        // FR-RND-027: `--format` is not declared, so it is the ordinary
+        // unknown-flag `64` of FR-CLI-019 and not a case of its own.
+        (
+            &["render", WHOLE, "--format", "json"][..],
+            &["--format"][..],
+        ),
+    ] {
+        let written = refused(&sandbox, arguments, 64);
+
+        for token in named {
+            assert!(
+                written.contains(token),
+                "tpl {} did not name {token:?}: {written}",
+                arguments.join(" ")
+            );
+        }
+    }
+}
+
+// ------------------------------------------------------------ FR-RND-020 ---
+
+#[test]
+fn fr_rnd_020_a_document_that_is_not_the_contract_is_65_before_the_template_is_resolved() {
+    // FR-RND-020 in both halves: bytes that are not well-formed JSON, and JSON
+    // that is well formed and is not the document contract. Neither needs a
+    // server and neither needs a template, which is the second thing this body
+    // establishes — the template named below exists nowhere, and the condition
+    // is still the document's, because the document is read at step 5 of
+    // FR-ERR-006 and the template name is resolved at step 7.
+    //
+    // A project **is** needed: FR-TMPL-023 makes the template root a property
+    // of the resolved project and FR-CONF-004 resolves the render deadline from
+    // `[core]`, so steps 2 and 3 run on the document path exactly as they run
+    // on the other one. The project below names no database entry, so a build
+    // that fell through to step 4 would answer `78` rather than `65`.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    for (file, bytes) in [("broken.json", "{ this is not json"), ("bare.json", "{}")] {
+        sandbox.write(file, bytes);
+
+        let written = refused(&sandbox, &["render", "nosuch", "--context", file], 65);
+        let cause = line(&written, LABELS[1]);
+
+        // The `65` row of FR-ERR-034 obliges the path the document was read
+        // from to travel on the condition.
+        assert!(
+            line(&written, LABELS[0]).contains(file),
+            "the refusal did not name the document: {written}"
+        );
+        assert!(
+            cause.contains(file),
+            "the cause did not name the document: {written}"
+        );
+        assert!(
+            !written.contains("nosuch"),
+            "the refusal named the template, so the document was read after it \
+             rather than before: {written}"
+        );
+    }
+}
+
+// ------------------------------------- the two sources, and the one result ---
+
+#[test]
+fn fr_rnd_016_and_fr_rnd_026_one_template_and_one_object_render_the_same_bytes_from_every_source() {
+    // **The claim of this sprint.** One template and one bound object produce
+    // the same bytes whichever source produced the model, and there are four
+    // ways a model can arrive:
+    //
+    // | Source | How it is reached | Requirement |
+    // |---|---|---|
+    // | The server, with the store untouched | `--direct --no-cache` | `FR-CACHE-016` |
+    // | The server, through a store this read fills | the read-through of `FR-CACHE-006` | `FR-RND-026` |
+    // | The store, now warm | the same invocation again | `FR-CACHE-006` |
+    // | A document, from a file and from standard input | `--context <path>` and `--context -` | `FR-RND-016`, `FR-RND-017` |
+    //
+    // The comparison is over the **bytes**, which is the whole of what a caller
+    // receives, and the template is wide enough that two sources agreeing about
+    // a name and nothing else would not pass it.
+    //
+    // The project names an entry and `core.database` selects it, and the
+    // `--context` runs are made against that same project without changing it:
+    // FR-RND-019 makes a selected entry no conflict at all when `--context` is
+    // supplied and `-d/--database` is not.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_rnd_016_and_fr_rnd_026_one_template_and_one_object_render_the_same_bytes_from_every_source",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let sandbox = project(server, &[(WHOLE, WHOLE_SOURCE)]);
+        let store = sandbox.path(&format!(".tpl/.cache/{ENTRY}"));
+        let render: Vec<&str> = vec!["render", WHOLE, "--table", TABLE, "--set", TITLE.0];
+
+        let mut pure = render.clone();
+        pure.extend_from_slice(&["--direct", "--no-cache"]);
+
+        // The server, with nothing of the store read and nothing written.
+        let from_server = succeeds(&sandbox, &pure);
+
+        assert!(
+            !store.exists(),
+            "{name}: FR-CACHE-016 makes --direct --no-cache the pure read, and it \
+             wrote {}",
+            store.display()
+        );
+
+        // The server again, this time through the read-through of FR-RND-026,
+        // which fills the store on its way past.
+        let filling = succeeds(&sandbox, &render);
+
+        assert!(
+            store.exists(),
+            "{name}: the read-through render wrote no store, so the run below is \
+             a second server read rather than a cache read"
+        );
+
+        // The store, now warm.
+        let from_cache = succeeds(&sandbox, &render);
+
+        // The document, in both of the forms FR-RND-021 makes one contract.
+        let dumped = succeeds(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+        sandbox.write(CONTEXT, &dumped);
+
+        let mut from_file = render.clone();
+        from_file.extend_from_slice(&["--context", CONTEXT]);
+        let from_file = succeeds(&sandbox, &from_file);
+
+        let mut from_stdin = render.clone();
+        from_stdin.extend_from_slice(&["--context", "-"]);
+        let from_stdin = succeeds_with_stdin(&sandbox, &from_stdin, &dumped);
+
+        // The control: the comparison is over a result that carries the model,
+        // and not over two empty strings or two error-free nothings.
+        assert!(
+            from_server.contains(&format!("BOUND {TABLE} ")) && from_server.lines().count() > 100,
+            "{name}: the render produced {} line(s), which is not the model",
+            from_server.lines().count()
+        );
+        assert!(
+            from_server.contains(TITLE.1),
+            "{name}: the render did not carry the --set entry it was given"
+        );
+
+        for (source, produced) in [
+            ("the read-through server read", &filling),
+            ("the cache", &from_cache),
+            ("a --context document in a file", &from_file),
+            ("a --context document on stdin", &from_stdin),
+        ] {
+            assert!(
+                &from_server == produced,
+                "{name}: the result betrays its source — a model from {source} \
+                 rendered different bytes from one read straight from the server"
+            );
+        }
+    }
+}
+
+// ------------------------------------------- FR-RND-029 and FR-RND-032 ---
+
+#[test]
+fn fr_rnd_029_and_fr_rnd_032_a_name_that_reaches_nothing_is_66_with_a_nearest_match() {
+    // Two names, two steps of FR-ERR-006, one exit code. FR-RND-032 is step 6
+    // and FR-RND-029 is step 7, and both take the nearest-match suggestion of
+    // FR-ERR-019 — the `66` row of FR-ERR-034 obliges the population the name
+    // was sought in to be named beside it, which on this path is the document
+    // and the database it describes rather than an entry and a server.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_rnd_029_and_fr_rnd_032_a_name_that_reaches_nothing_is_66_with_a_nearest_match",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let (sandbox, _) = documented(server, &[(WHOLE, WHOLE_SOURCE)]);
+
+        // Step 6 first, because it runs first: an object the document does not
+        // carry, misspelled by one byte.
+        let absent_object = refused(
+            &sandbox,
+            &["render", WHOLE, "--context", CONTEXT, "--table", "charg"],
+            66,
+        );
+
+        assert!(
+            line(&absent_object, LABELS[0]).contains("charg"),
+            "{name}: {absent_object}"
+        );
+        assert!(
+            line(&absent_object, LABELS[1]).contains(CONTEXT)
+                && line(&absent_object, LABELS[1]).contains(SCHEMA),
+            "{name}: the cause did not name the population the object was sought \
+             in: {absent_object}"
+        );
+        assert!(
+            line(&absent_object, LABELS[2]).contains(TABLE),
+            "{name}: no nearest match for a name one byte from a real one: \
+             {absent_object}"
+        );
+
+        // Step 7, reached because step 6 passed: the object is bound and the
+        // template is the thing that does not exist.
+        let absent_template = refused(
+            &sandbox,
+            &["render", "whol", "--context", CONTEXT, "--table", TABLE],
+            66,
+        );
+
+        assert!(
+            line(&absent_template, LABELS[0]).contains("whol"),
+            "{name}: {absent_template}"
+        );
+        assert!(
+            line(&absent_template, LABELS[2]).contains(WHOLE),
+            "{name}: no nearest match among the project's templates: \
+             {absent_template}"
+        );
+    }
+}
+
+// ------------------------------- FR-RND-030, FR-RND-031 and FR-SEM-019 ---
+
+/// Every way a render fails, and the requirement each is written for.
+///
+/// `FR-SEM-019` makes all of them one kind of failure — a render failure under
+/// `FR-RND-031`, carrying the template, the line and the column — so they are
+/// driven as one list rather than as five bodies.
+///
+/// [`outside_the_process`](../outside_the_process/index.html) drives the same
+/// five for the other half of what they owe: the bytes they did not write to
+/// the process's own stdout, per `FR-RND-034` and `FR-SEM-020`. The list is
+/// written twice because the two are separate test binaries, and neither copy
+/// can make the other wrong: each is the population of the body beside it.
+const FAILING: [(&str, &str, &str); 5] = [
+    ("broken", "kept\n{% if %}\n", "FR-RND-030, a syntax error"),
+    (
+        "undefined",
+        "kept\n{{ database.missing }}\n",
+        "FR-SEM-012 through FR-RND-031, a field that does not exist",
+    ),
+    (
+        "stopped",
+        "kept\n{{ fail('no mapping') }}\n",
+        "FR-SEM-014, the author ending the render",
+    ),
+    (
+        "operand",
+        "kept\n{{ 42 | snake }}\n",
+        "FR-SEM-008 and FR-SEM-009, a filter given an operand it does not accept",
+    ),
+    (
+        "predicate",
+        "kept\n{% if database is nullable %}x{% endif %}\n",
+        "FR-SEM-005 and FR-SEM-007, a test given an operand it does not accept",
+    ),
+];
+
+#[test]
+fn fr_sem_019_every_way_a_render_fails_is_65_and_says_where_it_failed() {
+    // FR-RND-030 for the syntax error, FR-RND-031 for the four that fail while
+    // being evaluated, and FR-SEM-019 for what every one of them must carry:
+    // the template name, the line and the column. FR-SEM-007 and the second
+    // sentence of FR-SEM-008 are what the last two are for — a test that
+    // answered `false` and a filter that returned the empty string would both
+    // have exited `0` here, and would have put a plausible wrong answer in a
+    // generated file.
+    //
+    // The bytes these runs did not write to stdout are asserted in
+    // `outside_the_process`, on the process's own stream; what is asserted here
+    // is the code and the diagnostic.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_sem_019_every_way_a_render_fails_is_65_and_says_where_it_failed")
+    else {
+        return;
+    };
+
+    let templates: Vec<(&str, &str)> = FAILING
+        .iter()
+        .map(|(template, source, _)| (*template, *source))
+        .collect();
+
+    for server in series {
+        let name = server.name();
+        let (sandbox, _) = documented(server, &templates);
+
+        for (template, _, requirement) in FAILING {
+            let written = refused(&sandbox, &["render", template, "--context", CONTEXT], 65);
+            let reported = line(&written, LABELS[0]);
+
+            assert!(
+                reported.contains(template),
+                "{name}: {requirement} did not name the template: {written}"
+            );
+            assert!(
+                reported.contains("line 2") && reported.contains("column"),
+                "{name}: {requirement} did not report the line and the column \
+                 FR-SEM-019 obliges: {written}"
+            );
+        }
+    }
+}
+
+// ------------------------------------------- FR-CTX-029 and FR-CTX-030 ---
+
+/// A template that reads `now` twice, and nothing else.
+const TWICE: (&str, &str) = ("twice", "{{ now }}|{{ now }}");
+
+#[test]
+fn fr_ctx_029_and_fr_ctx_030_now_is_one_instant_and_a_template_without_it_repeats_byte_for_byte() {
+    // FR-CTX-029: `now` is evaluated once per invocation and every reference in
+    // one render yields the same value — so the two halves below are one string
+    // read twice and not two readings of a clock.
+    //
+    // FR-CTX-030: `now` is the **single** documented source of
+    // non-reproducibility, which is a claim about every other variable. A
+    // template that does not reference it produces byte-identical output
+    // between runs against unchanged inputs, and [`WHOLE_SOURCE`] is that
+    // template: the two runs below are made against one document, so the inputs
+    // are unchanged in the strongest sense available.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_ctx_029_and_fr_ctx_030_now_is_one_instant_and_a_template_without_it_repeats_byte_for_byte",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let (sandbox, _) = documented(server, &[(WHOLE, WHOLE_SOURCE), TWICE]);
+
+        let written = succeeds(&sandbox, &["render", TWICE.0, "--context", CONTEXT]);
+        let (first, second) = written
+            .split_once('|')
+            .unwrap_or_else(|| panic!("{name}: the template wrote {written:?}"));
+
+        assert_eq!(
+            first, second,
+            "{name}: two references to `now` in one render yielded two values"
+        );
+
+        // FR-CTX-028 fixes the one format: RFC 3339, UTC, a `Z` offset and
+        // second precision, which is twenty characters and no more.
+        assert_eq!(first.len(), 20, "{name}: `now` was {first:?}");
+        assert!(first.ends_with('Z'), "{name}: `now` was {first:?}");
+        assert_eq!(&first[4..5], "-", "{name}: `now` was {first:?}");
+        assert_eq!(&first[10..11], "T", "{name}: `now` was {first:?}");
+
+        let once = succeeds(
+            &sandbox,
+            &[
+                "render",
+                WHOLE,
+                "--context",
+                CONTEXT,
+                "--table",
+                TABLE,
+                "--set",
+                TITLE.0,
+            ],
+        );
+        let again = succeeds(
+            &sandbox,
+            &[
+                "render",
+                WHOLE,
+                "--context",
+                CONTEXT,
+                "--table",
+                TABLE,
+                "--set",
+                TITLE.0,
+            ],
+        );
+
+        assert!(
+            !once.is_empty(),
+            "{name}: the template produced nothing, so the equality below \
+             compares two empty strings"
+        );
+        assert_eq!(
+            once, again,
+            "{name}: a template that never references `now` produced different \
+             bytes on two runs against one document"
+        );
+    }
+}
+
+// ------------------------------------------- FR-CTX-026 and FR-RND-024 ---
+
+/// A template that reads `vars` whole, and the three injected variables.
+const THREE: (&str, &str) = ("three", "{{ vars }}|{{ tpl.version }}|{{ now }}");
+
+/// A template that reads the two `--set` entries `FR-RND-009` and `FR-RND-010`
+/// are about.
+const PAIR: (&str, &str) = ("pair", "[{{ vars.empty }}][{{ vars.msg }}]");
+
+/// The instant the forged document below states, which must reach nothing.
+const PLANTED_NOW: &str = "1999-01-01T00:00:00Z";
+
+#[test]
+fn fr_ctx_026_and_fr_rnd_024_vars_is_this_invocations_and_a_document_supplies_none_of_the_three() {
+    // FR-CTX-026: `vars` is the `--set` keys of **this** invocation, and `{}`
+    // where there are none. FR-RND-009 and FR-RND-010 are the two splitting
+    // rules that a caller generating a command line meets first — the first `=`
+    // and nothing after it, and an empty value that is valid.
+    //
+    // FR-RND-024: `vars`, `tpl` and `now` are always injected, and a value a
+    // `--context` document supplies for any of them is ignored. The forged
+    // document below plants all three at every level a producer could plausibly
+    // have put them — beside `schema_version`, inside `data`, and inside
+    // `database` — and none of them reaches the template.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_ctx_026_and_fr_rnd_024_vars_is_this_invocations_and_a_document_supplies_none_of_the_three",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let (sandbox, dumped) = documented(server, &[THREE, PAIR]);
+
+        // FR-CTX-026: no --set at all.
+        let empty = succeeds(&sandbox, &["render", THREE.0, "--context", CONTEXT]);
+        let fields: Vec<&str> = empty.split('|').collect();
+
+        assert_eq!(fields[0], "{}", "{name}: `vars` was {empty:?}");
+        assert_eq!(
+            fields[1],
+            env!("CARGO_PKG_VERSION"),
+            "{name}: FR-CTX-027 makes `tpl.version` the version the binary is"
+        );
+
+        // FR-RND-010 and FR-RND-009: an empty value, and a value carrying the
+        // separator it was split on.
+        let written = succeeds(
+            &sandbox,
+            &[
+                "render",
+                PAIR.0,
+                "--context",
+                CONTEXT,
+                "--set",
+                "empty=",
+                "--set",
+                "msg=a=b",
+            ],
+        );
+
+        assert_eq!(written, "[][a=b]", "{name}");
+
+        // FR-RND-024, over a document that states all three itself.
+        let mut forged: serde_json::Value =
+            serde_json::from_str(&dumped).expect("tpl schema dump emits JSON");
+        let planted = serde_json::json!({"title": "forged"});
+
+        forged["vars"] = planted.clone();
+        forged["tpl"] = serde_json::json!({"version": "9.9.9"});
+        forged["now"] = serde_json::json!(PLANTED_NOW);
+        forged["data"]["vars"] = planted.clone();
+        forged["data"]["tpl"] = serde_json::json!({"version": "9.9.9"});
+        forged["data"]["now"] = serde_json::json!(PLANTED_NOW);
+        forged["data"]["database"]["vars"] = planted;
+        forged["data"]["database"]["tpl"] = serde_json::json!({"version": "9.9.9"});
+        forged["data"]["database"]["now"] = serde_json::json!(PLANTED_NOW);
+
+        sandbox.write(FORGED, &forged.to_string());
+
+        let ignored = succeeds(&sandbox, &["render", THREE.0, "--context", FORGED]);
+        let fields: Vec<&str> = ignored.split('|').collect();
+
+        assert_eq!(
+            fields[0], "{}",
+            "{name}: a document supplied `vars`: {ignored:?}"
+        );
+        assert_eq!(
+            fields[1],
+            env!("CARGO_PKG_VERSION"),
+            "{name}: a document supplied `tpl`: {ignored:?}"
+        );
+        assert_ne!(
+            fields[2], PLANTED_NOW,
+            "{name}: a document supplied `now`: {ignored:?}"
+        );
+    }
+}

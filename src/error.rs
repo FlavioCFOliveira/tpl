@@ -463,6 +463,47 @@ pub enum Error {
         invocation: &'static str,
     },
 
+    /// A bare `--routine` name that names both a procedure and a function in a
+    /// `--context` document (`FR-RND-032`, with `FR-SCH-010`).
+    ///
+    /// It is the condition
+    /// [`AmbiguousRoutineName`](Error::AmbiguousRoutineName) states over a
+    /// catalogue read, met over the other context source of `FR-RND-023`. The
+    /// two are separate variants because `FR-ERR-034` forbids a `cause` whose
+    /// wording would be equally true of a different failure, and that one's
+    /// names a database entry the reader was opened through — which
+    /// `FR-RND-019` makes absent here, and `FR-RND-022` makes meaningless: no
+    /// connection was opened and no entry was resolved.
+    #[error("routine '{name}' names both a procedure and a function in the --context document")]
+    AmbiguousRoutineInContext {
+        /// The bare name as written.
+        name: String,
+        /// The document the two objects were found in.
+        path: PathBuf,
+        /// The database the document describes.
+        database: String,
+        /// The invocation the token was given to, below `tpl`, as a literal of
+        /// `FR-ERR-022`.
+        invocation: &'static str,
+    },
+
+    /// The same `--set` key supplied more than once (`FR-RND-014`).
+    ///
+    /// It is not the repetition [`RepeatedValueFlag`](Error::RepeatedValueFlag)
+    /// refuses: `FR-RND-008` makes `--set` repeatable, so the flag occurring
+    /// twice is correct and the **key** occurring twice is not. Both values
+    /// are carried because the fault is that two were supplied for one key,
+    /// and `FR-ERR-034` obliges the `cause` to say which they were.
+    #[error("the --set key '{key}' was given more than once")]
+    RepeatedSetKey {
+        /// The key, as written (`FR-CLI-020`).
+        key: String,
+        /// The value of the first occurrence, as written.
+        first: String,
+        /// The value of the second occurrence, as written.
+        second: String,
+    },
+
     /// `--no-cache` given to `tpl cache load` (`FR-CACHE-019`).
     ///
     /// The flag is declared by the command, per `FR-CACHE-017`, and refused by
@@ -620,6 +661,36 @@ pub enum Error {
         nearest: Vec<String>,
     },
 
+    /// A table, view or routine that the `--context` document does not carry
+    /// (`FR-RND-032`).
+    ///
+    /// It is the condition
+    /// [`CatalogueObjectNotFound`](Error::CatalogueObjectNotFound) states over
+    /// a catalogue read, met over the other context source of `FR-RND-023`,
+    /// and it is a variant of its own for the reason
+    /// [`AmbiguousRoutineInContext`](Error::AmbiguousRoutineInContext) gives:
+    /// that one's `cause` names `INFORMATION_SCHEMA` and a database entry, and
+    /// `FR-RND-022` opens no connection and `FR-RND-019` resolves no entry, so
+    /// neither exists here to be named.
+    #[error("{kind} '{name}' does not exist in the --context document")]
+    ContextObjectNotFound {
+        /// The kind the identifier was sought as.
+        kind: CatalogueObjectKind,
+        /// The identifier that was not found.
+        name: String,
+        /// The document it was sought in — the population `FR-ERR-034`
+        /// obliges, this path being what stands where a database entry stands
+        /// on the catalogue path.
+        path: PathBuf,
+        /// The database the document describes — the other half.
+        database: String,
+        /// The nearest matches among the objects of that kind the document
+        /// does carry, selected by `FR-ERR-019` and ordered as it fixes. Empty
+        /// where nothing qualified, per `FR-ERR-020`. `FR-RND-032` obliges the
+        /// suggestion.
+        nearest: Vec<String>,
+    },
+
     /// A named template that does not exist under the template root
     /// (`FR-TMPL-027`, `FR-RND-029`).
     #[error("template '{name}' does not exist")]
@@ -753,7 +824,13 @@ pub enum Error {
     },
 
     // ---------------------------------------------------------------- 74 ---
-    /// A file of the project could not be read (`FR-ERR-001`, the `74` row).
+    /// A file this invocation had to read could not be read (`FR-ERR-001`, the
+    /// `74` row).
+    ///
+    /// It is the project's own file in every case but one: `FR-RND-016` reads
+    /// a `--context` document the caller named, which may sit anywhere, and a
+    /// stream that refused the read is the same condition wherever the path
+    /// pointed.
     #[error("{} could not be read", .path.display())]
     ProjectFileUnreadable {
         /// The path that failed.
@@ -1234,6 +1311,8 @@ impl Error {
             | Self::MutuallyExclusiveFlags { .. }
             | Self::RoutinePrefixNotLowerCase { .. }
             | Self::AmbiguousRoutineName { .. }
+            | Self::AmbiguousRoutineInContext { .. }
+            | Self::RepeatedSetKey { .. }
             | Self::LoadWithoutStoring
             | Self::MalformedValue { .. }
             | Self::UnknownConfigurationKey { .. }
@@ -1249,6 +1328,7 @@ impl Error {
 
             // 66 EX_NOINPUT
             Self::CatalogueObjectNotFound { .. }
+            | Self::ContextObjectNotFound { .. }
             | Self::TemplateNotFound { .. }
             | Self::DatabaseEntryNotFound { .. }
             | Self::ConfigurationKeyNotFound { .. } => 66,
@@ -1314,7 +1394,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 62;
+    const VARIANT_COUNT: usize = 65;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -1439,6 +1519,23 @@ mod tests {
                 },
                 64,
             ),
+            (
+                Error::AmbiguousRoutineInContext {
+                    name: "calc_vat".to_owned(),
+                    path: PathBuf::from("context.json"),
+                    database: "freight".to_owned(),
+                    invocation: "render --routine",
+                },
+                64,
+            ),
+            (
+                Error::RepeatedSetKey {
+                    key: "title".to_owned(),
+                    first: "Orders".to_owned(),
+                    second: "Consignments".to_owned(),
+                },
+                64,
+            ),
             (Error::LoadWithoutStoring, 64),
             (
                 Error::MalformedValue {
@@ -1517,6 +1614,16 @@ mod tests {
                     entry: "shop".to_owned(),
                     database: "shop".to_owned(),
                     nearest: Vec::new(),
+                },
+                66,
+            ),
+            (
+                Error::ContextObjectNotFound {
+                    kind: CatalogueObjectKind::Table,
+                    name: "ordrs".to_owned(),
+                    path: PathBuf::from("context.json"),
+                    database: "freight".to_owned(),
+                    nearest: vec!["orders".to_owned()],
                 },
                 66,
             ),
@@ -1815,6 +1922,8 @@ mod tests {
             Error::MutuallyExclusiveFlags { .. } => "MutuallyExclusiveFlags",
             Error::RoutinePrefixNotLowerCase { .. } => "RoutinePrefixNotLowerCase",
             Error::AmbiguousRoutineName { .. } => "AmbiguousRoutineName",
+            Error::AmbiguousRoutineInContext { .. } => "AmbiguousRoutineInContext",
+            Error::RepeatedSetKey { .. } => "RepeatedSetKey",
             Error::LoadWithoutStoring => "LoadWithoutStoring",
             Error::MalformedValue { .. } => "MalformedValue",
             Error::UnknownConfigurationKey { .. } => "UnknownConfigurationKey",
@@ -1826,6 +1935,7 @@ mod tests {
             Error::ContextDocumentMalformed { .. } => "ContextDocumentMalformed",
             Error::RenderDeadlineExceeded { .. } => "RenderDeadlineExceeded",
             Error::CatalogueObjectNotFound { .. } => "CatalogueObjectNotFound",
+            Error::ContextObjectNotFound { .. } => "ContextObjectNotFound",
             Error::TemplateNotFound { .. } => "TemplateNotFound",
             Error::DatabaseEntryNotFound { .. } => "DatabaseEntryNotFound",
             Error::ConfigurationKeyNotFound { .. } => "ConfigurationKeyNotFound",
