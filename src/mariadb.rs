@@ -46,9 +46,13 @@
 //! rows are mapped, and the object that is short carries the `restricted`
 //! marking of `FR-PRIV-016` while the object that is whole carries none.
 //!
-//! **What this module does not do yet** is answer with the `77` of
-//! `FR-PRIV-003`. The verdict exists and is a value; emitting the code is the
-//! caller's, and no command that names one object exists to be that caller.
+//! **What this module still does not do is answer with the `77` of
+//! `FR-PRIV-003`.** The verdict exists and is a value; the exit code is emitted
+//! where every other one is, by the binary. The callers exist:
+//! `crate::cli::schema::named` takes that verdict once the object it was given
+//! has been found, and every read that names one object goes through it — the
+//! three subcommands of `tpl schema` that name one, `tpl cache load`, and the
+//! object flags of `tpl render`.
 
 pub(crate) mod catalogue;
 pub(crate) mod connect;

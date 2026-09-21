@@ -13,21 +13,29 @@
 //! | A syscall trace of the process | The files the process opens | **the two Linux targets** | `observe.sh opens`, wrapped by [`fixture`] |
 //! | A differential run | The invocation's exit code, its stdout bytes, and the artefacts it leaves on disk | all four | [`differential`], which is where it was built |
 //!
-//! # What is observable today, and what is not
+//! # What is observed here
 //!
-//! Two requirements are observed **here**, and they are the two about commands
-//! that must reach no server at all:
+//! Eight requirements are observed **here**. The first two are about commands
+//! that must reach no server at all; the rest are about what an invocation
+//! that does reach one sends it, and about what a failed render leaves on the
+//! stream a caller reads:
 //!
 //! | Requirement | The property |
 //! |---|---|
 //! | `NFR-PERF-005` | The commands of `FR-PROJ-025` open no connection, perform no project discovery, and read no configuration file |
 //! | `NFR-PERF-006` | A command that requires no catalogue data opens no connection |
+//! | `FR-RND-022` | `tpl render --context` opens no connection, from a file and from standard input alike |
+//! | `FR-SRV-012` | The server receives the four kinds of the closed list of `FR-SRV-006` and no fifth, the three connection-start statements in the order `FR-SRV-042` fixes |
+//! | `FR-SRV-013` | The read-back of `FR-SRV-009` is issued exactly once, in the one spelling every series of the window carries |
+//! | `FR-SRV-014`, `NFR-PERF-004` | One invocation opens at most one connection |
+//! | `NFR-PERF-002` | The catalogue statement count of a read that names one object does not grow with the database |
+//! | `FR-RND-034`, `FR-SEM-020` | A render that fails leaves at most one incomplete result on the process's own stdout |
 //!
-//! `NFR-PERF-001` and `NFR-PERF-003` are observed with the same instruments in
-//! [`schema_and_cache`](../schema_and_cache/index.html), where the commands
-//! that do read a catalogue live. `NFR-PERF-002` and `NFR-PERF-004`, and
-//! `FR-SRV-012`, `-013` and `-014`, are not yet observed from outside the
-//! process.
+//! `NFR-PERF-001` is observed here, beside `NFR-PERF-002` and over the same two
+//! databases, and again in
+//! [`schema_and_cache`](../schema_and_cache/index.html); `NFR-PERF-003` is
+//! observed there alone, because the read it is about is the one the cache
+//! serves.
 //!
 //! # Every negative assertion carries a control
 //!
@@ -72,16 +80,45 @@ const REFUSED: &str = "[core]\ndatabse = \"shop\"\n";
 /// The `78` of `FR-PROJ-006` and of `FR-CONF-034`.
 const CONFIG: i32 = 78;
 
-/// Every command of `FR-PROJ-025`, and every `cfg` subcommand but
-/// `database test`, in an order that leaves each of them a project and an entry
-/// to work on.
+/// The template `FR-PROJ-021` obliges `tpl init` to write, named as
+/// `FR-TMPL-006` resolves it — without the extension.
+const EXAMPLE: &str = "example";
+
+/// The `--context` document the `tpl render` entry reads, relative to the
+/// sandbox the population runs in (`FR-RND-016`).
+const CONTEXT: &str = "context.json";
+
+/// The table that entry binds (`FR-RND-003`).
+///
+/// It is a table of the fixture's `freight`, because the document is the one
+/// `tpl schema dump` produced against a fixture server.
+const BOUND: &str = "charge";
+
+/// Every command of `FR-PROJ-025`, every `cfg` subcommand but `database test`,
+/// the four `template` subcommands and `tpl render --context`, in an order
+/// that leaves each of them a project, a template and an entry to work on.
 ///
 /// `cfg database test` is excluded because it is the one `cfg` leaf still
-/// unwritten, and `NFR-PERF-006` excludes it in its own text. The `template`
-/// subcommands and `tpl render --context`, which that requirement also covers,
-/// exit `70` today and assert nothing.
-const POPULATION: [&[&str]; 18] = [
+/// unwritten, and `NFR-PERF-006` excludes it in its own text.
+///
+/// **The five entries that follow `tpl init` follow it because they need what
+/// it creates.** `FR-PROJ-017` gives a fresh project
+/// `.tpl/templates/example.jinja`, which is the template `show`, `path` and the
+/// render are given and one of the two `check` walks. The render needs a second
+/// thing the sandbox does not start with — the `--context` document of
+/// `FR-RND-016` — and the body below writes it there before the instruments are
+/// armed.
+///
+/// This is what gives the no-connection claim of `FR-TMPL-003` the **server's
+/// own connection record**, in place of the exit-code proxy
+/// `tests/template_commands.rs` uses for it where no fixture is required.
+const POPULATION: [&[&str]; 23] = [
     &["init"],
+    &["template", "list"],
+    &["template", "show", EXAMPLE],
+    &["template", "check"],
+    &["template", "path", EXAMPLE],
+    &["render", EXAMPLE, "--context", CONTEXT, "--table", BOUND],
     &["help"],
     &["help", "cfg"],
     &["help", "--format", "json"],
@@ -227,7 +264,21 @@ fn nfr_perf_007_the_commands_that_need_no_catalogue_open_no_connection() {
             server.name()
         );
 
+        // The `--context` document the render entry of POPULATION is given.
+        // It is what `tpl schema dump` produced against this server, so the
+        // document contract is stated once — in the product — rather than a
+        // second time here, where a later edition of
+        // `specification/context-document.md` would leave it silently wrong.
+        //
+        // It is produced **at this point**: after the control, which is why the
+        // one connection it opens is outside the bracket below, and before the
+        // statement record is armed, which truncates the log it would otherwise
+        // have left rows in.
+        let source = project(server);
+        let dumped = succeeds(&source, &["schema", "dump"]);
+
         let sandbox = Sandbox::new();
+        sandbox.write(CONTEXT, &dumped);
 
         fixture::statements_on(server);
         let attributable = fixture::connections_attributable_to(server, || {
@@ -919,5 +970,306 @@ fn nfr_perf_001_and_nfr_perf_002_the_catalogue_query_count_does_not_grow_with_th
                 invocation.join(" ")
             );
         }
+    }
+}
+
+// ------------------------------------------------------------ FR-RND-022 ---
+
+/// The template every render of this file is given, named as `FR-TMPL-006`
+/// resolves it.
+const REPORT: &str = "report";
+
+/// Its source, which reads only what a context source carries and never
+/// references `now`.
+const REPORT_SOURCE: &str = "{{ database.name }}/{{ table.name }}\n";
+
+#[test]
+fn fr_rnd_022_a_render_from_a_document_opens_no_connection_and_touches_no_cache() {
+    // FR-RND-022 with BR-SRV-003: a render from a `--context` document opens no
+    // connection and reads and writes no file of the cache. The first clause is
+    // the one a process cannot establish about itself, and this is the server's
+    // own connection record answering it — over the file form of FR-RND-016 and
+    // over the standard-input form of FR-RND-017 alike, because the two reach
+    // the same step of FR-ERR-006 by two different reads.
+    //
+    // **The arrangement is one that could have been tripped.** The project
+    // names an entry that reaches this very server and `core.database` selects
+    // it, which FR-RND-019 makes no conflict at all — so a build that let the
+    // selected entry win over `--context` would have read the catalogue, would
+    // have succeeded, and would have been counted here.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_rnd_022_a_render_from_a_document_opens_no_connection_and_touches_no_cache",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+
+        // The control, and it comes first: an assertion that no connection was
+        // opened is worth nothing until this same record is shown to count one
+        // that was.
+        let control =
+            fixture::connections_attributable_to(server, || fixture::connect_once(server));
+        assert_eq!(control, 1, "{name}: the connection record counted nothing");
+
+        let sandbox = project(server);
+        sandbox.write(&format!(".tpl/templates/{REPORT}.jinja"), REPORT_SOURCE);
+
+        // The second control, and the document the renders below are given. It
+        // is `tpl schema dump` against this server, so the contract of
+        // `specification/context-document.md` is stated once — in the product —
+        // rather than a second time here; and it is a read of the catalogue, so
+        // the same record is shown counting the one connection it opens.
+        // FR-CACHE-016 makes `--direct --no-cache` the pure read, which is what
+        // leaves the store untouched for the assertion at the end.
+        let mut dumped = String::new();
+        let producing = fixture::connections_attributable_to(server, || {
+            dumped = succeeds(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+        });
+
+        assert_eq!(
+            producing, 1,
+            "{name}: producing the document opened {producing} connection(s), so the \
+             record below is not the instrument this test takes it for"
+        );
+        sandbox.write(CONTEXT, &dumped);
+
+        let mut from_file = None;
+        let mut from_stdin = None;
+
+        fixture::statements_on(server);
+        let attributable = fixture::connections_attributable_to(server, || {
+            from_file =
+                Some(sandbox.run(&["render", REPORT, "--context", CONTEXT, "--table", BOUND]));
+            from_stdin = Some(sandbox.run_with_stdin(
+                &["render", REPORT, "--context", "-", "--table", BOUND],
+                dumped.as_bytes(),
+            ));
+        });
+        fixture::statements_off(server);
+
+        let from_file = from_file.expect("the bracket ran the file form");
+        let from_stdin = from_stdin.expect("the bracket ran the standard-input form");
+
+        // Both renders succeeded, so the count of zero below is the count of a
+        // window in which two renders happened rather than of one in which two
+        // invocations failed before they could reach a server.
+        for (form, printed) in [
+            ("--context <path>", &from_file),
+            ("--context -", &from_stdin),
+        ] {
+            assert_eq!(
+                printed.status.code(),
+                Some(0),
+                "{name}: tpl render {form} exited {:?}: {}",
+                printed.status.code(),
+                String::from_utf8_lossy(&printed.stderr)
+            );
+            assert!(
+                !printed.stdout.is_empty(),
+                "{name}: tpl render {form} produced nothing"
+            );
+        }
+
+        // FR-RND-016 and FR-RND-017 are one contract: the two forms read the
+        // same bytes and the result must not betray which carried them.
+        assert_eq!(
+            from_file.stdout, from_stdin.stdout,
+            "{name}: the file form and the standard-input form of one document \
+             rendered different bytes"
+        );
+
+        assert_eq!(
+            attributable, 0,
+            "{name}: two renders from a --context document opened {attributable} \
+             connection(s), which FR-RND-022 forbids"
+        );
+        assert_eq!(
+            fixture::statements_count(server, &[]),
+            0,
+            "{name}: the server received a statement from something that was not the observer"
+        );
+        assert!(
+            fixture::statements_count(server, &["--all"]) > 0,
+            "{name}: the statement record held nothing at all, not even the \
+             observer's own readings, so its emptiness above establishes nothing"
+        );
+
+        // The other clause of FR-RND-022, read from the disk rather than from
+        // the server: no file of the store was read, and none was written.
+        assert!(
+            !sandbox.path(".tpl/.cache").exists(),
+            "{name}: a render from a --context document created the cache store"
+        );
+    }
+}
+
+// ------------------------------------------- FR-RND-034 and FR-SEM-020 ---
+
+/// A project whose render phase is bounded at one second and which names no
+/// database entry at all.
+///
+/// A render from a `--context` document needs none, per `FR-RND-022`, and the
+/// bound is what puts the deadline of `FR-RND-033` within reach of a test.
+const BOUNDED: &str = "[core]\nrender_timeout = 1\n";
+
+/// The renders that fail, and the requirement each is written for.
+///
+/// Every source begins with the five bytes `kept\n`, so a build that streamed
+/// its result would have put them on stdout before the construct that fails was
+/// reached — which is exactly the incomplete result `FR-RND-034` bounds.
+///
+/// [`render_command`](../render_command/index.html) drives the same five for a
+/// different subject — the `65` each exits and the position `FR-SEM-019`
+/// obliges it to carry — and the list is written twice because the two are
+/// separate test binaries and `tests/support/` holds what the fixture and the
+/// sandbox are, not what any one subject is made of. Neither copy can make the
+/// other wrong: each is the population of the body beside it.
+const FAILING: [(&str, &str, &str); 5] = [
+    ("broken", "kept\n{% if %}\n", "FR-RND-030, a syntax error"),
+    (
+        "absent",
+        "kept\n{{ database.missing }}\n",
+        "FR-SEM-012 through FR-RND-031, a field that does not exist",
+    ),
+    (
+        "stopped",
+        "kept\n{{ fail('no mapping') }}\n",
+        "FR-SEM-014, the author's own failure",
+    ),
+    (
+        "operand",
+        "kept\n{{ 42 | snake }}\n",
+        "FR-SEM-008 and FR-SEM-009, a filter given an operand it does not accept",
+    ),
+    (
+        "predicate",
+        "kept\n{% if database is nullable %}x{% endif %}\n",
+        "FR-SEM-005 and FR-SEM-007, a test given an operand it does not accept",
+    ),
+];
+
+/// The name of the template that outlasts the bound of [`BOUNDED`].
+const SLOW_TEMPLATE: &str = "slow";
+
+/// The template that outlasts the bound of [`BOUNDED`].
+///
+/// The nested ranges are 64 million iterations, which the binary under test
+/// takes tens of seconds to walk: the body has to outlast one second on every
+/// machine this suite runs on, and no machine is fast enough to finish it
+/// inside the bound. What the test costs is the bound and not the walk — the
+/// timer of `FR-RND-033` ends the process one second in.
+const SLOW: &str = "kept\n{% for a in range(8000) %}{% for b in range(8000) %}\
+                    {% endfor %}{% endfor %}done\n";
+
+#[test]
+fn fr_rnd_034_and_fr_sem_020_a_render_that_fails_leaves_nothing_on_the_process_s_own_stdout() {
+    // FR-RND-034 admits at most one incomplete result on stdout when a render
+    // fails, and FR-SEM-020 repeats it for every failure render-semantics.md
+    // defines. What `tpl` leaves is none, and **this is the only place that can
+    // be seen**: a unit test hands `render` a buffer of its own and observes
+    // what was written to that buffer, which says nothing about the stream a
+    // caller reads — not about the writer, not about its buffering, and least
+    // of all about the deadline of FR-RND-033, which ends the process through
+    // `std::process::exit` and therefore runs no destructor and flushes
+    // nothing.
+    //
+    // The instrument is the process's own file descriptor 1, read by the
+    // parent. Its control is the first assertion made: the same instrument,
+    // over the same project, observing a render that succeeds putting bytes
+    // there. Without it an empty stdout would mean only that the test had
+    // stopped looking.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_rnd_034_and_fr_sem_020_a_render_that_fails_leaves_nothing_on_the_process_s_own_stdout",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+
+        // The document, produced by the product against this server, in a
+        // project of its own: the project the renders run in names no entry,
+        // because FR-RND-022 gives a render from a document no use for one.
+        let source = project(server);
+        let dumped = succeeds(&source, &["schema", "dump", "--direct", "--no-cache"]);
+
+        let sandbox = Sandbox::new();
+        sandbox.project(BOUNDED);
+        sandbox.write(CONTEXT, &dumped);
+        sandbox.write(&format!(".tpl/templates/{REPORT}.jinja"), REPORT_SOURCE);
+        sandbox.write(&format!(".tpl/templates/{SLOW_TEMPLATE}.jinja"), SLOW);
+        for (template, body, _) in FAILING {
+            sandbox.write(&format!(".tpl/templates/{template}.jinja"), body);
+        }
+
+        let render = |template: &str| {
+            sandbox.run(&["render", template, "--context", CONTEXT, "--table", BOUND])
+        };
+
+        // The control.
+        let produced = render(REPORT);
+
+        assert_eq!(
+            produced.status.code(),
+            Some(0),
+            "{name}: the control render exited {:?}: {}",
+            produced.status.code(),
+            String::from_utf8_lossy(&produced.stderr)
+        );
+        assert!(
+            !produced.stdout.is_empty(),
+            "{name}: the control render wrote nothing to stdout, so an empty \
+             stdout below establishes nothing"
+        );
+
+        // The five failures of FR-RND-030, FR-RND-031 and render-semantics.md,
+        // and the deadline of FR-RND-033 beside them.
+        for (template, _, requirement) in FAILING {
+            let printed = render(template);
+
+            assert_eq!(
+                printed.status.code(),
+                Some(65),
+                "{name}: {template} ({requirement}) exited {:?}: {}",
+                printed.status.code(),
+                String::from_utf8_lossy(&printed.stderr)
+            );
+            assert!(
+                printed.stdout.is_empty(),
+                "{name}: {template} ({requirement}) left {} byte(s) on stdout: {:?}",
+                printed.stdout.len(),
+                String::from_utf8_lossy(&printed.stdout)
+            );
+        }
+
+        let expired = render(SLOW_TEMPLATE);
+        let reported = String::from_utf8_lossy(&expired.stderr).into_owned();
+
+        assert_eq!(
+            expired.status.code(),
+            Some(65),
+            "{name}: the render that outlasts core.render_timeout exited {:?}: {reported}",
+            expired.status.code()
+        );
+
+        // The `65` this body is about is the deadline's and not another one the
+        // template happened to reach: the hint of FR-ERR-008 names the key that
+        // bounds the phase, which no other `65` of this file carries.
+        assert!(
+            reported.contains("core.render_timeout"),
+            "{name}: the render ended on something that was not its deadline, so \
+             the empty stdout below says nothing about the path that runs no \
+             destructor: {reported}"
+        );
+        assert!(
+            expired.stdout.is_empty(),
+            "{name}: a render ended by its own deadline left {} byte(s) on stdout, \
+             so the process flushed a buffer FR-ERR-033 requires it to discard",
+            expired.stdout.len()
+        );
     }
 }
