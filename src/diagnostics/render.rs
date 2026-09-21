@@ -1004,6 +1004,7 @@ mod tests {
             Error::TemplateNotFound {
                 name: hostile(),
                 root: hostile_path(),
+                nearest: vec![hostile()],
             },
             Error::DatabaseEntryNotFound {
                 name: hostile(),

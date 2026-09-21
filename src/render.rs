@@ -62,6 +62,7 @@ use minijinja::Value;
 
 use crate::error::Error;
 
+pub(crate) use root::Template;
 pub(crate) use surface::{
     INHERITED_FILTERS, REGISTERED_FILTERS, REGISTERED_FUNCTIONS, REGISTERED_TESTS,
 };
@@ -96,6 +97,24 @@ impl Environment {
     /// The template root, absolute (`FR-TMPL-021`, `FR-TMPL-023`).
     pub(crate) fn root(&self) -> &Path {
         self.root.path()
+    }
+
+    /// Every template of the project, in the order `FR-TMPL-013` fixes
+    /// (`FR-TMPL-011`, `FR-TMPL-014`).
+    ///
+    /// No engine is built: the listing is a walk of the template root, which
+    /// is what lets `tpl template list` answer without one. It is also the
+    /// population `tpl template check` checks when it is given no name, per
+    /// `FR-TMPL-018`, and the population the suggestion of `FR-TMPL-027` is
+    /// selected from.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::ProjectFileUnreadable`] where the filesystem refused
+    /// the walk. A project with no template directory carries no templates and
+    /// is not a failure, per `FR-TMPL-031`.
+    pub(crate) fn templates(&self) -> Result<Vec<Template>, Error> {
+        self.root.templates()
     }
 
     /// The canonical path of the template `name` resolves to (`FR-TMPL-022`).

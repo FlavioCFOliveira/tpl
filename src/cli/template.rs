@@ -26,10 +26,47 @@
 //! path of the file relative to `.tpl/templates/`, with or without the `.jinja`
 //! extension. That resolution is the command's work, not the parser's, so every
 //! name here is a string.
+//!
+//! # What the four do, and what none of them does
+//!
+//! Every one of them is `.tpl` and nothing else. [`environment`] performs steps
+//! 2 and 3 of `FR-ERR-006` — discovery, and the two trust checks — and stops
+//! there: `.tpl/.cfg` is not read for its keys, no database entry is resolved,
+//! and no connection is opened, which is `FR-TMPL-003` held by what is absent
+//! rather than by a guard. `BR-TMPL-002` is held the same way: nothing here
+//! writes.
+//!
+//! **Three of the four build no engine.** [`crate::render::Environment`] holds
+//! the engine in a cell filled on first use, and `list`, `show` and `path`
+//! reach the template root alone, so the one invocation that compiles anything
+//! is `check` — which is `NFR-PERF-006` and the project's lazy-initialisation
+//! rule.
+//!
+//! **`check` evaluates nothing.** It compiles, which is syntax analysis, per
+//! `FR-TMPL-017`; `BR-TMPL-001` makes that a guarantee rather than a side
+//! effect, so a template ending in `fail` passes and a template that reads an
+//! undefined variable passes.
+//!
+//! | Subcommand | What reaches stdout | Forced by |
+//! |---|---|---|
+//! | `list` | The aligned column of `FR-OUT-006`, or the `templates` array of `FR-TMPL-028` | `FR-TMPL-011` … `FR-TMPL-014` |
+//! | `show` | The template's bytes, unescaped and unterminated | `FR-TMPL-015`, `FR-OUT-019` |
+//! | `check` | Nothing at all; the exit code is the answer | `FR-TMPL-020`, `BR-CLI-004` |
+//! | `path` | One absolute path, or the `path` key of `FR-TMPL-029` | `FR-TMPL-021`, `FR-TMPL-022` |
+
+use std::borrow::Cow;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
+use serde::Serialize;
 
-use super::local;
+use super::globals::Globals;
+use super::local::{self, Format};
+use crate::error::Error;
+use crate::output::{self, Collection, Document, Form, Order, Source, Table};
+use crate::project::Project;
+use crate::render::Environment;
 
 /// The `tpl template` group node.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
@@ -88,4 +125,270 @@ pub(crate) enum Command {
         #[command(flatten)]
         output: local::Output,
     },
+}
+
+/// The header of the `text` listing of `tpl template list`.
+///
+/// One column, and the name is the whole of it. `FR-OUT-006` asks a listing to
+/// carry the useful information rather than only the name, and a template has
+/// no second property this specification fixes: where it lives is
+/// `tpl template path` and what it says is `tpl template show`. It is the shape
+/// `tpl cfg database list` takes, for the same reason.
+const NAMES: [&str; 1] = ["NAME"];
+
+/// The plural key the `data` of `tpl template list` carries (`FR-OUT-030`,
+/// `FR-TMPL-028`).
+const TEMPLATES: &str = "templates";
+
+/// One member of the `templates` array of `FR-TMPL-028`.
+///
+/// An object rather than a bare string, for the reason that requirement gives:
+/// `FR-OUT-014` makes adding a field the only non-breaking way for a listing to
+/// grow, and a string cannot gain one.
+#[derive(Debug, Serialize)]
+struct Named<'a> {
+    /// The displayed name of `FR-TMPL-011`, which `FR-TMPL-012` makes usable
+    /// verbatim as a positional argument.
+    name: &'a str,
+}
+
+/// The `data` of `tpl template path` (`FR-TMPL-029`).
+///
+/// One key, whose value is the absolute path `FR-TMPL-021` or `FR-TMPL-022`
+/// would print — the same bytes in both representations, so a caller reading
+/// `data.path` and a caller reading stdout are told the same thing.
+#[derive(Debug, Serialize)]
+struct Located<'a> {
+    /// The absolute path.
+    path: &'a str,
+}
+
+/// Runs one `template` subcommand.
+///
+/// The project is opened once, before the match, because all four need it and
+/// none needs anything else: `FR-TMPL-003` withholds the catalogue, the cache
+/// and the database entry from every one of them, and `FR-TMPL-023` makes
+/// `.tpl/templates/` of the resolved project the boundary all four work inside.
+///
+/// # Errors
+///
+/// Returns what [`environment`] returns — the `78` of a project that is not
+/// found or a `.tpl/.cfg` that cannot be used — and then, per subcommand: the
+/// `74` of a template root that could not be walked or a stream that refused
+/// the write, the `66` of `FR-TMPL-027` for a name that resolves to nothing,
+/// the `65` of `FR-TMPL-026` for one that resolves outside the root, and the
+/// `65` of `FR-TMPL-020` for a checked template the engine could not parse.
+pub(crate) fn run<W: Write>(
+    out: &mut W,
+    globals: &Globals,
+    command: &Command,
+) -> Result<(), Error> {
+    let environment = environment(globals)?;
+
+    match command {
+        Command::List { output } => list(out, &environment, output),
+        Command::Show { name } => show(out, &environment, name),
+        Command::Check { names } => check(&environment, names),
+        Command::Path { name, output } => path(out, &environment, name.as_deref(), output),
+    }
+}
+
+/// The render environment of the project this invocation acts on.
+///
+/// It is steps 2 and 3 of `FR-ERR-006` and then nothing:
+/// [`Environment::new`](crate::render::Environment::new) composes the template
+/// root and reads no file, so a subcommand that resolves a path has built no
+/// engine. The configuration is **not** loaded — `FR-TMPL-003` requires no
+/// database entry to be selected, and a key none of the four reads is a key
+/// none of the four fails on.
+///
+/// # Errors
+///
+/// Returns what [`Project::current`] returns: the `78` of a project that is
+/// not found, of a `.cfg` owned by another user, and of a `.cfg` that grants
+/// group or other any access.
+fn environment(globals: &Globals) -> Result<Environment, Error> {
+    let project = Project::current(globals.tpl_dir.first().map(PathBuf::as_path))?;
+
+    Ok(Environment::new(project.root()))
+}
+
+/// `tpl template list` (`FR-TMPL-011` … `FR-TMPL-014`, `FR-TMPL-028`).
+///
+/// The listing arrives in the order `FR-TMPL-013` fixes, and both
+/// representations present it in that order: the `json` one because
+/// `FR-TMPL-028`'s composition note requires the `templates` array to carry it,
+/// and the `text` one because [`Order::ByName`] is that same rule declared at
+/// the call site — the displayed name is the first column, so the layout orders
+/// the rows by the column a reader sees them sorted on.
+///
+/// A project with no template writes the header row and nothing beneath it in
+/// `text`, and `"templates":[]` in `json`, and exits `0` — which is
+/// `FR-TMPL-031` through `FR-OUT-033`, `FR-OUT-034` and `FR-OUT-035`, none of
+/// them a branch here.
+///
+/// # Errors
+///
+/// Returns what [`Environment::templates`](crate::render::Environment::templates)
+/// returns, and the write conditions of [`output`].
+fn list<W: Write>(
+    out: &mut W,
+    environment: &Environment,
+    output: &local::Output,
+) -> Result<(), Error> {
+    let templates = environment.templates()?;
+    let (format, form) = representation(output);
+
+    match format {
+        Format::Json => {
+            let members: Vec<Named<'_>> = templates
+                .iter()
+                .map(|template| Named {
+                    name: template.displayed(),
+                })
+                .collect();
+
+            output::emit_to(
+                out,
+                &Document::new(Source::Project, Collection::new(TEMPLATES, &members)),
+                form,
+            )
+        }
+        Format::Text => {
+            let rows: Vec<[&str; 1]> = templates
+                .iter()
+                .map(|template| [template.displayed()])
+                .collect();
+
+            output::emit_table_to(out, &Table::new(NAMES, &rows, Order::ByName))
+        }
+    }
+}
+
+/// `tpl template show <name>` (`FR-TMPL-015`, `FR-TMPL-016`).
+///
+/// The source reaches stdout unaltered: the escaping of `FR-OUT-018` does not
+/// apply to it, per `FR-OUT-019`, and nothing is appended — a template that
+/// ends without a newline is printed without one, which is what "unaltered"
+/// leaves no room to decide otherwise.
+///
+/// The file is read as text rather than as bytes because the engine reads it as
+/// text: a template that is not valid UTF-8 is one no render could compile, so
+/// refusing it here with the `74` of a file that could not be read is the same
+/// answer the render path gives it.
+///
+/// # Errors
+///
+/// Returns what [`Environment::resolve`](crate::render::Environment::resolve)
+/// returns, [`Error::ProjectFileUnreadable`] where the file could not be read,
+/// and the write conditions of [`output`].
+fn show<W: Write>(out: &mut W, environment: &Environment, name: &str) -> Result<(), Error> {
+    let located = environment.resolve(name)?;
+    let source =
+        std::fs::read_to_string(&located).map_err(|returned| Error::ProjectFileUnreadable {
+            path: located,
+            returned,
+        })?;
+
+    output::emit_verbatim(out, &source)
+}
+
+/// `tpl template check [<name> …]` (`FR-TMPL-017` … `FR-TMPL-020`).
+///
+/// Given no name it checks every template of the project, per `FR-TMPL-018`;
+/// given names it checks exactly those, per `FR-TMPL-019`. Nothing reaches
+/// stdout in either case: `FR-TMPL-020` reports through the exit code and
+/// `BR-CLI-004` makes the `0` the message.
+///
+/// **It stops at the first template that fails.** A condition is one value and
+/// the four labelled lines of `FR-ERR-008` carry one, so checking on past a
+/// failure could report no more than it already has. Which template that is, is
+/// not left to chance: the population arrives in the order `FR-TMPL-013` fixes
+/// and the named form is checked in the order the caller wrote, so the same
+/// invocation over the same project always names the same template.
+///
+/// # Errors
+///
+/// Returns what [`Environment::templates`](crate::render::Environment::templates)
+/// and [`Environment::compile`](crate::render::Environment::compile) return: the
+/// `66` of a name that resolves to nothing, the `65` of one that resolves
+/// outside the root, and the `65` of `FR-TMPL-020`.
+fn check(environment: &Environment, names: &[String]) -> Result<(), Error> {
+    if names.is_empty() {
+        // FR-TMPL-018, and FR-TMPL-031 where the project carries none: an
+        // empty population checks nothing and falls through to `Ok(())`.
+        for template in environment.templates()? {
+            environment.compile(template.name())?;
+        }
+
+        return Ok(());
+    }
+
+    // FR-TMPL-019: exactly those, each named as the caller wrote it so that a
+    // refusal reproduces the caller's own spelling.
+    for name in names {
+        environment.compile(name)?;
+    }
+
+    Ok(())
+}
+
+/// `tpl template path [<name>]` (`FR-TMPL-021`, `FR-TMPL-022`,
+/// `FR-TMPL-029`).
+///
+/// With no name it writes the template root, which is absolute because the
+/// project's own `.tpl` is canonical; with one, the canonical path of that
+/// template's file. The root is **not** required to exist for the first form:
+/// `FR-TMPL-021` asks where templates would be read from, and a project that
+/// has not been given a template directory still has an answer.
+///
+/// A path that is not valid UTF-8 is written with the replacement character, on
+/// the same terms `FR-OUT-017` fixes for a catalogue value: neither
+/// representation carries an arbitrary byte sequence, and refusing the whole
+/// command would withhold an answer the caller can act on.
+///
+/// # Errors
+///
+/// Returns what [`Environment::resolve`](crate::render::Environment::resolve)
+/// returns for a name that was given, and the write conditions of [`output`].
+fn path<W: Write>(
+    out: &mut W,
+    environment: &Environment,
+    name: Option<&str>,
+    output: &local::Output,
+) -> Result<(), Error> {
+    let (format, form) = representation(output);
+    let located: Cow<'_, Path> = match name {
+        None => Cow::Borrowed(environment.root()),
+        Some(name) => Cow::Owned(environment.resolve(name)?),
+    };
+    let written = located.to_string_lossy();
+
+    match format {
+        Format::Json => output::emit_to(
+            out,
+            &Document::new(Source::Project, Located { path: &written }),
+            form,
+        ),
+        Format::Text => output::emit_line(out, &written),
+    }
+}
+
+/// The representation a subcommand answers in (`FR-GLOB-021`, `FR-OUT-001`).
+///
+/// `FR-CLI-014` has already reduced the occurrences to at most one, so the
+/// first is the format in force and the declaration's own default occupies the
+/// place where the flag was absent. [`super::schema`] carries the same
+/// function over its own seven declarers; the two are written once per arm
+/// rather than shared, so that each states the requirement that gave its
+/// commands the flags — `FR-GLOB-021` here, `FR-SCH-023` there.
+fn representation(output: &local::Output) -> (Format, Form) {
+    (
+        output.format.first().copied().unwrap_or(Format::Text),
+        if output.pretty.pretty {
+            Form::Indented
+        } else {
+            Form::Compact
+        },
+    )
 }

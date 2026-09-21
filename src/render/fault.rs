@@ -44,6 +44,11 @@ pub(super) fn during_compile(root: &Path, name: &str, reported: &minijinja::Erro
         return Error::TemplateNotFound {
             name: name.to_owned(),
             root: root.to_owned(),
+            // The name reaching here was resolved before the engine was given
+            // it, per `OD-15`, so this is a template that went away between
+            // the two reads rather than one a caller misspelled — and there is
+            // no misspelling for a suggestion to correct.
+            nearest: Vec::new(),
         };
     }
 

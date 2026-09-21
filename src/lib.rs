@@ -9,7 +9,10 @@
 //! At this commit the **first arm reads**: the eight `schema` subcommands and
 //! the three of `tpl cache` resolve a database entry, consult the store under
 //! `.tpl/.cache/`, open the one connection they are allowed where the store
-//! does not answer, read the catalogue into the model, and present it. [`run`]
+//! does not answer, read the catalogue into the model, and present it. The
+//! **second arm reads too**, and reaches none of that: the four `tpl template`
+//! subcommands list, print, parse and locate the templates under
+//! `.tpl/templates/`, without a catalogue, a cache or a connection. [`run`]
 //! is the entry point the binary calls, [`install_panic_hook`] is the process
 //! setup it performs first, and [`Error`] is the value every module reports
 //! failure through.
@@ -33,8 +36,9 @@
 //! caller that named one receives the `77` of `FR-PRIV-003`, and `FR-CACHE-037`
 //! keeps a marked object out of the store. The render environment exists and
 //! registers, so `tpl help --format json` publishes the whole template surface;
-//! the two arms that consume it — `tpl template …` and `tpl render` — are added
-//! by the tasks that follow.
+//! the four `tpl template` subcommands consume its resolution and its parser,
+//! and `tpl render` — the one consumer of its evaluation — is added by the task
+//! that follows.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -57,16 +61,18 @@ pub(crate) mod mariadb;
 
 pub(crate) mod output;
 
-// The module is complete and two of its three consumers are later blocks: the
-// four `tpl template` subcommands and `tpl render` reach the engine and the
-// resolution, and `cli/help.rs` already reaches the registered surface. One
-// fact explains every item, so it is stated once here rather than once per
+// The module is complete and one of its three consumers is a later block:
+// `tpl render` is the only command that evaluates a template, so what the
+// engine registers to be called at evaluation time is reached from this crate's
+// own tests alone. `cli/help.rs` publishes the registered surface and the four
+// `tpl template` subcommands reach the resolution and the parser. One fact
+// explains every remaining item, so it is stated once here rather than once per
 // item.
 #[allow(
     dead_code,
-    reason = "the commands that build a render environment — the four of `tpl template` and \
-              `tpl render` — are a later block, and the block that owns the engine owns the \
-              surface it registers"
+    reason = "`tpl render` is a later block, and it is the one command that evaluates a \
+              template, so the surface the engine registers for evaluation has no caller \
+              outside this crate's tests yet"
 )]
 pub(crate) mod render;
 

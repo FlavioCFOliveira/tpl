@@ -305,8 +305,19 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
 
             Cow::Owned(suggest::hint_line(admitted.iter().copied(), &generic).into_owned())
         }
-        Error::TemplateNotFound { .. } => {
-            Cow::Borrowed("list the project's templates with: tpl template list")
+        // FR-TMPL-027 obliges the nearest-match half over the template names
+        // that do exist. The population is `render/`'s, for the reason this
+        // module's own documentation gives; a template name is a value this
+        // corpus does not fix, so FR-ERR-022 governs it by the character set
+        // and FR-ERR-023 drops a candidate outside it — which drops every
+        // nested name, because the separator a nested name carries is not in
+        // the set and is a literal of no enumerated spelling.
+        Error::TemplateNotFound { nearest, .. } => {
+            let admitted = admitted(nearest, admits);
+            suggest::hint_line(
+                admitted.iter().copied(),
+                "list the project's templates with: tpl template list",
+            )
         }
         // FR-GLOB-007 obliges the nearest-match half over the entry names the
         // file defines. An entry name is a value this corpus does not fix, so

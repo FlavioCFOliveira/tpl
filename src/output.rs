@@ -162,6 +162,32 @@ pub(crate) fn emit_verbatim<W: std::io::Write>(stream: W, text: &str) -> Result<
     Writer::new(stream).help(text)
 }
 
+/// Writes one scalar result to `stream`, escaped, on a line of its own.
+///
+/// It is the shape of a `text` result that is neither a listing nor a
+/// document: one value, and the newline that terminates it. `FR-TMPL-021` and
+/// `FR-TMPL-022` are what ask for it — `tpl template path` writes an absolute
+/// path and nothing else, and the worked example of `FR-TMPL-022` gives it no
+/// header row to sit under, so the aligned columns of [`text`] are not the
+/// shape it takes.
+///
+/// The C0 controls of `FR-OUT-018` are escaped on the way out, tab excepted,
+/// because `FR-OUT-019` reaches every value interpolated into `text` output
+/// whatever its source — "the catalogue, a `--context` document, or the
+/// argument vector" — and exempts two outputs, neither of which is this one.
+/// That is the whole of the difference from [`emit_verbatim`], which is how
+/// `tpl cfg get` reproduces a value `FR-CFG-006` requires to reach the next
+/// command in a pipeline exactly as the file holds it.
+///
+/// # Errors
+///
+/// Returns [`Error::StdoutUnwritable`] where the stream refused the write for a
+/// reason other than a close. A consumer that closed stdout is the silent
+/// success of `FR-ERR-025`, for the reason [`emit_help`] gives.
+pub(crate) fn emit_line<W: std::io::Write>(stream: W, value: &str) -> Result<(), Error> {
+    Writer::new(stream).line(value)
+}
+
 /// Writes one `text` listing to standard output.
 ///
 /// This is the `text` half of `FR-OUT-001`'s two formats and the other route a

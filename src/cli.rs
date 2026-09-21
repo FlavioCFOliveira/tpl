@@ -62,8 +62,8 @@
 //! parsed command with no implementation is. The arrangement is an arm per leaf
 //! rather than one catch-all so that each later sprint replaces **its own**
 //! entry, and so that the arm it must replace is named by its path rather than
-//! found by reading. What remains under it is the four `template` subcommands,
-//! `tpl render`, and `tpl cfg database test`.
+//! found by reading. What remains under it is `tpl render` and
+//! `tpl cfg database test`.
 //!
 //! Nothing else is provisional here.
 //!
@@ -637,12 +637,9 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
             Some(command) => schema::run(out, &invocation.globals, command),
         },
 
-        Some(Command::Template(template)) => match &template.command {
+        Some(Command::Template(read)) => match &read.command {
             None => node_help(out, &["template"]),
-            Some(template::Command::List { .. }) => not_yet_implemented!("tpl template list"),
-            Some(template::Command::Show { .. }) => not_yet_implemented!("tpl template show"),
-            Some(template::Command::Check { .. }) => not_yet_implemented!("tpl template check"),
-            Some(template::Command::Path { .. }) => not_yet_implemented!("tpl template path"),
+            Some(command) => template::run(out, &invocation.globals, command),
         },
 
         Some(Command::Render { .. }) => not_yet_implemented!("tpl render"),
@@ -828,9 +825,11 @@ mod tests {
     /// `FR-PROJ-017`, and the nine `cfg` subcommands that do not contact a
     /// server maintain `.tpl/.cfg`. The eight `schema` subcommands read the
     /// catalogue through the cache, per `FR-SCH-025`, and the three of
-    /// `tpl cache` load, clean and report on it. Every other leaf is still the
-    /// arrangement this module's own documentation describes.
-    const IMPLEMENTED: [&[&str]; 23] = [
+    /// `tpl cache` load, clean and report on it. The four of `tpl template`
+    /// list, print, check and locate the project's templates, per
+    /// `FR-TMPL-002`. Every other leaf is still the arrangement this module's
+    /// own documentation describes.
+    const IMPLEMENTED: [&[&str]; 27] = [
         &["schema", "info"],
         &["schema", "tables"],
         &["schema", "table"],
@@ -842,6 +841,10 @@ mod tests {
         &["cache", "load"],
         &["cache", "clean"],
         &["cache", "status"],
+        &["template", "list"],
+        &["template", "show"],
+        &["template", "check"],
+        &["template", "path"],
         &["help"],
         &["version"],
         &["init"],
