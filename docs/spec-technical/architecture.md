@@ -82,7 +82,7 @@ therefore the shape of the process, not a convention of the error module.
 | 3 | Read and validate the configuration file | `project/config.rs` | `78` |
 | 4 | Resolve the database entry | `project/settings.rs` | `78` or `66` |
 | 5 | Consult the cache; open a connection if it does not answer | `cache/`, then `mariadb/` | `69`, `77` or `78` |
-| 6 | Resolve the named catalogue object | `mariadb/` or `cache/` | `66` |
+| 6 | Resolve the named catalogue object | `mariadb/` or `cache/`, or `cli/` where a `--context` document is the source | `66` |
 | 7 | Resolve the template | `render/` | `66` |
 | 8 | Render | `render/` | `65` |
 
@@ -140,20 +140,22 @@ parts are properties of the whole tree rather than of any node under it.
 | `cli.rs` | The tree and the five settings that close it at every node; the one route from the process to the parser; the dispatch | `FR-CLI-002`, `FR-CLI-004`, `FR-CLI-005`, `FR-CLI-006`, [`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own) |
 | `globals.rs`, `local.rs` | The seven global flags, declared once and accepted at any position; the flags more than one node declares, written once and flattened by each | `FR-GLOB-001`, `FR-GLOB-002`, `FR-CLI-024` |
 | `schema.rs`, `template.rs`, `cache.rs`, `cfg.rs` | The nodes, positional arguments and local flags of each group, taken from the module of `/specification` that owns the command | `FR-CLI-010`, `FR-CLI-008` |
+| `render.rs`, with `render/context.rs` | The third arm's own step 1, the choice between the two context sources, and the assembly of the five context variables from four sources | `FR-RND-005`, `FR-RND-011` … `FR-RND-018`, `FR-RND-023`, `FR-RND-024`, `FR-RND-026` |
 | `rules.rs` | The two refusals `tpl` makes itself, and the diagnostic level the two verbosity flags resolve to | `FR-CLI-014`, `FR-CLI-015`, `FR-GLOB-014`, [`OD-17`](open-decisions.md#od-17--observability) |
 | `intercept.rs` | What a parser refusal becomes, read as typed API and never as rendered text | [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
 | `help.rs`, with `help/render.rs` and `help/document.rs` | The typed table, the seven-section renderer, and the JSON command tree | `FR-HELP-006`, `FR-HELP-016`, `FR-HELP-022`, [`OD-05`](open-decisions.md#od-05--the-module-decomposition) |
 
 **Recorded reading — the map's phrase against the code.**
 [`OD-05`](open-decisions.md#od-05--the-module-decomposition) writes `cli/` as
-one module per porcelain command. As built there is one module per command
-**group** — `schema`, `template`, `cache`, `cfg` — while `render`, `init`,
-`help` and `version` declare their arguments where they are declared as nodes: a
-group's leaves share flags that are written once and flattened by each, and a
-top-level leaf sharing none has nothing to put in a module of its own. Nothing
-of the decomposition moves — no command's work lives in `cli/`, which is what
-that entry decided — and the granularity is recorded rather than silently read
-as the same thing.
+one module per porcelain command. As built the **argument declarations** are one
+module per command **group** — `schema`, `template`, `cache`, `cfg` — while
+`render`, `init`, `help` and `version` declare theirs where they are declared as
+nodes: a group's leaves share flags that are written once and flattened by each,
+and a top-level leaf sharing none has nothing to put in a module of its own.
+Where a leaf's **work** needs a module it has one regardless of that split, as
+`render` has had since 2026-09-21. Nothing of the decomposition moves — `cli/`
+delegates and does not do the work, which is what that entry decided — and the
+granularity is recorded rather than silently read as the same thing.
 
 **Parsing yields one of three forms, and a command is only one of them.** The
 two flag forms are answered at whatever node they were given at (`FR-GLOB-019`,
@@ -535,12 +537,12 @@ The checks the inward direction makes, and the four it is forbidden or has no
 reason to make, are
 [interfaces.md](interfaces.md#the-two-directions-over-the-document)'s.
 
-**Neither direction has a caller yet.** `tpl schema dump` emits the document
-and `tpl render --context` consumes it, and both commands are a later sprint;
-the block that owns the model owns the document it is written as, so the two
-directions exist ahead of the commands that reach them. This is the same
-interim shape [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation)
-records for a parsed leaf, seen from the other end.
+**Both directions have their caller.** `tpl schema dump` emits the document and
+`tpl render --context` consumes it; the second arrived with the render work of
+2026-09-21, and from that commit the suite feeds one command's output to the
+other over a live server. The two directions were written ahead of both
+commands, because the block that owns the model owns the document it is written
+as.
 
 ### What `model/` does not answer of the two files it is built from
 
@@ -577,17 +579,23 @@ its pin are [`ADR-001`](../adr/adr-001-template-engine-pin.md) and
 | Templates are loaded and compiled at render time from disk | A template changes without the binary being rebuilt | `CLAUDE.md`, *Invariantes de Implementação*; `FR-TMPL-004` |
 | The loader closure calls the one resolution function | The three `template` subcommands that resolve without the engine call the same function, so one boundary is enforced once | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023` … `FR-TMPL-026` |
 | Undefined behaviour is set to the strict variant | Reading a field that does not exist fails the render | [`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with), `FR-SEM-012`, `FR-SEM-013` |
+| An output formatter of `tpl`'s own is installed | A `null` writes nothing and a boolean writes `true` or `false`, whatever the engine would have written | `FR-SEM-010`, `FR-SEM-011`, `FR-SEM-021` |
 | Auto-escaping is set explicitly, to off, and is never left at the engine's default | No property of a template's name can turn escaping on; escaping happens only where a template asks for it | `FR-ENV-026`, `FR-ENV-027`, `FR-ENV-028` |
 | Each template is compiled once per process and reused | A loop in a template does not reparse it | `CLAUDE.md`, *Desempenho e Eficiência* |
 
-**One observation is owed against the engine pin and is asserted nowhere.**
-Whether a **defined** `null` interpolates as the empty string under the strict
-variant, rather than failing, is **not confirmed in the engine's official
-documentation** for the pinned line, and if it does not hold it contradicts
-`FR-SEM-010` and `FR-SEM-011` outright — the observation
+**The formatter is load-bearing, and the observation
 [`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with)
-owes is what decides it, and until it is made no passage of this folder may rely
-on either answer.
+owed is what establishes that.** Made on 2026-09-21, it contradicted the answer
+that entry expected: a **defined** `null` does not fail under the strict
+variant, and the engine's own rendering of it is the word `None`, which
+`FR-SEM-011` forbids by name. Strictness governs *undefined* values and decides
+nothing about a defined `null`, so three requirements rest on the formatter row
+above and on nothing else — `FR-SEM-010`, `FR-SEM-011` and `FR-SEM-021`, the
+engine's stock rendering of a boolean being `True`.
+`FR-SEM-012` and `FR-SEM-013` are unaffected: an undefined
+fails before any formatter is reached. The two tests that hold this are in
+`src/render/engine.rs` and are named in `OD-14`; removing the formatter as a
+restatement of what the engine already does would break the three at once.
 
 **Parsing is separable from rendering.** The check command performs syntax
 analysis only — no expression evaluated, no filter called, no connection opened

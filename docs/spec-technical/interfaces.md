@@ -204,6 +204,8 @@ and the rejected options are not restated here.
 | No variant carries the database driver's error. The driver's failure is classified at the `mariadb/` boundary into a phase, a host, a port and a classification, and the original value is dropped | `FR-GLOB-018`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
 | `73` is constructible only on the `tpl init` path; `70` only from a panic or a detected invariant violation, its trigger reachable from nothing a caller can write | `FR-ERR-003`, `FR-ERR-030`, `FR-ERR-031`, [`OD-21`](open-decisions.md#od-21--two-test-seams-that-must-not-be-on-the-published-surface) |
 | A deadline produces the code of the **phase in progress**, so the value the phase clock hands to `error.rs` names the phase | `FR-ERR-027`, `FR-GLOB-013`, `FR-GLOB-012` |
+| One condition reachable over **two populations** is two variants, not one, where a single `cause` would carry wording that is false on one of them. An object sought in a catalogue read names the database entry it was read through; sought in a `--context` document it has no entry to name, because `FR-RND-019` resolves none and `FR-RND-022` opens no connection, so the document's **path** stands where the entry stands. Both name the database | `FR-ERR-034`, `FR-RND-032`, `FR-SCH-010`, `FR-RND-019`, `FR-RND-022` |
+| A repetition the specification **permits** is not the repetition `FR-CLI-014` refuses: `--set` is repeatable, so a second occurrence is correct and a second occurrence of the same **key** is the fault, reported with both values | `FR-RND-008`, `FR-RND-014`, `FR-CLI-014`, `FR-ERR-034` |
 
 `main.rs` reads the exit status and returns it; it performs no classification of
 its own, and the eight-step validation order that decides which code wins when
@@ -428,19 +430,29 @@ types rather than two routines kept in step (`FR-SCH-022`, `BR-SCH-004`,
 The document's keys, depths and cuts are `specification/context-document.md`'s
 and are cited here, never reproduced.
 
-**The types are the model's own, with four exceptions and two projections.**
+**The types are the model's own, with four exceptions, two projections and one
+flattening.**
 
 | Shape | Whose type | Why |
 |---|---|---|
-| A column, an index, a trigger, a `CHECK` constraint, a view, a routine, a decomposed type, the `server` object, and every member type nested inside them | The model's, serialised directly | Each states its own keys in its own module, so the key order of `FR-OUT-013` is stated once where the fields are |
+| A column, an index, a trigger, a `CHECK` constraint, a view, a routine, the `server` object, and every member type nested inside them | The model's, serialised directly | Each states its own keys in its own module, so the key order of `FR-OUT-013` is stated once where the fields are |
+| The decomposed type of a column | The model's, **flattened into the column** | `FR-CTX-014` gives a column `column_type` and `FR-CTX-015` gives it the eight parts *additionally*, so a serialised column reads `data_type` and never `column_type.data_type`: the nine keys are siblings of the column's own, and the decomposition is a type without being a level of the document. It stays a type because its one constructor is what makes `FR-CTX-040`'s field-by-field reading structural |
 | The `database` object, a table, a foreign key, an entry of `referenced_by` | The document's own | Each differs from the model in one respect and the same one: the **embedding** of `FR-CTX-006` and `FR-CTX-010`, which the model carries as a name and the document carries as an object |
 | A column default | The model's, projected onto a private tagged shape | `FR-CTX-012` puts the discriminant **inside** the object, beside a `value` the `null` form does not carry, which is neither shape a derive over the model's variants produces |
 | A `restricted` marking | The model's, projected onto a bare array of names | `FR-PRIV-016` makes the document shape an array rather than an object, and the projection is where its byte-wise order is applied |
 
 Both projections are declared on the model type, in both directions, so the
 document shape is still a property of a type and no writer restates it. The
-document's own types are `pub(crate)`: the document is contract and the types
-that write it are not (`DIV-032`).
+flattening is declared the same way and holds in both directions, so a document
+is read back by the shape it is written in. The document's own types are
+`pub(crate)`: the document is contract and the types that write it are not
+(`DIV-032`).
+
+**`FR-OUT-013`'s key order survives the flattening**, because the nine keys are
+emitted where the field sits: the column's order is its own field order with the
+decomposition's spliced in at that position, and it is still stated once, in the
+two types, rather than in a writer
+([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)).
 
 **What the inward direction checks, and where each check lives.** The document
 is untrusted input on this path, and every check is either a derived
@@ -870,7 +882,7 @@ What belongs here is the surface.
 | Function | Input, and where it is applied | Errors it can produce | Fixed by |
 |---|---|---|---|
 | The pattern matcher | A pattern from `cli/` and a name from `model/`, matched **in memory**, never sent to the server, case-folded over ASCII only; applied **after** coverage | None: a pattern matches or does not. Supplied where it is not declared it is an unknown flag, `64`; supplied to the dump, `64` | `FR-SCH-011` … `FR-SCH-015`, `FR-SCH-021`, `FR-CAT-028`, `BR-SCH-001` |
-| The qualified-routine-name parser | One positional argument or one flag value in `cli/`, resolved against `mariadb/` or `cache/` | `66` with a suggestion for a name that does not exist; `64` naming both candidates for a bare name that matches a procedure **and** a function, under every circumstance | `FR-SCH-008`, `FR-SCH-010`, `FR-RND-032`, `FR-CACHE-024` |
+| The qualified-routine-name parser | One positional argument or one flag value in `cli/`, resolved against `mariadb/`, `cache/`, or a supplied `--context` document | `66` with a suggestion for a name that does not exist; `64` naming both candidates for a bare name that matches a procedure **and** a function, under every circumstance. Each code is carried by two variants, one per population — see [the error type](#the-error-type-and-the-exit-code) | `FR-SCH-008`, `FR-SCH-010`, `FR-RND-032`, `FR-CACHE-024` |
 | The word-list tokeniser | A string operand in `render/`; five rules applied once, left to right, with a published eight-row vector | None of its own; the five naming filters that consume it fail `65` on a non-string operand | `FR-ENV-030` … `FR-ENV-033`, `FR-ENV-034` |
 | The edit distance | A supplied name and a population, in `diagnostics/` | None; it returns a possibly empty candidate list | `FR-ERR-019` … `FR-ERR-021` |
 | ASCII-only case folding | Shared by the matcher and the tokeniser, independent of server, collation and locale | None | `FR-SCH-014`, `FR-ENV-031` |

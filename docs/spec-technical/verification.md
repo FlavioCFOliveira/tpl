@@ -69,6 +69,18 @@ printed reason, where it is not. No other test reaches one, because no other
 command does — the connectivity subcommand is the one `cfg` leaf still
 unwritten.
 
+**Recorded staleness, 2026-09-21.** The three paragraphs above are the state at
+commit `fd51ca2` and have not been re-audited since: the commands that read a
+catalogue were written after it, and four test files now reach the fixture —
+`tests/outside_the_process.rs`, `tests/schema_and_cache.rs`,
+`tests/template_commands.rs` and `tests/render_command.rs`. So the count, the
+per-file breakdown and the sentence about which tests need a server all
+understate the suite, and the last of them is false as written. The same applies
+to this document's opening tally of which register rows are written. Re-auditing
+either against the suite is a pass of its own and was not in the scope that
+recorded this; only the render work's own consequences were corrected, and they
+are marked where they appear.
+
 ## The four kinds of test, and what each needs
 
 The kind is not a taxonomy for its own sake: it decides what the harness must
@@ -225,23 +237,30 @@ a query to count and a connection to attribute.
 
 ### Owed, and not yet observable
 
-Two verifications are owed by a settled decision rather than by a requirement.
-Each decides a point on which a settled entry declined to assert, and each names
-what it costs if the expected answer does not hold. A third was owed by
-[`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) and is
-discharged: the tests exist, and
-[The parser's mapping](#the-parsers-mapping-one-test-per-kind) names them.
+One verification is owed by a settled decision rather than by a requirement. It
+decides a point on which a settled entry declined to assert, and it names what
+it costs if the expected answer does not hold. Two others were owed and are
+discharged: [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)'s,
+where the tests exist and
+[The parser's mapping](#the-parsers-mapping-one-test-per-kind) names them, and
+`OD-14`'s, below.
 
 | Owed | What must be observed | What it costs if it fails | Kind | Recorded in |
 |---|---|---|---|---|
 | The phase attribution of a TLS handshake failure | Whether an untrusted certificate, a name mismatch, and a server offering no TLS each reach `tpl` as the driver's TLS error rather than its I/O error | `FR-ERR-034` row `69` cannot be met as written, and a defect is owed to the functional owner naming `FR-ERR-034` | Server; needs the three failure modes `FR-CONF-038` obliges the fixture to present | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
-| A **defined** `null` under the strict undefined-behaviour variant | Whether it interpolates as the empty string rather than failing the render | `FR-SEM-010` and `FR-SEM-011` are contradicted outright | Unit, against the engine pinned by [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with) |
 
-The second is why
-[architecture.md](architecture.md#the-render-component) asserts nothing about a
-defined `null`: until the observation is made, **no passage of this folder may
-rely on either answer**, and this register carries the obligation so that it is
-not lost between the entry that owes it and the run that discharges it.
+**Discharged on 2026-09-21 — a defined `null` under the strict
+undefined-behaviour variant.** The observation
+[`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with)
+owed was made, and the expected answer did not hold: a defined `null` does not
+fail, and the engine writes `None` for it. Two unit tests in
+`src/render/engine.rs` carry it — one over a defined `null`, one over an
+undefined field — and a third asserts the same shape of fact over a boolean, for
+`FR-SEM-021`. Each runs against an engine carrying the strict setting and
+nothing else, so what they assert is the engine's behaviour and not `tpl`'s. The
+requirements are met by the formatter instead, which is
+[architecture.md](architecture.md#the-render-component)'s, and no passage of
+this folder is bounded by the obligation any longer.
 
 ## The published test vectors
 
@@ -577,8 +596,19 @@ to the result of the same render against a live read of the same database.
 It is a **server** test on both halves: the dump and the live read must come
 from the same database in the same state. `BR-SCH-004`'s own note records that
 the container it needs now exists at all four series, and attributes the
-remaining block to `tpl` not existing; the binary exists at this commit, and
-what blocks the test is the two commands it runs, neither of which is written.
+remaining block to `tpl` not existing; the binary exists, and since 2026-09-21
+so do both commands the test runs.
+
+**The test exists.** In `tests/render_command.rs`,
+`fr_rnd_016_and_fr_rnd_026_one_template_and_one_object_render_the_same_bytes_from_every_source`
+dumps the fixture's database with `--direct --no-cache`, feeds the document back
+through `--context` in both of the forms `FR-RND-021` makes one contract — a
+file and standard input — and asserts byte equality with a render against a live
+read of the same database, with the two cache paths asserted beside them. It is
+gated on the fixture and runs over every series the fixture presents. The other
+four rows of the table above are not asserted by it and are not this row's.
+The tallies under [The suite as it stands](#the-suite-as-it-stands)
+were taken before this sprint and are not re-audited here.
 
 ## Cross-series equivalence across four series
 
