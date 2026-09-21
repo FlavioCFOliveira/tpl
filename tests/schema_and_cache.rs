@@ -23,6 +23,23 @@
 //! | `FR-CACHE-037` | An object marked `restricted` is never written, and its collection is not recorded whole |
 //! | `FR-CDOC-007`, `FR-CDOC-008` | A listing is served only from a whole collection; an individual object is served whenever it is present |
 //! | `FR-CDOC-012` | `loaded_at` appears in no read output |
+//! | `FR-CACHE-002` | The store is keyed by the entry name, and neither two entries onto one server nor one entry repointed move the key |
+//! | `FR-CACHE-004` | The `.gitignore` `tpl init` writes excludes `.cache/` |
+//! | `FR-CACHE-005`, `FR-CDOC-002`, `FR-CDOC-003`, `FR-CDOC-005` | The two versions govern every document of the folder, and either of them moving alone is a miss |
+//! | `FR-CACHE-008` | Nothing expires: a record dated at the epoch is still served |
+//! | `FR-CACHE-009` | The eight `schema` subcommands and a `tpl render` without `--context` read through the store, observed as nine reads and no connection |
+//! | `FR-CACHE-010` | `tpl cfg database test` touches no file of the store |
+//! | `FR-CACHE-011` | Four `template` subcommands and nine `cfg` subcommands reach neither a database nor the store |
+//! | `FR-CACHE-012`, `FR-CDOC-009`, `FR-CDOC-010`, `FR-CDOC-011` | A cached read says so, in one enumerated field of the envelope and nowhere else |
+//! | `FR-CACHE-013`, `FR-CACHE-014` | `--direct` ignores what is stored; `--no-cache` stores nothing and rewrites nothing |
+//! | `FR-CACHE-021` | `tpl cache` is a group node with exactly `load`, `clean` and `status` |
+//! | `FR-CACHE-028` | Nine commands that are neither `load` nor `clean` change not one byte of a warm store |
+//! | `FR-CACHE-030` | One file per object, and a second write renames a new file over the target rather than writing in place |
+//! | `FR-CACHE-031` | Four concurrent writers and one killed writer leave whole files and nothing locked |
+//! | `FR-CACHE-032` | A load against an unreachable server is `69` and changes nothing already stored |
+//! | `FR-CACHE-036` | A store that cannot be written changes neither the exit code nor a byte of stdout, and says nothing |
+//! | `FR-CDOC-006` | The record says, per collection, whether it was loaded whole, and `tpl cache status` reports the same |
+//! | `FR-CDOC-015`, `FR-CDOC-016` | A document served from the store is a snapshot of no server, and `"source":"cache"` is the signal |
 //! | `FR-CAT-054` | A table carries its engine and its collation, and a view carries neither field |
 //! | `BR-SCH-001` | A pattern selects the same set from a live read and from a cached one |
 //!
@@ -47,6 +64,9 @@
 mod fixture;
 #[path = "support/sandbox.rs"]
 mod sandbox;
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use fixture::Server;
 use sandbox::Sandbox;
@@ -1698,4 +1718,1712 @@ fn fr_srv_029_the_same_ddl_yields_the_same_document_on_every_series_of_the_windo
             "{name}: {PASSED_THROUGH} carried nothing, so normalising it hid no difference"
         );
     }
+}
+
+// ------------------------------------------------- what the store holds ---
+
+/// The second database entry the keying body defines.
+const SECOND: &str = "second";
+
+/// The entry the `cfg` battery of `FR-CACHE-011` creates and removes, chosen so
+/// that nothing it writes touches the entry a read is served through.
+const SCRATCH: &str = "scratch";
+
+/// The template every body that renders, lists or shows one writes.
+const TEMPLATE: &str = "plain";
+
+/// Its source, which reads one field of the database and nothing that varies.
+const TEMPLATE_SOURCE: &str = "{{ database.name }}\n";
+
+/// A comment no fixture server carries, planted in a cached table so that a
+/// document served from the store is distinguishable from one read live.
+const SENTINEL: &str = "planted in the store and on no server";
+
+/// The eight `schema` subcommands, in a form that reaches each of them, with
+/// the `--format json` of `FR-SCH-023` where the subcommand declares it.
+///
+/// `dump` is the eighth and declares no `--format`, per `FR-SCH-019`: it emits
+/// JSON and nothing else, so it carries the envelope without being asked.
+const EIGHT: [&[&str]; 8] = [
+    &["schema", "info", "--format", "json"],
+    &["schema", "tables", "--format", "json"],
+    &["schema", "views", "--format", "json"],
+    &["schema", "routines", "--format", "json"],
+    &["schema", "table", TABLE, "--format", "json"],
+    &["schema", "view", VIEW, "--format", "json"],
+    &["schema", "routine", FUNCTION, "--format", "json"],
+    &["schema", "dump"],
+];
+
+/// Every regular file under `directory`, as the path it holds relative to
+/// `directory` and the bytes it carries.
+///
+/// An absent directory is an empty map rather than a failure: a store that was
+/// never written and a store that was emptied are the same observation, which
+/// is what `FR-CACHE-003` and `FR-CACHE-023` both produce.
+fn contents(directory: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    fn walk(root: &Path, at: &Path, into: &mut BTreeMap<PathBuf, Vec<u8>>) {
+        let Ok(entries) = std::fs::read_dir(at) else {
+            return;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+
+            if path.is_dir() {
+                walk(root, &path, into);
+            } else {
+                let relative = path
+                    .strip_prefix(root)
+                    .expect("the walk started at the root")
+                    .to_owned();
+
+                into.insert(relative, std::fs::read(&path).expect("the store is ours"));
+            }
+        }
+    }
+
+    let mut held = BTreeMap::new();
+    walk(directory, directory, &mut held);
+
+    held
+}
+
+/// The store of the one entry every project here defines, file by file.
+fn held(sandbox: &Sandbox) -> BTreeMap<PathBuf, Vec<u8>> {
+    contents(&store(sandbox))
+}
+
+/// `meta.json`, parsed.
+fn record(sandbox: &Sandbox) -> serde_json::Value {
+    let written =
+        std::fs::read_to_string(store(sandbox).join("meta.json")).expect("the store is ours");
+
+    serde_json::from_str(&written).expect("the record is a document")
+}
+
+/// Rewrites one field of `meta.json` and leaves the rest of it as it stood.
+fn rewrite(sandbox: &Sandbox, field: &str, value: serde_json::Value) {
+    let mut written = record(sandbox);
+    written[field] = value;
+
+    std::fs::write(
+        store(sandbox).join("meta.json"),
+        serde_json::to_string(&written).expect("the record serialises"),
+    )
+    .expect("the store is ours");
+}
+
+/// Rewrites the `comment` of one cached table to [`SENTINEL`].
+///
+/// It is a scalar of the document and of nothing else, so a read that carries
+/// it was served from this file and a read that does not was not. The file
+/// stays a well-formed document of the shape the binary decodes, which is what
+/// keeps `FR-CACHE-033` from turning the planting into an ordinary miss.
+fn plant(sandbox: &Sandbox, table: &str) {
+    let file = store(sandbox).join("tables").join(format!("{table}.json"));
+    let written = std::fs::read_to_string(&file).expect("the store holds the table");
+    let mut cached: serde_json::Value =
+        serde_json::from_str(&written).expect("a cached table is a document");
+
+    cached["comment"] = serde_json::Value::String(SENTINEL.to_owned());
+
+    std::fs::write(
+        &file,
+        serde_json::to_string(&cached).expect("the table serialises"),
+    )
+    .expect("the store is ours");
+}
+
+/// A sandbox holding a project that reaches `server`, with [`TEMPLATE`] written
+/// under `.tpl/templates/`.
+fn rendered(server: &Server, account: (&str, &str)) -> Sandbox {
+    let sandbox = project(server, account);
+    sandbox.write(&format!(".tpl/templates/{TEMPLATE}.jinja"), TEMPLATE_SOURCE);
+
+    sandbox
+}
+
+#[test]
+fn fr_cache_002_the_store_is_keyed_by_the_entry_name_and_by_nothing_else() {
+    // FR-CACHE-002: the key is the entry name. Two entries that agree about the
+    // server, the schema and the credentials still get two folders, because
+    // nothing but the name reaches the key; and an entry whose connection
+    // changes keeps the folder it had, because nothing but the name reaches the
+    // key in that direction either.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cache_002_the_store_is_keyed_by_the_entry_name_and_by_nothing_else")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+
+    // Two entries reaching the same server as the same account. The second is
+    // the table the helper writes for it, taken from the header down, so no
+    // address is composed here.
+    let first = configuration(server, ROOT);
+    let both = fixture::configuration(server, SECOND, SCHEMA, ROOT);
+    let header = format!("[database.{SECOND}]");
+    let table = &both[both
+        .find(&header)
+        .expect("the helper writes one entry table")..];
+
+    let sandbox = Sandbox::new();
+    sandbox.project(&format!("{first}\n{table}"));
+
+    let one = sandbox.path(&format!(".tpl/.cache/{ENTRY}"));
+    let other = sandbox.path(&format!(".tpl/.cache/{SECOND}"));
+
+    assert_eq!(
+        document(&sandbox, &["schema", "tables", "--format", "json"])["source"],
+        "server"
+    );
+    assert!(one.is_dir(), "the read wrote no folder for {ENTRY}");
+    assert!(
+        !other.exists(),
+        "the read of {ENTRY} wrote a folder for {SECOND}"
+    );
+
+    // The second entry describes the same read and is still a miss, because the
+    // key is the name and the two names differ.
+    assert_eq!(
+        document(
+            &sandbox,
+            &["-d", SECOND, "schema", "tables", "--format", "json"]
+        )["source"],
+        "server",
+        "FR-CACHE-002: the second entry was served from the first entry's folder"
+    );
+    assert!(other.is_dir());
+    assert_eq!(
+        document(
+            &sandbox,
+            &["-d", SECOND, "schema", "tables", "--format", "json"]
+        )["source"],
+        "cache"
+    );
+
+    // And the folder does not move when what the entry points at does. The
+    // account is changed rather than the address, so the entry still describes
+    // a read that would succeed and the store is the only thing under test.
+    let before = contents(&one);
+
+    succeeds(
+        &sandbox,
+        &["cfg", "set", &format!("database.{ENTRY}.user"), REDUCED.0],
+    );
+
+    assert_eq!(
+        contents(&one),
+        before,
+        "FR-CACHE-002: repointing the entry moved what it is keyed by"
+    );
+    assert_eq!(
+        document(&sandbox, &["schema", "tables", "--format", "json"])["source"],
+        "cache"
+    );
+}
+
+#[test]
+fn fr_cache_004_the_gitignore_written_by_init_excludes_the_cache_folder() {
+    // FR-CACHE-004 with FR-PROJ-017: the file `tpl init` writes carries a line
+    // that excludes `.cache/`. It needs no server, and it needs one before the
+    // store exists — FR-CACHE-003 keeps `tpl init` from creating the folder, so
+    // the exclusion is written for a folder the first read will make.
+    let sandbox = Sandbox::new();
+
+    assert_eq!(succeeds(&sandbox, &["init"]), "");
+
+    let written =
+        std::fs::read_to_string(sandbox.path(".tpl/.gitignore")).expect("tpl init wrote the file");
+
+    assert!(
+        written.lines().any(|line| line == ".cache/"),
+        "FR-CACHE-004: the .gitignore carries no line excluding .cache/: {written:?}"
+    );
+    assert!(
+        !sandbox.path(".tpl/.cache").exists(),
+        "FR-CACHE-003: tpl init created the store"
+    );
+}
+
+#[test]
+fn fr_cache_005_every_cached_document_is_governed_by_the_two_versions_of_the_record() {
+    // FR-CACHE-005 with FR-CDOC-001 through FR-CDOC-005: each cached document
+    // carries a format version, and the two versions the cache keeps are
+    // written where those requirements put them — in `meta.json`, once for the
+    // whole entry. What makes that satisfy the requirement rather than sidestep
+    // it is the reach: a version this binary does not know makes **every**
+    // document of the folder a miss, including an individual object, which
+    // FR-CDOC-008 otherwise serves whenever it is present.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_005_every_cached_document_is_governed_by_the_two_versions_of_the_record",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let written = record(&sandbox);
+    assert!(written["cache_format"].is_u64(), "FR-CDOC-001: {written}");
+    assert!(written["schema_version"].is_u64(), "FR-CDOC-001: {written}");
+
+    // The control: at the versions the binary wrote, both a listing and an
+    // individual object are served from the store.
+    for arguments in [
+        &["schema", "tables", "--format", "json"][..],
+        &["schema", "table", TABLE, "--format", "json"][..],
+    ] {
+        assert_eq!(document(&sandbox, arguments)["source"], "cache");
+    }
+
+    // And with either version unknown, neither is.
+    for field in ["cache_format", "schema_version"] {
+        rewrite(&sandbox, field, serde_json::json!(99));
+
+        assert_eq!(
+            document(
+                &sandbox,
+                &["schema", "table", TABLE, "--format", "json", "--no-cache"]
+            )["source"],
+            "server",
+            "FR-CACHE-005: an object was served under an unknown {field}"
+        );
+        assert_eq!(
+            document(
+                &sandbox,
+                &["schema", "tables", "--format", "json", "--no-cache"]
+            )["source"],
+            "server",
+            "FR-CACHE-005: a listing was served under an unknown {field}"
+        );
+    }
+}
+
+#[test]
+fn fr_cache_008_no_time_to_live_expires_what_is_stored() {
+    // FR-CACHE-008: there is no time to live and nothing expires on its own. A
+    // cached object stays until `tpl cache clean` removes it or a fresh read
+    // replaces it, so a record dated at the epoch is served exactly as one
+    // written a moment ago.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series("fr_cache_008_no_time_to_live_expires_what_is_stored")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+    rewrite(
+        &sandbox,
+        "loaded_at",
+        serde_json::json!("1970-01-01T00:00:00Z"),
+    );
+
+    for arguments in EIGHT {
+        assert_eq!(
+            document(&sandbox, arguments)["source"],
+            "cache",
+            "FR-CACHE-008: tpl {} expired a record dated at the epoch",
+            arguments.join(" ")
+        );
+    }
+
+    // The age is still what the record says, so nothing refreshed it on the way
+    // past. `tpl cache status` is where it shows, per FR-CDOC-013.
+    assert_eq!(record(&sandbox)["loaded_at"], "1970-01-01T00:00:00Z");
+    assert_eq!(
+        document(&sandbox, &["cache", "status", "--format", "json"])["data"]["loaded_at"],
+        "1970-01-01T00:00:00Z"
+    );
+
+    // The control: removal is what ends it, and the same read is then a miss.
+    succeeds(&sandbox, &["cache", "clean"]);
+    assert_eq!(
+        document(&sandbox, &["schema", "tables", "--format", "json"])["source"],
+        "server"
+    );
+}
+
+#[test]
+fn fr_cache_009_the_eight_schema_subcommands_and_a_render_read_through_the_store() {
+    // FR-CACHE-009 names the commands that read through the cache: the eight
+    // `schema` subcommands, and `tpl render` when it has no `--context`. The
+    // property is observed in the server's own connection record, because a
+    // command that read through the store is a command that opened nothing —
+    // and the control comes first, as it must.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_009_the_eight_schema_subcommands_and_a_render_read_through_the_store",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+
+    let control = fixture::connections_attributable_to(server, || fixture::connect_once(server));
+    assert_eq!(
+        control,
+        1,
+        "the connection record of {} did not count a connection that was made",
+        server.name()
+    );
+
+    let sandbox = rendered(server, ROOT);
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let attributable = fixture::connections_attributable_to(server, || {
+        for arguments in EIGHT {
+            assert_eq!(
+                document(&sandbox, arguments)["source"],
+                "cache",
+                "FR-CACHE-009: tpl {} was not served from the store",
+                arguments.join(" ")
+            );
+        }
+
+        // The ninth: `tpl render` with no `--context`. It carries no envelope
+        // to declare a source in, per FR-RND-027, so the connection record is
+        // the whole of the observation.
+        assert_eq!(succeeds(&sandbox, &["render", TEMPLATE]), "freight\n");
+    });
+
+    assert_eq!(
+        attributable,
+        0,
+        "{} accepted {attributable} connection(s) for nine reads served from the store",
+        server.name()
+    );
+}
+
+#[test]
+fn fr_cache_010_the_connection_test_touches_no_file_of_the_store() {
+    // FR-CACHE-010: `tpl cfg database test` always contacts the server, neither
+    // reads nor writes the cache, and reads nothing into the model.
+    //
+    // The middle clause is the one this file owns and the one asserted
+    // unconditionally below: a warm store is byte-identical after the command
+    // has run, whatever the command did. The first clause needs a leaf that
+    // opens a connection, and `tpl cfg database test` is the one leaf of the
+    // tree still unwritten — so it is asserted only once the leaf answers
+    // something other than the `70` of FR-ERR-031, and a run in which it does
+    // not says so on its own stderr rather than passing in silence.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cache_010_the_connection_test_touches_no_file_of_the_store")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+
+    let control = fixture::connections_attributable_to(server, || fixture::connect_once(server));
+    assert_eq!(
+        control,
+        1,
+        "the connection record of {} did not count a connection that was made",
+        server.name()
+    );
+
+    let sandbox = project(server, ROOT);
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let before = held(&sandbox);
+    assert!(!before.is_empty(), "the store was not warmed");
+
+    let mut outcome = None;
+    let attributable = fixture::connections_attributable_to(server, || {
+        outcome = Some(run(&sandbox, &["cfg", "database", "test", ENTRY]));
+    });
+    let outcome = outcome.expect("the bracket ran the command");
+
+    // The clause this sprint owns, and it holds however the command ended.
+    assert_eq!(
+        held(&sandbox),
+        before,
+        "FR-CACHE-010: tpl cfg database test changed a file of the store"
+    );
+
+    if outcome.code == Some(70) {
+        fixture::notice(
+            "fr_cache_010_the_connection_test_touches_no_file_of_the_store: \
+             tpl cfg database test is still unwritten and exited 70, so the clause of \
+             FR-CACHE-010 that requires it to contact the server was not observed. \
+             The clause that it touches no file of the store was.",
+        );
+        return;
+    }
+
+    assert!(
+        attributable >= 1,
+        "FR-CACHE-010: tpl cfg database test exited {:?} and opened no connection to {}",
+        outcome.code,
+        server.name()
+    );
+}
+
+#[test]
+fn fr_cache_011_no_template_or_cfg_subcommand_reaches_a_database_or_the_store() {
+    // FR-CACHE-011: no `template` subcommand and no `cfg` subcommand other than
+    // `database test` contacts a database or touches the cache. Two
+    // observations, because the requirement makes two claims: the server's own
+    // connection record for the database, and the bytes of a warm store for the
+    // cache. Neither is reachable from the exit codes the thirteen produce.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_011_no_template_or_cfg_subcommand_reaches_a_database_or_the_store",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+
+    let control = fixture::connections_attributable_to(server, || fixture::connect_once(server));
+    assert_eq!(
+        control,
+        1,
+        "the connection record of {} did not count a connection that was made",
+        server.name()
+    );
+
+    let sandbox = rendered(server, ROOT);
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let before = held(&sandbox);
+    assert!(!before.is_empty(), "the store was not warmed");
+
+    // The four `template` subcommands, and the nine `cfg` leaves that are not
+    // `database test`. The five that write do so to a scratch entry, so that
+    // nothing here repoints the entry the warm store belongs to — which is
+    // FR-CACHE-029's subject and not this one.
+    let population: [&[&str]; 13] = [
+        &["template", "list"],
+        &["template", "show", TEMPLATE],
+        &["template", "check"],
+        &["template", "path", TEMPLATE],
+        &["cfg", "list"],
+        &["cfg", "get", "core.database"],
+        &[
+            "cfg",
+            "database",
+            "add",
+            SCRATCH,
+            "--host",
+            "elsewhere.example.com",
+            "--port",
+            "3307",
+            "--user",
+            "reader",
+            "--schema",
+            "elsewhere",
+        ],
+        &["cfg", "database", "list"],
+        &["cfg", "database", "show", SCRATCH],
+        &[
+            "cfg",
+            "database",
+            "update",
+            SCRATCH,
+            "--host",
+            "elsewhere2.example.com",
+        ],
+        &["cfg", "set", "database.scratch.tls", "disabled"],
+        &["cfg", "unset", "database.scratch.tls"],
+        &["cfg", "database", "remove", SCRATCH],
+    ];
+
+    let attributable = fixture::connections_attributable_to(server, || {
+        for arguments in population {
+            let outcome = run(&sandbox, arguments);
+
+            assert_eq!(
+                outcome.code,
+                Some(0),
+                "tpl {} exited {:?}: {}",
+                arguments.join(" "),
+                outcome.code,
+                outcome.err
+            );
+            assert_eq!(
+                held(&sandbox),
+                before,
+                "FR-CACHE-011: tpl {} touched the store",
+                arguments.join(" ")
+            );
+        }
+    });
+
+    assert_eq!(
+        attributable,
+        0,
+        "{} accepted {attributable} connection(s) for thirteen commands that contact no database",
+        server.name()
+    );
+}
+
+#[test]
+fn fr_cache_012_a_read_served_from_the_store_states_that_it_was_cached() {
+    // FR-CACHE-012: a read served from the cache says so, and the field that
+    // carries it is the `source` of FR-CDOC-009. It is asserted over all eight
+    // `schema` subcommands rather than one, because the requirement is about a
+    // read and not about a command.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cache_012_a_read_served_from_the_store_states_that_it_was_cached")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    // The control: the same eight, before anything is stored, say `server`.
+    for arguments in EIGHT {
+        let mut pure = arguments.to_vec();
+        pure.extend_from_slice(&["--direct", "--no-cache"]);
+
+        assert_eq!(
+            document(&sandbox, &pure)["source"],
+            "server",
+            "tpl {} answered a source it was not served from",
+            pure.join(" ")
+        );
+    }
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    for arguments in EIGHT {
+        assert_eq!(
+            document(&sandbox, arguments)["source"],
+            "cache",
+            "FR-CACHE-012: tpl {} did not state that it was cached",
+            arguments.join(" ")
+        );
+    }
+}
+
+#[test]
+fn fr_cache_013_direct_reads_the_database_and_ignores_what_is_stored() {
+    // FR-CACHE-013: `--direct` reads from the database, ignoring whatever is
+    // cached. A flag that merely preferred the server would be
+    // indistinguishable from one that ignored the store, so the store is made
+    // to hold something no server holds and the two answers are compared.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cache_013_direct_reads_the_database_and_ignores_what_is_stored")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+    plant(&sandbox, TABLE);
+
+    // The control: without `--direct` the read is served from the store, and
+    // what it carries is what was planted there.
+    let cached = document(
+        &sandbox,
+        &["schema", "table", TABLE, "--format", "json", "--no-cache"],
+    );
+    assert_eq!(cached["source"], "cache");
+    assert_eq!(cached["data"]["table"]["comment"], SENTINEL);
+
+    // And with it, the answer is the server's.
+    let direct = document(
+        &sandbox,
+        &[
+            "schema",
+            "table",
+            TABLE,
+            "--format",
+            "json",
+            "--direct",
+            "--no-cache",
+        ],
+    );
+    assert_eq!(direct["source"], "server");
+    assert_ne!(
+        direct["data"]["table"]["comment"], SENTINEL,
+        "FR-CACHE-013: --direct answered from the store"
+    );
+
+    // The planted file is still there, so the read above ignored it rather than
+    // replacing it: `--no-cache` was given beside `--direct`, which is the pure
+    // read of FR-CACHE-016.
+    assert_eq!(
+        document(
+            &sandbox,
+            &["schema", "table", TABLE, "--format", "json", "--no-cache"]
+        )["data"]["table"]["comment"],
+        SENTINEL
+    );
+
+    // `--direct` alone replaces it, which is the second row of FR-CACHE-015.
+    succeeds(
+        &sandbox,
+        &["schema", "table", TABLE, "--format", "json", "--direct"],
+    );
+    assert_ne!(
+        document(
+            &sandbox,
+            &["schema", "table", TABLE, "--format", "json", "--no-cache"]
+        )["data"]["table"]["comment"],
+        SENTINEL
+    );
+}
+
+#[test]
+fn fr_cache_014_no_cache_stores_nothing_and_leaves_a_warm_store_untouched() {
+    // FR-CACHE-014: `--no-cache` causes the invocation not to store its result.
+    // Two cases, because a store that does not yet exist and a store that does
+    // fail differently: nothing is created, and nothing already there is
+    // rewritten.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cache_014_no_cache_stores_nothing_and_leaves_a_warm_store_untouched")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    assert_eq!(
+        document(
+            &sandbox,
+            &["schema", "tables", "--format", "json", "--no-cache"]
+        )["source"],
+        "server"
+    );
+    assert!(
+        held(&sandbox).is_empty(),
+        "FR-CACHE-014: the read stored something"
+    );
+
+    // The control for the first case: the same read without the flag does
+    // create the store, so the absence above is the flag and not a read that
+    // stores nothing anyway.
+    succeeds(&sandbox, &["schema", "tables", "--format", "json"]);
+    let before = held(&sandbox);
+    assert!(!before.is_empty());
+
+    // The second case: a read through a warm store, which is served from it and
+    // stores nothing in passing.
+    succeeds(&sandbox, &["cache", "load"]);
+    let warm = held(&sandbox);
+
+    for arguments in EIGHT {
+        let mut unstored = arguments.to_vec();
+        unstored.push("--no-cache");
+
+        assert_eq!(document(&sandbox, &unstored)["source"], "cache");
+        assert_eq!(
+            held(&sandbox),
+            warm,
+            "FR-CACHE-014: tpl {} wrote to the store",
+            unstored.join(" ")
+        );
+    }
+
+    // And the control for the second: the instrument does see a change when one
+    // is made.
+    succeeds(&sandbox, &["cache", "clean", "--table", TABLE]);
+    assert_ne!(held(&sandbox), warm);
+}
+
+#[test]
+fn fr_cache_021_the_cache_node_is_a_group_with_exactly_three_children() {
+    // FR-CACHE-021 with FR-CLI-007 and FR-CLI-009: `tpl cache` is a group node
+    // — no action of its own, its own help at exit 0 when invoked bare — with
+    // exactly `load`, `clean` and `status` beneath it. The membership is read
+    // from the command tree of FR-HELP-016, which FR-HELP-021 derives from the
+    // parser rather than from a list maintained beside it. It needs no server.
+    let sandbox = Sandbox::new();
+
+    // FR-CLI-007: bare, it writes its own help and exits 0.
+    let bare = run(&sandbox, &["cache"]);
+    assert_eq!(bare.code, Some(0), "{}", bare.err);
+    assert!(bare.out.contains("tpl cache"), "{}", bare.out);
+
+    let subtree = document(&sandbox, &["help", "cache", "--format", "json"]);
+    let paths: Vec<Vec<&str>> = subtree["data"]["commands"]
+        .as_array()
+        .expect("the subtree carries a commands array")
+        .iter()
+        .map(|entry| {
+            entry["path"]
+                .as_array()
+                .expect("every entry carries a path")
+                .iter()
+                .map(|segment| segment.as_str().expect("a path segment is a string"))
+                .collect()
+        })
+        .collect();
+
+    assert_eq!(
+        paths,
+        vec![
+            vec!["cache"],
+            vec!["cache", "load"],
+            vec!["cache", "clean"],
+            vec!["cache", "status"],
+        ],
+        "FR-CACHE-021 fixes the children of tpl cache at exactly three"
+    );
+
+    // FR-CLI-009: the group node itself declares no argument and no flag of its
+    // own, so there is nothing it could do but dispatch.
+    let group = &subtree["data"]["commands"][0];
+    assert_eq!(group["arguments"].as_array().map(Vec::len), Some(0));
+    assert_eq!(group["options"].as_array().map(Vec::len), Some(0));
+
+    // And a fourth child is not one: an unknown command below the group is the
+    // 64 of FR-CLI-019.
+    let unknown = run(&sandbox, &["cache", "purge"]);
+    assert_eq!(unknown.code, Some(64), "{}", unknown.err);
+}
+
+#[test]
+fn fr_cache_028_only_load_and_clean_change_what_is_stored() {
+    // FR-CACHE-028: nothing invalidates the cache automatically, and only
+    // `tpl cache clean` and `tpl cache load` change what is stored. The
+    // configuration commands are the ones worth watching, because BR-CACHE-004
+    // is explicit that a configuration command must not delete cached data as a
+    // side effect.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series("fr_cache_028_only_load_and_clean_change_what_is_stored")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = rendered(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+    let warm = held(&sandbox);
+    assert!(!warm.is_empty(), "the store was not warmed");
+
+    let population: [&[&str]; 9] = [
+        &["cache", "status"],
+        &["cache", "status", "--format", "json"],
+        &["template", "list"],
+        &["cfg", "list"],
+        &["cfg", "get", "core.database"],
+        &["cfg", "set", "core.database", ENTRY],
+        &["cfg", "database", "update", ENTRY, "--tls", "disabled"],
+        &["schema", "tables", "--format", "json"],
+        &["render", TEMPLATE],
+    ];
+
+    for arguments in population {
+        succeeds(&sandbox, arguments);
+        assert_eq!(
+            held(&sandbox),
+            warm,
+            "FR-CACHE-028: tpl {} changed what is stored",
+            arguments.join(" ")
+        );
+    }
+
+    // The two that do, which are the control: the same instrument sees both.
+    succeeds(&sandbox, &["cache", "clean", "--view", VIEW]);
+    let cleaned = held(&sandbox);
+    assert_ne!(cleaned, warm, "tpl cache clean changed nothing");
+
+    succeeds(&sandbox, &["cache", "load"]);
+    assert_ne!(held(&sandbox), cleaned, "tpl cache load changed nothing");
+}
+
+#[test]
+fn fr_cache_030_each_object_is_its_own_file_renamed_over_the_target() {
+    // FR-CACHE-030: each cached object is written to its own file, through a
+    // temporary file in the same directory, renamed over the target. Two
+    // observable consequences, and the second is the one that distinguishes a
+    // rename from a truncating write: the file the caller ends with is a
+    // **different** file, so its inode changes while its content stays whole.
+    use std::os::unix::fs::MetadataExt as _;
+
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cache_030_each_object_is_its_own_file_renamed_over_the_target")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    let listed = document(
+        &sandbox,
+        &[
+            "schema",
+            "tables",
+            "--format",
+            "json",
+            "--direct",
+            "--no-cache",
+        ],
+    );
+    let names: Vec<String> = listed["data"]["tables"]
+        .as_array()
+        .expect("an array")
+        .iter()
+        .map(|table| format!("{}.json", table["name"].as_str().expect("a name")))
+        .collect();
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let mut stored: Vec<String> = std::fs::read_dir(store(&sandbox).join("tables"))
+        .expect("the store holds a tables directory")
+        .map(|entry| {
+            entry
+                .expect("the store is ours")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    let mut expected = names;
+    stored.sort();
+    expected.sort();
+
+    assert_eq!(
+        stored, expected,
+        "FR-CACHE-030: the tables collection is not one file per object"
+    );
+
+    // No temporary is left behind by a write that completed: the prefix the
+    // implementation uses begins with a dot, so a leftover would be invisible
+    // to the walk above and is looked for by name.
+    let strays: Vec<PathBuf> = held(&sandbox)
+        .into_keys()
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with('.'))
+        })
+        .collect();
+    assert!(
+        strays.is_empty(),
+        "FR-CACHE-030: a temporary file was left in the store: {strays:?}"
+    );
+
+    // The rename: the object file the second write produces is a different file
+    // from the one the first produced, and it is whole.
+    let file = store(&sandbox).join("tables").join(format!("{TABLE}.json"));
+    let first = std::fs::metadata(&file).expect("the store is ours").ino();
+
+    succeeds(&sandbox, &["cache", "load", "--table", TABLE]);
+
+    let second = std::fs::metadata(&file).expect("the store is ours").ino();
+    assert_ne!(
+        first, second,
+        "FR-CACHE-030: the target was written in place rather than renamed over"
+    );
+    serde_json::from_slice::<serde_json::Value>(&std::fs::read(&file).expect("the store is ours"))
+        .expect("the renamed file is a whole document");
+}
+
+#[test]
+fn fr_cache_031_concurrent_writers_leave_whole_files_and_a_killed_one_leaves_nothing_locked() {
+    // FR-CACHE-031: no lock is taken over the cache. Two processes writing the
+    // same object yield one whole result or the other, never a half file, and a
+    // killed process leaves nothing locked. Both halves are properties of a
+    // process against a process, so both are driven by spawning one.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_031_concurrent_writers_leave_whole_files_and_a_killed_one_leaves_nothing_locked",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    let load = || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_tpl"))
+            .env_clear()
+            .current_dir(sandbox.root())
+            .args(["cache", "load"])
+            .spawn()
+            .expect("the binary under test runs")
+    };
+
+    // Four writers over one store, at once.
+    let racing: Vec<std::process::Child> = (0..4).map(|_| load()).collect();
+    for mut writer in racing {
+        let printed = writer.wait().expect("the writer terminates");
+
+        assert_eq!(
+            printed.code(),
+            Some(0),
+            "a concurrent tpl cache load exited {:?}",
+            printed.code()
+        );
+    }
+
+    assert_whole(&sandbox);
+    assert_eq!(
+        document(&sandbox, &["schema", "tables", "--format", "json"])["source"],
+        "cache",
+        "the store four writers produced is not usable"
+    );
+
+    // A writer killed in flight. It leaves no lock, so the store is still
+    // readable and a later writer still succeeds — which is the whole of what
+    // the requirement promises about one.
+    let mut killed = load();
+    killed.kill().expect("the writer is ours to signal");
+    killed.wait().expect("the killed writer terminates");
+
+    assert_whole(&sandbox);
+    succeeds(&sandbox, &["cache", "load"]);
+    assert_eq!(
+        document(&sandbox, &["schema", "tables", "--format", "json"])["source"],
+        "cache"
+    );
+}
+
+/// Asserts that every object file of the store decodes, which is what
+/// `FR-CACHE-031` promises a concurrent reader: one whole version of a file or
+/// the other, never half of one.
+fn assert_whole(sandbox: &Sandbox) {
+    let mut seen = 0;
+
+    for (path, bytes) in held(sandbox) {
+        if path.extension().is_none_or(|found| found != "json") {
+            continue;
+        }
+
+        serde_json::from_slice::<serde_json::Value>(&bytes)
+            .unwrap_or_else(|failure| panic!("{} is half a file: {failure}", path.display()));
+        seen += 1;
+    }
+
+    assert!(seen > 1, "the store held nothing to check");
+}
+
+#[test]
+fn fr_cache_032_a_load_against_an_unreachable_server_exits_sixty_nine_and_changes_nothing() {
+    // FR-CACHE-032: an unreachable server during `tpl cache load` is exit 69,
+    // and everything already stored is left unchanged. The store is warmed
+    // first, because a requirement about what survives says nothing when there
+    // is nothing to survive.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_032_a_load_against_an_unreachable_server_exits_sixty_nine_and_changes_nothing",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let before = held(&sandbox);
+    assert!(!before.is_empty(), "the store was not warmed");
+
+    // Port 1 answers nothing, so the entry now describes a server that cannot
+    // be reached. Nothing else about the project changes.
+    succeeds(
+        &sandbox,
+        &["cfg", "set", &format!("database.{ENTRY}.port"), "1"],
+    );
+
+    for arguments in [
+        &["cache", "load"][..],
+        &["cache", "load", "--table", TABLE][..],
+        &["cache", "load", "--view", VIEW][..],
+        &["cache", "load", "--routine", FUNCTION][..],
+        &["cache", "load", "--direct"][..],
+    ] {
+        let refused = run(&sandbox, arguments);
+
+        assert_eq!(
+            refused.code,
+            Some(69),
+            "FR-CACHE-032: tpl {} exited {:?}: {}",
+            arguments.join(" "),
+            refused.code,
+            refused.err
+        );
+        assert!(
+            refused.out.is_empty(),
+            "tpl {} wrote to stdout",
+            arguments.join(" ")
+        );
+        assert_eq!(
+            held(&sandbox),
+            before,
+            "FR-CACHE-032: tpl {} changed what was already stored",
+            arguments.join(" ")
+        );
+    }
+
+    // And what survived is still servable, which is the point of leaving it
+    // unchanged.
+    assert_eq!(
+        document(&sandbox, &["schema", "tables", "--format", "json"])["source"],
+        "cache"
+    );
+}
+
+#[test]
+fn fr_cache_036_a_store_that_cannot_be_written_changes_neither_the_exit_code_nor_a_byte_of_stdout()
+{
+    // FR-CACHE-036: a cache that cannot be written leaves the answer alone —
+    // exit 0, stdout byte for byte what it would otherwise be, the store as it
+    // was found, and neither an error nor a warning. The reference bytes come
+    // from the pure read of FR-CACHE-016, which is the same answer with the
+    // write taken out of it.
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_036_a_store_that_cannot_be_written_changes_neither_the_exit_code_nor_a_byte_of_stdout",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    let reference = run(
+        &sandbox,
+        &[
+            "schema",
+            "tables",
+            "--format",
+            "json",
+            "--direct",
+            "--no-cache",
+        ],
+    );
+    assert_eq!(reference.code, Some(0), "{}", reference.err);
+    assert!(
+        held(&sandbox).is_empty(),
+        "the pure read wrote to the store"
+    );
+
+    // `.tpl/.cache/` exists and cannot be written into, which is the condition
+    // the requirement names. The entry folder beneath it is what a write would
+    // have to create.
+    let cache = sandbox.path(".tpl/.cache");
+    std::fs::create_dir_all(&cache).expect("the sandbox is writable");
+    std::fs::set_permissions(&cache, std::fs::Permissions::from_mode(0o500))
+        .expect("the sandbox is ours");
+
+    // The instrument's own control: a mode the effective user ignores is no
+    // condition at all, and a run made as root would pass this body for the
+    // wrong reason.
+    let probe = cache.join("probe");
+    if std::fs::write(&probe, b"").is_ok() {
+        let _ = std::fs::remove_file(&probe);
+        let _ = std::fs::set_permissions(&cache, std::fs::Permissions::from_mode(0o700));
+
+        fixture::notice(
+            "skipped fr_cache_036_a_store_that_cannot_be_written_changes_neither_the_exit_code_\
+             nor_a_byte_of_stdout: this user writes into a directory whose write bit is clear, \
+             so the condition FR-CACHE-036 describes cannot be arranged here.",
+        );
+        return;
+    }
+
+    let refused = run(&sandbox, &["schema", "tables", "--format", "json"]);
+
+    assert_eq!(
+        refused.code,
+        Some(0),
+        "FR-CACHE-036: a store that cannot be written changed the exit code: {}",
+        refused.err
+    );
+    assert_eq!(
+        refused.out, reference.out,
+        "FR-CACHE-036: a store that cannot be written changed a byte of stdout"
+    );
+    assert!(
+        refused.err.is_empty(),
+        "FR-CACHE-036 reports neither an error nor a warning: {}",
+        refused.err
+    );
+    assert!(
+        contents(&cache).is_empty(),
+        "FR-CACHE-036: the store was not left as it was found"
+    );
+
+    // The control: with the directory writable again the same read does store,
+    // so the absence above is the mode and not a read that stores nothing.
+    std::fs::set_permissions(&cache, std::fs::Permissions::from_mode(0o700))
+        .expect("the sandbox is ours");
+
+    let written = run(&sandbox, &["schema", "tables", "--format", "json"]);
+    assert_eq!(written.code, Some(0), "{}", written.err);
+    assert_eq!(written.out, reference.out);
+    assert!(!held(&sandbox).is_empty(), "the read stored nothing");
+}
+
+// ---------------------------------------------------- the two versions ---
+
+#[test]
+fn fr_cdoc_002_the_arrangement_version_governs_every_file_of_the_folder() {
+    // FR-CDOC-002: `cache_format` versions the on-disk arrangement — which
+    // files exist, where they sit, and how they are named. What it versions is
+    // therefore asserted as the arrangement itself, and the reach of the
+    // version as the miss FR-CDOC-004 makes of a folder written under an
+    // arrangement this binary does not know.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cdoc_002_the_arrangement_version_governs_every_file_of_the_folder")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    // The arrangement `cache_format` 1 denotes: two files at the top of the
+    // entry's folder, and three directories of objects beneath it.
+    let folder = store(&sandbox);
+    let mut top: Vec<String> = std::fs::read_dir(&folder)
+        .expect("the store holds the entry's folder")
+        .map(|entry| {
+            entry
+                .expect("the store is ours")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    top.sort();
+
+    assert_eq!(
+        top,
+        ["database.json", "meta.json", "routines", "tables", "views"],
+        "FR-CDOC-002: the arrangement is not the one cache_format 1 denotes"
+    );
+    for path in held(&sandbox).into_keys() {
+        assert_eq!(
+            path.extension().and_then(|found| found.to_str()),
+            Some("json"),
+            "FR-CDOC-002: {} is not named as the arrangement names a file",
+            path.display()
+        );
+    }
+
+    // And the version reaches every file of the folder, not only the record it
+    // is written in.
+    rewrite(&sandbox, "cache_format", serde_json::json!(99));
+
+    for arguments in EIGHT {
+        let mut unstored = arguments.to_vec();
+        unstored.push("--no-cache");
+
+        assert_eq!(
+            document(&sandbox, &unstored)["source"],
+            "server",
+            "FR-CDOC-002: tpl {} was served under an unknown cache_format",
+            unstored.join(" ")
+        );
+    }
+
+    // The control: at the version the binary wrote, the same reads are hits.
+    rewrite(&sandbox, "cache_format", serde_json::json!(1));
+    for arguments in EIGHT {
+        assert_eq!(document(&sandbox, arguments)["source"], "cache");
+    }
+}
+
+#[test]
+fn fr_cdoc_003_the_content_version_of_the_record_is_the_one_the_documents_carry() {
+    // FR-CDOC-003: `schema_version` versions the model content and is the same
+    // version the documents in the cache carry under FR-OUT-011. The two are
+    // read from the two places a caller can read them — the record on disk and
+    // the envelope on stdout — and compared.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cdoc_003_the_content_version_of_the_record_is_the_one_the_documents_carry",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let carried = record(&sandbox)["schema_version"].clone();
+
+    for arguments in EIGHT {
+        let served = document(&sandbox, arguments);
+
+        assert_eq!(served["source"], "cache");
+        assert_eq!(
+            served["schema_version"],
+            carried,
+            "FR-CDOC-003: tpl {} carried a version the record does not",
+            arguments.join(" ")
+        );
+    }
+
+    // And a content version this binary does not know makes the content a miss,
+    // which is what versioning the content is for.
+    rewrite(&sandbox, "schema_version", serde_json::json!(99));
+    assert_eq!(
+        document(
+            &sandbox,
+            &["schema", "tables", "--format", "json", "--no-cache"]
+        )["source"],
+        "server"
+    );
+}
+
+#[test]
+fn fr_cdoc_005_either_version_moves_alone_and_the_data_is_a_miss() {
+    // FR-CDOC-005: the two versions are independent, and neither is incremented
+    // on account of a change that affects only the other. At run time that is
+    // two separate readings: each version alone, moved while the other stands
+    // at what the binary wrote, makes the data a miss — so neither is derived
+    // from the other and neither is ignored.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cdoc_005_either_version_moves_alone_and_the_data_is_a_miss")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let known = record(&sandbox);
+    let read = &["schema", "tables", "--format", "json", "--no-cache"][..];
+
+    // The control: both at what the binary wrote, and the read is a hit.
+    assert_eq!(document(&sandbox, read)["source"], "cache");
+
+    for moved in ["cache_format", "schema_version"] {
+        let standing = if moved == "cache_format" {
+            "schema_version"
+        } else {
+            "cache_format"
+        };
+
+        rewrite(&sandbox, moved, serde_json::json!(99));
+
+        assert_eq!(
+            record(&sandbox)[standing],
+            known[standing],
+            "the other version moved with it, so nothing independent was tested"
+        );
+        assert_eq!(
+            document(&sandbox, read)["source"],
+            "server",
+            "FR-CDOC-005: an unknown {moved} beside a known {standing} was served"
+        );
+
+        rewrite(&sandbox, moved, known[moved].clone());
+        assert_eq!(document(&sandbox, read)["source"], "cache");
+    }
+}
+
+#[test]
+fn fr_cdoc_006_the_record_says_per_collection_whether_it_was_loaded_whole() {
+    // FR-CDOC-006: `meta.json` records, for each collection, whether that
+    // collection was loaded whole. Both values of the record are produced, by
+    // the two loads that produce them, and each is read from the file and from
+    // `tpl cache status`, which FR-CACHE-034 obliges to report the same thing.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cdoc_006_the_record_says_per_collection_whether_it_was_loaded_whole")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    /// One collection's name, and whether it was recorded whole.
+    type Completeness = Vec<(String, bool)>;
+
+    /// The record, as the file writes it and as `tpl cache status` reports it.
+    fn recorded(sandbox: &Sandbox) -> (Completeness, Completeness) {
+        let written = record(sandbox)["collections"]
+            .as_array()
+            .expect("the record names its collections")
+            .iter()
+            .map(|collection| {
+                (
+                    collection["name"]
+                        .as_str()
+                        .expect("a collection has a name")
+                        .to_owned(),
+                    collection["whole"].as_bool().expect("whole is a boolean"),
+                )
+            })
+            .collect();
+        let reported =
+            document(sandbox, &["cache", "status", "--format", "json"])["data"]["collections"]
+                .as_array()
+                .expect("the report names its collections")
+                .iter()
+                .map(|collection| {
+                    (
+                        collection["name"]
+                            .as_str()
+                            .expect("a collection has a name")
+                            .to_owned(),
+                        collection["whole"].as_bool().expect("whole is a boolean"),
+                    )
+                })
+                .collect();
+
+        (written, reported)
+    }
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let (written, reported) = recorded(&sandbox);
+    assert_eq!(
+        written,
+        vec![
+            ("tables".to_owned(), true),
+            ("views".to_owned(), true),
+            ("routines".to_owned(), true),
+        ],
+        "FR-CDOC-006: a whole load recorded something other than three whole collections"
+    );
+    assert_eq!(written, reported, "FR-CACHE-034 reports the same record");
+
+    // The other value: one named object, and the collection it belongs to was
+    // not loaded whole.
+    succeeds(&sandbox, &["cache", "clean"]);
+    succeeds(&sandbox, &["cache", "load", "--table", TABLE]);
+
+    let (written, reported) = recorded(&sandbox);
+    assert_eq!(
+        written,
+        vec![
+            ("tables".to_owned(), false),
+            ("views".to_owned(), false),
+            ("routines".to_owned(), false),
+        ],
+        "FR-CDOC-006: a named load recorded a collection as whole"
+    );
+    assert_eq!(written, reported);
+}
+
+// -------------------------------------------------- where a read came from ---
+
+#[test]
+fn fr_cdoc_009_every_read_carries_source_and_a_catalogue_read_names_the_one_that_served_it() {
+    // FR-CDOC-009: every read carries `source`, and a read that reaches a
+    // catalogue sets it to `cache` or `server` according to which served it.
+    // Both halves are asserted over the same eight subcommands, once against an
+    // empty store and once against a warm one, beside a read that reaches no
+    // catalogue and therefore carries neither value.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cdoc_009_every_read_carries_source_and_a_catalogue_read_names_the_one_that_served_it",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    for arguments in EIGHT {
+        let mut pure = arguments.to_vec();
+        pure.extend_from_slice(&["--direct", "--no-cache"]);
+
+        let served = document(&sandbox, &pure);
+
+        assert!(
+            served.get("source").is_some(),
+            "FR-CDOC-009: tpl {} carried no source",
+            pure.join(" ")
+        );
+        assert_eq!(served["source"], "server", "{}", pure.join(" "));
+    }
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    for arguments in EIGHT {
+        let served = document(&sandbox, arguments);
+
+        assert!(
+            served.get("source").is_some(),
+            "FR-CDOC-009: tpl {} carried no source",
+            arguments.join(" ")
+        );
+        assert_eq!(served["source"], "cache", "{}", arguments.join(" "));
+    }
+
+    // A read that reaches no catalogue carries the field all the same, and
+    // carries neither of the two values: FR-CACHE-034 fixes `tpl cache status`
+    // at `project`, because it reports on the store rather than being served
+    // from it.
+    let reported = document(&sandbox, &["cache", "status", "--format", "json"]);
+    assert_eq!(reported["source"], "project");
+}
+
+#[test]
+fn fr_cdoc_010_source_is_an_enumerated_string_and_never_a_boolean() {
+    // FR-CDOC-010: `source` is an enumerated string and is not a boolean. The
+    // distinction is what FR-OUT-014 rests on — an enumerated field may gain a
+    // value without breaking the contract and a boolean cannot — so the JSON
+    // type is what is asserted, beside the value being one the enumeration
+    // admits.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cdoc_010_source_is_an_enumerated_string_and_never_a_boolean")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    /// The four values `FR-OUT-026` fixes.
+    const PERMITTED: [&str; 4] = ["server", "cache", "project", "binary"];
+
+    let mut seen: Vec<String> = Vec::new();
+    let mut inspect = |served: &serde_json::Value, spelled: &str| {
+        let carried = &served["source"];
+
+        assert!(
+            !carried.is_boolean(),
+            "FR-CDOC-010: tpl {spelled} carried a boolean source"
+        );
+
+        let value = carried.as_str().unwrap_or_else(|| {
+            panic!("FR-CDOC-010: tpl {spelled} carried {carried}, not a string")
+        });
+
+        assert!(
+            PERMITTED.contains(&value),
+            "tpl {spelled} carried the source {value:?}, which FR-OUT-026 does not admit"
+        );
+
+        if !seen.iter().any(|held| held == value) {
+            seen.push(value.to_owned());
+        }
+    };
+
+    for arguments in EIGHT {
+        let mut pure = arguments.to_vec();
+        pure.extend_from_slice(&["--direct", "--no-cache"]);
+
+        inspect(&document(&sandbox, &pure), &pure.join(" "));
+    }
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    for arguments in EIGHT {
+        inspect(&document(&sandbox, arguments), &arguments.join(" "));
+    }
+
+    inspect(
+        &document(&sandbox, &["cache", "status", "--format", "json"]),
+        "cache status --format json",
+    );
+    inspect(
+        &document(&sandbox, &["help", "--format", "json"]),
+        "help --format json",
+    );
+
+    // More than one value was observed, so the field is being read as an
+    // enumeration rather than as a constant that happens to be a string.
+    seen.sort();
+    assert_eq!(
+        seen,
+        ["binary", "cache", "project", "server"],
+        "the four values of FR-OUT-026 were not all produced"
+    );
+}
+
+#[test]
+fn fr_cdoc_011_source_is_the_one_field_by_which_a_cached_read_declares_itself() {
+    // FR-CDOC-011: `source` satisfies FR-CACHE-012. What that requires beyond
+    // the value itself is that there is **one** field to read: the declaration
+    // is on the envelope, per FR-OUT-026, and the payload carries no second
+    // signal a consumer would have to know about — no `source` of its own, no
+    // boolean saying the same thing, and no load time, which FR-CDOC-012 keeps
+    // out of a read altogether.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cdoc_011_source_is_the_one_field_by_which_a_cached_read_declares_itself",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    for arguments in EIGHT {
+        let served = document(&sandbox, arguments);
+        let spelled = arguments.join(" ");
+
+        // The envelope is the three keys of FR-OUT-024, and `source` is the one
+        // that declares where the bytes came from.
+        let mut keys: Vec<&str> = served
+            .as_object()
+            .expect("a document is an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+
+        assert_eq!(keys, ["data", "schema_version", "source"], "tpl {spelled}");
+        assert_eq!(served["source"], "cache", "tpl {spelled}");
+
+        // And the payload declares nothing of its own.
+        for absent in ["source", "cached", "loaded_at"] {
+            assert!(
+                served["data"].get(absent).is_none(),
+                "FR-CDOC-011: tpl {spelled} carried a second declaration at data.{absent}"
+            );
+        }
+    }
+
+    // The control: the same field is what says the read was live, so it is the
+    // field and not a constant the cached path writes.
+    assert_eq!(
+        document(
+            &sandbox,
+            &[
+                "schema",
+                "tables",
+                "--format",
+                "json",
+                "--direct",
+                "--no-cache"
+            ]
+        )["source"],
+        "server"
+    );
+}
+
+#[test]
+fn fr_cdoc_015_a_document_served_from_the_store_is_a_snapshot_of_no_server() {
+    // FR-CDOC-015: a document served wholly or partly from the cache promises
+    // neither the referential integrity of FR-CTX-023 nor a point-in-time
+    // snapshot, and FR-CDOC-016 makes `"source":"cache"` the signal that
+    // neither promise applies.
+    //
+    // The withdrawal is only worth something if it is real, so it is shown to
+    // be: the store is made to hold one object that no server holds, and the
+    // whole-database read assembled from it is served at exit 0, carrying that
+    // object beside objects the server did supply. That document existed on no
+    // server at any instant, which is exactly what BR-CDOC-004 describes.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_cdoc_015_a_document_served_from_the_store_is_a_snapshot_of_no_server")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+
+    let live = document(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+    assert_eq!(live["source"], "server");
+
+    plant(&sandbox, TABLE);
+
+    let assembled = document(&sandbox, &["schema", "dump", "--no-cache"]);
+    assert_eq!(
+        assembled["source"], "cache",
+        "FR-CDOC-016: the signal is the source field"
+    );
+
+    let planted = assembled["data"]["database"]["tables"]
+        .as_array()
+        .expect("an array")
+        .iter()
+        .find(|table| table["name"] == TABLE)
+        .expect("the dump carries the table")
+        .clone();
+
+    assert_eq!(
+        planted["comment"], SENTINEL,
+        "the document was not assembled from the file that was planted"
+    );
+
+    // The rest of the document is the server's, so what was served is a mixture
+    // of what one read produced and what another did — a document that never
+    // existed on any server at any instant.
+    let untouched: Vec<&serde_json::Value> = assembled["data"]["database"]["tables"]
+        .as_array()
+        .expect("an array")
+        .iter()
+        .filter(|table| table["name"] != TABLE)
+        .collect();
+
+    assert!(
+        !untouched.is_empty(),
+        "the dump carried one table, so nothing was mixed"
+    );
+    for table in untouched {
+        let name = table["name"].as_str().expect("a name");
+        let live_table = live["data"]["database"]["tables"]
+            .as_array()
+            .expect("an array")
+            .iter()
+            .find(|held| held["name"] == name)
+            .unwrap_or_else(|| panic!("{name} is a table of the live document too"));
+
+        assert_eq!(*table, *live_table, "{name} differed from the live read");
+    }
+
+    // And the live read of the same database does not carry it, so the
+    // difference is the store and not the server.
+    assert_ne!(
+        live["data"]["database"]["tables"]
+            .as_array()
+            .expect("an array")
+            .iter()
+            .find(|table| table["name"] == TABLE)
+            .expect("the live dump carries the table too")["comment"],
+        SENTINEL
+    );
 }

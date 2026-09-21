@@ -56,6 +56,13 @@ pub(crate) enum Source {
     /// Read from a server on this invocation.
     Server,
     /// Served from `.tpl/.cache/`, per `FR-CACHE-006`.
+    ///
+    /// This value **is** the statement `FR-CACHE-012` requires a cached read to
+    /// make, and `FR-CDOC-011` names this field as the one that carries it. It
+    /// is also what `FR-CDOC-015` and `FR-CDOC-016` attach to: a document
+    /// carrying it promises neither the referential integrity of `FR-CTX-023`
+    /// nor a point-in-time snapshot, so a consumer recognises the withdrawal by
+    /// reading one field it already has to read.
     Cache,
     /// Read from `.tpl/` alone, with no catalogue involved.
     Project,

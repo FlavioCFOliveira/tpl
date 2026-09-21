@@ -36,6 +36,14 @@
 //! rather than by a guard. `BR-TMPL-002` is held the same way: nothing here
 //! writes.
 //!
+//! **The catalogue cache is absent for the same reason.** `FR-CACHE-011`
+//! forbids every subcommand of this arm to contact a database **or** to touch
+//! the store, and no code path here reaches [`crate::mariadb`] or
+//! [`crate::cache`]: there is no [`Cache`](crate::cache::Cache) to consult,
+//! nothing to write on a miss, and no entry to key one by. The half about the
+//! store is the half a connection record cannot see, and it holds here because
+//! the module has no route to `.tpl/.cache/` at all.
+//!
 //! **Three of the four build no engine.** [`crate::render::Environment`] holds
 //! the engine in a cell filled on first use, and `list`, `show` and `path`
 //! reach the template root alone, so the one invocation that compiles anything

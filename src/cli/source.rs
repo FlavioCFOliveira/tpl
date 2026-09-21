@@ -285,6 +285,11 @@ impl<'a> Reader<'a> {
     /// owners produced it, and a caller that took it out would have to name
     /// that owner.
     ///
+    /// Handing the value in is what makes `FR-CACHE-012` structural rather than
+    /// a rule each command applies: the one place that decides which source
+    /// served the read is the one place that states it, so no presentation can
+    /// answer from the store without saying so.
+    ///
     /// `look` is what the cache is asked for, and is the command's own: a
     /// listing asks for its collection and a named object for itself, per
     /// `FR-CDOC-007` and `FR-CDOC-008`. A miss reads the **whole** catalogue
