@@ -1,7 +1,7 @@
 ---
 title: Render Semantics
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-21
 related: [template-environment.md, render-command.md, errors-and-exit-codes.md, context-document.md]
 ---
 
@@ -13,7 +13,7 @@ related: [template-environment.md, render-command.md, errors-and-exit-codes.md, 
 call. This file says what happens when it calls it: how whitespace is treated,
 what a filter or a test does when it is handed the wrong thing, what an
 interpolated `null` produces, how that differs from a field that does not exist,
-and how a template author ends a render deliberately.
+what a boolean produces, and how a template author ends a render deliberately.
 
 One rule governs the whole file. A render that cannot do the right thing fails;
 it does not produce something plausible. The failure mode this tool must avoid
@@ -22,8 +22,8 @@ above all others is emitting wrong code that compiles.
 ## Scope
 
 In scope: whitespace control, operand type checking, coercion policy, the
-treatment of `null` and of absence, author-signalled failure, and the context
-dependency of the two derived tests.
+treatment of `null` and of absence, the rendering of a boolean,
+author-signalled failure, and the context dependency of the two derived tests.
 
 Out of scope: the names available to a template, which belong to
 [template-environment.md](template-environment.md); the flags and arguments of
@@ -111,13 +111,44 @@ format of an error message, which belongs to
   so. Coercing `42` to `"42"` has the same shape — it converts an author's
   mistake into output.
 
-## Null and absence
+## Null, absence, and booleans
 
 - **FR-SEM-010**: WHEN a `null` is interpolated into the output, the system
   SHALL emit the empty string.
 
 - **FR-SEM-011**: The system SHALL NOT emit the words `none` or `null` as the
   rendering of a `null`.
+
+- **FR-SEM-021**: WHEN a boolean is interpolated into the output, the system
+  SHALL emit `true` for a true value and `false` for a false value. The system
+  SHALL NOT emit `True`, `False`, or any other casing of either word.
+
+  *Rationale.* `tpl` is a code generator, and `True` is a token that Rust, Go,
+  JSON, and SQL all refuse. A template that writes `{{ column is nullable }}`
+  into a generated file therefore produces a file that does not build, and
+  produces it silently: the render succeeds, the exit code is `0`, and the
+  mistake surfaces in the caller's compiler rather than here. `true` and
+  `false` are the spellings all four accept.
+
+  *Rejected.* Leaving the rendering to the engine, unfixed by any requirement,
+  and obliging the template author to write `| lower` or `| json` at every
+  interpolation of a boolean. It costs this specification nothing, and under it
+  the casing of every generated boolean would carry the guarantee group 3 of
+  `FR-ENV-001` carries, which is none: an engine update could change it without
+  anything in this corpus having decided so. It is refused because the author
+  who forgets the filter receives no signal — the render succeeds and the wrong
+  token reaches the generated file — which is the quiet, plausible, wrong
+  output `BR-SEM-004` refuses everywhere else in this file. There it is
+  answered by failing; here it is answered by emitting the right token, because
+  there is one.
+
+  *Added in the twenty-ninth edition.* Nothing fixed what an interpolated
+  boolean produces, so the engine decided it, and the engine writes `True`.
+  The requirement sits here, beside `FR-SEM-010`, because what an interpolated
+  value produces is render semantics: the three groups of `FR-ENV-001`
+  partition the names a template may call, not the text a value turns into, so
+  no requirement of [template-environment.md](template-environment.md) changes
+  with this one.
 
 - **FR-SEM-012**: IF a template reads a field that does not exist on the value
   in hand, THEN the system SHALL fail the render with `65`.

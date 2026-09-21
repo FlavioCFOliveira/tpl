@@ -1,7 +1,7 @@
 ---
 title: The Template Environment
 status: approved
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-21
 related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md]
 ---
 
@@ -313,14 +313,33 @@ row is a case the implementation SHALL satisfy.
   word and joins with `_`; `kebab` lower-cases every word and joins with `-`.
 
   *Rationale.* Every filter is a pure function of the word list, so a template
-  author who has learned `FR-ENV-030` can predict all five, and
-  `snake(pascal(x))` returns `snake(x)` for every `x`.
+  author who has learned `FR-ENV-030` can predict all five, including a
+  chained one: the word list is derived from the operand the filter is handed,
+  whatever produced it. Chaining is not an identity. `snake(pascal(x))` does
+  not return `snake(x)` in general, because `pascal` joins with nothing and a
+  boundary survives only where `FR-ENV-030` recovers it from case alone:
+  `pascal` renders `order_2_items` as `Order2Items`, whose word list is a
+  single word, so `snake` returns `order2items`.
 
   *Accepted cost.* An acronym loses its case: `HTTP_server` becomes
   `HttpServer` and not `HTTPServer`. That is the Rust convention for an
   acronym in `UpperCamelCase`, and preserving the acronym would need a list of
   acronyms — which is the same objection `BR-ENV-003` raised against `plural`
   and `singular`, and it is refused here for the same reason.
+
+  *Corrected in the twenty-ninth edition.* The rationale claimed
+  `snake(pascal(x))` returns `snake(x)` for every `x`. It is false for
+  `order_2_items`, which is a row of this requirement's own table: `pascal`
+  gives `Order2Items`, whose word list under `FR-ENV-030` is a single word, so
+  `snake` gives `order2items`. The table is right, no cell of it moves, and
+  `BR-ENV-007` is untouched; the prose was the only thing wrong. The claim is
+  dropped rather than qualified because stating when it does hold takes more of
+  `FR-ENV-030` than the identity saves — a digit beside a boundary defeats it,
+  and so do two single-letter words, `a_b` giving `AB` and then `ab`, while
+  `a_bc` survives as `ABc` and then `a_bc` — and a shorter qualification would
+  put a second claim in the same place for a reader to carry too far. What
+  stands in its place is the rule itself: derive the word list of the operand
+  the filter is handed.
 
 - **FR-ENV-034**: IF a naming filter is applied to a value that is not a
   string, THEN the render SHALL fail with `65`, per `FR-SEM-008`. There is no
