@@ -36,7 +36,12 @@ use crate::diagnostics::emit;
 use crate::error::Error;
 
 /// The template directory inside `.tpl` (`FR-PROJ-017`).
-const TEMPLATES: &str = "templates";
+///
+/// It is the template root of `FR-TMPL-023`, so `crate::render` composes its
+/// own boundary from this constant rather than from a second spelling of the
+/// same directory: this module writes it, that one reads it, and one name
+/// keeps the two from parting.
+pub(crate) const TEMPLATES: &str = "templates";
 
 /// The file `.tpl/.gitignore`, which keeps `.cfg` and `.cache/` out of version
 /// control (`FR-PROJ-003`).

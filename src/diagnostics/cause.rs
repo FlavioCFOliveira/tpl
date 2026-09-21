@@ -260,7 +260,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "no row of INFORMATION_SCHEMA matches {kind} '{name}' in database '{database}', read \
              through database entry '{entry}'"
         )),
-        Error::TemplateNotFound { name, root } => Cow::Owned(format!(
+        Error::TemplateNotFound { name, root, .. } => Cow::Owned(format!(
             "no template named '{name}' exists under the template root {}",
             root.display()
         )),

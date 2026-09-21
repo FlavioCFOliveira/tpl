@@ -628,6 +628,14 @@ pub enum Error {
         name: String,
         /// The population it was sought in (`FR-TMPL-023`).
         root: PathBuf,
+        /// The nearest matches among the displayed names of the templates the
+        /// project does carry, selected by `FR-ERR-019` and ordered as it
+        /// fixes. Empty where nothing qualified, per `FR-ERR-020`, and empty
+        /// where the name was written inside a template rather than on the
+        /// command line — `FR-TMPL-027` obliges the suggestion for the second
+        /// of those and `FR-TMPL-009` answers the first with the engine's own
+        /// position instead.
+        nearest: Vec<String>,
     },
 
     /// A `-d/--database` entry that is absent from `.tpl/.cfg`
@@ -1516,6 +1524,7 @@ mod tests {
                 Error::TemplateNotFound {
                     name: "missing.jinja".to_owned(),
                     root: PathBuf::from(".tpl/templates"),
+                    nearest: Vec::new(),
                 },
                 66,
             ),

@@ -62,6 +62,7 @@ use std::io::{self, BufWriter, Write};
 use serde::Serialize;
 
 use super::envelope::Document;
+use super::escape;
 use super::json::{self, Form};
 use super::text::{self, Table};
 use crate::error::Error;
@@ -291,6 +292,38 @@ impl<W: Write> Writer<W> {
         }
     }
 
+    /// Writes one scalar result, escaped, on a line of its own, and flushes
+    /// it.
+    ///
+    /// It is the shape of a result that is neither a listing nor a document:
+    /// one value, on one line. What separates it from [`Writer::help`] is the
+    /// escaping — `FR-OUT-018` rewrites the C0 controls of every value
+    /// interpolated into `text` output, tab excepted, and `FR-OUT-019` exempts
+    /// exactly two outputs, neither of which is a scalar answer.
+    ///
+    /// A consumer that goes away is classified as [`Cut::Harmless`], on the
+    /// ground [`Writer::help`] gives for the same classification.
+    ///
+    /// A stream a previous call found closed is not written to again.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::StdoutUnwritable`] where the stream refused the write
+    /// for a reason other than a close. A close returns `Ok(())`, which is the
+    /// silent success of `FR-ERR-025`.
+    pub(super) fn line(&mut self, value: &str) -> Result<(), Error> {
+        if self.finished {
+            return Ok(());
+        }
+
+        self.inner.get_mut().begin();
+
+        match self.write_line(value) {
+            Ok(()) => Ok(()),
+            Err(refused) => self.classify(refused, Cut::Harmless),
+        }
+    }
+
     /// Writes one document and empties the buffer into the stream.
     fn write<T: Serialize>(&mut self, document: &Document<T>, form: Form) -> io::Result<()> {
         json::write_document(&mut self.inner, document, form)?;
@@ -300,6 +333,14 @@ impl<W: Write> Writer<W> {
     /// Writes one help text and empties the buffer into the stream.
     fn write_help(&mut self, text: &str) -> io::Result<()> {
         self.inner.write_all(text.as_bytes())?;
+        self.inner.flush()
+    }
+
+    /// Writes one escaped value with its terminator and empties the buffer
+    /// into the stream.
+    fn write_line(&mut self, value: &str) -> io::Result<()> {
+        escape::write(&mut self.inner, value)?;
+        self.inner.write_all(&[text::TERMINATOR])?;
         self.inner.flush()
     }
 

@@ -51,7 +51,11 @@ const SEPARATOR: &[u8] = b"  ";
 const SPACES: &[u8; 32] = &[b' '; 32];
 
 /// The byte every line ends with.
-const TERMINATOR: u8 = b'\n';
+///
+/// It is `pub(super)` for [`super::writer`], which terminates the scalar
+/// result of `FR-TMPL-021` with it rather than with a second spelling of the
+/// same byte.
+pub(super) const TERMINATOR: u8 = b'\n';
 
 /// Which order the rows of a listing are presented in (`NFR-DET-002`).
 ///
