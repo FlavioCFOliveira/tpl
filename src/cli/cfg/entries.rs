@@ -16,7 +16,7 @@
 //!
 //! **`show` redacts and `FR-CFG-019` forbids it to expand.** It is the second
 //! of the two printers `FR-SEC-003` names, and the redaction is
-//! [`redact`](crate::project::config::redact)'s rather than this module's.
+//! [`redact`]'s rather than this module's.
 //!
 //! `tpl cfg database test` is not here. It is the one `cfg` subcommand that
 //! contacts a server, per `FR-CFG-005`, and the sprint that opens a connection

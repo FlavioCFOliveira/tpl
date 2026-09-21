@@ -117,7 +117,7 @@
 /// decision.** The reading, the spelling, the serialisation and the read-back
 /// are identical for all five and differ only in the table of spellings, so
 /// they are written once here and each enumeration supplies its own table —
-/// the same reason [`crate::mariadb::catalogue::statements`] writes its column
+/// the same reason `mariadb::catalogue::statements` writes its column
 /// lists through a macro. A second copy of a rule is a second thing that can
 /// be wrong.
 ///

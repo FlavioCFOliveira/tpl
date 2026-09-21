@@ -100,9 +100,13 @@ pub fn install_panic_hook() {
 /// # Errors
 ///
 /// Returns the [`Error`] of the first condition that fails, in the order
-/// `FR-ERR-006` fixes, after it has been reported. At this commit step 1 of
-/// that order is the whole of it: the invocation is parsed, and a command that
-/// parses reports the interim `70` its own module documents.
+/// `FR-ERR-006` fixes, after it has been reported. All eight steps of that
+/// order are in force: the invocation is parsed, the project is discovered and
+/// trusted, `.tpl/.cfg` is read and validated, a template is resolved, the
+/// database entry is resolved, the cache or the connection serves the read, a
+/// catalogue object is resolved, and the render runs — each step reached only
+/// by an invocation that raises its condition, and the two the commands of
+/// `FR-PROJ-025` skip skipped for them.
 pub fn run() -> Result<(), Error> {
     dispatch().inspect_err(diagnostics::report)
 }

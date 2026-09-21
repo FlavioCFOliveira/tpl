@@ -28,7 +28,7 @@ would produce a technical statement with no trace, which this folder does not
 admit. A document listed as *unblocked* has no entry against it and has simply
 not been written.
 
-As of 2026-09-18 every entry of `open-decisions.md` is settled and **no document
+As of 2026-09-21 every entry of `open-decisions.md` is settled and **no document
 waits**. One entry is settled and **interim** — `OD-30`, which records an
 arrangement each later sprint removes one arm of — and it blocks nothing; one
 arm remains.
@@ -38,6 +38,27 @@ arm remains.
 undefined-behaviour setting. The answer was the opposite of the expected one, so
 the entry records what carries the two requirements the setting turned out not
 to decide, and `architecture.md` states it rather than declining to.
+
+**One entry was added and two were amended on 2026-09-21**, when the backlog was
+cleared. `OD-32` removes `anyhow` from the dependency graph and prepares the
+correction `CLAUDE.md` is owed for it; `technology-stack.md` cites it instead of
+carrying the question. `OD-12` is discharged of the phase attribution it owed
+`verification`, with three corrections against what the connection work
+observed. `OD-20` is narrowed to how the edit distance is computed, the measure
+itself now being `FR-ERR-039`'s.
+
+**Four documents were re-audited against the tree on 2026-09-21**, in the same
+clearance. `verification.md` was re-measured whole against the suite at commit
+`243c4d6` — the count, the per-file breakdown, which tests reach a server, which
+register rows are written, and which flows the tree can reach. `traceability.md`
+harvested editions ten to twenty of `/specification` and records the gap that
+remains, which is editions twenty-three to thirty-two. `open-decisions.md` was
+re-read whole against `CLAUDE.md` at commit `8f936d4`, as its own convention
+requires, and now records every such re-read with its commit and date.
+`architecture.md` and `data-model.md` lost the statements earlier sprints had
+made false. `OD-27` is discharged: `scripts/mariadb/seed-bench.sql` exists, so
+`quality-attributes.md`, `operations.md` and `verification.md` no longer wait on
+it.
 
 **One entry was added on 2026-09-18, against what the model work built.**
 `OD-31` answers four of the five library-shape questions `DIV-032` hands to
@@ -108,7 +129,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: thirty-one settled entries, each carrying its rejected options or citing the record that holds them, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: thirty-two settled entries, each carrying its rejected options or citing the record that holds them, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. Nothing bounds it: `OD-14`'s owed observation was made on 2026-09-21 and the entry records the answer |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
@@ -143,9 +164,9 @@ requirement text.
 commands that skip two of them. Step 1 in its three parts, and the division of
 `cli/` by subject rather than by command. Project discovery, its mount-point
 boundary, and the trust checks. Configuration resolution across two layers and
-a built-in default. The connection lifecycle: at most one, opened late, probe then
-read-only set then read-back, closed when the read ends. The catalogue reader
-and the query-count invariants. The cache as a read-through layer. The model as
+a built-in default. The connection lifecycle: at most one, opened late, five
+ordered stages in the order `FR-SRV-042` fixes, closed when the read ends. The
+catalogue reader and the query-count invariants. The cache as a read-through layer. The model as
 the single junction of three sources and three consumers. The render component:
 engine construction, loader, undefined behaviour, the output formatter,
 auto-escape, context assembly. Deadlines on six named blocking phases. Lazy initialisation. The

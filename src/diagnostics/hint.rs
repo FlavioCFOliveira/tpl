@@ -334,13 +334,11 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // the population is a file the caller supplied, and `tpl` has no
         // subcommand that lists it — FR-ERR-012 asks the hint to name a next
         // step and this is the one there is.
-        Error::ContextObjectNotFound { nearest, .. } => {
-            let admitted = admitted(nearest, admits);
-            suggest::hint_line(
-                admitted.iter().copied(),
-                "name an object the --context document carries, then run the command again",
-            )
-        }
+        Error::ContextObjectNotFound { nearest, .. } => suggested(
+            nearest,
+            admits,
+            "name an object the --context document carries, then run the command again",
+        ),
         // FR-TMPL-027 obliges the nearest-match half over the template names
         // that do exist. The population is `render/`'s, for the reason this
         // module's own documentation gives; a template name is a value this
@@ -348,24 +346,20 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // and FR-ERR-023 drops a candidate outside it — which drops every
         // nested name, because the separator a nested name carries is not in
         // the set and is a literal of no enumerated spelling.
-        Error::TemplateNotFound { nearest, .. } => {
-            let admitted = admitted(nearest, admits);
-            suggest::hint_line(
-                admitted.iter().copied(),
-                "list the project's templates with: tpl template list",
-            )
-        }
+        Error::TemplateNotFound { nearest, .. } => suggested(
+            nearest,
+            admits,
+            "list the project's templates with: tpl template list",
+        ),
         // FR-GLOB-007 obliges the nearest-match half over the entry names the
         // file defines. An entry name is a value this corpus does not fix, so
         // FR-ERR-022 governs it by the character set and FR-ERR-023 drops a
         // candidate outside it in every form.
-        Error::DatabaseEntryNotFound { nearest, .. } => {
-            let admitted = admitted(nearest, admits);
-            suggest::hint_line(
-                admitted.iter().copied(),
-                "list the entries with: tpl cfg database list",
-            )
-        }
+        Error::DatabaseEntryNotFound { nearest, .. } => suggested(
+            nearest,
+            admits,
+            "list the entries with: tpl cfg database list",
+        ),
         // FR-CFG-007 obliges the nearest-match half over the keys that do
         // exist in the file.
         Error::ConfigurationKeyNotFound { nearest, .. } => {
@@ -455,6 +449,23 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 "remove the key from .tpl/.cfg, or show what tpl cfg set accepts with: \
                  tpl help cfg set",
             )
+        }
+        // FR-CONF-044: the remedy FR-ERR-001 gives a `78` is to fix
+        // `.tpl/.cfg`, and the key to fix is this entry's own `ca_path`.
+        Error::TrustDirectoryEmpty { entry, .. } => {
+            let key = format!("database.{entry}.ca_path");
+
+            if admits_key(&key) {
+                Cow::Owned(format!(
+                    "point it at a directory holding certificate files with: tpl cfg set {key} \
+                     <path>, or remove it with: tpl cfg unset {key}"
+                ))
+            } else {
+                Cow::Borrowed(
+                    "point the key at a directory holding certificate files, or remove it with: \
+                     tpl cfg unset database.<entry>.ca_path",
+                )
+            }
         }
         Error::ConfigurationValueMalformed { key, .. } => {
             if admits_key(key) {
@@ -598,6 +609,25 @@ fn admitted(nearest: &[String], admits: fn(&str) -> bool) -> Vec<&str> {
         .collect()
 }
 
+/// The `hint` line for a variant whose nearest matches are drawn from a
+/// population `FR-ERR-022` governs by a character set.
+///
+/// Three arms above compose the same two steps — admit the candidates the set
+/// allows, then compose the line `FR-ERR-008` fixes around them — over three
+/// populations that differ only in the generic hint that follows. Writing the
+/// pair once is what keeps `FR-ERR-023` applied identically to all three: a
+/// fourth arm of this shape reads the same rule rather than restating it, and
+/// a correction to either step cannot land on two of the three.
+///
+/// The composed line is byte-identical to what the three composed separately.
+fn suggested(
+    nearest: &[String],
+    admits: fn(&str) -> bool,
+    generic: &'static str,
+) -> Cow<'static, str> {
+    suggest::hint_line(admitted(nearest, admits).iter().copied(), generic)
+}
+
 /// The `tpl help` command that lists the children of one node.
 ///
 /// `node` is the command path below `tpl`, empty at the root, and it is a
@@ -725,12 +755,26 @@ pub(super) fn admits_key(key: &str) -> bool {
     !key.is_empty() && key.split('.').all(admits)
 }
 
-/// Whether every segment of a flag is admitted.
+/// Whether a flag, or a flag **value** `FR-CLI-018` writes back, is admitted.
 ///
 /// The `-` or `--` that introduces the flag is a literal, per `FR-ERR-022`, and
 /// so is the `-` inside the five flags of this corpus that carry one —
 /// `--tpl-dir`, `--no-cache`, `--ca-file`, `--ca-path` and `--password-command`
 /// — because a flag is a spelling this specification enumerates.
+///
+/// **The whole value is bounded at [`MAX_NAME`], and each `-`-separated segment
+/// is bounded by the alphabet.** `FR-ERR-040` states the set this test enforces
+/// over the one population it governs — a flag value the caller supplied in a
+/// separate token — as `[A-Za-z0-9_-]{1,64}` *measured over the whole value,
+/// including every leading `-`*, and the per-segment form alone bounds no value
+/// at all: `tpl -d -a-a-a-a-a-a-a-a version` reaches the `hint` with every
+/// segment one character long, and a value of any length composed the same way
+/// reaches it too. What was unbounded was how much of the caller's own token
+/// could be written back to the caller's own terminal.
+///
+/// `FR-CLI-018`'s obligation to show the corrected form stays reachable for
+/// every admitted value, because the value the set refuses leaves a placeholder
+/// in its position rather than removing the line.
 ///
 /// This is the third of the three spelling tests, and it lives beside the other
 /// two because one rule stated in two places is a rule that drifts: [`hint`]
@@ -738,6 +782,11 @@ pub(super) fn admits_key(key: &str) -> bool {
 /// [`super::suggest`] applies it to a nearest-match candidate, and both are the
 /// same defensive assertion over the same enumerated population.
 pub(super) fn admits_flag(flag: &str) -> bool {
+    // Every admitted byte is ASCII, so the byte length is the character count.
+    if flag.is_empty() || flag.len() > MAX_NAME {
+        return false;
+    }
+
     let name = flag
         .strip_prefix("--")
         .or_else(|| flag.strip_prefix('-'))
@@ -813,6 +862,69 @@ mod tests {
     fn fr_err_022_a_name_of_more_than_sixty_four_characters_is_refused() {
         assert!(admits(&"a".repeat(MAX_NAME)));
         assert!(!admits(&"a".repeat(MAX_NAME + 1)));
+    }
+
+    #[test]
+    fn fr_err_040_the_whole_value_is_bounded_and_not_only_its_segments() {
+        // FR-ERR-040 measures its set over the **whole value**, every leading
+        // `-` included. The per-segment form derived from FR-ERR-022 bounds no
+        // value at all: `tpl -d -a-a-a-a-a-a-a-a version` reaches the hint with
+        // every segment one character long, and a value of any length composed
+        // the same way reaches it too.
+        let exactly = format!("-{}", "a".repeat(MAX_NAME - 1));
+        let one_more = format!("-{}", "a".repeat(MAX_NAME));
+
+        assert_eq!(exactly.len(), MAX_NAME);
+        assert_eq!(one_more.len(), MAX_NAME + 1);
+
+        assert!(admits_flag(&exactly), "a value of exactly 64 is admitted");
+        assert!(
+            !admits_flag(&one_more),
+            "a value of 65 is refused, whatever its segments measure"
+        );
+
+        // The shape the requirement reproduces, at both sides of the bound: 32
+        // segments of one character is 64 and is admitted; 33 is 66 and is not.
+        let admitted = "-a".repeat(MAX_NAME / 2);
+        let refused = "-a".repeat(MAX_NAME / 2 + 1);
+
+        assert_eq!(admitted.len(), MAX_NAME);
+        assert!(admits_flag(&admitted));
+        assert!(!admits_flag(&refused));
+
+        // And the bound is not a refusal of the alphabet: the five flags this
+        // corpus enumerates with a hyphen inside the name are all admitted.
+        for flag in [
+            "--tpl-dir",
+            "--no-cache",
+            "--ca-file",
+            "--ca-path",
+            "--password-command",
+        ] {
+            assert!(admits_flag(flag), "{flag}");
+        }
+    }
+
+    #[test]
+    fn fr_cli_018_a_value_the_set_refuses_leaves_the_corrected_form_reachable() {
+        // FR-CLI-018 obliges the hint to show the corrected form for every
+        // value, and FR-ERR-040 puts a placeholder in the value's position
+        // rather than removing the line.
+        use crate::error::Error;
+
+        let refused = super::hint(&Error::SeparateTokenValue {
+            flag: "--database".to_owned(),
+            value: format!("-{}", "a".repeat(MAX_NAME)),
+        });
+
+        assert_eq!(refused, "write the value in one token: --database=<value>");
+
+        let admitted = super::hint(&Error::SeparateTokenValue {
+            flag: "--database".to_owned(),
+            value: "-shop".to_owned(),
+        });
+
+        assert_eq!(admitted, "write the value in one token: --database=-shop");
     }
 
     #[test]

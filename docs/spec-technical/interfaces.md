@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-21
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -245,8 +245,8 @@ modules ([`OD-05`](open-decisions.md#od-05--the-module-decomposition)).
 **Suggestion selection.** At most three candidates within an edit distance of
 two, ordered by distance and then by name, over eight populations; where no
 candidate qualifies the suggestion is omitted rather than weakened
-(`FR-ERR-019`, `FR-ERR-020`, `FR-ERR-021`). The distance is
-Damerau-Levenshtein, implemented in the crate
+(`FR-ERR-019`, `FR-ERR-020`, `FR-ERR-021`). The distance is the one
+`FR-ERR-039` fixes, implemented in the crate
 ([`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms));
 its cost as a budgeted path is
 [quality-attributes.md](quality-attributes.md#the-failure-path-is-a-budget).
@@ -524,40 +524,62 @@ message that requirement obliges
 ([`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)); the action
 would state the reverse of what the tool enforces.
 
-**Recorded divergence — `FR-OUT-009` is refused nowhere.** That requirement
-makes `--pretty` without `--format json` a `64` on a command that declares both,
-and the `EXIT CODES` section of every such command already states it. In the
-working tree of 2026-09-17 no code refuses it: `tpl cfg list --pretty` writes
-the compact document and exits `0`, and `cli/` carries the rule in a doc comment
-saying it is deliberately not declared on the argument, with no arm refusing it
-either. Both readings are recorded. `/specification` governs, so the requirement
-stands and the built behaviour is the defect; it is **not** narrowed to fit, and
-this folder does not close it. The first commands able to reach it — the four
-`cfg` subcommands that declare both flags — were written on 2026-09-17, and the
-help that promises the refusal was written on 2026-09-15, so a caller reading
-the help is told something the binary does not do. Closing it is a change to
-code, which this document does not make.
+**Recorded divergence — `FR-OUT-009` was refused nowhere, and is discharged.**
+That requirement makes `--pretty` without `--format json` a `64` on a command
+that declares both, and the `EXIT CODES` section of every such command already
+states it. In the working tree of 2026-09-17 no code refused it: `tpl cfg list
+--pretty` wrote the compact document and exited `0`, while `cli/` carried the
+rule in a doc comment saying it was deliberately not declared on the argument,
+with no arm refusing it either. The divergence was recorded rather than closed
+by narrowing: `/specification` governs, so the requirement stood and the built
+behaviour was the defect.
 
-**Recorded divergence — the sixth fact, mutual exclusion.** `FR-HELP-013`
-obliges help to state it, and no argument of the tree states it. The tree
-declares no `conflicts_with`, because the refusals the corpus obliges — the
-exclusions of `FR-CLI-015`, `FR-RND-005`, `FR-CFG-016` and `FR-CFG-029`, and the
-dependency of `FR-OUT-009` — are each meant to be refused away from the parser,
-for the reason the diagnostic renderer's section gives; so there is nothing to
-introspect, and no second source was invented for it. The four exclusions are so
-refused; the dependency is the divergence above. As built, such a pair
-is named instead in the prose of the `EXIT CODES` section of the command that
-**owns** the refusal: `tpl render` names its object flags and `--context`
-against `-d/--database` under `64`, and the `cfg database` entries name `--dsn`
-against the discrete connection flags. **The one pair that is global is named
-nowhere**: `-q/--quiet` with `-v/--verbose` appears in no help text of the tree,
-because the root's `64` line carries an unknown command, an unknown flag and a
-repeated flag value, and not that pair. `FR-HELP-013`'s sixth clause is
-therefore answered for every local pair and unanswered for the global one, and
-the remedy is one line of the typed table rather than a declaration on the
-tree. Reported at commit `f8f335d`,
-2026-09-15; it is not closed by narrowing the obligation above, which is the
-requirement's.
+**Discharged at commit `243c4d6`.** `rules::refuse_pretty_without_json` in
+`src/cli/rules.rs` applies it, at every node that declares both flags and
+recursively into each matched subcommand, and yields
+`Error::MutuallyExclusiveFlags` naming both members — which is what the `64` row
+of `FR-ERR-034` obliges the `cause` line to carry. `--pretty` written with no
+`--format` at all is caught by the same arm, because the declaration gives
+`--format` a default and the first occurrence is the format in force.
+
+| Invocation | Exit | Verified |
+|---|---|---|
+| `tpl cfg list --pretty` | `64`, with the four labelled lines of `FR-ERR-008` | by invocation, 2026-09-21 |
+| `tpl cfg list --pretty --format json` | `0`, and the document indented | by invocation, 2026-09-21 |
+
+`FR-OUT-009` was last re-read against the **thirty-second edition** of
+`/specification`, the current one, and carries no amendment note in any edition:
+it stands exactly as first written, and the built behaviour now matches it. The
+record of the divergence is kept rather than deleted, so that an identifier
+resolves to what happened.
+
+**The sixth fact, mutual exclusion, is stated on the argument's own entry.**
+`FR-HELP-013` obliges help to state it and the tree has nothing to introspect:
+no argument declares `conflicts_with`, because every refusal the corpus obliges
+— the exclusions of `FR-CLI-015`, `FR-RND-005`, `FR-CFG-016` and `FR-CFG-029`,
+and the dependency of `FR-OUT-009` — is refused away from the parser, for the
+reason [the diagnostic renderer](#the-diagnostic-renderer) gives. The fact is
+therefore carried by the typed table, as `Documented::excludes`, spelled as the
+reader meets it — a long form with its dashes — and empty where the argument
+excludes nothing. It is one place, uniformly at every node, and it reaches both
+channels: the sentence in the text help, and the `excludes` array of each
+argument in the JSON document. That is where `FR-HELP-022` puts a fact neither
+channel may derive from the other.
+
+**`EXIT CODES` was rejected, on three grounds.** The obligation had been met in
+the prose of the `EXIT CODES` section of the command that **owns** each refusal.
+
+| Ground | What it says |
+|---|---|
+| **The decisive one.** The global pair has no `EXIT CODES` line to live in | `-q/--quiet` with `-v/--verbose` is declared at the root, and the root's `64` line carries an unknown command, an unknown flag and a repeated flag value — never that pair. The route answered `FR-HELP-013` for every local pair and for the global one not at all, which is an obligation met inconsistently |
+| The requirement puts the fact on the argument | It is the sixth of six facts about **the value**, beside the type, the default, whether it is required, the permitted values and repeatability. Five are introspected onto the argument's entry; the sixth belongs where they are |
+| A code's section answers a different question | `EXIT CODES` says what produces a code. What an argument may be written with is not that, and is not addressable per argument in the JSON document from there |
+
+The `EXIT CODES` prose is untouched by the decision. Built at commit `243c4d6`;
+`src/cli/help/render.rs` carries the same three grounds beside the renderer, and
+`tests/help_surface.rs` holds two tests to it — one over the global verbosity
+pair, one over every exclusion the document declares, each asserting that the
+text help of the node names it.
 
 **`70` is listed in one help text and no other**: the root's. `FR-ERR-030` makes
 its two producing conditions defects in `tpl` rather than conditions of any
@@ -598,11 +620,14 @@ back to `tpl help` (`FR-HELP-026`), and `inherits_globals` after the seven
 members `FR-HELP-019` names. The reduction of `FR-HELP-029` is a pre-order walk
 from the node the path resolved to, so a subtree is the walk rather than a
 filter applied to the whole array. `template_surface` carries the three
-groups of `FR-ENV-005` in the shape that requirement fixes, with the arrays of
-`registered` set to `null` until `render/` registers, which is what `FR-ENV-005`
-and `FR-OUT-012` give for a value that is absent rather than empty; `filters` of
-`inherited` is `null` too, and that one is a divergence the register records.
-Both shapes, and the points the implementation derives under them, are
+groups of `FR-ENV-005` in the shape that requirement fixes, and **every array
+the corpus can enumerate is now published**: `registered` carries the eleven
+filters, seven tests and five functions `render/` actually registers, and
+`inherited.filters` the fourteen names of `FR-ENV-018` in the order that
+requirement states them. `inherited.tests`, `inherited.functions` and the three
+arrays of `other` stay as `FR-ENV-005` fixes them — two empty and three `null`
+(read from `tpl help --format json`, 2026-09-21). Both shapes, and the points
+the implementation derives under them, are
 [`OD-29`](open-decisions.md#od-29--the-json-command-tree-two-shapes-and-what-the-binary-publishes).
 
 **The six forms reach one renderer and one version line**, which is what makes

@@ -20,7 +20,10 @@
 
 use std::borrow::Cow;
 
-use crate::error::{ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, ReadOnlyFault};
+use crate::error::{
+    ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, PasswordCommandFault,
+    ReadOnlyFault,
+};
 
 /// The separator between two links of a template-engine error chain.
 const CHAIN_SEPARATOR: &str = ": caused by ";
@@ -241,8 +244,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             joined(chain)
         )),
         Error::TemplateOutsideRoot { name, root } => Cow::Owned(format!(
-            "the path '{name}' resolves to lies outside the template root {}, and tpl reads no \
-             template from outside it",
+            "'{name}' resolves to a path outside the template root {}, and tpl reads no template \
+             from outside it",
             root.display()
         )),
         // The row obliges the path and either the position of the malformed
@@ -515,19 +518,54 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "password_command {command:?} was terminated after writing more than {cap} bytes to \
              its standard output"
         )),
-        Error::PasswordCommandNotExecutable { command, returned } => Cow::Owned(format!(
-            "password_command {command:?} could not be started: {returned}"
-        )),
-        Error::PasswordCommandFailed { command, status } => match status {
-            Some(status) => Cow::Owned(format!(
+        // FR-CONF-042: the line names the command as stored, says which of the
+        // two conditions occurred, and names what the operating system
+        // returned. One wording for both is what that requirement was written
+        // over — `could not be started` is false of a child that had started.
+        Error::PasswordCommandNotExecutable {
+            command,
+            fault,
+            returned,
+        } => match fault {
+            PasswordCommandFault::NotStarted => Cow::Owned(format!(
+                "password_command {command:?} could not be started: {returned}"
+            )),
+            PasswordCommandFault::StatusUnreadable => Cow::Owned(format!(
+                "password_command {command:?} was started and tpl could not read the status it \
+                 ended with: {returned}"
+            )),
+        },
+        // FR-CONF-033 for the exit and FR-CONF-043 for the signal. The signal
+        // number is named because FR-ERR-034 bans a category where an instance
+        // is available, and a Unix reports the signal that ended a child: a
+        // line saying only that the child was signalled would read identically
+        // for a supervisor, a memory limit and an interactive interrupt.
+        Error::PasswordCommandFailed { command, end } => match end {
+            ChildEnd::Exited(status) => Cow::Owned(format!(
                 "password_command {command:?} exited with status {status}; its standard error went \
                  to the null device and tpl never saw it"
             )),
-            None => Cow::Owned(format!(
-                "password_command {command:?} was ended by a signal and returned no exit status; \
-                 its standard error went to the null device and tpl never saw it"
+            ChildEnd::Signalled(signal) => Cow::Owned(format!(
+                "password_command {command:?} was ended by signal {signal}, which tpl did not \
+                 send, and returned no exit status; its standard error went to the null device and \
+                 tpl never saw it"
+            )),
+            ChildEnd::Unreported => Cow::Owned(format!(
+                "password_command {command:?} returned neither an exit status nor a signal, and \
+                 the operating system reported no number for either; its standard error went to \
+                 the null device and tpl never saw it"
             )),
         },
+        // FR-CONF-044: the line names the directory as the entry declared it
+        // and states that it yielded no certificate file. The key is named
+        // beside it because the `78` row of FR-ERR-034 asks for the key where
+        // the fault is one, and this fault is `ca_path`'s.
+        Error::TrustDirectoryEmpty { entry, path } => Cow::Owned(format!(
+            "no entry of the directory {} resolves to a regular file, so \
+             'database.{entry}.ca_path' supplies no certificate to the trust material the \
+             connection was to validate against",
+            path.display()
+        )),
         Error::ReadOnlySessionNotEnforced { entry, fault } => match fault {
             ReadOnlyFault::NotApplied => Cow::Owned(format!(
                 "the session opened for database entry '{entry}' did not accept the read-only \
@@ -589,7 +627,14 @@ fn listed(series: &[&'static str]) -> Cow<'static, str> {
 
 /// The command path as a caller writes it, which at the root is the program
 /// name alone.
-fn invoked(command: &str) -> Cow<'_, str> {
+///
+/// It is `pub(crate)` rather than private because the `error:` line of
+/// [`Error::UnknownCommandPathSegment`] names the **same node** this line
+/// names, and `FR-HELP-028` obliges both to name it. Spelling the root twice
+/// is how the two came to disagree — this line wrote `'tpl'` and that one
+/// wrote `''` — so both now read one rule, and neither can be corrected
+/// without the other following.
+pub(crate) fn invoked(command: &str) -> Cow<'_, str> {
     if command.is_empty() {
         Cow::Borrowed(PROGRAM)
     } else {

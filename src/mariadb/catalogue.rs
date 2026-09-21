@@ -297,7 +297,15 @@ fn fetch(
         })?;
 
     runtime.block_on(async {
-        match timeout(bound.remaining(), query.fetch_all(&mut *connection)).await {
+        let started = std::time::Instant::now();
+        let answered = timeout(bound.remaining(), query.fetch_all(&mut *connection)).await;
+        // FR-GLOB-017's other half: how long the phase took, beside the line
+        // above that says it happened. The two are separate obligations of one
+        // requirement and carry separate tokens, so the count of catalogue
+        // queries `NFR-PERF-008` reads is untouched by this line.
+        crate::diagnostics::emit::phase_ran(Phase::CatalogueQuery, started.elapsed());
+
+        match answered {
             Err(_) => Err(expired()),
             Ok(Ok(rows)) => Ok(rows),
             Ok(Err(driver)) => Err(fault::speaking(&driver, target.host(), target.port())),

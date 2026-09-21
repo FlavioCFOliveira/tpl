@@ -96,18 +96,16 @@ rejected option and cites the argument rather than reproducing it.
 | `toml` | The read path over `.tpl/.cfg`, through its document tree — spanned keys and spanned values — rather than through a `serde` derive | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which would put an editing document on the path that reads untrusted input; and a `serde` derive, which cannot name the offending key or its position |
 | `toml_edit` | The write path over `.tpl/.cfg`, preserving comments, spacing and the relative order of items | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml` alone, which would delete the commented example `FR-PROJ-018` requires on the first write |
 | `thiserror` | Derives the one public error enum and its `Display` | [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) | `anyhow` in the library; per-module enums composed by `From`; an exit code stored as a field ([`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)) |
-| `anyhow` | The binary's error type, per `CLAUDE.md` *Stack* | `CLAUDE.md` *Stack* fixes it | **No alternative was ever weighed**, and the observation below is why one now has to be |
+| `anyhow` | **Nothing.** The manifest declares it and no file of `src/` or `tests/` names it | `CLAUDE.md` *Stack* fixed it; [`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph) removes it | Keeping it declared as a reserve for a dynamic error the binary might one day carry ([`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph)) |
 | `rustix` | Supplies the process's own user identifier, the one value `std` does not give, for the ownership check of `FR-PROJ-010` | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) | `libc` with a local `unsafe` block; `nix`; a crate that resolves the user account; inferring ownership by attempting a write ([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid)) |
 
-**Observation — `anyhow` may no longer earn its place.**
-[`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)
-reduces the entrypoint to three steps: call the library, read the exit code
-from the error value, return it. A binary that performs those three carries no
-dynamic error, and a crate whose purpose is to carry one then earns nothing
-against the dependency budget. The observation is recorded and **not settled**:
-keeping `anyhow` or dropping it is a decision, and a decision belongs to the
-register or to a record, not to this document. The row above records the crate
-as `CLAUDE.md` *Stack* has it today.
+**The observation this section carried is settled, and the decision has its
+home.** `anyhow` is removed from the dependency graph by
+[`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph), settled
+2026-09-21, which holds the ground, the alternative it refused and the
+correction `CLAUDE.md` is owed; none of it is restated here. The row above
+records the manifest as it stands at commit `243c4d6`, and it moves when the
+manifest does.
 
 ## The template engine
 
@@ -251,7 +249,7 @@ requirement.**
 | Feature | Forced off by | Why the requirement forces it |
 |---|---|---|
 | `color` | `NFR-DET-004`, with `NFR-DET-003` | No ANSI escape sequence may reach stdout or stderr under any circumstances, and the requirement names removing colour as what lets the parser be built without its colour support ([`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own), [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)) |
-| `suggestions` | `FR-ERR-019`, `FR-ERR-020`, `FR-ERR-023` | The corpus fixes the candidate count, the distance, the ordering and a character-class filter, and [`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms) fixes the distance itself. A second candidate generator would compute a set that is then discarded ([`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)) |
+| `suggestions` | `FR-ERR-019`, `FR-ERR-020`, `FR-ERR-023`, `FR-ERR-039` | The corpus fixes the candidate count, the ordering, a character-class filter and the measure itself; [`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms) fixes only how that measure is computed. A second candidate generator would compute a set that is then discarded ([`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)) |
 
 **`error-context` stays on**, because it is the only source of the token
 `FR-ERR-034` row `64` obliges the `cause` line to name
@@ -298,10 +296,17 @@ this document's own reading, with the source and the date beside each.
 ## Serialisation
 
 Derived `Serialize` through `serde_json`, into a writer `tpl` owns; the field
-declaration order **is** the key order, `preserve_order` is off and `indexmap`
-does not enter the graph, and one `skip_serializing_if` appears in the whole
-crate. All five answers, and the four options rejected, are
+declaration order **is** the key order, `preserve_order` is off, `serde_json`
+does not depend on `indexmap`, and `skip_serializing_if` governs **one field of
+the model**, written once for each kind that can carry the marking. All five
+answers, the four options rejected, and the readings behind the last two are
 [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions).
+Those last two were re-checked at commit `243c4d6` on 2026-09-21 — with
+`cargo tree --all-features --invert indexmap` and with
+`grep -rn skip_serializing_if src/` — and both hold as that entry states them.
+Each names a property a command can be run against, where the two claims they
+replace — that `indexmap` enters no graph, and that the attribute appears once
+in the crate — named none, and were false besides.
 
 `serde` appears in the library's public signature, and it costs nothing: `DIV-032`
 fixes the contract at the JSON document and the command line, so no consumer's

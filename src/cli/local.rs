@@ -23,10 +23,16 @@
 //! reason is `OD-08`'s and is stated once, in [`super::globals`]: only the
 //! accumulated occurrences put the **both values** of `FR-CLI-014` in hand. A
 //! field of those flags is therefore every occurrence in the order written,
-//! reduced to at most one before any command reads it. The flags that carry no
-//! value — `--pretty`, `--direct` and `--no-cache` — are outside `FR-CLI-014`,
-//! which governs a flag that carries a single value, and keep their
-//! `ArgAction::SetTrue`.
+//! reduced to at most one before any command reads it.
+//!
+//! **The three flags that carry no value — `--pretty`, `--direct` and
+//! `--no-cache` — are idempotent**, per `FR-CLI-025`: they are outside
+//! `FR-CLI-014`, which governs a flag that carries a single value, so they keep
+//! their `ArgAction::SetTrue` and each is declared as **overriding itself**,
+//! which is what makes `tpl schema tables --direct --direct` the invocation
+//! `tpl schema tables --direct` is. Without the override the parser raises an
+//! `ArgumentConflict` on the second occurrence, which is the `64` that
+//! requirement rejects as "the outcome and not a decision".
 //!
 //! What is deliberately **not** here: `FR-OUT-009`, which makes `--pretty`
 //! without `--format json` a `64` on a command that declares both; and
@@ -65,7 +71,9 @@ pub(crate) enum Format {
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
 pub(crate) struct Pretty {
     /// Indent JSON output by two spaces, one key per line (`FR-OUT-008`).
-    #[arg(long = "pretty", action = ArgAction::SetTrue)]
+    ///
+    /// It overrides itself, per `FR-CLI-025`.
+    #[arg(long = "pretty", action = ArgAction::SetTrue, overrides_with = "pretty")]
     pub(crate) pretty: bool,
 }
 
@@ -107,12 +115,20 @@ pub(crate) struct Output {
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
 pub(crate) struct Caching {
     /// Read from the database, ignoring whatever is cached (`FR-CACHE-013`).
-    #[arg(long = "direct", action = ArgAction::SetTrue)]
+    ///
+    /// It overrides itself, per `FR-CLI-025`.
+    #[arg(long = "direct", action = ArgAction::SetTrue, overrides_with = "direct")]
     pub(crate) direct: bool,
 
     /// Do not store the result of this invocation in the cache
     /// (`FR-CACHE-014`).
-    #[arg(long = "no-cache", action = ArgAction::SetTrue)]
+    ///
+    /// It overrides itself, per `FR-CLI-025`.
+    #[arg(
+        long = "no-cache",
+        action = ArgAction::SetTrue,
+        overrides_with = "no_cache"
+    )]
     pub(crate) no_cache: bool,
 }
 

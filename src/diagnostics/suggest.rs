@@ -10,11 +10,15 @@
 //! `project/config.rs`, command and flag names to `cli/` — and this module owns
 //! only the selection made over one of them.
 //!
-//! The distance is **Damerau-Levenshtein**, hand-rolled and with no
-//! dependency, per `OD-20`: a transposition is one error rather than two, so
-//! `ordres` is one step from `orders` where plain Levenshtein reports two. The
-//! choice decides the candidate **set** and not only its order, because
-//! `FR-ERR-019` admits a candidate by its distance. `BR-PERF-004` makes this a
+//! The **measure** is `FR-ERR-039`'s: the **restricted** Damerau-Levenshtein
+//! distance, optimal string alignment, in which a transposition of two adjacent
+//! characters costs one — so `ordres` is one step from `orders` where plain
+//! Levenshtein reports two. The member and not merely the family is named there
+//! because the two forms disagree inside the threshold `FR-ERR-019` fixes, so
+//! the choice decides the candidate **set** and not only its order.
+//!
+//! The **computation** is `OD-20`'s: hand-rolled in this crate, with no
+//! dependency, over a rolling window of three rows. `BR-PERF-004` makes this a
 //! budgeted path — a `66` over `WL-001` compares against 200 names — so the
 //! implementation reuses one scratch buffer across every comparison of a run
 //! and refuses a candidate on its length before measuring it.
@@ -162,6 +166,17 @@ impl<'a> Suggestions<'a> {
 /// `FR-ERR-023`. What survives is measured against `supplied` and kept where it
 /// lies within `MAX_DISTANCE`, ordered by distance and then by name.
 ///
+/// **A candidate equal to `supplied` is refused before it is measured**, over
+/// every population this function serves. `FR-ERR-019` admits a candidate by
+/// its distance and zero is inside the threshold, so nothing in the measure
+/// stops one; what stops it is `FR-ERR-038`, which rejects folding ASCII case
+/// on the ground that it "would place a name differing only in case at distance
+/// **zero** — the measure calling the candidate the supplied name, beneath an
+/// `error` line stating that the supplied name does not exist", which
+/// `FR-ERR-010` reads as the two lines disagreeing. A suggestion that proposes
+/// the very token the invocation was refused for is that disagreement reached
+/// by the other road, and the reader is an agent that may act on it.
+///
 /// The returned names borrow from `candidates`; nothing is copied.
 pub(crate) fn suggestions<'a, C>(
     supplied: &str,
@@ -175,6 +190,12 @@ where
     let mut kept = Suggestions::default();
 
     for candidate in candidates {
+        // FR-ERR-038 and FR-ERR-010: a candidate byte-identical to the supplied
+        // value is not a suggestion, whatever population it was drawn from.
+        if candidate == supplied {
+            continue;
+        }
+
         if !population.admits(candidate) {
             continue;
         }
@@ -278,18 +299,21 @@ impl Matrix {
     /// The Damerau-Levenshtein distance between the supplied name and
     /// `candidate`, or `None` where it exceeds `ceiling`.
     ///
-    /// A transposition of two adjacent characters costs one, which is the
-    /// property `OD-20` chose this distance for: `ordres` is one step from
-    /// `orders`, where plain Levenshtein reports two.
+    /// The measure is `FR-ERR-039`'s: the **restricted** Damerau-Levenshtein
+    /// distance, optimal string alignment, in which the insertion, the
+    /// deletion and the substitution of one character and the transposition of
+    /// two **adjacent** characters each cost one and no substring is edited
+    /// twice. A transposition costing one is the property the measure exists
+    /// for: `ordres` is one step from `orders`, where plain Levenshtein reports
+    /// two.
     ///
-    /// This is the **restricted** form — optimal string alignment — in which no
-    /// substring is edited twice. It parts from the unrestricted form only
-    /// where a further edit falls between the two transposed characters: `ca`
-    /// is three steps from `abc` here and two there, so a candidate of that
-    /// shape is not admitted. The unrestricted form reaches back to an
-    /// arbitrary earlier row and therefore needs the whole matrix, which
-    /// `BR-PERF-004` will not pay for; the property `OD-20` states, and the
-    /// worked example it states it with, hold in both.
+    /// The restricted form parts from the unrestricted one only where a further
+    /// edit falls between the two transposed characters: `ca` is three steps
+    /// from `abc` here and two there, so a candidate of that shape is not
+    /// admitted. `FR-ERR-039` rejects the unrestricted form because it reaches
+    /// back to an arbitrary earlier row and therefore needs the whole matrix,
+    /// which `BR-PERF-004` will not pay for; the three rolling rows below are
+    /// the window `OD-20` holds the computation to.
     ///
     /// Two bounds keep the budget of `BR-PERF-004`. A candidate whose length
     /// differs by more than `ceiling` is refused before the matrix is touched,
@@ -372,6 +396,52 @@ mod tests {
 
     /// The generic hint of `FR-ERR-008`'s own example.
     const GENERIC: &str = "list the available tables with: tpl -d shop schema tables";
+
+    /// The four populations, with a candidate each that this corpus admits.
+    ///
+    /// The list is the classification of [`Population`] and not the eight
+    /// populations of `FR-ERR-021`: what a candidate is measured against is the
+    /// class, so a property asserted once per class is asserted over every
+    /// population the selection serves.
+    const EVERY_POPULATION: [(Population, &str); 4] = [
+        (Population::Commands, "cfg database add"),
+        (Population::Flags, "--pattern"),
+        (Population::ConfigurationKeys, "core.render_timeout"),
+        (Population::Names, "orders"),
+    ];
+
+    #[test]
+    fn fr_err_038_no_suggestion_is_ever_the_token_it_is_offered_for() {
+        // FR-ERR-019 admits a candidate at distance zero, and a candidate equal
+        // to the supplied value is at zero — which is the measure calling the
+        // candidate the supplied name, beneath an `error` line saying the
+        // supplied name does not exist. FR-ERR-038 rejects folding case on
+        // exactly that ground and FR-ERR-010 reads the two lines as one thing,
+        // so the candidate is dropped before it is measured, over every
+        // population.
+        for (population, candidate) in EVERY_POPULATION {
+            assert_eq!(
+                kept(candidate, &[candidate], population),
+                Vec::<&str>::new(),
+                "{population:?} offered the token it was given"
+            );
+
+            // The drop is of that candidate and of nothing else: a neighbour of
+            // the same population is still offered beside it.
+            let neighbour = match population {
+                Population::Commands => "cfg database ad",
+                Population::Flags => "--patern",
+                Population::ConfigurationKeys => "core.render_timeut",
+                Population::Names => "order",
+            };
+
+            assert_eq!(
+                kept(candidate, &[candidate, neighbour], population),
+                vec![neighbour],
+                "{population:?} dropped more than the token it was given"
+            );
+        }
+    }
 
     /// The measured distance between two names, with no ceiling in the way.
     fn measured(supplied: &str, candidate: &str) -> Option<usize> {

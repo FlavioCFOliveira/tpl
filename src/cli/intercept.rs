@@ -14,7 +14,7 @@
 //! | `MissingRequiredArgument` | [`Error::MissingArgument`] | `tpl schema table` |
 //! | `InvalidValue` | [`Error::ValueOutsideEnumeration`], [`Error::SeparateTokenValue`] or [`Error::FlagValueMissing`] | `tpl schema tables --format xml`, `tpl --timeout` |
 //! | `ValueValidation` | [`Error::MalformedValue`] | `tpl --timeout soon` |
-//! | `ArgumentConflict` | [`Error::RepeatedFlag`] or [`Error::MutuallyExclusiveFlags`] | `tpl -q -q version` |
+//! | `ArgumentConflict` | [`Error::RepeatedFlag`] or [`Error::MutuallyExclusiveFlags`] | no invocation of this tree, since `FR-CLI-025`; the arm stays because `ErrorKind` is `#[non_exhaustive]` |
 //! | anything else | [`Error::InvocationRejected`] | a value that is not valid UTF-8 |
 //!
 //! **Every row of the table is `64`**, and so is the last: `ErrorKind` and
@@ -1042,20 +1042,19 @@ mod tests {
     }
 
     #[test]
-    fn fr_cli_014_a_flag_that_carries_no_value_is_refused_on_its_second_occurrence() {
-        // The parser refuses it, since FR-CLI-014 governs a flag that carries a
-        // single value and this one carries none. What this task owns is that
-        // the caller reads the refusal in the four labelled lines and never in
-        // the parser's words.
-        let error = refused(&["tpl", "-q", "-q", "version"], ErrorKind::ArgumentConflict);
-        let lines = four_lines(&error);
-
-        assert_eq!(error.exit_code(), 64);
-        assert_eq!(
-            line(&lines, "error: "),
-            "the flag '--quiet' was given more than once"
-        );
-        assert_eq!(line(&lines, "hint:  "), "give '--quiet' once");
+    fn fr_cli_025_a_flag_that_carries_no_value_reaches_this_module_at_all_no_longer() {
+        // FR-CLI-025 makes the repetition idempotent, so the parser raises no
+        // `ArgumentConflict` for it and there is nothing here to classify. It
+        // used to: `tpl -q -q version` was the one invocation of this tree that
+        // reached the arm, and the `64` it produced is the outcome that
+        // requirement rejects. The arm itself stays, because `ErrorKind` is
+        // `#[non_exhaustive]` and this crate may not assume the set is closed.
+        //
+        // The six flags the requirement names are driven in `cli::rules`; what
+        // is asserted here is that the parser accepts what this module would
+        // otherwise have had to reject.
+        assert!(parse_from(["tpl", "-q", "-q", "version"].into_iter()).is_ok());
+        assert!(parse(["tpl", "-q", "-q", "version"].into_iter()).is_ok());
     }
 
     #[test]
@@ -1102,7 +1101,9 @@ mod tests {
             &["tpl", "schema", "tables", "--pattrn", "x"][..],
             &["tpl", "schema", "tables", "--format", "xml"][..],
             &["tpl", "cfg", "set", "core.database"][..],
-            &["tpl", "-q", "-q", "version"][..],
+            // `tpl -q -q version` stood here until FR-CLI-025 made it an
+            // invocation the parser accepts; it refuses nothing now, so there
+            // is no refusal of it to compare two renderings of.
             &["tpl", "--timeout", "soon", "version"][..],
             &["tpl", "-d", "-x", "schema", "tables"][..],
             &["tpl", "version", "foo"][..],

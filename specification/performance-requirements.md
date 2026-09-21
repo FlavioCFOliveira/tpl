@@ -1,7 +1,7 @@
 ---
 title: Performance Requirements
 status: approved
-last-reviewed: 2026-09-20
+last-reviewed: 2026-09-21
 related: [server-contract.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md]
 ---
 
@@ -61,6 +61,42 @@ would satisfy a budget.
   *Rationale.* This is the N+1 prohibition, stated so that it can be checked
   rather than reviewed. A reader that issues one query per table passes every
   correctness test and fails this one.
+
+  *Observed, 2026-09-21: the comparison this requirement asks for has been
+  made.* Both workloads were loaded into each of the four series of
+  `FR-SRV-015` from `scripts/mariadb/seed-bench.sql`, by the loader that
+  verifies every count those workloads state, and a full read of each was taken
+  with `tpl` as the client, from a fresh project whose cache was empty so that
+  the read reached the server. The statements each server received were counted
+  from the server side, per `NFR-PERF-007`, with the counting window bracketed
+  per read:
+
+  | Series | Statements over `WL-001` | Statements over `WL-003` |
+  |---|---|---|
+  | `10.11` | 11 | 11 |
+  | `11.4` | 11 | 11 |
+  | `11.8` | 11 | 11 |
+  | `12.3` | 11 | 11 |
+
+  **Eleven against eleven, on all four series.** A database of 200 tables and a
+  database of one cost the reader the same eleven catalogue statements, which
+  is this requirement satisfied by measurement rather than by review. The count
+  is the same one the integration suite asserts for a full read of the
+  correctness fixture, whose 23 objects sit between the two, so it is now
+  observed over three databases spanning two orders of magnitude of object
+  count.
+
+  *What this record is not.* It ratifies nothing. No baseline is set, no figure
+  becomes a limit, and no budget of `NFR-PERF-014` is measured by it: a
+  statement count is a requirement of form, and ratification is
+  `NFR-PERF-009` through `NFR-PERF-012` under the gate of `NFR-PERF-020`.
+
+  *The condition the reading was taken under, stated because the fixture can
+  change it.* Eleven is what the reader issues over the catalogue this corpus
+  covers, at the coverage of `catalogue-coverage.md` in force on the date
+  above. What this requirement fixes is the **equality** of the two counts, not
+  the number eleven; a later edition that widens coverage moves both counts
+  together and leaves this requirement satisfied.
 
 - **NFR-PERF-002**: The number of catalogue queries the system issues to read
   one named object SHALL NOT depend on the number of objects in the database.
@@ -122,7 +158,10 @@ would satisfy a budget.
 - **NFR-PERF-005**: Every command named by `FR-PROJ-025` SHALL perform no
   project discovery, SHALL read no configuration file, and SHALL open no
   connection. Those commands are `tpl init`, every form of `help`, and every
-  form of `version`.
+  form of `version`. The discovery clause is what `FR-PROJ-025` states it
+  forbids — no project above the invocation decides its outcome — and the one
+  upward look that requirement licenses, the ancestor `FR-PROJ-016` obliges
+  `tpl init` to warn about, satisfies it rather than excepting from it.
 
   The connection clause SHALL be verified on every target of `NFR-PERF-018`,
   from the server side. The discovery clause and the configuration clause SHALL
@@ -138,6 +177,37 @@ would satisfy a budget.
   and this requirement states the observable consequence, verified from outside
   the process per `NFR-PERF-007`: no `stat` of an ancestor directory, no open
   of `.tpl/.cfg`, no socket.
+
+  *Amended in the thirty-first edition: the first of the third edition's three
+  observables holds for three of the four commands and not for the fourth.*
+  `tpl init` walks its destination's ancestors, because `FR-PROJ-016` requires
+  it to warn that the project it creates shadows one above, so a syscall trace
+  of it records `stat` calls above the destination. The third edition's
+  sentence read over the whole set and was false of one member of it from the
+  first edition onwards; the code was observed doing exactly what
+  `FR-PROJ-016` obliges on 2026-09-18, recorded in that requirement and in
+  `FR-PROJ-025`. The observables now read, per command:
+
+  | Command | `stat` above the working directory or the destination | Open of `.tpl/.cfg` | Socket |
+  |---|---|---|---|
+  | every form of `help` | none | none | none |
+  | every form of `version` | none | none | none |
+  | `tpl init` | the walk of `FR-PROJ-016`, and nothing else | none | none |
+
+  The configuration clause and the connection clause are unchanged and hold for
+  all four alike. Nothing about what `tpl` does changes here: the walk has been
+  required since the first edition, and what changes is that this requirement
+  stops stating an observable that contradicts it.
+
+  *Rejected: keeping the sentence and obliging `tpl init` to satisfy it.* That
+  is withdrawing `FR-PROJ-016`, which `FR-PROJ-025` rejects in its own text
+  because `FR-PROJ-005`'s accepted cost names the warning as one of the three
+  things bounding the removal of the home boundary.
+
+  *Rejected: reading the sentence as a summary that the requirement's own
+  clauses override.* It is the sentence a verification suite is written from —
+  it names three syscalls and the instrument that sees them — and a summary
+  that a test asserts is not a summary.
 
   *Amended in the eleventh edition: the verification names its platforms.* The
   third edition's note said the requirement is verified from outside the
@@ -211,8 +281,32 @@ would satisfy a budget.
 
 - **NFR-PERF-006**: A command that requires no catalogue data SHALL open no
   connection. This covers every `template` subcommand, every `cfg` subcommand
-  except `database test`, `help`, `version`, `init`, and any `tpl render`
-  invoked with `--context`.
+  except `database test`, `help`, `version`, `init`, any `tpl render` invoked
+  with `--context`, and any `tpl render` whose template name does not resolve.
+
+  *Amended in the thirty-first edition: the coverage clause names the
+  invocation the thirtieth edition created.* That edition moved template
+  resolution to the fourth step of `FR-ERR-006`, so a `tpl render` whose
+  template does not exist is refused before an entry is resolved, a connection
+  is opened or a catalogue statement is issued — and it cited the obligation
+  above as one of the two requirements the move satisfies. It checked this
+  clause and left it, on the ground that the clause enumerates and the
+  obligation governs. The ground is sound and the omission is corrected
+  anyway: this clause already reasons per invocation rather than per command —
+  *any `tpl render` invoked with `--context`* is an invocation — so a reader
+  takes it for the set, and the one invocation it was short of is the one the
+  edition before it acted on. An enumeration short by exactly the case the
+  previous edition decided from it is the enumeration worth lengthening.
+
+  Nothing about `tpl` changes: the obligation is the same obligation, the
+  invocation already satisfies it, and `FR-ERR-006` is untouched.
+
+  *Rejected: leaving the clause as the thirtieth edition left it.* Its ground
+  — the obligation governs and the clause only illustrates — is true and is
+  not what a reader does with a list of five. Also rejected: replacing the
+  clause with the obligation alone, dropping the list. The list is what tells
+  an implementer which invocations were considered, and dropping it to avoid
+  having to extend it would lose the only record of that.
 
 - **NFR-PERF-007**: Each requirement of this section SHALL be verified by an
   observation made outside the process, and SHALL NOT be verified by reading
@@ -226,16 +320,40 @@ would satisfy a budget.
   | A syscall trace of the process | The files the process opens | the two Linux targets |
   | A differential run | The observable outcome of the invocation — its exit code, the bytes on stdout, and the artefacts it leaves on disk — under an arrangement in which the operation, had it been performed, would have changed that outcome | all four |
 
-  A **differential run** is an invocation made in a state that the operation
-  under test would not have survived, compared against the same invocation made
-  in a state that has nothing for it to find. For the discovery clause of
+  A **differential run** is defined in
+  [glossary.md](glossary.md#differential-run). For the discovery clause of
   `NFR-PERF-005` the arrangement is `tpl init` invoked inside a subdirectory of
   an existing project, which per `FR-PROJ-012` and `FR-PROJ-013` creates a
-  project in that subdirectory and does not report the ancestor. For the
-  configuration clause it is any command of `FR-PROJ-025` invoked inside a
-  project whose `.tpl/.cfg` would fail the validation of `FR-CONF-034`,
-  asserting exit `0` and stdout byte-identical to the same command invoked
-  outside any project.
+  project in that subdirectory, asserting exit `0`, stdout empty per
+  `FR-PROJ-022`, and a `.tpl` carrying the five artefacts of `FR-PROJ-017` at
+  the subdirectory and not at the ancestor. For the configuration clause it is
+  any command of `FR-PROJ-025` invoked inside a project whose `.tpl/.cfg` would
+  fail the validation of `FR-CONF-034`, asserting exit `0` and stdout
+  byte-identical to the same command invoked outside any project.
+
+  *Amended in the thirty-first edition: the first arrangement asserted
+  something this instrument does not read, and something a requirement in force
+  forbids.* It read that the arrangement *creates a project in that
+  subdirectory and does not report the ancestor*. The second half is wrong
+  twice over. `FR-PROJ-016` **requires** the ancestor to be reported, so the
+  arrangement asserted the absence of a warning this corpus obliges; and the
+  report goes to stderr, which is not among the three observables the
+  differential run reads — its row above names the exit code, the bytes on
+  stdout, and the artefacts left on disk. The clause is replaced by what the
+  arrangement does assert, in those three terms, and the differential run is
+  unweakened by the change: a `tpl init` that let an ancestor decide where the
+  project goes would create nothing at the subdirectory, or would refuse with
+  `73` under `FR-PROJ-014`, and either outcome fails the assertion.
+
+  *Amended in the thirty-second edition: the definition moves to the glossary
+  and this requirement cites it.* The eleventh edition wrote it here, and the
+  thirty-first followed the shape for *in flight*, which left the corpus with
+  two conventions for where a defined term lives. The glossary governs; the
+  decision, and the alternative rejected with it, are at the head of
+  [glossary.md](glossary.md). **Nothing about the instrument changes.** The
+  three observables stay in the table row above, which is what this instrument
+  observes rather than what the term means, and the two arrangements stay
+  here, because an arrangement is an application of the term and not the term.
 
   On a target where both the third instrument and the fourth are available, the
   third SHALL be what establishes a clause stated as a syscall, and the fourth
@@ -284,6 +402,39 @@ would satisfy a budget.
   routines, and comments on 60% of the tables. It SHALL be realised by a
   dedicated fixture, `scripts/mariadb/seed-bench.sql`.
 
+  **The index count counts the primary key, and counts a composite index
+  once.** The 600 are 200 primary keys, 200 secondary indexes, 20 composite
+  indexes and the 180 that carry the foreign keys. `WL-003` states the same
+  rule over its own count, so that the two workloads are counted alike, which
+  is what makes the comparison `NFR-PERF-001` asks for a comparison of two
+  databases and not of two counting conventions.
+
+  *Stated in the thirty-third edition, because the fixture had to choose and
+  this file had not.* The number stood alone, and a count of indexes admits
+  two readings that differ by a third of it. The reading written above is the
+  one the model already obliges: `FR-CAT-043` states that the primary key **is
+  also an index**, that the catalogue reports it as one, and that the index
+  named `PRIMARY` appears in the table's index collection. A workload's index
+  count is a count of what a reader of that database presents, so excluding
+  `PRIMARY` would count something this corpus does not carry. The second
+  clause follows from the same requirement: `FR-CAT-042` folds the catalogue's
+  one row per index column into one index carrying a column list, so a
+  composite index is one index and never one per column.
+
+  *Rejected: `PRIMARY` not counted.* It was the live alternative, because a
+  reader may take an index count to mean the keys a DDL declares beside the
+  primary key. It is rejected on three grounds. It contradicts `FR-CAT-043`,
+  which puts `PRIMARY` in the collection being counted. It moves both numbers
+  rather than settling one — under it the 600 would name a database of 800
+  indexes and `WL-003`'s three a database of four — so adopting it is a change
+  to the shape of two workloads that `NFR-PERF-014` measures nine budgets
+  against; `BR-PERF-005` records what that costs, having found that a figure
+  cannot be carried across a change to the quantity it measured. And it buys
+  nothing: the quantity `NFR-PERF-001` compares is a count of **statements**,
+  which no index convention moves, so the only thing the alternative would
+  change is whether the fixture can verify that it realises what this file
+  names.
+
 - **WL-002** — the verification scalar. The compact `tpl schema dump` of
   `WL-001` SHALL be N bytes, within ±2%. N SHALL be unvalued until it is
   measured, and SHALL then be recorded in `BENCHMARKS.md` under the gate of
@@ -305,7 +456,9 @@ would satisfy a budget.
   schedules.
 
 - **WL-003** — the small workload. A database of one table, 12 columns, and 3
-  indexes.
+  indexes. **The three count the primary key**, on the rule `WL-001` states and
+  for the grounds stated there: they are `PRIMARY`, one unique key and one
+  composite key, and the composite key is one index and not one per column.
 
   *Rationale.* This is the common path. Iteration over objects is the caller's
   job under `BR-RND-002`, so the invocation a caller repeats is a read of one
@@ -459,6 +612,51 @@ would satisfy a budget.
   unconstrained, because `NFR-PERF-017` still holds it to its own first
   recorded baseline.
 
+  *Checked in the thirty-first edition against a failure on a live database,
+  and no row is added.* The failure-path row runs over `WL-001` with
+  `Server: no`, so nothing in this set measures a `64` or a `66` taken against
+  a server, and the question put was whether the set gains a tenth budget that
+  does. It does not. `BR-PERF-004` states what this row exists to measure — the
+  edit distance computed against every existing name, which over `WL-001` is
+  200 names for a table and more for a template — and that quantity needs no
+  server. What a live-database row would add is the catalogue read the
+  invocation performs before it fails, and that is two quantities this set
+  already carries: the statement count is a requirement of form in
+  `NFR-PERF-001` and `NFR-PERF-002`, and the wall time is the
+  `tpl schema dump` row over the same workload. A tenth budget would measure
+  their sum and attribute nothing.
+
+  The one failure this set could once have been asked for, and can no longer,
+  is a `tpl render` whose template does not exist: the thirtieth edition moved
+  template resolution to the fourth step of `FR-ERR-006`, so that invocation
+  opens no connection at all and is measured by the row already here.
+
+  *Rejected: a tenth row, `The failure path against a live server`, over
+  `WL-001` with `Server: yes`.* `NFR-PERF-014` fixes the set at nine "and no
+  others", so adding one is a change to the set and not an addition to a list,
+  and `BR-PERF-003` counts the cost of the set against `NFR-PERF-018`'s four
+  targets. It would also be the sixth budget needing the fixture, where
+  `BR-PERF-007` counts five, and the fourth needing a server as well.
+  `BR-PERF-001` prefers a requirement of form where both would catch
+  the same defect, and here the form exists and is stronger than the figure
+  would be.
+
+  *Corrected in the thirty-third edition, on both of its counts.* The clause
+  read *the sixth budget needing a server, where `BR-PERF-007` already names
+  five as unmeasurable until the fixture is complete*. Three rows of the table
+  above carry `Server: yes`, so a tenth would be the fourth needing a server
+  and not the sixth; the count of five is `BR-PERF-007`'s count of the budgets
+  needing the **fixture**, which is what a `WL-001` row joins. And the second
+  half was made false by the fixture being completed, which is the same edition
+  restating `BR-PERF-007`. The rejection is unchanged and so is its arithmetic:
+  a tenth row is still a change to a closed set, and the ground `BR-PERF-001`
+  supplies is still the one that decides it.
+
+  *Rejected: moving the failure-path row to `Server: yes`.* It would remove the
+  one measurement of the suggestion path that can run with no server, which is
+  the half of it `BR-PERF-007` says is measurable as soon as the fixture has
+  been loaded once.
+
   *Amended in the fifth edition.* The last column previously cited an open
   question per row, `OQ-051` through `OQ-059`. Those ten entries are closed:
   what they held open was a **number**, and this requirement now carries a
@@ -571,16 +769,33 @@ would satisfy a budget.
   normative budget of `NFR-PERF-015`, whose ratified target is stated in both
   places deliberately.
 
-- **BR-PERF-007**: Five of the nine budgets cannot be measured, and neither
-  `WL-001` nor `WL-003` can be realised, until the fixture is complete.
-  `scripts/mariadb/` now exists, with its container definition, `setup.sql`
-  and `seed.sql`, buildable at each of the four series of `FR-SRV-015`; the
-  `seed-bench.sql` this file requires is still absent, and `WL-001` is what
-  needs it.
+- **BR-PERF-007**: Five of the nine budgets need the fixture and four do not,
+  and the fixture is complete. `scripts/mariadb/` carries its container
+  definition, `setup.sql`, `seed.sql` and `seed-bench.sql`, buildable and
+  loadable at each of the four series of `FR-SRV-015`, and `seed-bench.sql`
+  realises both `WL-001` and `WL-003`. **No budget of `NFR-PERF-014` is
+  blocked by the fixture.** What now stands between a budget and a figure is a
+  measurement and the gate of `NFR-PERF-020`, and for three of the nine a
+  running server as well, per the `Server` column of that requirement.
 
-  *Amended in the sixth edition.* The whole directory was absent when this rule
-  was written. Three of its four files now exist, so the blocker is narrower
-  and is named precisely rather than as the absence of everything.
+  *Restated in the thirty-third edition, because the condition it named has
+  been met.* The rule read *the `seed-bench.sql` this file requires is still
+  absent, and `WL-001` is what needs it*, and that file exists: it loads on
+  each of the four series and produces both workloads at every count this file
+  states for them. The rule keeps its identifier and its arithmetic — five
+  budgets needed the fixture, four did not, and which are which is what its
+  citations read it for — and states the condition that now holds instead of
+  the one that has passed.
+
+  *Rejected: withdrawing the rule.* It was the live alternative, because a rule
+  whose blocker is gone can look spent. It is rejected because the distinction
+  the rule draws is not the blocker: which budgets need a fixture, which need a
+  server as well, and which need neither is a permanent property of the budget
+  set, read by `NFR-PERF-014` twice in its own rejections and by two entries of
+  [upstream-divergences.md](upstream-divergences.md). Withdrawing it would
+  retire an identifier under the scheme of the
+  [README](README.md#identifier-scheme) and leave every one of those citations
+  resolving to a note about a rule instead of to a rule.
 
   The four that need no fixture and no server are the four whose workload is
   `none` in `NFR-PERF-014`: `tpl --version`, `tpl --help`, startup to the first
@@ -589,7 +804,11 @@ would satisfy a budget.
   carry a figure without anything being stood up. Two further budgets need the
   fixture but no server — the cache-served read over `WL-003`, which
   `NFR-PERF-013` requires to run over the cache, and the failure path — so they
-  can be measured once the fixture has been loaded once.
+  are measurable now that the fixture has been loaded once.
+
+  *Amended in the sixth edition.* The whole directory was absent when this rule
+  was written. Three of its four files then existed, so the blocker was
+  narrowed and named precisely rather than as the absence of everything.
 
   *Corrected in the fifth edition.* The rule previously said none of the
   budgets can be measured. That over-claimed: it made the whole set look
@@ -612,8 +831,10 @@ would satisfy a budget.
   `NFR-PERF-018` makes reachable; and `FR-ERR-031`, which rejected a
   verification mechanism on the ground `NFR-PERF-005` rejects one on.
 - [project-and-discovery.md](project-and-discovery.md) — `FR-PROJ-025`, the
-  commands `NFR-PERF-005` constrains, and `FR-PROJ-012` and `FR-PROJ-013`,
-  which make the differential run of `NFR-PERF-007` possible for `tpl init`.
+  commands `NFR-PERF-005` constrains and the clause that says what its
+  discovery clause forbids; `FR-PROJ-012` and `FR-PROJ-013`, which make the
+  differential run of `NFR-PERF-007` possible for `tpl init`; and
+  `FR-PROJ-016`, the one upward look any command of that set makes.
 
 ## Open questions
 
@@ -622,5 +843,5 @@ under [Closed](open-questions.md#closed): each held a number open, and
 `NFR-PERF-014`, `NFR-PERF-019` and `NFR-PERF-020` replace the ten questions
 with one protocol that carries a provisional figure or a stated blank for every
 budget and says what turns either into a limit. What remains is measurement
-work, not an open question — `BR-PERF-007` says which part of it is blocked and
-which is not.
+work, not an open question — `BR-PERF-007` says what the fixture no longer
+blocks and what a budget still needs.

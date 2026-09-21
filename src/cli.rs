@@ -34,7 +34,7 @@
 //! specification module that owns the command. A flag that more than one node
 //! declares is written once and flattened by each of them — the four of
 //! `FR-GLOB-021` and the three object flags in [`local`], `--pattern` in
-//! [`schema`], the nine entry flags in [`cfg`] — so that one row of a
+//! [`schema`], the nine entry flags in [`mod@cfg`] — so that one row of a
 //! requirement's table remains one declaration in the tree. Nothing is global
 //! but the seven, per `FR-GLOB-001`, and nothing carries a short form but their
 //! five, per `FR-GLOB-024`.

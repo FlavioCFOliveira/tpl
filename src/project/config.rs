@@ -39,6 +39,7 @@ pub(crate) mod keys;
 pub(crate) mod redact;
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::io;
 use std::num::NonZeroU64;
 use std::ops::Range;
@@ -50,6 +51,7 @@ use toml::de::{DeTable, DeValue};
 use crate::deadline::Seconds;
 use crate::diagnostics::suggest::{self, Population};
 use crate::error::{Error, Position};
+use crate::project::secret::Redacted;
 
 use entry::{Combination, Entry, Located, PasswordCommand, PortSetting, TlsMode};
 use keys::{CoreKey, EntryKey, Key, ValueType};
@@ -101,7 +103,17 @@ impl Core {
 }
 
 /// One `.tpl/.cfg`, read, validated, and not resolved.
-#[derive(Debug, Clone)]
+///
+/// Its [`Debug`](fmt::Debug) is hand-written and its
+/// [`Configuration::text`] field is the reason. That field is the file's own
+/// bytes, credential included, so a derived implementation printed the password
+/// **twice** — once raw and once through the entry — beside a
+/// [`Configuration::redactions`] list that describes the redaction without
+/// applying it. `FR-ERR-013` and `BR-ERR-003` bar a credential from every
+/// message, and the way to hold a prohibition on printing is to deny the value
+/// a printing implementation, exactly as [`Secret`](crate::project::secret)
+/// does for the credential it owns.
+#[derive(Clone)]
 pub(crate) struct Configuration {
     /// The file it was read from, which every condition it raises names.
     file: PathBuf,
@@ -120,25 +132,31 @@ pub(crate) struct Configuration {
     redactions: Vec<redact::Redaction>,
 }
 
+impl fmt::Debug for Configuration {
+    /// Writes every member but the file's own bytes, which are replaced by
+    /// [`Redacted`].
+    ///
+    /// The span logic of [`redact`] reads the raw text and is the only thing
+    /// that does: it is a free function taking `&str`, called by the reader
+    /// with the bytes it has just validated and by
+    /// [`Configuration::printed`] with this field, and neither route hands the
+    /// value to a caller. There is no accessor for it, which is what keeps the
+    /// set of things that can reach it at those two.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Configuration")
+            .field("file", &self.file)
+            .field("text", &Redacted)
+            .field("core", &self.core)
+            .field("entries", &self.entries)
+            .field("redactions", &self.redactions)
+            .finish()
+    }
+}
+
 impl Configuration {
     /// The file this document was read from.
     pub(crate) fn file(&self) -> &Path {
         &self.file
-    }
-
-    /// The file's own bytes, exactly as they were read.
-    ///
-    /// Nothing prints this. `FR-CFG-013` prints the file literally **with
-    /// passwords redacted**, which is [`Configuration::printed`]; the
-    /// unredacted text is what the redaction is spliced into.
-    #[allow(
-        dead_code,
-        reason = "the unredacted text has no printer by design; it is kept because the redaction \
-                  of FR-CFG-021 is spliced into it, and a test asserts the two differ where the \
-                  file carries a credential"
-    )]
-    pub(crate) fn text(&self) -> &str {
-        &self.text
     }
 
     /// The file as `FR-CFG-013` prints it: literally, with passwords redacted
@@ -747,6 +765,43 @@ mod tests {
 
     fn refused(text: &str) -> Error {
         read(text, &file()).expect_err("the document is refused")
+    }
+
+    /// A `.tpl/.cfg` carrying `text`, loaded from a scratch directory.
+    fn loaded(scratch: &crate::project::scratch::Scratch, text: &str) -> Configuration {
+        super::load(&scratch.file(".cfg", text)).expect("the document is valid")
+    }
+
+    #[test]
+    fn fr_err_013_the_debug_of_a_configuration_carries_none_of_the_file_it_read() {
+        // FR-ERR-013 and BR-ERR-003 bar a credential from every message. The
+        // `text` field is the file's own bytes, so a derived Debug printed the
+        // password twice — once raw and once through the entry — beside a
+        // `redactions` list that describes the redaction without applying it,
+        // and `cli::source::Opened` derives Debug on a struct holding this one.
+        //
+        // This fails the moment the raw text becomes printable again, by a
+        // derive restored here or by an accessor that hands it out.
+        let scratch = crate::project::scratch::Scratch::new();
+        let document = loaded(
+            &scratch,
+            "[database.shop]\nhost = \"db\"\nuser = \"alice\"\npassword = \"hunter2\"\n",
+        );
+
+        for rendered in [format!("{document:?}"), format!("{document:#?}")] {
+            assert!(!rendered.contains("hunter2"), "{rendered}");
+            // The shape survives: what a reader of this output wants is which
+            // keys the file set, and that is not a secret.
+            assert!(rendered.contains("shop"), "{rendered}");
+            assert!(rendered.contains("***"), "{rendered}");
+        }
+
+        // FR-CFG-013 still prints the file literally with the password
+        // redacted, which is the one printer the raw text has.
+        let printed = document.printed();
+        assert!(!printed.contains("hunter2"), "{printed}");
+        assert!(printed.contains("***"), "{printed}");
+        assert!(printed.contains("user = \"alice\""), "{printed}");
     }
 
     #[test]

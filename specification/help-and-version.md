@@ -1,7 +1,7 @@
 ---
 title: Help and Version
 status: approved
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-21
 related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md]
 ---
 
@@ -121,7 +121,87 @@ alongside the command it documents.
 
 - **FR-HELP-013**: For every flag and argument, help SHALL state the type of its
   value, its default, whether it is required, its permitted values where they
-  are enumerated, whether it is repeatable, and any mutual exclusion.
+  are enumerated, whether it is repeatable, and any mutual exclusion. Those six
+  facts describe the **value**; what the flag or the argument does is
+  `FR-HELP-030`, and both are stated.
+
+  *Amended in the thirty-first edition.* The last sentence is a
+  cross-reference and not a seventh fact. This list was read as the whole of
+  what help states about a flag, and a renderer derived from it emitted
+  `-d, --database <NAME>` over `Type: string. No default. Optional. Not
+  repeatable.` — six facts, every one correct, and nothing saying that the
+  flag selects a `[database.<name>]` entry of `.tpl/.cfg`. `FR-HELP-030` adds
+  the statement of purpose; nothing about these six changes.
+
+- **FR-HELP-030**: For every flag and every positional argument, help SHALL
+  state in one sentence what supplying it does — the object it acts on and the
+  effect it has — beside the six facts of `FR-HELP-013`. The sentence SHALL
+  name a thing this specification fixes rather than restating the flag's own
+  spelling: for `-d/--database`, that it selects the `[database.<name>]` entry
+  of `.tpl/.cfg` used by the invocation, per `FR-GLOB-004`.
+
+  The text SHALL live in the typed table of `FR-HELP-022`, indexed by command
+  path for a local flag or an argument and by flag name for a global flag,
+  which `FR-GLOB-003` lists once at the root. That table feeds both channels,
+  so the sentence SHALL appear in the `OPTIONS` and `ARGUMENTS` sections of the
+  text help and in the `options` array of `FR-HELP-020`, the `arguments` array
+  of `FR-HELP-019`, and `data.global_flags` of `FR-HELP-018`.
+
+  It SHALL apply to the seven global flags of `FR-GLOB-001`, stated once in the
+  `OPTIONS` section of `tpl --help` and repeated in no other node's, per
+  `FR-GLOB-003`.
+
+  It is **already satisfied** for the children a node lists inside `ARGUMENTS`,
+  per `FR-HELP-008`: the one-line summary beside each child — `tables   List
+  tables` — is this sentence, and nothing about that listing changes.
+
+  *Rationale.* Help is one of only three channels the primary consumer has, and
+  `FR-HELP-014` forbids sending a reader anywhere else for the rest. The six
+  facts of `FR-HELP-013` are true of `-d/--database` and of
+  `--pattern <PATTERN>` in the same words, so an agent choosing between two
+  flags learns from them the shape of a value and nothing about which flag to
+  write. A statement of purpose is the one fact that distinguishes them, and it
+  is the fact a caller came to the help for.
+
+  *Why the typed table and not the declarations.* The flag declarations cannot
+  carry the text. Their doc comments name requirement identifiers in backticks,
+  and `FR-HELP-014` bars help from referring to any document outside the help
+  system — a `SEE ALSO` may name a `tpl` command and nothing else — so a
+  renderer that lifted a doc comment into help would publish
+  `FR-GLOB-004`-shaped citations to a caller who cannot resolve them. The
+  typed table already exists for exactly this reason: `FR-HELP-022` holds
+  `examples` and `exit_codes` there because help text is not a place to derive
+  anything from, and a purpose sentence belongs beside them.
+
+  *Weighed against `BR-HELP-002` and the context window.* The cost is one line
+  per flag, at the one place that flag is declared. The seven global flags cost
+  seven lines in `tpl --help` and nothing anywhere else, because `FR-GLOB-003`
+  already forbids repeating them; a local flag costs one line in the single
+  command that declares it. That is not the cost `FR-HELP-007`'s rationale
+  refuses — a simple command's help growing from eight lines to eighteen for
+  four empty section headings — and it does not repeat anything at a level
+  where it has already been said, which is what `BR-HELP-002` bars. A caller
+  who has to run a second invocation, or guess, because the first help did not
+  say what a flag does spends more context than the line would have cost.
+
+  *Rejected: leaving `FR-HELP-013` as the whole of it.* It is what produced the
+  renderer that satisfies the requirement and tells the caller nothing, and the
+  defect is invisible to every check this corpus can run on itself: the
+  requirement was met.
+
+  *Rejected: putting the purpose in the `DESCRIPTION` section as prose.* It is
+  not addressable per flag, so the JSON document of `FR-HELP-016` could not
+  carry it in `options` or `global_flags`, and the agent that loads the whole
+  surface in one call — the caller that document exists for — would have to
+  parse a paragraph to recover it. It would also repeat the seven global flags
+  in every node's `DESCRIPTION`, which is the multiplication `FR-GLOB-003`
+  exists to prevent.
+
+  *Rejected: a sentence for a positional argument alone, leaving flags to the
+  six facts.* An argument and a flag are the same problem — `<PATTERN>` says as
+  little as `--pattern` — and `FR-HELP-008` makes a subcommand formally a
+  positional argument, so the two populations are not separable in the first
+  place.
 
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help
@@ -256,9 +336,18 @@ alongside the command it documents.
   truth, and the test comparing them would end up performing the introspection
   anyway.
 
-- **FR-HELP-022**: `examples` and `exit_codes` SHALL come from a typed table
-  indexed by command path, which feeds both the text help and the JSON document.
-  The system SHALL NOT derive either by parsing help text.
+- **FR-HELP-022**: `examples`, `exit_codes` and the statement of purpose of
+  `FR-HELP-030` SHALL come from a typed table indexed by command path, which
+  feeds both the text help and the JSON document. The system SHALL NOT derive
+  any of the three by parsing help text.
+
+  *Amended in the thirty-first edition.* The purpose sentence joins the two
+  this requirement already held, and for the reason they are held here: it is
+  written once and read by two channels, and neither channel may be derived
+  from the other. `FR-HELP-030` states what the sentence must cover and where
+  each kind of entry is indexed — by command path for a local flag or an
+  argument, and by flag name for a global flag, which `FR-GLOB-003` lists once
+  at the root and which therefore has no command path of its own.
 
 - **FR-HELP-023**: The document SHALL preserve declaration order throughout, and
   the emitting path SHALL NOT use any unordered map.

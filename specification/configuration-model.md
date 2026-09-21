@@ -20,8 +20,9 @@ obtained without being written to disk.
 In scope: the `.cfg` key space, value types and defaults, the strictness with
 which the file is read, entry shape, what an entry must describe for a
 connection and a read to be possible, DSN grammar, the five TLS modes and the
-behaviour by which they are distinguished, timeouts, `${VAR}` expansion, and
-`password_command` execution and its failure modes.
+behaviour by which they are distinguished, the trust material the two
+verifying modes read and how the directory holding it is resolved, timeouts,
+`${VAR}` expansion, and `password_command` execution and its failure modes.
 
 Out of scope: the commands that read and write the file, which belong to
 [cfg-commands.md](cfg-commands.md); and the ownership and permission checks
@@ -418,7 +419,146 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   by default and needs `tls = "required"` or a `ca_file`.
 
 - **FR-CONF-014**: `ca_file` and `ca_path` SHALL supply the trust material used
-  by `verify-ca` and `verify-identity`.
+  by `verify-ca` and `verify-identity`. The system SHALL resolve each entry of
+  the directory `ca_path` names **through symbolic links**: an entry that
+  resolves to a regular file SHALL be read at its target and SHALL contribute
+  to the trust material, and an entry that resolves to anything else SHALL be
+  skipped, a directory being skipped rather than descended into. An entry the
+  system cannot resolve, or cannot read at its target, SHALL be reported
+  against that entry's own path in the directory and SHALL NOT be passed over,
+  per the `74` row of `FR-ERR-034`. What becomes of a directory that yields no
+  regular file at all is `FR-CONF-044`.
+
+  *Amended in the thirty-second edition: the key says whether it follows a
+  link, because the convention it exists to serve is a directory of links.*
+  The requirement had one clause and settled neither question a reader of it
+  has to answer. A `CApath` directory, in the sense OpenSSL and MariaDB give
+  the word, is conventionally a set of hash-named **symbolic links** created by
+  `c_rehash` or `openssl rehash` beside the certificates they point at. A
+  `ca_path` that skipped links would take nothing from such a directory and
+  would say nothing about having taken nothing — and that is the arrangement
+  the key is most likely to be pointed at.
+
+  *Weighed against what this corpus already says about links, and the two are
+  not one rule.* This corpus states links twice and in opposite directions,
+  each on the ground of what a link would let somebody do. `FR-TMPL-024` and
+  `FR-SEC-017` **refuse** a symbolic link inside `.tpl/templates/`: that
+  directory is versioned and shared, its contents are printed by
+  `tpl template show`, and `FR-TMPL-026` names the attack in its own
+  rationale — `ln -s ../.cfg .tpl/templates/leak.jinja` must not become a
+  credential dump. `FR-PROJ-009` and `FR-SEC-015` **follow** a link: the `.tpl`
+  path is canonicalised so that the ownership and mode checks of `FR-PROJ-010`
+  and `FR-PROJ-011` land on the real file rather than on a pointer to it, and
+  following is what makes the check sound. `ca_path` has the second shape and
+  not the first, on three grounds that hold together. The directory is named by
+  `.tpl/.cfg`, which those same two requirements oblige to be the invoking
+  user's alone at mode `0600`, so a link inside it is one the caller put there
+  or pointed at. What is read is certificates, which are public by
+  construction and are the one kind of material in this file that is not a
+  secret. And no byte of the bundle is ever printed: it is handed to the TLS
+  layer, and `FR-ERR-013` and `FR-SEC-005` keep it out of every stream, so
+  there is no disclosure for a link to arrange. Following therefore widens
+  nothing this corpus protects, and skipping costs the key its own convention.
+
+  *Rejected: skipping a symbolic link, which is the behaviour built.* `trust`,
+  in `src/mariadb/connect.rs`, selects directory entries on
+  `DirEntry::file_type`, which does not traverse a link, so a hash-named
+  `CApath` yields an empty bundle. It is rejected because its outcome is the
+  worst available: not a refusal and not a warning, but a
+  `verify-ca` or `verify-identity` connection attempted on the public roots
+  alone, which then fails — where it fails at all — with a transport error
+  naming a certificate and never naming the key that was meant to admit it.
+  `FR-CONF-039` is why it may not fail at all: supplied material is additional
+  to the bundled roots, so a publicly signed server validates whether or not
+  the pinned authority was ever loaded. The two questions are answered together
+  because either answer alone leaves the arrangement half-diagnosed.
+
+  *Rejected: passing over an entry that cannot be resolved.* A dangling link in
+  a `CApath` is what a removed certificate leaves behind, and it is skipped in
+  silence today because `DirEntry::file_type` reads the link itself and never
+  asks what it points at. Under this requirement the resolution is attempted
+  and its failure is reported. The ground is the one `BR-CONF-004` states for
+  the whole file: a reader that accepts what it does not understand is guessing
+  at which authority the connection trusts. A skipped dangling link is a trust
+  anchor the operator believes is loaded and is not, which is the failure this
+  amendment exists to make visible, arriving one entry at a time instead of all
+  at once.
+
+  *The order is untouched, and so is `NFR-DET-001`.* Entries are sorted into
+  ascending path order before any of them is read, over the names the directory
+  holds and never over the targets they resolve to, so one configuration
+  produces one bundle on every run and on every host exactly as before. Two
+  links resolving to one certificate contribute it twice; no requirement of
+  this corpus forbids that, and none is amended here to forbid it.
+
+  *Provenance of the convention, stated because it is the one input this
+  amendment did not verify.* That a `CApath` directory is conventionally a set
+  of hash-named symbolic links is taken as given from the task that raised the
+  question. It is not cited to a published authority, because no document in
+  this repository states it and the project's scope rule admits no reading
+  outside the repository; `ADR-002` records only that no driver method takes a
+  directory, which is why `tpl` reads it. **The decision does not rest on the
+  convention alone**, and stands if it is ever shown to be wrong: the weighing
+  above turns on there being no disclosure for a link to arrange, which makes
+  following the more useful behaviour for any directory a caller curates, and
+  `FR-CONF-044` makes the empty outcome visible either way. What the convention
+  adds is the reason the defect is likely rather than possible. Verifying it
+  against OpenSSL's documentation for `c_rehash` and `openssl rehash`, and
+  against MariaDB's for `ssl-capath`, would make it a provenance of the third
+  kind and is one line of work for whoever may read outside this repository.
+
+- **FR-CONF-044**: IF an entry declares `ca_path` under `verify-ca` or
+  `verify-identity` and no entry of the directory it names resolves to a
+  regular file, THEN the system SHALL exit `78`, and the `cause` SHALL name the
+  directory as the entry declared it and SHALL state that it yielded no
+  certificate file.
+
+  *Rationale.* This is the answer to the second of `FR-CONF-014`'s two
+  questions, and it is what makes the first one's failure visible. A declared
+  key that contributes nothing is a fault in `.tpl/.cfg` and nowhere else: the
+  path is wrong, or the directory is empty, or its contents are of a kind this
+  key does not take. `78` puts it with `FR-CONF-034`, `FR-CONF-035` and the
+  three `password_command` refusals, and the remedy `FR-ERR-001` gives that
+  code — fix `.tpl/.cfg` — is the remedy here. The condition is decided while
+  the trust material is assembled, before any connection is opened, so it costs
+  no round trip and reaches the caller before the server is contacted.
+
+  *The condition is exactly stated, and no wider.* It is *no entry resolves to
+  a regular file*, which is decidable before a byte is read. A regular file
+  that is empty, or that holds no PEM block, is **not** this condition: `tpl`
+  does not parse the bytes it assembles, `FR-CONF-014` takes them as they are,
+  and a requirement that refused on their content would oblige this corpus to
+  fix a certificate format it names nowhere. The condition is also per key: a
+  `ca_path` that yields nothing is refused whether or not `ca_file` is declared
+  beside it, because the operator asked for both and only one was honoured.
+
+  *Rejected: a warning on stderr, and it was the close alternative.* It refuses
+  nothing, so a connection that would have succeeded still succeeds, which is
+  its whole appeal. It was rejected because
+  stderr is not contract — the [README](README.md#writing-conventions) and
+  `NFR-DET-001` keep the guarantee on stdout — a warning is lowered out of sight
+  by `-q` under `FR-GLOB-015`, and a caller redirecting stderr in a build log
+  is exactly the caller this condition exists for. The corpus's own posture on
+  a `.tpl/.cfg` fault is refusal and not repair, per `BR-CONF-004`, and a key
+  that does nothing is not a lesser fault than a key that is misspelled, which
+  `FR-CONF-034` refuses outright.
+
+  *Rejected: `69` (`EX_UNAVAILABLE`), and `74` (`EX_IOERR`).* `69` is what
+  `FR-CONF-038` gives a verifying mode against a server that offers no TLS,
+  which is a fact about the server discovered on the wire; this is decided from
+  the project before anything is contacted, and reporting it as `69` would send
+  a caller to look at a server that is not at fault. `74` is an I/O failure, and
+  nothing failed: the directory was read successfully and is empty of what the
+  key promises. An entry that could not be read **is** `74`, and
+  `FR-CONF-014` states that separately.
+
+  *Neither mode that ignores the key is reached.* `disabled`, `preferred` and
+  `required` never read `ca_file` or `ca_path` — `FR-CONF-014` names the two
+  modes the material serves, and `FR-CONF-038` records `required` ignoring
+  supplied trust material as one of the three controls that separate the
+  modes — so a `ca_path` declared beside one of them is stored, printed and
+  validated as a path and is never opened. Refusing there would turn an
+  unread key into a failure of a mode that would never have looked at it.
 
 - **FR-CONF-036**: The five modes of `FR-CONF-013` SHALL be normative over the
   database driver. A driver that cannot express all five distinctly SHALL be
@@ -711,8 +851,70 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 
   *Accepted cost.* A `password_command` that fails and explains itself on
   stderr explains itself to nobody. The diagnosis a caller receives is the
-  exit status of the child, per `FR-CONF-033`, and the remedy stated in the
-  `hint` is to run the command directly, where its own stderr is visible.
+  outcome of the child — its exit status under `FR-CONF-033`, or the condition
+  of `FR-CONF-042` or `FR-CONF-043` where it returned none — and the remedy
+  stated in the `hint` is to run the command directly, where its own stderr is
+  visible.
+
+  *Amended in the thirty-second edition: the clause named one outcome of
+  three.* It read *the exit status of the child, per `FR-CONF-033`*, which was
+  the whole of what this corpus governed when it was written and is now one of
+  three. Nothing about this requirement changes; the note names the two
+  conditions the same edition added.
+
+- **FR-CONF-042**: IF the system obtains no exit status from
+  `password_command` — because the child could not be started, or because the
+  system could not read the status of a child it had started — THEN the system
+  SHALL exit `78`, and the `cause` SHALL name the command as stored, SHALL say
+  which of the two occurred, and SHALL name what the operating system returned.
+
+  *Why this is a condition of its own.* `FR-CONF-033` routes a child that
+  **exits** non-zero, and its `cause` is obliged to name the exit status the
+  child returned. A child that never ran, or whose outcome the system cannot
+  read, returns none, so that requirement's condition is not raised and its
+  `cause` obligation cannot be met. The two are the same failure to a
+  caller — the configured way of obtaining a password produced no password —
+  and they differ in what the message can say, which is why the code is shared
+  and the wording is not.
+
+  *Why `78`.* It joins `FR-CONF-022`, `FR-CONF-028`, `FR-CONF-031` and
+  `FR-CONF-033` on the ground `FR-CONF-033` states for all of them: the
+  configured way of obtaining a password failed to produce one, which is a
+  fault in `.tpl/.cfg` and not in the network or the credentials. Routing it
+  to `77` would tell the caller a server refused an authentication that was
+  never attempted, and routing it to `70` would name a defect in `tpl` for a
+  program the caller chose.
+
+  *Two conditions on one code, and `FR-ERR-002` permits it.* That requirement
+  bars collapsing two conditions onto one code **where the caller's next step
+  would differ**, and here it does not. The remedy in both is the `hint`
+  `FR-CONF-032` promises: run the command directly, where its own stderr is
+  visible. For the first it reproduces the failure outright — the program is
+  absent, or is not executable, or the file it names is not a program. For the
+  second it rules the configured command out and leaves the machine as what to
+  look at, which is the next thing a caller has to know. What `FR-ERR-002` does
+  forbid is one wording for both, and this requirement obliges the `cause` to
+  say which occurred.
+
+  *What the `cause` may name, and what it may not.* The array as stored, under
+  the one exception `FR-CONF-033` states over it — that exception is written
+  over the array **wherever a requirement of this corpus obliges a `cause` to
+  name it**, so it reaches this requirement without amending `FR-GLOB-018`,
+  `FR-SEC-005` or `BR-ERR-003`. The operating system's own report of the
+  failure, which is neither a credential nor a content of `.tpl/.cfg`. And
+  nothing else: there is no standard output to name, because there is no
+  password, and the child's standard error went to the null device under
+  `FR-CONF-032`, so there is nothing held to withhold.
+
+  *Written in the thirty-second edition, over a condition the diagnostic
+  renderer at `src/diagnostics/cause.rs` already produced and no requirement
+  reached.* `FR-ERR-002` obliges every failing condition to carry a code named
+  by the requirement that owns it, and this one was owned by nobody. The
+  implementation routes it to `78`, which this requirement confirms rather than
+  decides. What it does **not** confirm is the wording: the message renders
+  *could not be started* for both cases, which is false of the second, and
+  correcting it is work this requirement obliges rather than a defect of this
+  corpus.
 
 - **FR-CONF-033**: IF `password_command` exits non-zero, THEN the system SHALL
   exit `78`, and the `cause` SHALL name the command as stored and the exit
@@ -726,9 +928,112 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 
   *Composition.* The command as stored is the argument array of
   `FR-CONF-023`, which `FR-CONF-017` guarantees carries no expanded value, so
-  naming it in the `cause` cannot disclose a secret. The child's stderr is not
-  available to name, per `FR-CONF-032`, and its stdout is the password and is
-  never named, per `FR-ERR-013`.
+  naming it in the `cause` cannot disclose a secret the **environment** holds.
+  The child's stderr is not available to name, per `FR-CONF-032`, and its
+  stdout is the password and is never named, per `FR-ERR-013`.
+
+  *This requirement governs, and two general prohibitions yield to it.*
+  `FR-GLOB-018` bars the `password_command` from every diagnostic stream at
+  every verbosity, and `BR-ERR-003` bars the contents of `.tpl/.cfg` from every
+  error message; the array this `cause` names is both. The three were in flat
+  contradiction and this one wins, for three reasons stated together. It is the
+  specific rule over the general, and it is the only one of the three written
+  against this condition. The two general rules protect a **credential**, which
+  is the whole subject of the section each sits in, and the array is the one
+  part of an entry that exists in order not to be one — `FR-CONF-007`'s
+  rationale says its whole purpose is to keep the password out of the file.
+  And without it the `cause` names a category where an instance is available,
+  which `FR-ERR-034` bans in terms, and the `hint` `FR-CONF-032` promises —
+  run the command directly, where its own stderr is visible — cannot be
+  written at all. `FR-GLOB-018`, `FR-SEC-005` and `BR-ERR-003` are amended in
+  the same edition to state the exception rather than to be read past.
+
+  The exception is **the array as stored, and nothing else**. Everything the
+  three rules bar is still barred on this path: the child's stdout, which is
+  the password; the child's stderr, which `FR-CONF-032` sends to the null
+  device; every other key of `.tpl/.cfg`; the resolved DSN; and the argument
+  vector. And it is not confined to this requirement's own condition:
+  `FR-CONF-031` obliges the same `cause` to name the cap **and the command**,
+  `FR-CONF-028` reaches the same array through the `78` row of `FR-ERR-034`,
+  and `FR-CONF-042` and `FR-CONF-043` oblige it by name, so the exception is
+  stated over the array wherever a requirement of this corpus obliges a
+  `cause` to name it.
+
+  *Accepted cost, stated plainly.* `${VAR}` cannot put a secret into this
+  array, per `FR-CONF-017`, but a caller can: a `password_command` written as
+  `["sh", "-c", "echo hunter2"]` is printed verbatim in the `cause`, on the
+  stream a caller may be redirecting into a build log, a CI transcript or an
+  issue report. Three things bound the cost and none of them removes it. The
+  array is bytes the caller wrote into a file `FR-PROJ-010` and `FR-PROJ-011`
+  require to be theirs alone at mode `0600`, so the message widens the audience
+  for a secret that is already on that caller's disk rather than disclosing one
+  they did not have. A literal secret there is a misuse of the key and not a
+  supported configuration: the key that carries a secret in the file is
+  `password`, `FR-CONF-007` refuses the two together, and an entry that wants
+  neither has `${VAR}` in `password`. And the condition is a failure — the
+  child exited non-zero — so the `cause` is reached only where the caller is
+  already reading the message.
+
+  *What would change this.* A rule that a `cause` names the array's first
+  element and the count of its remaining arguments, rather than the array. It
+  was rejected here because the executable alone identifies almost nothing a
+  real entry uses — `security`, `op` and `sh` are the common first elements,
+  and two entries whose helpers differ only in their arguments would produce
+  the same `cause`, which is the wording `FR-ERR-034` bans — and because the
+  `hint` would then name a command the caller cannot run. Taking it would be an
+  amendment to this requirement, to `FR-CONF-031` and to `FR-ERR-034`
+  together.
+
+  *This note joins neither family of the
+  [README](README.md#writing-conventions), and says so rather than letting a
+  reader count.* The three-member family of `FR-SRV-041`, `FR-PRIV-020` and
+  `FR-CONF-039` is limits on what `tpl` guarantees about a server, a table or a
+  trust store, and each cites the other two; the four requirements beside it
+  limit the **evidence** for a guarantee. This is a limit on a **redaction** —
+  what a message is allowed to carry — which is a third kind, and it takes the
+  note shapes both families use without joining either. The families stay at
+  three and at four.
+
+- **FR-CONF-043**: IF `password_command` is ended by a signal the system did
+  not send, and therefore returns no exit status, THEN the system SHALL exit
+  `78`, and the `cause` SHALL name the command as stored and the signal number
+  the operating system reports.
+
+  *Why it is not `FR-CONF-033`.* That requirement's condition is a non-zero
+  **exit** and its `cause` is obliged to name the exit status the child
+  returned. A signalled child returns no exit status at all, so the condition
+  is a different one and the obligation is a different one. The code is the
+  same, for the reason `FR-CONF-042` states: to a caller this is the
+  configured way of obtaining a password failing to produce one.
+
+  *The signal the system sends is not this condition.* `FR-CONF-028`
+  terminates the child at a deadline and `FR-CONF-031` terminates it at the
+  output cap. Both of those end the child by a signal and both own their
+  outcome, so this requirement is reached only where something outside `tpl`
+  ended the child — the terminal's process group, a supervisor, the
+  out-of-memory killer, or a `kill` from elsewhere. Without this clause the
+  requirement would swallow two conditions in force and report them with the
+  wrong `cause`.
+
+  *Why the signal is named.* `FR-ERR-034` bans a `cause` that names a category
+  where an instance is available, and the instance is available: every target
+  of `NFR-PERF-018` is a Unix, and a Unix reports the signal that ended a
+  child. A `cause` saying only that the child was signalled would read
+  identically for a deadline enforced from outside, a memory limit and an
+  interactive interrupt, which are three different next steps for the caller.
+
+  *What the `cause` may name, and what it may not.* The array as stored, under
+  the exception `FR-CONF-033` states over it and which reaches every
+  requirement that obliges a `cause` to name the array. The signal number,
+  which is neither a credential nor a content of `.tpl/.cfg`. Not the child's
+  standard error, which `FR-CONF-032` sent to the null device; not its
+  standard output, which is the password and is barred by `FR-ERR-013`.
+
+  *Written in the thirty-second edition, over a condition the diagnostic
+  renderer at `src/diagnostics/cause.rs` already produced and no requirement
+  reached.* The implementation raises it and routes it to `78`, which this
+  requirement confirms, and it names no signal, which this requirement now
+  obliges it to.
 
 ## Precedence
 
@@ -761,8 +1066,13 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   right-hand column of `FR-CONF-038`.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, the code a TLS
   handshake failure produces, and `FR-ERR-034`, which fixes what its `cause`
-  must name; `FR-ERR-006`, at whose entry-resolution step `FR-CONF-040` and
-  `FR-CONF-041` are decided.
+  must name and whose `74` row fixes what a trust-material path that cannot be
+  read must name under `FR-CONF-014`; `FR-ERR-002`, which obliges every
+  condition here to carry a code; `FR-ERR-006`, at whose entry-resolution step
+  `FR-CONF-040` and `FR-CONF-041` are decided.
+- [template-commands.md](template-commands.md) — `FR-TMPL-024`, the other rule
+  this corpus states about a symbolic link, and the one `FR-CONF-014` is
+  weighed against.
 - [schema-commands.md](schema-commands.md) — the arm `FR-CONF-041` supplies
   with the database every one of its subcommands reads.
 

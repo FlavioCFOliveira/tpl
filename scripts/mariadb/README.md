@@ -12,6 +12,7 @@ observation was made against one series rather than all four, it says which.
 | `Dockerfile` | One image definition, parameterised by release series |
 | `setup.sql` | The `freight` schema: DDL only |
 | `seed.sql` | The data, plus the statements that make the triggers, the sequence and the system-versioned table actually fire |
+| `seed-bench.sql` | The two benchmark workloads of `NFR-PERF-001`, `WL-001` and `WL-003`: DDL only, loaded on demand and not in the image |
 | `tls/generate.sh` | Regenerates the TLS material below |
 | `tls/openssl.cnf` | The certificate profile: what the certificate says, including the names it carries |
 | `tls/ca.pem` | The fixture's root certificate, and the file to pass as `ca_file` |
@@ -21,6 +22,7 @@ observation was made against one series rather than all four, it says which.
 | `up.sh` | Starts every server and does not return until each is listening and verified |
 | `down.sh` | Stops and removes them, and proves nothing of the fixture is left |
 | `status.sh` | The gate: whether the fixture is up, answered without a client |
+| `seed-bench.sh` | Loads `seed-bench.sql` into a running server and counts what arrived |
 | `observe.sh` | The three instruments of `NFR-PERF-007` that need a server or a tracer, and the reading that identifies a build |
 | `series.env` | The inventory — one record per server — and the helpers the scripts share |
 | `probe-session.sql` | The connection-start sequence of `FR-SRV-006`, for a substitute client |
@@ -132,7 +134,7 @@ start on all four series; both come from the container runtime's kernel. On
 
 ## The harness
 
-Seven files drive the fixture and instrument it. They exist because `NFR-PERF-007`
+Eight files drive the fixture and instrument it. They exist because `NFR-PERF-007`
 makes the instrument *the* verification: a requirement of form is checked by an
 observation made outside the process and never by reading the source, so each
 observation has to be a command somebody can run and an output somebody can
@@ -145,6 +147,7 @@ the output it produced.
 | `up.sh` | Starts the servers and verifies each one |
 | `down.sh` | Removes them and proves nothing is left |
 | `status.sh` | The gate |
+| `seed-bench.sh` | Loads the benchmark workloads, and verifies every count they state |
 | `observe.sh` | The three instruments, and the build reading beside them |
 | `probe-session.sql` | The connection-start sequence of `FR-SRV-006`, for a substitute client |
 | `observer.Dockerfile` | The tracer image the third instrument falls back to |
@@ -349,6 +352,152 @@ after:   Aborted_connects 4   Connections 28
 The general log is not affected: an unauthenticated probe produces no `Connect`
 row, so the log-based connection count is immune to the gate while the status
 counter is not. Take the counter baseline **after** the gate, not before it.
+
+### The benchmark workloads
+
+`NFR-PERF-001` states its requirement over two reference workloads, `WL-001`
+and `WL-003`, and requires the number of catalogue statements a full read issues
+over one to **equal** the number it issues over the other. Neither workload is
+`freight`: `BR-PERF-002` keeps them apart, because `setup.sql` and `seed.sql`
+are exhaustive variety at minimal volume, for correctness, and the benchmark
+fixture is volume at minimal variety, for measurement. One fixture serving both
+would hide an N+1 — invisible at 23 objects — or would make the correctness
+suite pay for 200 tables on every run.
+
+`seed-bench.sql` realises both, as two schemas:
+
+| Schema | Workload | What it holds |
+|---|---|---|
+| `freight_wl001` | `WL-001`, the large workload | 200 tables, 2 400 columns, 600 indexes, 180 foreign keys, 40 generated columns, 25 triggers, 30 views, 40 routines, and a comment on 120 of the 200 tables |
+| `freight_wl003` | `WL-003`, the small workload | one table, 12 columns, 3 indexes |
+
+**It is not in the image**, and that is deliberate on the same ground: the
+Dockerfile copies `setup.sql` and `seed.sql` into
+`/docker-entrypoint-initdb.d`, so every container carries `freight` from the
+moment it starts, and a correctness run must not pay for the benchmark
+workload as well. `seed-bench.sh` is how the workload gets in.
+
+**It seeds no rows.** Both workloads are defined by catalogue volume, every
+measurement stated over them reads `INFORMATION_SCHEMA`, and a row changes no
+count the file is answerable for. What the file seeds is the catalogue.
+
+#### Loading it
+
+```sh
+./up.sh                        # the workload needs a server to go into
+./seed-bench.sh                # load into all five, then verify
+./seed-bench.sh 11.8 notls     # only the named servers
+./seed-bench.sh --verify       # count what is there; load nothing
+./seed-bench.sh --drop         # drop both schemas
+```
+
+Loading is idempotent — the file drops each schema before creating it — and the
+script asks the gate before it starts, because a load against a server that is
+not up fails halfway and leaves a partial schema behind. Its exit code is `0`
+when every requested server holds both workloads at every stated count, `1` when
+one does not, and `2` when the invocation is wrong or the fixture is down.
+
+Never load it by hand. A `docker exec … < seed-bench.sql` puts the DDL in and
+skips the twelve counts below, which is the whole of the verification that the
+schema it created is the workload the specification names.
+
+#### What it verifies, and how each quantity is counted
+
+The counting rule is stated once, here and beside the statement in
+`seed-bench.sh` that applies it, because several of these can be counted more
+than one way and a figure whose rule is unstated is not a figure:
+
+| Quantity | Counted as |
+|---|---|
+| tables | `TABLES` rows with `TABLE_TYPE = 'BASE TABLE'`; a view is not a table |
+| columns | `COLUMNS` rows belonging to those base tables, generated columns included |
+| indexes | **distinct** `(TABLE_NAME, INDEX_NAME)` pairs in `STATISTICS`; `PRIMARY` is one of them, and a composite index is one index and not one per column |
+| foreign_keys | `REFERENTIAL_CONSTRAINTS` rows |
+| generated | `COLUMNS` rows of those base tables whose `EXTRA` names a generated-column storage |
+| triggers | `TRIGGERS` rows |
+| views | `TABLES` rows with `TABLE_TYPE = 'VIEW'` |
+| routines | `ROUTINES` rows, procedures and functions together |
+| commented_tables | base tables whose `TABLE_COMMENT` is not empty |
+
+The index rule is the one that decides a design in the file. An index on a
+foreign-key column is declared **explicitly, before the constraint that needs
+it**, so InnoDB adopts it instead of creating one of its own: the 180 foreign
+keys contribute exactly 180 indexes and not 360, and the 600 are 200 primary,
+200 secondary, 20 composite and those 180.
+
+`WL-003` is counted on the same rules, which is what makes it comparable: its
+three indexes are `PRIMARY`, one unique key and one composite key.
+
+#### The run, on all five servers
+
+```sh
+./seed-bench.sh
+```
+```
+10.11
+  load    seed-bench.sql into tpl-mariadb-10.11
+  ok      freight_wl001 (WL-001): tables=200 columns=2400 indexes=600 foreign_keys=180 generated=40 triggers=25 views=30 routines=40 commented_tables=120
+  ok      freight_wl003 (WL-003): tables=1 columns=12 indexes=3 foreign_keys=0 generated=0 triggers=0 views=0 routines=0 commented_tables=1
+11.4
+  load    seed-bench.sql into tpl-mariadb-11.4
+  ok      freight_wl001 (WL-001): tables=200 columns=2400 indexes=600 foreign_keys=180 generated=40 triggers=25 views=30 routines=40 commented_tables=120
+  ok      freight_wl003 (WL-003): tables=1 columns=12 indexes=3 foreign_keys=0 generated=0 triggers=0 views=0 routines=0 commented_tables=1
+11.8
+  load    seed-bench.sql into tpl-mariadb-11.8
+  ok      freight_wl001 (WL-001): tables=200 columns=2400 indexes=600 foreign_keys=180 generated=40 triggers=25 views=30 routines=40 commented_tables=120
+  ok      freight_wl003 (WL-003): tables=1 columns=12 indexes=3 foreign_keys=0 generated=0 triggers=0 views=0 routines=0 commented_tables=1
+12.3
+  load    seed-bench.sql into tpl-mariadb-12.3
+  ok      freight_wl001 (WL-001): tables=200 columns=2400 indexes=600 foreign_keys=180 generated=40 triggers=25 views=30 routines=40 commented_tables=120
+  ok      freight_wl003 (WL-003): tables=1 columns=12 indexes=3 foreign_keys=0 generated=0 triggers=0 views=0 routines=0 commented_tables=1
+notls
+  load    seed-bench.sql into tpl-mariadb-notls
+  ok      freight_wl001 (WL-001): tables=200 columns=2400 indexes=600 foreign_keys=180 generated=40 triggers=25 views=30 routines=40 commented_tables=120
+  ok      freight_wl003 (WL-003): tables=1 columns=12 indexes=3 foreign_keys=0 generated=0 triggers=0 views=0 routines=0 commented_tables=1
+
+every requested server holds WL-001 and WL-003 at the counts the specification states
+```
+
+Observed on 2026-09-21. **The identical DDL is accepted by all four series of
+`FR-SRV-015` and by the `--skip-ssl` server**, with no `[ERROR]` line in any of
+the five logs afterwards, which is the same standard `setup.sql` is held to and
+is what makes a later difference between two servers a difference between the
+servers.
+
+#### The comparison `NFR-PERF-001` asks for
+
+With both schemas loaded, the requirement's own instrument is a read of each,
+counted with the [statements](#the-statements-a-server-receives) instrument. The
+window is bracketed per read, and the client is `tpl` itself:
+
+```sh
+./observe.sh statements on 11.8
+tpl schema dump > /dev/null            # in a project whose entry names freight_wl001
+./observe.sh statements off 11.8
+./observe.sh statements dump 11.8 --catalogue --count
+```
+
+Repeated for `freight_wl003`, and repeated on each of the four series, against a
+project whose cache was empty so that the read reached the server:
+
+```
+SERVER   SCHEMA           COUNT
+10.11    freight_wl001    11
+10.11    freight_wl003    11
+11.4     freight_wl001    11
+11.4     freight_wl003    11
+11.8     freight_wl001    11
+11.8     freight_wl003    11
+12.3     freight_wl001    11
+12.3     freight_wl003    11
+```
+
+**Eleven against eleven, on all four series.** A database of 200 tables and one
+of a single table cost the reader the same eleven catalogue statements, which is
+`NFR-PERF-001` satisfied and measured rather than reviewed. The figure is also
+the one `tests/schema_and_cache.rs` asserts for a full read of `freight`, whose
+23 objects are a third size again — so the count is now observed across three
+databases differing by two orders of magnitude in object count.
 
 ## Connecting
 
@@ -638,8 +787,9 @@ the instrument per row on the same terms.
 
 Rows 4 and 9 name one property between them, so the nine requirements need
 fewer than nine distinct observations. Rows 1 and 2 are the only two that need a
-second and larger database to be conclusive; see [what could not be
-instrumented](#what-could-not-be-instrumented).
+second and larger database to be conclusive, and they now have one: `WL-001` and
+`WL-003` are loaded by [the benchmark workloads](#the-benchmark-workloads), where
+the comparison `NFR-PERF-001` asks for is recorded.
 
 Every observation below was made against a **substitute client** — the
 `mariadb` client of the series being observed, or the one in the observer
@@ -942,7 +1092,7 @@ builds the image `observe.sh` uses; it is `alpine:3.24` with `strace` and
 
 ### What could not be instrumented
 
-Three things, recorded here rather than left to be discovered later.
+Two things, recorded here rather than left to be discovered later.
 
 **The failing outcome of `FR-SRV-013`.** That requirement assigns each outcome
 of the read-back to the test form that can reach it, and this fixture's is the
@@ -965,13 +1115,6 @@ configuration — so that outcome is verified in process and nothing is owed to
 this fixture for it. What the fixture establishes is the instrument: the
 statement is visible in the log and the value is readable from the session, so
 whichever outcome occurs is observable.
-
-**Rows 1 and 2 conclusively.** The instrument counts catalogue queries and the
-count above is real, but `NFR-PERF-001` compares a count over `WL-001` with a
-count over `WL-003`, and `WL-001` is to be realised by `scripts/mariadb/seed-bench.sql`,
-which does not exist. Until it does, the count can be observed but the
-comparison the requirement asks for cannot be made. The `freight`-versus-`mysql`
-pair above stands in for the shape of the comparison, not for its content.
 
 **Row 5 on Darwin, as a syscall.** The trace above is of a Linux process. macOS
 offers no tracer that runs without root or without System Integrity Protection

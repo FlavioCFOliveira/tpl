@@ -429,7 +429,7 @@ fn text<W: Write>(out: &mut W, entry: &str, held: &Status) -> Result<(), Error> 
 /// The `database` object narrowed to the members a named load stores.
 ///
 /// `FR-CACHE-022` and `FR-CACHE-024` make `tpl cache load --table orders` store
-/// that table and nothing else, and [`Cache::write`] stores every member the
+/// that table and nothing else, and [`Store::write`] stores every member the
 /// document it is given carries — so the narrowing is done here, on the
 /// document, rather than by a second store path.
 ///

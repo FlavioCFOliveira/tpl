@@ -628,3 +628,281 @@ fn nfr_det_001_the_document_is_byte_identical_between_runs() {
         succeeds(&["help", "cfg", "--format", "json"])
     );
 }
+
+// ---------------------------------------------------------------------------
+// The statement of purpose, and the sixth fact
+// ---------------------------------------------------------------------------
+
+/// The prefixes a requirement identifier of this corpus is written with.
+///
+/// `FR-HELP-014` makes help self-contained — it refers the reader to no
+/// document outside the help system — and a requirement identifier is a
+/// citation of one, which a caller reading help cannot resolve.
+const IDENTIFIERS: [&str; 8] = ["FR-", "NFR-", "BR-", "UC-", "OD-", "ADR-", "OQ-", "DIV-"];
+
+/// The `purpose` of one entry of `options`, `arguments` or `global_flags`, with
+/// the name it is stated for.
+fn purpose(argument: &serde_json::Value) -> (String, String) {
+    let name = argument
+        .get("long")
+        .or_else(|| argument.get("name"))
+        .and_then(serde_json::Value::as_str)
+        .expect("an argument is named")
+        .to_owned();
+    let stated = argument["purpose"]
+        .as_str()
+        .expect("an argument states its purpose")
+        .to_owned();
+
+    (name, stated)
+}
+
+/// Every (node path, argument name, sentence) the document publishes, walked
+/// from the document itself rather than enumerated.
+fn every_purpose() -> Vec<(String, String, String)> {
+    let document = document();
+    let mut stated = Vec::new();
+
+    for flag in document["data"]["global_flags"]
+        .as_array()
+        .expect("data.global_flags is an array")
+    {
+        let (name, sentence) = purpose(flag);
+        stated.push((String::from("tpl"), name, sentence));
+    }
+
+    for entry in document["data"]["commands"]
+        .as_array()
+        .expect("data.commands is an array")
+    {
+        let path = entry["path"]
+            .as_array()
+            .expect("an entry carries its path")
+            .iter()
+            .map(|segment| segment.as_str().expect("a segment is a string").to_owned())
+            .collect::<Vec<String>>();
+
+        for argument in entry["options"]
+            .as_array()
+            .expect("an entry carries its options")
+            .iter()
+            .chain(
+                entry["arguments"]
+                    .as_array()
+                    .expect("an entry carries its arguments"),
+            )
+        {
+            let (name, sentence) = purpose(argument);
+            stated.push((written(&path), name, sentence));
+        }
+    }
+
+    stated
+}
+
+#[test]
+fn fr_help_030_every_flag_and_argument_of_the_document_states_what_supplying_it_does() {
+    // FR-HELP-030: one sentence per flag and per positional argument, in the
+    // `options` and `arguments` arrays of every command and in
+    // `data.global_flags`. The population is read from the document, so an
+    // argument added to the tree is covered here without this test changing —
+    // which is what enumerating the arguments by hand would not give.
+    let stated = every_purpose();
+
+    assert!(
+        stated.len() > 100,
+        "only {} arguments were walked",
+        stated.len()
+    );
+
+    for (at, name, sentence) in stated {
+        assert!(
+            !sentence.trim().is_empty(),
+            "{at} states an empty purpose for {name}"
+        );
+        assert!(
+            sentence.ends_with('.'),
+            "{at} states no sentence for {name}: {sentence:?}"
+        );
+
+        for prefix in IDENTIFIERS {
+            assert!(
+                !sentence.contains(prefix),
+                "{at} cites {prefix} in the purpose of {name}: {sentence:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn fr_help_030_the_sentence_of_the_document_is_the_sentence_of_the_text_help() {
+    // FR-HELP-022 makes the typed table the one source of the sentence for both
+    // channels and forbids deriving either from the other. What a caller can
+    // check from outside is that the two agree, node by node.
+    for (path, help) in node_paths()
+        .into_iter()
+        .map(|path| {
+            let text = String::from_utf8(succeeds(&borrowed(&with(&path, &["--help"]))))
+                .expect("help is text");
+            (path, text)
+        })
+        .collect::<Vec<(Vec<String>, String)>>()
+    {
+        let at = written(&path);
+        let collapsed = help.split_whitespace().collect::<Vec<&str>>().join(" ");
+
+        for (stated_at, name, sentence) in every_purpose() {
+            // A global flag is stated once, at the root, per FR-GLOB-003; a
+            // local one at the node that declares it.
+            let expected = if stated_at == "tpl" {
+                path.is_empty()
+            } else {
+                stated_at == at
+            };
+
+            if !expected {
+                continue;
+            }
+
+            assert!(
+                collapsed.contains(&sentence),
+                "{at} does not carry the sentence of {name}: {sentence:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn fr_help_013_the_mutual_exclusion_of_the_two_verbosity_flags_is_named_in_help() {
+    // FR-HELP-013's sixth fact, for the one pair that is global. It appeared in
+    // no help text of the tree: the root's `64` line carries an unknown
+    // command, an unknown flag and a repeated flag value, and never this pair.
+    let root = String::from_utf8(succeeds(&["--help"])).expect("help is text");
+    let collapsed = root.split_whitespace().collect::<Vec<&str>>().join(" ");
+
+    assert!(
+        collapsed.contains("-q, --quiet"),
+        "the root does not list --quiet"
+    );
+    assert!(
+        collapsed.contains("Not to be given with --verbose."),
+        "the root does not name the exclusion on --quiet: {root}"
+    );
+    assert!(
+        collapsed.contains("Not to be given with --quiet."),
+        "the root does not name the exclusion on --verbose: {root}"
+    );
+}
+
+#[test]
+fn fr_help_013_every_exclusion_the_document_declares_is_named_in_the_text_help_of_its_node() {
+    // The same walk over the other channel: whatever the document states about
+    // an argument's exclusions reaches the reader of the text help of the node
+    // that declares it. A pair stated in one channel and not the other is the
+    // inconsistency FR-HELP-022 exists to prevent.
+    let document = document();
+    let mut met = 0usize;
+
+    let root = String::from_utf8(succeeds(&["--help"])).expect("help is text");
+    let root = root.split_whitespace().collect::<Vec<&str>>().join(" ");
+
+    for flag in document["data"]["global_flags"]
+        .as_array()
+        .expect("data.global_flags is an array")
+    {
+        for excluded in flag["excludes"]
+            .as_array()
+            .expect("a flag carries its exclusions")
+        {
+            met += 1;
+            let excluded = excluded.as_str().expect("an exclusion is a string");
+
+            assert!(
+                root.contains(&format!("Not to be given with {excluded}")),
+                "tpl --help does not name the exclusion of {excluded}"
+            );
+        }
+    }
+
+    for entry in document["data"]["commands"]
+        .as_array()
+        .expect("data.commands is an array")
+    {
+        let path: Vec<String> = entry["path"]
+            .as_array()
+            .expect("an entry carries its path")
+            .iter()
+            .map(|segment| segment.as_str().expect("a segment is a string").to_owned())
+            .collect();
+
+        let mut declared: Vec<&str> = Vec::new();
+
+        for argument in entry["options"]
+            .as_array()
+            .expect("an entry carries its options")
+            .iter()
+            .chain(
+                entry["arguments"]
+                    .as_array()
+                    .expect("an entry carries its arguments"),
+            )
+        {
+            for excluded in argument["excludes"]
+                .as_array()
+                .expect("an argument carries its exclusions")
+            {
+                declared.push(excluded.as_str().expect("an exclusion is a string"));
+            }
+        }
+
+        if declared.is_empty() {
+            continue;
+        }
+
+        let help = String::from_utf8(succeeds(&borrowed(&with(&path, &["--help"]))))
+            .expect("help is text");
+        let collapsed = help.split_whitespace().collect::<Vec<&str>>().join(" ");
+
+        let named = excluded_in(&collapsed);
+
+        for excluded in declared {
+            met += 1;
+
+            assert!(
+                named.iter().any(|stated| stated == excluded),
+                "{} does not name the exclusion of {excluded}",
+                written(&path)
+            );
+        }
+    }
+
+    assert!(met >= 20, "only {met} exclusions were walked");
+}
+
+/// Every argument named by an exclusion sentence of a collapsed help text.
+///
+/// The sentence is `Not to be given with A, B or C.`, so the names are read
+/// from it rather than searched for one at a time: a search would pass for a
+/// name that appears anywhere in the help, which is most of them.
+fn excluded_in(collapsed: &str) -> Vec<String> {
+    const OPENING: &str = "Not to be given with ";
+
+    let mut named = Vec::new();
+
+    for sentence in collapsed.split(OPENING).skip(1) {
+        let listed = sentence
+            .split_once(". ")
+            .map_or(sentence, |(head, _)| head)
+            .trim_end_matches('.');
+
+        named.extend(
+            listed
+                .split([','])
+                .flat_map(|part| part.split(" or "))
+                .map(|part| part.trim().to_owned())
+                .filter(|part| !part.is_empty()),
+        );
+    }
+
+    named
+}

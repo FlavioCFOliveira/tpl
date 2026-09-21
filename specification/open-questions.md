@@ -1,7 +1,7 @@
 ---
 title: Open Questions
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-21
 related: [README.md, catalogue-coverage.md, context-document.md, server-contract.md]
 ---
 
@@ -46,17 +46,32 @@ unused `OQ` number; the last assigned was `OQ-075`.
 
 ## Closed
 
-An entry is closed when the requirement it produced is written into the owning
-module. Two are closed differently. An entry is **dissolved** when the
-mechanism it governed ceases to exist, so there is no answer to record because
-there is no longer a question. An entry closes **on a stated limit** when the
-evidence it asks for is shown to be unobtainable rather than merely
-unrecorded: what would have been the answer becomes a limit written into the
-requirement, in the form the [README](README.md#writing-conventions) fixes,
-because an entry no achievable observation can close is not an open question.
-`OQ-042` is the only one closed this way. In every case the identifier is
-retired and never reused, so a gap in the sequence is expected rather than a
-defect.
+**Closed**, **dissolved** and **closed on a stated limit** are defined in
+[glossary.md](glossary.md#closed--dissolved--closed-on-a-stated-limit). Every
+entry below left this index by one of the three. Almost all are closed;
+`OQ-011` and `OQ-023` are the two dissolved, and `OQ-042` is the one closed on
+a stated limit, because an entry no achievable observation can close is not an
+open question. In every case the identifier is retired and never reused, so a
+gap in the sequence is expected rather than a defect.
+
+*Amended in the thirty-third edition: the three definitions move to the
+glossary and this passage cites them.* They were written here, and the
+thirty-second edition's rule is that a defined term has one definition and it
+lives in [glossary.md](glossary.md). All three are used away from this file —
+*dissolved* in [render-command.md](render-command.md) and
+[errors-and-exit-codes.md](errors-and-exit-codes.md), and *stated limit* in
+five, three of which carry it as the name of the note a requirement writes
+where a guarantee stops — so all three are the rule's business.
+**Nothing about how an entry closes changes**: the definitions there are these
+ones, and the table below is untouched.
+
+*Rejected: keeping the three here and citing them from the glossary.* It is
+the alternative the thirty-second edition already weighed and rejected at the
+head of that file, on the ground that a pointer beside a definition that may
+move is a cross-reference to maintain where an entry and a citation are not.
+Nothing about these three re-opens it; if anything they argue the other way,
+since *stated limit* is read in five other files whose readers have no reason
+to come here.
 
 | Id | Question | Answered by | Closed in |
 |---|---|---|---|

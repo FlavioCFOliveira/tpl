@@ -1,7 +1,7 @@
 ---
 title: Project and Discovery
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-21
 related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md]
 ---
 
@@ -142,6 +142,67 @@ maintain it.
   Every other command SHALL perform discovery, and SHALL fail with `78` per
   `FR-PROJ-006` when it finds no project.
 
+  **What "SHALL NOT perform discovery" forbids.** No project above the
+  invocation SHALL decide its outcome: none is required for the command to
+  succeed, none supplies configuration to it, none selects a database entry for
+  it, and none decides where `tpl init` creates what it creates. The walk of
+  `FR-PROJ-004` is the mechanism this clause exists to keep out of those four
+  decisions, and it is those decisions the clause governs.
+
+  **One of the four commands looks upward, and it is obliged to.**
+  `FR-PROJ-016` requires `tpl init` to warn that the project it is about to
+  create shadows one in an ancestor directory, and the warning cannot be
+  written without looking for that ancestor. The look decides nothing this
+  clause protects: the destination is `FR-PROJ-012`'s argument or the current
+  directory, the five artefacts are `FR-PROJ-017`'s, the exit code is `0` per
+  `FR-PROJ-022`, and an ancestor that is found or not found changes none of
+  them. What it adds is one line on stderr. No other command of this table
+  looks upward at all.
+
+  *Amended in the thirty-first edition: the clause says what it forbids,
+  because read as "no ancestor is looked at" it contradicted a requirement in
+  force.* `FR-PROJ-016` has required the shadowing warning since the first
+  edition, and `FR-PROJ-005`'s accepted cost names that warning as one of the
+  three things that bound the cost of removing the home boundary — so the
+  warning is load-bearing and cannot yield. Read literally this clause forbade
+  the only way to produce it, and `NFR-PERF-005` turned the literal reading
+  into an observable ("no `stat` of an ancestor directory") while
+  `NFR-PERF-007` wrote a differential arrangement that asserts the warning is
+  not emitted. Three requirements said three things and the code did the
+  fourth. This clause is the one that yields, because it is the only one of the
+  three that was reaching for something other than what it said: what a command
+  that requires no project must not do is depend on one, and looking for a
+  project in order to warn about it is not depending on it.
+
+  *Observed, 2026-09-18.* `src/project/init.rs` calls `discover::locate` on the
+  destination before `.tpl` exists and emits the warning where the walk finds
+  an ancestor. Run inside `sub/deep` of an existing project, `tpl init` printed
+  `warning: the project created at ./.tpl shadows the project at
+  /private/tmp/.../.tpl` and exited `0`. It is reproduced by `tpl init`, then
+  `mkdir -p sub/deep && cd sub/deep && tpl init`. The walk it makes reads no
+  `.tpl/.cfg` and applies none of the trust checks of `FR-PROJ-009` through
+  `FR-PROJ-011`, so the configuration clause of `NFR-PERF-005` is untouched by
+  it and only the discovery clause was ever at issue.
+
+  *Rejected: removing `tpl init` from this table for the discovery clause,
+  keeping it for the rest.* It splits one table into two sets with different
+  members and obliges every reader of it to ask which set a row is in.
+  `tpl init` belongs here for the plainer half, stated below, and the half it
+  would be removed from is the half this amendment makes true of it.
+
+  *Rejected: withdrawing `FR-PROJ-016`, so that the clause can stand
+  literally.* It reopens `FR-PROJ-005`. That requirement removed the home
+  boundary and bounded the cost with three things, one of which is this
+  warning; withdrawing it would leave the accepted cost naming a protection
+  that no longer exists, and a nested project created inside an inherited one
+  would be created in silence.
+
+  *Rejected: emitting the warning without a walk, by looking only at the
+  immediate parent.* It is cheaper and it is wrong more often than it is right:
+  a project three directories up shadows just as completely as one directory
+  up, and a warning that fires only sometimes is worse than none, because a
+  caller who has seen it work reads its absence as an answer.
+
   *Rationale.* A calling agent's first invocation is `tpl help --format json`,
   which is how it loads the whole surface, per `FR-HELP-016`. Failing it with a
   code that says "fix `.tpl/.cfg` or run `tpl init`" before the agent has
@@ -216,6 +277,32 @@ tpl init [<path>]
 
   *Accepted cost.* A caller checking only the exit code will not see the
   warning.
+
+  *Checked in the thirty-first edition against the two requirements that
+  contradicted it, and unchanged.* This requirement obliges a look at the
+  ancestors of the destination, and `FR-PROJ-025` forbade every command it
+  names from performing discovery while naming `tpl init`. `FR-PROJ-025` is
+  the requirement that yields, and it now states what its discovery clause
+  forbids: no project above the invocation decides its outcome. This one is
+  untouched — the warning, its stream and the `0` are as the first edition
+  wrote them — and `NFR-PERF-005` and `NFR-PERF-007` follow `FR-PROJ-025` in
+  the same edition.
+
+  *Observed, 2026-09-18, and the observation is recorded here as well because
+  this is the requirement it satisfies.* `src/project/init.rs:185` calls
+  `discover::locate(None, destination)` and line 190 calls
+  `emit::project_shadows_ancestor`. Run inside `sub/deep` of an existing
+  project, `tpl init` printed
+  `warning: the project created at ./.tpl shadows the project at
+  /private/tmp/.../.tpl` and exited `0`. Reproduced by `tpl init`, then
+  `mkdir -p sub/deep && cd sub/deep && tpl init`.
+
+  *Consequence, stated plainly.* `tpl init` is the one command of
+  `FR-PROJ-025` whose syscalls include a walk over its ancestors, so the
+  file-open observation of `NFR-PERF-007` sees `stat` calls above the
+  destination for it and for neither of the other three. `NFR-PERF-005` states
+  that per command rather than leaving a reader to infer it from a clause
+  written over the whole table.
 
 - **FR-PROJ-017**: `tpl init` SHALL create exactly five artefacts:
 

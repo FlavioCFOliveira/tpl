@@ -1,7 +1,7 @@
 ---
 title: CLI Contract
 status: approved
-last-reviewed: 2026-09-14
+last-reviewed: 2026-09-21
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
 
@@ -26,13 +26,35 @@ module that owns the command.
 
 ## Actors
 
-- **Calling agent** — an AI coding agent invoking `tpl` programmatically and
-  reading its help text, exit code, and output. This is the primary consumer.
-- **Operator** — a person invoking `tpl` at a shell prompt.
-- **Project** — the `.tpl` folder supplying configuration and templates.
+- **Calling agent**, reading the surface this file fixes through help text,
+  exit code, and output. This is the primary consumer.
+- **Operator**, invoking that same surface at a shell prompt.
+- **Project**, supplying the configuration and the templates the commands of
+  this tree reach.
+
+All three are defined in [glossary.md](glossary.md); the lines above state
+each one's stake in this file, which is the form every other module's *Actors*
+section uses.
 
 Both callers are served by the same surface. Where the two would pull in
 opposite directions, the calling agent decides the outcome.
+
+*Amended in the thirty-third edition: the three definitions move to the
+glossary and these lines state a stake instead.* This was the one *Actors*
+section in the corpus that said what its actors **are** rather than what they
+want from the file, and it was the only definition of *calling agent* and of
+*operator* anywhere — two terms used in twenty module files and sixteen. Its
+third line was worse than a second convention: it defined *project* a second
+time, and not the same way. This file had it as *the `.tpl` folder supplying
+configuration and templates*, where [glossary.md](glossary.md#project) has a
+project as any directory **containing** a `.tpl` folder, with that folder as
+the project root. `FR-PROJ-001` is with the glossary. The glossary governs,
+and the sentence that is wrong does not survive the move.
+
+*Rejected: leaving this section and adding two glossary entries beside it.* It
+buys one file a fuller answer and leaves the corpus with two places to look
+for it, which is the defect the thirty-second edition's rule names. It would
+also have left the `project` line standing, and that line is false.
 
 ## Invocation grammar
 
@@ -166,6 +188,69 @@ tpl
 
   *Rationale.* Last-wins would let a script that appends a flag twice keep
   working, with the result depending on how the script grew.
+
+- **FR-CLI-025**: WHEN a flag that carries **no value** is given more than once
+  in one invocation, the system SHALL accept the invocation and SHALL give the
+  flag the effect of one occurrence. `tpl -q -q schema tables` is
+  `tpl -q schema tables`, and `tpl schema tables --direct --direct` is
+  `tpl schema tables --direct`.
+
+  Six flags of this specification are reached: `-q/--quiet`, `--pretty`,
+  `--direct`, `--no-cache`, `-h/--help` and `-V/--version`. `-v/--verbose` is
+  **excluded**, and it is the one exclusion: `FR-CLI-016` counts its
+  repetitions up to three levels and saturates above three, so a second
+  occurrence of that flag carries meaning and there is nothing to make
+  idempotent. A valueless flag added to this specification later is governed by
+  this requirement without amendment; the six are named so that an implementer
+  can see which exist today and not to close the class.
+
+  Where `FR-HELP-013` obliges help to state whether a flag is repeatable, the
+  fact for such a flag is that it is accepted more than once and that further
+  occurrences have the effect of the first.
+
+  *Rationale.* `FR-CLI-014` refuses a repeated flag that carries a value, and
+  the ground it gives is that last-wins would let a script that appends a flag
+  twice keep working with the result depending on how the script grew. That
+  ground does not transfer here, because there are no two values to disagree.
+  What decides it instead is the primary consumer: an agent that appends a flag
+  to a command line it has already built is the ordinary way a command line
+  gets built programmatically, and refusing it makes the count of a flag's
+  occurrences a fact the agent has to learn from a failure. That is the
+  argument `FR-CLI-024` already made for the position of a global flag, and it
+  applies here unchanged. Two of the six make it sharpest: `-h/--help` is the
+  flag a caller reaches for **to recover from a failure**, so refusing
+  `tpl -h -h` refuses the recovery path itself; and `-v/--verbose` is already
+  accepted any number of times, so a caller who may write `-v -v -v` and may
+  not write `-q -q` is holding a distinction nothing on the surface explains.
+
+  *What is unchanged.* `FR-CLI-015` still refuses `-q` together with `-v` with
+  `64`: that is two flags disagreeing and not one flag repeating.
+  `FR-CLI-014` is untouched and still reaches every flag that carries a single
+  value. Neither requirement reaches `--set`, which `FR-RND-008` declares
+  repeatable with distinct keys and `FR-RND-014` refuses on a repeated key.
+  `FR-CLI-019` still rejects at each node every flag that node does not
+  declare, so `tpl init --pretty --pretty` is `64` for the flag being unknown
+  there and not for being written twice.
+
+  *Rejected: `64`, which is what the parser produces today.* It is the outcome
+  and not a decision — the refusal was given a message in the sixth sprint
+  without the question being put — and the only ground available for it is
+  `FR-CLI-014`'s, which is about a value. Refusing also costs the caller a
+  whole invocation to learn something that changes nothing about what they
+  asked for: the meaning of `tpl -q -q` is not in doubt to anybody, including
+  the parser that refuses it.
+
+  *Rejected: `64` for the four flags a command declares and acceptance for the
+  two that end the invocation.* It splits one rule over two sets with no
+  difference a caller can see from the command line, and it leaves
+  `tpl --pretty --pretty` and `tpl -h -h` on opposite branches of a rule about
+  writing a flag twice.
+
+  *Accepted cost.* A caller whose command line carries a flag twice because its
+  generator has a defect is not told so. The corpus does not treat a refusal as
+  a defect detector anywhere else — `FR-CLI-014` refuses for ambiguity and not
+  for duplication — and `BR-CLI-002` is satisfied either way, because what the
+  invocation does is still fully determined by what is visible of it.
 
 - **FR-CLI-015**: IF `-q/--quiet` and `-v/--verbose` are both given, THEN the
   system SHALL exit `64`.

@@ -81,18 +81,18 @@ applies.
 
 | Workload | What it is | Realised by |
 |---|---|---|
-| `WL-001` | The large workload, against which every budget that needs volume is measured | `scripts/mariadb/seed-bench.sql`, which does not exist |
-| `WL-002` | The verification scalar: the size of the compact dump of `WL-001`, which detects a change in the fixture or in the document shape with no server. Unvalued, and `BR-PERF-006` forbids inventing it | The same fixture; its value is computed once the fixture exists |
-| `WL-003` | The small workload — the common path, because `FR-RND-002` gives one render per invocation and `BR-RND-002` moves iteration to the caller | No file is named for it; `BR-PERF-007` counts it among what cannot be realised until the fixture is complete |
+| `WL-001` | The large workload, against which every budget that needs volume is measured | `scripts/mariadb/seed-bench.sql`, as schema `freight_wl001` |
+| `WL-002` | The verification scalar: the size of the compact dump of `WL-001`, which detects a change in the fixture or in the document shape with no server. **Unvalued**, and `BR-PERF-006` forbids inventing it | The same fixture; the fixture now exists, so the value can be computed and has not been |
+| `WL-003` | The small workload — the common path, because `FR-RND-002` gives one render per invocation and `BR-RND-002` moves iteration to the caller | The same file, as schema `freight_wl003` |
 
 `BR-PERF-002` keeps `seed.sql` and `seed-bench.sql` apart deliberately: one
 fixture serving both would hide an N+1 or make the correctness suite pay for the
-benchmark volume. `BR-PERF-007` records that `seed-bench.sql` is the one file of
-`scripts/mariadb/` still absent, and
-[`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001) settles when it is
-written: in the sprint that implements the catalogue reader, because that is the
-point at which an N+1 becomes detectable. The fixture itself is
-`verification.md`.
+benchmark volume. **`seed-bench.sql` was written on 2026-09-21**, in the sprint
+[`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001) named, and it is
+DDL alone, loaded on demand by `seed-bench.sh` rather than baked into the image;
+that script verifies every count each workload states. The counts, the schema
+names and the load procedure are `scripts/mariadb/README.md`'s and are not
+restated here. The fixture itself is `verification.md`.
 
 ## The nine budgets
 
@@ -131,13 +131,25 @@ in `BENCHMARKS.md` — the single deliberate exception to `BR-PERF-006`. Every o
 budget carries the no-regression rule of `NFR-PERF-017` only and no ratified
 target (`NFR-PERF-016`).
 
-**Why five of the nine cannot be measured yet.** Budgets 4, 6, 8 and 9 are
-measured over `WL-001` and budget 5 over `WL-003`, and neither workload can be
-realised until the fixture is complete (`BR-PERF-007`, `OD-27`). Budgets 1, 2, 3 and 7
-need neither fixture nor server; each waits only on the command it measures.
-Of the five that need the fixture, three also need a server — 4, 8 and 9 — and
-those three can never be normative, which is exactly what `NFR-PERF-013`
-requires.
+**Which of the nine the fixture gates.** Budgets 4, 6, 8 and 9 are measured over
+`WL-001` and budget 5 over `WL-003`. Budgets 1, 2, 3 and 7 need neither fixture
+nor server; each waits only on the command it measures. Of the five that need
+the fixture, three also need a server — 4, 8 and 9 — and those three can never
+be normative, which is exactly what `NFR-PERF-013` requires.
+
+**Recorded contradiction — `BR-PERF-007` against the tree.** That rule states
+that *"the `seed-bench.sql` this file requires is still absent, and `WL-001` is
+what needs it"*, and both workloads were realised on 2026-09-21:
+`scripts/mariadb/seed-bench.sql` carries them, `seed-bench.sh` loads and
+verifies them, and a measurement over both has been taken and recorded in
+`scripts/mariadb/README.md`. **Both readings are recorded and neither is chosen
+here.** `/specification` governs, so nothing of this folder is written around
+the rule; what the rule says of the repository is simply older than the
+repository, which is the fifth validation rule's own case. The defect is owed to
+the functional owner and names `BR-PERF-007`. What follows for the five budgets
+— whether each is now measurable, and which move from provisional under the gate
+of `NFR-PERF-019` — is the functional owner's to restate and is not decided
+here.
 
 **Recorded discrepancy.** [traceability.md](traceability.md) §23 reads *"Nine
 budgets, one normative, five needing a server"*. `NFR-PERF-014`'s `Server`
@@ -180,11 +192,12 @@ an edit distance against every existing name of the relevant population
 that population is large. `FR-ERR-020` omits the suggestion rather than offering
 a poor one, which bounds the output but not the computation.
 
-The algorithm is settled in
+The measure is `FR-ERR-039`'s, because it decides which candidates are offered
+and not only their order. How it is computed is
 [`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms):
-Damerau-Levenshtein, hand-rolled, no dependency — chosen partly *because* this
-is a budgeted path and the implementation must be ours to measure. Its surface
-is `interfaces.md`.
+hand-rolled, no dependency, a three-row window — chosen partly *because* this is
+a budgeted path and the implementation must be ours to measure. Its surface is
+`interfaces.md`.
 
 ## Peak memory, and the two embeddings
 

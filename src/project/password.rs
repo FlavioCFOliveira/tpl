@@ -37,8 +37,8 @@ use std::time::{Duration, Instant};
 
 use super::config::entry::PasswordCommand;
 use super::secret::Secret;
-use crate::deadline::Bound;
-use crate::error::{self, Error};
+use crate::deadline::{Bound, Phase};
+use crate::error::{self, ChildEnd, Error, PasswordCommandFault};
 
 /// The most the system reads from the child's standard output, in bytes
 /// (`FR-CONF-031`).
@@ -60,12 +60,15 @@ const POLL: Duration = Duration::from_millis(1);
 ///
 /// # Errors
 ///
-/// Returns [`Error::PasswordCommandNotExecutable`] where the child could not be
-/// started, [`Error::PasswordCommandDeadlineExceeded`] where `bound` expired
+/// Returns [`Error::PasswordCommandNotExecutable`] where no exit status is
+/// obtained — the child could not be started, or its status could not be read
+/// after it had started, which `FR-CONF-042` obliges the `cause` line to
+/// separate — [`Error::PasswordCommandDeadlineExceeded`] where `bound` expired
 /// before it finished (`FR-CONF-028`),
 /// [`Error::PasswordCommandOutputCapExceeded`] where it wrote more than
 /// [`OUTPUT_CAP`] bytes (`FR-CONF-031`), and [`Error::PasswordCommandFailed`]
-/// where it exited non-zero (`FR-CONF-033`).
+/// where it exited non-zero (`FR-CONF-033`) or was ended by a signal `tpl` did
+/// not send (`FR-CONF-043`).
 pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, Error> {
     let arguments = command.arguments();
 
@@ -85,6 +88,7 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
         .spawn()
         .map_err(|returned| Error::PasswordCommandNotExecutable {
             command: arguments.to_vec(),
+            fault: PasswordCommandFault::NotStarted,
             returned,
         })?;
 
@@ -121,10 +125,17 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
     let started = Instant::now();
     let mut captured: Option<Vec<u8>> = None;
 
+    // FR-GLOB-017 reports how long the phase took, whichever way it ended, so
+    // the report is written by every exit of the loop below rather than by the
+    // successful one alone.
+    let report = || crate::diagnostics::emit::phase_ran(Phase::PasswordCommand, started.elapsed());
+
     let status = loop {
         if captured.is_none() {
             match receiver.try_recv() {
                 Ok(bytes) if bytes.len() > OUTPUT_CAP => {
+                    report();
+
                     return Err(reap(
                         &mut child,
                         reader,
@@ -143,12 +154,18 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => {}
+            // FR-CONF-042's second condition, and the reason the fault is
+            // carried: the child **had** started, so a line saying it could not
+            // be started would be false of this path.
             Err(returned) => {
+                report();
+
                 return Err(reap(
                     &mut child,
                     reader,
                     Error::PasswordCommandNotExecutable {
                         command: arguments.to_vec(),
+                        fault: PasswordCommandFault::StatusUnreadable,
                         returned,
                     },
                 ));
@@ -156,11 +173,15 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
         }
 
         if started.elapsed() >= bound.remaining() {
+            report();
+
             return Err(reap(&mut child, reader, expired(arguments, bound)));
         }
 
         thread::sleep(POLL);
     };
+
+    report();
 
     let _ = reader.join();
     let bytes = match captured {
@@ -178,7 +199,7 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
     if !status.success() {
         return Err(Error::PasswordCommandFailed {
             command: arguments.to_vec(),
-            status: status.code(),
+            end: ended(&status),
         });
     }
 
@@ -189,6 +210,31 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
     Ok(Secret::new(
         String::from_utf8_lossy(&bytes).trim().to_owned(),
     ))
+}
+
+/// How a child that did not exit zero ended.
+///
+/// `FR-CONF-033` owns the exit status and `FR-CONF-043` the signal, and the two
+/// are read in that order because a status is the ordinary outcome. The signal
+/// is read through [`ExitStatusExt`](std::os::unix::process::ExitStatusExt),
+/// which every target of `NFR-PERF-018` carries: `FR-CONF-043` obliges the
+/// `cause` line to name the number, and `FR-ERR-034` bans naming the category
+/// instead where the instance is available.
+///
+/// **A signal `tpl` itself sent never reaches here.** `FR-CONF-028` and
+/// `FR-CONF-031` each terminate the child and return their own condition
+/// before the status is read, which is what `FR-CONF-043` requires of the two
+/// it excludes.
+fn ended(status: &std::process::ExitStatus) -> ChildEnd {
+    use std::os::unix::process::ExitStatusExt as _;
+
+    if let Some(code) = status.code() {
+        return ChildEnd::Exited(code);
+    }
+
+    status
+        .signal()
+        .map_or(ChildEnd::Unreported, ChildEnd::Signalled)
 }
 
 /// Terminates the child, waits for the reader, and returns `condition`.
@@ -221,7 +267,7 @@ fn expired(arguments: &[String], bound: Bound) -> Error {
 mod tests {
     use super::{OUTPUT_CAP, obtain};
     use crate::deadline::{Clock, Seconds};
-    use crate::error::{DeadlineBound, Error};
+    use crate::error::{ChildEnd, DeadlineBound, Error};
     use crate::project::config::entry::PasswordCommand;
     use std::num::NonZeroU64;
 
@@ -337,12 +383,9 @@ mod tests {
         let condition = obtain(&command(&[&no]), bound(10)).expect_err("the child fails");
 
         match condition {
-            Error::PasswordCommandFailed {
-                ref command,
-                status,
-            } => {
+            Error::PasswordCommandFailed { ref command, end } => {
                 assert_eq!(command, &[no]);
-                assert_eq!(status, Some(1));
+                assert_eq!(end, ChildEnd::Exited(1));
             }
             other => panic!("expected a non-zero exit, got {other:?}"),
         }

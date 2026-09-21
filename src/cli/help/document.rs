@@ -191,6 +191,9 @@ struct Argument<'a> {
     /// The name the tree gives the value, as the help spells it.
     name: &'a str,
 
+    /// One sentence saying what supplying it does (`FR-HELP-030`).
+    purpose: &'static str,
+
     /// The type of the value.
     value_type: &'static str,
 
@@ -206,6 +209,10 @@ struct Argument<'a> {
 
     /// Whether the invocation may supply it more than once.
     repeatable: bool,
+
+    /// The arguments it may not be supplied with, empty where it excludes none
+    /// (`FR-HELP-013`).
+    excludes: Vec<&'static str>,
 }
 
 /// One flag, whether global or local.
@@ -218,6 +225,9 @@ struct Argument<'a> {
 struct Flag<'a> {
     /// The long form, with its two leading dashes.
     long: String,
+
+    /// One sentence saying what supplying it does (`FR-HELP-030`).
+    purpose: &'static str,
 
     /// The short form, with its one leading dash, or `null` where the flag has
     /// none. `FR-GLOB-024` gives a short form to exactly five flags of the
@@ -242,6 +252,10 @@ struct Flag<'a> {
 
     /// Whether the invocation may supply it more than once.
     repeatable: bool,
+
+    /// The arguments it may not be supplied with, empty where it excludes none
+    /// (`FR-HELP-013`).
+    excludes: Vec<&'static str>,
 }
 
 /// One example of a command, per `FR-HELP-012`.
@@ -379,7 +393,7 @@ fn surface<'a>(
 
     Ok(Surface {
         tpl_version: VERSION,
-        global_flags: flags(tree),
+        global_flags: flags(tree, &[]),
         commands,
         template_surface: TemplateSurface::PUBLISHED,
     })
@@ -442,9 +456,9 @@ fn entry<'a>(node: &'a Command, path: &[&'a str]) -> Result<Entry<'a>, Error> {
         arguments: node
             .get_arguments()
             .filter(|argument| argument.is_positional())
-            .map(argument)
+            .map(|declared| argument(declared, path))
             .collect(),
-        options: flags(node),
+        options: flags(node, path),
         examples: declared.examples.iter().map(example).collect(),
         exit_codes: declared.exit_codes.iter().map(exit_code).collect(),
         inherits_globals: INHERITS_GLOBALS,
@@ -459,39 +473,61 @@ fn entry<'a>(node: &'a Command, path: &[&'a str]) -> Result<Entry<'a>, Error> {
 /// subcommands only when the parser is **built**, and this reads the tree as
 /// [`crate::cli::tree`] returns it, unbuilt. The root's own call is therefore
 /// the seven of `FR-GLOB-001` and nothing else, which is `data.global_flags`.
-fn flags(node: &Command) -> Vec<Flag<'_>> {
+fn flags<'a>(node: &'a Command, path: &[&str]) -> Vec<Flag<'a>> {
     node.get_arguments()
         .filter(|argument| !argument.is_positional())
-        .map(flag)
+        .map(|declared| flag(declared, path))
         .collect()
 }
 
+/// The sentence of `FR-HELP-030` and the exclusions of `FR-HELP-013` for one
+/// argument, as the typed table states them.
+///
+/// The table is the one source for both channels, per `FR-HELP-022`, so the
+/// text help and this document publish the same text without either being
+/// derived from the other. A row that is missing contributes an empty sentence
+/// and an empty list rather than a document that will not build; the table is
+/// complete over the tree and a test walks the tree to hold it so.
+fn stated(path: &[&str], name: &str) -> (&'static str, Vec<&'static str>) {
+    super::documented(path, name).map_or(("", Vec::new()), |stated| {
+        (stated.purpose, stated.excludes.to_vec())
+    })
+}
+
 /// One positional argument.
-fn argument(declared: &Arg) -> Argument<'_> {
+fn argument<'a>(declared: &'a Arg, path: &[&str]) -> Argument<'a> {
+    let name = render::value_name(declared);
+    let (purpose, excludes) = stated(path, name);
+
     Argument {
-        name: render::value_name(declared),
+        name,
+        purpose,
         value_type: render::type_name(declared),
         permitted: permitted(declared),
         default: default(declared),
         required: declared.is_required_set(),
         repeatable: rules::repeats(declared),
+        excludes,
     }
 }
 
 /// One flag.
-fn flag(declared: &Arg) -> Flag<'_> {
+fn flag<'a>(declared: &'a Arg, path: &[&str]) -> Flag<'a> {
     let takes_value = declared.get_action().takes_values();
+    // Every flag of the tree declares a long form, which a test pins; the
+    // identifier stands in for one that did not, so a flag is named by
+    // something rather than by nothing.
+    let long = format!(
+        "--{}",
+        declared
+            .get_long()
+            .unwrap_or_else(|| declared.get_id().as_str())
+    );
+    let (purpose, excludes) = stated(path, &long);
 
     Flag {
-        // Every flag of the tree declares a long form, which a test pins; the
-        // identifier stands in for one that did not, so a flag is named by
-        // something rather than by nothing.
-        long: format!(
-            "--{}",
-            declared
-                .get_long()
-                .unwrap_or_else(|| declared.get_id().as_str())
-        ),
+        long,
+        purpose,
         short: declared.get_short().map(|short| format!("-{short}")),
         value_name: takes_value.then(|| render::value_name(declared)),
         value_type: takes_value.then(|| render::type_name(declared)),
@@ -504,6 +540,7 @@ fn flag(declared: &Arg) -> Flag<'_> {
         default: default(declared),
         required: declared.is_required_set(),
         repeatable: rules::repeats(declared),
+        excludes,
     }
 }
 

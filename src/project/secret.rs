@@ -14,11 +14,39 @@
 //! [`Secret::expose`] is the single deliberate exit. It is named to be
 //! greppable, and the whole of what may call it is the code that hands the
 //! credential to the database driver.
+//!
+//! [`Redacted`] is the same prohibition for a value that is **not** a
+//! [`Secret`] and carries one all the same — the file's own bytes, a `password`
+//! or `dsn` as the file wrote it, a field of a parsed DSN. Those are read as
+//! text by the paths that validate and redact them, so they cannot be moved
+//! into a [`Secret`]; what they can be denied is a derived
+//! [`Debug`](fmt::Debug), and this is what the hand-written one writes in their
+//! place.
 
 use std::fmt;
 
 /// What [`Secret`]'s [`Debug`](fmt::Debug) writes in place of the value.
 const REDACTED: &str = "Secret(***)";
+
+/// What a hand-written [`Debug`](fmt::Debug) writes in place of a field that
+/// may carry a credential.
+const REDACTED_FIELD: &str = "***";
+
+/// A stand-in a hand-written [`Debug`](fmt::Debug) prints for a field it will
+/// not disclose.
+///
+/// `debug_struct` takes a `&dyn Debug` per field, so a field that must not be
+/// printed needs a value whose own [`Debug`](fmt::Debug) is the placeholder.
+/// This is that value, held once so that every redacting implementation writes
+/// the same bytes as [`crate::project::config::redact`] does on the printing
+/// path.
+pub(crate) struct Redacted;
+
+impl fmt::Debug for Redacted {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(REDACTED_FIELD)
+    }
+}
 
 /// A credential: a password from `.tpl/.cfg`, or the standard output of a
 /// `password_command`.
@@ -45,12 +73,6 @@ impl Secret {
     /// The one route out of this type, named so that every use of a credential
     /// is one `grep` away. Nothing but the code that authenticates against the
     /// server may call it, and nothing that writes to a stream may.
-    #[allow(
-        dead_code,
-        reason = "the connection that authenticates with the credential is a later sprint; the \
-                  accessor is written here because it is the property this type exists to make \
-                  greppable, and a test asserts it returns what was stored"
-    )]
     pub(crate) fn expose(&self) -> &str {
         &self.0
     }
@@ -69,7 +91,16 @@ impl fmt::Debug for Secret {
 
 #[cfg(test)]
 mod tests {
-    use super::{REDACTED, Secret};
+    use super::{REDACTED, REDACTED_FIELD, Redacted, Secret};
+
+    #[test]
+    fn fr_err_013_the_placeholder_a_hand_written_debug_writes_carries_no_value() {
+        // The stand-in every redacting Debug of `project/config` prints. It
+        // holds nothing, so there is nothing for it to disclose, and it writes
+        // what the printing path of FR-CFG-021 writes.
+        assert_eq!(format!("{Redacted:?}"), REDACTED_FIELD);
+        assert_eq!(format!("{Redacted:#?}"), REDACTED_FIELD);
+    }
 
     #[test]
     fn fr_err_013_the_debug_of_a_secret_carries_none_of_it() {

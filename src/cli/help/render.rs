@@ -68,25 +68,41 @@
 //! and is refused on its second occurrence all the same. Reading the action
 //! here would tell the caller the opposite of what the tool does.
 //!
-//! **The sixth fact, mutual exclusion, is not stated, because the tree does not
-//! carry it.** `FR-OUT-009`, `FR-RND-005`, `FR-CFG-016` and `FR-CFG-029` are
-//! refusals *between* two arguments, and [`super::super::globals`],
-//! [`super::super::local`] and [`super::super::cfg`] each state why no
-//! `conflicts_with` declares them: a refusal written in the parser's words is a
-//! refusal the caller never reads in the four labelled lines of `FR-ERR-008`.
-//! There is therefore nothing to introspect, and inventing a second source here
-//! would be a table of exclusions maintained beside the commands that enforce
-//! them. Each such pair is named by the `EXIT CODES` section of the command
-//! that refuses it — `--pretty` without `--format json` under `64` — which is
-//! where the caller meets it.
+//! Repeatability is **three-valued** since `FR-CLI-025`: refused, idempotent,
+//! or accumulated. [`rules::repetition`] is that answer and [`facts`] states it,
+//! in the terms that requirement fixes for the middle case — accepted more than
+//! once, with further occurrences having the effect of the first.
 //!
-//! **No prose accompanies a flag or an argument**, for the same reason read the
-//! other way: the only per-argument text the tree carries is the doc comment
-//! `clap`'s derive lifts, and those name requirement identifiers and are
+//! **The sixth fact, mutual exclusion, is read from the typed table**, because
+//! the tree does not carry it. `FR-OUT-009`, `FR-RND-005`, `FR-CFG-016` and
+//! `FR-CFG-029` are refusals *between* two arguments, and
+//! [`super::super::globals`], [`super::super::local`] and
+//! [`super::super::cfg`] each state why no `conflicts_with` declares them: a
+//! refusal written in the parser's words is a refusal the caller never reads in
+//! the four labelled lines of `FR-ERR-008`. There is therefore nothing to
+//! introspect, and `FR-HELP-013` obliges help to state it all the same — so it
+//! is stated **on the argument's own entry**, out of [`super::Documented`],
+//! which is where `FR-HELP-022` puts a fact neither channel may derive from the
+//! other.
+//!
+//! **The pairs are stated in one place and not two.** They were named in the
+//! prose of the `EXIT CODES` section of the command that refuses each, which
+//! answered `FR-HELP-013` for every local pair and for the global pair of
+//! `FR-CLI-015` not at all: the root's `64` line carries an unknown command, an
+//! unknown flag and a repeated flag value, and never that pair. An obligation
+//! met in two places for one population and in neither for the other is met
+//! inconsistently, so it is met on the argument — where the requirement puts
+//! it, beside the other five facts, and where it is addressable per argument in
+//! the JSON document as well. The `EXIT CODES` prose is untouched: it says what
+//! produces a code, which is a different question from what an argument may be
+//! written with.
+//!
+//! **One sentence accompanies every flag and every argument**, per
+//! `FR-HELP-030`, and it comes from the same typed table. It cannot come from
+//! the declarations: the only per-argument text the tree carries is the doc
+//! comment `clap`'s derive lifts, and those name requirement identifiers and are
 //! written in backticks, which `FR-HELP-014` bars from help — it is
-//! self-contained and refers to no document outside the help system. The typed
-//! table carries none either. What a flag means is therefore told by its name,
-//! its value name, its permitted values and the node's `DESCRIPTION`.
+//! self-contained and refers to no document outside the help system.
 //!
 //! # Where the global flags are, and are not
 //!
@@ -174,8 +190,8 @@ fn compose(node: &Command, path: &[&str], found: &Entry) -> String {
     let sections = [
         ("USAGE", usage(node, path)),
         ("DESCRIPTION", wrapped(found.description, BODY)),
-        ("ARGUMENTS", arguments(node)),
-        ("OPTIONS", options(node)),
+        ("ARGUMENTS", arguments(node, path)),
+        ("OPTIONS", options(node, path)),
         ("EXAMPLES", examples(found.examples)),
         ("EXIT CODES", exit_codes(found.exit_codes)),
         ("SEE ALSO", see_also(found.see_also)),
@@ -225,15 +241,35 @@ fn usage(node: &Command, path: &[&str]) -> Vec<String> {
 
 /// `ARGUMENTS`: the node's children first, as its first positional argument per
 /// `FR-HELP-008`, then the positional arguments it declares.
-fn arguments(node: &Command) -> Vec<String> {
+fn arguments(node: &Command, path: &[&str]) -> Vec<String> {
     let mut lines = children(node);
 
     for argument in positionals(node) {
         lines.push(indented(&placeholder(argument), BODY));
-        lines.extend(wrapped(&facts(argument), NESTED));
+        lines.extend(stated(path, value_name(argument)));
+        lines.extend(wrapped(
+            &facts(argument, path, value_name(argument)),
+            NESTED,
+        ));
     }
 
     lines
+}
+
+/// The sentence of `FR-HELP-030` for the argument `name` at `path`, laid out.
+///
+/// It precedes the facts of `FR-HELP-013` because it is the fact a caller came
+/// to the help for: the six say what shape the value has, and an agent choosing
+/// between two flags learns from them nothing about which to write.
+///
+/// A table with no row for the argument contributes no line. The table is
+/// complete over the tree and a test walks the tree to hold it so, which is
+/// where an argument added without a sentence is caught — rather than here,
+/// where the only thing a renderer could do about it is invent one.
+fn stated(path: &[&str], name: &str) -> Vec<String> {
+    super::documented(path, name)
+        .map(|stated| wrapped(stated.purpose, NESTED))
+        .unwrap_or_default()
 }
 
 /// The children of a node, in the shape `FR-HELP-008` gives them: one short
@@ -267,16 +303,32 @@ fn children(node: &Command) -> Vec<String> {
 ///
 /// Below the root that is the node's own flags alone, which is what
 /// `FR-GLOB-003` requires and what this module's own documentation explains.
-fn options(node: &Command) -> Vec<String> {
+fn options(node: &Command, path: &[&str]) -> Vec<String> {
     node.get_arguments()
         .filter(|argument| !argument.is_positional())
         .flat_map(|argument| {
+            let named = long_form(argument);
             let mut lines = vec![indented(&spelling(argument), BODY)];
-            lines.extend(wrapped(&facts(argument), NESTED));
+            lines.extend(stated(path, &named));
+            lines.extend(wrapped(&facts(argument, path, &named), NESTED));
 
             lines
         })
         .collect()
+}
+
+/// A flag's long form with both dashes, which is how the typed table names it.
+///
+/// Every flag of the tree declares a long form, which a test pins; the
+/// identifier stands in for one that did not, so a flag is looked up by
+/// something rather than by nothing.
+fn long_form(argument: &Arg) -> String {
+    format!(
+        "--{}",
+        argument
+            .get_long()
+            .unwrap_or_else(|| argument.get_id().as_str())
+    )
 }
 
 /// `EXAMPLES`: each caption, then the lines of the example, as written.
@@ -489,15 +541,25 @@ pub(super) fn value_name(argument: &Arg) -> &str {
         .map_or("VALUE", clap::builder::Str::as_str)
 }
 
-/// The facts `FR-HELP-013` obliges help to state about one flag or argument,
-/// in four sentences: its type and permitted values, its default, whether it is
-/// required, and whether it is repeatable.
+/// The six facts `FR-HELP-013` obliges help to state about one flag or
+/// argument: its type and permitted values, its default, whether it is
+/// required, whether it is repeatable, and the arguments it excludes.
 ///
-/// The sixth fact of the requirement, mutual exclusion, is absent because the
-/// declarations do not carry it; this module's own documentation says why, and
-/// where a caller meets each such pair instead.
-fn facts(argument: &Arg) -> String {
-    format!(
+/// **Repeatability is three-valued**, because `FR-CLI-025` made it so: a flag
+/// that carries a value is refused on its second occurrence, a flag that
+/// carries none is accepted and further occurrences have the effect of the
+/// first, and a flag or argument that accumulates means something by each. That
+/// requirement states the fact for the middle case in its own words, and this
+/// is it.
+///
+/// **The sixth fact is read from the typed table**, and not from the
+/// declarations: the tree carries no `conflicts_with` to introspect, because
+/// every exclusion this corpus obliges is refused away from the parser so that
+/// the caller reads it in the four labelled lines of `FR-ERR-008`. The sentence
+/// is omitted where the argument excludes nothing, which is what *any* mutual
+/// exclusion means for an argument that has none.
+fn facts(argument: &Arg, path: &[&str], name: &str) -> String {
+    let mut stated = format!(
         "{kind} {default} {required} {repetition}",
         kind = kind(argument),
         default = default(argument),
@@ -506,12 +568,35 @@ fn facts(argument: &Arg) -> String {
         } else {
             "Optional."
         },
-        repetition = if rules::repeats(argument) {
-            "Repeatable."
-        } else {
-            "Not repeatable."
+        repetition = match rules::repetition(argument) {
+            rules::Repetition::Refused => "Not repeatable.",
+            rules::Repetition::Idempotent =>
+                "Repeatable, and further occurrences have the effect of the first.",
+            rules::Repetition::Accumulated => "Repeatable.",
         }
-    )
+    );
+
+    if let Some(excluded) = excluded(path, name) {
+        stated.push(' ');
+        stated.push_str(&excluded);
+    }
+
+    stated
+}
+
+/// The sentence stating the mutual exclusions of `FR-HELP-013`, or [`None`]
+/// where the argument has none.
+fn excluded(path: &[&str], name: &str) -> Option<String> {
+    let listed = super::documented(path, name)?.excludes;
+
+    match listed {
+        [] => None,
+        [only] => Some(format!("Not to be given with {only}.")),
+        [rest @ .., last] => Some(format!(
+            "Not to be given with {} or {last}.",
+            rest.join(", ")
+        )),
+    }
 }
 
 /// The type of an argument's value, and its permitted values where they are
@@ -948,9 +1033,10 @@ mod tests {
 
     #[test]
     fn fr_help_013_every_flag_and_argument_states_the_facts_of_the_requirement() {
-        // FR-HELP-013, for the five facts the declarations carry. The sixth,
-        // mutual exclusion, is not declared anywhere in the tree, for the
-        // reason this module documents.
+        // FR-HELP-013, over all six facts: five are introspected from the
+        // declarations and the sixth is read from the typed table, which is
+        // where the tree's exclusions are stated because the tree does not
+        // declare them.
         let tree = tree();
 
         for (path, help) in every_help() {
@@ -959,8 +1045,9 @@ mod tests {
 
             // The facts of an argument are wrapped like any other prose, so
             // they are asserted over the text with its layout collapsed: what
-            // is pinned is that every argument of every node is named and that
-            // all five facts follow it, not the column a break fell in.
+            // is pinned is that every argument of every node is named, that its
+            // sentence of FR-HELP-030 follows it, and that the facts follow
+            // that — not the column a break fell in.
             let collapsed = collapsed(&help);
 
             for argument in node.get_arguments() {
@@ -969,19 +1056,33 @@ mod tests {
                 } else {
                     super::spelling(argument)
                 };
-                let stated = super::facts(argument);
+                let key = if argument.is_positional() {
+                    super::value_name(argument).to_owned()
+                } else {
+                    super::long_form(argument)
+                };
+                let purpose = crate::cli::help::documented(&segments, &key)
+                    .unwrap_or_else(|| panic!("{path:?} states no purpose for {key}"))
+                    .purpose;
+                let stated = super::facts(argument, &segments, &key);
 
                 assert!(
-                    collapsed.contains(&format!("{named} {stated}")),
-                    "{path:?} does not state '{named} {stated}'"
+                    collapsed.contains(&format!("{named} {purpose} {stated}")),
+                    "{path:?} does not state '{named} {purpose} {stated}'"
                 );
 
                 assert!(
                     stated.contains("Required.") || stated.contains("Optional."),
                     "{path:?} states no requiredness for {named}"
                 );
+                // FR-CLI-025 made the fact three-valued, so the assertion is
+                // over the three wordings and not over two.
                 assert!(
-                    stated.contains("Repeatable.") || stated.contains("Not repeatable."),
+                    stated.contains("Not repeatable.")
+                        || stated.contains("Repeatable.")
+                        || stated.contains(
+                            "Repeatable, and further occurrences have the effect of the first."
+                        ),
                     "{path:?} states no repeatability for {named}"
                 );
                 assert!(
@@ -989,6 +1090,156 @@ mod tests {
                         || stated.contains("No default.")
                         || stated.contains("Off unless given."),
                     "{path:?} states no default for {named}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fr_help_013_every_mutual_exclusion_the_tree_declares_is_named_in_the_help_of_its_node() {
+        // FR-HELP-013's sixth fact, walked over the tree rather than over a
+        // list of pairs written by hand: for every node and every argument that
+        // node declares, whatever the typed table states about its exclusions
+        // appears in that node's own help, on that argument's entry. A pair
+        // added to the table without reaching the reader fails here.
+        let tree = tree();
+        let mut met = 0usize;
+
+        for (path, help) in every_help() {
+            let segments: Vec<&str> = path.iter().map(String::as_str).collect();
+            let (node, _) = walk(&tree, &segments).expect("the path names a node");
+            let collapsed = collapsed(&help);
+
+            for argument in node.get_arguments() {
+                let key = if argument.is_positional() {
+                    super::value_name(argument).to_owned()
+                } else {
+                    super::long_form(argument)
+                };
+                let Some(sentence) = super::excluded(&segments, &key) else {
+                    continue;
+                };
+
+                met += 1;
+
+                let named = if argument.is_positional() {
+                    super::placeholder(argument)
+                } else {
+                    super::spelling(argument)
+                };
+                let stated = super::facts(argument, &segments, &key);
+
+                // The sentence sits inside the argument's own entry, which is
+                // what `{named} … {stated}` being one run asserts.
+                assert!(
+                    collapsed.contains(&format!("{named} ")),
+                    "{path:?} does not name {named}"
+                );
+                assert!(
+                    stated.ends_with(&sentence),
+                    "{path:?} states {key}'s exclusions away from its facts"
+                );
+                assert!(
+                    collapsed.contains(&stated),
+                    "{path:?} does not state '{sentence}' on the entry of {key}"
+                );
+
+                for excluded in super::super::documented(&segments, &key)
+                    .expect("the argument has a row")
+                    .excludes
+                {
+                    assert!(
+                        sentence.contains(excluded),
+                        "{path:?} states {key}'s exclusions without naming {excluded}"
+                    );
+                }
+            }
+        }
+
+        // A floor, so that a table stating no exclusion at all would not pass
+        // this walk vacuously.
+        assert!(met >= 20, "only {met} exclusions were met over the tree");
+    }
+
+    #[test]
+    fn fr_help_013_the_global_pair_and_a_local_pair_are_stated_in_the_same_place() {
+        // The obligation was met in two places for one population and in
+        // neither for the other: every local pair was named in the prose of the
+        // EXIT CODES section of the command that refuses it, and the one global
+        // pair — -q/--quiet with -v/--verbose — appeared in no help text of the
+        // tree at all. Both are now stated on the argument's own entry, in
+        // OPTIONS, which is the single place this asserts.
+        let root = collapsed(&rendered(&[]));
+        let render = collapsed(&rendered(&["render"]));
+
+        for (path, help, entry, excluded) in [
+            (&[][..], &root, "-q, --quiet", "--verbose"),
+            (&[][..], &root, "-v, --verbose", "--quiet"),
+            (&["render"][..], &render, "--table <NAME>", "--view"),
+        ] {
+            assert!(
+                help.contains(&format!("{entry} ")),
+                "{entry} is not an entry of this help"
+            );
+
+            let node = rendered(path);
+            let listed = section(&node, "OPTIONS").expect("the node carries an OPTIONS section");
+            let body = listed
+                .join(" ")
+                .split_whitespace()
+                .collect::<Vec<&str>>()
+                .join(" ");
+
+            assert!(
+                body.contains(&format!("{entry} ")),
+                "{entry} is not in the OPTIONS section"
+            );
+            assert!(
+                body.contains(&format!("Not to be given with {excluded}")),
+                "{entry} does not state its exclusion in OPTIONS"
+            );
+        }
+
+        // And it is not also stated in EXIT CODES, which is what "one place"
+        // means: that section says what produces a code.
+        for path in [&[][..], &["render"][..]] {
+            let help = rendered(path);
+            let codes = section(&help, "EXIT CODES").expect("every node lists its codes");
+
+            assert!(
+                !codes.join(" ").contains("Not to be given with"),
+                "{path:?} states an exclusion in EXIT CODES as well"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_help_030_every_flag_and_argument_of_every_node_carries_its_sentence() {
+        // FR-HELP-030 over the rendered text, walked node by node: the sentence
+        // of the typed table appears in the help of the node that declares the
+        // argument, between the argument and its facts. The population is the
+        // tree's, so an argument added to a node is covered without this test
+        // changing.
+        let tree = tree();
+
+        for (path, help) in every_help() {
+            let segments: Vec<&str> = path.iter().map(String::as_str).collect();
+            let (node, _) = walk(&tree, &segments).expect("the path names a node");
+            let collapsed = collapsed(&help);
+
+            for argument in node.get_arguments() {
+                let key = if argument.is_positional() {
+                    super::value_name(argument).to_owned()
+                } else {
+                    super::long_form(argument)
+                };
+                let purpose = super::super::documented(&segments, &key)
+                    .unwrap_or_else(|| panic!("{path:?} states no purpose for {key}"))
+                    .purpose;
+
+                assert!(
+                    collapsed.contains(purpose),
+                    "{path:?} does not carry the sentence of {key}"
                 );
             }
         }
@@ -1015,13 +1266,15 @@ mod tests {
         let render = rendered(&["render"]);
 
         assert!(
-            render
-                .contains("--set <KEY=VALUE>\n    Type: string. No default. Optional. Repeatable.")
+            render.contains("Type: string. No default. Optional. Repeatable."),
+            "{render}"
         );
         assert!(
             render.contains(
-                "--table <NAME>\n    Type: string. No default. Optional. Not repeatable."
-            )
+                "Type: string. No default. Optional. Not repeatable. Not to be given with\n    \
+                 --view or --routine."
+            ),
+            "{render}"
         );
 
         assert!(

@@ -26,13 +26,20 @@
 
 set -euo pipefail
 
+# The header above is this script's own usage text, and `usage` reads it back
+# out of the file. The name is taken before the `cd`, because `$0` is the path
+# the caller wrote and stops resolving the moment the working directory changes:
+# invoked as `scripts/mariadb/observe.sh`, the `cd` below lands in that folder
+# and `awk` is then handed a path relative to it that does not exist.
+SELF="$(basename "$0")"
+
 cd "$(dirname "$0")"
 . ./series.env
 
 die() { printf 'observe.sh: %s\n' "$*" >&2; exit 2; }
 
 usage() {
-    awk 'NR >= 3 { if ($0 !~ /^#/) exit; sub(/^# ?/, ""); print }' "$0"
+    awk 'NR >= 3 { if ($0 !~ /^#/) exit; sub(/^# ?/, ""); print }' "$SELF"
     exit 2
 }
 

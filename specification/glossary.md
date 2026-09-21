@@ -1,14 +1,87 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-21
 related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md]
 ---
 
 # Glossary
 
 Terms are defined once, here, and used consistently across the corpus. A term
-used in a requirement without being defined here is a defect.
+used in a requirement without being defined here is a defect. **A definition
+written anywhere else in the corpus is the same defect seen from its other
+end.** Where a requirement needs its term explained beside it, the requirement
+cites the entry here and does not restate it, so that one term has one
+definition and a reader has one place to look.
+
+*Amended in the thirty-second edition: the rule says what a definition
+elsewhere is, because the corpus had grown a second convention and the one
+being broken was this file's own.* `NFR-PERF-007` defined *differential run*
+beside the instrument table, and the thirty-first edition defined *in flight*
+beside `FR-ERR-025` and `FR-ERR-026` by following it. Two conventions for one
+question are not a style; they are two answers to where a reader looks, and the
+sentence above had answered it already. Both terms are moved here in the same
+edition and both requirements now cite this file.
+
+*Rejected: a term defined where it is used, with this file carrying a
+pointer.* It was the live alternative, because both instances that raised the
+question are load-bearing at the point of use — the *in flight* line is what
+divides `FR-ERR-025` from `FR-ERR-026`, and the *differential run* line cannot
+be read apart from the two arrangements `NFR-PERF-007` names. It was rejected
+on three grounds. It would rewrite the rule above from an absolute into a
+two-case rule whose new case has no test: *has an entry here* can be checked
+by a reader or a parser over this file alone, and *is defined where it is
+used* cannot be checked at all. It legitimises the drift that produced the
+defect rather than closing it, since one unchecked precedent is exactly how
+the second instance arrived. And it is the weaker form of one copy: a pointer
+beside a definition that may move is a cross-reference to maintain, where an
+entry here and a citation to it is the shape this file already uses for
+`budget`, `provisional figure` and `cache hit / cache miss`, each of which
+defines the term here and cites the requirement that governs it.
+
+## What counts as a definition
+
+*Stated in the thirty-third edition, which swept the corpus for the rule the
+thirty-second wrote.* The rule above needs a boundary, because a sweep for
+definitions with none either misses half of them or drags this file's whole
+editorial machinery into a list of terms. **A definition is a passage whose
+work is to fix what a term means, where the term is then used away from that
+passage.** Three shapes are not definitions and stay where they are:
+
+- **A requirement or a business rule that fixes a thing.** That is the owning
+  statement, and this file's shape for it is an entry here citing it — which
+  is what `template`, `word list`, `target`, `complete read / incomplete read`
+  and `volatile field` already do. Restating the rule here instead would
+  create the second copy this file exists to prevent.
+- **A legend for the values of one field of one table**, read where the table
+  is: the clause and status names of
+  [upstream-divergences.md](upstream-divergences.md), the four treatments
+  `BR-SRV-006` fixes for the divergence register, and the status legend of the
+  [README](README.md#status-legend). Each is read once, in place, by a reader
+  of that table, and none is used anywhere else.
+- **A note shape the writing conventions own** — *Rationale*, *Observed*,
+  *Rejected*, *Accepted cost*, *Consequence, stated plainly*, *What would
+  change this*, and the bounded claim of the fourth provenance. Their members
+  are defined against each other and are read together, in the
+  [README](README.md#writing-conventions).
+
+  *A stated limit* is the one member of that family that is **also** a term
+  here, and it shows how the boundary is applied rather than contradicting it.
+  The note's shape — what a requirement writing one must contain — is the
+  writing conventions'. The term is here because it is used away from that
+  family: it is one of the three ways an open question leaves the index, and
+  [open-questions.md](open-questions.md) is where it had been defined.
+
+*Rejected: no boundary, and the rule read at its widest.* It was the live
+alternative, because the widest reading is the easiest to check. It is
+rejected because it is not checkable at all in practice: applied literally it
+moves ten clause and status names out of the register that uses them, three
+frontmatter values out of the legend that explains them, and every note shape
+out of the family that defines them — emptying four sections to fill one, and
+leaving each of those readers a hop where they had a sentence. The boundary
+above costs one judgement per candidate and is answerable from the corpus:
+find the term's other uses, and ask whether they are in the passage that
+defines it.
 
 ## alias
 
@@ -51,6 +124,18 @@ A hit is a read served entirely from `.tpl/.cache/` with no connection opened. A
 miss is a read for which the required data is absent, unreadable, or of an
 unknown format version, and which therefore reaches the server.
 
+## calling agent
+
+An AI coding agent invoking `tpl` programmatically and reading its help text,
+exit code, and output. It is the primary consumer of every surface this
+specification fixes, which is why help, exit codes, output formats and
+determinism are treated as contract rather than as presentation. Each module's
+*Actors* section states this actor's stake in that module; what it is, is
+stated here.
+
+*Written here in the thirty-third edition*, from
+[cli-contract.md](cli-contract.md), whose *Actors* section defined it.
+
 ## canonical name
 
 The primary name of a command or subcommand, as opposed to an alias. Help text
@@ -61,6 +146,23 @@ and the JSON command tree present the canonical name first.
 The database structure `tpl` reads: database metadata, tables, columns, indexes,
 keys, views, routines, and triggers. How the catalogue is read is outside the
 scope of this edition.
+
+## closed / dissolved / closed on a stated limit
+
+The three ways an open question leaves the index of
+[open-questions.md](open-questions.md). An entry is **closed** when the
+requirement it produced is written into the owning module. It is **dissolved**
+when the mechanism it governed ceases to exist, so there is no answer to record
+because there is no longer a question. It closes **on a stated limit** when the
+evidence it asks for is shown to be unobtainable rather than merely unrecorded:
+what would have been the answer becomes a limit written into the requirement
+itself, in the shape the [README](README.md#writing-conventions) fixes. In all
+three cases the identifier is retired and never reused. *A stated limit* is
+also the name of the note a requirement carries where a guarantee stops, which
+is the same fact seen from the requirement's end rather than the question's.
+
+*Written here in the thirty-third edition*, from
+[open-questions.md](open-questions.md), which defined all three.
 
 ## command tree
 
@@ -107,6 +209,21 @@ The three-key outer shape every JSON document `tpl` writes to stdout carries:
 `schema_version`, `source`, and `data`. Only `data` differs between commands,
 and the module that owns a command owns the shape of its `data`. Fixed by
 `FR-OUT-024`; the seventeen documents are indexed by `BR-OUT-002`.
+
+## in flight
+
+Said of a JSON document `tpl` writes to stdout. A document is in flight from
+the moment its first byte is written until the moment its last byte is
+written; before the first byte and after the last, no document is in flight.
+The line divides the two outcomes of a closed stdout: `FR-ERR-025` for a
+stream closed with nothing in flight, and `FR-ERR-026` for one closed with a
+document in flight. A producer that has composed a document and written no
+byte of it has none in flight, because what the two requirements turn on is
+what the consumer received.
+
+*Written here in the thirty-second edition*, from
+[errors-and-exit-codes.md](errors-and-exit-codes.md), where the thirty-first
+edition defined it.
 
 ## coverage
 
@@ -200,6 +317,15 @@ the no-regression rule. There is exactly one, fixed by `NFR-PERF-015`.
 A table, a view, or a routine. The three kinds are named by the same flag
 spellings wherever a command names one: `--table`, `--view`, `--routine`.
 
+## operator
+
+A person invoking `tpl` at a shell prompt. Both callers are served by one
+surface, and where the two would pull in opposite directions the calling agent
+decides the outcome, per [cli-contract.md](cli-contract.md#actors).
+
+*Written here in the thirty-third edition*, from
+[cli-contract.md](cli-contract.md), whose *Actors* section defined it.
+
 ## plumbing
 
 Output intended to be consumed by another program. In `tpl`, `--format json`
@@ -215,7 +341,7 @@ explicitly not a contract. See `FR-OUT-004`.
 ## project
 
 Any directory containing a `.tpl` folder. The `.tpl` folder is the project root
-and the only source of configuration and templates.
+and the only source of configuration and templates. Fixed by `FR-PROJ-001`.
 
 ## qualified routine name
 
@@ -250,6 +376,22 @@ than as a figure — that the catalogue-query count does not grow with the numbe
 of objects, that a cache hit opens no connection. It is verified from outside
 the process and needs no stopwatch. The six are `NFR-PERF-001` through
 `NFR-PERF-006`.
+
+## differential run
+
+An invocation made in a state that the operation under test would not have
+survived, compared against the same invocation made in a state that has
+nothing for that operation to find. It is the fourth instrument of
+`NFR-PERF-007`, available on every target of `NFR-PERF-018` and needing no
+privilege on any of them, and it is what stands in for the syscall trace on the
+two macOS targets, where that instrument does not exist. It observes three
+things and no others: the invocation's exit code, the bytes on stdout, and the
+artefacts it leaves on disk. Stderr is not among them. The arrangements it is
+used in are named by `NFR-PERF-007`.
+
+*Written here in the thirty-second edition*, from
+[performance-requirements.md](performance-requirements.md), where the
+eleventh edition defined it.
 
 ## restricted
 
@@ -333,8 +475,9 @@ extension optional on the command line and mandatory inside a template. See
 ## volatile field
 
 A catalogue field the server changes without any change to the structure — a row
-estimate, a data length, a modification timestamp, an index cardinality.
-Sixteen are excluded from the model as a closed list by `FR-CAT-024`, because
+estimate, a data length, a modification timestamp, an index cardinality. The
+rule that fixes the term is `BR-CAT-002`. Sixteen such fields are excluded from
+the model as a closed list by `FR-CAT-024`, because
 carrying one would put `NFR-DET-001` in permanent conflict with the server.
 Three of the sixteen are the creation and alteration timestamps of a routine
 and of a trigger, which differ between two servers of the same series and

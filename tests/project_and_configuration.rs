@@ -12,6 +12,8 @@
 //! | Which commands may run with no project at all | `FR-PROJ-025` |
 //! | The code and the four labelled lines each refusal carries | `FR-ERR-001`, `FR-ERR-008` |
 //! | That a refused write left the file byte for byte as it was | `FR-CFG-041`, `FR-CFG-048` |
+//! | That a second `tpl init` is refused `73` and changes nothing | `FR-PROJ-014`, `BR-ERR-001` |
+//! | That the password the file carries reaches neither stream, from any command | `BR-SEC-003` |
 //!
 //! A unit test can show that a function returns the right error; only a process
 //! shows that the file on disk was not touched on the way, that stdout stayed
@@ -23,22 +25,35 @@
 //! removed when the test's sandbox goes out of scope, and nothing outside it is
 //! read or written.
 //!
-//! **What this file deliberately does not reach.** Three areas of the sprint
-//! are unobservable from a process at this commit, because the resolution step
-//! of `FR-CONF-029` has no caller until a command opens a connection: `${VAR}`
-//! expansion (`FR-CONF-021`, `FR-CONF-022`), `password_command` execution
-//! (`FR-CONF-023` … `FR-CONF-033`), and the composition of `--timeout` with a
-//! phase deadline (`FR-GLOB-012`). `tpl cfg` reads the file and never resolves
-//! it, per `FR-CFG-014`, so no invocation of any command this sprint delivers
-//! expands a reference, runs a child, or enters a blocking phase. Those three
-//! are exercised by the unit tests of `project::config::expand`,
-//! `project::password` and `deadline`, and belong here on the day a command
-//! reaches them.
+//! **The one body that needs a server.** The sentinel sweep of `BR-SEC-003`
+//! runs every command of the tree, and the commands that reach a server have to
+//! reach one for the sweep to say anything about what they write on the way. It
+//! is therefore gated on `scripts/mariadb/status.sh` through
+//! [`fixture`](../fixture/index.html), on the terms
+//! [`outside_the_process`](../outside_the_process/index.html) states: `0` runs
+//! the half that needs a server, `1` skips it with a printed reason, and `2` —
+//! half a fixture — fails the run. The half that needs none runs always, which
+//! is what `BR-SEC-003` says of it. Every other body here needs no server and
+//! is not gated at all.
+//!
+//! **What this file deliberately does not reach.** Three areas of the
+//! configuration are exercised by unit tests rather than here, because no body
+//! here arranges them: `${VAR}` expansion (`FR-CONF-021`, `FR-CONF-022`),
+//! `password_command` execution (`FR-CONF-023` … `FR-CONF-033`), and the
+//! composition of `--timeout` with a phase deadline (`FR-GLOB-012`). The
+//! sentinel of `BR-SEC-003` is a literal password, which is the arrangement
+//! that rule names; a sentinel delivered through `${VAR}` or through a child
+//! process would exercise two more credential paths, and neither is written
+//! here. The three are exercised by the unit tests of `project::config::expand`,
+//! `project::password` and `deadline`.
 
+#[path = "support/fixture.rs"]
+mod fixture;
 #[path = "support/sandbox.rs"]
 mod sandbox;
 
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::process::Output;
 
 use sandbox::Sandbox;
@@ -116,6 +131,45 @@ fn assert_refused(printed: &Output, expected: i32, spelled: &str) -> String {
     );
 
     written
+}
+
+/// Every path under `directory`, relative to it, with the bytes of each file
+/// and `None` for each folder.
+///
+/// It is what makes *"SHALL change nothing"* an assertion rather than a claim:
+/// two snapshots taken around an invocation are equal only if no file changed,
+/// none was added, and none was removed.
+///
+/// # Panics
+///
+/// Panics when `directory` cannot be walked or one of its files cannot be read.
+fn snapshot(directory: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
+    fn walk(root: &Path, at: &Path, into: &mut BTreeMap<PathBuf, Option<Vec<u8>>>) {
+        for entry in std::fs::read_dir(at).expect("the folder is there") {
+            let entry = entry.expect("the entry is readable");
+            let path = entry.path();
+            let relative = path
+                .strip_prefix(root)
+                .expect("the walk started at the root")
+                .to_path_buf();
+
+            if entry.file_type().expect("the kind is readable").is_dir() {
+                into.insert(relative, None);
+                walk(root, &path, into);
+            } else {
+                into.insert(
+                    relative,
+                    Some(std::fs::read(&path).expect("the file is readable")),
+                );
+            }
+        }
+    }
+
+    let mut found = BTreeMap::new();
+
+    walk(directory, directory, &mut found);
+
+    found
 }
 
 /// One labelled line of a diagnostic, without its label.
@@ -197,6 +251,61 @@ fn fr_proj_018_the_generated_configuration_carries_no_active_database_entry() {
         stdout(&printed),
         "{\"schema_version\":1,\"source\":\"project\",\"data\":{\"entries\":[]}}\n"
     );
+}
+
+// ------------------------------------------------------------ FR-PROJ-014 ---
+
+#[test]
+fn br_err_001_a_second_init_at_a_destination_that_already_carries_tpl_is_73() {
+    // BR-ERR-001 makes at least one **integration** test per exit code part of
+    // the definition of done, and FR-ERR-003 reserves `73` for `tpl init`, so
+    // the only invocation that can be observed carrying it is an `init`. The
+    // condition is FR-PROJ-014's: a destination that already holds a `.tpl`.
+    //
+    // FR-PROJ-014 states two obligations and both are read here — the code, and
+    // that the refused run "SHALL change nothing": it does not merge, complete
+    // partially, or overwrite. The second is the one a unit test over the
+    // mapping cannot reach, and it is asserted over the whole of what the first
+    // `init` left, folder by folder and byte by byte.
+    //
+    // The `cause` is read against the `73` row of FR-ERR-034, which obliges it
+    // to name the path that could not be created and to say which of the two
+    // obstacles stopped it: an existing `.tpl`, or a failure the filesystem
+    // reported. The destination is spelled twice — the working directory, and a
+    // path named as an argument — so that the path the message carries is shown
+    // to be the destination of that invocation and not a constant.
+    let sandbox = Sandbox::new();
+
+    assert_eq!(code(&sandbox.run(&["init"])), 0);
+    assert_eq!(code(&sandbox.run(&["init", "nested"])), 0);
+
+    for (arguments, destination) in [
+        (&["init"][..], ".tpl"),
+        (&["init", "nested"][..], "nested/.tpl"),
+    ] {
+        let spelled = format!("tpl {}", arguments.join(" "));
+        let folder = sandbox.path(destination);
+        let before = snapshot(&folder);
+
+        let written = assert_refused(&sandbox.run(arguments), 73, &spelled);
+        let cause = line(&written, "cause: ");
+
+        assert!(
+            cause.contains(destination),
+            "{spelled}: the cause names no destination: {cause:?}"
+        );
+        assert!(
+            cause.contains("exists"),
+            "{spelled}: the cause does not say the obstacle was an existing .tpl: {cause:?}"
+        );
+
+        assert_eq!(
+            snapshot(&folder),
+            before,
+            "{spelled} changed {destination}, which FR-PROJ-014 forbids"
+        );
+        assert_eq!(mode_of(&folder.join(".cfg")), MODE);
+    }
 }
 
 // ------------------------------------------------------------ FR-PROJ-011 ---
@@ -487,6 +596,264 @@ fn fr_cfg_021_the_password_inside_a_url_is_redacted_and_the_rest_of_it_is_not() 
         "{written}"
     );
     assert!(!written.contains("hunter2"), "{written}");
+}
+
+// ------------------------------------------------------------- BR-SEC-003 ---
+
+/// The sentinel password of `BR-SEC-003`.
+///
+/// It is distinctive by construction: no help text, no diagnostic, no error
+/// message and no document this project emits can carry these bytes by
+/// coincidence, so a search for them over a stream answers exactly the question
+/// the rule asks and never a broader one.
+const SENTINEL: &str = "tpl-sentinel-1f9c4b7e-no-byte-of-any-stream-carries-this";
+
+/// The one name everything in the swept project is given: the database entry,
+/// and the template.
+///
+/// The sweep takes the commands from the tree and fills each required argument
+/// with this name, so naming the project's own contents after it is what
+/// carries each command as far as it can go — `tpl cfg database show x` prints
+/// an entry rather than failing to find one, and `tpl render x` resolves a
+/// template and opens a connection rather than stopping at `66`. A per-command
+/// table of arguments would reach further still, and would stop reaching a
+/// command the day one is added, which is the property `BR-SEC-003` exists for.
+const SWEPT: &str = "x";
+
+/// The server-side database the swept entry selects.
+///
+/// It is the schema `scripts/mariadb/setup.sql` creates, so that the entry
+/// describes a read that would succeed if the credential were right.
+const SWEPT_SCHEMA: &str = "freight";
+
+/// An address no server answers on: nothing listens on port 1.
+///
+/// It is not a fixture address and is not read from the harness, because the
+/// half of the sweep that uses it is the half `BR-SEC-003` says needs no
+/// container at all.
+const UNREACHABLE: &str = "127.0.0.1:1";
+
+/// Maximum verbosity: three occurrences of `-v`, which `FR-GLOB-014` makes
+/// `TRACE` and which `BR-SEC-003` requires every command of the sweep to be run
+/// at.
+const LOUDEST: [&str; 3] = ["-v", "-v", "-v"];
+
+/// A `.tpl/.cfg` selecting one entry at `address` whose password is the
+/// sentinel, written as a literal, which is the arrangement `BR-SEC-003` names.
+///
+/// # Panics
+///
+/// Panics when `address` is not `host:port`.
+fn sentinel_configuration(address: &str) -> String {
+    let (host, port) = address
+        .rsplit_once(':')
+        .expect("an address is written host:port");
+
+    format!(
+        "[core]\ndatabase = \"{SWEPT}\"\n\n\
+         [database.{SWEPT}]\nhost = \"{host}\"\nport = {port}\n\
+         user = \"root\"\npassword = \"{SENTINEL}\"\n\
+         database = \"{SWEPT_SCHEMA}\"\ntls = \"disabled\"\n"
+    )
+}
+
+/// A sandbox holding that configuration and one template, both named [`SWEPT`].
+fn sentinel_project(configuration: &str) -> Sandbox {
+    let sandbox = Sandbox::new();
+
+    sandbox.project(configuration);
+    sandbox.write(
+        &format!(".tpl/templates/{SWEPT}.jinja"),
+        "{{ database.name }}\n",
+    );
+
+    sandbox
+}
+
+/// Every command of the tree of `FR-CLI-002`, as the invocation that reaches
+/// it: the node's path, followed by [`SWEPT`] for each argument it requires.
+///
+/// The tree is the binary's own account of its surface, introspected from the
+/// parser rather than maintained beside it, per `FR-HELP-021`. Reading it here
+/// rather than writing the commands out is what makes this a sentinel: a
+/// command added to the parser enters the sweep on the day it is added, and a
+/// command that leaks on a path nobody thought was a credential path is caught
+/// without anyone having thought of it.
+///
+/// # Panics
+///
+/// Panics when `tpl help --format json` does not answer with the tree.
+fn every_invocation(sandbox: &Sandbox) -> Vec<Vec<String>> {
+    let printed = sandbox.run(&["help", "--format", "json"]);
+
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+
+    let tree: serde_json::Value =
+        serde_json::from_slice(&printed.stdout).expect("the command tree is a JSON document");
+
+    // The root of the tree is `tpl` itself, which `data.commands` does not
+    // carry because it is not a subcommand. A bare `tpl` is an invocation of
+    // it, and the sweep is over every command of the tree.
+    let mut invocations = vec![Vec::new()];
+
+    invocations.extend(
+        tree["data"]["commands"]
+            .as_array()
+            .expect("data.commands is an array")
+            .iter()
+            .map(|entry| {
+                let mut invocation: Vec<String> = entry["path"]
+                    .as_array()
+                    .expect("every entry carries a path")
+                    .iter()
+                    .map(|segment| {
+                        segment
+                            .as_str()
+                            .expect("a path segment is a string")
+                            .to_owned()
+                    })
+                    .collect();
+                let required = entry["arguments"]
+                    .as_array()
+                    .expect("every entry carries its arguments")
+                    .iter()
+                    .filter(|argument| argument["required"] == true)
+                    .count();
+
+                invocation.extend(std::iter::repeat_n(SWEPT.to_owned(), required));
+
+                invocation
+            }),
+    );
+
+    invocations
+}
+
+/// Whether `bytes` carries the sentinel anywhere in it.
+fn carries_sentinel(bytes: &[u8]) -> bool {
+    bytes
+        .windows(SENTINEL.len())
+        .any(|window| window == SENTINEL.as_bytes())
+}
+
+/// Runs every command of the tree at maximum verbosity against a project
+/// configured with `configuration`, asserts that neither stream of any of them
+/// carries the sentinel, and returns the exit codes observed.
+///
+/// Each command gets a **fresh** project, because the sweep includes the four
+/// commands that rewrite `.tpl/.cfg` — `cfg set`, `cfg unset`,
+/// `cfg database add` and `cfg database remove` — and a sweep sharing one
+/// project could disarm itself part-way through by removing the entry the
+/// sentinel lives in.
+///
+/// `arrangement` names the half of the rule under test, so that a failure says
+/// which one saw the leak.
+fn sweep(configuration: &str, arrangement: &str) -> Vec<i32> {
+    let invocations = every_invocation(&sentinel_project(configuration));
+    let mut codes = Vec::with_capacity(invocations.len());
+
+    for invocation in &invocations {
+        let sandbox = sentinel_project(configuration);
+        let mut arguments: Vec<&str> = LOUDEST.to_vec();
+
+        arguments.extend(invocation.iter().map(String::as_str));
+
+        let spelled = format!("tpl {}", arguments.join(" "));
+        let printed = sandbox.run(&arguments);
+
+        for (stream, bytes) in [("stdout", &printed.stdout), ("stderr", &printed.stderr)] {
+            assert!(
+                !carries_sentinel(bytes),
+                "{spelled}, {arrangement}, wrote the sentinel password to {stream}:\n{}",
+                String::from_utf8_lossy(bytes)
+            );
+        }
+
+        codes.push(code(&printed));
+    }
+
+    codes
+}
+
+#[test]
+fn br_sec_003_no_command_of_the_tree_writes_the_sentinel_at_maximum_verbosity() {
+    // BR-SEC-003, which `specification/security.md` owns outright: "A known
+    // sentinel password SHALL never appear in any byte `tpl` writes", tested in
+    // the form that rule fixes — a database entry configured with a distinctive
+    // sentinel, every command of the tree of FR-CLI-002 run against it at
+    // maximum verbosity, and no byte of stdout and no byte of stderr, from any
+    // of them, carrying the sentinel.
+    //
+    // **What it catches.** Each rule in the *Credentials* section of that file
+    // closes one path — FR-SEC-003 the two printers, FR-SEC-005 the diagnostic
+    // stream, FR-SEC-006 error messages, FR-CONF-032 a child's stderr — and a
+    // test of each proves only that the path it names is closed. This proves
+    // the property those prohibitions exist to produce, over the whole surface
+    // at once, and it keeps proving it when a path is added: the commands come
+    // from the tree the parser introspects, so a command, a diagnostic or an
+    // error message that begins to echo the resolved entry fails here whether
+    // or not anyone thought it was on the credential path. Maximum verbosity is
+    // where FR-GLOB-018 and FR-SEC-005 are least likely to be reviewed, which
+    // is the rule's own reason for fixing it.
+    //
+    // **The one invocation the sweep does not make.** FR-SEC-004 and BR-CFG-002
+    // make `tpl cfg get` the single deliberate exception to redaction, because
+    // it is a directed read of a named key; `tpl cfg get database.x.password`
+    // therefore prints the password and is sanctioned in doing so. It is the
+    // control below rather than a member of the sweep, and it is what makes the
+    // sweep mean anything: the same byte search, over the same stream, is shown
+    // to find the sentinel when it is there.
+    let control = sentinel_project(&sentinel_configuration(UNREACHABLE));
+    let printed = control.run(&["cfg", "get", &format!("database.{SWEPT}.password")]);
+
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(
+        carries_sentinel(&printed.stdout),
+        "the directed read of FR-SEC-004 did not print the sentinel, so the search below \
+         would not have found it either: {:?}",
+        stdout(&printed)
+    );
+
+    // The half that needs no server, which is most of the tree: every command
+    // that reads `.tpl/.cfg` without connecting, and every command that does
+    // connect stopped at the refusal of a TCP connect. BR-SEC-003 says this
+    // half needs no container, so it is not gated.
+    let codes = sweep(
+        &sentinel_configuration(UNREACHABLE),
+        "against an address no server answers on",
+    );
+
+    assert!(
+        codes.contains(&69),
+        "no command of the sweep reached the connect phase, so the sweep says nothing \
+         about what the connection path writes: {codes:?}"
+    );
+
+    // The half that needs one. The register makes this row an integration test
+    // whose server-reaching commands need a server, and this is what makes the
+    // credential leave the process: the entry is carried to a real MariaDB,
+    // presented, and refused there with `77`. One server is enough — BR-SEC-003
+    // is a property of what `tpl` writes and not of what a server answers, and
+    // the row does not make it a cross-series test the way rows 10 and 12 do —
+    // so the first series of FR-SRV-015 is the one used.
+    let Some(series) = fixture::series("the server half of br_sec_003_no_command_of_the_tree")
+    else {
+        return;
+    };
+    let server = series.first().expect("a ready fixture has its series");
+    let _exclusive = fixture::exclusive();
+
+    let codes = sweep(
+        &sentinel_configuration(server.address()),
+        "against a fixture server that refuses the credential",
+    );
+
+    assert!(
+        codes.contains(&77),
+        "no command of the sweep carried the credential to {}, so the sweep says nothing \
+         about what the authentication path writes: {codes:?}",
+        server.name()
+    );
 }
 
 // ------------------------------------------------------------ FR-ERR-035 ---

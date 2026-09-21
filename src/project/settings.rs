@@ -110,14 +110,18 @@ pub(crate) struct Settings {
     entry: String,
     /// How that entry was chosen (`FR-GLOB-008`).
     ///
-    /// Nothing reads it yet. `FR-RND-018` and `FR-RND-019` are what the
-    /// distinction exists for — `--context` is refused beside an entry named on
-    /// the command line and admitted beside one resolved from the file — and
-    /// `tpl render` is the third arm.
+    /// Nothing reads it, and nothing is expected to. `FR-GLOB-008` obliges the
+    /// distinction to exist because `FR-RND-018` and `FR-RND-019` depend on it,
+    /// and `tpl render` decides both **before** this value exists: `FR-ERR-006`
+    /// puts an argument-pair refusal at step 1 and entry resolution at step 5,
+    /// so the refusal is read off the argument vector — see
+    /// `cli::render::document_flag` — and resolving an entry first would let a
+    /// `78` preempt the `64` the pair earns.
     #[allow(
         dead_code,
-        reason = "FR-RND-018 and FR-RND-019 are the only readers of the distinction, and \
-                  tpl render is a later sprint"
+        reason = "FR-GLOB-008 obliges the distinction and FR-ERR-006 puts its two readers at \
+                  step 1, before this value exists; the field carries the requirement and a test \
+                  asserts both arms of it"
     )]
     selection: Selection,
     /// The host, where the entry names one.
@@ -146,11 +150,12 @@ impl Settings {
         &self.entry
     }
 
-    /// How that entry was chosen.
+    /// How that entry was chosen (`FR-GLOB-008`).
     #[allow(
         dead_code,
-        reason = "FR-RND-018 and FR-RND-019 are the only readers of the distinction, and \
-                  tpl render is a later sprint"
+        reason = "FR-GLOB-008 obliges the distinction and FR-ERR-006 puts its two readers at \
+                  step 1, before these settings exist; the accessor is what makes the field \
+                  readable at all, and a test asserts both arms of it"
     )]
     pub(crate) const fn selection(&self) -> Selection {
         self.selection

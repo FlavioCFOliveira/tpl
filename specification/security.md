@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-09-14
+last-reviewed: 2026-09-21
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md]
 ---
 
@@ -59,8 +59,24 @@ module, `BR-SEC-003` excepted.
 
 - **FR-SEC-005**: The system SHALL NOT write the argument vector, the resolved
   DSN, the `password_command` or its stderr, the raw driver error, or the
-  contents of `.tpl/.cfg` to any diagnostic stream, at any verbosity level. See
-  `FR-GLOB-018`.
+  contents of `.tpl/.cfg` to any diagnostic stream, at any verbosity level, with
+  exactly one exception: the `password_command` array **as stored**, where a
+  requirement of this specification obliges a `cause` line to name it. See
+  `FR-GLOB-018`, which owns the rule and the exception.
+
+  *Amended in the thirty-first edition, with `FR-GLOB-018`.* `FR-CONF-033`
+  obliges the `cause` of a non-zero `password_command` to name the command as
+  stored, and `FR-CONF-031` obliges the same of the output cap, so this rule
+  and those two were in flat contradiction. The two specific requirements
+  govern and this one states the exception, in the terms `FR-GLOB-018` fixes.
+  The child's stderr stays barred without exception, per `FR-CONF-032`, and so
+  does its stdout, which is the password.
+
+  *The threat this leaves open is stated where it is created*, in
+  `FR-CONF-033`: `${VAR}` cannot put a secret into the array, per
+  `FR-CONF-017`, but a caller who writes one there literally sees it in the
+  message. That requirement carries the accepted cost, what bounds it, and what
+  would change it.
 
 - **FR-SEC-006**: The system SHALL NOT include a credential in any error
   message, at any verbosity level. See `FR-ERR-013`.
@@ -166,12 +182,23 @@ module, `BR-SEC-003` excepted.
   command, a flag, a key of `FR-CONF-002` — is a literal; every other value is
   governed by the set, whatever its source, among them a table, a view, a
   routine, a template, a database entry, the entry name inside a
-  `database.<name>` key, and the name of an environment variable. See
-  `FR-ERR-022` and `FR-ERR-023`.
+  `database.<name>` key, and the name of an environment variable. A **flag value
+  the caller supplied in a separate token** is governed too, by a set of its
+  own, `[A-Za-z0-9_-]{1,64}` measured over the whole value. See
+  `FR-ERR-022`, `FR-ERR-023` and `FR-ERR-040`.
 
   *Threat closed.* A table name is free text on the server and can contain
   semicolons, quotes, and newlines; formatting one into a suggested command is
   command injection with the caller as the interpreter.
+
+  *Amended in the thirty-first edition: one population is governed by a second
+  set.* `FR-CLI-018` obliges the `hint` of a separate-token flag value to show
+  the corrected `--flag=value` form, and every value that reaches that
+  condition begins with `-` — so the set above refuses all of them and the
+  correction could never carry a value. `FR-ERR-040` admits the hyphen for that
+  population alone and bounds the whole value at 64 characters. The threat is
+  unchanged and the admitted alphabet holds no shell metacharacter, no quote,
+  no whitespace and no newline.
 
   *Amended in the twentieth edition.* This rule restated the character set as
   governing every candidate, per `FR-ERR-022` as it then read. It now carries

@@ -1370,3 +1370,86 @@ fn fr_rnd_034_and_fr_sem_020_a_render_that_fails_leaves_nothing_on_the_process_s
         );
     }
 }
+
+#[test]
+fn fr_glob_017_an_invocation_that_opens_a_connection_reports_the_phases_it_ran() {
+    // FR-GLOB-017: at INFO the system reports which phases ran and how long
+    // each took, beside the one line per catalogue query. The connection path
+    // has real phases — the name is resolved, the socket is opened and the TLS
+    // handshake runs inside it, and the session is started — and the tool was
+    // silent about all of them.
+    //
+    // It is observed from outside the process because the level is a property
+    // of the **stream** a caller reads: a unit test over the emitter would show
+    // that a line composes, not that an invocation emits one, nor that `-v`
+    // is what turns it on.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_glob_017_an_invocation_that_opens_a_connection_reports_the_phases_it_ran",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let sandbox = project(server);
+        let name = server.name();
+
+        // One occurrence of -v is INFO, which is the level the requirement
+        // names for this report.
+        let printed = sandbox.run(&["-v", "schema", "info", "--direct", "--no-cache"]);
+
+        assert_eq!(
+            printed.status.code(),
+            Some(0),
+            "{name}: the read failed: {}",
+            String::from_utf8_lossy(&printed.stderr)
+        );
+
+        let written = String::from_utf8_lossy(&printed.stderr).into_owned();
+        let reported: Vec<&str> = written
+            .lines()
+            .filter(|line| line.starts_with("phase:"))
+            .collect();
+
+        // The two phases of the connection itself, each named and each carrying
+        // a duration. The TLS handshake runs inside the driver's connect call
+        // and is not separable from it, which `mariadb::connect` documents, so
+        // its time is inside the connect's and it carries no line of its own.
+        for phase in ["dns resolution", "tcp connect"] {
+            assert!(
+                reported
+                    .iter()
+                    .any(|line| line.contains(phase) && line.contains("ms")),
+                "{name}: no phase line reports {phase}: {written}"
+            );
+        }
+
+        // The session start is three statements, each bounded by the phase
+        // FR-CONF-005 gives a statement, so the report carries at least three
+        // more lines beyond the two above.
+        assert!(
+            reported.len() >= 5,
+            "{name}: only {} phase lines were reported: {written}",
+            reported.len()
+        );
+
+        for line in &reported {
+            assert!(
+                line.contains("took") && line.contains("ms"),
+                "{name}: a phase line carries no duration: {line}"
+            );
+        }
+
+        // The level is the one the requirement names: a run that supplies no
+        // -v is at WARNINGS and reports nothing of this kind, and the two
+        // together are what make the report an INFO fact rather than an
+        // unconditional one.
+        let quiet = sandbox.run(&["schema", "info", "--direct", "--no-cache"]);
+
+        assert_eq!(quiet.status.code(), Some(0), "{name}");
+        assert!(
+            !String::from_utf8_lossy(&quiet.stderr).contains("phase:"),
+            "{name}: a run below INFO reported a phase"
+        );
+    }
+}

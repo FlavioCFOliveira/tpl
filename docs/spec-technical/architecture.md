@@ -1,7 +1,7 @@
 ---
 title: Architecture
 status: draft
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-21
 related: [README.md, traceability.md, open-decisions.md, overview.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -135,13 +135,20 @@ them is `64`.
 `cli/` is therefore divided by subject and not by command: two of the three
 parts are properties of the whole tree rather than of any node under it.
 
+The table below lists every file under `src/cli/` as the directory stands at
+commit `243c4d6`.
+
 | Under `cli/` | Owns | Traced to |
 |---|---|---|
-| `cli.rs` | The tree and the five settings that close it at every node; the one route from the process to the parser; the dispatch | `FR-CLI-002`, `FR-CLI-004`, `FR-CLI-005`, `FR-CLI-006`, [`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own) |
+| `cli.rs` | The tree and the five settings that close it at every node; the one route from the process to the parser; the dispatch, with the one arm a leaf without an implementation still takes | `FR-CLI-002`, `FR-CLI-004`, `FR-CLI-005`, `FR-CLI-006`, [`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own), [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) |
 | `globals.rs`, `local.rs` | The seven global flags, declared once and accepted at any position; the flags more than one node declares, written once and flattened by each | `FR-GLOB-001`, `FR-GLOB-002`, `FR-CLI-024` |
 | `schema.rs`, `template.rs`, `cache.rs`, `cfg.rs` | The nodes, positional arguments and local flags of each group, taken from the module of `/specification` that owns the command | `FR-CLI-010`, `FR-CLI-008` |
+| `schema/named.rs`, `schema/pattern.rs`, `schema/text.rs` | Naming one object — the qualified routine form, the lookup shared by the first arm, two `cache` subcommands and `render`, the `66` a name that reaches nothing produces and the `77` a short object owes; the `LIKE` filter evaluated in memory; and the `text` half of the first arm | `FR-SCH-005`, `FR-SCH-008`, `FR-SCH-010`, `FR-CACHE-024`, `FR-RND-003`, `FR-PRIV-003`; `FR-SCH-011` … `FR-SCH-015`, `BR-SCH-001`; `FR-SCH-026`, `FR-SCH-027` |
+| `cfg/keys.rs`, `cfg/entries.rs`, `cfg/coherence.rs` | The dotted-key arm; the entry arm; and the one refusal the three writing subcommands share, applied before any of them touches the file | `FR-CFG-007` … `FR-CFG-012`, `FR-ERR-035`; `BR-CFG-001`, `FR-CFG-015` … `FR-CFG-029`; `FR-CFG-048`, `FR-CONF-007` |
+| `source.rs` | Where a catalogue read comes from — the cache first, the server on a miss — for the eight `schema` subcommands and for `tpl cache load`, which is the same pipeline with the lookup skipped | `FR-CACHE-006`, `FR-CACHE-007`, `FR-SCH-025`, `FR-ERR-006` |
+| `layout.rs` | The `text` cells and the multi-part payload two arms share; it composes no line, and every cell is escaped by `output/` on the way out | `FR-OUT-006`, `FR-OUT-018`, `FR-OUT-019`, `FR-OUT-034` |
 | `render.rs`, with `render/context.rs` | The third arm's own step 1, the choice between the two context sources, and the assembly of the five context variables from four sources | `FR-RND-005`, `FR-RND-011` … `FR-RND-018`, `FR-RND-023`, `FR-RND-024`, `FR-RND-026` |
-| `rules.rs` | The two refusals `tpl` makes itself, and the diagnostic level the two verbosity flags resolve to | `FR-CLI-014`, `FR-CLI-015`, `FR-GLOB-014`, [`OD-17`](open-decisions.md#od-17--observability) |
+| `rules.rs` | The refusals `tpl` makes itself — the repeated single-value flag, the verbosity pair, `--pretty` without `--format json` — and the diagnostic level the two verbosity flags resolve to | `FR-CLI-014`, `FR-CLI-015`, `FR-OUT-009`, `FR-GLOB-014`, [`OD-17`](open-decisions.md#od-17--observability) |
 | `intercept.rs` | What a parser refusal becomes, read as typed API and never as rendered text | [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
 | `help.rs`, with `help/render.rs` and `help/document.rs` | The typed table, the seven-section renderer, and the JSON command tree | `FR-HELP-006`, `FR-HELP-016`, `FR-HELP-022`, [`OD-05`](open-decisions.md#od-05--the-module-decomposition) |
 
@@ -152,10 +159,14 @@ module per command **group** — `schema`, `template`, `cache`, `cfg` — while
 `render`, `init`, `help` and `version` declare theirs where they are declared as
 nodes: a group's leaves share flags that are written once and flattened by each,
 and a top-level leaf sharing none has nothing to put in a module of its own.
-Where a leaf's **work** needs a module it has one regardless of that split, as
-`render` has had since 2026-09-21. Nothing of the decomposition moves — `cli/`
-delegates and does not do the work, which is what that entry decided — and the
-granularity is recorded rather than silently read as the same thing.
+Where a leaf's **work** needs a module it has one regardless of that split:
+`render/context.rs`, `schema/named.rs`, `schema/pattern.rs`, `schema/text.rs`,
+`cfg/keys.rs`, `cfg/entries.rs` and `cfg/coherence.rs`. Two further modules sit
+beside the tree and belong to no node: `source.rs`, which every catalogue read
+goes through, and `layout.rs`, which two arms share. Nothing of the
+decomposition moves — `cli/` delegates and does not do the work, which is what
+that entry decided — and the granularity is recorded rather than silently read
+as the same thing.
 
 **Parsing yields one of three forms, and a command is only one of them.** The
 two flag forms are answered at whatever node they were given at (`FR-GLOB-019`,
@@ -311,8 +322,15 @@ resolution parses the URL, expands within each already-delimited field, and
 hands on a host, a port, a user, a password and a server-side database name —
 whichever way the entry was written — so nothing downstream distinguishes the
 two shapes and an expanded value has no delimiter to move within (`FR-CONF-018`,
-`FR-SEC-009`). Percent-encoding, the third step of that order, is applied by
-whichever component composes a URL for the driver, which is a later sprint's.
+`FR-SEC-009`). Percent-encoding, the third step of that order, is built:
+`Field::encode` in `project/config/dsn.rs` leaves the unreserved set of RFC 3986
+and escapes every delimiter of the grammar. **It has no caller on any path the
+binary takes**, because nothing composes a URL for the driver: `mariadb/`
+builds `MySqlConnectOptions` field by field — host, port, user, password,
+database, TLS mode, trust material — so the guarantee `FR-SEC-009` names rests
+on the shape of the parsed type rather than on the order of two calls, and the
+encoder stands ready for the first consumer that has to put a field back into a
+URL (read 2026-09-21).
 
 ## The connection lifecycle
 
@@ -340,19 +358,18 @@ property and `security.md`'s subject. The verdicts stages 4 and 5 produce — an
 unsupported product, a series below the window, a series above it — are
 [interfaces.md](interfaces.md#the-catalogue-reader)'s.
 
-**Recorded discrepancy — the order of stages 2 to 4.**
-[README.md](README.md#architecturemd) summarises the lifecycle as *"probe then
-read-only set then read-back"*. `FR-SRV-002` admits both orders: it requires the
-product and version to be determined before any statement **other than** the
-read-only pair, which is exactly the permission for that pair to run first.
-`FR-CFG-024` then fixes four steps that the connectivity command SHALL perform
-*"in this order"*, and its step 2 is enforcing and confirming the read-only
-session while its step 3 is verifying the series — the reverse of the summary.
-Both readings are recorded. The table above takes the order that satisfies every
-requirement literally rather than only one of them, and it costs nothing: the
-read-only pair is the one thing `FR-SRV-002` allows before the probe, and
-`FR-SRV-010` stops the connection before any catalogue statement either way. The
-index's wording is this folder's to correct, in its own pass and not here.
+**The order of stages 2 to 4 is `FR-SRV-042`'s.** That requirement fixes the
+three connection-start statements in one order and in no other, states it once
+for the whole functional corpus, and obliges every passage that depends on it to
+cite it rather than repeat it. The table above conforms to it and adds nothing
+of its own.
+
+This section recorded a discrepancy until 2026-09-21: the summary in
+[README.md](README.md#architecturemd) ordered the three the other way, and
+`FR-SRV-002` admitted both readings by requiring the product and version to be
+determined before any statement **other than** the read-only pair. `FR-SRV-042`
+removes that latitude, so there is no discrepancy left to carry, and the index's
+wording was corrected in the same pass as this paragraph.
 
 ## The catalogue reader and the query-count invariants
 

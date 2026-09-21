@@ -1,7 +1,7 @@
 ---
 title: Schema Commands (First Arm)
 status: approved
-last-reviewed: 2026-09-20
+last-reviewed: 2026-09-21
 related: [cli-contract.md, cache-commands.md, output-formats.md, context-document.md, render-command.md]
 ---
 
@@ -162,9 +162,9 @@ tpl schema dump                        The whole database as one JSON document
   *Amended in the seventh edition, because one item on the list does not
   exist.* The requirement named a table's **character set**, and the
   catalogue has no such field: the table catalogue carries a collation and no
-  character set, observed on all four series of `FR-SRV-015`. The three
-  places a character set is reachable are the database, per `FR-CTX-036`, and
-  each individual column, per `FR-CTX-041` — not the table between them.
+  character set, observed on all four series of `FR-SRV-015`. A character set
+  is reachable on the database, per `FR-CTX-036`, and on each individual
+  column, per `FR-CTX-041` — and not on the table between them.
   Deriving one from the collation's leading segment would be an inference the
   catalogue does not state, and this specification does not write down what
   it has not observed, so the item is removed rather than reconstructed.
@@ -181,6 +181,32 @@ tpl schema dump                        The whole database as one JSON document
   `FR-CAT-053` names it beside them. The comment's absent value was already
   fixed by `FR-CAT-039`. Nothing this requirement obliges changes: the three
   are as the seventh edition left them.
+
+  *Corrected in the thirty-first edition: the sentence counted three places and
+  named two.* It read *The three places a character set is reachable are the
+  database, per `FR-CTX-036`, and each individual column, per `FR-CTX-041`*,
+  which is a count with nothing under it — a reader looking for the third found
+  no requirement of this corpus that gives one. The count is dropped rather
+  than a third place found, and the sentence now reads as the same fact reads
+  in [catalogue-coverage.md](catalogue-coverage.md), where the twenty-sixth
+  edition stated it below the table of `FR-CAT-054` in these words and stated
+  no number. Nothing this requirement obliges changes, and the seventh
+  edition's amendment above stands in every other word.
+
+  *Rejected: naming the session character set a routine, a routine parameter
+  or a trigger carries as the third place.* `FR-CAT-048`, `FR-CAT-049` and
+  `FR-CAT-050` each record a client character set the model carries, so a
+  literal count of every place the word appears is larger than three and not
+  smaller. They are not what this sentence is about: each records the session
+  the object was created in, and this sentence is about the chain a character
+  set describing **data** runs down — the database, then the table, then the
+  column — which is the chain the removed item was wrongly placed on. Writing
+  the larger count would answer the arithmetic and lose the point.
+
+  *Rejected: leaving the number and finding a third place to fit it.* There is
+  none, and manufacturing one — the collation's leading segment, or the
+  schema's default read a second time at table level — is the inference the
+  amendment above removed the item rather than make.
 
 - **FR-SCH-010**: IF a named table, view, or routine does not exist in the
   selected database, THEN the system SHALL exit `66` (`EX_NOINPUT`) with a

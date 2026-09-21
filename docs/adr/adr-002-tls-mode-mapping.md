@@ -3,7 +3,7 @@ id: ADR-002
 title: The TLS mode mapping onto the database driver
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-21
 requirements: [FR-CONF-013, FR-CONF-014, FR-CONF-036, FR-CONF-037, FR-CONF-038, FR-CONF-039]
 supersedes: []
 superseded-by: null
@@ -43,15 +43,23 @@ supplied by `ca_file` or `ca_path` be **additional** to what the TLS
 implementation already trusts, and forbids describing `verify-ca` or
 `verify-identity` as exclusive trust in the supplied authority.
 
+**`FR-CONF-014` names a key the driver has no mechanism for.** It makes
+`ca_file` **and** `ca_path` supply the trust material the two validating modes
+use, and says nothing about how either reaches a driver, because the corpus
+names none. `ca_file` maps straight onto a driver method. `ca_path` does not:
+the driver affords a file and a byte buffer, and no directory. The mapping of
+that key onto the driver is the same kind of fact as the mapping of the five
+modes, missing for the same reason, and it is held here for the same reason.
+
 **The driver choice itself is `ADR-003`.** That record holds the driver, the
 rule that settled it — `FR-CONF-036`, which disqualified the candidate that
 could not express all five modes — and the alternatives weighed. This record
 maps the five modes onto the driver that record pins, and restates none of it.
 
-`NFR-DET-001` and `BR-CLI-002` bear on the remaining question of where the trust
-anchors come from. `BR-CLI-002` states that two identical command lines run in
-two different shells, against the same project state, cannot read different
-databases.
+`NFR-DET-001` and `BR-CLI-002` bear on the two remaining questions: where the
+trust anchors come from, and in what order supplied material is assembled.
+`BR-CLI-002` states that two identical command lines run in two different
+shells, against the same project state, cannot read different databases.
 
 ## Decision
 
@@ -82,6 +90,28 @@ roots, never substituted for them.** This is the behaviour `FR-CONF-039`
 requires, and it is a property of how the crates build their root store rather
 than a choice made here.
 
+**`ca_path` reaches the driver as one bundle `tpl` assembles.** The driver takes
+its trusted authorities through `ssl_ca`, which names a file, or
+`ssl_ca_from_pem`, which takes PEM bytes; no method takes a directory (docs.rs,
+`sqlx` 0.9.0, `sqlx::mysql::MySqlConnectOptions`, verified 2026-09-21).
+`FR-CONF-014` makes `ca_path` supply trust material all the same, so `tpl` reads
+both keys itself and hands the driver **one PEM bundle** through
+`ssl_ca_from_pem`, composed in this order:
+
+1. the bytes of `ca_file`, where the entry declares one;
+2. then the **regular files** the `ca_path` directory holds, sorted into
+   ascending path order before any of them is read.
+
+Each block ends before the next begins, so that a certificate file whose last
+line carries no newline cannot run into the block after it.
+
+**The bundle is assembled only under `verify-ca` and `verify-identity`.** Those
+are the two modes `FR-CONF-014` names. Under the other three the driver ignores
+the material it is given — `FR-CONF-038` records `required` ignoring supplied
+trust material as one of the three controls that separate the modes — and
+reading a path whose contents cannot reach the connection would turn an
+unreadable path into a failure of a mode that would never have looked at it.
+
 **The mode is set explicitly on every connection `tpl` opens.** The driver's own
 default is `MySqlSslMode::Preferred` (docs.rs, verified 2026-09-10), which
 `FR-CONF-037` forbids relying on. The default is never reached, for any mode,
@@ -103,6 +133,29 @@ including `disabled`.
   key, `FR-CONF-002` closes the key space, and `FR-CONF-034` makes an
   unrecognised key fatal. Introducing one would be a functional change, and an
   architecture decision may not make one.
+
+- **Handing the directory to the driver.** Unavailable rather than refused. Both
+  CA methods store the same type, whose only two shapes are a path to a file and
+  an inline byte buffer (`vendor/sqlx-core-0.9.0/src/net/tls/mod.rs`, read
+  2026-09-21). There is no third shape to reach for, and that is what makes the
+  assembly `tpl`'s work rather than the driver's.
+
+- **Supporting `ca_file` and refusing `ca_path`.** Refused for the reason the
+  configurable trust store is refused above: it cannot be built from this side.
+  `FR-CONF-014` names both keys and `FR-CONF-002` closes the key space, so
+  dropping one is a functional change, and an architecture decision may not make
+  one. The absence of a driver mechanism is a fact about the driver, and
+  `FR-CONF-036` already settles which of the two yields when they disagree.
+
+- **Taking the directory's files in the order the directory yields them.**
+  Refused. The order a directory read returns entries in "is platform and
+  filesystem dependent" and "can change between calls", and the same
+  documentation states the remedy — "if reproducible ordering is required, the
+  entries should be explicitly sorted" (Rust standard library, `std::fs::read_dir`,
+  verified 2026-09-21). One configuration would otherwise produce different
+  bundles on two runs of one command, or on two hosts holding the same
+  certificates, which is the ground on which the platform trust store is refused
+  above, arriving through the filesystem instead of through the machine.
 
 ## Consequences
 
@@ -132,6 +185,25 @@ changing — and would move again on a dependency upgrade. Setting the mode
 explicitly on every connection is what keeps the authority where the
 configuration puts it.
 
+**One configuration is one bundle, on every run and on every host.** The
+directory's own order stops being an input: what the driver is handed is a
+function of `ca_file`, of the names and the contents of the regular files under
+`ca_path`, and of nothing else. That is the same property the bundled root set
+delivers for the anchors, obtained the same way — by removing from the decision
+everything the invocation does not state.
+
+**What the assembly obliges of the code.** Three obligations follow, and each is
+a property the bundle has only if the code keeps it. Every block the bundle
+carries must end before the next begins, or two certificates merge into one
+unparseable block. Only regular files are taken: a subdirectory is skipped
+rather than descended into, and a symbolic link is skipped with it, because the
+type is read from the directory entry and `DirEntry::file_type` "will not
+traverse symlinks if this entry points at a symlink" (Rust standard library,
+`std::fs::DirEntry::file_type`, verified 2026-09-21). And a path that cannot be
+read — the `ca_file`, the directory, or a file inside it — is reported against
+the path the configuration declared, not against the bundle it was being
+assembled into.
+
 **A bundled root set ages with the binary.** Refreshing the trusted roots
 requires a dependency update and a rebuild, which is the accepted cost of
 removing the host from the decision. The vendor documents this trade-off in the
@@ -152,10 +224,14 @@ commit that created that record. Moving the pin `ADR-003` holds obliges a
 re-check of the five-variant mapping above, and `ADR-003` carries that
 obligation on its own side.
 
-**Under R3, the mapping lives here alone.**
-`docs/spec-technical/security.md` cites `ADR-002` for it rather than restating
-it, and `docs/spec-technical/open-decisions.md` entry `OD-16` reduces to a
-citation of this record.
+**Under R3, the mapping lives here alone, and so does the assembly.**
+`docs/spec-technical/security.md` cites `ADR-002` for the mapping rather than
+restating it, and `docs/spec-technical/open-decisions.md` entry `OD-16` reduces
+to a citation of this record. `FR-CONF-014` states that both keys supply the
+material and says nothing about how, which is what it should say: the corpus
+names no driver, and the assembly exists only because the driver `ADR-003` pins
+has no mechanism for a directory. No other document of this repository states
+the composition or the order, and none may.
 
 ## Sources
 
@@ -169,4 +245,9 @@ citation of this record.
 | The driver, the rule that settled the choice, and the candidate it disqualified | `ADR-003` | 2026-09-11 |
 | `rustls` 0.23.44, `ring` 0.17.14, `webpki-roots` 1.0.9 linked by both candidates in the spike | `BENCHMARKS.md`, "2026-09-10 — MariaDB driver selection", Crates | 2026-09-10 |
 | The behaviour of all five modes against a TLS-offering and a TLS-less server, verified cell by cell against running servers | `specification/configuration-model.md`, `FR-CONF-038` | 2026-09-10 |
+| The driver takes trusted authorities as `ssl_ca`, naming a file, or `ssl_ca_from_pem`, taking PEM bytes, and no method takes a directory | docs.rs, `sqlx` 0.9.0, `sqlx::mysql::MySqlConnectOptions` | 2026-09-21 |
+| Both CA methods store one type whose only two shapes are `File(PathBuf)` and `Inline(Vec<u8>)` | `vendor/sqlx-core-0.9.0/src/net/tls/mod.rs`, `CertificateInput` | 2026-09-21 |
+| A directory read's order "is platform and filesystem dependent", "can change between calls", and reproducible ordering requires the entries to be explicitly sorted | Rust standard library documentation, `std::fs::read_dir` | 2026-09-21 |
+| `DirEntry::file_type` "will not traverse symlinks if this entry points at a symlink" | Rust standard library documentation, `std::fs::DirEntry::file_type` | 2026-09-21 |
+| Both keys are read under the two validating modes alone, `ca_file` first and then the directory's regular files sorted by path, and the bundle is handed over through `ssl_ca_from_pem` | `src/mariadb/connect.rs`, `trust` and `options` | 2026-09-21 |
 </content>

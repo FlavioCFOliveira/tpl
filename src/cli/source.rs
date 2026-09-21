@@ -359,6 +359,12 @@ impl<'a> Reader<'a> {
         // connection. FR-CACHE-013 skips the lookup outright, and
         // FR-CACHE-033 makes a file that will not decode a miss rather than a
         // condition — which is why the decode is part of the hit.
+        //
+        // FR-CDOC-011 is discharged here and nowhere else: it obliges `source`
+        // to satisfy FR-CACHE-012 — a cached read states that it was cached —
+        // and this is the one call that presents a document the store served.
+        // The value is passed rather than defaulted, so a hit cannot reach the
+        // presentation carrying the value a live read would have carried.
         if !self.direct
             && let Some(loaded) = opened.cache.look(look)
             && let Some(document) = loaded.document()

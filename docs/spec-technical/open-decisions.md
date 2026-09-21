@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-21
 related: [README.md, traceability.md]
 ---
 
@@ -9,14 +9,14 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Thirty-one entries, each a decision the repository could not settle on its own.
-**All thirty-one are settled. None is open.** Nineteen were settled by the product
-owner in the interview of 2026-09-10, by the establishment of the decision
-register, and by the eighth edition of `/specification`; nine more were settled
-on 2026-09-11, together with all five residuals the eighth edition left inside
-settled entries. The fifth, `OD-22`'s, was work rather than a decision: it was
-executed on 2026-09-11 by tasks #15 and #25, and the entry records what each
-produced.
+Thirty-two entries, each a decision the repository could not settle on its own.
+**All thirty-two are settled. None is open.** Nineteen were settled by the
+product owner in the interview of 2026-09-10, by the establishment of the
+decision register, and by the eighth edition of `/specification`; nine more were
+settled on 2026-09-11, together with all five residuals the eighth edition left
+inside settled entries. The fifth, `OD-22`'s, was work rather than a decision:
+it was executed on 2026-09-11 by tasks #15 and #25, and the entry records what
+each produced.
 
 **Two entries were added on 2026-09-15**, when the command surface was built and
 this folder was reconciled against it: `OD-29`, the two shapes of the JSON
@@ -31,6 +31,13 @@ questions `DIV-032` hands to architecture. `OD-05`, `OD-18` and `OD-19` were
 re-read against the same build the same day; the first two carry a refinement
 and two amendments, and the third carries an observation now owed to
 `adr-guardian`.
+
+**One entry was added on 2026-09-21**, when the backlog was cleared: `OD-32`,
+the removal of `anyhow` from the dependency graph, settled by the user that day.
+It is the fifth entry to prepare a correction to `CLAUDE.md` and the only one
+whose correction is still owed. `OD-20` was narrowed the same day: `FR-ERR-039`
+names the edit-distance variant, so the entry holds only how the distance is
+computed.
 
 **One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
 that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
@@ -53,8 +60,10 @@ renders it `None` — and the entry records what the built system does about it.
 `/specification`**, at commit `4ad5e8c` of 2026-09-11: `OD-28`'s amendment to
 `FR-ERR-030`, and `OD-12`'s observation on the referent of `FR-CONF-004`.
 Neither entry is reopened and neither history is dropped; each records what
-landed. One obligation of `OD-12`'s survives inside that entry and falls to
-`verification` rather than to this register. `OD-08`'s obligation of the same
+landed. The one obligation of `OD-12`'s that fell to `verification` was
+discharged on 2026-09-18, when the connection was built; the entry records the
+two failure modes that were produced, the third that was not, and the
+instruction of its own that the work overruled. `OD-08`'s obligation of the same
 kind was discharged on 2026-09-15 and is recorded as discharged in that entry.
 
 **No entry is a conflict.** The three that were — `OD-21`, `OD-22` and
@@ -79,33 +88,62 @@ the register itself rather than a record.
 
 ### Corrections owed to `CLAUDE.md`
 
-`CLAUDE.md` is coordination and is never edited by this folder; four entries
-prepared a correction to it and **all four were applied on 2026-09-11**, each
-entry now recording the commit that discharged it.
+`CLAUDE.md` is coordination and **this folder never edits it**; five entries
+have prepared a correction to it. **Four were applied on 2026-09-11**, each
+entry now recording the commit that discharged it. The fifth was prepared on
+2026-09-21 and **has not been applied**.
 
-| Entry | Correction | Applied by |
+| Entry | Correction | State |
 |---|---|---|
-| `OD-09` | The stack table's configuration row splits into `toml` and `toml_edit` | Task #20, commit `ee7363d` |
-| `OD-17` | The logging row loses `tracing` and `tracing-subscriber` | Task #20, commit `ee7363d` |
-| `OD-24` | The stack table gains a row for `rustix` | Task #20, commit `ee7363d` |
-| `OD-26` | *Fontes de Verdade* gains this folder as a fourth source | Task #46, commit `c6356df` |
+| `OD-09` | The stack table's configuration row splits into `toml` and `toml_edit` | Applied. Task #20, commit `ee7363d` |
+| `OD-17` | The logging row loses `tracing` and `tracing-subscriber` | Applied. Task #20, commit `ee7363d` |
+| `OD-24` | The stack table gains a row for `rustix` | Applied. Task #20, commit `ee7363d` |
+| `OD-26` | *Fontes de Verdade* gains this folder as a fourth source | Applied. Task #46, commit `c6356df` |
+| `OD-32` | The *Stack* table's error row loses `anyhow` and states `thiserror` alone, and the *Tipos e erros* convention that repeats that row loses it with it | **Not applied.** Both lines still name `anyhow` at commit `8f936d4`, read 2026-09-21. It waits on **the user**, who is that file's only writer; no agent of this project may make it |
 
-**The whole register was re-read against `CLAUDE.md`** at commit `c6356df`, the
-last that touched the file, on 2026-09-11. **No other entry claims a correction
-is owed to `CLAUDE.md`, and none names the root `README.md` at all.** Two
-statements about the file remain accurate and are not corrections owed by this
-register: `OD-06` leaves the fate of `anyhow` in that table conditional on a
-dependency question `technology-stack` owns, and `OD-27` cites `DIV-036`
-— an entry of `/specification`'s register, not of this one — for
-`scripts/mariadb/seed-bench.sql`, which does not yet exist; what that entry
-still owes the file is the entry's to state.
+**The whole register was re-read against `CLAUDE.md` at commit `8f936d4` on
+2026-09-21**, which is the file's current state. The re-read before it was at
+`c6356df` on 2026-09-11, and four commits have touched the file since —
+`b066cfa` (2026-09-15), `cd6ce7e` (2026-09-17), `6a0cce5` (2026-09-18) and
+`8f936d4` (2026-09-21), read from `git log -- CLAUDE.md`. **No ground this
+register takes from that file moved.** The four sections every entry draws on —
+*Stack*, *Orçamento de dependências*, *Plataformas Suportadas* and
+*Desenvolvimento* — are untouched by all four commits, as are *Fontes de
+Verdade*, *Invariantes de Implementação*, *Testes contra MariaDB*, *Tipos e
+erros* and *Desempenho e Eficiência*, and each section name this register cites
+still resolves. What the four commits added is coordination: a Regra Zero block,
+the sections *Sinergia e Convergência do Esforço*, *Linguagem*, *Proactividade*
+and *Completude*, the launch gate for subagents, and the split of `rmp` between
+two skills. None of it grounds a technical decision, and none of it is cited
+here.
+
+**`OD-32` is the one entry claiming a correction is owed to `CLAUDE.md`, and it
+is still owed.** The two lines it names — 465 and 539 — both still read
+*"`thiserror` na biblioteca, `anyhow` no binário"* (read 2026-09-21), so nothing
+has been applied. `anyhow` has meanwhile been removed from `Cargo.toml`, so the file
+now names a dependency the graph does not carry. **This register cannot correct
+it**: `CLAUDE.md` is coordination and the user is its only writer, so the
+correction waits on the user and on nobody else. No entry names the root
+`README.md` at all.
+
+One statement about the file is corrected by this re-read rather than by any
+entry: `OD-27` cited `DIV-036` for `scripts/mariadb/seed-bench.sql` as a file
+that did not yet exist. **It was written on 2026-09-21** and `OD-27` records the
+discharge in its own entry; what `DIV-036` still owes the root documents is
+`/specification`'s register's to state, not this one's.
 
 **A second sweep, for quotations rather than claims**, ran on 2026-09-11 over
 the whole folder: every quoted span, every cited section name and every
 Portuguese fragment attributed to a root document was tested against
 `CLAUDE.md` at commit `c6356df` and against the root `README.md` at commit
-`87dd6e3`, the last to touch each. **`OD-02` was the only stale quotation**,
-and is corrected in its own entry. Two passages quote the graph's former row —
+`87dd6e3`, then the last to touch each. **`OD-02` was the only stale
+quotation**, and is corrected in its own entry. **The sweep was run again on
+2026-09-21 against `CLAUDE.md` at `8f936d4`, and nothing had gone stale**: this
+register quotes that file twice — *"Onde e **como**"*, marked in `OD-26` as the
+text `c6356df` replaced, and *"o erro previsível"*, which the file still carries
+in *Fontes de Verdade* — and both hold. The one quotation of
+`scripts/mariadb/README.md`, in `OD-22`, was tested the same way and still
+resolves. Two passages quote the graph's former row —
 [`OD-26`](#od-26--the-boundary-against-the-knowledge-graph) and
 [README.md](README.md#the-four-sources-of-truth) — each explicitly as the text
 `c6356df` replaced, which was confirmed against that commit. No passage of this
@@ -133,8 +171,18 @@ its entry. This sweep is a third check again: a summary claims no correction
 and quotes nothing, so it passes both checks above while decaying on the same
 edit.
 
-The re-reading is now a convention of this folder rather than an occasion, for
-the reason [README.md](README.md#conventions) gives.
+The re-reading is a convention of this folder rather than an occasion, for the
+reason [README.md](README.md#conventions) gives, and its trigger is an edit to
+the target file. **Every re-read this register has made is recorded with its
+commit and date**, so the next one starts from a known state rather than from
+the last edition of this folder.
+
+| Target | Re-read at | Date | Outcome |
+|---|---|---|---|
+| `CLAUDE.md` | `c6356df` | 2026-09-11 | Three entries claimed a correction `ee7363d` had already applied; each now records the commit that discharged it |
+| Root `README.md` | `87dd6e3` | 2026-09-11 | No passage of this folder quotes it, and no entry names it |
+| `specification/upstream-divergences.md` | — | 2026-09-11 | Eleven passages stale, in five files; all eleven now state the concern or the entry |
+| `CLAUDE.md` | `8f936d4` | 2026-09-21 | No ground moved. `OD-32`'s correction is confirmed still owed and still the user's |
 
 ## Status legend
 
@@ -183,9 +231,10 @@ the reason [README.md](README.md#conventions) gives.
 | [OD-29](#od-29--the-json-command-tree-two-shapes-and-what-the-binary-publishes) | The JSON command tree: two shapes, and what the binary publishes | Settled | — |
 | [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled, interim | — |
 | [OD-31](#od-31--the-models-shape-strings-fields-and-the-attribute) | The model's shape: strings, fields, and the attribute | Settled | — |
+| [OD-32](#od-32--anyhow-in-the-shipped-graph) | `anyhow` in the shipped graph | Settled | — |
 
-Thirty entries are settled outright; `OD-19` alone carries an observation owed.
-Thirty and one are the whole of the thirty-one. `OD-30` is settled and
+Thirty-one entries are settled outright; `OD-19` alone carries an observation
+owed. Thirty-one and one are the whole of the thirty-two. `OD-30` is settled and
 **interim**: it records an arrangement each later sprint removes one arm of, and
 it is discharged when no arm remains — one arm remains.
 
@@ -200,10 +249,13 @@ crate index, the Rust Edition Guide, the Rust Reference, the Rust Book, the
 Cargo Book, or a file of this repository. Each claim carries the date it was
 verified on: **2026-09-10** for the nineteen entries settled that day,
 **2026-09-11** for everything added since, **2026-09-18** for the two library
-and format claims `OD-31` rests on and for the dependency-graph reading that
-corrected `OD-18`, and **2026-09-21** for the engine behaviour `OD-14` now
-records as observed. Anything not verified says so in its own text. No claim
-rests on recollection.
+and format claims `OD-31` rests on, for the dependency-graph reading that
+corrected `OD-18` and for the driver behaviour `OD-12` now records as observed,
+and **2026-09-21** for the manifest, dependency-graph and source readings
+`OD-32` rests on, for the reading of `src/mariadb/connect.rs` that `OD-12`'s
+third correction rests on, and for the engine behaviour `OD-14` now records as
+observed. Anything not verified says so in its own text. No claim rests on
+recollection.
 
 The last of those has a source of a different kind, and it is named here because
 the difference matters: it is a **test of this repository**, not a page of
@@ -515,13 +567,14 @@ underlying template-engine errors", so a render variant carries that chain, and
 - **`anyhow::Error` in the library.** The project fixes `thiserror` there, and an opaque error cannot carry the per-code obligations of `FR-ERR-034` or the exhaustive match `exit_code` depends on.
 - **An exit code stored as a field on the error.** It makes two variants able to disagree with the table by construction, and it moves the assignment from a compiler-checked match to a value someone writes at each construction site.
 
-**One observation for `technology-stack`.** With `main.rs` reduced to calling
-the library, reading `exit_code`, and returning, the binary has no dynamic error
-to carry, so `anyhow` earns nothing under the dependency budget. Whether it
-stays in the stack table is a dependency question for that document; nothing in
-this entry depends on the answer, and the correction to the coordination
-document, if any, is prepared for the user rather than made here — as `OD-09`
-did for `toml_edit`.
+**One observation for `technology-stack`, answered on 2026-09-21.** With
+`main.rs` reduced to calling the library, reading `exit_code`, and returning,
+the binary has no dynamic error to carry, so `anyhow` earns nothing under the
+dependency budget. Whether it stays was a dependency question for that document,
+and [`OD-32`](#od-32--anyhow-in-the-shipped-graph) settles it: the crate is
+removed, and the correction to the coordination document is prepared there for
+the user rather than made in this folder — as `OD-09` did for `toml_edit`.
+Nothing in this entry depended on the answer, and nothing in it moves.
 
 **Unblocks.** `interfaces`, `architecture`.
 
@@ -593,7 +646,7 @@ renderer is never invoked, so no byte it produces reaches a caller.
 | clap feature | State | Why |
 |---|---|---|
 | `error-context` | **on** | It is the only source of the token `FR-ERR-034` row `64` obliges the `cause` line to name |
-| `suggestions` | **off** | `FR-ERR-019` and `FR-ERR-020` fix the suggestion rule — at most three, within an edit distance of two, ordered by distance then by name — and `OD-20` fixes the distance as Damerau-Levenshtein. A second candidate generator with different rules would be dead weight whose output is discarded |
+| `suggestions` | **off** | `FR-ERR-019` and `FR-ERR-020` fix the suggestion rule — at most three, within an edit distance of two, ordered by distance then by name — while `FR-ERR-039` fixes the measure and `OD-20` how it is computed. A second candidate generator with different rules would be dead weight whose output is discarded |
 | `color` | **off** | `NFR-DET-004` forbids colour and every ANSI escape sequence on stdout and on stderr, "under any circumstances", and names removing colour as what "lets the argument parser be built without its colour support" |
 | `wrap_help` | off (default) | `FR-HELP-009` and `FR-HELP-010` put the line breaks in the text and forbid reading `COLUMNS`. Settled in `OD-07` |
 
@@ -809,19 +862,19 @@ records the unexplained musl blocking cost this entry mentioned; it bears on
 ## OD-12 — How six phase deadlines are enforced
 
 **Status: settled.** The observation it owed `specification-manager` landed in
-the ninth edition; one behaviour is still owed a verification, which falls to
-`verification` rather than to this register. It is the only such obligation
-standing: `OD-08`'s was discharged on 2026-09-15. It was
-flagged as the entry likeliest to prove a requirement unmeetable. It did not:
-five of the six phases separate cleanly, and the sixth pair separates in the
-report rather than in the call.
+the ninth edition; the behaviour it owed a verification was **observed on
+2026-09-18**, when the connection was built, and the entry is discharged below
+with three corrections. No obligation of this entry stands. It was flagged as
+the entry likeliest to prove a requirement unmeetable. It did not: five of the
+six phases separate cleanly, and the sixth pair separates in the report rather
+than in the call — on two discriminants and not on one.
 
 **Decision.** Three mechanisms, chosen by what the phase is waiting on.
 
 | Phase | Bounded by | Deadline |
 |---|---|---|
 | DNS resolution | `tokio::time::timeout` around `tokio::net::lookup_host`, performed by `tpl` before the driver is called | the connection deadline |
-| TCP connect **and** TLS handshake | one `tokio::time::timeout` around the driver's `connect_with`, which receives an address the resolution already produced | the remainder of the connection deadline |
+| TCP connect **and** TLS handshake | one `tokio::time::timeout` around the driver's `connect_with`, which receives the **configured host** and not the address the resolution produced — third correction below | the remainder of the connection deadline |
 | Catalogue query | `tokio::time::timeout` around each query | `core.query_timeout` |
 | `password_command` | a reader thread draining the child's standard output and a polling loop in the parent, which kills the child and reports the deadline | `core.password_timeout` |
 | Render | a timer thread that writes the `65` diagnostic and exits the process | `core.render_timeout` |
@@ -834,9 +887,9 @@ requires: a phase ends at the first of its own deadline and what remains of
 
 **How the phases are separated.**
 
-1. **DNS is separated because `tpl` performs it.** This is obliged rather than chosen: `FR-CONF-005`'s note and `NFR-PERF-018`'s accepted cost both require the `cause` line to say that a name did not resolve rather than that a host refused a connection, and that distinction cannot be recovered from a driver call that resolves internally. `MySqlConnectOptions` exposes `host` and `port` and no pre-resolution hook, so handing it the address the resolution produced leaves it nothing to resolve (docs.rs `sqlx::mysql::MySqlConnectOptions`, sqlx 0.9.0, verified 2026-09-11).
+1. **DNS is separated because `tpl` performs it.** This is obliged rather than chosen: `FR-CONF-005`'s note and `NFR-PERF-018`'s accepted cost both require the `cause` line to say that a name did not resolve rather than that a host refused a connection, and that distinction cannot be recovered from a driver call that resolves internally. `MySqlConnectOptions` exposes `host` and `port` and no pre-resolution hook (docs.rs `sqlx::mysql::MySqlConnectOptions`, sqlx 0.9.0, verified 2026-09-11), so the driver resolves whatever it is given and the separation costs a second lookup. This entry proposed paying for it by handing the driver the address instead; the third correction below records why that was overruled.
 2. **TCP connect and TLS handshake are not separable in the call.** `MySqlConnectOptions` has **no method that accepts an already-connected stream or socket**; `socket()` takes the path of a Unix socket and changes the transport rather than supplying a connection (same source and date). One call therefore covers both phases, which is what `BENCHMARKS.md` measured when it attributed 44.18 ms to `connect_with` as a whole.
-3. **They are separated in the report, by the driver's own discriminant.** `sqlx::Error::Tls` is documented as "Error occurred while attempting to establish a TLS connection" and `sqlx::Error::Io` as "Error communicating with the database backend" (docs.rs `sqlx::Error`, sqlx 0.9.0, verified 2026-09-11). The phase named in the `cause` line is derived from the variant, not from the call site.
+3. **They are separated in the report, by the driver's own discriminants — two of them, not one.** `sqlx::Error::Tls` is documented as "Error occurred while attempting to establish a TLS connection" and `sqlx::Error::Io` as "Error communicating with the database backend" (docs.rs `sqlx::Error`, sqlx 0.9.0, verified 2026-09-11). The phase named in the `cause` line is derived from the error value and not from the call site; **the variant alone is not the discriminant**, and the first correction below records what is.
 4. **Catalogue query, `password_command` and render are separate calls** and need no argument.
 
 **What the `cause` line may carry.** `FR-ERR-034` row `69` requires it to name
@@ -941,17 +994,64 @@ instead of implying a key per phase — so the shared connection deadline above 
 the corpus's rule rather than this entry's reading. Nothing in the decision
 changes.
 
-**The behaviour owed a verification, and what it costs if it does not hold.**
-Whether a TLS handshake failure reaches `tpl` as `sqlx::Error::Tls` — for an
-untrusted certificate, for a name mismatch, and for a server that offers no
-TLS — is **not confirmed in sqlx's documentation**, which states what each
-variant means and not which failures map to it. If a handshake failure arrives
-as `Error::Io`, point 3 fails and `FR-ERR-034` row `69` cannot be met as
-written; that is then a defect owed to `specification-manager`, naming
-`FR-ERR-034`. The test that decides it belongs to `verification` and runs
-against the fixture, whose obligation under `FR-CONF-038` already provides all
-three failure modes, all three of which the fixture now presents — see
-[`OD-22`](#od-22--the-test-harness-and-the-fixture-certificate).
+**The behaviour owed a verification was observed on 2026-09-18, when the
+connection was built. It discharges the obligation and corrects this entry in
+three places.** What was owed: whether a TLS handshake failure reaches `tpl` as
+`sqlx::Error::Tls` — for an untrusted certificate, for a name mismatch, and for
+a server that offers no TLS — which sqlx's documentation does not state, and on
+which `FR-ERR-034` row `69` depended. It does for one of the two failures that
+were produced, and not for the other. Nothing below moves the decision: the
+three mechanisms, the shared connection budget and the six phases are
+unchanged.
+
+**First correction — the variant alone is not the discriminant.** Observed
+against `scripts/mariadb/` on 2026-09-18, on the `11.8` server and on the
+server that offers no TLS, at the driver version
+[`ADR-003`](../adr/adr-003-database-driver.md) pins:
+
+| Failure | What the driver returned |
+|---|---|
+| A server offering no TLS, under `required` | `sqlx::Error::Tls` |
+| A certificate the trust material does not vouch for, under `verify-ca` and under `verify-identity` | `sqlx::Error::Io`, **of kind `InvalidData`** |
+
+The second is the driver completing the handshake's own I/O and propagating what
+the TLS implementation reported. `src/mariadb/fault.rs`, lines 234-235, reads
+the **variant and that kind** and nothing else (read 2026-09-21), and point 3
+above is corrected to match: no kind the operating system produces for a socket
+is `InvalidData`, and the driver reports a malformed protocol packet on a
+variant of its own, so the two discriminants separate the two phases without
+reading a message. That is what keeps `FR-ERR-034` row `69` satisfiable while
+`FR-GLOB-018` holds. The trust material the two validating modes use is
+[`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s and is not restated here.
+
+**Second correction — the fixture claim was overstated, and one of the three
+modes is reasoning rather than observation.** This entry said the fixture
+provides all three failure modes and presents all three. **Two were produced**,
+and they are the two in the table. The third — a certificate that does not name
+the host — was **not observed**, because the fixture's certificate names every
+spelling of the loopback by which a test can reach it
+([`OD-22`](#od-22--the-test-harness-and-the-fixture-certificate)), so no
+mismatch can be raised against it. It is classified with the first, on the
+ground that it is the same rejection by the same implementation reported through
+the same call; **that is reasoning, and `src/mariadb/fault.rs` writes it down as
+reasoning** under a bounded claim of its own. The two are kept apart rather than
+flattened into one list: what a claim of this kind costs is knowable only while
+it is still marked as one.
+
+**Third correction — the driver is handed the configured host, and this entry's
+instruction was overruled.** The mechanism table and point 1 both said the
+driver receives the address the resolution produced. The connection work of
+2026-09-18 deliberately did not do that, and `src/mariadb/connect.rs` records
+why (read 2026-09-21): `sqlx` takes the TLS server name from `options.host`, so
+a driver handed an IP address validates **the IP address** under
+`verify-identity` — the default mode of `FR-CONF-013` — and fails against every
+certificate that names a host. `FR-CONF-038` fixes what that mode must do, so
+the instruction and the requirement could not both stand and the requirement
+governs. The resolution is still `tpl`'s and still runs first, but its result is
+used for **phase attribution alone**: a name that yields no address is
+`FR-ERR-001`'s `69` naming DNS, which is the whole of what point 1 needs from
+it. The cost is a second lookup inside the driver — a second resolution and not
+a second connection, so `NFR-PERF-004` is untouched.
 
 **One consequence recorded for `architecture`.** `tokio::net::lookup_host` is
 gated behind tokio's `net` feature (docs.rs `tokio::net::lookup_host`, tokio
@@ -1408,31 +1508,36 @@ value holds its members until it is. Reported 2026-09-18, against commit
 
 ## OD-20 — Edit distance, and the other small algorithms
 
-**Status: settled.** The distance was settled in the eighth edition; the four
-further algorithms are settled below.
+**Status: settled.** The four further algorithms are settled in the residual
+below. **The measure itself left this register on 2026-09-18**, and what remains
+here is how it is computed.
 
-**Decision.** **Damerau-Levenshtein, hand-rolled, no dependency.**
+**Narrowed on 2026-09-21: `FR-ERR-039` names the member, and this entry no
+longer holds the question.** This entry chose the Damerau-Levenshtein family and
+carried the argument for it, because no requirement named a measure.
+`FR-ERR-039` now does — the **restricted** form, optimal string alignment —
+assigned at commit `a67d656` of 2026-09-18. It belongs there rather than here
+because the two forms of the distance disagree inside the threshold
+`FR-ERR-019` fixes, so the member decides **which candidates a `66` offers** and
+not merely how they are ranked, which makes it observable output. The measure,
+the worked example that motivates the transposition, and the form rejected are
+that requirement's, and are **not restated here**.
 
-**Rationale.** A transposition is one error, and it is the commonest typing
-mistake; counting it as two misreports the caller's actual distance from the
-name they wanted. This is **observable output**, so the worked example belongs
-in the specification rather than in a comment:
+**Decision, and the whole of what is still this entry's.** The distance is
+**hand-rolled in the crate, with no dependency, over a rolling window of three
+rows**.
 
-| Supplied | Candidate | Damerau-Levenshtein | Plain Levenshtein |
-|---|---|---|---|
-| `ordres` | `orders` | **1** | 2 |
+| Question | Answer | Why |
+|---|---|---|
+| Whose code | The crate's own | `CLAUDE.md` *Orçamento de dependências* prefers `std` and refuses a crate used for one function; and `BR-PERF-004` makes this a budgeted path — 200 comparisons for a `66` over `WL-001` — so the implementation has to be ours to measure |
+| How much state is held | Three rows of the comparison, rolled, and the supplied name decoded once per run | The transposition rule reaches back one row further than a plain substitution does, so rows `i`, `i - 1` and `i - 2` are the whole of what the recurrence reads (`src/diagnostics/suggest.rs`, `Matrix`, read 2026-09-21). A window bounded at all is what `FR-ERR-039` buys: it refuses the unrestricted form on the ground that it "reaches back to an arbitrary earlier position" and holds the whole comparison. Three rows also let the scratch be allocated once per population rather than once per candidate, which is what `BR-PERF-004`'s budget needs |
 
-`FR-ERR-019` admits candidates "within an edit distance of two", so the choice
-changes the candidate set as well as its order: under Damerau-Levenshtein more
-names qualify, and a transposed name ranks above a name one substitution away.
-Hand-rolled and with no dependency because `CLAUDE.md` *Orçamento de
-dependências* prefers `std` and refuses a crate used for one function, and
-because `BR-PERF-004` makes this a budgeted path — 200 comparisons for a `66`
-over `WL-001` — so the implementation must be ours to measure.
+**Rejected.** A distance crate, for the dependency budget. The measure's own
+rejected alternatives — plain Levenshtein, and the unrestricted form — are
+`FR-ERR-039`'s.
 
-**Rejected.** Plain Levenshtein, which reports the commonest typo as two
-errors and would drop a transposed name from the candidate set whenever a
-second error is present; and a distance crate, for the dependency budget.
+**Where this is built.** `src/diagnostics/suggest.rs`, in its `Matrix` scratch,
+which holds rows `i`, `i - 1` and `i - 2` (read 2026-09-21).
 
 **Residual, settled 2026-09-11. All four are implemented in the crate, with no
 dependency.** The four are decided together because one argument decides all of
@@ -1798,20 +1903,37 @@ description under one owner and one scope — the confusion `CLAUDE.md` warns is
 
 ## OD-27 — `seed-bench.sql` and `WL-001`
 
-**Status: settled.**
+**Status: settled, and discharged on 2026-09-21.**
 
 **Decision.** `scripts/mariadb/seed-bench.sql` is written in a **later sprint —
 the one that implements the catalogue reader**. Until then the five budgets that
 depend on it are stated as **provisional**, in the vocabulary `NFR-PERF-019`
 already provides.
 
+**Discharged: the file exists, and the decision held.** It was written on
+2026-09-21, in the sprint the decision named, and `scripts/mariadb/README.md`
+records what it loads and how it is verified: `seed-bench.sql` carries `WL-001`
+and `WL-003` as DDL alone, loaded on demand by `seed-bench.sh`, which checks
+every count each workload states and is accepted by all four series and by the
+`--skip-ssl` server. The measurement the decision was waiting for was made at
+once: a full read of `WL-001` and a full read of `WL-003` cost **eleven
+catalogue statements each, on all four series**, which is `NFR-PERF-001`
+satisfied by measurement rather than by review. Which budgets that moves from
+provisional to ratified is `NFR-PERF-019`'s gate and
+[quality-attributes.md](quality-attributes.md)'s to state; nothing of this
+entry's decision or rationale changes.
+
 **Rationale.** `WL-001` fixes the fixture's content — 200 tables, 2 400
 columns, 600 indexes, 180 foreign keys, 40 generated columns, 25 triggers, 30
 views, 40 routines, comments on 60% of the tables — and `BR-PERF-002` keeps it
 separate from `seed.sql` on purpose, because one fixture serving both "would
-hide an N+1, which is invisible at ten tables". `BR-PERF-007` already records
-that it is the one file of `scripts/mariadb/` still absent, and that `WL-001`
-is what needs it. Writing it beside the reader it measures is the point at
+hide an N+1, which is invisible at ten tables". `BR-PERF-007` recorded, when
+this entry was written, that it was the one file of `scripts/mariadb/` still
+absent, and that `WL-001` is what needs it; **that rule still says so and the
+file now exists**, which is a contradiction owed to the functional owner and
+recorded in
+[quality-attributes.md](quality-attributes.md#the-nine-budgets). Writing it
+beside the reader it measures is the point at
 which an N+1 becomes detectable; writing it earlier produces a fixture nothing
 can be run against. `NFR-PERF-019` and `NFR-PERF-020` are exactly the mechanism
 for carrying a named, unmeasured budget without it being a limit, so
@@ -1822,9 +1944,10 @@ with no reader to exercise it and no measurement to validate it against; and
 merging it into `seed.sql`, which `BR-PERF-002` forbids and which would make
 the correctness suite pay for 200 tables on every run.
 
-**Consequence to record.** `WL-002`'s byte scalar `N` cannot be computed until
-the fixture exists; `DIV-036` is the register entry that tracks what naming
-the file still owes the root coordination document.
+**Consequence to record.** `WL-002`'s byte scalar `N` could not be computed
+until the fixture existed, and the fixture now exists; `DIV-036` is the register
+entry of `/specification` that tracks what naming the file still owes the root
+coordination document, and what it owes is that register's to state.
 
 ---
 
@@ -1889,21 +2012,23 @@ the requirement's, and each is what a reader of
 | The root is the one node carrying no entry | `FR-HELP-019` publishes every node **below** `tpl`, and what the root's `options` would hold is `data.global_flags`, carried once (`FR-HELP-018`, `FR-GLOB-003`) |
 | `inherits_globals` is emitted **after** the seven members `FR-HELP-019` names | It is not one of the seven, and last is the one position that leaves every one of them where the requirement puts it. **Rejected**: beside `options`, the member it qualifies, which reads well and interleaves an eighth member into a sequence a requirement fixes |
 | A line of an example carries `text` — the line as a caller types it, shell included — and `invocation`, the argument vector, `null` where the line carries no `tpl` call | `BR-HELP-003` parses the published vector itself, so what is published is what is parsed. **Rejected**: publishing the typed table's own prefix, invocation and suffix, which exposes a layout the renderer needs and obliges every consumer to reassemble the line the caller types |
-| The three arrays of `registered` are `null` | `FR-ENV-005` requires them to be derived from the registrations the environment actually performs, `render/` is a later sprint, and `FR-OUT-012` gives `null` for a value that is absent rather than empty. **Rejected**: restating the names of `FR-ENV-006`, `FR-ENV-007`, `FR-ENV-014` and `FR-ENV-020` here, which creates the second source `FR-HELP-021` exists to prevent and asserts a surface the binary does not have |
+| The three arrays of `registered` are derived from the registrations, and never restated | `FR-ENV-005` requires exactly that. They stood at `null` while `render/` was unwritten, which is what `FR-OUT-012` gives for a value that is absent rather than empty; since `render/` was built they carry eleven filters, seven tests and five functions (read from `tpl help --format json`, 2026-09-21). **Rejected**: restating the names of `FR-ENV-006`, `FR-ENV-007`, `FR-ENV-014` and `FR-ENV-020` here, which creates the second source `FR-HELP-021` exists to prevent and asserts a surface the binary does not have |
 | `inherited.tests` and `inherited.functions` are empty arrays, and the three arrays of `other` are `null` | `FR-ENV-005` fixes all five, permanently: group 2 enumerates filters alone, and group 3 is what the other two do not name and `tpl` cannot enumerate |
 
-**Recorded divergence — `inherited.filters` is `null` and the corpus fixes its
-names.** `FR-ENV-005` ties **`registered`** to the registrations the environment
-performs and says nothing of the kind about `inherited.filters`: it requires that
-array to carry the fourteen names of `FR-ENV-018`, in the order that requirement
-states them, and admits `null` only *where the group cannot be enumerated*. Group
-2 can be enumerated — the corpus enumerates it — so the `null` this binary
-publishes today is a divergence and not the absent value `FR-OUT-012` permits.
-Its cause is the same as `registered`'s: the implementation reads all four arrays
-as `render/`'s, and `render/` is a later sprint. Reported at commit `f8f335d`,
-2026-09-15, and not closed here: it is closed by publishing the fourteen names,
-which is a change to code. Until it is, a caller reading `data.template_surface`
-learns that group 2 is `pinned` and cannot learn which filters it holds.
+**Recorded divergence — `inherited.filters` was `null` where the corpus fixes
+its names, and is discharged.** `FR-ENV-005` ties **`registered`** to the
+registrations the environment performs and says nothing of the kind about
+`inherited.filters`: it requires that array to carry the fourteen names of
+`FR-ENV-018`, in the order that requirement states them, and admits `null` only
+*where the group cannot be enumerated*. Group 2 can be enumerated — the corpus
+enumerates it — so the `null` the binary published was a divergence and not the
+absent value `FR-OUT-012` permits. Its cause was the same as `registered`'s: the
+implementation read all four arrays as `render/`'s, and `render/` was unwritten.
+Reported at commit `f8f335d`, 2026-09-15. **Discharged at commit `243c4d6`**:
+`tpl help --format json` publishes the fourteen names under
+`data.template_surface.inherited.filters` (read 2026-09-21), so a caller learns
+which filters group 2 holds as well as that it is `pinned`. The record is kept
+rather than deleted, so that an identifier resolves to what happened.
 
 **Unblocks.** `interfaces`.
 
@@ -2058,6 +2183,71 @@ but `model/`.
 
 ---
 
+## OD-32 — `anyhow` in the shipped graph
+
+**Status: settled 2026-09-21, by the user.** The correction it prepares for
+`CLAUDE.md` is **owed**, and is listed above with the four that were applied.
+
+**Decision.** **`anyhow` is removed from the dependency graph.** Nothing
+replaces it: the one error the binary handles is already handled without it.
+
+**The ground: the crate is declared and used by nothing.** `CLAUDE.md`
+*Desempenho e Eficiência* admits a crate for what it does and refuses one used
+for a trivial function; this one is used for no function at all. Four readings
+establish it, all at commit `243c4d6` on 2026-09-21.
+
+| What was read | How | What it returned |
+|---|---|---|
+| The declaration | `Cargo.toml`, line 16 | `anyhow = "1.0.104"`, a direct dependency of the package |
+| Who else needs it | `cargo tree -i anyhow`, and again with `--all-features` | `anyhow v1.0.104` with `tpl` as its only parent, identically in both readings: no other crate in the graph pulls it in |
+| Whether the crate names it | `grep -rn anyhow src/ tests/` | No occurrence. `benches/` and `examples/` do not exist at this commit |
+| What the binary does with an error | `src/main.rs`, read whole | `tpl::install_panic_hook()`, then `tpl::run()`, then `ExitCode::from(error.exit_code())`. There is no other error handling in the file |
+
+[`OD-06`](#od-06--the-error-types-shape-and-the-exit-code-derivation) predicted
+this. With `main.rs` reduced to calling the library, reading `exit_code` and
+returning it, the binary carries no dynamic error, and a crate whose purpose is
+to carry one earns nothing against the budget.
+
+**Rejected — keeping it declared as a reserve** for a dynamic error the binary
+might one day have to carry. Refused because `OD-06` gives the binary no route
+to classify anything: the exit code comes from an inherent method on the
+library's error, the enum is `#[non_exhaustive]` so a match written in the
+binary would need the wildcard arm that entry refuses, and the four labelled
+lines are composed by a renderer inside the library. The reserve is for a
+capability the binary may not have, and a dependency held against a use nobody
+can name is the dependency the budget exists to refuse.
+
+**`thiserror` is untouched, and no error handling leaves the crate.** It derives
+the one public `#[non_exhaustive] enum Error` and its `Display`, which is
+`OD-06`'s decision and is unchanged by this one. What is removed is a crate the
+source does not name; the library's error type, its exit-code method and the
+diagnostic renderer are all where they were.
+
+**The MSRV is `ADR-007`'s.** [That record](../adr/adr-007-msrv.md) holds the
+rule, the graph the rule runs over and the crate that sets the figure; running
+it again over a graph one crate smaller is that record's work and not this
+entry's, and this entry restates none of it.
+
+**The correction prepared for `CLAUDE.md` is owed, and this folder cannot make
+it.** That file names the crate twice — in the *Stack* table's error row and in
+the *Tipos e erros* convention that repeats it (`CLAUDE.md`, lines 465 and 539,
+re-read at commit `8f936d4` on 2026-09-21) — and both still name it as the
+binary's error type. Both must lose it and state `thiserror` alone. **The file
+is coordination and the user is its only writer**, so the correction waits on
+the user: no task of this sprint applied it, and none could. It is the same
+handover [`OD-17`](#od-17--observability) made for `tracing` and
+`tracing-subscriber` over the same table.
+
+**The manifest change was made, in the order this entry fixed.** `CLAUDE.md`
+*Stack* makes an alteration to that table an architecture decision, to be
+registered before it is implemented; this entry is the registration, and
+`anyhow` was removed from `[dependencies]` afterwards (read from `Cargo.toml`,
+2026-09-21). **The consequence is that `CLAUDE.md` now names a dependency the
+graph does not carry**, which is the cost of the correction being the user's
+alone and is stated here rather than left for the next reader to discover.
+
+---
+
 ## Editorial defects, reported and corrected
 
 Two statements in `specification/` were stale when this register was written.
@@ -2096,8 +2286,23 @@ discharged: the ninth edition amended `FR-ERR-030` (`OD-28`) and gave
 `FR-CONF-005` the phase-to-key mapping with its shared connection budget
 (`OD-12`). Each entry records what landed, and neither is reopened.
 
-One obligation falls to `verification` rather than to this register, and is
-recorded in the entry that creates it: the phase attribution of a TLS handshake
-failure against the fixture (`OD-12`). The second, one test per mapped
-`clap::ErrorKind` (`OD-08`), was discharged at commit `f8f335d` of 2026-09-15
-and is recorded as discharged in that entry.
+**No obligation now falls to `verification` from this register.** The phase
+attribution of a TLS handshake failure (`OD-12`) was discharged on 2026-09-18,
+against the fixture, and that entry records what was observed and what was
+reasoned; the second, one test per mapped `clap::ErrorKind` (`OD-08`), was
+discharged at commit `f8f335d` of 2026-09-15. Each is recorded as discharged in
+its own entry.
+
+**One correction is owed outside this folder, and it has not been made.**
+`OD-32` prepares the removal of `anyhow` from the two places `CLAUDE.md` names
+it — lines 465 and 539, both still naming it at commit `8f936d4` on 2026-09-21.
+**Only the user writes that file**, so the correction waits on the user and on
+no task of this project; it blocks no document of this folder, and it is listed
+with the four applied ones under
+[Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd). The crate is
+already out of `Cargo.toml`, so until the user applies it the coordination
+document names a dependency the graph does not carry.
+
+**`OD-27`'s consequence is discharged.** `scripts/mariadb/seed-bench.sql` was
+written on 2026-09-21, and `quality-attributes` and `verification` no longer
+wait on it.

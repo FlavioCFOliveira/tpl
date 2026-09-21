@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-21
 related: [README.md, open-decisions.md]
 ---
 
@@ -48,10 +48,22 @@ section 10 was **wrong** before this harvest rather than merely absent: it gave
 `FR-CFG-023` as binding the entry-removal command alone, which is narrower than
 the requirement as amended.
 
-**Recorded gap — editions ten to twenty have not been harvested.** What they
-changed is not reflected in the rows below. The gap is recorded rather than
-closed: harvesting eleven editions is work of its own, and this reconciliation
-was scoped to the command surface.
+**Editions ten to twenty were harvested on 2026-09-21**, in order, closing the
+gap this header recorded. The eleven editions **added twelve rows across five
+sections and corrected three more**, and one of them — the tenth — introduced no
+concern this file did not already carry. What each contributed is recorded in
+[The harvest of editions ten to twenty](#the-harvest-of-editions-ten-to-twenty),
+so that a reader can tell a concern this file derived from one an edition
+forced.
+
+**Recorded gap — editions twenty-three to thirty-two have not been harvested.**
+The twenty-first and twenty-second were harvested out of order, on the command
+surface alone, so closing the gap below leaves a second and later one of ten
+editions. The last two of them were written in the sprint that closed the first
+gap: eleven identifiers were added across the two, thirty entries of the
+divergence register were discharged and two were opened, and none of it is
+reflected in the rows below. **The mapping is current with the twenty-second
+edition and behind by ten.**
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -65,6 +77,37 @@ identifier is the authority and the wording here is a summary.
 | Drawn from | The requirement identifiers or the file section that forces it |
 | Doc | The technical document that answers it, by the short names of [README.md](README.md#the-documents) |
 | `OD-nn` | An entry of [open-decisions.md](open-decisions.md). Its status — settled, open, or a conflict owed to the functional owner — is recorded there and nowhere else |
+
+---
+
+## The harvest of editions ten to twenty
+
+Harvested on 2026-09-21, in order. **A row was added only where the edition
+introduced a concern the implementation must answer and no row already carried
+it.** An edition that amends no requirement may still introduce one — an
+observation that bounds what a reader may assume is such a concern — and an
+edition that amends one may introduce none, where a row already carried what it
+settled. An edition that introduced nothing is recorded as introducing nothing
+rather than passed over.
+
+| Edition | What it settled | Rows |
+|---|---|---|
+| Tenth | The read-back names `@@session.tx_read_only`; the verification is bound to every series; difference 12 | **None added.** Two rows of section 21 already carry all three, drawn from the requirements directly |
+| Eleventh | The file-open observation is Linux-only and may not be inferred; the four instruments are bound to their targets; parity is of results | **One added** to section 23. The instrument binding and the parity clause already had rows; what none carried is the prohibition on crediting a Linux observation to a Darwin target, and what that costs |
+| Twelfth | Difference 13: the announced version is not the probed one | **One added** to section 21 |
+| Thirteenth | Difference 14: `VECTOR` is refused at DDL time by two series | **One added** to section 21. The existing row counts fourteen differences and names this one; what it does not carry is that a difference about what a server **accepts** bounds the fixture's shared DDL |
+| Fourteenth | Difference 3 names the condition it was read under | **One added** to section 21 |
+| Fifteenth | Every entry of the divergence register carries a Status and names the commit that discharged it; a register decays when somebody else edits its target | **One added** to section 26 |
+| Sixteenth | Seven entries added; the register gains a third kind, **Overstatement** | **One added** to section 26 |
+| Seventeenth | A candidate read and not recorded: a passage that directs is not a passage that asserts | **One added** to section 26 |
+| Eighteenth | `FR-SRV-038` states what a row requires and gives three grounds for the home below the table | **One added** to section 21 |
+| Nineteenth | `FR-ERR-001`'s *Condition* column characterises and does not enumerate; `FR-ERR-035` routes one configuration key to three codes | **Two added** to section 14, and **one row corrected** |
+| Twentieth | Four absolutes narrowed to their ground, and `FR-GLOB-015` names the verbosity refusal where both flags are declared | **Two added**, to sections 3 and 14, and **two rows corrected**, in sections 2 and 14 |
+
+**Three rows were contradicted by an edition rather than merely left short, and
+each is corrected in place with the contradiction recorded beside it**: the
+`FR-ERR-002` row and the `FR-ERR-022` row of section 14, and the `NFR-DET-004`
+row of section 2. None is overwritten silently.
 
 ---
 
@@ -95,8 +138,19 @@ identifier is the authority and the wording here is a summary.
 | Never interactive: no prompt, no pager, no stdin read except `--context -` | `BR-CLI-003` | `architecture`, `security` |
 | Byte-identical **stdout** for one invocation against one state; stderr is explicitly outside the contract | `NFR-DET-001` | `quality-attributes`, `verification` |
 | Every collection is ordered explicitly, byte-wise by name, with six named exceptions — three of which the default rule would corrupt. The ordering must be applied by the emitter, not inherited from the server or the filesystem | `NFR-DET-002` | `interfaces`, `verification` |
-| No `isatty()`, no terminal detection, no colour, no ANSI byte on either stream: clap's default `color` feature must be off | `NFR-DET-003`, `NFR-DET-004` | `technology-stack`, `operations` |
+| No `isatty()`, no terminal detection, no colour: clap's default `color` feature must be off. `NFR-DET-004` governs **what the system composes for presentation** and not a byte carried from the catalogue, a template, a `--context` value or the argument vector, so escaping stays with the three requirements that own it | `NFR-DET-003`, `NFR-DET-004` (twentieth edition), with `FR-ERR-024`, `FR-OUT-018`, `FR-OUT-019` | `technology-stack`, `operations`, `security` |
 | `now` is the single documented source of non-reproducibility | `NFR-DET-005`, `FR-CTX-028` | `architecture` (`OD-25`) |
+
+**Contradiction recorded — the previous reading of `NFR-DET-004`.** The row
+above read *no ANSI byte on either stream*, without qualification. The
+**twentieth edition** refuted that reading in the requirement itself: a
+catalogue name carrying the single-character CSI would make an absolute
+unsatisfiable, and the wider reading would forbid `tpl render` the byte-for-byte
+output `FR-OUT-019` guarantees it. The row is corrected rather than overwritten:
+what it asserted is recorded here, and what replaces it is the requirement as
+amended. One consequence stands and is the corpus's own maintenance item — a
+value escaped over the C0 range alone can still carry a C1 control to a terminal
+that honours it.
 
 ---
 
@@ -111,6 +165,7 @@ identifier is the authority and the wording here is a summary.
 | Four diagnostic levels, one line per catalogue query at `INFO`, **distinguishable from every other line**, and cache hit/miss at `DEBUG` | `FR-GLOB-014` … `FR-GLOB-017`, `NFR-PERF-008` | `operations` (`OD-17`) |
 | Six categories of content must never reach any diagnostic stream at any level: argv, resolved DSN, `password_command` and its stderr, raw driver error, `.cfg` contents. A raw driver error is what a naive `tracing` call on an `Err` emits | `FR-GLOB-018`, `FR-SEC-005` | `security`, `operations` (`OD-17`) |
 | Five short forms exist in the whole tool and no local flag may declare one | `FR-GLOB-024` | `interfaces` |
+| The refusal of `-q` with `-v` is stated **where both flags are declared**, so an implementer resolving the pair meets it without reading another file; no precedence is admitted, because quiet-over-verbose and last-wins both make the result depend on how a script grew | `FR-GLOB-015` (twentieth edition), `FR-CLI-015`, `FR-CLI-014` | `interfaces` |
 
 ---
 
@@ -300,18 +355,32 @@ identifier is the authority and the wording here is a summary.
 
 | Technical concern | Drawn from | Doc |
 |---|---|---|
-| Ten codes and no others; each distinct condition has its own code and is not collapsed | `FR-ERR-001`, `FR-ERR-002` | `interfaces` (`OD-06`) |
+| Ten codes and no others. Every condition that ends an invocation in failure carries **exactly one** of them, named by the requirement that owns the condition; two conditions never share a code where the caller's next step differs | `FR-ERR-001`, `FR-ERR-002` (twentieth edition) | `interfaces` (`OD-06`) |
+| **The code set is closed and the *Condition* column is not.** An error type cannot be derived from the cells of `FR-ERR-001`: a condition is neither absent nor misfiled because no cell names it, and the requirement that owns the behaviour is what assigns the code. One hundred and twelve requirements outside that file name a code of the table | `FR-ERR-001`, `FR-ERR-002` (nineteenth edition) | `interfaces` (`OD-06`) |
+| **One configuration key routes to three codes, by where it was met and what was asked of it**: outside the key space to `tpl cfg set` is `64`, absent from the file to `tpl cfg get` or `unset` is `66`, carried by the file and outside the key space is `78`. They cannot collide, because the file is validated at step 3 of `FR-ERR-006` and no `cfg` subcommand is excused from it | `FR-ERR-035` (nineteenth edition), with `FR-CFG-009`, `FR-CFG-007`, `FR-CFG-012`, `FR-CONF-034`, `FR-ERR-007` | `interfaces`, `data-model` |
 | A **fixed eight-step validation order** decides which code wins, with steps 2 and 3 skipped for four commands. This is the shape of the invocation pipeline | `FR-ERR-006`, `FR-ERR-007` | `architecture` |
 | Four labelled lines on stderr: `error:`, `cause:`, `hint:`, `exit:` | `FR-ERR-008` | `interfaces` |
 | The `cause` line has a **per-code obligation table** naming what it must contain; the error value must therefore carry the instance, not the category | `FR-ERR-034`, `FR-ERR-010`, `FR-ERR-012` | `interfaces` (`OD-06`) |
 | An internal taxonomy with no external carrier was **explicitly rejected**, while an exit code still has to be derived from the error value | `FR-ERR-015` *Rejected*; `BR-ERR-002` | `interfaces` (`OD-06`) |
 | `70` has exactly two producing conditions — a panic in the process and a detected invariant violation — and **both** exist in the distributed binary: the ninth edition states the first as the outcome a caller observes, so a process that reports the panic and exits `70` satisfies it, and which mechanism does so is an architecture decision the corpus does not name | `FR-ERR-030`, `FR-ERR-032`, `FR-ERR-034` row `70` | `architecture`, `operations`, `technology-stack` (`OD-28`); [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md) |
 | The deliberate `70` trigger is reachable **only from within the system's own test configuration** and from no invocation of the distributed binary, and appears in neither command tree nor any help text; `BR-ERR-001` excepts `70` from its integration test in consequence | `FR-ERR-031`, `BR-ERR-001` | `verification` (the residual of `OD-21`) |
-| Nearest match: at most three candidates within edit distance two, ordered by distance then name, over eight populations | `FR-ERR-019` … `FR-ERR-021` | `interfaces`, `quality-attributes` (`OD-20`) |
-| A runnable hint is built only from literals and `[A-Za-z0-9_]{1,64}`; a candidate outside that set is not presented **at all** | `FR-ERR-022`, `FR-ERR-023` | `security` |
+| Nearest match: at most three candidates within edit distance two, ordered by distance then name, over eight populations. The **measure** is the corpus's — the restricted Damerau-Levenshtein distance, optimal string alignment — because the two forms disagree inside the threshold and so decide which candidates a `66` offers; how it is computed is this folder's | `FR-ERR-019` … `FR-ERR-021`, `FR-ERR-039` | `interfaces`, `quality-attributes` (`OD-20`) |
+| A runnable hint separates a **spelling this corpus enumerates** — a command or alias of the tree, a flag a node declares, a key of `FR-CONF-002` — which is a literal and is admissible as written, from every other value whatever its source, which is what `[A-Za-z0-9_]{1,64}` tests. Values are tested one at a time and the separators joining them are literals, so a dotted key and a command path are admissible exactly as far as their own segments are; a value outside the set is not presented **at all** | `FR-ERR-022`, `FR-ERR-023` (twentieth edition), `FR-ERR-021`, `FR-SEC-019` | `security` |
+| A `cause` restates the `error` line when it **adds nothing** to it; where a row of `FR-ERR-034` obliges a fact the `error` line also carries, the row governs. A `cause` that subtracted whatever the `error` line happened to say would make a testable obligation depend on the wording of one message | `FR-ERR-010` (twentieth edition), `FR-ERR-034`, `FR-ERR-008` | `interfaces` |
 | Every interpolated value in a message escapes `\n`, `\r`, `\t` and C0 — a different rule from the `text` read output, which is the one path that excepts tab | `FR-ERR-024`, `FR-OUT-018` | `security`, `interfaces` |
 | `EPIPE` is `0` normally and `74` if a JSON document was mid-flight: the writer must know whether it is inside a document | `FR-ERR-025`, `FR-ERR-026` | `architecture`, `interfaces` |
 | Nine codes carry at least one integration test, part of the definition of done; `70` is the single exception and is exercised in process | `BR-ERR-001` | `verification` |
+
+**Two contradictions recorded, both from the harvest of editions ten to
+twenty.**
+
+| Row as it stood | What contradicted it |
+|---|---|
+| *each distinct condition has its own code and is not collapsed* | The **twentieth edition** amended `FR-ERR-002` and stated that the sentence was refuted three times over: by `FR-ERR-006`, which routes every parsing fault to `64` by design; by the hundred and twelve requirements outside that file that name a code; and by `FR-ERR-035`, which routes one key to three codes *because* three next steps differ. The obligation that survives is one code per condition, named by the owning requirement |
+| *built only from literals and `[A-Za-z0-9_]{1,64}`* | The **twentieth edition** found `FR-ERR-021` and `FR-ERR-022` in outright contradiction: no key of `FR-CONF-002` matches the set, because all fifteen key forms carry a dot, so two of the eight populations `FR-ERR-021` names could never be suggested. Widening the set was rejected; the distinction between a literal and a value is what replaced it |
+
+Neither row is overwritten silently: what each asserted is recorded here beside
+what replaced it.
 
 ---
 
@@ -439,6 +508,10 @@ identifier is the authority and the wording here is a summary.
 | Verification is from **outside the process**, on the server: the statements it receives, the connections it accepts. The read-back test runs against **every** series, because exactly one of the four discriminates the variable's spelling | `FR-SRV-012` … `FR-SRV-014`, `BR-SRV-003` | `verification` |
 | The newer-than-window path is verified through the in-process seam of `FR-ERR-031`, asserting that the read completes without error and that `standing` is `newer_than_supported`; `BR-SRV-003` states in its own text that it does not reach this requirement | `FR-SRV-035`, `BR-SRV-003` | `verification` (the residual of `OD-21`) |
 | Fourteen observed differences bound the reader's assumptions; three of them — 2, 8 and 14 — do **not** separate `10.11` from the rest, so tests must not model the window as one old server and three modern ones | `FR-SRV-038`, differences 2, 8, 14 | `verification` |
+| The version is taken from the **probe** and never from the connection greeting. On `10.11` the greeting carries a `5.5.5-` prefix the probe's answer does not, so `<major>.<minor>` read from the greeting is `5.5` and `FR-SRV-020` would refuse a supported server as older than the window. Any gate, diagnostic or fixture script that reads a greeting must not assume the two readings agree | `FR-SRV-040`, `FR-SRV-041`; `FR-SRV-038`, difference 13 (twelfth edition) | `interfaces`, `verification` |
+| A difference may be about what a server **accepts** rather than what it reports, which bounds the fixture rather than the reader: the shared DDL must be accepted by all four series, so a structure one series rejects is deliberately absent rather than hidden behind a conditional | `FR-SRV-038`, difference 14; `FR-SRV-029` (thirteenth edition) | `verification` |
+| An observation of a value **the fixture itself sets** records the condition it was read under, or the record contradicts the fixture it was taken from. Only one reading of the fourteen is such a value, and the negative was established by sweep rather than assumed | `FR-SRV-038`, difference 3; `FR-CONF-038` (fourteenth edition) | `verification` |
+| A reading that is a property of the **build** the fixture selects, or whose entailment by the series is not established, is **not** a difference between the series: it goes below the table with its bound and with the observation that would settle it. Three readings sit there — the source revision, the SSL library string and the distribution suffix — and none may be read as a series fact | `FR-SRV-038` as amended in the eighteenth edition; `FR-SRV-040` | `verification`, `data-model` |
 
 ---
 
@@ -466,11 +539,12 @@ identifier is the authority and the wording here is a summary.
 | Each is verified from **outside the process**, never by reading the source, by **four** named instruments — the statements a server receives, the connections it accepts, a syscall trace, and a differential run — each usable only on the targets its row names: the trace on the two Linux targets, the other three on all four | `NFR-PERF-007`, `NFR-PERF-018`, `BR-SRV-003` | `verification` |
 | The query count must be observable from the diagnostic stream, which makes one diagnostic line structurally load-bearing although stderr is not contract | `NFR-PERF-008`, `FR-GLOB-017` | `operations`, `verification` (`OD-17`) |
 | Exactly four targets; Linux is `musl`, statically linked; no target is second class. The parity is of **results**, not of instruments: one instrument of `NFR-PERF-007` exists on two targets only | `NFR-PERF-018` | `operations`, `verification` |
+| A Linux observation **may not be credited to either Darwin target**, and a trace taken inside a Linux container may not be credited to macOS, because the artefact observed is not the artefact distributed. What the two Darwin targets consequently do not catch is named by the requirement — a build that opened `.tpl/.cfg`, read it and discarded what it read — and a run on such a target must say which instrument established a clause | `NFR-PERF-005` as amended in the eleventh edition; `NFR-PERF-007`, `NFR-PERF-018` | `verification`, `operations` |
 | Nine budgets, one normative, five needing a server; a measurement names its target **and its server series** | `NFR-PERF-012`, `NFR-PERF-014` | `quality-attributes` |
 | The measurement protocol is normative: 200-run median, 20 warmups, no shell, idle host, first run of a fresh binary discarded, RSD ≤ 5% | `NFR-PERF-009` … `NFR-PERF-011` | `quality-attributes` |
 | Provisional figures are not limits; the ratification gate has four conditions and moves the figure to `BENCHMARKS.md` | `NFR-PERF-019`, `NFR-PERF-020`, `BR-PERF-006` | `quality-attributes` |
 | Regression against a recorded baseline on the same target fails the change | `NFR-PERF-017` | `operations`, `quality-attributes` |
-| Three reference workloads and a byte scalar; `WL-001` needs `seed-bench.sql`, which does not exist | `WL-001` … `WL-003`, `BR-PERF-002`, `BR-PERF-007` | `verification` (`OD-27`) |
+| Three reference workloads and a byte scalar, `WL-001` kept separate from the correctness fixture so that one does not hide an N+1 in the other. `seed-bench.sql` carries it, and was written on 2026-09-21 | `WL-001` … `WL-003`, `BR-PERF-002`, `BR-PERF-007` | `verification` (`OD-27`) |
 | The failure path is a budget because nearest match computes an edit distance against every existing name | `BR-PERF-004` | `quality-attributes` (`OD-20`) |
 
 ---
@@ -513,12 +587,15 @@ is named only where a row would otherwise imply a correction is outstanding.
 | The target matrix is fixed and Linux is `musl`; the `gnu` triples are not targets. The linkage has an observable DNS consequence that must not be presented as pure packaging | `DIV-041` | `operations` |
 | `panic = "abort"` settles how a panic **ends** the process, not whether the process may report it first. The profile stands as written, `FR-ERR-030` as amended obliges the message and the code without obliging the panic path to be catchable, and `DIV-045` is discharged with nothing owed to the root coordination document | `DIV-045` | `architecture`, `technology-stack`, `operations` (`OD-28`); [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md) |
 | No performance figure is written in this folder: `NFR-PERF-014` holds a budget's provisional figure and `BENCHMARKS.md` its ratified one, and a third place would be the copy nobody updates | `DIV-035` | `quality-attributes` |
-| `WL-001` needs `scripts/mariadb/seed-bench.sql`, which the repository has not got; the budgets over that workload cannot be measured until it exists | `DIV-036` | `verification` (`OD-27`) |
+| `WL-001` needs `scripts/mariadb/seed-bench.sql`; the budgets over that workload could not be measured until it existed, and it was written on 2026-09-21. What the entry still owes the root documents is that register's to state | `DIV-036` | `verification` (`OD-27`) |
 | The catalogue is read through `INFORMATION_SCHEMA` only: the closed list of `FR-SRV-006` has four entries, `SHOW` is not one of them, and no necessity admits a fifth | `DIV-031` | `security`, `interfaces` |
 | Determinism is over **stdout** only | `DIV-039` | `quality-attributes` |
 | Four things write inside `.tpl`: `tpl init`, `tpl cfg …`, `tpl cache load`, and any cached read command on a miss | `DIV-005` | `architecture` |
 | `tpl cache` is a group node of the command tree in its own right, with three subcommands, and not a part of project management: the auxiliary set is not closed without it | `DIV-040` | `architecture` |
 | Every divergence is a correction owed to a file **the specification never edits** — the technical spec inherits that restraint and must not restate the corrected content either | *Overview* | `README`, `overview` |
+| **A register describing a file this corpus does not own decays whenever somebody else edits that file**, and no reference check, recount or sweep of the corpus can see it happen. Every entry therefore carries a state, and a discharged entry names the **commit** that discharged it, so that when it stopped being owed is auditable. This folder adopted the same rule for its own statements about a file it does not own | *Maintenance debt*, fifth validation rule (fifteenth edition) | `README`, `decisions` |
+| The register admits a third kind of entry, **Overstatement**: a file states as a present fact about the repository something the repository does not contain. It contradicts no requirement, owes this folder nothing, and acting on it fails anyway — so no technical decision discharges one, and a row of this table must not imply that one does | *Overview*, the three kinds (sixteenth edition) | `README` |
+| **A passage that directs is not a passage that asserts.** A deontic statement about which targets a verification runs on is an intention and not a claim of a state, and this corpus states verification in that same mode in requirements in force — so a conclusion that nothing is owed is itself recorded, or the next reader re-opens it from scratch | *A candidate read, and not recorded* (seventeenth edition) | `README`, `verification` |
 
 ---
 

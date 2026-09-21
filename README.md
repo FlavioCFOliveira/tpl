@@ -389,6 +389,6 @@ cargo audit
 
 `unsafe` is forbidden; `#![forbid(unsafe_code)]` stays at the top of the crate.
 
-Tests that need a live database use the containers defined in `scripts/mariadb/`: one server per supported MariaDB series, seeded from `setup.sql` and `seed.sql` and presenting the fixture's own TLS certificate, and one further server offering no TLS at all. No test needs one today, because no command that reaches a server is written.
+Tests that need a live database use the containers defined in `scripts/mariadb/`: one server per supported MariaDB series, seeded from `setup.sql` and `seed.sql` and presenting the fixture's own TLS certificate, and one further server offering no TLS at all. The integration tests that reach a server use them, and skip with a notice when the fixture is not up.
 
 The fixture is driven by its own scripts, and they are the supported way to operate it: they bring the servers up and verify each one, take them down and prove nothing was left behind, answer whether the fixture is up before a server-dependent test runs, and instrument the observations that have to be made from outside the process. Use them rather than Docker commands of your own. What the directory holds, which scripts drive it, how to invoke them and how to verify the result are described in [`scripts/mariadb/README.md`](scripts/mariadb/README.md). External database instances are not used, and neither are mocks standing in for a real engine.
