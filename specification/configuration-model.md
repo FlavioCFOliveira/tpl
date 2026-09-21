@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-21
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -249,10 +249,10 @@ and the database to read. Each is carried either by its own key of
 `FR-CONF-002` or by the `dsn` that stands in for the discrete fields, and an
 entry supplying neither form of one of them describes no connection, or no
 read. `FR-CFG-016` admits an entry created from any one discrete flag, so both
-absences are reachable from a legal invocation. Both are decided at step 4 of
-`FR-ERR-006` — entry resolution — before any connection is opened, and neither
-adds a code: the `78` row of `FR-ERR-001` carries the condition as *invalid
-entry*.
+absences are reachable from a legal invocation. Both are decided at the
+entry-resolution step of `FR-ERR-006`, before any connection is opened, and
+neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
+*invalid entry*.
 
 - **FR-CONF-040**: An entry SHALL name a host. IF the entry an invocation
   selects carries neither `dsn` nor `host`, THEN the system SHALL exit `78`
@@ -761,8 +761,8 @@ entry*.
   right-hand column of `FR-CONF-038`.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, the code a TLS
   handshake failure produces, and `FR-ERR-034`, which fixes what its `cause`
-  must name; `FR-ERR-006`, at whose fourth step `FR-CONF-040` and `FR-CONF-041`
-  are decided.
+  must name; `FR-ERR-006`, at whose entry-resolution step `FR-CONF-040` and
+  `FR-CONF-041` are decided.
 - [schema-commands.md](schema-commands.md) — the arm `FR-CONF-041` supplies
   with the database every one of its subcommands reads.
 

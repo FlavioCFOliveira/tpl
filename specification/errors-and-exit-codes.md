@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-21
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md]
 ---
 
@@ -302,7 +302,7 @@ Out of scope: the wording of any individual message.
   read and validated at step 3, and no `cfg` subcommand is among the commands
   `FR-PROJ-025` excuses from it, so a `.tpl/.cfg` carrying a key outside the
   key space is refused with `78` before any command resolves a key of its own
-  at step 4 or later. A key that reaches a `cfg` subcommand is therefore met in
+  at any later step. A key that reaches a `cfg` subcommand is therefore met in
   a file that carries only keys the space admits, and the remaining question is
   the one its own command asks: whether the key is in the space, for `set`, or
   whether it is in this file, for `get` and `unset`. One consequence is worth
@@ -350,10 +350,10 @@ Out of scope: the wording of any individual message.
   1. argument parsing                          64
   2. .tpl discovery and trust checks           78
   3. .cfg read and validation                  78
-  4. database entry resolution                 78 or 66
-  5. cache or connection                       69, 77, or 78
-  6. catalogue object resolution               66
-  7. template resolution                       66
+  4. template resolution                       66
+  5. database entry resolution                 78 or 66
+  6. cache or connection                       69, 77, or 78
+  7. catalogue object resolution               66
   8. render                                    65
   ```
 
@@ -365,13 +365,14 @@ Out of scope: the wording of any individual message.
   order alone did not say whether `--help` reached discovery; `FR-PROJ-025` now
   names the commands that skip them.
 
-  *Amended in the fourth edition.* Step 5 gains `78`. Three conditions are
-  decided once a connection is open and before any catalogue read, and all three
-  are configuration faults rather than availability ones: the read-only session
-  of `FR-SRV-010`, which the first edition already routed to `78` without the
-  order saying where; the product check of `FR-SRV-003`; and the version-window
-  check of `FR-SRV-020`. They are evaluated in that order among themselves, so
-  the strongest guarantee is confirmed before the server is characterised.
+  *Amended in the fourth edition.* The cache-or-connection step gains `78`.
+  Three conditions are decided once a connection is open and before any
+  catalogue read, and all three are configuration faults rather than
+  availability ones: the read-only session of `FR-SRV-010`, which the first
+  edition already routed to `78` without the order saying where; the product
+  check of `FR-SRV-003`; and the version-window check of `FR-SRV-020`. They are
+  evaluated in that order among themselves, so the strongest guarantee is
+  confirmed before the server is characterised.
 
   *Checked in the twenty-fourth edition, and unchanged.* This requirement
   orders **conditions**, and it is the condition order that governs. The order
@@ -383,8 +384,103 @@ Out of scope: the wording of any individual message.
   The two were in conflict until that requirement was written, because
   `FR-SRV-012` read an order out of a table of `FR-SRV-006` that states none,
   and that reading put the probe first. Nothing here changes: the eight steps,
-  the two that are skipped, and the ordering among the three conditions of step
-  5 are as the fourth edition left them.
+  the two that are skipped, and the ordering among the three conditions of the
+  cache-or-connection step are as the fourth edition left them.
+
+  *Amended in the thirtieth edition: template resolution moves from the seventh
+  position to the fourth, and nothing else about this requirement changes.* The
+  steps are still eight, none is added or withdrawn, and no step carries a
+  different code. What changes is where one of them is evaluated: a template
+  name is resolved immediately after `.tpl/.cfg`, and before the entry, the
+  cache, the connection and the catalogue. The two notes above name the
+  cache-or-connection step instead of numbering it, because its number has
+  moved beneath them.
+
+  *Why it moves: the condition needed nothing the old position gave it.*
+  `FR-TMPL-023` makes the template root a property of the resolved project, and
+  `FR-TMPL-003` establishes that resolving a template name requires no entry,
+  no cache and no connection — so the condition was decidable as soon as step 2
+  had run. `FR-SCH-008` had already placed a condition on that ground: the
+  shape of a qualified routine name is decidable without a server, so it is
+  evaluated at step 1 and precedes every catalogue read. This is the same
+  ground one step later, because a template name needs the project where that
+  token needed only itself.
+
+  *What the old position cost.* An invocation whose template cannot resolve
+  cannot render, and it paid first for everything the steps in between perform:
+  the entry resolved, with the `${VAR}` expansion of `FR-CONF-015` and the
+  child of `FR-CONF-024`; the one connection of `NFR-PERF-004`; the whole
+  catalogue read that `NFR-PERF-001` governs; and the store written one file
+  per object under `FR-CACHE-030`. None of it could be curtailed, because
+  `FR-CACHE-007` obliges the write to happen before the answer, so the store is
+  full by the time the refusal is reached. `BR-PERF-004` states what the
+  performance family requires of this exact invocation: a wrong invocation is
+  the one a calling agent makes most often while it is finding its way, and it
+  must cost what `tpl --version` costs. Over `WL-001` it could not, while a
+  name answerable from a directory listing was answered after the catalogue.
+  From the fourth position it can — every step that resolves an entry, opens a
+  connection, issues a catalogue statement or writes a cache file now follows
+  the refusal.
+
+  *`NFR-PERF-006` reaches the same invocation, and the order stood against it.*
+  That requirement obliges a command requiring no catalogue data to open no
+  connection, and the clause naming what it covers already reasons about
+  invocations rather than command forms — *any `tpl render` invoked with
+  `--context`* is an invocation and not a command. A `tpl render` whose
+  template does not exist requires no catalogue data either. A requirement of
+  form and an order pulled against each other, and `BR-PERF-001` prefers the
+  form, which holds everywhere and forever.
+
+  *It is one order still.* Moving a step does not make a second order, and no
+  command gains one of its own. `tpl render` is the only command that reaches
+  both sides of the move: `FR-TMPL-003` and `FR-CACHE-011` keep every
+  `template` subcommand away from an entry, the cache, a connection and the
+  catalogue, and no other command names a template. For every command but one
+  the move is unobservable.
+
+  *Accepted cost, and it is `FR-ERR-007` working rather than a defect.* The
+  first unsatisfied condition is the one reported, so an invocation carrying
+  two faults now reports the other of them: `tpl render nosuch` in a project
+  that selects no entry exits `66` where it exited `78`, and
+  `tpl render nosuch --context bad.json` exits `66` where `FR-RND-020` gave it
+  `65`. Neither requirement changes and neither is weakened — each states its
+  own condition and is reported whenever it is the first to fail — and a caller
+  still corrects one fault per invocation and reaches a correct invocation in
+  the same number of them. The second cost is small and falls the other way: a
+  render that fails at a later step resolves its template name first, which is
+  one lookup under a root already canonicalised.
+
+  *Accepted cost, stated plainly, because it is visible outside the process.*
+  Under `--context -` the document is no longer read before the template name
+  is judged, so a producer at the other end of the pipe is cut off; where its
+  document does not fit the pipe buffer, `FR-ERR-026` makes that producer exit
+  `74` where it exited `0`. What a caller branches on is unchanged: the refusal
+  is downstream of the producer, so `66` is the status a shell reports for the
+  pair of `FR-RND-017` with `pipefail` and without it, and the producer's own
+  code is reachable only by inspecting each stage.
+
+  *Rejected: leaving the order as it was and recording why it stands.* The
+  ground would have had to be that one order for every command is worth what
+  the old position cost — and moving a step keeps one order, so there was
+  nothing for the cost to buy.
+
+  *Rejected: a clause exempting `tpl render`, evaluating template resolution
+  before entry resolution for that command alone.* It puts a second order in
+  the corpus, leaves `FR-ERR-007` two orders to choose between, and buys
+  nothing the move does not, since no other command observes the difference.
+
+  *Rejected: keeping the numbering and stating the new position in prose.* It
+  preserves every citation of a step by number, at the price of a numbered list
+  whose numbers are not the order — and being the order is the list's only job.
+  The six citations of a moved number elsewhere in this corpus are corrected
+  instead, each by naming the step it means or by dropping a number it never
+  needed.
+
+  *Rejected: placing template resolution below entry resolution, so that only
+  the cache, the connection and the catalogue follow it.* Entry resolution
+  selects the entry, expands `${VAR}` and obtains the password, none of which
+  an invocation that cannot render has a use for, and the `78` it can raise is
+  a fault the caller meets on the next invocation anyway.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
@@ -820,15 +916,16 @@ Out of scope: the wording of any individual message.
   the `69` row of `FR-ERR-034`. It SHALL NOT name DNS resolution, TCP connect,
   or the TLS handshake, each of which completed before the session opened.
 
-  The conditions other requirements route elsewhere are the three of step 5 of
-  `FR-ERR-006`, and all three are `78`: the read-only session statement and its
-  read-back, under `FR-SRV-010`, which is `78` whether the server refused the
-  statement or the session did not survive it, because a setting that cannot be
-  applied is a setting that cannot be applied; the product check of
-  `FR-SRV-003`; and the version-window check of `FR-SRV-020`. What is left for
-  this requirement is therefore the other two statements of `FR-SRV-006` — the
-  version probe, whose own verdicts `FR-SRV-003` and `FR-SRV-020` reach only
-  when the probe answered, and the catalogue read.
+  The conditions other requirements route elsewhere are the three of the
+  cache-or-connection step of `FR-ERR-006`, and all three are `78`: the
+  read-only session statement and its read-back, under `FR-SRV-010`, which is
+  `78` whether the server refused the statement or the session did not survive
+  it, because a setting that cannot be applied is a setting that cannot be
+  applied; the product check of `FR-SRV-003`; and the version-window check of
+  `FR-SRV-020`. What is left for this requirement is therefore the other two
+  statements of `FR-SRV-006` — the version probe, whose own verdicts
+  `FR-SRV-003` and `FR-SRV-020` reach only when the probe answered, and the
+  catalogue read.
 
   *Rationale.* `69` is right and was never in question — the session did not
   hold, the server is unreachable for this invocation, and the caller's next
