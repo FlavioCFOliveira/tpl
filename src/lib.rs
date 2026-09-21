@@ -26,13 +26,15 @@
 //! | `mariadb` | The one connection of `NFR-PERF-004`, the TLS mode of `FR-CONF-037` and `ADR-002`, the read-only session of `FR-SRV-008` … `FR-SRV-011`, the version probe of `FR-SRV-002` with the window of `FR-SRV-015`, and the classification `OD-06` drops the driver's error at |
 //! | `mariadb::catalogue` | The fixed repertoire of catalogue queries — one per object kind, whose count `NFR-PERF-001` and `NFR-PERF-002` fix — the common column lists of `FR-SRV-037`, the fold that turns their rows into the model, and the completeness verdict of `FR-PRIV-001` … `FR-PRIV-019` it takes as it folds |
 //! | `cache` | The store of `FR-CACHE-001` … `FR-CACHE-037`: one folder per entry, one file per object written through a rename, the two versions and the completeness record of `FR-CDOC-001` … `FR-CDOC-007`, and a failure in either direction that is a miss rather than a condition |
+//! | `render` | The engine of `ADR-001`, built lazily and from disk at render time; the one template-name resolution of `FR-TMPL-023` … `FR-TMPL-027`; and the registered surface of `FR-ENV-005` … `FR-ENV-046` with the semantics of `FR-SEM-001` … `FR-SEM-019` |
 //!
 //! A read is honest about what a reader's privileges did not reach: an object
 //! that came back short carries the `restricted` marking of `FR-PRIV-016`, a
 //! caller that named one receives the `77` of `FR-PRIV-003`, and `FR-CACHE-037`
-//! keeps a marked object out of the store. The render environment, and the two
-//! arms that consume it — `tpl template …` and `tpl render` — are added by the
-//! tasks that follow.
+//! keeps a marked object out of the store. The render environment exists and
+//! registers, so `tpl help --format json` publishes the whole template surface;
+//! the two arms that consume it — `tpl template …` and `tpl render` — are added
+//! by the tasks that follow.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -54,6 +56,19 @@ pub(crate) mod project;
 pub(crate) mod mariadb;
 
 pub(crate) mod output;
+
+// The module is complete and two of its three consumers are later blocks: the
+// four `tpl template` subcommands and `tpl render` reach the engine and the
+// resolution, and `cli/help.rs` already reaches the registered surface. One
+// fact explains every item, so it is stated once here rather than once per
+// item.
+#[allow(
+    dead_code,
+    reason = "the commands that build a render environment — the four of `tpl template` and \
+              `tpl render` — are a later block, and the block that owns the engine owns the \
+              surface it registers"
+)]
+pub(crate) mod render;
 
 pub use error::Error;
 

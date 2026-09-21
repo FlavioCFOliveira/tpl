@@ -58,11 +58,9 @@
 //! The shape is published here, in that position. Its **content** is `render/`'s:
 //! that requirement derives `registered` from the registrations the environment
 //! actually performs, for the reason `FR-HELP-021` gives for the command tree,
-//! and `render/` is a later sprint. Until it registers, the three arrays it
-//! would fill are `null` — which is what `FR-ENV-005` gives for a group that
-//! cannot be enumerated and what `FR-OUT-012` gives for a value that is absent
-//! rather than empty. [`TemplateSurface::PUBLISHED`] states which of the twelve
-//! values are permanent and which await that module.
+//! so the four arrays that carry names are read from that module's constants
+//! and no name is written here. [`TemplateSurface::PUBLISHED`] states which of
+//! the twelve values are permanent and which are read from the environment.
 
 use std::io::Write;
 
@@ -325,7 +323,7 @@ struct Group {
 }
 
 impl TemplateSurface {
-    /// The surface as this binary can state it.
+    /// The surface as this binary states it.
     ///
     /// Eight of the twelve values are permanent and fixed by `FR-ENV-005`: the
     /// three guarantees; the three `null` arrays of `other`, because group 3 is
@@ -335,23 +333,25 @@ impl TemplateSurface {
     ///
     /// The remaining four — the three arrays of `registered` and the filters of
     /// `inherited` — are `render/`'s, which `FR-ENV-005` requires them to be
-    /// derived from: "the registrations the environment actually performs". That
-    /// module is a later sprint, so this binary cannot enumerate them and says
-    /// so in the form the requirement provides, rather than restating the names
-    /// of `FR-ENV-006`, `FR-ENV-007`, `FR-ENV-014`, `FR-ENV-018` and
-    /// `FR-ENV-020` here. Restating them was rejected on `FR-HELP-021`'s own
-    /// ground: it would create a second source for one truth, and the document
-    /// would assert a surface the binary does not have.
+    /// derived from: "the registrations the environment actually performs".
+    /// They are taken from that module's own constants and are **not restated
+    /// here**, on `FR-HELP-021`'s ground: a second statement of one truth is
+    /// the statement that stops being true without saying so, and the document
+    /// would then be able to assert a surface the binary does not have. The
+    /// three of `registered` are written by the same declaration that installs
+    /// the names on the engine; the filters of `inherited` are the closed list
+    /// of `FR-ENV-019`, which `tpl` does not register and `ADR-001` guarantees
+    /// against the engine pin.
     const PUBLISHED: Self = Self {
         registered: Group {
             guarantee: "contract",
-            filters: None,
-            tests: None,
-            functions: None,
+            filters: Some(crate::render::REGISTERED_FILTERS),
+            tests: Some(crate::render::REGISTERED_TESTS),
+            functions: Some(crate::render::REGISTERED_FUNCTIONS),
         },
         inherited: Group {
             guarantee: "pinned",
-            filters: None,
+            filters: Some(crate::render::INHERITED_FILTERS),
             tests: Some(&[]),
             functions: Some(&[]),
         },
@@ -876,16 +876,49 @@ mod tests {
         // FR-ENV-005: three sibling objects of one shape, each carrying
         // `guarantee`, `filters`, `tests` and `functions` in that order, with
         // the guarantee its table gives the group. The four arrays `render/`
-        // fills are `null` until that module registers, and the two `FR-ENV-018`
-        // and `FR-ENV-019` fix as empty are empty in every document.
+        // fills carry the names of FR-ENV-006 followed by those of FR-ENV-007,
+        // then those of FR-ENV-014, FR-ENV-020 and FR-ENV-018, each in the
+        // order its requirement states them, per FR-HELP-023. The two
+        // FR-ENV-018 and FR-ENV-019 fix as empty are empty in every document,
+        // and the three of group 3 are `null` in every document.
         assert_eq!(
             serde_json::to_string(&TemplateSurface::PUBLISHED).expect("it serialises"),
             concat!(
-                r#"{"registered":{"guarantee":"contract","filters":null,"tests":null,"#,
-                r#""functions":null},"inherited":{"guarantee":"pinned","filters":null,"#,
-                r#""tests":[],"functions":[]},"other":{"guarantee":"none","filters":null,"#,
-                r#""tests":null,"functions":null}}"#
+                r#"{"registered":{"guarantee":"contract","filters":["pascal","camel","snake","#,
+                r#""upper_snake","kebab","quote","sql_type","json","indent","comment","escape"],"#,
+                r#""tests":["nullable","primary_key","auto_increment","unique","numeric",""#,
+                r#"temporal","textual"],"functions":["table","view","routine","column","fail"]},"#,
+                r#""inherited":{"guarantee":"pinned","filters":["default","join","length","map","#,
+                r#""select","reject","first","last","reverse","sort","trim","upper","lower","#,
+                r#""replace"],"tests":[],"functions":[]},"other":{"guarantee":"none","#,
+                r#""filters":null,"tests":null,"functions":null}}"#
             )
+        );
+    }
+
+    #[test]
+    fn fr_env_005_the_published_arrays_are_the_ones_the_environment_registers() {
+        // FR-ENV-005 derives `registered` from the registrations the
+        // environment actually performs. The document holds no copy of the
+        // names, so this asserts the derivation rather than the names — which
+        // `render/` asserts against their requirements.
+        let published = TemplateSurface::PUBLISHED;
+
+        assert_eq!(
+            published.registered.filters,
+            Some(crate::render::REGISTERED_FILTERS)
+        );
+        assert_eq!(
+            published.registered.tests,
+            Some(crate::render::REGISTERED_TESTS)
+        );
+        assert_eq!(
+            published.registered.functions,
+            Some(crate::render::REGISTERED_FUNCTIONS)
+        );
+        assert_eq!(
+            published.inherited.filters,
+            Some(crate::render::INHERITED_FILTERS)
         );
     }
 
