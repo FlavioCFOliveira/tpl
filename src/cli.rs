@@ -703,8 +703,13 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
                         cfg::entries::remove(&cfg::Supplied::new(globals, None), name)
                     }
                     // The one cfg subcommand that contacts a server, per
-                    // FR-CFG-005, and therefore the one the sprint that opens a
-                    // connection owns.
+                    // FR-CFG-005 and FR-CACHE-010, and therefore the one the
+                    // sprint that opens a connection owns. FR-CACHE-010 also
+                    // keeps the store out of it — the command reaches a server
+                    // and reads nothing into the model — and FR-CACHE-011 keeps
+                    // the store and the server out of every other arm of this
+                    // match and of every `template` subcommand: none of them
+                    // constructs a `Cache` or a session.
                     Some(cfg::DatabaseCommand::Test { .. }) => {
                         not_yet_implemented!("tpl cfg database test")
                     }

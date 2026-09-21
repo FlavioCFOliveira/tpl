@@ -10,17 +10,24 @@
 //!
 //! # The order the steps run in
 //!
-//! `FR-ERR-006` fixes it, and it is the order of [`Reader::open`] followed by
-//! [`Reader::fetch`]:
+//! `FR-ERR-006` fixes it, and it is the order of [`project`] and
+//! [`Reader::open_from`] followed by [`Reader::fetch`]:
 //!
 //! | Step | What runs | Requirement |
 //! |---|---|---|
 //! | 2 | Project discovery and the two trust checks | `FR-PROJ-004` … `FR-PROJ-011` |
 //! | 3 | `.tpl/.cfg` is read and validated | `FR-CONF-001` … `FR-CONF-022` |
-//! | 4 | The entry is selected and resolved, and the two keys a read needs are checked | `FR-GLOB-004` … `FR-GLOB-008`, `FR-CONF-040`, `FR-CONF-041` |
-//! | 5 | The cache is consulted, and the server read only where it misses | `FR-CACHE-006`, `FR-CACHE-007` |
+//! | 5 | The entry is selected and resolved, and the two keys a read needs are checked | `FR-GLOB-004` … `FR-GLOB-008`, `FR-CONF-040`, `FR-CONF-041` |
+//! | 6 | The cache is consulted, and the server read only where it misses | `FR-CACHE-006`, `FR-CACHE-007` |
 //!
-//! Step 4's two checks are made **here** and not below: `FR-CONF-040` rejects
+//! **Step 4 is missing from that table because it is not this module's.** It is
+//! template resolution, which `FR-ERR-006` evaluates immediately after `.tpl/.cfg`
+//! and which only `tpl render` reaches. That command therefore takes steps 2 and
+//! 3 from [`project`], resolves its template name, and enters step 5 through
+//! [`Reader::open_from`]; every other caller has no step 4 to make room for and
+//! calls [`Reader::open`], which is the two joined.
+//!
+//! Step 5's two checks are made **here** and not below: `FR-CONF-040` rejects
 //! composing either refusal where the connection is assembled, because the `78`
 //! row of `FR-ERR-034` obliges the `cause` to name the file and the key, and
 //! neither is a thing that layer holds.
@@ -107,20 +114,21 @@ pub(super) struct Reader<'a> {
     no_cache: bool,
 }
 
-/// The project, the entry and the store one invocation acts on.
+/// The entry and the store one invocation acts on.
 ///
-/// It is steps 2 through 4 of `FR-ERR-006`, settled: a value of this type
+/// It is steps 2, 3 and 5 of `FR-ERR-006`, settled: a value of this type
 /// exists only where the project was found and trusted, `.tpl/.cfg` validated,
 /// the entry selected and resolved, and the two keys of `FR-CONF-040` and
 /// `FR-CONF-041` found.
+///
+/// The project itself is **not** kept. A command that reaches `.tpl/` as well
+/// as a catalogue holds it already: [`project`] is what produced it, and
+/// [`Reader::open_from`] takes it by reference precisely so that one discovery
+/// serves both.
 #[derive(Debug)]
 pub(super) struct Opened {
     /// The entry's own store (`FR-CACHE-001`, `FR-CACHE-002`).
     pub(super) cache: Cache,
-
-    /// The project this invocation acts on, kept so that a command which
-    /// reaches `.tpl/` **and** a catalogue reaches both from one discovery.
-    project: Project,
 
     /// The validated configuration, kept so that a later condition can name
     /// the file the `78` row of `FR-ERR-034` obliges.
@@ -134,17 +142,6 @@ impl Opened {
     /// The database entry this invocation selected (`FR-GLOB-008`).
     pub(super) fn entry(&self) -> &str {
         self.settings.entry()
-    }
-
-    /// The `.tpl` folder of the project this invocation acts on.
-    ///
-    /// It is here so that `tpl render` builds its template root from the same
-    /// discovery the catalogue read was made through: `FR-TMPL-023` makes
-    /// `.tpl/templates/` of the **resolved** project the boundary of every
-    /// lookup, and a second walk could resolve a second project between the
-    /// two steps.
-    pub(super) fn root(&self) -> &Path {
-        self.project.root()
     }
 
     /// The four phase deadlines of `FR-CONF-004`, as `.tpl/.cfg` resolved
@@ -184,17 +181,40 @@ impl<'a> Reader<'a> {
     }
 
     /// Discovers the project, reads `.tpl/.cfg`, and resolves the entry —
-    /// steps 2 through 4 of `FR-ERR-006`.
+    /// steps 2, 3 and 5 of `FR-ERR-006`.
+    ///
+    /// Every command but `tpl render` reaches the entry straight from the
+    /// project, because `FR-ERR-006` gives it nothing to evaluate in between.
     ///
     /// # Errors
     ///
-    /// Returns what [`Project::current`], [`Project::configuration`] and
-    /// [`settings::resolve`] return, and [`Error::EntryKeyMissing`] where the
-    /// entry names no host or no database, per `FR-CONF-040` and
-    /// `FR-CONF-041`.
+    /// Returns what [`project`] and [`Reader::open_from`] return.
     pub(super) fn open(&self) -> Result<Opened, Error> {
-        let project = Project::current(self.tpl_dir)?;
-        let configuration = project.configuration()?;
+        let (project, configuration) = project(self.tpl_dir)?;
+
+        self.open_from(&project, configuration)
+    }
+
+    /// Step 5 of `FR-ERR-006` over a project already discovered: the entry is
+    /// selected and resolved, and the two keys a read needs are checked.
+    ///
+    /// It is separate from [`Reader::open`] because `FR-ERR-006` evaluates
+    /// template resolution at step 4, between the configuration and the entry,
+    /// and `tpl render` is the one command that reaches both sides of it. The
+    /// entry is where the `${VAR}` expansion of `FR-CONF-015` happens and where
+    /// the `password_command` child of `FR-CONF-024` runs, so an invocation
+    /// whose template does not resolve must never arrive here.
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`settings::resolve`] returns, and
+    /// [`Error::EntryKeyMissing`] where the entry names no host or no
+    /// database, per `FR-CONF-040` and `FR-CONF-041`.
+    pub(super) fn open_from(
+        &self,
+        project: &Project,
+        configuration: Configuration,
+    ) -> Result<Opened, Error> {
         let settings = settings::resolve(
             &configuration,
             self.requested,
@@ -224,7 +244,6 @@ impl<'a> Reader<'a> {
 
         Ok(Opened {
             cache,
-            project,
             configuration,
             settings,
         })
@@ -285,6 +304,11 @@ impl<'a> Reader<'a> {
     /// owners produced it, and a caller that took it out would have to name
     /// that owner.
     ///
+    /// Handing the value in is what makes `FR-CACHE-012` structural rather than
+    /// a rule each command applies: the one place that decides which source
+    /// served the read is the one place that states it, so no presentation can
+    /// answer from the store without saying so.
+    ///
     /// `look` is what the cache is asked for, and is the command's own: a
     /// listing asks for its collection and a named object for itself, per
     /// `FR-CDOC-007` and `FR-CDOC-008`. A miss reads the **whole** catalogue
@@ -311,7 +335,7 @@ impl<'a> Reader<'a> {
 
     /// [`Reader::serve`] over a project already opened.
     ///
-    /// The two exist because `tpl render` needs steps 2 through 4 in hand
+    /// The two exist because `tpl render` needs steps 2, 3 and 5 in hand
     /// **before** the read: `FR-TMPL-023` builds its template root from the
     /// project the read was made through and `FR-CONF-004` resolves the render
     /// deadline from the same file, and neither reaches the presentation. Every
@@ -365,8 +389,8 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// The project and its validated configuration, for a command that reaches
-/// `.tpl/` and no catalogue.
+/// The project and its validated configuration — steps 2 and 3 of
+/// `FR-ERR-006`.
 ///
 /// `tpl cache clean` and `tpl cache status` name the store by entry and never
 /// reach a server, so they stop at the **selection** of `FR-GLOB-004` through
@@ -374,6 +398,10 @@ impl<'a> Reader<'a> {
 /// opens a connection or reads the catalogue, and neither does. Stopping there
 /// is also what keeps `password_command` from running for a command that has
 /// nothing to authenticate to.
+///
+/// `tpl render` reaches it for a second reason: step 4 of `FR-ERR-006` resolves
+/// its template name from the root `FR-TMPL-023` makes a property of this very
+/// project, and it does so before [`Reader::open_from`] resolves the entry.
 ///
 /// # Errors
 ///

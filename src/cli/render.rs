@@ -31,9 +31,9 @@
 //! |---|---|---|
 //! | 1 | `--set`, the object flags, and `--context` beside `-d/--database` | `FR-RND-005`, `FR-RND-011` … `FR-RND-014`, `FR-RND-018` |
 //! | 2, 3 | Project discovery, the trust checks, and `.tpl/.cfg` | `FR-PROJ-004` … `FR-PROJ-011`, `FR-CONF-001` … `FR-CONF-022` |
-//! | 4, 5 | The entry, the cache, and the server on a miss — **skipped** on the `--context` path | `FR-RND-019`, `FR-RND-022`, `FR-RND-026` |
-//! | 6 | The object the invocation bound | `FR-RND-032` |
-//! | 7 | The template name | `FR-RND-029`, `FR-TMPL-027` |
+//! | 4 | The template name | `FR-RND-029`, `FR-TMPL-027` |
+//! | 5, 6 | The entry, the cache, and the server on a miss — **skipped** on the `--context` path | `FR-RND-019`, `FR-RND-022`, `FR-RND-026` |
+//! | 7 | The object the invocation bound | `FR-RND-032` |
 //! | 8 | The render | `FR-RND-030`, `FR-RND-031`, `FR-RND-033` |
 //!
 //! Step 1 is this module's own and runs before anything is discovered or
@@ -43,12 +43,23 @@
 //! precedes a refusal that is a property of **two**, so a `--set` that is not a
 //! pair is reported however the object flags read.
 //!
-//! Step 7 is performed explicitly, by resolving the template name before the
-//! render is entered, so that the order above is observable: a template that
-//! does not exist is the `66` of `FR-TMPL-027` and not the `65` a render
-//! deadline already spent would otherwise produce. `OD-15` already splits the
-//! resolution by who asks and makes the loader resolve again, so the cost of
-//! stating the step is one `realpath` on a path already in the page cache.
+//! Step 4 is performed explicitly, on both context paths, by resolving the
+//! template name as soon as the project has been read and before anything else
+//! is reached. `tpl render` is the only command that reaches both sides of that
+//! step, and what follows it is everything an invocation that cannot render has
+//! no use for: the entry, with the `${VAR}` expansion of `FR-CONF-015` and the
+//! `password_command` child of `FR-CONF-024`; the one connection of
+//! `NFR-PERF-004`; the catalogue read of `NFR-PERF-001`; and the store written
+//! under `FR-CACHE-030`. `OD-15` already splits the resolution by who asks and
+//! makes the loader resolve again, so the cost of stating the step is one
+//! `realpath` on a path already in the page cache.
+//!
+//! Two visible consequences follow from the position, and `FR-ERR-006` records
+//! both as accepted: an invocation carrying two faults reports the template
+//! rather than the entry or the document, because `FR-ERR-007` reports the
+//! first condition that fails; and under `--context -` the document is no
+//! longer read, so a producer at the other end of the pipe is cut off instead
+//! of drained.
 //!
 //! # What this command does not have
 //!
@@ -83,13 +94,12 @@ use minijinja::Value;
 use super::globals::Globals;
 use super::local::{Caching, Object};
 use super::schema::named::{self, Sought};
-use super::source::Reader;
+use super::source::{self, Reader};
 use crate::cache::Look;
 use crate::deadline::{Bound, Phase};
 use crate::error::{ContextFault, Error, Position};
 use crate::model::document::{self, DatabaseDocument};
 use crate::output;
-use crate::project::Project;
 use crate::project::settings;
 use crate::render::Environment;
 
@@ -222,7 +232,7 @@ impl<'a> Binding<'a> {
     /// The object variable this binding contributes to the context, or
     /// [`None`] for the whole-database form (`FR-RND-023`, `FR-RND-032`).
     ///
-    /// This is step 6 of `FR-ERR-006`, and it runs over whichever context
+    /// This is step 7 of `FR-ERR-006`, and it runs over whichever context
     /// source produced `document`: `at` carries which that was, so the `66` and
     /// the `64` name the population they were actually sought in.
     ///
@@ -286,12 +296,13 @@ struct Assembly<'a> {
 ///
 /// Returns the condition of the first step of `FR-ERR-006` that fails, in the
 /// order this module's own documentation states: the `64` of `FR-RND-005`,
-/// `FR-RND-011` through `FR-RND-014` and `FR-RND-018`; the `78` of a project,
-/// a configuration or an entry that does not describe a read; the `65` of
-/// `FR-RND-020` for a `--context` document that does not match the contract;
-/// the `69` and `77` of a server that did not answer or did not permit the
-/// read; the `66` of `FR-RND-032` and `FR-RND-029`; and the `65` of
-/// `FR-RND-030`, `FR-RND-031` and `FR-RND-033`.
+/// `FR-RND-011` through `FR-RND-014` and `FR-RND-018`; the `78` of a project
+/// or a configuration that does not describe a read; the `66` of `FR-RND-029`
+/// for a template name that resolves to nothing; the `78` of an entry that
+/// does not describe a read; the `65` of `FR-RND-020` for a `--context`
+/// document that does not match the contract, and the `69` and `77` of a
+/// server that did not answer or did not permit the read; the `66` of
+/// `FR-RND-032`; and the `65` of `FR-RND-030`, `FR-RND-031` and `FR-RND-033`.
 pub(super) fn run<W: std::io::Write>(
     out: &mut W,
     globals: &Globals,
@@ -344,7 +355,8 @@ fn document_flag<'a>(globals: &Globals, context: &'a [PathBuf]) -> Result<Option
 ///
 /// # Errors
 ///
-/// Returns what [`Reader::open`] and [`Reader::serve_from`] return, and what
+/// Returns what [`source::project`], [`Environment::resolve`],
+/// [`Reader::open_from`] and [`Reader::serve_from`] return, and what
 /// [`produce`] returns.
 fn from_catalogue<W: std::io::Write>(
     out: &mut W,
@@ -354,11 +366,21 @@ fn from_catalogue<W: std::io::Write>(
     defined: &BTreeMap<&str, &str>,
 ) -> Result<(), Error> {
     let reader = Reader::new(globals, Some(supplied.caching));
-    // Steps 2 through 4, in hand before the read: the template root and the
-    // render deadline are both properties of the project this read was made
-    // through.
-    let opened = reader.open()?;
-    let environment = Environment::new(opened.root());
+    // Steps 2 and 3, made once: the template root of FR-TMPL-023 and the
+    // render deadline of FR-CONF-004 are both properties of the project this
+    // read is made through, and a second walk could resolve a second project
+    // between the two steps.
+    let (project, configuration) = source::project(reader.tpl_dir())?;
+    let environment = Environment::new(project.root());
+
+    // Step 4, before an entry is resolved: FR-RND-029 through FR-TMPL-027. An
+    // invocation refused here has spared itself the ${VAR} expansion of
+    // FR-CONF-015, the password_command child of FR-CONF-024, the one
+    // connection of NFR-PERF-004, the catalogue read and the store write.
+    environment.resolve(supplied.template)?;
+
+    // Steps 5 and 6.
+    let opened = reader.open_from(&project, configuration)?;
     let assembly = Assembly {
         environment: &environment,
         template: supplied.template,
@@ -382,20 +404,27 @@ fn from_catalogue<W: std::io::Write>(
 
 /// Renders from a `--context` document (`FR-RND-016`, `FR-RND-022`).
 ///
-/// Steps 4 and 5 of `FR-ERR-006` are skipped entirely: no entry is selected,
+/// Steps 5 and 6 of `FR-ERR-006` are skipped entirely: no entry is selected,
 /// so `password_command` does not run, and no connection is opened and no file
-/// of the cache is read or written. Steps 2 and 3 are **not** skipped —
+/// of the cache is read or written. Steps 2, 3 and 4 are **not** skipped —
 /// `FR-TMPL-023` makes the template root a property of the resolved project and
 /// `FR-CONF-004` resolves the render deadline from `[core]`, and neither is
-/// reachable without them.
+/// reachable without the first two; the third is the template name, which
+/// `FR-ERR-006` evaluates on this path exactly where it evaluates it on the
+/// other.
+///
+/// **The document is read after step 4 and not before it**, which is what
+/// `FR-ERR-006` records as an accepted cost: a document that does not match the
+/// contract is reported only where the template resolves, and under
+/// `--context -` a producer at the other end of the pipe is cut off rather than
+/// drained.
 ///
 /// # Errors
 ///
-/// Returns what [`Project::current`] and
-/// [`Project::configuration`](crate::project::Project::configuration) return,
-/// what [`read_document`] returns for a document that cannot be read, the `65`
-/// of `FR-RND-020` for one that does not match the contract, and what
-/// [`produce`] returns.
+/// Returns what [`source::project`] and [`Environment::resolve`] return, what
+/// [`read_document`] returns for a document that cannot be read, the `65` of
+/// `FR-RND-020` for one that does not match the contract, and what [`produce`]
+/// returns.
 fn from_document<W: std::io::Write>(
     out: &mut W,
     globals: &Globals,
@@ -405,9 +434,13 @@ fn from_document<W: std::io::Write>(
     path: &Path,
 ) -> Result<(), Error> {
     let reader = Reader::new(globals, Some(supplied.caching));
-    let project = Project::current(reader.tpl_dir())?;
-    let configuration = project.configuration()?;
+    // Steps 2 and 3.
+    let (project, configuration) = source::project(reader.tpl_dir())?;
     let environment = Environment::new(project.root());
+
+    // Step 4, before the document is read: FR-RND-029 through FR-TMPL-027.
+    environment.resolve(supplied.template)?;
+
     let assembly = Assembly {
         environment: &environment,
         template: supplied.template,
@@ -433,33 +466,30 @@ fn from_document<W: std::io::Write>(
     )
 }
 
-/// Steps 6, 7 and 8 of `FR-ERR-006`, over whichever source produced
-/// `document`.
+/// Steps 7 and 8 of `FR-ERR-006`, over whichever source produced `document`.
 ///
 /// This is the one place a render happens, which is what makes the promise of
 /// this sprint structural: the result cannot betray which source the model came
 /// from, because the only thing either source contributes is this argument.
 ///
+/// The template name is **not** resolved here. `FR-ERR-006` evaluates it at
+/// step 4, which both callers reach before they resolve an entry or read a
+/// document, so what arrives here is a name already known to resolve.
+///
 /// # Errors
 ///
-/// Returns what [`Binding::bind`] returns for step 6, what
-/// [`Environment::resolve`](crate::render::Environment::resolve) returns for
-/// step 7 — the `66` of `FR-RND-029` with the nearest-match suggestion of
-/// `FR-TMPL-027` — and for step 8 the `65` of `FR-RND-030` for a syntax error,
-/// of `FR-RND-031` for an evaluation failure and of `FR-RND-033` for the
-/// deadline, and [`Error::StdoutUnwritable`] where the stream refused the
-/// write.
+/// Returns what [`Binding::bind`] returns for step 7, and for step 8 the `65`
+/// of `FR-RND-030` for a syntax error, of `FR-RND-031` for an evaluation
+/// failure and of `FR-RND-033` for the deadline, and
+/// [`Error::StdoutUnwritable`] where the stream refused the write.
 fn produce<W: std::io::Write>(
     out: &mut W,
     assembly: &Assembly<'_>,
     document: &DatabaseDocument<'_>,
     at: Sought<'_>,
 ) -> Result<(), Error> {
-    // 6 — FR-RND-032.
+    // 7 — FR-RND-032.
     let bound = assembly.binding.bind(document, at)?;
-
-    // 7 — FR-RND-029, before the deadline of step 8 can be found spent.
-    assembly.environment.resolve(assembly.template)?;
 
     // 8 — FR-RND-030, FR-RND-031, FR-RND-033. `now` is read here, which is
     // render time, and once, which is FR-CTX-029.
@@ -819,7 +849,7 @@ mod tests {
     fn fr_rnd_021_a_document_is_accepted_in_either_form_and_is_read_from_no_connection() {
         // FR-RND-021 and FR-RND-022: compact and indented are one contract,
         // and neither opens anything. The project here declares no database
-        // entry at all, so an invocation that reached step 4 would be the `78`
+        // entry at all, so an invocation that reached step 5 would be the `78`
         // of FR-GLOB-006 rather than a render.
         let scratch = Scratch::new();
         let tpl_dir = project(&scratch, &[("name.jinja", "{{ database.name }}")]);
@@ -864,9 +894,12 @@ mod tests {
 
     #[test]
     fn fr_rnd_029_a_template_that_does_not_exist_is_66_with_a_suggestion() {
-        // FR-RND-029 through FR-TMPL-027, and the order of FR-ERR-006: step 7
-        // is reached because step 6 passed, and the condition is the missing
-        // template rather than anything the render would have raised.
+        // FR-RND-029 through FR-TMPL-027, and the order of FR-ERR-006: step 4
+        // is reached because steps 2 and 3 passed, and the condition is the
+        // missing template rather than anything the document or the render
+        // would have raised. The document supplied here is well formed and
+        // carries the whole contract, so nothing downstream could have
+        // produced this refusal.
         let scratch = Scratch::new();
         let tpl_dir = project(&scratch, &[("example.jinja", "hello\n")]);
         let context = scratch.file("context.json", &dumped());

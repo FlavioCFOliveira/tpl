@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-20
+last-reviewed: 2026-09-21
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -24,7 +24,7 @@ correction is still owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in twenty-nine editions. All are in force;
+The specification has been written in thirty editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1925,12 +1925,13 @@ written.
 - **Three requirements are checked and left as written.** `FR-ERR-006`, in
   [errors-and-exit-codes.md](errors-and-exit-codes.md), orders conditions and
   not statements, and its eight steps and the ordering among the three
-  conditions of step 5 are as the fourth edition left them. `FR-SRV-002` admits
-  both orders — it defers to the read-only pair without saying whether that
-  pair is issued before the probe — which is exactly why the intent its
-  fourth-edition amendment states needed a requirement of its own. And
-  `FR-CFG-024`, in [cfg-commands.md](cfg-commands.md), whose step 2 is the
-  read-only pair and step 3 the series check, fixes the four outcomes that
+  conditions of the cache-or-connection step are as the fourth edition left
+  them. `FR-SRV-002` admits both orders — it defers to the read-only pair
+  without saying whether that pair is issued before the probe — which is
+  exactly why the intent its fourth-edition amendment states needed a
+  requirement of its own. And `FR-CFG-024`, in
+  [cfg-commands.md](cfg-commands.md), whose step 2 is the read-only pair and
+  step 3 the series check, fixes the four outcomes that
   command reports and not the order of the statements. Each now records that it
   was checked, and cites `FR-SRV-042` rather than repeating it.
 
@@ -1999,12 +2000,12 @@ condition carries a code the table already holds.
   `tpl cfg database add reporting --user reader`
   writes an entry that is legal in the file, passes `FR-CONF-007`, and
   describes no connection and no read. `FR-CONF-040` and `FR-CONF-041` refuse
-  the invocation that selects such an entry with `78`, at step 4 of
-  `FR-ERR-006`, before a connection is opened. The second of the two also
-  states the question nothing had answered — **which database a read covers**:
-  it is the one the entry names, by the `database` key or the `/database`
-  segment of a DSN, and from no other source. Every `schema` subcommand
-  depends on it. Composing either refusal where the connection is assembled
+  the invocation that selects such an entry with `78`, at the entry-resolution
+  step of `FR-ERR-006`, before a connection is opened. The second of the two
+  also states the question nothing had answered — **which database a read
+  covers**: it is the one the entry names, by the `database` key or the
+  `/database` segment of a DSN, and from no other source. Every `schema`
+  subcommand depends on it. Composing either refusal where the connection is assembled
   was rejected, because that layer cannot satisfy the `78` row of `FR-ERR-034`
   — it holds neither the file nor the position the `cause` must name; refusing
   the whole file at step 3 was rejected, because it makes `.tpl/.cfg`
@@ -2505,6 +2506,63 @@ sat directly beneath a table that was right and read as that table's summary. A
 rationale is prose, and prose beside a test vector is read as description of
 it; this one made a claim the vector refutes in a row the reader has just
 scanned.
+
+### Thirtieth edition — a condition decidable from the project, evaluated after the catalogue
+
+`tpl render nosuch --table orders` against a live database read the whole
+catalogue and filled the store before refusing on a template name that could
+never have rendered. Nothing was diverging: `FR-ERR-006` put template
+resolution seventh, after the entry, the cache and the catalogue, and the
+implementation did exactly that. What had never been asked is whether that
+position is the one the performance family wants, and the certification of the
+write path on 2026-09-21 supplied the facts the question needed — that the read
+path has no partial form, and that every fallible step runs before the single
+write of a document already whole. This edition puts the question and answers
+it.
+
+**No identifier is assigned, none is retired, and no requirement is added or
+withdrawn.** One step of one requirement changes position; the step count, the
+codes and every other requirement stay as they were, and the index of
+[open-questions.md](open-questions.md) stays empty.
+
+- **Template resolution moves from the seventh position to the fourth** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-006` resolves a
+  template name immediately after `.tpl/.cfg`, and before the entry, the cache,
+  the connection and the catalogue. The condition needed nothing the old
+  position gave it: `FR-TMPL-023` makes the template root a property of the
+  resolved project and `FR-TMPL-003` keeps a template name away from an entry,
+  a cache and a connection, so it was decidable as soon as step 2 had run —
+  the ground on which `FR-SCH-008` already placed one condition at step 1. What
+  the old position cost was everything an invocation that cannot render paid
+  before being told so, which `BR-PERF-004` says a wrong invocation must not
+  pay, and whose connection `NFR-PERF-006` obliges a command needing no
+  catalogue data not to open. It remains one order for every command:
+  `tpl render` is the only command that reaches both sides of the move, and
+  `FR-ERR-007` therefore hands a doubly faulted invocation the other of its two
+  codes. The requirement records the two cases that change as an accepted cost,
+  beside the one visible outside the process — a producer behind `--context -`
+  is now cut off rather than drained.
+- **Eight sentences numbered a step that has moved, and each is corrected** —
+  two in `FR-ERR-006`'s own notes, two elsewhere in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), two in
+  [configuration-model.md](configuration-model.md), and two in the edition
+  records of this file. Each now names the step it means, or drops a number it
+  never needed. Numbering a step in prose is what let one move falsify eight
+  sentences, and the four steps of `FR-CFG-024`, which are its own and not
+  these, are untouched.
+- **`NFR-PERF-006` is checked and left as written** —
+  [performance-requirements.md](performance-requirements.md). Its obligation —
+  a command requiring no catalogue data opens no connection — is what the new
+  position lets a render whose template does not exist satisfy, and the clause
+  naming what that requirement covers does not name this invocation. The clause
+  enumerates and the obligation governs, so nothing in that file is false and
+  nothing in it changes here.
+
+**What found it.** Not a reading of this corpus against itself: the order, every
+requirement it orders, and the code all agreed with one another. It was found by
+asking from the performance side, rather than the correctness side, what an
+invocation costs when it cannot succeed — and it was answerable only because the
+write path had been certified the same day.
 
 ### Still out of scope
 
@@ -3028,6 +3086,17 @@ own table disproves. Neither touches a fixture, a measurement, or a file this
 corpus does not own. What `FR-SEM-021` now requires is owed by the code that
 renders, which is work a requirement in force obliges rather than debt of this
 corpus. The item below was untouched by this edition and stays outstanding.
+
+The thirtieth edition adds no obligation of either kind, and records none as
+discharged. It moves one step of `FR-ERR-006` and corrects the eight sentences
+that numbered a step the move displaced. Nothing it changes touches a fixture
+or a measurement. Two things outside this corpus now follow the order it
+replaced: the code that implements the old position, and every citation of a
+step of `FR-ERR-006` by number in `docs/spec-technical/` and in the comments of
+the implementation and its tests. Both are owed by owners outside this corpus —
+work a requirement in force obliges, in the terms the twenty-eighth and
+twenty-ninth editions used, rather than debt of this one. The item below was
+untouched by this edition and stays outstanding.
 
 The section therefore carries the one item the twentieth edition recorded, and
 the seven it has held before are all accounted for below.

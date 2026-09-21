@@ -29,6 +29,24 @@
 //! rather than properties of one, and are left where [`super::local`] leaves
 //! the two of its own.
 //!
+//! # The arm and the catalogue cache
+//!
+//! `FR-CACHE-011` forbids every subcommand of this arm **other than
+//! `database test`** to contact a database or to touch `.tpl/.cache/`, and
+//! `FR-CACHE-010` fixes what the exception does: `database test` always
+//! contacts the server, neither reads nor writes the store, and reads nothing
+//! into the model — the one statement it issues against the catalogue is the
+//! privilege probe of `FR-CFG-044`, whose result is a boolean and not model
+//! content.
+//!
+//! Both hold by absence. No code path of this module, of [`entries`] or of
+//! [`keys`] reaches [`crate::cache`], so no subcommand of the arm has a route
+//! to the store; and the nine that are not `database test` reach
+//! [`crate::mariadb`] no more than they reach the cache. `database test` is the
+//! one leaf of the tree still unwritten, and the sprint that opens a connection
+//! owns it; what this arm fixes for it now is that a connection is the only
+//! thing it may reach for.
+//!
 //! What is absent is a requirement in its own right. `FR-CFG-030` forbids a
 //! `--password` or `-p` flag on any command, and `FR-GLOB-023` generalises it
 //! to any flag whose purpose is to carry a password. A literal password reaches

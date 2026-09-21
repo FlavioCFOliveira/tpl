@@ -4,6 +4,11 @@
 //! (`FR-CLI-009`), an optional child, and its own help at exit `0` when
 //! invoked bare (`FR-CLI-007`). None of its three children carries an alias.
 //!
+//! `FR-CACHE-021` fixes the membership as well as the kind: the group carries
+//! **exactly** `load`, `clean` and `status`, and [`Command`] is that list. A
+//! fourth child would be a fourth variant, so the requirement is the shape of
+//! the enumeration rather than a rule applied to it.
+//!
 //! # The surface of the three
 //!
 //! `FR-CACHE-024` gives `load` and `clean` the three object flags of
@@ -56,7 +61,7 @@ pub(crate) struct Cache {
     pub(crate) command: Option<Command>,
 }
 
-/// The three children of `tpl cache`.
+/// The three children of `tpl cache`, and `FR-CACHE-021` admits no fourth.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub(crate) enum Command {
     /// Reads the catalogue and writes it to the cache.
@@ -209,11 +214,25 @@ pub(crate) fn run<W: Write>(
 /// `status` and to neither of the other two, so this command has no
 /// representation to answer in and `BR-CLI-004` leaves stdout empty.
 ///
+/// # A read that does not complete stores nothing
+///
+/// `FR-CACHE-032` requires an unreachable server to exit `69` and to leave
+/// everything already stored **unchanged**, and the order of the body is what
+/// establishes it: every step that can fail — the project, the configuration,
+/// the entry, the connection, the catalogue read, the fold, the document build
+/// and the resolution of a named object — runs **before** the single call to
+/// [`Store::write`], so a failure returns with no file of the store created,
+/// truncated or removed. There is no partial-load path: the store is written
+/// once, from a document that is already whole, and [`Store::of`] composes
+/// paths without creating a directory, so even reaching the failing step leaves
+/// nothing behind.
+///
 /// # Errors
 ///
 /// Returns [`Error::LoadWithoutStoring`] — `64` — for `--no-cache`, per
 /// `FR-CACHE-019`; what [`Wanted::of`] returns for the object flags; what the
-/// read returns; and the `66` of `FR-SCH-010` where the named object does not
+/// read returns, including the `69` of `FR-CACHE-032` where the server could
+/// not be reached; and the `66` of `FR-SCH-010` where the named object does not
 /// exist.
 fn load(globals: &Globals, object: &local::Object, caching: &local::Caching) -> Result<(), Error> {
     // FR-CACHE-019, and FR-ERR-006 step 1: a contradiction between a flag the

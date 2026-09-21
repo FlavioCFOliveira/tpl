@@ -15,16 +15,17 @@
 //!
 //! # What is observed here
 //!
-//! Eight requirements are observed **here**. The first two are about commands
-//! that must reach no server at all; the rest are about what an invocation
-//! that does reach one sends it, and about what a failed render leaves on the
-//! stream a caller reads:
+//! Nine requirements are observed **here**. The first three are about
+//! invocations that must reach no server at all; the rest are about what an
+//! invocation that does reach one sends it, and about what a failed render
+//! leaves on the stream a caller reads:
 //!
 //! | Requirement | The property |
 //! |---|---|
 //! | `NFR-PERF-005` | The commands of `FR-PROJ-025` open no connection, perform no project discovery, and read no configuration file |
 //! | `NFR-PERF-006` | A command that requires no catalogue data opens no connection |
 //! | `FR-RND-022` | `tpl render --context` opens no connection, from a file and from standard input alike |
+//! | `FR-ERR-006` | A `tpl render` whose template does not resolve opens no connection and writes no file of the cache, against a project whose entry reaches a live server |
 //! | `FR-SRV-012` | The server receives the four kinds of the closed list of `FR-SRV-006` and no fifth, the three connection-start statements in the order `FR-SRV-042` fixes |
 //! | `FR-SRV-013` | The read-back of `FR-SRV-009` is issued exactly once, in the one spelling every series of the window carries |
 //! | `FR-SRV-014`, `NFR-PERF-004` | One invocation opens at most one connection |
@@ -1102,6 +1103,102 @@ fn fr_rnd_022_a_render_from_a_document_opens_no_connection_and_touches_no_cache(
         assert!(
             !sandbox.path(".tpl/.cache").exists(),
             "{name}: a render from a --context document created the cache store"
+        );
+    }
+}
+
+// ------------------------------------------------------------ FR-ERR-006 ---
+
+/// A template name that resolves to nothing, one edit away from [`REPORT`].
+const UNRESOLVED: &str = "reprt";
+
+#[test]
+fn fr_err_006_a_template_that_does_not_resolve_opens_no_connection_and_writes_no_cache() {
+    // FR-ERR-006 evaluates template resolution at the fourth position,
+    // immediately after `.tpl/.cfg` and before the entry, the cache, the
+    // connection and the catalogue. What the position is worth is exactly what
+    // this body observes, and it cannot be observed from inside the process:
+    // the server's own connection record for the connection that was not
+    // opened, and the sandbox's own disk for the store that was not written.
+    //
+    // The invocation is `tpl render <unresolved> --table <object>` against a
+    // project whose entry reaches this very server and which `core.database`
+    // selects, so every step the refusal now precedes was reachable.
+    //
+    // **The arrangement is one that could have been tripped, and the control
+    // proves it.** The same project, the same flags and a template that does
+    // resolve open one connection and write the store; the store is then
+    // removed, so the doomed invocation below meets a cold cache and would have
+    // had to read the server to answer.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_err_006_a_template_that_does_not_resolve_opens_no_connection_and_writes_no_cache",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let sandbox = project(server);
+        sandbox.write(&format!(".tpl/templates/{REPORT}.jinja"), REPORT_SOURCE);
+
+        let store = sandbox.path(".tpl/.cache");
+
+        // The control. It is also the control for the connection record, which
+        // is shown counting the one connection a render that reaches the server
+        // opens.
+        let resolving = fixture::connections_attributable_to(server, || {
+            succeeds(&sandbox, &["render", REPORT, "--table", BOUND]);
+        });
+
+        assert_eq!(
+            resolving, 1,
+            "{name}: a render that resolves its template opened {resolving} \
+             connection(s), so the count below is not the instrument this test \
+             takes it for"
+        );
+        assert!(
+            store.exists(),
+            "{name}: the read-through render wrote no store, so its absence \
+             below establishes nothing"
+        );
+
+        std::fs::remove_dir_all(&store).expect("the sandbox is writable");
+
+        // The invocation under test, with the store cold and the entry live.
+        let mut refused = None;
+        let attributable = fixture::connections_attributable_to(server, || {
+            refused = Some(sandbox.run(&["render", UNRESOLVED, "--table", BOUND]));
+        });
+        let refused = refused.expect("the bracket ran the invocation");
+
+        assert_eq!(
+            refused.status.code(),
+            Some(66),
+            "{name}: tpl render {UNRESOLVED} did not exit 66: {}",
+            String::from_utf8_lossy(&refused.stderr)
+        );
+        assert!(
+            refused.stdout.is_empty(),
+            "{name}: the refusal wrote {} byte(s) to stdout",
+            refused.stdout.len()
+        );
+        assert!(
+            String::from_utf8_lossy(&refused.stderr).contains(REPORT),
+            "{name}: no nearest match among the project's templates: {}",
+            String::from_utf8_lossy(&refused.stderr)
+        );
+        assert_eq!(
+            attributable, 0,
+            "{name}: a render whose template does not resolve opened \
+             {attributable} connection(s), which the fourth position of \
+             FR-ERR-006 forbids"
+        );
+        assert!(
+            !store.exists(),
+            "{name}: a render whose template does not resolve wrote the cache \
+             store at {}",
+            store.display()
         );
     }
 }

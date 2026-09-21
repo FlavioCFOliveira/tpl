@@ -1,7 +1,7 @@
 //! The argument vector is untrusted input, and this is what the process does
 //! with a hostile one.
 //!
-//! Four properties of this corpus cannot be established from inside the crate,
+//! Five properties of this corpus cannot be established from inside the crate,
 //! because each is a property of the **process** rather than of a function:
 //!
 //! | Property | Requirement |
@@ -10,6 +10,12 @@
 //! | One rejected token reaches the message, and never the vector | `FR-GLOB-018`, and the composition note of `OD-08` |
 //! | No `tpl-<token>` executable is looked for on `PATH` | `FR-CLI-006` |
 //! | No environment variable decides anything | `FR-CLI-021`, `NFR-DET-004` |
+//! | The two cache flags are declared by exactly ten commands and are unknown to every other | `FR-CACHE-017`, `FR-CACHE-020` |
+//!
+//! The fifth is here and not beside the store it governs, because it is settled
+//! from the invocation alone: the ten that declare the flags and the twenty-three
+//! that refuse them are decided at step 1 of `FR-ERR-006`, before a project is
+//! discovered and with no cache in existence.
 //!
 //! A unit test over the renderer would show that the renderer escapes; it would
 //! not show that the argument vector reaches the renderer, that nothing else
@@ -531,6 +537,261 @@ fn fr_cli_019_a_token_written_on_both_sides_of_the_terminator_is_refused_where_i
             stderr(&printed).starts_with(&format!("error: unexpected argument '{token}'")),
             "{spelled}: {:?}",
             stderr(&printed)
+        );
+    }
+}
+
+// ----------------------------------------- FR-CACHE-017 and FR-CACHE-020 ---
+
+/// The ten commands `FR-CACHE-017` gives `--direct` and `--no-cache`, in the
+/// order the command tree of `FR-HELP-019` lists them.
+///
+/// It is written out because it **is** the requirement: a surface derived from
+/// the tree and then compared against the tree would agree with itself whatever
+/// the tree said.
+const CACHING: [&[&str]; 10] = [
+    &["schema", "info"],
+    &["schema", "tables"],
+    &["schema", "table"],
+    &["schema", "views"],
+    &["schema", "view"],
+    &["schema", "routines"],
+    &["schema", "routine"],
+    &["schema", "dump"],
+    &["render"],
+    &["cache", "load"],
+];
+
+/// The two flags of `FR-CACHE-013` and `FR-CACHE-014`.
+const CACHE_FLAGS: [&str; 2] = ["--direct", "--no-cache"];
+
+/// The placeholder a required positional argument is given, so that the node
+/// under test is reached rather than refused for an argument it is missing.
+const PLACEHOLDER: &str = "x";
+
+/// The JSON command tree of `FR-HELP-016`, parsed.
+///
+/// It is the binary's own account of the surface it parses with, introspected
+/// from the parser tree rather than maintained beside it, per `FR-HELP-021`.
+fn command_tree() -> serde_json::Value {
+    let printed = run(&["help", "--format", "json"]);
+
+    assert_eq!(
+        printed.status.code(),
+        Some(0),
+        "tpl help --format json exited {:?}: {}",
+        printed.status.code(),
+        stderr(&printed)
+    );
+
+    serde_json::from_slice(&printed.stdout).expect("the command tree is a JSON document")
+}
+
+/// Every node of `tree` below `tpl`, as its path and the long flags it
+/// declares.
+fn nodes(tree: &serde_json::Value) -> Vec<(Vec<String>, Vec<String>)> {
+    tree["data"]["commands"]
+        .as_array()
+        .expect("data.commands is an array")
+        .iter()
+        .map(|entry| {
+            let path = entry["path"]
+                .as_array()
+                .expect("every entry carries a path")
+                .iter()
+                .map(|segment| {
+                    segment
+                        .as_str()
+                        .expect("a path segment is a string")
+                        .to_owned()
+                })
+                .collect();
+            let options = entry["options"]
+                .as_array()
+                .expect("every entry carries its options")
+                .iter()
+                .map(|flag| flag["long"].as_str().expect("a flag has a name").to_owned())
+                .collect();
+
+            (path, options)
+        })
+        .collect()
+}
+
+/// The invocation that reaches the node at `path`: its segments, followed by a
+/// placeholder for each argument the node requires.
+fn reaching(path: &[String], tree: &serde_json::Value) -> Vec<String> {
+    let entry = tree["data"]["commands"]
+        .as_array()
+        .expect("data.commands is an array")
+        .iter()
+        .find(|entry| {
+            entry["path"]
+                .as_array()
+                .expect("every entry carries a path")
+                .iter()
+                .map(|segment| segment.as_str().expect("a path segment is a string"))
+                .eq(path.iter().map(String::as_str))
+        })
+        .unwrap_or_else(|| panic!("{path:?} names a node of the tree"));
+
+    let required = entry["arguments"]
+        .as_array()
+        .expect("every entry carries its arguments")
+        .iter()
+        .filter(|argument| argument["required"] == true)
+        .count();
+    let mut reaching = path.to_vec();
+
+    reaching.extend(std::iter::repeat_n(PLACEHOLDER.to_owned(), required));
+
+    reaching
+}
+
+#[test]
+fn fr_cache_017_the_two_cache_flags_are_declared_by_exactly_ten_commands_and_are_unknown_elsewhere()
+{
+    // FR-CACHE-017 with FR-CLI-019: `--direct` and `--no-cache` are declared by
+    // the eight `schema` subcommands, `tpl render` and `tpl cache load`, and by
+    // nothing else — and every other command refuses them as unknown flags,
+    // which is step 1 of FR-ERR-006 and is therefore decided in a directory
+    // with no project at all.
+    //
+    // The surface is read twice over, and the two readings are independent: the
+    // command tree of FR-HELP-016 says which nodes **declare** the flags, and
+    // the process says which nodes **accept** them. A tree that disagreed with
+    // the parser would be caught between the two.
+    let tree = command_tree();
+    let nodes = nodes(&tree);
+
+    let declaring: Vec<Vec<String>> = nodes
+        .iter()
+        .filter(|(_, options)| {
+            CACHE_FLAGS
+                .iter()
+                .any(|flag| options.iter().any(|option| option == flag))
+        })
+        .map(|(path, _)| path.clone())
+        .collect();
+    let expected: Vec<Vec<String>> = CACHING
+        .iter()
+        .map(|path| path.iter().map(|&segment| segment.to_owned()).collect())
+        .collect();
+
+    assert_eq!(
+        declaring, expected,
+        "FR-CACHE-017 fixes the ten commands that declare either flag"
+    );
+
+    // Each of the ten declares **both**: the two are orthogonal, per
+    // FR-CACHE-015, so a command declaring one of them and not the other would
+    // satisfy the count above and not the requirement.
+    for (path, options) in &nodes {
+        if !expected.contains(path) {
+            continue;
+        }
+
+        for flag in CACHE_FLAGS {
+            assert!(
+                options.iter().any(|option| option == flag),
+                "tpl {} declares no {flag}",
+                path.join(" ")
+            );
+        }
+    }
+
+    // And every other node refuses each of them where FR-CLI-019 puts it.
+    for (path, _) in &nodes {
+        if expected.contains(path) {
+            continue;
+        }
+
+        for flag in CACHE_FLAGS {
+            let mut arguments = reaching(path, &tree);
+            arguments.push(flag.to_owned());
+
+            let spelled = format!("tpl {}", arguments.join(" "));
+            let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
+            let printed = run(&borrowed);
+
+            assert_refused(&printed, &spelled);
+            assert!(
+                stderr(&printed).starts_with(&format!("error: unknown flag '{flag}'")),
+                "{spelled}: {:?}",
+                stderr(&printed)
+            );
+        }
+    }
+
+    // The control, and it is what makes the refusals above mean something: the
+    // ten are not refused as unknown flags. Each is carried past the parser and
+    // fails on what an empty directory gives it — no project, per FR-PROJ-005 —
+    // or, for `tpl cache load --no-cache`, on the command's own contradiction,
+    // per FR-CACHE-019.
+    for path in &expected {
+        for flag in CACHE_FLAGS {
+            let mut arguments = reaching(path, &tree);
+            arguments.push(flag.to_owned());
+
+            let spelled = format!("tpl {}", arguments.join(" "));
+            let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
+            let written = stderr(&run(&borrowed));
+
+            assert!(
+                !written.starts_with(&format!("error: unknown flag '{flag}'")),
+                "{spelled} was refused as an unknown flag: {written:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn fr_cache_020_clean_and_status_declare_neither_cache_flag() {
+    // FR-CACHE-020 names the two commands of the `cache` arm that declare
+    // neither flag, and makes supplying either the unknown-flag 64 of
+    // FR-CLI-019. It is the case of FR-CACHE-017 worth stating on its own: the
+    // two stand beside `cache load`, which declares both, so the refusal is a
+    // property of the node rather than of the arm.
+    let tree = command_tree();
+    let nodes = nodes(&tree);
+    let options_of = |wanted: &[&str]| -> Vec<String> {
+        nodes
+            .iter()
+            .find(|(path, _)| path.iter().map(String::as_str).eq(wanted.iter().copied()))
+            .map(|(_, options)| options.clone())
+            .unwrap_or_else(|| panic!("{wanted:?} names a node of the tree"))
+    };
+
+    for node in [["cache", "clean"], ["cache", "status"]] {
+        let options = options_of(&node);
+
+        for flag in CACHE_FLAGS {
+            assert!(
+                !options.iter().any(|option| option == flag),
+                "tpl {} declares {flag}",
+                node.join(" ")
+            );
+
+            let arguments = [node[0], node[1], flag];
+            let spelled = format!("tpl {}", arguments.join(" "));
+            let printed = run(&arguments);
+
+            assert_refused(&printed, &spelled);
+            assert!(
+                stderr(&printed).starts_with(&format!("error: unknown flag '{flag}'")),
+                "{spelled}: {:?}",
+                stderr(&printed)
+            );
+        }
+    }
+
+    // The control: their sibling declares both, so the two refusals above are
+    // the requirement and not an arm that parses no flags at all.
+    let sibling = options_of(&["cache", "load"]);
+    for flag in CACHE_FLAGS {
+        assert!(
+            sibling.iter().any(|option| option == flag),
+            "tpl cache load declares no {flag}"
         );
     }
 }

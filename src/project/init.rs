@@ -45,6 +45,15 @@ pub(crate) const TEMPLATES: &str = "templates";
 
 /// The file `.tpl/.gitignore`, which keeps `.cfg` and `.cache/` out of version
 /// control (`FR-PROJ-003`).
+///
+/// The second line is `FR-CACHE-004`, which requires the file this command
+/// writes to exclude `.cache/` and defers the requirement itself to
+/// `FR-PROJ-017`. The store holds a catalogue read from a server with one
+/// machine's credentials, so it is per-machine state that must not travel with
+/// the repository, and the exclusion is written **here** rather than left to
+/// the caller's own `.gitignore`: `FR-CACHE-003` makes the folder appear on the
+/// first read that populates it, long after anyone would have thought to
+/// exclude it.
 const GITIGNORE: &str = ".cfg\n.cache/\n";
 
 /// The generated `.tpl/.cfg` (`FR-PROJ-017`, `FR-PROJ-018`).
