@@ -54,7 +54,7 @@
 use std::path::Path;
 
 use crate::cache::{Cache, Covered, Look};
-use crate::deadline::{Clock, Seconds};
+use crate::deadline::{Clock, Deadlines, Seconds};
 use crate::error::Error;
 use crate::mariadb::{self, Target, catalogue};
 use crate::model::document::{self, DatabaseDocument};
@@ -118,6 +118,10 @@ pub(super) struct Opened {
     /// The entry's own store (`FR-CACHE-001`, `FR-CACHE-002`).
     pub(super) cache: Cache,
 
+    /// The project this invocation acts on, kept so that a command which
+    /// reaches `.tpl/` **and** a catalogue reaches both from one discovery.
+    project: Project,
+
     /// The validated configuration, kept so that a later condition can name
     /// the file the `78` row of `FR-ERR-034` obliges.
     configuration: Configuration,
@@ -130,6 +134,27 @@ impl Opened {
     /// The database entry this invocation selected (`FR-GLOB-008`).
     pub(super) fn entry(&self) -> &str {
         self.settings.entry()
+    }
+
+    /// The `.tpl` folder of the project this invocation acts on.
+    ///
+    /// It is here so that `tpl render` builds its template root from the same
+    /// discovery the catalogue read was made through: `FR-TMPL-023` makes
+    /// `.tpl/templates/` of the **resolved** project the boundary of every
+    /// lookup, and a second walk could resolve a second project between the
+    /// two steps.
+    pub(super) fn root(&self) -> &Path {
+        self.project.root()
+    }
+
+    /// The four phase deadlines of `FR-CONF-004`, as `.tpl/.cfg` resolved
+    /// them.
+    ///
+    /// `tpl render` reads `core.render_timeout` from here rather than from a
+    /// second load of the file, which `FR-CONF-004` resolves once per
+    /// invocation.
+    pub(super) const fn deadlines(&self) -> Deadlines {
+        self.settings.deadlines()
     }
 }
 
@@ -199,6 +224,7 @@ impl<'a> Reader<'a> {
 
         Ok(Opened {
             cache,
+            project,
             configuration,
             settings,
         })
@@ -280,6 +306,31 @@ impl<'a> Reader<'a> {
     {
         let opened = self.open()?;
 
+        self.serve_from(&opened, look, present)
+    }
+
+    /// [`Reader::serve`] over a project already opened.
+    ///
+    /// The two exist because `tpl render` needs steps 2 through 4 in hand
+    /// **before** the read: `FR-TMPL-023` builds its template root from the
+    /// project the read was made through and `FR-CONF-004` resolves the render
+    /// deadline from the same file, and neither reaches the presentation. Every
+    /// other caller has no such need and calls [`Reader::serve`], which is this
+    /// function with the opening done for it.
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`Reader::fetch`] returns, what the fold and the document
+    /// build return, and whatever `present` returns.
+    pub(super) fn serve_from<T, P>(
+        &self,
+        opened: &Opened,
+        look: &Look<'_>,
+        present: P,
+    ) -> Result<T, Error>
+    where
+        P: FnOnce(&DatabaseDocument<'_>, Source, &str) -> Result<T, Error>,
+    {
         // FR-CACHE-006: the cache is consulted first, and a hit opens no
         // connection. FR-CACHE-013 skips the lookup outright, and
         // FR-CACHE-033 makes a file that will not decode a miss rather than a
@@ -291,7 +342,7 @@ impl<'a> Reader<'a> {
             return present(&document, Source::Cache, opened.entry());
         }
 
-        let catalogue = self.fetch(&opened)?;
+        let catalogue = self.fetch(opened)?;
         let model = catalogue.model()?;
         let document = document::context(&model)?;
 
@@ -304,7 +355,12 @@ impl<'a> Reader<'a> {
 
     /// The clock this invocation's blocking phases are bounded by
     /// (`FR-GLOB-011`, `FR-GLOB-012`).
-    fn clock(&self) -> Clock {
+    ///
+    /// It is read outside this module by `tpl render`, whose own phase is
+    /// bounded by the same budget: `FR-GLOB-012` composes `--timeout` with
+    /// every phase deadline, and the render is one of the six `FR-CONF-005`
+    /// names.
+    pub(super) fn clock(&self) -> Clock {
         settings::clock(self.budget)
     }
 }

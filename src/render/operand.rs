@@ -55,7 +55,8 @@ const COLUMN_TYPE: &str = "column_type";
 /// The column's own name.
 const NAME: &str = "name";
 
-/// The normalised type name of `FR-CTX-015`, inside the decomposed type.
+/// The normalised type name of `FR-CTX-015`, which is a field of the column
+/// beside [`COLUMN_TYPE`] rather than a field inside it.
 const DATA_TYPE: &str = "data_type";
 
 /// Which grammatical class refused, so that the message names it as the
@@ -168,25 +169,19 @@ impl<'a> Column<'a> {
     /// The normalised type name of `FR-CTX-015`, or `null` under
     /// `FR-CTX-018`.
     ///
-    /// The model carries the eight decomposed parts inside the column's
-    /// `column_type`, per `crate::model::column_type`, so this is the one
-    /// attribute that is read one level down.
+    /// `FR-CTX-014` and `FR-CTX-015` make the raw type and the eight
+    /// decomposed parts **siblings** on the column, so this is an attribute of
+    /// the column like any other and is read at the same level as
+    /// [`Column::table_name`].
     ///
     /// # Errors
     ///
-    /// Returns the refusal of [`Column::malformed`] where the decomposed type
-    /// carries no `data_type` at all, which is a column no read of a supported
-    /// series produces.
+    /// Returns the refusal of [`Column::malformed`] where the column carries
+    /// no `data_type` at all, which is a column no read of a supported series
+    /// produces — `FR-CTX-018` makes an unrecognised type carry the part as
+    /// `null`, which is present and is returned.
     pub(super) fn data_type(&self) -> Result<Value, Error> {
-        let decomposed = self.attribute(COLUMN_TYPE);
-
-        if decomposed.kind() != ValueKind::Map {
-            return Err(self.malformed(COLUMN_TYPE));
-        }
-
-        let data_type = decomposed
-            .get_attr(DATA_TYPE)
-            .map_err(|_| self.malformed(DATA_TYPE))?;
+        let data_type = self.attribute(DATA_TYPE);
 
         if data_type.is_undefined() {
             return Err(self.malformed(DATA_TYPE));
@@ -296,15 +291,28 @@ mod tests {
     }
 
     #[test]
-    fn fr_ctx_015_the_normalised_type_name_is_read_from_the_decomposed_type() {
+    fn fr_ctx_015_the_normalised_type_name_is_read_from_the_column_and_not_from_inside_the_raw_type()
+     {
         // FR-CTX-015 and FR-ENV-039: the value of the column's `data_type`,
-        // exactly as the model carries it.
+        // exactly as the model carries it. FR-CTX-014 makes `column_type` the
+        // raw string beside it, and the second assertion is what would fail if
+        // the parts went back under it.
         let column = fixture::column("consignment_id");
-        let column = Column::of(&column, Role::Filter, "sql_type").expect("it is a column");
+        let operand = Column::of(&column, Role::Filter, "sql_type").expect("it is a column");
 
         assert_eq!(
-            column.data_type().expect("the type is decomposed").as_str(),
+            operand
+                .data_type()
+                .expect("the type is decomposed")
+                .as_str(),
             Some("bigint")
+        );
+        assert_eq!(
+            column
+                .get_attr("column_type")
+                .expect("FR-CTX-014 puts the raw type on every column")
+                .as_str(),
+            Some("bigint(20) unsigned")
         );
     }
 

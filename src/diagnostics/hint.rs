@@ -196,6 +196,30 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 Cow::Borrowed("name the kind you mean, with the prefix 'procedure:' or 'function:'")
             }
         }
+        // The same correction as the arm above, over the other context source.
+        Error::AmbiguousRoutineInContext {
+            name, invocation, ..
+        } => {
+            if admits(name) {
+                Cow::Owned(format!(
+                    "name the kind you mean: tpl {invocation} procedure:{name}"
+                ))
+            } else {
+                Cow::Borrowed("name the kind you mean, with the prefix 'procedure:' or 'function:'")
+            }
+        }
+        // FR-RND-012 confines a `--set` key to the character set FR-ERR-022
+        // admits, so the key reaches the runnable command; the test beside it
+        // is the defensive assertion this module applies to every such value.
+        Error::RepeatedSetKey { key, .. } => {
+            if admits(key) {
+                Cow::Owned(format!(
+                    "give '--set {key}=<value>' once, with the value you intend"
+                ))
+            } else {
+                Cow::Borrowed("define the key named above once, with the value you intend")
+            }
+        }
         // FR-CACHE-018 accepts `--direct` on this command and ignores it, so
         // the line names the invocation that does what the caller asked for.
         Error::LoadWithoutStoring => Cow::Borrowed(
@@ -304,6 +328,18 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             let admitted = admitted(nearest, admits);
 
             Cow::Owned(suggest::hint_line(admitted.iter().copied(), &generic).into_owned())
+        }
+        // FR-RND-032 obliges the nearest-match half over the objects the
+        // document does carry. The generic half names no runnable command:
+        // the population is a file the caller supplied, and `tpl` has no
+        // subcommand that lists it — FR-ERR-012 asks the hint to name a next
+        // step and this is the one there is.
+        Error::ContextObjectNotFound { nearest, .. } => {
+            let admitted = admitted(nearest, admits);
+            suggest::hint_line(
+                admitted.iter().copied(),
+                "name an object the --context document carries, then run the command again",
+            )
         }
         // FR-TMPL-027 obliges the nearest-match half over the template names
         // that do exist. The population is `render/`'s, for the reason this

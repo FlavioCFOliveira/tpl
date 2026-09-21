@@ -14,7 +14,7 @@
 //! | 2 | Joins the name to the template root | `FR-TMPL-023` |
 //! | 3 | Canonicalises the joined path | `FR-TMPL-025` |
 //! | 4 | Re-checks the canonical path against the canonicalised root | `FR-TMPL-026` |
-//! | 5 | Refuses a symbolic link by its own metadata, without following it | `FR-TMPL-024` |
+//! | 5 | Refuses a symbolic link at **any** component below the root, by its own metadata, without following it | `FR-TMPL-024` |
 //! | 6 | Returns the path that was checked, and no other | `OD-15` |
 //!
 //! # Two names, and why the extension is completed by only one of them
@@ -45,6 +45,23 @@
 //! `FR-TMPL-004` — one whose file does not end in `.jinja`, a directory, a
 //! device — is reported as the first of the two: `FR-TMPL-005` makes such an
 //! entry invisible, and an entry that is invisible is one that does not exist.
+//!
+//! # Why step 5 walks every component
+//!
+//! `FR-TMPL-024` refuses a symbolic link under `.tpl/templates/` without
+//! qualification, and a link is an entry of the tree wherever it sits. A step
+//! that read the metadata of the **last** component alone accepted
+//! `templates/link/a.jinja` where `link` is a symlink to a real directory
+//! under the root: step 4 passes, because the canonical path is inside the
+//! root, and the last component is an ordinary file. Nothing escaped
+//! containment — step 4 is what guarantees that, and it is unchanged — but the
+//! entry the requirement refuses was resolved all the same, and
+//! [`Root::templates`] would not have listed it, so one name was renderable
+//! and unlistable.
+//!
+//! The walk therefore lstats **every component below the canonical root**, in
+//! order, and refuses the first that is a link. The root itself is not walked:
+//! step 4 canonicalises it, so it carries no link to find.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -326,24 +343,8 @@ impl Root {
             return Err(self.escaped(named));
         }
 
-        // 5 — FR-TMPL-024. The metadata is read from the joined path and not
-        // from the canonical one, and through `symlink_metadata`, which does
-        // not follow the entry: a link that was followed is a link that cannot
-        // be seen.
-        let metadata = std::fs::symlink_metadata(&joined).map_err(|returned| {
-            if returned.kind() == io::ErrorKind::NotFound {
-                self.missing(named, suggesting)
-            } else {
-                Error::ProjectFileUnreadable {
-                    path: joined.clone(),
-                    returned,
-                }
-            }
-        })?;
-
-        if metadata.file_type().is_symlink() {
-            return Err(self.escaped(named));
-        }
+        // 5 — FR-TMPL-024, over every component below the root.
+        let metadata = self.unlinked(&root, relative, named, suggesting)?;
 
         if !metadata.is_file() {
             return Err(self.missing(named, suggesting));
@@ -351,6 +352,62 @@ impl Root {
 
         // 6 — the path that was checked.
         Ok(resolved)
+    }
+
+    /// Step 5: walks `relative` down from `root`, refusing a symbolic link at
+    /// any component, and returns the metadata of the last (`FR-TMPL-024`).
+    ///
+    /// The metadata of each component is read from the **joined** path and not
+    /// from the canonical one, and through `symlink_metadata`, which does not
+    /// follow the entry: a link that was followed is a link that cannot be
+    /// seen. The prefixes are built by pushing the components of `relative` in
+    /// order, so the last path the walk reaches is exactly the path step 3
+    /// canonicalised.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::TemplateOutsideRoot`] for the first component that is
+    /// a symbolic link, [`Error::TemplateNotFound`] where a component is not
+    /// there — which step 3 has already refused, so it is the walk's own
+    /// totality rather than a reachable condition — and
+    /// [`Error::ProjectFileUnreadable`] where the filesystem refused the
+    /// lookup for any other reason.
+    fn unlinked(
+        &self,
+        root: &Path,
+        relative: &str,
+        named: &str,
+        suggesting: Suggest,
+    ) -> Result<std::fs::Metadata, Error> {
+        let mut walked = root.to_path_buf();
+        let mut reached = None;
+
+        for component in Path::new(relative).components() {
+            walked.push(component);
+
+            let found = std::fs::symlink_metadata(&walked).map_err(|returned| {
+                if returned.kind() == io::ErrorKind::NotFound {
+                    self.missing(named, suggesting)
+                } else {
+                    Error::ProjectFileUnreadable {
+                        path: walked.clone(),
+                        returned,
+                    }
+                }
+            })?;
+
+            if found.file_type().is_symlink() {
+                return Err(self.escaped(named));
+            }
+
+            reached = Some(found);
+        }
+
+        // A name with no component at all does not reach here: step 1 requires
+        // it to end in `.jinja`, which the empty name does not. The arm is the
+        // loop's own totality, and is a degradation rather than a panic on the
+        // same terms `Template::displayed` states.
+        reached.ok_or_else(|| self.missing(named, suggesting))
     }
 
     /// The canonical template root of step 4 (`FR-TMPL-025`).
@@ -562,6 +619,44 @@ mod tests {
             .expect_err("a symbolic link is not a template");
 
         assert!(matches!(condition, Error::TemplateOutsideRoot { .. }));
+    }
+
+    #[test]
+    fn fr_tmpl_024_a_symlinked_intermediate_directory_is_refused_although_its_target_is_inside() {
+        // FR-TMPL-024 refuses a symbolic link under the template root without
+        // qualification, and a link is an entry wherever it sits. Step 4
+        // passes here — the canonical path is inside the root — and the last
+        // component is an ordinary file, so this is the case that made the
+        // narrow step 5 accept an entry the requirement refuses and the
+        // listing omits.
+        let scratch = Scratch::new();
+        let root = project(&scratch);
+        scratch.file("project/.tpl/templates/real/a.jinja", "body\n");
+        let real = scratch.canonical("project/.tpl/templates/real");
+        scratch.link(&real, &scratch.path("project/.tpl/templates/link"));
+
+        // Through the real directory the template resolves, which is what
+        // makes the refusal below about the link and not about the name.
+        assert!(root.resolve("real/a").is_ok());
+
+        let condition = root
+            .resolve("link/a")
+            .expect_err("a symlinked directory is not a component of a template path");
+
+        assert!(matches!(condition, Error::TemplateOutsideRoot { .. }));
+        assert_eq!(condition.exit_code(), 65);
+
+        // The literal entry point is the loader's, so an `{% include %}`
+        // through the same link is refused on the same terms.
+        assert!(matches!(
+            root.locate("link/a.jinja")
+                .expect_err("the loader refuses it too"),
+            Error::TemplateOutsideRoot { .. }
+        ));
+
+        // And the lookup now agrees with the listing, which never carried the
+        // link: no name is renderable and unlistable.
+        assert_eq!(listed(&root), ["example", "real/a"]);
     }
 
     #[test]

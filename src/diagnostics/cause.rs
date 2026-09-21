@@ -102,6 +102,29 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              'procedure:{name}' and 'function:{name}', and tpl resolves a bare name in favour of \
              neither"
         )),
+        // FR-RND-032, over the other context source of FR-RND-023. The line
+        // names the document rather than a database entry, because
+        // FR-RND-022 opened no connection and FR-RND-019 resolved no entry —
+        // which is the whole of why this is not the arm above.
+        Error::AmbiguousRoutineInContext {
+            name,
+            path,
+            database,
+            ..
+        } => Cow::Owned(format!(
+            "the --context document {} describes database '{database}', which carries both \
+             'procedure:{name}' and 'function:{name}', and tpl resolves a bare name in favour of \
+             neither",
+            path.display()
+        )),
+        // FR-RND-014: the key is what was given twice, and both values are
+        // named because the `64` row obliges the line to say why the token was
+        // rejected. FR-RND-008 makes the flag itself repeatable, so a line
+        // naming the flag would report the wrong fault.
+        Error::RepeatedSetKey { key, first, second } => Cow::Owned(format!(
+            "'--set' defines each key once and '{key}' was defined twice, as '{first}' and then \
+             '{second}'; tpl refuses the repetition rather than letting one of them silently win"
+        )),
         // FR-CACHE-019: the flag is declared by the command and contradicts
         // what the command does.
         Error::LoadWithoutStoring => Cow::Borrowed(
@@ -259,6 +282,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         } => Cow::Owned(format!(
             "no row of INFORMATION_SCHEMA matches {kind} '{name}' in database '{database}', read \
              through database entry '{entry}'"
+        )),
+        // The population is the document rather than a catalogue, so the line
+        // names the document and the database it describes. Nothing here says
+        // INFORMATION_SCHEMA, because on this path nothing read it.
+        Error::ContextObjectNotFound {
+            kind,
+            name,
+            path,
+            database,
+            ..
+        } => Cow::Owned(format!(
+            "the --context document {} describes database '{database}' and carries no {kind} \
+             named '{name}'",
+            path.display()
         )),
         Error::TemplateNotFound { name, root, .. } => Cow::Owned(format!(
             "no template named '{name}' exists under the template root {}",

@@ -1,5 +1,5 @@
-//! The panic hook of `ADR-004`, and the only call to `std::process::exit` in
-//! the crate.
+//! The panic hook of `ADR-004`, and one of the two calls to
+//! `std::process::exit` in the crate.
 //!
 //! `FR-ERR-030` gives `70` two producing conditions — a panic in the process,
 //! and a detected invariant violation — and requires both to exist in the
@@ -18,6 +18,12 @@
 //! Nothing is written to stdout on this path, and nothing is flushed to it:
 //! [`std::process::exit`] runs no destructor, so a buffered stdout is
 //! discarded rather than emitted, which is the outcome `FR-ERR-033` requires.
+//!
+//! The other call is the render deadline of `FR-RND-033`, in
+//! [`crate::cli`]'s third arm. `OD-12` gives it the same mechanism for the same
+//! reason: a timer thread holds a condition no frame of the render could
+//! return, so it writes the four labelled lines itself and terminates the
+//! process with the status they named.
 //!
 //! [`Error`]: crate::error::Error
 

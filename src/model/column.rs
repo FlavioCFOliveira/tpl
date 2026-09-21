@@ -122,7 +122,21 @@ pub struct Column<'a> {
     pub position: u64,
 
     /// The type: the raw string of `FR-CTX-014` and the eight decomposed parts
-    /// of `FR-CTX-015`.
+    /// of `FR-CTX-015`, carried as **siblings** on the column.
+    ///
+    /// `FR-CTX-014` gives a column `column_type`; `FR-CTX-015` gives it the
+    /// decomposed parts *additionally*. Both read as fields of the column, so
+    /// a serialised column reads `col.data_type` and never
+    /// `col.column_type.data_type`, and `#[serde(flatten)]` is what makes the
+    /// document say so. The decomposition remains a type of its own, because
+    /// [`ColumnType::decompose`](super::column_type::ColumnType::decompose)
+    /// being its only constructor is what makes `FR-CTX-040` structural — the
+    /// nesting was an artefact of that type, not a rule of the document.
+    ///
+    /// The nine keys are emitted where this field sits, so `OD-18` still holds
+    /// and the key order is the field order of this struct with
+    /// [`ColumnType`]'s own order spliced in at this position.
+    #[serde(flatten)]
     pub column_type: ColumnType<'a>,
 
     /// Whether the column admits `NULL`, which is what the `nullable` test of

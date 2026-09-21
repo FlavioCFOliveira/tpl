@@ -569,7 +569,7 @@ fn look_for<'a>(wanted: &named::Wanted<'a>) -> Look<'a> {
 /// named, per `FR-CONF-041`: the read covered it and nothing else, so no
 /// second source is consulted for it.
 fn sought<'a>(entry: &'a str, document: &'a DatabaseDocument<'_>) -> named::Sought<'a> {
-    named::Sought {
+    named::Sought::Catalogue {
         entry,
         database: &document.name,
     }
