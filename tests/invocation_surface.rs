@@ -795,3 +795,72 @@ fn fr_cache_020_clean_and_status_declare_neither_cache_flag() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// A repeated valueless flag
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fr_cli_025_a_repeated_valueless_flag_is_accepted_by_the_process() {
+    // FR-CLI-025 makes a repeated flag that carries no value idempotent, and
+    // the fact a caller can observe is the exit code. The two invocations the
+    // requirement writes out are driven here, beside the other four flags it
+    // names; each ends the invocation or reaches a command that needs no
+    // project, so `0` is the whole of what is being read.
+    for arguments in [
+        &["-q", "-q", "version"][..],
+        &["--quiet", "--quiet", "version"][..],
+        &["-v", "-v", "-v", "-v", "version"][..],
+        &["-h", "-h"][..],
+        &["--help", "--help"][..],
+        &["-V", "-V"][..],
+        &["--version", "--version"][..],
+        &["help", "--pretty", "--pretty", "--format", "json"][..],
+    ] {
+        let printed = run(arguments);
+
+        assert_eq!(
+            printed.status.code(),
+            Some(0),
+            "tpl {} did not exit 0: {}",
+            arguments.join(" "),
+            stderr(&printed)
+        );
+    }
+
+    // The effect is the effect of one occurrence: `-q` lowers the diagnostic
+    // level and the second one changes nothing, which is what the requirement
+    // means by the flag having the effect of one occurrence.
+    assert_eq!(
+        run(&["-q", "version"]).stdout,
+        run(&["-q", "-q", "version"]).stdout
+    );
+}
+
+#[test]
+fn fr_cli_014_a_repeated_value_carrying_flag_is_still_refused_by_the_process() {
+    // The control for the test above, and the half of the pair FR-CLI-025
+    // leaves untouched: a flag that carries a single value is `64` with both
+    // values named, because the ground FR-CLI-014 gives is about two values
+    // disagreeing.
+    for (arguments, first, second) in [
+        (&["-d", "a", "-d", "b", "version"][..], "a", "b"),
+        (
+            &["--timeout", "1", "--timeout", "2", "version"][..],
+            "1",
+            "2",
+        ),
+    ] {
+        let printed = run(arguments);
+        let written = stderr(&printed);
+
+        assert_eq!(
+            printed.status.code(),
+            Some(USAGE),
+            "tpl {} did not exit {USAGE}: {written}",
+            arguments.join(" ")
+        );
+        assert!(written.contains(first), "{written}");
+        assert!(written.contains(second), "{written}");
+    }
+}

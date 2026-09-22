@@ -3,7 +3,7 @@
 //!
 //! One document carries the model. `tpl schema dump` emits it, `tpl render
 //! --context` consumes it, and a template sees the same material. This module
-//! is the junction: [`dump`] builds the document from a model and [`read`]
+//! is the junction: [`dump`] builds the document from a model and [`read()`]
 //! builds a model from a document, and the two are inverse because they are two
 //! directions over **one** set of types rather than two hand-written routines
 //! that would have to be kept inverse.
@@ -47,7 +47,7 @@
 //! two forms of `FR-OUT-007` and `FR-OUT-008`, and the buffered writer the
 //! bytes are aggregated through; [`dump`] hands that module a
 //! [`Document`] and composes no byte of its own. It does not read a file
-//! either: [`read`] is given the bytes, so the one path that opens a file is
+//! either: [`read()`] is given the bytes, so the one path that opens a file is
 //! the caller's.
 
 pub(crate) mod build;

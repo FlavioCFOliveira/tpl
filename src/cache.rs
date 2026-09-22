@@ -14,7 +14,7 @@
 //! one hop, per `FR-CTX-006`; a view; a routine — beside one file carrying the
 //! database's own three metadata fields and the `server` object of
 //! `FR-CTX-031`. A read therefore reassembles a
-//! [`DatabaseDocument`](crate::model::document::DatabaseDocument) and hands it
+//! [`DatabaseDocument`] and hands it
 //! to the same presentation the server path hands one to, which is what makes
 //! `BR-SCH-001` hold: a pattern, a listing and a named object select and print
 //! the same thing whichever source served them.

@@ -19,9 +19,11 @@
 
 use std::io::Write as _;
 use std::path::Path;
+use std::time::Duration;
 
 use super::escape;
 use super::verbosity::{Level, emits};
+use crate::deadline::Phase;
 
 /// The fixed leading token of the one line per catalogue query.
 ///
@@ -31,6 +33,15 @@ use super::verbosity::{Level, emits};
 /// what lets `NFR-PERF-001` and `NFR-PERF-002` be checked at all. One function
 /// writes this token and no other line begins with it.
 const CATALOGUE_QUERY_TOKEN: &str = "query:";
+
+/// The fixed leading token of the one line per phase that ran.
+///
+/// `FR-GLOB-017` requires the level to report **which phases ran and how long
+/// each took**, beside the one line per catalogue query. One function writes
+/// this token and no other line begins with it, so the phases an invocation ran
+/// are recoverable from the stream by the same reading that recovers the query
+/// count.
+const PHASE_TOKEN: &str = "phase:";
 
 /// The leading token of a warning.
 const WARNING_TOKEN: &str = "warning:";
@@ -64,6 +75,39 @@ pub(crate) fn catalogue_query() {
     composed.push_str(" read INFORMATION_SCHEMA");
 
     write_line(&composed);
+}
+
+/// Reports that `phase` ran, and how long it took (`FR-GLOB-017`).
+///
+/// Called once by the code that runs a phase of `FR-CONF-005`, after that phase
+/// has ended, whether it ended in an answer or in a refusal: a phase that failed
+/// is a phase that ran, and how long it took before it failed is the half of the
+/// report a caller diagnosing a slow invocation is looking for.
+///
+/// The two arguments are typed, per `OD-17`, and neither can carry anything
+/// `FR-GLOB-018` bars: a [`Phase`] is one of six discriminants this crate
+/// declares, and a [`Duration`] is a number. There is no host, no user, no
+/// statement and no driver message on this line, and no argument through which
+/// one could be passed.
+///
+/// The duration is written in milliseconds with one fractional digit, which is
+/// the resolution a caller can act on; `NFR-DET-001` puts stderr outside the
+/// contract, so the wording is free to change and no test reads it.
+pub(crate) fn phase_ran(phase: Phase, took: Duration) {
+    if !emits(Level::Info) {
+        return;
+    }
+
+    write_line(&phase_line(phase, took));
+}
+
+/// Composes the line of [`phase_ran`], unescaped.
+fn phase_line(phase: Phase, took: Duration) -> String {
+    format!(
+        "{PHASE_TOKEN} {} took {:.1}ms",
+        phase.name(),
+        took.as_secs_f64() * 1_000.0
+    )
 }
 
 /// Warns that a project just created shadows one in an ancestor directory.
@@ -104,21 +148,64 @@ fn write_line(composed: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{CATALOGUE_QUERY_TOKEN, WARNING_TOKEN, shadow_line};
+    use super::{CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, WARNING_TOKEN, phase_line, shadow_line};
+    use crate::deadline::Phase;
     use std::path::Path;
+    use std::time::Duration;
 
     #[test]
     fn fr_glob_017_the_catalogue_query_token_is_distinguishable_from_every_label() {
         // FR-GLOB-017: the line must be distinguishable from every other
-        // diagnostic line. The four labels of FR-ERR-008 and the warning token
-        // are the whole of what else this module writes.
-        for other in ["error: ", "cause: ", "hint:  ", "exit:  ", WARNING_TOKEN] {
+        // diagnostic line. The four labels of FR-ERR-008, the phase token and
+        // the warning token are the whole of what else this module writes.
+        for other in [
+            "error: ",
+            "cause: ",
+            "hint:  ",
+            "exit:  ",
+            WARNING_TOKEN,
+            PHASE_TOKEN,
+        ] {
             assert!(
                 !other.starts_with(CATALOGUE_QUERY_TOKEN),
                 "{other:?} would be read as a catalogue-query line"
             );
             assert!(!CATALOGUE_QUERY_TOKEN.starts_with(other));
         }
+    }
+
+    #[test]
+    fn fr_glob_017_a_phase_report_names_the_phase_and_how_long_it_took() {
+        // FR-GLOB-017: at INFO the system reports which phases ran and how long
+        // each took. The line carries both, under a token of its own.
+        let line = phase_line(Phase::TcpConnect, Duration::from_micros(12_300));
+
+        assert!(line.starts_with(PHASE_TOKEN), "{line}");
+        assert!(line.contains(Phase::TcpConnect.name()), "{line}");
+        assert!(line.contains("12.3ms"), "{line}");
+    }
+
+    #[test]
+    fn fr_glob_017_every_phase_of_the_closed_set_reports_under_a_name_of_its_own() {
+        // FR-CONF-005 closes the set at six, and a report that named two of
+        // them alike would make the two indistinguishable on the stream.
+        let named: Vec<&str> = [
+            Phase::DnsResolution,
+            Phase::TcpConnect,
+            Phase::TlsHandshake,
+            Phase::CatalogueQuery,
+            Phase::PasswordCommand,
+            Phase::Render,
+        ]
+        .into_iter()
+        .map(Phase::name)
+        .collect();
+
+        let mut unique = named.clone();
+        unique.sort_unstable();
+        unique.dedup();
+
+        assert_eq!(unique.len(), named.len(), "{named:?}");
     }
 
     #[test]

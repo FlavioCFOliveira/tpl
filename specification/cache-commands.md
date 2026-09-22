@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-21
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md]
 ---
 
@@ -77,6 +77,39 @@ read from the server on a miss.
 - **FR-CACHE-007**: WHEN a cached read misses, the system SHALL read the server,
   SHALL write the result to the cache except for the objects `FR-CACHE-037`
   excludes, and SHALL then answer. The write happens before the answer.
+
+  *Checked in the thirty-first edition against an invocation that fails after
+  the write, and unchanged.* A `tpl render` whose template carries a syntax
+  error refuses at step 8 of `FR-ERR-006`, and the catalogue it read at steps 6
+  and 7 is in the store by then, because this requirement puts the write before
+  the answer. The question put was whether the store should be left untouched
+  by an invocation that goes on to fail. It should not, and the cost stands
+  with its ground stated here rather than an exemption being written in.
+
+  *Why the cost stands.* What is written is a **correct read of the server**,
+  and nothing downstream of it makes it wrong: the template that failed to
+  compile is not a fact about the catalogue. The ordinary next action after a
+  `65` from `FR-RND-030` is to correct the template and render again, against
+  the same entry and the same objects — which the filled store serves without
+  a connection, per `NFR-PERF-003`. An exemption would therefore spend a
+  correct read in order to make the caller pay for it a second time on the very
+  next invocation they make. A caller who does not want the store written has
+  `--no-cache`, per `FR-CACHE-014`, and `--direct --no-cache` is the pure read
+  of `FR-CACHE-016`.
+
+  *Rejected: exempting a read whose invocation has already failed.* At the
+  moment the write happens the invocation has **not** failed — step 8 has not
+  run — so the exemption has no condition it could test. Making it testable
+  would mean holding the read in memory until the render has succeeded and
+  writing it afterwards, which is a second ordering of the same two operations
+  and reaches the store only on the path where the store was least needed.
+
+  *Rejected: writing the store only on success, as a general rule.* It moves
+  the write behind every fallible step, so a `74` on stdout — a consumer that
+  closed the pipe, per `FR-ERR-026` — would also discard a catalogue that was
+  read correctly, and `tpl schema dump | head -1` would leave the store empty
+  every time. The one case that raised the question would be answered by
+  making every case worse.
 
 - **FR-CACHE-008**: The system SHALL NOT apply a time-to-live and SHALL NOT
   expire an entry automatically. A cached object stays until `tpl cache clean`

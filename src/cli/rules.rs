@@ -26,6 +26,13 @@
 //! without error" holds at the fourth occurrence and at the three-hundredth
 //! alike.
 //!
+//! `FR-CLI-025` needs no rule of its own either, and for the opposite reason:
+//! it makes a repeated **valueless** flag idempotent, so there is nothing to
+//! refuse. The six flags it reaches are declared as overriding themselves, in
+//! [`super::globals`] and [`super::local`], and what this module owns of that
+//! requirement is [`repetition`] — the fact help states about each argument,
+//! which is now three-valued because the answer for those six changed.
+//!
 //! `FR-CLI-017` and `FR-CLI-020` need no rule either, and neither is therefore
 //! implemented here: the parser terminates the arguments at `--` and matches a
 //! flag and a value byte for byte. Both are properties this project guarantees
@@ -73,31 +80,68 @@ const QUIET: &str = "--quiet";
 /// `-v/--verbose`, in the long form the tree declares it under.
 const VERBOSE: &str = "--verbose";
 
-/// Whether the tree accepts `argument` more than once.
+/// What the tree does with a second occurrence of one argument.
+///
+/// The set is three-valued because three requirements answer the question
+/// differently, and `FR-HELP-013` obliges help to state the answer: a flag that
+/// carries a value is refused, a flag that carries none is accepted and does
+/// nothing the second time, and a flag or positional argument that accumulates
+/// means something by each occurrence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Repetition {
+    /// A second occurrence is `64` (`FR-CLI-014`).
+    Refused,
+
+    /// A second occurrence is accepted and has the effect of the first
+    /// (`FR-CLI-025`).
+    Idempotent,
+
+    /// Every occurrence counts (`FR-CLI-016`, `FR-RND-008`, `FR-TMPL-018`).
+    Accumulated,
+}
+
+/// What a second occurrence of `argument` does.
 ///
 /// It is the rule [`refuse_repetition`] applies, read the other way round, and
 /// it is here rather than in the renderer of [`super::help`] so that what the
 /// help states and what the invocation meets cannot drift apart. Reading the
-/// action instead would state the opposite of both: `OD-08` declares a flag
-/// that carries **one** value with `ArgAction::Append` so that both values
+/// action alone would state the opposite of one of them: `OD-08` declares a
+/// flag that carries **one** value with `ArgAction::Append` so that both values
 /// reach the message of `FR-CLI-014`, and that flag is refused on its second
 /// occurrence all the same.
 ///
-/// Three populations are repeatable, and no other:
-///
-/// | Population | Why |
-/// |---|---|
-/// | `-v/--verbose` | `FR-CLI-016` counts the occurrences and saturates them |
-/// | A positional argument that takes many values | `FR-TMPL-018` and `FR-HELP-026` are the sequence, not a repetition |
-/// | The flags of [`REPEATABLE`] | `FR-RND-008` makes `--set` repeatable with distinct keys |
-pub(super) fn repeats(argument: &clap::Arg) -> bool {
+/// | Population | Answer | Why |
+/// |---|---|---|
+/// | `-v/--verbose` | accumulated | `FR-CLI-016` counts the occurrences and saturates them |
+/// | A positional argument that takes many values | accumulated | `FR-TMPL-018` and `FR-HELP-026` are the sequence, not a repetition |
+/// | The flags of [`REPEATABLE`] | accumulated | `FR-RND-008` makes `--set` repeatable with distinct keys |
+/// | A flag that carries no value | idempotent | `FR-CLI-025`, whose six flags are exactly the tree's `ArgAction::SetTrue` arguments — a test pins that |
+/// | Everything else | refused | `FR-CLI-014` |
+pub(crate) fn repetition(argument: &clap::Arg) -> Repetition {
     match argument.get_action() {
-        ArgAction::Count => true,
-        ArgAction::Append => {
-            argument.get_long().is_none() || REPEATABLE.contains(&argument.get_id().as_str())
+        ArgAction::Count => Repetition::Accumulated,
+        // FR-CLI-025. The declaration carries `overrides_with` naming itself,
+        // so the parser accepts the repetition; what is stated here is what
+        // that acceptance means.
+        ArgAction::SetTrue => Repetition::Idempotent,
+        ArgAction::Append
+            if argument.get_long().is_none()
+                || REPEATABLE.contains(&argument.get_id().as_str()) =>
+        {
+            Repetition::Accumulated
         }
-        _ => false,
+        _ => Repetition::Refused,
     }
+}
+
+/// Whether the tree accepts `argument` more than once at all.
+///
+/// It is [`repetition`] reduced to the boolean `FR-HELP-013` asks for, and it
+/// is what the `...` of a positional argument's placeholder turns on. A
+/// positional argument is never [`Repetition::Idempotent`] — it carries a
+/// value — so the reduction loses nothing there.
+pub(super) fn repeats(argument: &clap::Arg) -> bool {
+    !matches!(repetition(argument), Repetition::Refused)
 }
 
 /// Refuses a flag that carries a single value and was given more than once
@@ -283,7 +327,8 @@ pub(super) fn level(globals: &Globals) -> Level {
 #[cfg(test)]
 mod tests {
     use super::{
-        FORMAT, PRETTY, QUIET, REPEATABLE, VERBOSE, declares, level, refuse_both_verbosities,
+        FORMAT, PRETTY, QUIET, REPEATABLE, Repetition, VERBOSE, declares, level,
+        refuse_both_verbosities, repetition,
     };
     use crate::cli::globals::Globals;
     use crate::diagnostics::verbosity::Level;
@@ -329,6 +374,138 @@ mod tests {
         assert_eq!(level(&globals(u8::MAX, false)), Level::Trace);
 
         assert_eq!(level(&globals(0, true)), Level::Errors);
+    }
+
+    /// The six flags `FR-CLI-025` names, by the path they are written at and
+    /// the tokens that write one of them twice.
+    ///
+    /// Two of the six end the invocation and four are declared by a command, so
+    /// the vectors differ; what they have in common is that each writes one
+    /// valueless flag twice and nothing else that could fail.
+    const IDEMPOTENT: [&[&str]; 6] = [
+        &["-q", "-q", "version"],
+        &["--quiet", "--quiet", "version"],
+        &[
+            "schema", "tables", "--pretty", "--pretty", "--format", "json",
+        ],
+        &["schema", "tables", "--direct", "--direct"],
+        &["schema", "tables", "--no-cache", "--no-cache"],
+        &["-h", "-h"],
+    ];
+
+    #[test]
+    fn fr_cli_025_a_valueless_flag_written_twice_is_the_invocation_it_would_have_been() {
+        // FR-CLI-025: the parser accepts the repetition and the flag has the
+        // effect of one occurrence. It used to raise an ArgumentConflict and
+        // exit 64, which that requirement rejects as "the outcome and not a
+        // decision".
+        //
+        // Six flags are reached and `-V/--version` is the seventh vector below,
+        // written apart because `tpl -V -V` carries no command at all.
+        for argv in IDEMPOTENT {
+            assert!(
+                refused(argv).is_none(),
+                "{argv:?} is refused: {:?}",
+                refused(argv).map(|error| error.to_string())
+            );
+        }
+
+        assert!(refused(&["-V", "-V"]).is_none());
+        assert!(refused(&["--version", "--version"]).is_none());
+
+        // The effect is the effect of one occurrence, read off the parsed
+        // invocation rather than inferred from the absence of a refusal.
+        let once = crate::cli::parse(["tpl", "-q", "version"]).expect("one occurrence parses");
+        let twice =
+            crate::cli::parse(["tpl", "-q", "-q", "version"]).expect("two occurrences parse");
+
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn fr_cli_014_a_flag_that_carries_a_value_is_still_refused_on_its_second_occurrence() {
+        // FR-CLI-025 is untouched by FR-CLI-014 and the other way round: a flag
+        // that carries a single value is still `64` with both values named,
+        // because the ground FR-CLI-014 gives is about two values disagreeing
+        // and that ground does not transfer to a flag with none.
+        for (argv, flag, first, second) in [
+            (
+                &["-d", "a", "-d", "b", "version"][..],
+                "--database",
+                "a",
+                "b",
+            ),
+            (
+                &["--timeout", "1", "--timeout", "2", "version"][..],
+                "--timeout",
+                "1",
+                "2",
+            ),
+            (
+                &["schema", "tables", "--format", "json", "--format", "text"][..],
+                "--format",
+                "json",
+                "text",
+            ),
+        ] {
+            let condition =
+                refused(argv).unwrap_or_else(|| panic!("{argv:?} is refused by FR-CLI-014"));
+
+            assert_eq!(condition.exit_code(), 64, "{argv:?}");
+
+            let message = condition.to_string();
+            assert!(message.contains(flag), "{message}");
+
+            let cause = crate::diagnostics::rendered(&condition);
+            assert!(cause.contains(first), "{cause}");
+            assert!(cause.contains(second), "{cause}");
+        }
+    }
+
+    #[test]
+    fn fr_cli_025_the_flags_it_reaches_are_the_valueless_ones_and_verbose_is_not_among_them() {
+        // FR-CLI-025 names six and excludes `-v/--verbose`, which FR-CLI-016
+        // counts: a second occurrence of that flag carries meaning, so there is
+        // nothing to make idempotent. The classification is read from the tree,
+        // so a valueless flag added to it is governed without this changing —
+        // which is what that requirement asks of an implementer.
+        let tree = crate::cli::tree();
+        let mut idempotent: Vec<String> = Vec::new();
+
+        fn walk(command: &clap::Command, into: &mut Vec<String>) {
+            for argument in command.get_arguments() {
+                if repetition(argument) == Repetition::Idempotent {
+                    into.push(format!("--{}", argument.get_long().unwrap_or_default()));
+                }
+            }
+
+            for child in command.get_subcommands() {
+                walk(child, into);
+            }
+        }
+
+        walk(&tree, &mut idempotent);
+        idempotent.sort_unstable();
+        idempotent.dedup();
+
+        assert_eq!(
+            idempotent,
+            [
+                "--direct",
+                "--help",
+                "--no-cache",
+                "--pretty",
+                "--quiet",
+                "--version"
+            ]
+        );
+
+        let verbose = tree
+            .get_arguments()
+            .find(|argument| argument.get_long() == Some("verbose"))
+            .expect("the root declares --verbose");
+
+        assert_eq!(repetition(verbose), Repetition::Accumulated);
     }
 
     #[test]

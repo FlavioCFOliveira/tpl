@@ -14,7 +14,7 @@
 //! `FR-HELP-021` gives for the command tree: a second statement of one truth is
 //! the statement that stops being true without saying so. The engine exposes no
 //! way to read its filters back, so the derivation is made the other way round
-//! — [`declare!`] takes one list and writes both the name arrays
+//! — the `declare!` macro below takes one list and writes both the name arrays
 //! `cli::help::document` publishes and the registration that installs them, so
 //! neither can be edited without the other.
 //!

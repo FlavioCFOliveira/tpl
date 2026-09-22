@@ -65,7 +65,7 @@ pub(super) const DATABASE: &str = "database.json";
 /// The extension every cached object carries.
 const EXTENSION: &str = "json";
 
-/// The suffix [`object`] appends, extension included.
+/// The suffix [`Layout::object`] appends, extension included.
 const DOT_JSON: &str = ".json";
 
 /// The three collections the cache holds, in the order `FR-CTX-036` writes

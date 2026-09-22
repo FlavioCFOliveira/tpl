@@ -15,6 +15,7 @@
 //! | `FR-CONF-039` — supplied material is **additional** to the bundled roots | Nothing here substitutes: the driver adds what it is given, per `ADR-002` |
 //! | `FR-SRV-006`, `FR-SRV-007` — a closed statement list | Every option that would make the driver issue a statement of its own is turned off; see below |
 //! | `FR-CONF-005`, `OD-12` — DNS resolution and the connect are separate phases | Both run under one shared budget, each reporting its own phase |
+//! | `FR-GLOB-017` — `INFO` reports which phases ran and how long each took | Each of the two is timed where it runs and reported through [`emit::phase_ran`] |
 //!
 //! **The driver issues a statement of its own unless it is told not to, and
 //! that statement is outside the closed list.** `sqlx` 0.9.0 follows the
@@ -41,7 +42,9 @@
 //! duplicated lookup is a second resolution and not a second connection, so
 //! `NFR-PERF-004` is untouched.
 
+use std::fmt;
 use std::path::Path;
+use std::time::Instant;
 
 use sqlx::Connection as _;
 use sqlx::mysql::{MySqlConnectOptions, MySqlConnection, MySqlSslMode};
@@ -51,6 +54,7 @@ use tokio::time::timeout;
 
 use super::fault;
 use crate::deadline::{Clock, Deadlines, Phase};
+use crate::diagnostics::emit;
 use crate::error::{Error, NetworkPhase};
 use crate::project::config::entry::TlsMode;
 use crate::project::secret::Secret;
@@ -166,6 +170,29 @@ const fn ssl_mode(mode: TlsMode) -> MySqlSslMode {
 /// same invocation the same result, and a bundle assembled in directory order
 /// would not be the same twice.
 ///
+/// **Every block is terminated before the next begins**, which `ADR-002`
+/// obliges and which the seam between the two keys did not have: a `ca_file`
+/// whose last byte is not a newline ran its final PEM block into the first line
+/// of the first directory file, and a bundle that will not parse is the one
+/// outcome a concatenation has to be built to avoid.
+///
+/// **A `ca_path` entry is resolved through a symbolic link**, per `FR-CONF-014`
+/// as the thirty-second edition amended it: the convention the key exists to
+/// serve is a directory of hash-named links beside the certificates they point
+/// at, and a reader that skipped them would take nothing from such a directory
+/// and say nothing about having taken nothing. An entry whose **target** is a
+/// regular file is read at that target; anything else — a directory, a socket,
+/// a device — is skipped, a directory being skipped rather than descended into.
+/// An entry that cannot be resolved, or cannot be read at its target, is
+/// reported against **its own path in the directory** and never passed over,
+/// because a skipped dangling link is a trust anchor the operator believes is
+/// loaded and is not.
+///
+/// The names are sorted **before** any of them is resolved, over the directory's
+/// own entries and never over the targets they resolve to, so `NFR-DET-001`
+/// holds exactly as before. Two links resolving to one certificate contribute
+/// it twice, which no requirement forbids.
+///
 /// Only the two modes `FR-CONF-014` names read it. Under the other three the
 /// driver ignores what it is given — `FR-CONF-038` records `required` with
 /// trust material ignoring it as one of the three controls that separate the
@@ -178,8 +205,14 @@ const fn ssl_mode(mode: TlsMode) -> MySqlSslMode {
 ///
 /// # Errors
 ///
-/// Returns [`Error::ProjectFileUnreadable`] naming the path the configuration
-/// declared, where the file or the directory cannot be read.
+/// Returns [`Error::ProjectFileUnreadable`] — `74` — naming the path the
+/// configuration declared, or the directory entry's own path, where a file, a
+/// directory or an entry cannot be read; and
+/// [`Error::TrustDirectoryEmpty`] — `78` — where `ca_path` is declared and no
+/// entry of the directory it names resolves to a regular file, per
+/// `FR-CONF-044`. The second is decided here, while the material is assembled,
+/// so it costs no round trip and reaches the caller before the server is
+/// contacted.
 fn trust(target: &Target<'_>) -> Result<Option<Vec<u8>>, Error> {
     if !matches!(target.tls, TlsMode::VerifyCa | TlsMode::VerifyIdentity) {
         return Ok(None);
@@ -189,27 +222,53 @@ fn trust(target: &Target<'_>) -> Result<Option<Vec<u8>>, Error> {
 
     if let Some(file) = target.ca_file {
         bundle.extend_from_slice(&read(file)?);
+        // ADR-002: each block ends before the next begins. The terminator is
+        // written here and not only after a directory entry, because the seam
+        // between `ca_file` and the first entry of `ca_path` is a seam like any
+        // other.
+        bundle.push(b'\n');
     }
 
     if let Some(directory) = target.ca_path {
         let mut paths = Vec::new();
 
         for entry in unreadable(directory, std::fs::read_dir(directory))? {
-            let entry = unreadable(directory, entry)?;
-
-            if unreadable(&entry.path(), entry.file_type())?.is_file() {
-                paths.push(entry.path());
-            }
+            paths.push(unreadable(directory, entry)?.path());
         }
 
+        // NFR-DET-001: the order is the directory's own names, ascending, fixed
+        // before anything is resolved or read.
         paths.sort();
 
+        let mut contributed = false;
+
         for path in paths {
+            // `metadata` follows the link and `symlink_metadata` would not,
+            // which is the whole of the amendment: what decides is the kind of
+            // the **target**. A failure to resolve is reported against the
+            // entry's own path — the link, not what it points at.
+            if !unreadable(&path, std::fs::metadata(&path))?.is_file() {
+                continue;
+            }
+
             bundle.extend_from_slice(&read(&path)?);
             // A bundle is a concatenation of PEM blocks, and a file whose last
             // line carries no terminator would otherwise run into the next
             // file's first line.
             bundle.push(b'\n');
+            contributed = true;
+        }
+
+        // FR-CONF-044. The condition is *no entry resolves to a regular file*,
+        // which is decidable before a byte is read; a regular file that is
+        // empty, or that holds no PEM block, is not this condition, because
+        // `tpl` does not parse the bytes it assembles. It is per key, so it
+        // fires whether or not `ca_file` is declared beside it.
+        if !contributed {
+            return Err(Error::TrustDirectoryEmpty {
+                entry: target.entry.to_owned(),
+                path: directory.to_owned(),
+            });
         }
     }
 
@@ -230,12 +289,70 @@ fn unreadable<T>(path: &Path, outcome: std::io::Result<T>) -> Result<T, Error> {
     })
 }
 
+/// Everything the driver is told, in a type that cannot print it.
+///
+/// `MySqlConnectOptions` derives [`Debug`] and its derivation writes
+/// `password: Some("…")` **in clear**, which is verified rather than assumed.
+/// `FR-ERR-013`, `FR-GLOB-018` and `BR-ERR-003` bar a credential from every
+/// message and every stream at every verbosity, and the way to hold a
+/// prohibition on printing is to deny the value a printing implementation —
+/// which is what [`Secret`] does for the credential itself and what this type
+/// does for the composed options that carry it.
+///
+/// It is a newtype and not a wrapper with an accessor **on purpose**: the two
+/// operations [`open`] needs are carried here, so the inner value never leaves
+/// and no caller can reach a `{:?}` of it. What it deliberately does **not**
+/// implement is as much of the type as what it does: no derived [`Debug`], no
+/// [`Clone`], no [`Display`](std::fmt::Display), no
+/// [`Serialize`](serde::Serialize), no [`PartialEq`] and no [`Default`].
+/// Omitting [`Clone`] is load-bearing — a clone is a second value to keep track
+/// of, and one of the two would eventually be held by something that prints.
+pub(crate) struct DriverOptions(MySqlConnectOptions);
+
+impl fmt::Debug for DriverOptions {
+    /// Writes a placeholder, whatever the options carry.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(REDACTED_OPTIONS)
+    }
+}
+
+impl DriverOptions {
+    /// The user the driver will authenticate as.
+    ///
+    /// It is the one field of the options a condition names: the `77` row of
+    /// `FR-ERR-034` obliges the `cause` line of a refused authentication to
+    /// name the user it was refused for.
+    fn username(&self) -> &str {
+        self.0.get_username()
+    }
+
+    /// Opens the connection these options describe.
+    async fn connect(&self) -> Result<MySqlConnection, sqlx::Error> {
+        MySqlConnection::connect_with(&self.0).await
+    }
+
+    /// The TLS mode the options carry.
+    #[cfg(test)]
+    fn ssl_mode(&self) -> MySqlSslMode {
+        self.0.get_ssl_mode()
+    }
+
+    /// The server-side database the options carry.
+    #[cfg(test)]
+    fn database(&self) -> Option<&str> {
+        self.0.get_database()
+    }
+}
+
+/// What [`DriverOptions`]'s [`Debug`] writes in place of the options.
+const REDACTED_OPTIONS: &str = "DriverOptions(***)";
+
 /// Everything the driver is told, composed once.
 ///
 /// # Errors
 ///
 /// Returns what [`trust`] returns for trust material that cannot be read.
-fn options(target: &Target<'_>) -> Result<MySqlConnectOptions, Error> {
+fn options(target: &Target<'_>) -> Result<DriverOptions, Error> {
     let mut options = MySqlConnectOptions::new()
         .host(target.host)
         .port(target.port)
@@ -264,7 +381,7 @@ fn options(target: &Target<'_>) -> Result<MySqlConnectOptions, Error> {
         options = options.ssl_ca_from_pem(bundle);
     }
 
-    Ok(options)
+    Ok(DriverOptions(options))
 }
 
 /// Opens the one connection of `NFR-PERF-004`.
@@ -276,6 +393,13 @@ fn options(target: &Target<'_>) -> Result<MySqlConnectOptions, Error> {
 /// second call and is not separable from it — `MySqlConnectOptions` has no
 /// method that accepts an already-connected socket — and is separated in the
 /// report instead, by the driver's own discriminant, per `OD-12`.
+///
+/// **Each of the two is timed and reported**, per `FR-GLOB-017`, whether it
+/// ended in an answer or in a refusal: a phase that failed is a phase that ran,
+/// and how long it took before it failed is what a caller diagnosing a slow
+/// invocation came for. The TLS handshake carries no line of its own for the
+/// reason above — its duration is inside the connect's, and a line naming it
+/// would be a number this module does not have.
 ///
 /// # Errors
 ///
@@ -304,7 +428,11 @@ pub(super) fn open(
             ));
         }
 
-        let resolved = match timeout(bound.remaining(), lookup_host((host, port))).await {
+        let started = Instant::now();
+        let resolved = timeout(bound.remaining(), lookup_host((host, port))).await;
+        emit::phase_ran(Phase::DnsResolution, started.elapsed());
+
+        let resolved = match resolved {
             Err(_) => {
                 return Err(fault::expired(
                     NetworkPhase::DnsResolution,
@@ -333,7 +461,14 @@ pub(super) fn open(
             return Err(fault::expired(NetworkPhase::TcpConnect, host, port, bound));
         }
 
-        match timeout(bound.remaining(), MySqlConnection::connect_with(&options)).await {
+        let started = Instant::now();
+        let opened = timeout(bound.remaining(), options.connect()).await;
+        // FR-GLOB-017. The TLS handshake ran inside this call where the mode
+        // negotiates one, so its time is inside this number and it has no line
+        // of its own.
+        emit::phase_ran(Phase::TcpConnect, started.elapsed());
+
+        match opened {
             Err(_) => Err(fault::expired(NetworkPhase::TcpConnect, host, port, bound)),
             Ok(Ok(connection)) => Ok(connection),
             // The database is the one the entry names, per `FR-CONF-041`, and
@@ -344,7 +479,7 @@ pub(super) fn open(
                 &driver,
                 host,
                 port,
-                options.get_username(),
+                options.username(),
                 target.database,
             )),
         }
@@ -353,7 +488,8 @@ pub(super) fn open(
 
 #[cfg(test)]
 mod tests {
-    use super::{Target, options, ssl_mode, trust};
+    use super::{REDACTED_OPTIONS, Target, options, ssl_mode, trust};
+    use crate::error::Error;
     use crate::project::config;
     use crate::project::config::entry::TlsMode;
     use crate::project::scratch::Scratch;
@@ -426,11 +562,7 @@ mod tests {
             let target = Target::of(&resolved).expect("the entry names a host");
             let composed = options(&target).expect("no trust material is declared");
 
-            assert_eq!(
-                named(composed.get_ssl_mode()),
-                named(ssl_mode(mode)),
-                "{mode}"
-            );
+            assert_eq!(named(composed.ssl_mode()), named(ssl_mode(mode)), "{mode}");
         }
     }
 
@@ -447,8 +579,8 @@ mod tests {
         assert_eq!(target.entry(), "shop");
         assert_eq!(target.host(), "db.example.com");
         assert_eq!(target.port(), 3306);
-        assert_eq!(composed.get_username(), "alice");
-        assert_eq!(composed.get_database(), Some("freight"));
+        assert_eq!(composed.username(), "alice");
+        assert_eq!(composed.database(), Some("freight"));
     }
 
     #[test]
@@ -477,6 +609,17 @@ mod tests {
         assert_eq!(target.port(), 3307);
     }
 
+    /// The bundle `text` assembles for an entry declaring `keys`.
+    fn bundle(scratch: &Scratch, keys: &str) -> String {
+        let resolved = settings(scratch, &format!("[database.shop]\nhost = \"db\"\n{keys}"));
+        let target = Target::of(&resolved).expect("the entry names a host");
+        let assembled = trust(&target)
+            .expect("the material is readable")
+            .expect("the entry declares material");
+
+        String::from_utf8(assembled).expect("the bundle is text")
+    }
+
     #[test]
     fn fr_conf_014_both_keys_supply_the_bundle_and_the_order_is_fixed() {
         // FR-CONF-014: ca_file and ca_path together, file first and then the
@@ -487,22 +630,191 @@ mod tests {
         scratch.file("anchors/b.pem", "B\n");
         scratch.file("anchors/a.pem", "A\n");
 
-        let resolved = settings(
+        assert_eq!(
+            bundle(
+                &scratch,
+                &format!(
+                    "ca_file = \"{}\"\nca_path = \"{}\"\n",
+                    file.display(),
+                    anchors.display()
+                )
+            ),
+            "FILE\n\nA\n\nB\n\n"
+        );
+    }
+
+    #[test]
+    fn adr_002_the_ca_file_block_is_terminated_before_the_first_ca_path_block() {
+        // ADR-002: each block ends before the next begins. The fixture above
+        // happens to end in a newline, which is why the seam between the two
+        // keys could be unterminated without any assertion failing; this one
+        // carries a ca_file whose last byte is not a newline, so the defect is
+        // the difference between 'FILE' running into 'A' and not.
+        let scratch = Scratch::new();
+        let file = scratch.file("root.pem", "FILE");
+        let anchors = scratch.directory("anchors");
+        scratch.file("anchors/a.pem", "A\n");
+
+        let assembled = bundle(
             &scratch,
             &format!(
-                "[database.shop]\nhost = \"db\"\nca_file = \"{}\"\nca_path = \"{}\"\n",
+                "ca_file = \"{}\"\nca_path = \"{}\"\n",
                 file.display(),
                 anchors.display()
             ),
         );
+
+        assert_eq!(assembled, "FILE\nA\n\n");
+        assert!(
+            !assembled.contains("FILEA"),
+            "the ca_file block ran into the first ca_path block"
+        );
+    }
+
+    /// What `trust` made of an entry declaring `keys`, refused.
+    fn refused(scratch: &Scratch, keys: &str) -> Error {
+        let resolved = settings(scratch, &format!("[database.shop]\nhost = \"db\"\n{keys}"));
         let target = Target::of(&resolved).expect("the entry names a host");
-        let bundle = trust(&target)
-            .expect("the material is readable")
-            .expect("the entry declares material");
+
+        trust(&target).expect_err("the material is refused")
+    }
+
+    #[test]
+    fn fr_conf_014_a_ca_path_entry_is_resolved_through_a_symbolic_link() {
+        // FR-CONF-014, as the thirty-second edition amended it: an entry whose
+        // **target** is a regular file is read at that target. A hash-named
+        // CApath directory is a set of links beside the certificates they point
+        // at, and a reader that selected on `DirEntry::file_type` — which does
+        // not traverse a link — took nothing from one and said nothing about
+        // having taken nothing.
+        let scratch = Scratch::new();
+        let anchors = scratch.directory("anchors");
+        let real = scratch.file("store/root.pem", "ROOT\n");
+        scratch.link(&real, &anchors.join("a.0"));
+
+        // Two links to one certificate contribute it twice, which no
+        // requirement of this corpus forbids and this one states.
+        scratch.link(&real, &anchors.join("b.0"));
 
         assert_eq!(
-            String::from_utf8(bundle).expect("the bundle is text"),
-            "FILE\nA\n\nB\n\n"
+            bundle(&scratch, &format!("ca_path = \"{}\"\n", anchors.display())),
+            "ROOT\n\nROOT\n\n"
+        );
+    }
+
+    #[test]
+    fn nfr_det_001_the_order_is_the_directory_own_names_and_never_the_targets() {
+        // FR-CONF-014: the entries are sorted before any of them is resolved,
+        // over the names the directory holds and never over what they resolve
+        // to. The link names and their targets sort in opposite orders here, so
+        // a sort moved after the resolution would produce the other bundle.
+        let scratch = Scratch::new();
+        let anchors = scratch.directory("anchors");
+        let first = scratch.file("store/z.pem", "FIRST\n");
+        let second = scratch.file("store/a.pem", "SECOND\n");
+        scratch.link(&first, &anchors.join("a.0"));
+        scratch.link(&second, &anchors.join("b.0"));
+
+        assert_eq!(
+            bundle(&scratch, &format!("ca_path = \"{}\"\n", anchors.display())),
+            "FIRST\n\nSECOND\n\n"
+        );
+    }
+
+    #[test]
+    fn fr_conf_014_an_entry_that_resolves_to_anything_but_a_regular_file_is_skipped() {
+        // FR-CONF-014: a directory is skipped rather than descended into, and
+        // so is a link that resolves to one. The certificate beside them is
+        // still taken, so the skip is of the entry and not of the directory.
+        let scratch = Scratch::new();
+        let anchors = scratch.directory("anchors");
+        scratch.file("anchors/a.pem", "TAKEN\n");
+        let nested = scratch.directory("anchors/b.d");
+        scratch.file("anchors/b.d/buried.pem", "BURIED\n");
+        scratch.link(&nested, &anchors.join("c.0"));
+
+        assert_eq!(
+            bundle(&scratch, &format!("ca_path = \"{}\"\n", anchors.display())),
+            "TAKEN\n\n"
+        );
+    }
+
+    #[test]
+    fn fr_conf_014_a_dangling_entry_is_reported_against_its_own_path_and_never_passed_over() {
+        // FR-CONF-014: an entry the system cannot resolve is reported against
+        // **that entry's own path in the directory** — the link, not its target
+        // — per the `74` row of FR-ERR-034, and is not skipped. A dangling link
+        // silently skipped is a trust anchor the operator believes is loaded
+        // and is not.
+        let scratch = Scratch::new();
+        let anchors = scratch.directory("anchors");
+        scratch.file("anchors/a.pem", "TAKEN\n");
+        let gone = scratch.path("store/removed.pem");
+        let link = anchors.join("b.0");
+        scratch.link(&gone, &link);
+
+        let condition = refused(&scratch, &format!("ca_path = \"{}\"\n", anchors.display()));
+
+        assert_eq!(condition.exit_code(), 74);
+
+        match condition {
+            Error::ProjectFileUnreadable { ref path, .. } => {
+                assert_eq!(path, &link, "the condition names the target, not the link");
+                assert_ne!(path, &gone);
+            }
+            other => panic!("expected an unreadable path, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fr_conf_044_a_ca_path_that_yields_no_regular_file_is_refused_before_anything_is_contacted() {
+        // FR-CONF-044: a declared key that contributes nothing is a fault in
+        // .tpl/.cfg, and the condition is decided while the material is
+        // assembled. 78 and not 69 — nothing was contacted — and not 74 —
+        // nothing failed to be read.
+        let scratch = Scratch::new();
+        let empty = scratch.directory("empty");
+        scratch.directory("empty/nested");
+
+        let condition = refused(&scratch, &format!("ca_path = \"{}\"\n", empty.display()));
+
+        assert_eq!(condition.exit_code(), 78);
+        assert!(
+            matches!(condition, Error::TrustDirectoryEmpty { ref path, .. } if *path == empty),
+            "{condition:?}"
+        );
+
+        // The check is per key: it fires whether or not `ca_file` is declared
+        // beside it, because the operator asked for both and only one was
+        // honoured.
+        let file = scratch.file("root.pem", "FILE\n");
+        let beside = refused(
+            &scratch,
+            &format!(
+                "ca_file = \"{}\"\nca_path = \"{}\"\n",
+                file.display(),
+                empty.display()
+            ),
+        );
+
+        assert_eq!(beside.exit_code(), 78);
+    }
+
+    #[test]
+    fn fr_conf_044_a_regular_file_that_is_empty_or_carries_no_pem_block_is_not_that_condition() {
+        // FR-CONF-044 states its condition exactly and no wider: it is *no
+        // entry resolves to a regular file*, decidable before a byte is read.
+        // tpl does not parse the bytes it assembles, and a requirement that
+        // refused on their content would oblige this corpus to fix a
+        // certificate format it names nowhere.
+        let scratch = Scratch::new();
+        let anchors = scratch.directory("anchors");
+        scratch.file("anchors/a.pem", "");
+        scratch.file("anchors/b.pem", "not a certificate at all\n");
+
+        assert_eq!(
+            bundle(&scratch, &format!("ca_path = \"{}\"\n", anchors.display())),
+            "\nnot a certificate at all\n\n"
         );
     }
 
@@ -532,14 +844,16 @@ mod tests {
     #[test]
     fn fr_err_013_the_target_carries_the_password_in_a_type_that_does_not_print_it() {
         // FR-ERR-013 and FR-GLOB-018: a credential reaches no message and no
-        // stream at any verbosity. This type is the one this crate owns and
-        // could reach for, and it holds the secret behind the type that
-        // redacts itself.
+        // stream at any verbosity. This type is one of the two this module
+        // owns and could reach for, and it holds the secret behind the type
+        // that redacts itself.
         //
-        // The driver's own options are the reason that matters here: their
-        // derived `Debug` prints the password in clear, which is why the value
-        // this module composes is a local of `open` and is never held by a
-        // type of this crate, logged, or returned.
+        // The prohibition on the **driver's** own options is no longer this
+        // test's: `MySqlConnectOptions` derives `Debug` and that derivation
+        // writes the password in clear, so the composed value is wrapped in
+        // `DriverOptions`, which has a hand-written one. The property has moved
+        // to the test below, and it is a property of a type rather than of a
+        // local nobody happens to print.
         let scratch = Scratch::new();
         let resolved = settings(
             &scratch,
@@ -550,5 +864,38 @@ mod tests {
         assert!(!format!("{target:?}").contains("hunter2"));
         assert!(!format!("{target:#?}").contains("hunter2"));
         assert!(options(&target).is_ok());
+    }
+
+    #[test]
+    fn fr_err_013_the_options_the_driver_is_given_do_not_print_the_password() {
+        // FR-ERR-013, FR-GLOB-018 and BR-ERR-003 bar a credential from every
+        // message and every stream at every verbosity. `MySqlConnectOptions`
+        // derives `Debug` and prints `password: Some("…")` in clear, so the
+        // composed value is denied a printing implementation rather than
+        // trusted not to reach one.
+        //
+        // Both composition paths are driven: `FR-CONF-006` supplies the
+        // password through the discrete `password` key, and `FR-CONF-009`
+        // supplies it inside the user info of a DSN. The two build the options
+        // by different routes and either would have printed it.
+        let scratch = Scratch::new();
+
+        for document in [
+            "[database.shop]\nhost = \"db\"\nuser = \"alice\"\npassword = \"hunter2\"\n",
+            "[database.shop]\ndsn = \"mysql://alice:hunter2@db.example.com:3306/freight\"\n",
+        ] {
+            let resolved = settings(&scratch, document);
+            let target = Target::of(&resolved).expect("the entry names a host");
+            let composed = options(&target).expect("no trust material is declared");
+
+            assert_eq!(format!("{composed:?}"), REDACTED_OPTIONS);
+            assert_eq!(format!("{composed:#?}"), REDACTED_OPTIONS);
+            assert!(!format!("{composed:?}").contains("hunter2"), "{document}");
+            assert!(!format!("{composed:#?}").contains("hunter2"), "{document}");
+
+            // The value did reach the options: the property under test is that
+            // it cannot be printed, not that it was never supplied.
+            assert_eq!(composed.username(), "alice");
+        }
     }
 }

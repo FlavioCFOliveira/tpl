@@ -214,6 +214,50 @@ pub enum ReadOnlyFault {
     ReadBackDisagreed,
 }
 
+/// Which of the two conditions of `FR-CONF-042` left `tpl` with no exit status
+/// for a `password_command`.
+///
+/// That requirement gives both `78` and obliges the `cause` line to say which
+/// occurred, per `FR-ERR-034`: a program that never ran is corrected in
+/// `.tpl/.cfg`, and a child whose outcome could not be read leaves the machine
+/// as what to look at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordCommandFault {
+    /// The child could not be started at all.
+    NotStarted,
+
+    /// The child had started and the system could not read the status it ended
+    /// with.
+    StatusUnreadable,
+}
+
+/// How a `password_command` child ended, where it did not exit zero.
+///
+/// `FR-CONF-033` owns the exit and `FR-CONF-043` the signal, and each obliges
+/// the `cause` line to name its own instance. The two are one type because they
+/// are one condition to a caller — the configured way of obtaining a password
+/// produced none — and share the one code those requirements give them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChildEnd {
+    /// It exited with this non-zero status (`FR-CONF-033`).
+    Exited(i32),
+
+    /// It was ended by this signal, which `tpl` did not send (`FR-CONF-043`).
+    ///
+    /// The two signals `tpl` does send — the deadline of `FR-CONF-028` and the
+    /// output cap of `FR-CONF-031` — never reach here, because each owns its
+    /// outcome and returns its own condition before the status is read.
+    Signalled(i32),
+
+    /// It reported neither an exit status nor a signal.
+    ///
+    /// No target of `NFR-PERF-018` produces this: a Unix reports one or the
+    /// other. It is a variant rather than a panic because the standard library
+    /// promises neither, and `FR-ERR-034` bans naming a category where an
+    /// instance is available — here none is.
+    Unreported,
+}
+
 /// Every condition `tpl` reports as a failure.
 ///
 /// One variant per distinct condition the specification names, each carrying
@@ -272,7 +316,13 @@ pub enum Error {
     /// anywhere. The node is therefore carried on the variant: without it the
     /// message could not satisfy the row, and the two conditions would share a
     /// wording that `FR-ERR-034` forbids.
-    #[error("unknown command '{segment}' under '{node}'")]
+    ///
+    /// The node is named by the rule `crate::diagnostics::invoked` fixes, which
+    /// is the rule the `cause` line of this variant reads too: the root is the
+    /// program name and not the empty path. `FR-HELP-028` obliges the node to
+    /// be named on both lines, and a second spelling of the root here is how
+    /// the two came to say `''` and `'tpl'` of one node.
+    #[error("unknown command '{segment}' under '{}'", crate::diagnostics::invoked(.node))]
     UnknownCommandPathSegment {
         /// The segment as written, never normalised (`FR-CLI-020`).
         segment: String,
@@ -1103,34 +1153,63 @@ pub enum Error {
         cap: usize,
     },
 
-    /// `password_command` could not be started at all.
+    /// `password_command` yielded no exit status (`FR-CONF-042`).
     ///
     /// `FR-CONF-033` routes a child that **exits** non-zero to `78`, on the
     /// ground that the configured way of obtaining a password failed to produce
-    /// one; a child that never starts fails in the same way and for the same
-    /// reason, and is a condition of its own because its next step differs — a
-    /// program that is absent or not executable is corrected in the file, not
-    /// by running the command to see what it printed.
-    #[error("password_command could not be started")]
+    /// one; a child that never starts, and a child whose status the system
+    /// cannot read, fail in the same way and for the same reason, and are a
+    /// condition of their own because the next step differs — a program that is
+    /// absent or not executable is corrected in the file, not by running the
+    /// command to see what it printed.
+    ///
+    /// The two are reached from two places and [`PasswordCommandFault`] says
+    /// which, because `FR-CONF-042` obliges the `cause` line to: one wording
+    /// for both is what that requirement was written over, and `FR-ERR-002`
+    /// forbids it.
+    #[error("password_command yielded no exit status")]
     PasswordCommandNotExecutable {
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
-        /// What the operating system returned when the child was spawned.
+        /// Which of the two conditions of `FR-CONF-042` arose.
+        fault: PasswordCommandFault,
+        /// What the operating system returned.
         #[source]
         returned: io::Error,
     },
 
-    /// `password_command` exited non-zero (`FR-CONF-033`).
+    /// `password_command` exited non-zero (`FR-CONF-033`), or was ended by a
+    /// signal `tpl` did not send (`FR-CONF-043`).
     ///
     /// Its standard error is not carried because it was never captured:
     /// `FR-CONF-032` sends it to the null device.
-    #[error("password_command exited with a non-zero status")]
+    #[error("password_command did not exit successfully")]
     PasswordCommandFailed {
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
-        /// The exit status the child returned, or `None` where a signal ended
-        /// it.
-        status: Option<i32>,
+        /// How the child ended, which decides which of the two requirements
+        /// owns the condition and what its `cause` line names.
+        end: ChildEnd,
+    },
+
+    /// `ca_path` names a directory that yields no certificate file
+    /// (`FR-CONF-044`).
+    ///
+    /// The condition is decided while the trust material is assembled and
+    /// before any connection is opened, so it costs no round trip; it is
+    /// *no entry resolves to a regular file*, and a regular file that is empty
+    /// or holds no PEM block is not it. It is per key, and fires whether or not
+    /// `ca_file` is declared beside it.
+    ///
+    /// `78` and not `69` — nothing was contacted — and not `74` — nothing
+    /// failed to be read; the directory was read and is empty of what the key
+    /// promises.
+    #[error("the ca_path of database entry '{entry}' supplies no certificate file")]
+    TrustDirectoryEmpty {
+        /// The entry whose `ca_path` it is.
+        entry: String,
+        /// The directory as the entry declared it (`FR-CONF-044`).
+        path: PathBuf,
     },
 
     /// The read-only session could not be established or confirmed
@@ -1371,6 +1450,7 @@ impl Error {
             | Self::PasswordCommandOutputCapExceeded { .. }
             | Self::PasswordCommandNotExecutable { .. }
             | Self::PasswordCommandFailed { .. }
+            | Self::TrustDirectoryEmpty { .. }
             | Self::ReadOnlySessionNotEnforced { .. }
             | Self::EntryKeyMissing { .. }
             | Self::NoDatabaseEntrySelected { .. }
@@ -1383,8 +1463,9 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
-        NetworkPhase, Position, ReadOnlyFault, ensure_invariant, trigger_internal_invariant,
+        CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
+        NetworkPhase, PasswordCommandFault, Position, ReadOnlyFault, ensure_invariant,
+        trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -1394,7 +1475,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 65;
+    const VARIANT_COUNT: usize = 66;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -1856,6 +1937,7 @@ mod tests {
             (
                 Error::PasswordCommandNotExecutable {
                     command: vec!["pass".to_owned()],
+                    fault: PasswordCommandFault::NotStarted,
                     returned: io::Error::from(io::ErrorKind::NotFound),
                 },
                 78,
@@ -1863,7 +1945,14 @@ mod tests {
             (
                 Error::PasswordCommandFailed {
                     command: vec!["op".to_owned(), "read".to_owned()],
-                    status: Some(1),
+                    end: ChildEnd::Exited(1),
+                },
+                78,
+            ),
+            (
+                Error::TrustDirectoryEmpty {
+                    entry: "shop".to_owned(),
+                    path: path(),
                 },
                 78,
             ),
@@ -1968,6 +2057,7 @@ mod tests {
             Error::PasswordCommandOutputCapExceeded { .. } => "PasswordCommandOutputCapExceeded",
             Error::PasswordCommandNotExecutable { .. } => "PasswordCommandNotExecutable",
             Error::PasswordCommandFailed { .. } => "PasswordCommandFailed",
+            Error::TrustDirectoryEmpty { .. } => "TrustDirectoryEmpty",
             Error::ReadOnlySessionNotEnforced { .. } => "ReadOnlySessionNotEnforced",
             Error::EntryKeyMissing { .. } => "EntryKeyMissing",
             Error::NoDatabaseEntrySelected { .. } => "NoDatabaseEntrySelected",

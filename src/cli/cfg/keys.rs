@@ -22,7 +22,7 @@
 //! key: whoever types the key knows what they are asking for, and redacting
 //! here would leave no way to feed a password to another command. `FR-CFG-013`
 //! and `FR-CFG-021` redact in `list`, on the printing path, per
-//! [`redact`](crate::project::config::redact).
+//! [`redact`].
 //!
 //! **`list` resolves nothing.** `FR-CFG-014` forbids it to expand `${VAR}`, to
 //! run `password_command`, or to apply a default, so it prints the document

@@ -1,7 +1,7 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-21
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md]
 ---
 
@@ -522,13 +522,52 @@ tpl cfg database test   <name>
 - **FR-CFG-041**: WHEN a `cfg` command rewrites `.tpl/.cfg`, it SHALL write a
   temporary file in `.tpl/` at mode `0600` and SHALL rename it over the target.
   A failure part-way through SHALL leave the previous `.cfg` in place,
-  unchanged.
+  unchanged. IF the write fails at any step — the temporary file cannot be
+  created, cannot be written, cannot be given mode `0600`, or cannot be renamed
+  over the target — THEN the system SHALL exit `74` (`EX_IOERR`), and the
+  `cause` SHALL name the path, the operation attempted on it, and what the
+  filesystem returned, per the `74` row of `FR-ERR-034`.
 
   *Rationale.* This is the rule `FR-CACHE-030` already applies to the other
   thing `tpl` writes, and it matters more here: a truncated `.cfg` is a `78` on
   every subsequent invocation, and it holds the credentials without which the
   project cannot reach a server. A cached object lost to a truncated write is
   recovered by reading the server again; a lost `.cfg` is not recovered at all.
+
+  *Amended in the thirty-first edition: the failure this requirement names now
+  carries a code.* The requirement stated the outcome of a failed write — the
+  previous file survives — and named no code, so the five commands that rewrite
+  the file had a condition `FR-ERR-002` obliges to carry one and none to carry.
+  It is `74`, and the row of `FR-ERR-001` that carries it is the `74` row,
+  whose cell is widened in the same edition to characterise I/O on `.tpl`
+  rather than reading it alone. The five commands are `tpl cfg set`,
+  `tpl cfg unset`, `tpl cfg database add`, `tpl cfg database update` and
+  `tpl cfg database remove`, which are the writers `FR-PROJ-023` names for
+  `.tpl/.cfg`.
+
+  *Why `74`.* The fault is the filesystem refusing an operation on a file the
+  project owns, which is what that code means and what its `cause` row is
+  written for — the path, the operation, and what the filesystem returned. The
+  caller's next step is the one the `74` row of `FR-ERR-001` states: check
+  permissions and free space.
+
+  *Rejected: `73` (`EX_CANTCREAT`).* `FR-ERR-003` reserves it for `tpl init`,
+  in terms, and the ground survives the reading: `73` reports a **destination**
+  that could not be brought into existence, and here the destination exists and
+  is intact. A caller receiving `73` from `tpl cfg set` would be told to choose
+  another destination, and there is none to choose.
+
+  *Rejected: `78` (`EX_CONFIG`).* It is the code for a configuration that does
+  not describe a usable connection, and this requirement guarantees the
+  configuration is exactly as it was. The message would send the caller to
+  correct a file that is correct, which is the wrong diagnosis
+  `FR-CONF-033`'s rationale refuses in the same shape.
+
+  *Rejected: leaving the code to the implementation.* It was left, and the
+  implementation supplied `74` in the `EXIT CODES` section of the five
+  commands' help before any requirement said so — a help text filling a gap in
+  this corpus, which is the state this amendment ends. The code it chose is the
+  code this requirement now states, so nothing a caller observes changes.
 
 - **FR-CFG-042**: The system SHALL NOT take a lock over `.tpl/.cfg`. Two
   processes rewriting it yield one whole file or the other, never a half file,

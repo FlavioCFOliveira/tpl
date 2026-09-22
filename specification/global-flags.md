@@ -1,7 +1,7 @@
 ---
 title: Global Flags
 status: approved
-last-reviewed: 2026-09-14
+last-reviewed: 2026-09-21
 related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md]
 ---
 
@@ -17,8 +17,8 @@ which a setting is resolved.
 ## Scope
 
 In scope: the global flag set, each flag's meaning and default, the complete
-short-flag set of the tool, the precedence rule, and the list of flags that are
-deliberately not global.
+short-flag set of the tool, the precedence rule, the commands that require a
+database entry, and the list of flags that are deliberately not global.
 
 Out of scope: the behaviour each flag triggers inside a particular command,
 which belongs to that command's module.
@@ -63,16 +63,109 @@ which belongs to that command's module.
 
 - **FR-GLOB-006**: IF no entry is selected — neither `-d/--database` on the
   command line nor `core.database` in the file — and the command requires one,
-  THEN the system SHALL exit `78` (`EX_CONFIG`) with a message naming the file.
+  per `FR-GLOB-025`, THEN the system SHALL exit `78` (`EX_CONFIG`) with a
+  message naming the file.
+
+  *Amended in the thirty-first edition.* The citation is the whole of the
+  change. This requirement has carried the qualifier *and the command requires
+  one* since the first edition and never said which commands those are;
+  `FR-GLOB-025` now names them, and both this requirement and `FR-GLOB-007`
+  read the same set from the same place.
 
 - **FR-GLOB-007**: IF `-d/--database` names an entry that is absent from
-  `.tpl/.cfg`, THEN the system SHALL exit `66` (`EX_NOINPUT`) with a
-  nearest-match suggestion over the entry names that exist.
+  `.tpl/.cfg`, and the command requires an entry, per `FR-GLOB-025`, THEN the
+  system SHALL exit `66` (`EX_NOINPUT`) with a nearest-match suggestion over
+  the entry names that exist. WHERE the command requires no entry, the system
+  SHALL NOT resolve the name and SHALL NOT refuse the invocation on its
+  account.
+
+  ```
+  tpl -d nope schema tables      66 — schema tables requires an entry
+  tpl -d nope cfg list           0  — cfg list requires none
+  ```
 
   *Rationale.* Nothing selected is a configuration problem; a named entry that
   does not exist is a named object that does not exist, like a missing table or
   template. Calling a missing entry `64` would contradict the help, since `-d`
   is genuinely optional whenever `core.database` is set.
+
+  *Amended in the thirty-first edition: the requirement carries the qualifier
+  its neighbour has always carried.* Read literally it made
+  `tpl -d nope cfg list` a `66`, although `tpl cfg list` never reaches a
+  database and `FR-GLOB-004` gives the flag nothing to select for it. Which
+  outcome is right was decided here, and it is `0`: this requirement decides
+  it, and `FR-ERR-006` agrees, because its step 5 is a condition a command that
+  resolves no entry does not raise. The reading was already in the repository
+  before it was in this corpus — the help of roughly thirty commands lists `66`
+  from `-d` on the `schema`, `render` and `cache` subcommands and not on the
+  `cfg` ones — and it is now what a requirement says rather than what an
+  implementer inferred.
+
+  *The case that decides it.* `tpl -d nope cfg database add nope --host h` is
+  the invocation that creates the entry `nope`. `FR-GLOB-002` accepts `-d` at
+  every node, so under the literal reading that invocation is refused with `66`
+  for the absence of the very entry it exists to add, and no order of flags
+  rescues it. A rule that makes a command unable to create what its own
+  argument names is not a rule about a missing entry.
+
+  *Rejected: leaving the requirement unqualified and refusing wherever `-d`
+  names something absent.* Its ground is that a caller who writes `-d nope` has
+  made a mistake and should be told of it. They have made one, and the price of
+  telling them here is that a flag with **no effect on the invocation** decides
+  whether the invocation runs: `tpl -d shop cfg list` and
+  `tpl -d nope cfg list` do exactly the same work, and only one of them would
+  be allowed to. `BR-GLOB-002` is the rule
+  that names the asymmetry — no global flag changes what a command reads from
+  the database, and a `cfg` command reads nothing from one.
+
+  *Rejected: refusing `-d` outright on a command that requires no entry, as an
+  unknown flag under `FR-CLI-019`.* `FR-GLOB-002` makes every global flag
+  acceptable at every node, and `FR-CLI-024` frees its position for the reason
+  that an agent appends a flag to a line it has already built. Refusing the
+  flag rather than the name would break both, and for a larger population: it
+  would reach `tpl -d shop cfg list` as well.
+
+- **FR-GLOB-025**: A command requires a database entry WHERE it must resolve
+  one in order to do its work. Those commands, and no others, SHALL be:
+
+  | Command | Why it requires one |
+  |---|---|
+  | The eight `tpl schema …` subcommands | Each reads the catalogue of the database the entry names |
+  | `tpl render`, invoked without `--context` | It reads the catalogue for the context it assembles, per `FR-RND-026` |
+  | `tpl cache load`, `tpl cache clean`, `tpl cache status` | Each acts on the store of the selected entry, per `FR-CACHE-023` and `FR-CACHE-025`; `tpl cache load` reads the server besides |
+
+  Every other command SHALL require none: every `tpl template` subcommand,
+  every `tpl cfg` subcommand, `tpl render` invoked with `--context`,
+  `tpl init`, `tpl help` and `tpl version`.
+
+  *`tpl cfg database test` requires no entry in the sense of this
+  requirement*, and it is the one command where that reads oddly. It names the
+  entry it tests as its own positional argument, per `FR-CFG-024`, so nothing
+  is resolved through `-d/--database` or through `core.database` and neither
+  `FR-GLOB-006` nor `FR-GLOB-007` reaches it. An absent name there is that
+  command's own `66`, over its own argument.
+
+  *`tpl render` is the one command on both lists*, and `--context` is what
+  moves it. `FR-RND-022` keeps a `--context` invocation away from a connection
+  and a cache, and `FR-RND-018` makes `--context` with an explicit
+  `-d/--database` a `64` at step 1 of `FR-ERR-006` — before any entry is
+  resolved — so the two lists cannot both claim one invocation.
+
+  *Rationale.* `FR-GLOB-006` has qualified its `78` with *the command requires
+  one* since the first edition, and nothing anywhere said which commands do.
+  An implementer needs the set to write either refusal, and deriving it from
+  `NFR-PERF-006` is close but wrong: that requirement's subject is catalogue
+  **data**, which `tpl cache clean` and `tpl cache status` need none of while
+  still acting on one entry's store.
+
+  *Rejected: deriving the set from `FR-CACHE-009`, the commands that read
+  through the cache.* It is the eight `schema` subcommands and `tpl render`
+  without `--context`, and it leaves out `tpl cache clean` and
+  `tpl cache status`, which resolve an entry and read no catalogue at all.
+
+  *Rejected: stating the set as a property of each command, in the module that
+  owns it.* It is one fact read by two requirements in this file, and spreading
+  it over five modules would leave neither of them with anything to cite.
 
 - **FR-GLOB-008**: The system SHALL distinguish an entry selected by
   `-d/--database` on the command line from one resolved through `core.database`,
@@ -141,7 +234,16 @@ which belongs to that command's module.
 
 - **FR-GLOB-015**: `-q/--quiet` SHALL lower the diagnostic level to errors
   only. IF `-v/--verbose` is given in the same invocation, THEN the system
-  SHALL exit `64` (`EX_USAGE`), per `FR-CLI-015`.
+  SHALL exit `64` (`EX_USAGE`), per `FR-CLI-015`. `-q/--quiet` given more than
+  once SHALL be accepted, with the effect of one occurrence, per
+  `FR-CLI-025`.
+
+  *Amended in the thirty-first edition.* The last sentence is a
+  cross-reference and not a second rule, added for the reason the twentieth
+  edition added the one before it: this file declares the flag, and an
+  implementer resolving `-q -q` reads here. `FR-CLI-025` owns the rule and
+  names the six valueless flags it reaches; `-v/--verbose` is excluded from it
+  by `FR-CLI-016`, which is the requirement immediately above.
 
   *Amended in the twentieth edition: the pair is named where both flags are
   declared.* `FR-CLI-015` has refused `-q` together with `-v` with `64` since
@@ -179,7 +281,38 @@ which belongs to that command's module.
 - **FR-GLOB-018**: The system SHALL NOT write any of the following to any
   diagnostic stream, at any verbosity level: the argument vector, the resolved
   DSN, the `password_command` or its stderr, the raw driver error, or the
-  contents of `.tpl/.cfg`.
+  contents of `.tpl/.cfg`. There is exactly one exception, and it is the
+  `password_command` **array as stored** in `.tpl/.cfg`, written into the
+  `cause` line of an error message WHERE a requirement of this specification
+  obliges that line to name it — `FR-CONF-033` for a child that exits
+  non-zero, `FR-CONF-031` for one that exceeds the output cap, and the `78`
+  row of `FR-ERR-034` for the deadline of `FR-CONF-028`.
+
+  *Amended in the thirty-first edition: the one exception is stated, because
+  three requirements in force contradicted this one.* `FR-CONF-033` requires
+  the `cause` to name the command as stored, `FR-CONF-031` requires it to name
+  the cap and the command, and `BR-ERR-003` barred the contents of
+  `.tpl/.cfg` from every error message alongside this rule. The two specific
+  requirements govern, and `FR-CONF-033` carries the grounds: the array is the
+  one part of an entry whose purpose is **not** to hold a credential, and
+  without it the `cause` names a category where an instance is available, which
+  `FR-ERR-034` bans, and the `hint` `FR-CONF-032` promises cannot be written.
+  `BR-ERR-003` and `FR-SEC-005` are amended with this one.
+
+  *What the exception does not reach.* Everything else on the list above, on
+  every path, without exception: the child's stdout, which is the password; the
+  child's stderr, which `FR-CONF-032` sends to the null device so that this
+  rule cannot be broken by construction; every other key of `.tpl/.cfg`,
+  including `password`; the resolved DSN; the raw driver error; and the
+  argument vector. Nor does it reach the **verbosity-driven** stream this
+  requirement's neighbours govern: no level of `FR-GLOB-014` or `FR-GLOB-017`
+  writes the array anywhere, at any verbosity, and the exception exists on the
+  error path of `FR-ERR-008` alone.
+
+  *The residual is stated in `FR-CONF-033`*, which carries it, what bounds it
+  and what would change it: `FR-CONF-017` keeps `${VAR}` out of the array, so
+  the environment cannot inject a secret into it, and a caller who writes one
+  there literally sees it printed.
 
 ### `-h`, `--help` and `-V`, `--version`
 
@@ -262,7 +395,8 @@ which belongs to that command's module.
 ## Dependencies
 
 - [cli-contract.md](cli-contract.md) — the parsing rules that apply to these
-  flags, including `FR-CLI-014` on repetition.
+  flags, including `FR-CLI-014` on a repeated flag that carries a value and
+  `FR-CLI-025` on a repeated flag that carries none.
 - [configuration-model.md](configuration-model.md) — the `[core]` timeout keys
   referenced by `FR-GLOB-012`.
 - [cache-commands.md](cache-commands.md) — the meaning of `--direct` and

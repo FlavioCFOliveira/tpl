@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-21
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -472,12 +472,15 @@ and enacted in `operations.md`, and it is not a requirement.
 Where a bump is enacted in a release, and what a release gate checks, are
 `operations.md`.
 
-**Note on the state of the repository.** Two of the four numbers have a site in
-the repository and two do not. The binary version is the manifest's `version`
-field, and `schema_version` is the one constant `output/` writes into the
-envelope; each carries the starting value above. `cache_format` waits on
-`cache/` and the changelog on `CHANGELOG.md`, so those two rows are prescription
-alone. Nothing built contradicts any of the four.
+**Note on the state of the repository, read at commit `243c4d6`.** All four
+numbers now have a site, and no row is prescription alone. The binary version is
+the manifest's `version` field; `schema_version` is the one constant `output/`
+writes into the envelope; `cache_format` is `const CACHE_FORMAT: u32 = 1` in
+`src/cache/meta.rs`, which reads `SCHEMA_VERSION` from `output/` rather than
+writing a second copy of it; and `CHANGELOG.md` was created at commit `f2d19ac`
+on 2026-09-21, in the Keep a Changelog format this table names. Each of the
+three integers carries the starting value above, and nothing built contradicts
+any of the four.
 
 ## Migration
 

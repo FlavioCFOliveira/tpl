@@ -29,6 +29,7 @@ use serde::Serialize;
 
 use super::keys::EntryKey;
 use crate::error::Position;
+use crate::project::secret::Redacted;
 
 /// The five TLS modes of `FR-CONF-013`, defaulting to `verify-identity`.
 ///
@@ -275,7 +276,15 @@ impl<'a> Written<'a> {
 /// default of "none" and `FR-CFG-016` requires only that **something** was
 /// supplied. What is not optional is the coherence of the set, which
 /// `FR-CONF-007` fixes and the reader of the file applies.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// Its [`Debug`](fmt::Debug) is hand-written, because two of the ten keys carry
+/// a credential as the file wrote it: `password` is one outright, and `dsn`
+/// carries one in its user info. `FR-ERR-013` and `BR-ERR-003` bar both from
+/// every message, and [`redact`](super::redact) applies only on the printing
+/// path of `tpl cfg list` and `tpl cfg database show` — it does nothing for a
+/// `{:?}`, which is how a derived implementation put the password of a live
+/// invocation into the first structure that formatted this one.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub(crate) struct Entry {
     /// `dsn`, as written, with every `${VAR}` still literal.
     pub(crate) dsn: Option<Located<String>>,
@@ -297,6 +306,30 @@ pub(crate) struct Entry {
     pub(crate) ca_file: Option<PathBuf>,
     /// `ca_path` (`FR-CONF-014`).
     pub(crate) ca_path: Option<PathBuf>,
+}
+
+impl fmt::Debug for Entry {
+    /// Writes every key but the two that carry a credential, which are written
+    /// as [`Redacted`] where the entry declares them and as `None` where it
+    /// does not.
+    ///
+    /// Whether a key is **set** is not a secret and is what a reader of this
+    /// output is looking for; what it is set to is, so the two are separated
+    /// rather than the pair being dropped.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Entry")
+            .field("dsn", &self.dsn.as_ref().map(|_| Redacted))
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("user", &self.user)
+            .field("password", &self.password.as_ref().map(|_| Redacted))
+            .field("password_command", &self.password_command)
+            .field("database", &self.database)
+            .field("tls", &self.tls)
+            .field("ca_file", &self.ca_file)
+            .field("ca_path", &self.ca_path)
+            .finish()
+    }
 }
 
 impl Entry {
@@ -478,6 +511,48 @@ mod tests {
 
     fn position() -> Position {
         Position { line: 7, column: 1 }
+    }
+
+    #[test]
+    fn fr_err_013_the_debug_of_an_entry_carries_neither_its_password_nor_its_dsn() {
+        // Two of the ten keys carry a credential as the file wrote it, and
+        // `redact` applies on the printing path of `tpl cfg list` and
+        // `tpl cfg database show` alone — it does nothing for a `{:?}`, which is
+        // how a derived Debug put a live invocation's password into the first
+        // structure that formatted this one.
+        //
+        // This fails the moment either value becomes printable again.
+        let entry = Entry {
+            dsn: Some(Located {
+                value: "mysql://alice:hunter2@db.example.com:3306/shop".to_owned(),
+                position: position(),
+            }),
+            host: Some("db.example.com".to_owned()),
+            user: Some("alice".to_owned()),
+            password: Some("hunter2".to_owned()),
+            ..Entry::default()
+        };
+
+        for rendered in [format!("{entry:?}"), format!("{entry:#?}")] {
+            assert!(!rendered.contains("hunter2"), "{rendered}");
+            assert!(!rendered.contains("mysql://"), "{rendered}");
+            // Whether a key is set is not a secret, and is what a reader of
+            // this output is looking for.
+            assert!(rendered.contains("alice"), "{rendered}");
+            assert!(rendered.contains("db.example.com"), "{rendered}");
+            assert!(rendered.contains("***"), "{rendered}");
+        }
+
+        // An entry that declares neither says so, rather than saying `***` of
+        // a value it does not hold.
+        let bare = Entry {
+            host: Some("db".to_owned()),
+            ..Entry::default()
+        };
+        let rendered = format!("{bare:?}");
+
+        assert!(rendered.contains("password: None"), "{rendered}");
+        assert!(rendered.contains("dsn: None"), "{rendered}");
     }
 
     #[test]

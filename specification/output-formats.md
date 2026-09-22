@@ -1,7 +1,7 @@
 ---
 title: Output Formats
 status: approved
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-21
 related: [cli-contract.md, schema-commands.md, errors-and-exit-codes.md, help-and-version.md]
 ---
 
@@ -103,6 +103,88 @@ module that owns the command producing it.
   | Renaming a field | Yes |
   | Changing the type of a field | Yes |
 
+  What a **Yes** in the second column obliges is `FR-OUT-038`. This
+  requirement classifies and does not act; that requirement says what the
+  classification costs.
+
+  *Amended in the thirty-first edition: the table says where its own verdict is
+  acted on.* The sentence above is the whole of the change, and no cell moves.
+  The table has classified changes as breaking since the first edition and no
+  requirement anywhere said what being classified breaking obliges, so the
+  column was a verdict with no sentence. `FR-OUT-038` is that sentence, and the
+  pointer is here because this is the table a reader is looking at when the
+  question arises.
+
+- **FR-OUT-038**: `schema_version` SHALL carry one value across every document
+  of the envelope of `FR-OUT-024`. A change `FR-OUT-014` classifies as breaking
+  SHALL increase it by exactly one; a change that requirement classifies as
+  non-breaking SHALL leave it unchanged; and it SHALL never decrease.
+
+  The obligation SHALL bind from the **first release** of the binary. Before
+  that release `schema_version` SHALL be `1`, whatever breaking changes the
+  document shapes undergo, and a breaking change made before it SHALL NOT move
+  the value.
+
+  *Rationale.* `FR-OUT-011` says the key versions the document contract and
+  `FR-OUT-025` says it is first, and between them nothing said what moves it.
+  A version exists for one reader: a consumer that has read a document under
+  one value and needs to know whether it may read the next the same way. The
+  two clauses above are that reader's whole interest — the number moves exactly
+  when the old way of reading stops working, and it does not move when it does
+  not.
+
+  *Why the release, and not the edition that makes the change.* Before the
+  first release no document this project emits has reached such a consumer, so
+  a value moved now would record this project's own edits rather than anything
+  anybody read. A first release shipping `schema_version: 4` because three
+  shapes were corrected while the arms were being built tells a consumer
+  nothing it can act on, and it costs this corpus a rewrite of every worked
+  example each time. `FR-SRV-019` already makes a release a gate this corpus
+  states obligations against, so the term is one this specification uses rather
+  than one it introduces here.
+
+  *Observed, 2026-09-21.* `Column::column_type` was flattened from an object to
+  a string in this sprint, which the fifth row of `FR-OUT-014` classifies as
+  breaking, and `schema_version` stayed at `1`. Under this requirement that is
+  correct and not an oversight: `tpl` has never been released and no version
+  has ever been tagged, so the contract had no consumer to protect. The six
+  files carrying `schema_version: 1` in a worked example —
+  [output-formats.md](output-formats.md),
+  [schema-commands.md](schema-commands.md),
+  [cfg-commands.md](cfg-commands.md),
+  [cache-commands.md](cache-commands.md),
+  [help-and-version.md](help-and-version.md) and
+  [template-commands.md](template-commands.md) — are therefore untouched, and
+  the first breaking change after the first release moves all six together.
+
+  *Accepted cost.* One value governs every document, so a breaking change to
+  one command's `data` moves `schema_version` for the other sixteen, and a
+  consumer of `tpl cfg list` re-checks a document that did not change. The
+  alternative is a second version key, per document, and `FR-OUT-028` forbids
+  the envelope a fourth key. The cost falls on the consumer that reads more
+  than one document and it costs it one comparison; the alternative costs every
+  consumer a key it has to find before it can read anything.
+
+  *Rejected: obliging the increase from the first edition, with no release
+  qualifier.* It obliges `schema_version` to move now, and again at every
+  further pre-release change, and it makes the number a count of this project's
+  own history. It also states an obligation this corpus could not have met: the
+  document shapes were fixed across the third, fifth, seventh and twenty-first
+  editions, and none of them moved the value.
+
+  *Rejected: leaving `FR-OUT-014` with no obligation attached, on the ground
+  that `FR-OUT-011` implies one.* It does not. A key that "versions the
+  document contract" says what the key is for and not when it moves, and an
+  implementer deriving the emitter from this corpus found no answer — which is
+  how a breaking change shipped this sprint against a value that did not move,
+  correctly as it turns out, and for no reason this corpus had written down.
+
+  *Rejected: tying `schema_version` to the binary version.* `FR-OUT-011` makes
+  the two independent in terms, and for the reason that survives here: a
+  breaking change to the binary's command line is not a breaking change to a
+  document, and a consumer that parses documents would be made to re-check on
+  every release that touched a flag.
+
 - **FR-OUT-015**: WHEN the outcome of an invocation is an error, the system
   SHALL ignore `--format`, SHALL write the four-line text diagnostic of
   `FR-ERR-008` to stderr, and SHALL leave stdout empty. No error is emitted as
@@ -144,7 +226,12 @@ owns the shape of its `data`.
   before.
 
 - **FR-OUT-025**: `schema_version` SHALL version the document contract, per
-  `FR-OUT-011`, and SHALL be the first key.
+  `FR-OUT-011`, and SHALL be the first key. What moves it is `FR-OUT-038`.
+
+  *Amended in the thirty-first edition.* The last sentence is a
+  cross-reference and not a second rule. This requirement fixes the key's
+  position and its subject and never said when its value changes; a reader
+  resolving that question arrived here from `FR-OUT-011` and was sent back.
 
 - **FR-OUT-026**: `source` SHALL state where the bytes of `data` came from, and
   SHALL take one of exactly the following values:
@@ -343,8 +430,9 @@ owns the shape of its `data`.
 - [cli-contract.md](cli-contract.md) — determinism, and the stream separation
   rule this file details.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `FR-ERR-033`, which
-  keeps every error out of JSON, and the `EPIPE` rule that depends on whether a
-  JSON document is mid-flight.
+  keeps every error out of JSON, and the `EPIPE` rule that `FR-ERR-025` and
+  `FR-ERR-026` divide on whether a JSON document is **in flight**, which
+  [glossary.md](glossary.md#in-flight) defines.
 - [help-and-version.md](help-and-version.md) — the JSON command tree, which
   obeys every rule here.
 

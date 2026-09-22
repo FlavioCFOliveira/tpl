@@ -251,8 +251,8 @@ const fn sysexits_name(code: u8) -> Option<&'static str> {
 mod tests {
     use super::{Label, SOFTWARE, exit_content, render, render_panic, sysexits_name};
     use crate::error::{
-        CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
-        NetworkPhase, Position, ReadOnlyFault, trigger_internal_invariant,
+        CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
+        NetworkPhase, PasswordCommandFault, Position, ReadOnlyFault, trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -294,6 +294,106 @@ mod tests {
     }
 
     // -------------------------------------------------------- the shape ---
+
+    #[test]
+    fn fr_help_028_both_lines_name_the_node_by_one_rule_at_the_root_and_beneath_it() {
+        // FR-HELP-028 requires the node the segment was looked for under to be
+        // named, and FR-ERR-010 reads an overlap between the two lines as the
+        // reader's signal that both are about the same thing. The `error` line
+        // spelled the root itself and produced `under ''` where the `cause`
+        // line said `'tpl'`; both now read `cause::invoked`, so the two cannot
+        // name one node two ways again.
+        for (node, named) in [("", "'tpl'"), ("cfg database", "'tpl cfg database'")] {
+            let condition = Error::UnknownCommandPathSegment {
+                segment: "nosuchcommand".to_owned(),
+                node: node.to_owned(),
+                nearest: Vec::new(),
+            };
+            let rendered = render(&condition);
+
+            assert!(
+                line(&rendered, Label::Error).contains(named),
+                "the error line of {node:?} does not name the node: {rendered}"
+            );
+            assert!(
+                line(&rendered, Label::Cause).contains(named),
+                "the cause line of {node:?} does not name the node: {rendered}"
+            );
+            assert!(
+                !rendered.contains("under ''"),
+                "the root reached a line as the empty name: {rendered}"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_conf_042_the_two_conditions_that_yield_no_exit_status_are_distinguishable() {
+        // FR-CONF-042 obliges the `cause` to say which of the two occurred, and
+        // `could not be started` is false of a child that had started. The two
+        // lines name the command as stored and what the operating system
+        // returned, and neither claims the other's condition.
+        let stored = vec!["security".to_owned(), "find-generic-password".to_owned()];
+
+        let not_started = render(&Error::PasswordCommandNotExecutable {
+            command: stored.clone(),
+            fault: PasswordCommandFault::NotStarted,
+            returned: io::Error::from(io::ErrorKind::NotFound),
+        });
+        let unreadable = render(&Error::PasswordCommandNotExecutable {
+            command: stored.clone(),
+            fault: PasswordCommandFault::StatusUnreadable,
+            returned: io::Error::from(io::ErrorKind::NotFound),
+        });
+
+        let first = line(&not_started, Label::Cause);
+        let second = line(&unreadable, Label::Cause);
+
+        assert_ne!(first, second);
+        assert!(first.contains("could not be started"), "{first}");
+        assert!(!second.contains("could not be started"), "{second}");
+        assert!(
+            second.contains("could not read the status it ended with"),
+            "{second}"
+        );
+
+        for stated in [&first, &second] {
+            assert!(stated.contains("security"), "{stated}");
+            assert!(stated.contains("find-generic-password"), "{stated}");
+        }
+    }
+
+    #[test]
+    fn fr_conf_043_the_signal_cause_names_the_number_the_operating_system_reported() {
+        // FR-CONF-043 obliges the `cause` to name the signal number: a line
+        // saying only that the child was signalled reads identically for a
+        // supervisor, a memory limit and an interactive interrupt, which
+        // FR-ERR-034 bans.
+        let stored = vec!["op".to_owned(), "read".to_owned()];
+
+        let signalled = line(
+            &render(&Error::PasswordCommandFailed {
+                command: stored.clone(),
+                end: ChildEnd::Signalled(9),
+            }),
+            Label::Cause,
+        );
+
+        assert!(signalled.contains("signal 9"), "{signalled}");
+        assert!(signalled.contains("tpl did not send"), "{signalled}");
+
+        // The exit is a different condition with a different obligation, and
+        // the two do not read alike.
+        let exited = line(
+            &render(&Error::PasswordCommandFailed {
+                command: stored,
+                end: ChildEnd::Exited(1),
+            }),
+            Label::Cause,
+        );
+
+        assert!(exited.contains("status 1"), "{exited}");
+        assert_ne!(signalled, exited);
+    }
 
     #[test]
     fn fr_err_008_the_four_labels_appear_in_the_order_the_requirement_fixes() {
@@ -1136,11 +1236,25 @@ mod tests {
             },
             Error::PasswordCommandNotExecutable {
                 command: vec![hostile()],
+                fault: PasswordCommandFault::NotStarted,
+                returned: io::Error::from(io::ErrorKind::NotFound),
+            },
+            Error::PasswordCommandNotExecutable {
+                command: vec![hostile()],
+                fault: PasswordCommandFault::StatusUnreadable,
                 returned: io::Error::from(io::ErrorKind::NotFound),
             },
             Error::PasswordCommandFailed {
                 command: vec![hostile()],
-                status: None,
+                end: ChildEnd::Signalled(9),
+            },
+            Error::PasswordCommandFailed {
+                command: vec![hostile()],
+                end: ChildEnd::Unreported,
+            },
+            Error::TrustDirectoryEmpty {
+                entry: hostile(),
+                path: hostile_path(),
             },
             Error::ReadOnlySessionNotEnforced {
                 entry: hostile(),
@@ -1169,7 +1283,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 57, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 60, "every variant of Error is sampled");
     }
 
     #[test]

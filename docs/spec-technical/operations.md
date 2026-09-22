@@ -464,11 +464,12 @@ plan.
 - **Regenerating the material is a rebuild and a fresh container**, since the
   image carries it; and it is not byte-reproducible, only meaning-reproducible.
 
-**One file is owed and is not this document's.** `seed-bench.sql`, which
-`WL-001` needs, does not exist; `BR-PERF-007` counts what cannot be realised
-without it, and
-[`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001) settles when it is
-written. `DIV-036` is the correction owed to the root documents for it.
+**The last file the fixture owed was written on 2026-09-21.** `seed-bench.sql`
+carries `WL-001` and `WL-003`, loaded on demand by `seed-bench.sh`;
+[`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001) settled when it was
+written and records the discharge. `DIV-036` is the entry of
+`specification/upstream-divergences.md` that tracks what naming it still owes
+the root documents, and what that is remains that register's to state.
 
 ## No continuous integration is prescribed
 

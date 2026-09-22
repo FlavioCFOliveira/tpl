@@ -18,13 +18,14 @@ specification now owns, contradicts it, or states as present something the
 repository does not contain, the divergence is recorded in
 [upstream-divergences.md](upstream-divergences.md) and the passage must be
 corrected in those files. That register is re-read against both files whenever
-either of them changes — for entries the files have discharged and for
-divergences it does not yet hold — and every entry records whether the
-correction is still owed and, where it is not, the commit that discharged it.
+either of them changes, and whenever this corpus amends a requirement one of
+them paraphrases — for entries the files have discharged and for divergences it
+does not yet hold — and every entry records whether the correction is still
+owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty editions. All are in force;
+The specification has been written in thirty-two editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1311,14 +1312,27 @@ answer being trusted, on the rule that edition acted on — a claim that a class
 is exhausted is worth only the sweep behind it, and the sixteenth edition's own
 sweep is what found the entries the fifteenth had missed. Every path, file and
 artefact the document names was tested against the working tree at `87dd6e3`,
-still the last commit to touch either root document, and all exist but those
-already recorded under `DIV-050`, `DIV-051` and `DIV-052`. Two
+which was then the last commit to touch either root document, and all existed
+but those already recorded under `DIV-050`, `DIV-051` and `DIV-052`. Two
 further passages were read on their own and are not of the kind: the workflow
-step and the language rule that name a `CHANGELOG` the repository has not got,
-which are directions rather than claims and which the technical specification
-already records as prescribed and not yet observable; and the routing sentence
-of *Desempenho e Eficiência*, which names `BENCHMARKS.md` and describes it as
-that file describes itself. **So the seam is shut**: four passages registered
+step and the language rule that name a `CHANGELOG`, which are directions
+rather than claims; and the routing sentence of *Desempenho e Eficiência*,
+which names `BENCHMARKS.md` and describes it as that file describes itself.
+
+*Corrected in the thirty-first edition.* Two statements here were true when
+this edition was written and are not now, and both are about the repository
+rather than about the reading. `87dd6e3` is no longer the last commit to touch
+either root document — `db80114` has since edited both — so the claim that the
+class is exhausted is of the file at `87dd6e3` and of no later state of it,
+which is what the fifth validation rule below already says of it and what the
+tense now says too. And the `CHANGELOG` the workflow step names exists:
+`f2d19ac` created `CHANGELOG.md` on 2026-09-21, and `Cargo.toml` has been in
+the repository since the fifth sprint. The reading is untouched by either — a
+direction is not a claim whether or not the path it names exists — and the
+clause about what the repository has not got is removed because the reading
+never needed it. The same two corrections are made in
+[upstream-divergences.md](upstream-divergences.md), where the passage this one
+summarises lives. **So the seam is shut**: four passages registered
 in `CLAUDE.md`, one in the root `README.md` under `DIV-046`, and the candidate
 read and dismissed with its reason.
 
@@ -2564,6 +2578,487 @@ asking from the performance side, rather than the correctness side, what an
 invocation costs when it cannot succeed — and it was answerable only because the
 write path had been certified the same day.
 
+### Thirty-first edition — the backlog read back, and fourteen statements nobody had made
+
+Sprint 17 was opened to clear a backlog thirty-one tasks deep, set aside while
+the three arms were built, and fourteen of those tasks were questions for this
+corpus. They are not one finding. They arrived from the first derivation of the
+diagnostic renderer, from the parser, from the help renderer, from a
+measurement taken across a pipe, from a run of `tpl init`, and from reading
+this corpus back against a repository that has moved under it. What they share
+is a shape: in each of the fourteen a requirement in force was silent, or
+stated wider than the ground it gives for itself, or true when it was written
+and not now. They are answered here in one pass over the corpus rather than in
+fourteen visits, because nine of the fourteen land in three files —
+[errors-and-exit-codes.md](errors-and-exit-codes.md),
+[global-flags.md](global-flags.md) and this one.
+
+**Six identifiers are assigned, none is retired and none is renumbered** —
+`FR-CLI-025`, `FR-GLOB-025`, `FR-ERR-040`, `FR-HELP-030`, `FR-OUT-038` and
+`FR-RND-035`. No code is added to the table of `FR-ERR-001` or withdrawn from
+it; one cell of that table is widened, and one row of `FR-ERR-034` gains a
+fourth population. The index of [open-questions.md](open-questions.md) stays
+empty.
+
+**Two of the fourteen change what `tpl` does.** A valueless flag written twice
+is accepted where the parser refuses it today, and every flag and every
+positional argument must now say what it does in its help. Everything else
+states what was already in force, qualifies a rule that reached further than
+its ground, or corrects a sentence that had stopped being true.
+
+- **The `cause` of a failed `password_command` names the command, and two
+  general prohibitions yield to it** —
+  [configuration-model.md](configuration-model.md),
+  [global-flags.md](global-flags.md), [security.md](security.md) and
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-CONF-033` obliged
+  the `cause` to name the command as stored while `FR-GLOB-018` barred the
+  `password_command` from every diagnostic stream and `BR-ERR-003` barred the
+  contents of `.tpl/.cfg` from every error message. `FR-CONF-033` governs: it
+  is the specific rule, the array is the one part of an entry whose purpose is
+  **not** to hold a credential, and without it the `cause` names a category
+  where an instance is available. `FR-GLOB-018`, `FR-SEC-005` and `BR-ERR-003`
+  now state the one exception, over the array wherever a requirement obliges a
+  `cause` to name it — which reaches `FR-CONF-031` and `FR-CONF-028` as well.
+  The residual is **accepted, with its ground**: `FR-CONF-017` keeps `${VAR}`
+  out of the array, so the environment cannot inject a secret, and a caller who
+  writes one there literally sees it printed. The implementation's reading was
+  correct and nothing in `src/diagnostics/cause.rs` is owed a change.
+- **A valueless flag given twice is accepted, with the effect of one
+  occurrence** — [cli-contract.md](cli-contract.md). `FR-CLI-025`, placed
+  beside `FR-CLI-014` and not inside it, because that requirement's ground is
+  two values disagreeing and a valueless flag has none. Six flags are reached —
+  `-q/--quiet`, `--pretty`, `--direct`, `--no-cache`, `-h/--help` and
+  `-V/--version` — and `-v/--verbose` is excluded, because `FR-CLI-016` counts
+  its repetitions. Refusing with `64`, which is what the parser produces today
+  and produces by accident, is rejected in the requirement's own text: the
+  meaning of `tpl -q -q` is not in doubt to anybody, and `tpl -h -h` refuses
+  the very path a caller uses to recover from a refusal. `FR-GLOB-015` carries
+  the cross-reference where the flag is declared.
+- **A failed rewrite of `.tpl/.cfg` is `74`** —
+  [cfg-commands.md](cfg-commands.md) and
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-CFG-041` named the
+  failure and no code; it now names `74`, and the row that carries it is the
+  `74` row of `FR-ERR-001`, whose cell is widened from *reading `.tpl`* to the
+  class it characterises. `73` is rejected because `FR-ERR-003` reserves it for
+  `tpl init` and the destination here exists; `78` because the file is intact
+  and the message would send the caller to correct what is correct. The `74`
+  the sixth sprint wrote into the help of the five `cfg` writers is
+  **confirmed**, and nothing in that help changes.
+- **`FR-GLOB-007` is qualified as `FR-GLOB-006` is qualified** —
+  [global-flags.md](global-flags.md). `tpl -d nope cfg list` is `0`, and
+  `FR-GLOB-007` as amended decides it. `FR-GLOB-025` names the commands that
+  require an entry — the eight `schema` subcommands, `tpl render` without
+  `--context`, and the three `cache` subcommands — so both requirements read
+  one set from one place. The case that settles it is
+  `tpl -d nope cfg database add nope --host h`, which the literal reading
+  refuses for the absence of the entry it exists to create. The reading written
+  into roughly thirty commands' help is **confirmed**, and `FR-ERR-006` now
+  says that a step whose condition an invocation does not raise is not a step
+  it skips — which is the contrast that let the literal reading stand.
+- **A flag and an argument say what they do** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-013` enumerates six
+  facts about a **value**, and a renderer satisfying it emits
+  `Type: string. No default. Optional. Not repeatable.` for `-d/--database`
+  without saying that the flag selects a `[database.<name>]` entry.
+  `FR-HELP-030` adds one sentence of purpose, held in the typed table of
+  `FR-HELP-022` — which is where it must live, because the declarations' doc
+  comments name requirement identifiers that `FR-HELP-014` bars from help. It
+  reaches the seven global flags `FR-GLOB-003` lists once at the root, and it
+  is already satisfied by the one-line summaries `FR-HELP-008` puts beside a
+  node's children. The cost is one line per flag at the one place that flag is
+  declared, which is not the multiplication `BR-HELP-002` and `FR-HELP-007`
+  refuse.
+- **A separate-token flag value in a `hint` is governed, by a set of its own** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-022`'s closing
+  clause reaches it and `FR-ERR-022`'s set cannot hold it: every value reaching
+  `FR-CLI-018` begins with `-`, so `[A-Za-z0-9_]{1,64}` refuses all of them and
+  the corrected form could never show a value. `FR-ERR-040` admits
+  `[A-Za-z0-9_-]{1,64}` over the **whole** value, which is the half the
+  admission test could not enforce — it bounds each `-`-separated segment and
+  so bounds nothing, as `tpl -d -a-a-a-a-a-a-a-a version` shows. Widening
+  `FR-ERR-022`'s own set is rejected on the twentieth edition's ground, and
+  `FR-CLI-018` is satisfiable either way and says so.
+- **`tpl init` looks upward because a requirement obliges it to** —
+  [project-and-discovery.md](project-and-discovery.md) and
+  [performance-requirements.md](performance-requirements.md). `FR-PROJ-016`
+  requires the shadowing warning, `FR-PROJ-025` and `NFR-PERF-005` forbade the
+  discovery that produces it, and `NFR-PERF-007` wrote a differential
+  arrangement asserting the warning is not emitted. `FR-PROJ-025` is the
+  requirement that yields, and it now states what its discovery clause forbids:
+  no project above the invocation decides its outcome. `NFR-PERF-005` states
+  the file-open observable per command, so that the one command that walks its
+  ancestors is not described as one that does not; and `NFR-PERF-007`'s
+  arrangement now asserts the three things the differential run actually reads
+  — the exit code, stdout, and the artefacts on disk — where it asserted the
+  absence of a warning on a stream that instrument does not observe. The code
+  at `src/project/init.rs`, observed on 2026-09-18, conforms.
+- **Two statements the twenty-third edition made false** —
+  [upstream-divergences.md](upstream-divergences.md) and
+  [context-document.md](context-document.md). `DIV-034` claimed that
+  `FR-CAT-039` through `FR-CAT-051` fix the field list of every object kind; it
+  now says *every object kind an entry of
+  [open-questions.md](open-questions.md) had asked for* and names `FR-CAT-053`
+  for the table, which is outside the range. `FR-CTX-035` sent a reader to
+  "`catalogue-coverage.md` and the open questions it carries", an index that has
+  been empty since the seventh edition; it names the file alone.
+- **A sixth validation rule, for a negative observation** — under
+  *[Maintenance debt](#maintenance-debt)*. A record that something is absent
+  must rest on a form that would fail on a wrong question. It is the rule none
+  of the five would have found the defect of `FR-SRV-040` with, and it is of
+  the first and third rules' family rather than the fourth and fifth's, which
+  is why the nineteenth and twentieth editions' ground for declining a sixth
+  does not reach it.
+- **`FR-SCH-009`'s note counted three places and named two** —
+  [schema-commands.md](schema-commands.md). The count is dropped rather than a
+  third place found, and the sentence now reads as
+  [catalogue-coverage.md](catalogue-coverage.md) states the same fact below the
+  table of `FR-CAT-054`.
+- **The *Provenance* section counted three sources above a list of five** —
+  below. It meant three when it was written, and the fourth and sixth editions
+  each added a source without moving the count. The opening says **four**, the
+  fifth item is named as the rule that closes the list, and **no item is
+  renumbered**, because seven passages of this corpus cite *the fourth
+  provenance* and every one means item 4.
+- **Four facts the render path left unsettled** —
+  [output-formats.md](output-formats.md),
+  [errors-and-exit-codes.md](errors-and-exit-codes.md),
+  [render-command.md](render-command.md) and
+  [upstream-divergences.md](upstream-divergences.md). `FR-OUT-038` says what
+  `FR-OUT-014`'s *Breaking* column obliges — `schema_version` moves by one, and
+  the obligation binds from the **first release**, so the flattening of
+  `Column::column_type` this sprint correctly left it at `1` and the six files
+  carrying `schema_version: 1` in a worked example are untouched. The `66` row
+  of `FR-ERR-034` gains the `--context` document as a fourth population, which
+  `FR-RND-032` had always produced. `FR-RND-035` fixes `74` for a `--context`
+  file or stream that cannot be read and `FR-RND-020` fixes `65` for bytes that
+  are not UTF-8, on RFC 8259's ground; both confirm what the code chose. And
+  two statements about the repository are corrected: `Cargo.toml` and
+  `CHANGELOG.md` both exist, verified in the working tree on 2026-09-21.
+- **The performance family, and work on a doomed invocation** —
+  [performance-requirements.md](performance-requirements.md) and
+  [cache-commands.md](cache-commands.md). `NFR-PERF-006`'s coverage clause now
+  names the invocation the thirtieth edition created, a `tpl render` whose
+  template does not resolve; the thirtieth edition checked that clause and left
+  it, and an enumeration short by exactly the case the edition before it
+  decided from is the enumeration worth lengthening. `NFR-PERF-014` gains **no**
+  live-database row: what one would measure is the catalogue read, which
+  `NFR-PERF-001` governs as a form and the `tpl schema dump` row as a figure.
+  `FR-CACHE-007` keeps its ordering and records why — what the store holds is a
+  correct read of the server, the author's next act is to fix the template and
+  render again, and an exemption would spend a correct read to make them pay
+  for it twice.
+- **`FR-ERR-026` is reached only when bytes are already in flight** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). The thirtieth edition's
+  note gave the condition as *where its document does not fit the pipe buffer*,
+  which is necessary and not sufficient. Measured with the fixture up, eight
+  runs of eight of `tpl schema dump --direct --no-cache | tpl render nosuch
+  --context -` gave `producer=0 consumer=66 pair=66`: the consumer refuses in
+  about 3 ms, at the step the thirtieth edition moved, before the producer has
+  written a byte. The note is corrected, and `FR-ERR-025` and `FR-ERR-026`
+  needed the same qualification rather than only the note — a document is **in
+  flight** from its first byte on stdout to its last, and that line divides the
+  two codes.
+
+**What found them.** Not one of the six validation rules, and not one reading.
+Five came from deriving an implementation from this corpus and finding it
+silent — the `cause` of a failed child, the code of a failed `.cfg` write, the
+qualifier on `-d`, the purpose of a flag, and what a breaking change obliges.
+Three came from running the joined tool and looking at what it did: the
+parser's refusal of `-q -q`, the walk `tpl init` makes, and the unbounded value
+in a `hint`. One came from **measuring** rather than reading, across a pipe,
+and it corrected a condition the edition immediately before had stated
+confidently and loosely. The remaining five came from reading this corpus back
+against something that had moved beneath it — a range of identifiers and an
+index that emptied, two counts nobody recomputed, a finding read back for what
+would have caught it, and a performance family read back against a step the
+thirtieth edition moved. That last group is the one the fifth validation rule
+exists for, and it is the group that keeps arriving.
+
+### Thirty-second edition — a register paid, two conditions nobody owned, and a key that skipped its own convention
+
+Sprint 17 was opened to clear a backlog thirty-one tasks deep, and the
+thirty-first edition answered fourteen of them in one pass. Four remained,
+three of them findings that edition recorded and deliberately did not act on.
+They are answered here in one pass for the reason that edition gave: two of the
+four land in the same file, and the two corpus-wide rules the others set — one
+over where a defined term lives and one over when a register decays — are read
+together or not at all.
+
+**Three requirement identifiers are assigned, none is retired and none is
+renumbered** — `FR-CONF-042`, `FR-CONF-043` and `FR-CONF-044`, all in
+[configuration-model.md](configuration-model.md). Two entries are raised in
+[upstream-divergences.md](upstream-divergences.md), `DIV-053` and `DIV-054`,
+whose sequence is its own. No code is added to the table of `FR-ERR-001` or
+withdrawn from it, and no cell of it moves. The index of
+[open-questions.md](open-questions.md) stays empty.
+
+**Two of the four change what `tpl` does**, and both are implemented by the
+Rust delegation that follows this edition. `ca_path` follows symbolic links,
+and a `ca_path` that supplies nothing is refused rather than ignored. And two
+`cause` lines change: the one for a `password_command` ended by a signal now
+names the signal, and the one for a child whose status could not be read stops
+saying the child could not be started. The other two put a definition where
+this corpus says definitions go, and bring a register back into agreement with
+two files that had moved under it.
+
+- **Two `password_command` conditions the corpus did not reach** —
+  [configuration-model.md](configuration-model.md). The diagnostic renderer at
+  `src/diagnostics/cause.rs` produces a message for a child that could not be
+  started and for a child ended by a signal, and neither fell inside
+  `FR-CONF-028`, `FR-CONF-031` or `FR-CONF-033`, which `FR-ERR-002` says must
+  not happen. `FR-CONF-042` governs the first and `FR-CONF-043` the second,
+  both at `78`, which is what the implementation already chose and what puts
+  them with the three conditions beside them: the configured way of obtaining a
+  password failed to produce one, which is a fault in `.tpl/.cfg` and not in
+  the network or the credentials. `77` is rejected in both — it would tell the
+  caller a server refused an authentication that was never attempted — and `70`
+  in the first, which would name a defect in `tpl` for a program the caller
+  chose. Two things follow that the code does not yet do. `FR-CONF-043` obliges
+  the `cause` to name **the signal**, because `FR-ERR-034` bans a `cause` that
+  names a category where an instance is available and every target of
+  `NFR-PERF-018` is a Unix; and it excludes the signals `tpl` itself sends,
+  because `FR-CONF-028` and `FR-CONF-031` terminate the child and own their own
+  outcomes, so without the clause the requirement would swallow two conditions
+  in force. The exception the thirty-first edition wrote over the
+  `password_command` array reaches both without amending `FR-GLOB-018`,
+  `FR-SEC-005` or `BR-ERR-003`, because it was stated over the array wherever a
+  requirement obliges a `cause` to name it.
+- **`ca_path` follows symbolic links, and a `ca_path` that yields nothing is
+  refused** — [configuration-model.md](configuration-model.md). `FR-CONF-014`
+  had one clause and answered neither question. A `CApath` directory in
+  OpenSSL's and MariaDB's sense is conventionally a set of hash-named symbolic
+  links, and `trust` at `src/mariadb/connect.rs` selects entries on
+  `DirEntry::file_type`, which does not traverse one — so the arrangement the
+  key exists to serve yields an empty bundle, silently. The weighing is written
+  into the requirement: this corpus states links twice and in opposite
+  directions, refusing them inside `.tpl/templates/` under `FR-TMPL-024`
+  because that directory is versioned, shared and printed, and following them
+  at `.tpl` under `FR-PROJ-009` because following is what makes the ownership
+  and mode checks land on the real file. `ca_path` has the second shape: the
+  directory is named by a `.tpl/.cfg` that is the caller's alone at mode
+  `0600`, what is read is certificates, and no byte of the bundle is ever
+  printed. `FR-CONF-044` answers the second question at `78`, because a
+  declared key that contributes nothing is a fault in the file and its remedy
+  is the file. A **warning** was the close alternative and is rejected in the
+  requirement's own text — stderr is not contract, `-q` lowers it out of sight,
+  and the caller redirecting it into a build log is the caller this condition
+  exists for — and `69` and `74` are rejected for naming a server and an I/O
+  failure that are not at fault. The order is untouched, and `NFR-DET-001` with
+  it: entries are sorted over the names the directory holds and never over the
+  targets they resolve to.
+- **A term defined in two places, and the rule being broken was the glossary's
+  own** — [glossary.md](glossary.md),
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and
+  [performance-requirements.md](performance-requirements.md). That file opens
+  by saying a term used in a requirement without being defined there is a
+  defect, and two terms were defined elsewhere: *differential run* beside
+  `NFR-PERF-007` since the eleventh edition, and *in flight* beside `FR-ERR-025`
+  and `FR-ERR-026` since the thirty-first, which followed it. **The glossary
+  governs**, and both are moved into it with the two requirements citing them.
+  The alternative — a term defined where it is used, with the glossary carrying
+  a pointer — was live, because both are load-bearing at the point of use, and
+  is rejected on three grounds stated at the head of that file: it turns an
+  absolute into a two-case rule whose new case has no test, it legitimises the
+  drift that produced the defect, and it is the weaker form of one copy where
+  the file already has the stronger one in `budget`, `provisional figure` and
+  `cache hit / cache miss`. **Nothing about `tpl` changes**, and neither
+  requirement is amended: what moved is where the sentence lives. One
+  cross-reference follows it, in [output-formats.md](output-formats.md), which
+  named the two requirements as defining the term.
+- **Fifty-two entries re-read, and forty-five of them are discharged** —
+  [upstream-divergences.md](upstream-divergences.md). The obligation the
+  thirty-first edition recorded and did not pay is paid. Every entry was read
+  against `README.md` at `db80114` and `CLAUDE.md` at `8f936d4`, in both
+  directions. **Thirty entries are discharged and each names the commit.**
+  `e75996c` is what `0ea5624` was to the other file: it rewrote `README.md`
+  whole, and twenty-eight of the thirty name it. With `DIV-034`, which the
+  thirty-first edition discharged, the `README.md` half of `DIV-037` and two of
+  the four parts of `DIV-001`, it discharges something in thirty-one entries.
+  The asymmetry the fifteenth edition found has reversed:
+  thirty-two corrections were owed to `README.md` and three are, while six are
+  owed to `CLAUDE.md`. **Two
+  divergences the register did not hold are raised**, and each says something
+  the register had not had to say. `DIV-053` is the sentence of *Discovery*
+  saying four commands perform no discovery **at all**, which was an exact
+  summary of `FR-PROJ-025` until the thirty-first edition amended that
+  requirement to admit the upward look `FR-PROJ-016` obliges: the register
+  decayed from **this** side, and the fifth validation rule is extended below to
+  say so. `DIV-054` is two passages saying no command reaches a server, left
+  standing by the very commits that made them false. Three rules of that file
+  move with the pass: the **Overstatement** kind is widened to both directions,
+  a **Discharged** status is allowed to name the commit that made a statement
+  **true** rather than one that removed it — which is how `DIV-046` and
+  `DIV-051` close, and why both now say that the correction they asked for must
+  **not** be made — and the dating convention written over *Says* is extended
+  to every clause but **Status**.
+
+**What found them.** Not one reading and not one instrument. Two came from
+deriving an implementation from this corpus and finding it silent — the
+conditions of a failed child, and what a directory of links contributes. One
+came from reading this corpus against itself, where a file's own opening rule
+and a requirement in another file could not both be honoured. And one is the
+fifth validation rule doing exactly what it was written for, a sprint late: a
+register of corrections owed to files this corpus does not own, read against
+those files after somebody else edited them. That last one also found the rule
+short by a trigger, which is the second time the fifth rule has been extended
+by a pass it authorised — the sixteenth edition made the first extension for
+the same reason, that a rule satisfied in full was still not enough.
+
+**One observation is named and not acted on.** The `74` cell of `FR-ERR-001`
+characterises its class as I/O on "`.tpl` and what it holds, a `--context`
+document, or stdout", and calls those "the three kinds of file and stream this
+system touches". Trust material read from a `ca_file` or a `ca_path` outside
+`.tpl` — `/etc/ssl/certs/db-ca.pem` is the example in the root `README.md` — is
+a fourth, and `FR-CONF-014` now names that code for an entry it cannot read.
+Nothing is ungoverned by it, because the thirty-first edition's amendment to
+that table says a condition is neither absent nor misfiled because no cell
+names it, and no requirement rests on the count of three. It is named here so
+that the next reader of that cell does not have to find it again.
+
+*Acted on in the thirty-third edition, and the observation is discharged.* The
+cell names four kinds and trust material is among them.
+
+### Thirty-third edition — a file that arrived, a class counted short, and the sweep the rule was worth
+
+Sprint 17 was opened to clear a backlog thirty-one tasks deep. The thirty-first
+edition answered fourteen of it in one pass and the thirty-second the four that
+remained; three more were raised by the work that followed them, and they are
+answered here in one pass, which is this sprint's last reading of this corpus.
+Two of the three were recorded by earlier editions of this sprint and
+deliberately not acted on — one because the edition that found it had no
+reading to choose between, one because it needed a sweep of every file rather
+than a judgement on the two instances in front of it.
+
+**No requirement identifier is assigned, none is retired and none is
+renumbered.** No entry is raised in
+[upstream-divergences.md](upstream-divergences.md) and no entry of it changes
+status. The index of [open-questions.md](open-questions.md) stays empty. **No
+figure is ratified and no baseline is set.**
+
+**Nothing this edition changes changes what `tpl` does.** One requirement of
+form is recorded as measured, two counts are told how they are counted, one
+cell of a table names a fourth member of the class it characterises, and five
+definitions move to the file this corpus says definitions live in. The one
+thing owed outside this corpus is one sentence of the root `CLAUDE.md`, which
+was owed before and is owed more narrowly now.
+
+- **A rule that had been waiting on a file the tree now holds** —
+  [performance-requirements.md](performance-requirements.md) and
+  [upstream-divergences.md](upstream-divergences.md). `BR-PERF-007` said that
+  `scripts/mariadb/seed-bench.sql` *is still absent*, and it is not:
+  the file loads on each of the four series of `FR-SRV-015` and realises both
+  `WL-001` and `WL-003` at every count this corpus states for them. The rule is
+  **restated over the condition that now holds** rather than withdrawn, and the
+  two are not the same choice: five budgets needed the fixture and four did
+  not, which is a permanent property of the budget set and what its live
+  citations read the rule for, so withdrawing it would retire an identifier and
+  leave every one of them resolving to a note. The same fact reaches the register, and
+  it reaches it from the side the thirty-second edition widened the
+  **Overstatement** kind to cover — the repository catching up with a document,
+  rather than a document being edited. `DIV-036` was raised over that file and
+  now owes one sentence instead of a sentence and a file; `DIV-052` waited on a
+  benchmark **and** on that fixture, and now waits on the benchmark alone.
+  Neither changes status, so no count in that register moves. Two further
+  corrections travel with it: `NFR-PERF-014` rejected a tenth budget on the
+  ground that it would be *the sixth budget needing a server*, where three rows
+  carry `Server: yes` and five is `BR-PERF-007`'s count of the budgets needing
+  the **fixture**; and `DIV-052` called itself one of *seven* corrections where
+  that register's own Overview counts nine entries owing. Both are corrected
+  against the figures they meant to cite. **`NFR-PERF-001` is recorded as
+  measured**, dated, with the condition it was read under: eleven catalogue
+  statements against eleven, on all four series, from a fresh project with an
+  empty cache. That record ratifies nothing, and says so — ratification is
+  `NFR-PERF-009` through `NFR-PERF-012` under the gate of `NFR-PERF-020`, and a
+  statement count is a requirement of form.
+- **Two counts that did not say how they were counted** —
+  [performance-requirements.md](performance-requirements.md). `WL-003` named
+  three indexes and `WL-001` six hundred, and an index count admits two
+  readings that differ by a third of it. The fixture had to choose, chose
+  **`PRIMARY` counts**, and wrote that rule into a script — an implementation
+  filling a gap this corpus left, which is the shape of defect the
+  twenty-seventh edition named when the finished first arm had to choose four
+  answers for itself. Both workloads now state the rule, so that they are read
+  alike: what makes `NFR-PERF-001`'s comparison a comparison of two databases
+  rather than of two conventions is that one convention governs both. The
+  reading is not a preference. `FR-CAT-043` states that the primary key **is
+  also an index** and puts the index named `PRIMARY` in the table's index
+  collection, so a count that excluded it would count something the model does
+  not present; `FR-CAT-042` supplies the second clause, that a composite index
+  is one index and not one per column. **`PRIMARY` not counted** is rejected in
+  the requirement's own text, on the ground that it moves both numbers rather
+  than settling one — 600 would describe a database of 800 — and buys nothing,
+  since the quantity `NFR-PERF-001` compares is a count of statements that no
+  index convention moves.
+- **A class characterised by three where it reaches four** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). The `74` cell of
+  `FR-ERR-001` called `.tpl` and what it holds, a `--context` document and
+  stdout *the three kinds of file and stream this system touches*. Trust
+  material read from a `ca_file` or a `ca_path` is a fourth: nothing in this
+  corpus requires either path to lie inside `.tpl`, a conventional `CApath` is
+  a system trust store, and `FR-CONF-014` — as the thirty-second edition
+  amended it — routes an entry it cannot read to this very code. The cell names
+  the fourth. **The characterisation is not turned back into an enumeration**,
+  which the thirty-first edition decided deliberately and the nineteenth closed
+  the column against: a fourth member is no argument for reopening either, and
+  the count is not load-bearing, so a fifth kind moves this cell and nothing
+  else. A **code of its own** for trust material is rejected under
+  `FR-ERR-002`, which forbids collapsing two conditions only where the caller's
+  next step would differ, and it does not — checking permissions on a
+  configured path is what this row already prints.
+- **The sweep the thirty-second edition's rule was worth, and five definitions
+  moved** — [glossary.md](glossary.md),
+  [open-questions.md](open-questions.md) and
+  [cli-contract.md](cli-contract.md). That edition wrote the rule that every
+  defined term lives in the glossary, moved the two instances a question had
+  been asked about, and recorded that no sweep for the rest had been made. The
+  sweep is made, over all twenty-six files. It first needed a **boundary**, and
+  the boundary is now stated in the glossary with the alternative rejected
+  beside it, because the rule read at its widest empties four sections to fill
+  one. Three shapes are not definitions: a requirement or business rule that
+  fixes a thing, which the glossary cites rather than restates; a legend for
+  the values of one field of one table, read where the table is; and a note
+  shape the writing conventions own. Under it, **five definitions moved and one
+  duplicate was removed.** *Closed*, *dissolved* and *closed on a stated limit*
+  were defined in [open-questions.md](open-questions.md) and are used away from
+  it — *dissolved* in two other files, and *stated limit* in five, three of
+  which carry it as the name of the note a requirement writes where a
+  guarantee stops. *Calling agent* and *operator* were defined in
+  [cli-contract.md](cli-contract.md)'s *Actors* section, which was the one
+  Actors section in the corpus that says what its actors **are** rather than
+  what they want from the file, and the only definition of either term
+  anywhere. Its third line was the duplicate, and the worse half of the finding:
+  it defined *project* a second time and **not the same way**, as the `.tpl`
+  folder itself where `FR-PROJ-001` and the glossary have a project as the
+  directory containing one. The glossary governs, and the sentence that was
+  wrong did not survive the move. One citation is repaired with them:
+  the glossary's `volatile field` entry restated `BR-CAT-002` without citing
+  it, so a reader was never sent to the rule that fixes the term.
+
+**What found them.** Three different things, and none of them a rule of the
+list below. The first was a fact about the working tree arriving after the
+corpus had been read against it — the same shape as the register's own decay,
+a sprint later and from the other side, and the reason this edition re-read two
+entries against the tree rather than against either root document. The second
+was a script documenting a rule this corpus had left open, which is only
+visible to somebody reading the implementation and the requirement together.
+The third was an edition doing what it said it would: the thirty-second wrote a
+rule and recorded that it was worth exactly the sweep behind it, and the sweep
+found five more terms, in two passages the two known instances did not predict
+— and one of the five contradicted the glossary rather than merely repeating
+it.
+
+**Two observations are named and not acted on.** The first is that the rule the
+sweep applied is a rule about **terms**, and the corpus has an editorial
+vocabulary the boundary deliberately leaves in place: ten clause and status
+names in [upstream-divergences.md](upstream-divergences.md), three frontmatter
+values in the status legend below, and the note shapes of the writing
+conventions. Each is read where it is defined and none is used elsewhere, so
+none is a defect today; what would make one a defect is its being used away
+from the passage that defines it, which is the test the glossary now states.
+The second is that nineteen module *Actors* sections state a stake and one stated
+a definition, and only the one that stated a definition was touched — the
+nineteen are the convention and are left alone.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -2699,6 +3194,23 @@ because they constrain the whole module rather than one interaction.
   the limit. Three requirements are written this way — `FR-SRV-041`,
   `FR-PRIV-020` and `FR-CONF-039` — and each cites the other two, so that
   three honest limits read as one pattern rather than three accidents.
+- **A term that has a definition has exactly one, and it is in
+  [glossary.md](glossary.md).** That file states one half of the rule of
+  itself — a term used in a requirement without an entry there is a defect —
+  and the thirty-second edition adds the other: a definition written anywhere
+  else in this corpus is the same defect. A requirement that needs its term
+  explained beside it cites the entry and does not restate it. **It is
+  checkable against an edition under review**: for every term an edition
+  defines, marks out or leans on, ask whether [glossary.md](glossary.md) holds
+  an entry for it and whether the entry and the passage say the same thing.
+  Two terms were moved under this rule in the edition that wrote it —
+  *in flight* and *differential run* — and the **sweep of all twenty-six files
+  for the rest was made in the thirty-third**, which moved five more and
+  removed one duplicate. What the rule reaches, and the three shapes it does
+  not, are stated in [glossary.md](glossary.md#what-counts-as-a-definition)
+  with the alternative rejected beside them; a note shape of the two bullets
+  above is one of the three, which is why naming one here is not defining a
+  term elsewhere.
 - **Where a verification stops, rather than a guarantee, the same note shapes
   are used and the three-way family stays three.** The family above is limits
   on what `tpl` guarantees about a server, a table, or a trust store, and its
@@ -2724,7 +3236,32 @@ because they constrain the whole module rather than one interaction.
 
 ## Provenance
 
-Every requirement in this specification derives from one of three sources:
+Every requirement in this specification derives from one of **four** sources,
+numbered 1 through 4 below. The fifth item is not a fifth source: it is the
+rule that closes the list.
+
+*Corrected in the thirty-first edition: the opening counted three sources above
+a list of five.* Three was true of the list when it was written — decision
+logs, the root documents, and *Nothing else* — and two sources have been added
+since without the count moving: the fourth edition added the published external
+authority and the sixth the direct observation, each taking the number below
+the one it displaced. The count is corrected and **no item is renumbered**,
+because seven passages of this corpus cite *the fourth provenance* and every
+one of them means item 4, the direct observation — `FR-SRV-041` and `FR-SRV-038` in
+[server-contract.md](server-contract.md), `FR-CAT-053`, `FR-CAT-055` and
+`FR-CAT-056` in [catalogue-coverage.md](catalogue-coverage.md), the
+twenty-seventh edition's record above, and the note on recurring obligations in
+[open-questions.md](open-questions.md). Renumbering to make four items into four
+numbers would silently redirect all seven.
+
+*Rejected: splitting the five into three sources with sub-items.* There is no
+grouping under which the four are three. The decision logs, the root documents,
+the published authority and the direct observation are four kinds of ground
+with four different ways of decaying, which is the whole reason each is stated
+apart. *Rejected: lifting item 5 out of the numbered list.* It is the rule that
+makes the other four exhaustive, and it is read where a reader is counting
+them; moving it to a paragraph below would leave the list looking open.
+
 
 1. Seven decision logs. The first interview settled 53 points about the CLI
    surface; the second settled 28 points about the model, the document, the
@@ -2777,10 +3314,11 @@ Every requirement in this specification derives from one of three sources:
 ## Maintenance debt
 
 **One item is outstanding**, recorded by the twentieth edition and listed
-below. The seven items this section held before it are all discharged; the last
-of those was recorded by the thirteenth edition and discharged by the
-eighteenth. The item this section carried through the sixth edition — twenty
-catalogue field lists that no observation had recorded — was discharged by the
+below. The eight items this section has held before it are all discharged; the
+most recent of those was recorded by the thirty-second edition and discharged
+by the thirty-third, inside one sprint. The item this section carried through
+the sixth edition — twenty catalogue field lists that no observation had
+recorded — was discharged by the
 seventh: the fixture was read against all four series of `FR-SRV-015` on
 2026-09-10, every field list was recorded verbatim, and each is now a
 requirement in [catalogue-coverage.md](catalogue-coverage.md) or
@@ -3098,8 +3636,61 @@ work a requirement in force obliges, in the terms the twenty-eighth and
 twenty-ninth editions used, rather than debt of this one. The item below was
 untouched by this edition and stays outstanding.
 
-The section therefore carries the one item the twentieth edition recorded, and
-the seven it has held before are all accounted for below.
+The thirty-first edition adds no obligation of either kind, and records one as
+discharged outside this corpus. It settles fourteen points the backlog had
+held, of which two change what `tpl` does — a valueless flag given twice is now
+accepted, per `FR-CLI-025`, and every flag and argument now states what it does
+in its help, per `FR-HELP-030` — and the rest state what was already in force,
+qualify a rule stated wider than its ground, or correct a sentence that had
+stopped being true. Nothing it changes touches a fixture or a measurement. The
+entry it discharges is `DIV-034`, whose `README.md` half `e75996c` removed when
+it rewrote that file, recorded with its commit in
+[upstream-divergences.md](upstream-divergences.md) under the fifth validation
+rule below.
+
+That same rule has a trigger and the trigger has fired. Both root documents
+were edited since the fifteenth edition's classification of the register, so a
+re-read of all fifty-two entries against both files is owed, in both
+directions. This edition re-read the one entry it amends and did not make that
+pass, and says so where the register states its own figures. Like `FR-SRV-019`
+below it is an obligation with an owner and a trigger rather than debt of this
+corpus: no requirement here waits on it, and nothing in this specification is
+ambiguous while it stands. The item below was untouched by this edition and
+stays outstanding.
+
+*Corrected in the thirty-second edition, and the obligation is discharged.*
+The paragraph read *Both root documents were edited at `db80114`, and the root
+`README.md` twice more before it*, and `db80114` touched `README.md` alone.
+`CLAUDE.md` was edited five times after `87dd6e3`, at `c6356df`, `b066cfa`,
+`cd6ce7e`, `6a0cce5` and `8f936d4`, and `README.md` three, at `e75996c`,
+`db7337d` and `db80114`. The trigger had fired far harder than the sentence
+said. The same clause appears in the register's own sweep and is corrected
+there with it. **The pass is made**, and what it found is the thirty-second
+edition's record above.
+
+The thirty-second edition adds one obligation inside this corpus and none
+outside it, and discharges the one recorded immediately above. It pays the
+register in full — fifty-two entries re-read against both root documents,
+thirty of them discharged with the commit that discharged each, and two
+divergences raised that the register did not hold — governs the two
+`password_command` conditions `FR-ERR-002` left ungoverned, and decides the two
+questions `FR-CONF-014` had never answered. Nothing it changes touches a
+fixture or a measurement. What `FR-CONF-014` and `FR-CONF-044` now require is
+owed by the code that assembles trust material, and what `FR-CONF-043` requires
+of a `cause` is owed by the diagnostic renderer; both are work a requirement in
+force obliges rather than debt of this corpus, in the terms the twenty-eighth
+through thirtieth editions used. The obligation it does add is the sweep below.
+
+The thirty-third edition adds no obligation of either kind, and discharges the
+one the thirty-second recorded. It makes that sweep, restates `BR-PERF-007`
+over a fixture that is now complete, names a fourth kind in the `74` cell of
+`FR-ERR-001`, and records `NFR-PERF-001` as measured without ratifying
+anything. Nothing it changes touches a fixture or a measurement, and nothing
+it changes changes what `tpl` does; one sentence of the root `CLAUDE.md` is
+owed under `DIV-036` and was owed before, more widely.
+
+The section therefore carries the item the twentieth edition recorded, and the
+eight it has held before are all accounted for below.
 
 One item is outstanding.
 
@@ -3124,7 +3715,30 @@ One item is outstanding.
   corpus is ambiguous while it stands: both requirements say exactly what they
   escape, and a reader of either is told where the gap is.
 
-Seven items previously recorded here have been discharged.
+Eight items previously recorded here have been discharged. The eighth is the
+sweep below, recorded and discharged inside this sprint.
+
+- **The corpus has not been swept for terms defined outside the glossary.**
+  Recorded by the thirty-second edition, which wrote the rule that every
+  defined term lives in [glossary.md](glossary.md), moved the two instances its
+  four pieces reached — *in flight*, from
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), and *differential run*,
+  from [performance-requirements.md](performance-requirements.md) — and
+  recorded that whether a third existed was unknown, on the ground that a rule
+  is worth exactly the sweep behind it. **Discharged in the thirty-third
+  edition**, which read all twenty-six files for a passage that defines a term
+  rather than using one. It moved five definitions and removed one duplicate:
+  *closed*, *dissolved* and *closed on a stated limit*, from
+  [open-questions.md](open-questions.md), and *calling agent* and *operator*,
+  from the *Actors* section of [cli-contract.md](cli-contract.md), whose third
+  line defined *project* a second time and **not the same way** as the entry
+  that already held it. One citation was repaired with them, in the glossary's
+  own `volatile field` entry, which restated `BR-CAT-002` without sending a
+  reader to it. The sweep also produced what the rule had been missing: a
+  **boundary**, stated in
+  [glossary.md](glossary.md#what-counts-as-a-definition) with the alternative
+  rejected beside it, so that the next reading of this rule has a test and not
+  a judgement.
 
 - **The catalogue field lists.** Twenty entries, blocked first by the absence
   of a container and then by the absence of a recorded observation. Both are
@@ -3258,3 +3872,83 @@ directions. This is the third rule's lesson in a second setting: counting a
 record's own rows correctly, or classifying a register's own entries
 correctly, establishes nothing about whether either is complete against the
 thing it describes.
+
+*Extended again in the thirty-second edition: the trigger is an edit on either
+side.* The rule names an edit to the target file, and says of itself that it is
+the one rule this corpus cannot run on itself, "because what decays is outside
+it and decays when somebody else edits it". That is half of it. **An entry
+decays equally when this corpus amends a requirement the target document
+paraphrases**, and it then becomes owed without anybody touching the file it is
+owed to. `DIV-053` is the instance. The root `README.md` says that four
+commands perform no discovery **at all**, which was an exact summary of
+`FR-PROJ-025` from `e75996c` until the thirty-first edition amended that
+requirement four days later to admit the upward look `FR-PROJ-016` obliges.
+Nothing about the sentence changed and it stopped being true. So half of this
+rule **can** be run on this corpus, and it is a check an edition under review
+can be put to: for every requirement the edition amends, ask whether either
+root document paraphrases it, and read the paraphrase. It is the same lesson
+the sixteenth edition's extension carried — a register satisfied in full in one
+direction is still incomplete — arriving from a third direction.
+
+The thirty-first edition adds a sixth rule, learned from a record of an absence
+that no check here could have caught. **A record that something is absent must
+rest on a form of observation that would fail on a wrong question.** A negative
+observation — that a variable does not exist, that a field returns no row, that
+a population holds no member of a kind — is admissible only where the form used
+to take it separates *the thing is not there* from *the question was wrong*,
+either because a wrong question makes that form report an error, or because the
+population was enumerated and the thing shown not to be in it. A form that
+answers a wrong question with the same silence it answers a true absence with
+proves nothing, and the record it produces is wrong on the day it is written.
+
+`FR-SRV-040` recorded `version_malloc_library` as returning no row where it
+returns one on every server of the fixture, and the twenty-third edition
+corrected it. None of the five rules above could have found it: the record
+cited an observation, was internally coherent, was correctly cross-referenced,
+was complete against the corpus, and named the conditions it was taken under.
+What was wrong was the **reading**, and the form could not fail — a name that
+matches nothing under a `SHOW … LIKE` prints no row and no header at all and
+exits `0`, so an absent row is what a wrong name and a missing variable both
+produce. The enumerating form of the same question, a read of the global
+variables table with no `LIKE`, would have shown the variable present; and a
+form that errors on an unknown name would have failed outright.
+
+**It applies retrospectively**, on the trigger the second rule already uses: a
+record of an absence is re-read against this rule the next time it is read for
+any purpose, and a record that does not say what form it was taken by is not
+yet a record. Two instances are named so that the rule is readable against
+something. `NFR-PERF-005` satisfies it — its observation of an absence names
+three commands and what each did, one absent, one refused by `csrutil` and one
+demanding a password, so a wrong question there produces three distinct
+refusals and not one silence. `FR-CAT-057` states an absence of a different
+kind, a feature the fixture does not declare, and satisfies the rule by naming
+the DDL that would create the case rather than by any reading at all.
+
+**This rule is of the first and third rules' family and not of the fourth and
+fifth's.** The nineteenth and twentieth editions each declined a sixth rule on
+the ground that every rule here is about a statement decaying, and this one is
+not about decay. That ground never covered the whole set: the first rule is
+about a check that passes on a wrong answer — an identifier that exists is not
+an identifier that is correct — and the third about a count that establishes
+nothing about completeness. This is the first rule's shape applied to an
+observation rather than to a reference: the form answered, and an answer is not
+a result. What those two editions declined is a different question, whether a
+sentence of this corpus is stated wider than the ground it gives for itself,
+and it is still named, still recurring, and still left for a reading that
+covers the corpus.
+
+*Rejected: declining the rule and recording the lesson beside the
+twenty-third edition's finding, as the nineteenth and twentieth editions
+recorded theirs.* A lesson recorded beside one finding is read by whoever reads
+that finding, and the defect it guards against is made by whoever takes the
+next observation — a different reader, at a different time, with no reason to
+be looking there. The five rules exist because each of them is a check that can
+be applied to an edition under review, and this one can: for each record of an
+absence the edition adds, name the form and ask what that form would print for
+a question that is simply wrong.
+
+**An edition record above that counts five rules is counting the set it had.**
+Each such statement — *none of the five rules below would have found it* — is
+an account of what an edition found against the rules that existed when it ran,
+and it stays true of that edition. None is amended to say six, because amending
+it would assert that an edition applied a rule nobody had yet written.

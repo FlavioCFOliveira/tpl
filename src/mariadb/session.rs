@@ -43,6 +43,7 @@
 
 use std::borrow::Cow;
 use std::future::Future;
+use std::time::Instant;
 
 use sqlx::mysql::MySqlConnection;
 use sqlx::{Row as _, mysql::MySqlRow};
@@ -53,6 +54,7 @@ use super::connect::Target;
 use super::fault;
 use super::window::{self, Series};
 use crate::deadline::{Bound, Clock, Phase};
+use crate::diagnostics::emit;
 use crate::error::{Error, NetworkPhase, ReadOnlyFault};
 use crate::model::server::{Server, series_of};
 
@@ -102,6 +104,15 @@ enum Attempt {
 /// reads a schema, so none of them is a catalogue query for the counts of
 /// `NFR-PERF-001` and `NFR-PERF-002`, which `FR-SRV-006` states of the
 /// read-back in its own words.
+///
+/// **Each run is timed and reported**, per `FR-GLOB-017`: this is where the
+/// session start spends its time, and the three statements are three runs of
+/// the phase `FR-CONF-005` bounds them by. The line carries that phase and a
+/// duration and nothing else — no statement text, which `NFR-DET-001` would
+/// make a caller mistake for contract, and which `FR-GLOB-018` keeps off this
+/// stream with everything else it bars. The count of these lines is not the
+/// catalogue-query count of `NFR-PERF-008`: that count is the lines
+/// [`emit::catalogue_query`] writes, under a token of its own.
 fn run<T>(
     runtime: &Runtime,
     bound: Bound,
@@ -122,7 +133,11 @@ fn run<T>(
     }
 
     runtime.block_on(async {
-        match timeout(bound.remaining(), work).await {
+        let started = Instant::now();
+        let outcome = timeout(bound.remaining(), work).await;
+        emit::phase_ran(Phase::CatalogueQuery, started.elapsed());
+
+        match outcome {
             Err(_) => Err(expired()),
             Ok(Ok(answer)) => Ok(answer),
             Ok(Err(driver)) => Err(Attempt::Driver(driver)),

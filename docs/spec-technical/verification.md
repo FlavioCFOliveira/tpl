@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-21
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -22,64 +22,89 @@ figure is `BENCHMARKS.md`'s. **No build command appears here.** The pipeline
 that runs the suite, the gates a release passes and the fixture's operational
 standing are [operations.md](operations.md#the-mandatory-validation-pipeline).
 
-**The harness exists.**
-[The container harness](#the-container-harness) records what
-`scripts/mariadb/` supplies as of 2026-09-11, which discharged the harness half
-of [`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)'s
-residual, what the suite added to it at commit `a6d1fed`, and what remains
-unestablished beside both.
+**The harness is complete.**
+[The container harness](#the-container-harness) records what `scripts/mariadb/`
+supplies, which discharged the harness half of
+[`OD-22`](open-decisions.md#od-22--the-test-harness-and-the-fixture-certificate)'s
+residual on 2026-09-11, what the suite added to it at commit `a6d1fed`, the
+benchmark workloads added on 2026-09-21, and what remains unestablished beside
+them. **This whole document was re-audited against the tree at commit `243c4d6`
+on 2026-09-21**: every count, every per-file breakdown and every statement that
+a component is a later sprint's was re-measured rather than carried forward.
 
-**Six rows of the register below are written or partly written; every other row
-is obligation alone.** Row 2 is a unit test over the seam `FR-ERR-031` requires,
-and it asserts what that row asserts: the guard produces the condition of
-`FR-ERR-030` carrying the message `FR-ERR-032` requires. Rows 3 to 6 were
-written with the command surface, at commit `f8f335d` of 2026-09-15, and
-[Help](#help-snapshots-at-every-depth) names each. Row 1 is reached for two of
-its nine codes — `0`, by every successful form of help and version, and `64`, by
-every refusal of step 1 — because the commands that produce the other seven are
-later sprints. Row 15 is reached for two of its six requirements, at commit
-`a6d1fed`, and [the register](#mandated-by-the-corpus) says which, on what
-evidence, and what is written but runs on neither Darwin target.
+**Twenty-five of the twenty-six rows of the register below carry at least one
+test; row 8 alone carries none.** Row 2 is a unit test over the seam
+`FR-ERR-031` requires, and it asserts what that row asserts: the guard produces
+the condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires. Rows 3
+to 6 were written with the command surface, at commit `f8f335d` of 2026-09-15,
+and [Help](#help-snapshots-at-every-depth) names each. **Seven rows are not
+whole**, and each is named where it falls short rather than counted as answered:
 
-**The suite reaches the containers.** `tests/outside_the_process.rs` carries six
-tests: two drive the four series of `FR-SRV-015`, two are differential runs that
-need no server, one is the syscall trace the two Linux targets admit, and one
-exercises the gate's own mapping with no fixture in reach. What is recorded of
-every other test is its obligation, its trace, and, where the test exists, where
-it lives — never an outcome.
+| Row | What is reached | What is not |
+|---|---|---|
+| 1 | Eight of the nine codes, by integration test | `73`. `tpl init` is written and exercised, and no test in `tests/` drives it against a destination that already carries a `.tpl`; `src/error.rs` asserts the code inside the library instead, which is not what `BR-ERR-001` asks for |
+| 8 | Nothing at all | `BR-SEC-003`'s sentinel is named in no test of the tree. Searching `src/` and `tests/` for the word and for the identifier returns nothing (2026-09-21) |
+| 10 | The confirming outcome, on every series | The failing outcome, which no real MariaDB produces — see [what is not established](#what-is-not-established) |
+| 13 | The refusal, as a **unit** test in `src/mariadb/catalogue.rs` | The integration test against a container outside the window, which the fixture does not provision |
+| 22 | The shipped example's text, as a **unit** test in `src/project/init.rs` | The render against a table of a supported series, which the row makes a server test |
+| 23 | The key invariant, as **unit** tests in `src/model/table.rs` | The server form the row names |
+| 24 | Context strictness, as a **unit** test in `src/render/predicate.rs` | The integration form the row names |
+
+**The suite reaches the containers.** `tests/outside_the_process.rs` carries
+fourteen tests: ten are driven once per series of `FR-SRV-015` and gated on the
+fixture, two are differential runs that need no server, one is the syscall trace
+the two Linux targets admit, and one exercises the gate's own mapping with no
+fixture in reach. What is recorded of every other test is its obligation, its
+trace, and, where the test exists, where it lives — never an outcome.
 
 ## The suite as it stands
 
-At commit `fd51ca2`, and recorded with its point in history because it is a
-count that moves: **621 tests**, made of 564 unit tests inside the library, 55
-integration tests over the binary — 25 in `tests/project_and_configuration.rs`,
-13 in `tests/help_surface.rs`, 7 in `tests/invocation_surface.rs`, 6 in
-`tests/outside_the_process.rs`, 4 in `tests/help_environment.rs` — and 2
-doc-tests. It was 504 in the working tree of 2026-09-17 and 272 at commit
-`f8f335d` of 2026-09-15; the model work of `0cdc539` and the harness work of
-`a6d1fed` are the whole of the difference, at 111 tests and 6.
+Read from the working tree at commit `243c4d6` on 2026-09-21, by
+`cargo test --all-features --no-run` followed by `--list` on each compiled
+target, and recorded with its point in history because it is a count that moves:
+**1 010 tests**, made of 863 unit tests inside the library, 145 integration
+tests over the binary, and 2 doc-tests. The binary's own test target carries
+none.
 
-`tests/support/` holds two modules and no test target: `fixture.rs`, which is
-the gate and the three server-side instruments, and `differential.rs`, which is
-the fourth. Both are reached by `#[path]` from the files that use them.
+| Integration target | Tests | Gated on the fixture |
+|---|---|---|
+| `tests/schema_and_cache.rs` | 51 | 46 |
+| `tests/project_and_configuration.rs` | 25 | 0 |
+| `tests/help_surface.rs` | 17 | 0 |
+| `tests/outside_the_process.rs` | 14 | 10 |
+| `tests/template_commands.rs` | 14 | 0 |
+| `tests/invocation_surface.rs` | 11 | 0 |
+| `tests/render_command.rs` | 9 | 6 |
+| `tests/help_environment.rs` | 4 | 0 |
+| **Total** | **145** | **62** |
 
-**Two tests need a server**, both in `tests/outside_the_process.rs`, and both
-are gated on the fixture: they run where it is up and are skipped, with a
-printed reason, where it is not. No other test reaches one, because no other
-command does — the connectivity subcommand is the one `cfg` leaf still
-unwritten.
+It was 621 at commit `fd51ca2`, 504 in the working tree of 2026-09-17 and 272 at
+commit `f8f335d` of 2026-09-15.
 
-**Recorded staleness, 2026-09-21.** The three paragraphs above are the state at
-commit `fd51ca2` and have not been re-audited since: the commands that read a
-catalogue were written after it, and four test files now reach the fixture —
-`tests/outside_the_process.rs`, `tests/schema_and_cache.rs`,
-`tests/template_commands.rs` and `tests/render_command.rs`. So the count, the
-per-file breakdown and the sentence about which tests need a server all
-understate the suite, and the last of them is false as written. The same applies
-to this document's opening tally of which register rows are written. Re-auditing
-either against the suite is a pass of its own and was not in the scope that
-recorded this; only the render work's own consequences were corrected, and they
-are marked where they appear.
+`tests/support/` holds three modules and no test target: `fixture.rs`, which is
+the gate and the three server-side instruments; `differential.rs`, which is the
+fourth; and `sandbox.rs`, which is the temporary directory and cleared
+environment every launch of the binary runs under. All three are reached by
+`#[path]` from the files that use them — `sandbox.rs` by five targets,
+`fixture.rs` by three, `differential.rs` by one.
+
+**Sixty-two tests need a server**, in three targets — 46 in
+`tests/schema_and_cache.rs`, 10 in `tests/outside_the_process.rs`, 6 in
+`tests/render_command.rs` — and every one is gated on the fixture: it runs where
+the fixture is up and is skipped, with a printed reason, where it is not. The
+count is of tests whose body calls `fixture::series` or `fixture::exclusive`.
+`tests/template_commands.rs` reaches no server **by design**: `FR-TMPL-003`
+makes the absence of a connection the property under test, and that target
+establishes it with a control run instead of a fixture, which its own header
+records.
+
+**One leaf of the tree is still unwritten** — `tpl cfg database test`, the
+connectivity subcommand, which exits `70` under the one arm
+[`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) leaves
+(verified by invocation, 2026-09-21). No test asserts what that command must do;
+`fr_cache_010_the_connection_test_touches_no_file_of_the_store` asserts the
+clause that holds however the command ends and prints a notice for the clause
+that does not.
 
 ## The four kinds of test, and what each needs
 
@@ -126,27 +151,31 @@ unmet in form. It was closed where it was owed, in the code: at commit
 `bfa043d`, **604 of the 619 test functions** were renamed so that the mandating
 identifier leads, and *which test covers `FR-X`?* is now answerable by search
 alone. **Every test name this document prints is read from the tree at commit
-`fd51ca2`**, except the two illustrations of the form in the table above, which
+`243c4d6`**, except the two illustrations of the form in the table above, which
 name no test.
 
-**Fifteen tests keep a descriptive name, and the rule's last row is narrowed to
-say so.** The row read *no test is named without an identifier*, which those
-fifteen do not satisfy. It was this folder's own strengthening rather than the
-corpus's: `specification/README.md` makes the identifier **the reference used
-in** a test name and does not require every test to reference a requirement, so
-a test that verifies none has no identifier to be named after. The row now
-states the rule the suite holds to, and the criterion that decides which tests
-fall outside it is stated here rather than left to the next reader: **a test
-verifies no single requirement when what it asserts is a property of the crate's
-internals or of the test corpus rather than of `tpl`'s observable behaviour**.
-The fifteen fall into four families, each searchable by the absence of a
-prefix.
+**Thirty-two tests keep a descriptive name, and the rule's last row is narrowed
+to say so.** The row read *no test is named without an identifier*, which those
+thirty-two do not satisfy. It was this folder's own strengthening rather than
+the corpus's: `specification/README.md` makes the identifier **the reference
+used in** a test name and does not require every test to reference a
+requirement, so a test that verifies none has no identifier to be named after.
+The row now states the rule the suite holds to, and the criterion that decides
+which tests fall outside it is stated here rather than left to the next reader:
+**a test verifies no single requirement when what it asserts is a property of
+the crate's internals or of the test corpus rather than of `tpl`'s observable
+behaviour**. The thirty-two fall into six families, each searchable by the
+absence of a prefix. The figure and the families are read from the tree at
+commit `243c4d6`, by listing every test of every compiled target and keeping
+those whose name does not begin with a lower-cased requirement identifier.
 
 | Family | Count | Why no identifier leads |
 |---|---|---|
+| A private type, a private helper, or the test corpus | 12 | The assertion is about a construct no document publishes: one walks the sample set the exit-code test is driven from, and the others exercise a layout type, a cache path type, a template type, the secret wrapper, a verbosity discriminant, two rendering helpers or the engine's own registration. `display_is_one_line_and_carries_no_labelled_line` in `src/error.rs` cites [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) — an entry of this folder's register, and not a requirement identifier |
 | Allocation and borrowing | 8 | The assertion is that a value is borrowed rather than copied. `CLAUDE.md` requires minimal allocation on a hot path; no requirement of `/specification` states it, and a caller cannot observe it |
-| The test corpus, or a private type | 4 | One walks the sample set the exit-code test is driven from, two exercise a type no document publishes, and `display_is_one_line_and_carries_no_labelled_line` in `src/error.rs` cites [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) — an open decision, and not a requirement identifier |
-| `text` output | 2 | `FR-OUT-004` makes `text` output explicitly not a contract, so line termination and trailing whitespace are properties of a layout no requirement fixes |
+| `text` output and its layout | 5 | `FR-OUT-004` makes `text` output explicitly not a contract, so line termination, trailing whitespace, the word a boolean cell prints and the spacing between two parts are properties of a layout no requirement fixes |
+| A property of an algorithm, or a case the corpus leaves open | 4 | Two assert that a derivation is self-consistent over four centuries and that the pattern walk terminates on its worst case, neither of which any requirement states; two assert what a lone backslash and an empty pattern select, where `FR-SCH-012` fixes four behaviours and no fifth |
+| A decision record rather than a requirement | 2 | `adr_002_…` in `src/mariadb/connect.rs` and `adr_005_…` in `src/mariadb.rs` lead with the record that decides them. A record is not a requirement identifier, and the rule's table is written over identifiers |
 | The suite's own gate | 1 | It asserts how `scripts/mariadb/status.sh`'s exit code is mapped, which is a property of the harness and not of `tpl` |
 
 A better criterion replaces this one. What may not happen is a test named for a
@@ -210,14 +239,18 @@ outside that list — `FR-SRV-014`, `NFR-PERF-007`, `FR-ENV-045`, `FR-CTX-039`,
 the non-coercion rules. The two are not in conflict about any test; they count
 differently. Nothing is corrected in the other file.
 
-**What row 15 reaches, and what it does not.** Two of the six requirements of
-form are asserted, at commit `a6d1fed`, in `tests/outside_the_process.rs`. Every
-negative assertion carries a control, on the terms
+**What row 15 reaches, and what it does not.** All six requirements of form are
+asserted, in `tests/outside_the_process.rs` and `tests/schema_and_cache.rs`.
+Every negative assertion carries a control, on the terms
 [the invocation surface](#the-invocation-surface-observed-on-the-process) states
 and for the same reason.
 
 | Requirement, or clause of one | Instrument | Where it runs |
 |---|---|---|
+| `NFR-PERF-001` | The server's statement record, over two databases of different size | Every series of `FR-SRV-015`, in `nfr_perf_001_and_nfr_perf_002_the_catalogue_query_count_does_not_grow_with_the_database`; and against a full read of `freight` in `nfr_perf_001_a_full_read_issues_eleven_catalogue_statements` |
+| `NFR-PERF-002` | The same record, for a read that names one object | The same test, over the same two databases |
+| `NFR-PERF-003` | The server's connection record | `fr_cache_006_a_read_served_from_the_cache_opens_no_connection`, gated on the fixture |
+| `NFR-PERF-004` | The server's connection record | `fr_srv_014_and_nfr_perf_004_an_invocation_opens_at_most_one_connection` |
 | `NFR-PERF-006`, and the connection clause of `NFR-PERF-005` | The server's connection record, corroborated over the same window by the server's statement record | Every series of `FR-SRV-015`, once each, gated on the fixture |
 | The discovery clause of `NFR-PERF-005` | A differential run, with its inversion | All four targets: it needs no server |
 | The configuration clause of `NFR-PERF-005` | A differential run, with its inversion | All four targets |
@@ -231,23 +264,36 @@ not exist the differential run is the whole of the evidence, which
 `NFR-PERF-007` provides for in terms and `NFR-PERF-005` states in its own
 text.
 
-`NFR-PERF-001` through `NFR-PERF-004` are the four of the six that are not
-reached, and each waits on the same thing: a catalogue reader, so that there is
-a query to count and a connection to attribute.
+**`NFR-PERF-001` is measured outside the suite as well, and by the requirement's
+own instrument.** `scripts/mariadb/README.md`, *The benchmark workloads*, records
+a read of `WL-001` and a read of `WL-003` bracketed with `observe.sh statements`
+against an empty cache: **eleven catalogue statements against eleven, on all
+four series**, over a database of 200 tables and one of a single table. The same
+eleven is what `tests/schema_and_cache.rs` asserts for a full read of `freight`,
+so the count is observed across three databases differing by two orders of
+magnitude in object count. The workloads are loaded by `seed-bench.sql` through
+`seed-bench.sh`, which verifies every count they state.
 
-### Owed, and not yet observable
+### Owed, and discharged
 
-One verification is owed by a settled decision rather than by a requirement. It
-decides a point on which a settled entry declined to assert, and it names what
-it costs if the expected answer does not hold. Two others were owed and are
-discharged: [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)'s,
-where the tests exist and
-[The parser's mapping](#the-parsers-mapping-one-test-per-kind) names them, and
-`OD-14`'s, below.
+**No verification is owed by a settled decision any longer.** Three were, and
+all three are discharged:
+[`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)'s, where the
+tests exist and [The parser's mapping](#the-parsers-mapping-one-test-per-kind)
+names them; `OD-12`'s, below; and `OD-14`'s, below.
 
-| Owed | What must be observed | What it costs if it fails | Kind | Recorded in |
-|---|---|---|---|---|
-| The phase attribution of a TLS handshake failure | Whether an untrusted certificate, a name mismatch, and a server offering no TLS each reach `tpl` as the driver's TLS error rather than its I/O error | `FR-ERR-034` row `69` cannot be met as written, and a defect is owed to the functional owner naming `FR-ERR-034` | Server; needs the three failure modes `FR-CONF-038` obliges the fixture to present | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+**Discharged on 2026-09-18 — the phase attribution of a TLS handshake
+failure.** The observation
+[`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) owed
+was made against the fixture, and the expected answer held for one failure and
+not the other: a server offering no TLS under `required` reaches `tpl` as the
+driver's TLS error, and a certificate the trust material does not vouch for
+reaches it as the driver's I/O error of kind `InvalidData`. `FR-ERR-034` row
+`69` is therefore satisfiable and no defect is owed to the functional owner —
+the two discriminants separate the two phases without reading a message. The
+entry records what was observed, what was reasoned rather than observed, and
+the two corrections the observation forced on it; none of that is restated
+here.
 
 **Discharged on 2026-09-21 — a defined `null` under the strict
 undefined-behaviour variant.** The observation
@@ -367,7 +413,8 @@ in the suite is presently pointed at the invocation the three requirements
 disagree about.
 
 Rows 1 and 2 are the only two that need a **second, larger** database to be
-conclusive, which is `WL-001` and therefore `seed-bench.sql`
+conclusive, which is `WL-001` and therefore `seed-bench.sql`; that file was
+written on 2026-09-21 and both rows are now conclusive
 ([quality-attributes.md](quality-attributes.md#the-three-reference-workloads),
 [`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001)). The query count is
 additionally observable on the diagnostic stream, through the fixed leading token
@@ -397,13 +444,13 @@ Four properties of the argument vector are properties of the **process** rather
 than of a function, so none can be established from inside the crate: a unit
 test over the renderer shows that the renderer escapes, not that the vector
 reaches it, that nothing else writes to the stream, or that the parser consulted
-no `PATH` on the way. They are asserted in `tests/invocation_surface.rs`, at
-commit `f8f335d` of 2026-09-15 and under the names `bfa043d` gave them — five
-tests for the four properties, and two regressions beside them. **Every negative
-test carries a control**: the decoy executable is run directly, and the
-environment is shown to reach a child process, because a test that asserts an
-absence is worth nothing until the same harness is shown to observe the
-presence.
+no `PATH` on the way. They are asserted in `tests/invocation_surface.rs`, which carries **eleven
+tests** at commit `243c4d6`: five for the four properties, two regressions
+beside them, and four added since over the declaration of the two cache flags
+and the two repetition rules. **Every negative test carries a control**: the
+decoy executable is run directly, and the environment is shown to reach a child
+process, because a test that asserts an absence is worth nothing until the same
+harness is shown to observe the presence.
 
 | Property | Requirement | Test |
 |---|---|---|
@@ -414,12 +461,16 @@ presence.
 | No environment variable decides a form of help, of version, or a refusal | `FR-CLI-021`, `NFR-DET-004` | `fr_cli_021_no_environment_variable_decides_a_form_of_help_of_version_or_a_refusal` |
 | The argument terminator is never read as the value of the flag before it, so the `cause` names the node the invocation reached | `FR-CLI-017`, and `FR-ERR-009` through it | `fr_cli_017_the_argument_terminator_is_never_read_as_the_value_of_the_flag_before_it` |
 | A token written on both sides of the terminator is refused where it stands **first** | `FR-CLI-017`, `FR-CLI-019` | `fr_cli_019_a_token_written_on_both_sides_of_the_terminator_is_refused_where_it_stands_first` |
+| The two cache flags are declared by exactly the commands that may read a catalogue, and by no other node | `FR-CACHE-017`, `FR-CACHE-020` | `fr_cache_017_the_two_cache_flags_are_declared_by_exactly_ten_commands_and_are_unknown_elsewhere`, `fr_cache_020_clean_and_status_declare_neither_cache_flag` |
+| A repeated flag carrying no value is accepted and a repeated flag carrying one is refused, observed on the process rather than on the rule | `FR-CLI-025`, `FR-CLI-014` | `fr_cli_025_a_repeated_valueless_flag_is_accepted_by_the_process`, `fr_cli_014_a_repeated_value_carrying_flag_is_still_refused_by_the_process` |
 
-The last two are regression tests over defects a security audit of the command
-surface found, and each was proved to fail against the defect it guards before
-being kept. They are recorded here rather than left in the file because a
+The two terminator tests are regressions over defects a security audit of the
+command surface found, and each was proved to fail against the defect it guards
+before being kept. They are recorded here rather than left in the file because a
 regression test whose defect is not named is a test the next reader cannot
-judge.
+judge. The last two rows are the same kind of observation applied to the
+declaration of a flag: each walks the published command tree and asserts over
+every node, so a node added to the tree is covered without the test changing.
 
 ## The two test seams
 
@@ -461,18 +512,27 @@ invents none of its own.
 test per code, part of the definition of done for the feature that can produce
 it; `70` is the single exception, exercised in process through the seam above.
 
-| Code | Reached by | Needs a server |
-|---|---|---|
-| `0` | Any successful command | Only where the command reads a catalogue |
-| `64` | An unknown command or flag, a mutually exclusive pair, a malformed value | no |
-| `65` | A template syntax error, a malformed `--context`, a path escaping the root | no |
-| `66` | A named object that does not exist | Only for a catalogue object |
-| `69` | An unreachable server | no |
-| `70` | **Excepted.** The seam above | no |
-| `73` | `tpl init` against an existing `.tpl` | no |
-| `74` | An I/O failure, including a pipe closed mid-document | no |
-| `77` | Authentication refused, or a privilege shortfall on a named object | yes for both |
-| `78` | A configuration that does not describe a usable connection; an unsupported series; a read-only session that could not be enforced | Only for the last two |
+| Code | Reached by | Needs a server | Asserted in `tests/` |
+|---|---|---|---|
+| `0` | Any successful command | Only where the command reads a catalogue | yes |
+| `64` | An unknown command or flag, a mutually exclusive pair, a malformed value | no | yes |
+| `65` | A template syntax error, a malformed `--context`, a path escaping the root | no | yes |
+| `66` | A named object that does not exist | Only for a catalogue object | yes |
+| `69` | An unreachable server | no | yes |
+| `70` | **Excepted.** The seam above | no | excepted by `BR-ERR-001` |
+| `73` | `tpl init` against an existing `.tpl` | no | **no** |
+| `74` | An I/O failure, including a pipe closed mid-document | no | yes |
+| `77` | Authentication refused, or a privilege shortfall on a named object | yes for both | yes |
+| `78` | A configuration that does not describe a usable connection; an unsupported series; a read-only session that could not be enforced | Only for the last two | yes |
+
+The last column is read from the tree at commit `243c4d6`, by searching every
+target of `tests/` for an assertion over each code. **`73` is the one gap**, and
+it is not a gap in the feature: `tpl init` is written, `FR-PROJ-014` gives it the
+code, and `src/error.rs` asserts both that the code is produced and that it is
+confined to the `init` path. What is missing is the **integration** test
+`BR-ERR-001` makes part of the definition of done, which needs a run against a
+destination that already carries a `.tpl`. Closing it is a change to `tests/`,
+which this document does not make.
 
 The message every one of them carries is four labelled lines (`FR-ERR-008`),
 identical in shape whatever `--format` was requested (`FR-ERR-033`), with the
@@ -549,10 +609,10 @@ rather than of one text against another. The help surface as built is
 
 ### Which tests exist
 
-At commit `f8f335d` of 2026-09-15, under the names `bfa043d` gave them. Every
-test in `tests/` launches the binary in an empty directory with no `.tpl` above
-it and under a cleared environment, because a run that happened to stand inside
-a project would pass for the wrong reason.
+Read from the tree at commit `243c4d6`. Every test of `tests/help_surface.rs`
+and `tests/help_environment.rs` launches the binary in an empty directory with
+no `.tpl` above it and under a cleared environment, because a run that happened
+to stand inside a project would pass for the wrong reason.
 
 | Test | What it covers |
 |---|---|
@@ -563,9 +623,9 @@ a project would pass for the wrong reason.
 | `tests/help_surface.rs::fr_glob_019_a_leaf_that_requires_an_operand_still_answers_both_flag_forms` | All fourteen required operands answer `-h`, `--help`, `-V` and `--version`, and the node still refuses a missing operand with `64` |
 | `tests/help_surface.rs::fr_help_027_an_alias_prints_the_same_bytes_as_the_node_it_names` | The seven aliases of `FR-CLI-011`, in the text form and the JSON one, over eight comparisons — `cfg db add` being the alias read at depth three |
 | `tests/help_surface.rs::fr_help_028_a_segment_that_names_no_child_is_refused_with_the_node_it_was_sought_under` | `FR-HELP-028`, on the process: `64`, an empty stdout, the suggestion, and a `cause` naming both the segment and the node |
-| `tests/help_surface.rs`, six further tests | That every form succeeds where no project exists and nothing is in the environment (`FR-PROJ-025`, `FR-CLI-021`); the envelope and the four keys of `data`; the compact form and the indented one; the reduction of `FR-HELP-029`; the global flags carried once and repeated by no command; and a document byte-identical between runs |
+| `tests/help_surface.rs`, ten further tests | That every form succeeds where no project exists and nothing is in the environment (`FR-PROJ-025`, `FR-CLI-021`); the envelope and the four keys of `data`; the compact form and the indented one; the reduction of `FR-HELP-029`; the global flags carried once and repeated by no command; a document byte-identical between runs; the sentence of purpose `FR-HELP-030` obliges, in the document and in the text help alike; and the mutual exclusion of `FR-HELP-013`, over the global verbosity pair and over every exclusion the document declares |
 | `tests/help_environment.rs`, four tests | `FR-HELP-009`, `FR-HELP-010` and `NFR-DET-004`: the same bytes under two environments that disagree about `COLUMNS`, `TERM`, `CLICOLOR_FORCE` and `FORCE_COLOR`; exit `0` on stdout; no line over 80 columns; no ANSI escape on either stream |
-| `src/cli/help/document.rs`, three tests | The three properties of `BR-HELP-003`, each over the document `surface` builds, compared against the tree the binary parses with |
+| `src/cli/help/document.rs`, nine tests | The three properties of `BR-HELP-003`, each over the document `surface` builds, compared against the tree the binary parses with; and six more over the same document — the global flags of `FR-HELP-018`, the subtree of `FR-HELP-029`, the key order of `FR-OUT-024`, the three groups and the registered arrays of `FR-ENV-005`, and the long form and named value type `FR-GLOB-024` obliges of every flag |
 
 **The population the walk covers is read from the document rather than
 listed**, so a node added to the tree is covered without any of these tests
@@ -607,8 +667,6 @@ file and standard input — and asserts byte equality with a render against a li
 read of the same database, with the two cache paths asserted beside them. It is
 gated on the fixture and runs over every series the fixture presents. The other
 four rows of the table above are not asserted by it and are not this row's.
-The tallies under [The suite as it stands](#the-suite-as-it-stands)
-were taken before this sprint and are not re-audited here.
 
 ## Cross-series equivalence across four series
 
@@ -732,13 +790,14 @@ rather than a series difference (`FR-CAT-034`); and the `utf8mb4_uca1400_*`
 collations, which are the default on three of the four and would make a declared
 collation indistinguishable from an inherited one.
 
-One file the fixture still owes bounds what can be measured rather than what can
-be asserted: `seed-bench.sql`, which `WL-001` needs and which
-[`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001) schedules for the
-sprint that implements the catalogue reader. Rows 1 and 2 of
-[the nine observations](#the-nine-observations-made-outside-the-process) wait on
-it, because a query count that does not scale cannot be demonstrated against ten
-tables.
+**The last file the fixture owed was written on 2026-09-21.**
+`scripts/mariadb/seed-bench.sql` carries `WL-001` and `WL-003` as DDL alone,
+loaded on demand by `seed-bench.sh`, which verifies every count each workload
+states. Rows 1 and 2 of
+[the nine observations](#the-nine-observations-made-outside-the-process) waited
+on it and no longer do: a query count that does not scale is now demonstrated
+against 200 tables and against one
+([`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001)).
 
 ## The twelve end-to-end flows
 
@@ -769,16 +828,23 @@ only flow that must run where **no project exists**, which is what makes
 `UC-011` is the only flow whose expected outcome is a **wrong answer with exit
 `0`**: the test asserts the documented failure mode, not its absence.
 
-**Which flows the built tree can reach, at 2026-09-17.** Three, and one of them
-only in part. `UC-001` and `UC-005` run whole. `UC-002` runs whole, and
-`tests/project_and_configuration.rs` exercises both of its refusals and the
-two `FR-CFG-048` adds. `UC-003` runs only as far as the file: the array the
-quoting rule produces is asserted on the write path, and the execution half —
-no shell, the cap, the deadline, the `78` — is reachable from no command,
-because the resolution that runs the child is entered only by a command that
-opens a connection. It is covered by unit tests against the child until
-`UC-004`'s subcommand exists. The other eight need a server or a command that
-is not written.
+**Which flows the built tree can reach, at 2026-09-21.** Eleven of the twelve.
+Every command each of them composes is written, `UC-004`'s excepted: that flow
+is `tpl cfg database test`, the one leaf
+[`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) still
+covers, and it exits `70`.
+
+`UC-003` was the last to become reachable, and the change is in the resolution
+rather than in the flow: the execution half — no shell, the cap, the deadline,
+the `78` — is entered by any command that opens a connection, so a project whose
+`password_command` fails answers `78` from `tpl schema tables` (verified by
+invocation, 2026-09-21). It no longer waits on `UC-004`'s subcommand.
+
+**No test is written as a flow.** No target of `tests/` cites a `UC-NNN`
+identifier, so what the suite asserts is the requirements each flow composes and
+not the composition itself — the exit code, the stdout bytes and the
+postcondition taken together, which is what a flow test is. Writing them is a
+change to `tests/`, which this document does not make.
 
 ## The container harness
 
@@ -802,17 +868,17 @@ obligation each part discharges, and what a test suite still has to decide.
 | The reduced-privilege reader is reachable beside the privileged one, on every series | `FR-PRIV-018`, `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019` | `tpl_reader`, with the three shapes of absence observed identically on all four series |
 | The statements a server receives, and the connections it accepts, are observable **from the server side** | `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-014`, `BR-SRV-003` | `observe.sh statements` and `observe.sh connections`, each established against a substitute client and each with its own observer baseline measured rather than assumed |
 | The files a process opens are observable from outside it | `NFR-PERF-005`, `NFR-PERF-007` | `observe.sh opens`, on a Linux host. See the target limit below |
-| Every command of the tree can be run at maximum verbosity with both streams captured whole | `BR-SEC-003` | The fixture supplies the servers the commands that reach one need; capturing both streams whole is the suite's, and the suite does it — every launch of the binary in `tests/` captures both. The sentinel test itself waits on the commands that carry a credential to a server |
+| Every command of the tree can be run at maximum verbosity with both streams captured whole | `BR-SEC-003` | The fixture supplies the servers the commands that reach one need; capturing both streams whole is the suite's, and the suite does it — every launch of the binary in `tests/` captures both. The commands that carry a credential to a server are written; **the sentinel test itself is not** |
 
 **The instruments were established against a substitute client**, `tpl` having
 no catalogue reader to send a statement with. That is the correct order for an
 instrument whose whole purpose is to observe from outside the process under
 test: what was established is that the instrument sees what a client sends, not
-what any particular client sends. **Two tests now drive `tpl` itself** against
-the four series, and what each establishes is an absence — no connection
-accepted, no statement received — which is why each carries the control the
-absence is worthless without: the same record is shown to count a connection
-that was made, and to hold the observer's own statements, over the same window.
+what any particular client sends. **Sixty-two tests now drive `tpl` itself**
+against the four series. Where what a test establishes is an absence — no
+connection accepted, no statement received — it carries the control the absence
+is worthless without: the same record is shown to count a connection that was
+made, and to hold the observer's own statements, over the same window.
 
 ### The gate, and the fourth instrument
 
@@ -870,7 +936,8 @@ each value of the gate.
 |---|---|
 | **The file-open instrument does not exist on either Darwin target.** On a host with no `strace` the harness traces a Linux build inside a container and says so; `NFR-PERF-005` forbids crediting that observation to macOS | The limit is the platform's, recorded by `NFR-PERF-005` with the three commands that established it. What would lift it is named there, and is not this folder's to take |
 | **What the refusal test of `FR-SRV-029` runs against** | The contradiction is recorded under [cross-series equivalence](#cross-series-equivalence-across-four-series) and is the functional owner's; the fixture provisions no container outside the window |
-| **Two observations the fixture could not produce**: the failing outcome of `FR-SRV-013`, and rows 1 and 2 conclusively | The first needs a server that accepts the read-only statement and does not apply it, which no real MariaDB does — a fault-injection seam in `tpl`, not a container, and no such seam is decided. The second waits on `WL-001` ([`OD-27`](open-decisions.md#od-27--seed-benchsql-and-wl-001)) |
+| **One observation the fixture cannot produce**: the failing outcome of `FR-SRV-013` | It needs a server that accepts the read-only statement and does not apply it, which no real MariaDB does — a fault-injection seam in `tpl`, not a container, and no such seam is decided |
+| **The sentinel of `BR-SEC-003`** | Row 8 of the register carries no test at all. The fixture supplies what it needs; the whole-surface sweep over every command at maximum verbosity is the suite's, and it is not written |
 
 ## What this document defers, and to what
 

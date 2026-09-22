@@ -113,12 +113,6 @@ impl From<Seconds> for Duration {
 /// The set is closed by that requirement, and each variant names the `[core]`
 /// key its deadline is resolved from. Three of the six share one budget, which
 /// is [`Budget`]'s subject rather than this type's.
-#[allow(
-    dead_code,
-    reason = "five of the six phases are reached by the connection and the render, which are \
-              later sprints; FR-CONF-005 closes the set here because this is where the deadline \
-              of each is applied, and the mapping onto the four keys is asserted by a test"
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Phase {
     /// Resolving the host name, bounded by `core.connect_timeout`.
@@ -126,6 +120,21 @@ pub(crate) enum Phase {
     /// Opening the TCP connection, bounded by `core.connect_timeout`.
     TcpConnect,
     /// Negotiating TLS, bounded by `core.connect_timeout`.
+    ///
+    /// It is never constructed, and `FR-CONF-005` is why it exists all the
+    /// same: that requirement closes the set at six and this is one of them.
+    /// The handshake is **inside** the driver's connect call and the driver
+    /// affords no method that takes an already-connected socket, so nothing can
+    /// bound it, time it or report it apart from the TCP connect it runs
+    /// within — `mariadb::connect` says so where the two are run, and `OD-12`
+    /// records that the report separates them by the driver's own discriminant
+    /// rather than by a clock.
+    #[allow(
+        dead_code,
+        reason = "FR-CONF-005 closes the set of phases at six and the TLS handshake is one of \
+                  them; it is never constructed because the driver runs it inside the connect \
+                  call, which is what mariadb::connect documents and what OD-12 records"
+    )]
     TlsHandshake,
     /// One catalogue query, bounded by `core.query_timeout`.
     CatalogueQuery,
@@ -135,15 +144,35 @@ pub(crate) enum Phase {
     Render,
 }
 
-#[allow(
-    dead_code,
-    reason = "these two are the table of FR-CONF-005 stated as code — which key a phase resolves \
-              from, and which three share one budget — and their readers are the connection and \
-              the render, which are later sprints; a test asserts both against the requirement"
-)]
 impl Phase {
+    /// The phase's own name, as the report of `FR-GLOB-017` writes it.
+    ///
+    /// It is the discriminant spelled out rather than the `Debug` of the
+    /// variant, because a report line is text a caller reads and `NFR-DET-001`
+    /// leaves stderr outside the contract only as far as its wording: a name
+    /// that changed with a rename of the variant would change what the reader
+    /// sees for no reason the reader can see.
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::DnsResolution => "dns resolution",
+            Self::TcpConnect => "tcp connect",
+            Self::TlsHandshake => "tls handshake",
+            Self::CatalogueQuery => "catalogue query",
+            Self::PasswordCommand => "password command",
+            Self::Render => "render",
+        }
+    }
+
     /// The `[core]` key of `FR-CONF-002` this phase takes its deadline from,
     /// per the table of `FR-CONF-005`.
+    #[allow(
+        dead_code,
+        reason = "this is the table of FR-CONF-005 stated as code — which key a phase resolves \
+                  from — and a test asserts it against the requirement, row by row; the resolution \
+                  itself reads the key space rather than this mapping, so it has no caller in the \
+                  library build and gains one only if a diagnostic ever names the key a phase was \
+                  bounded by"
+    )]
     pub(crate) const fn key(self) -> &'static str {
         match self {
             Self::DnsResolution | Self::TcpConnect | Self::TlsHandshake => "core.connect_timeout",
@@ -155,6 +184,13 @@ impl Phase {
 
     /// Whether this phase draws on the shared connection budget of
     /// `FR-CONF-005`.
+    #[allow(
+        dead_code,
+        reason = "this is the other half of the FR-CONF-005 table stated as code — which three \
+                  phases share one budget — and a test asserts it against the requirement; the \
+                  connection opens that budget from `Clock::connection_budget` directly, so the \
+                  predicate has no caller in the library build"
+    )]
     pub(crate) const fn shares_the_connection_budget(self) -> bool {
         matches!(
             self,
@@ -314,12 +350,6 @@ impl Clock {
     /// The instant is taken here, which is the start of the first of the three
     /// that runs, and the three then consume one budget of `connect` in the
     /// order they run rather than one budget each.
-    #[allow(
-        dead_code,
-        reason = "the three connection phases are a later sprint; FR-CONF-005 states the shared \
-                  budget here because the clock is where it is applied, and the resolution this \
-                  sprint delivers is what feeds it"
-    )]
     pub(crate) fn connection_budget(&self, connect: Seconds) -> Budget {
         Budget {
             clock: *self,
@@ -401,10 +431,6 @@ impl Budget {
     /// The result is a [`Bound`] like any other phase's, so a caller that
     /// reports an expiry names the same two facts `FR-ERR-034` obliges
     /// everywhere else.
-    #[allow(
-        dead_code,
-        reason = "the three connection phases that consume this budget are a later sprint"
-    )]
     pub(crate) fn remaining(&self) -> Bound {
         let own = self.limit.duration().saturating_sub(self.opened.elapsed());
         let composed = self.clock.bound(self.limit);

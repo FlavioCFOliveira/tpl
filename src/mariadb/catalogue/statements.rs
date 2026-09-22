@@ -63,7 +63,8 @@
 //! narrowed one; the forms differ by a predicate and share a column list, and
 //! `FR-SRV-037` is a property **of that column list**. Writing it once per
 //! form would make the requirement checkable in two places that can drift
-//! apart, so [`forms!`] writes it once and appends each form's predicate. The
+//! apart, so the `forms!` macro below writes it once and appends each form's
+//! predicate. The
 //! product is still a `&'static str`, which is what `sqlx`'s `SqlSafeStr`
 //! admits without an assertion: no schema name, object name or routine kind is
 //! ever composed into SQL, and all three travel as bind parameters.

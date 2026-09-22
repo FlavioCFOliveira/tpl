@@ -16,7 +16,7 @@
 //!
 //! **The result must not betray which.** That is not a rule this module has to
 //! remember: both paths produce a
-//! [`DatabaseDocument`](crate::model::document::DatabaseDocument) and hand it
+//! [`DatabaseDocument`] and hand it
 //! to the same [`produce`], so the context a template sees is assembled once,
 //! from one type, by [`context::assemble`]. What differs between the two is
 //! carried where it is true and nowhere else — the population an object was
@@ -96,6 +96,8 @@ use super::local::{Caching, Object};
 use super::schema::named::{self, Sought};
 use super::source::{self, Reader};
 use crate::cache::Look;
+use std::time::Instant;
+
 use crate::deadline::{Bound, Phase};
 use crate::error::{ContextFault, Error, Position};
 use crate::model::document::{self, DatabaseDocument};
@@ -614,12 +616,22 @@ fn bounded<T>(deadline: Bound, render: impl FnOnce() -> Result<T, Error>) -> Res
         }
     });
 
+    let began = Instant::now();
     let produced = render();
 
     // The phase is over whichever way it ended, so the timer is woken and
     // joined: nothing of this invocation outlives the invocation.
     drop(finished);
     let _ = timer.join();
+
+    // FR-GLOB-017: the phase ran, and this is how long it took. It is written
+    // after the timer is joined so that the line cannot interleave with the
+    // four labelled lines a deadline would have written from that thread.
+    //
+    // A render the deadline **did** interrupt reports nothing, and cannot: that
+    // path leaves the process from inside the timer, which is what FR-RND-033
+    // requires of it.
+    crate::diagnostics::emit::phase_ran(Phase::Render, began.elapsed());
 
     produced
 }

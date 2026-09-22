@@ -12,8 +12,19 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.94.0"
 
+# `dbg_macro` and the two `print_*` lints are in clippy's `restriction` group
+# and are off by default, so `-D warnings` does not reach them. All three write
+# straight to a standard stream, bypassing `src/diagnostics/` and the escaping
+# `FR-ERR-024` applies there; `dbg!` also writes the value's `Debug`, which is
+# how a credential leaves a type that redacts itself. A legitimate site carries
+# a local `#[allow(...)]` with its reason — never a crate-level suppression.
+# Every other `restriction` lint is its own decision and is not taken here.
+[lints.clippy]
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
 [dependencies]
-anyhow = "1.0.104"
 clap = { version = "4.6.6", default-features = false, features = [
     "std",
     "help",

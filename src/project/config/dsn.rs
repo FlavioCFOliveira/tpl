@@ -23,9 +23,11 @@
 //! security consequence.
 
 use std::borrow::Cow;
+use std::fmt;
 use std::path::Path;
 
 use crate::error::{DsnFault, Error};
+use crate::project::secret::Redacted;
 
 /// The separator between the scheme and the authority.
 const SCHEME_SEPARATOR: &str = "://";
@@ -44,8 +46,24 @@ const fn unreserved(byte: u8) -> bool {
 }
 
 /// One field of a parsed DSN, still carrying whatever `${VAR}` the file wrote.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Its [`Debug`](fmt::Debug) is hand-written and writes [`Redacted`] for every
+/// field alike. One of the six **is** the password, so a derived
+/// implementation put a credential in the first structure that formatted a
+/// [`Dsn`]; and the type carries no discriminant saying which field it holds,
+/// so the redaction cannot be conditioned on the field without inventing one.
+/// Redacting all six is the direction that cannot be wrong: nothing in this
+/// crate reads a DSN field from a `{:?}` — [`Field::raw`] is how the expansion
+/// of `FR-CONF-018` reads one, and [`redact`](super::redact) is how the
+/// printing path of `FR-CFG-021` does.
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Field<'a>(&'a str);
+
+impl fmt::Debug for Field<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&Redacted, f)
+    }
+}
 
 impl<'a> Field<'a> {
     /// The field as the file wrote it, references and all.
@@ -88,7 +106,13 @@ impl<'a> Field<'a> {
 }
 
 /// A DSN split into the fields of `FR-CONF-009`, before any expansion.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Its [`Debug`](fmt::Debug) is hand-written because [`Dsn::raw`] is the value
+/// **as the file wrote it**, user info included: a derived implementation
+/// printed the whole credential-bearing URL beside the field that carries the
+/// credential on its own. `FR-ERR-013` and `BR-ERR-003` bar it from every
+/// message.
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Dsn<'a> {
     /// The value as the file wrote it, which every field borrows from.
     raw: &'a str,
@@ -102,6 +126,26 @@ pub(crate) struct Dsn<'a> {
     port: Option<Field<'a>>,
     /// The server-side database, which the grammar requires.
     database: Field<'a>,
+}
+
+impl fmt::Debug for Dsn<'_> {
+    /// Writes the six fields, every one of them redacted, and never
+    /// [`Dsn::raw`].
+    ///
+    /// The shape is kept — which fields the authority carried and which it did
+    /// not — because that is what a reader of this output is looking for, and
+    /// it discloses nothing: a `None` says the grammar found no user info, not
+    /// what the user info was.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Dsn")
+            .field("raw", &Redacted)
+            .field("user", &self.user)
+            .field("password", &self.password)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("database", &self.database)
+            .finish()
+    }
 }
 
 impl<'a> Dsn<'a> {
@@ -293,6 +337,40 @@ mod tests {
 
     fn refused(raw: &str) -> Error {
         parse(raw, KEY, &file()).expect_err("the DSN is refused")
+    }
+
+    #[test]
+    fn fr_err_013_the_debug_of_a_parsed_dsn_carries_neither_the_url_nor_its_password() {
+        // `Dsn::raw` is the value as the file wrote it, user info included, and
+        // a `Field` carries no discriminant saying which field it holds — so a
+        // derived Debug printed the whole credential-bearing URL beside the
+        // field that carries the credential on its own. FR-ERR-013 and
+        // BR-ERR-003 bar both from every message.
+        //
+        // This fails the moment either becomes printable again.
+        let dsn = parsed("mysql://alice:hunter2@db.example.com:3306/shop");
+
+        for rendered in [format!("{dsn:?}"), format!("{dsn:#?}")] {
+            assert!(!rendered.contains("hunter2"), "{rendered}");
+            assert!(!rendered.contains("mysql://"), "{rendered}");
+            assert!(!rendered.contains("alice"), "{rendered}");
+            // The shape survives: a `None` says the grammar found no user info,
+            // not what the user info was.
+            assert!(rendered.contains("password: Some"), "{rendered}");
+            assert!(rendered.contains("***"), "{rendered}");
+        }
+
+        let bare = parsed("mysql://db.example.com/shop");
+        let rendered = format!("{bare:?}");
+
+        assert!(rendered.contains("password: None"), "{rendered}");
+
+        // A field on its own is as reticent as one inside the struct, which is
+        // what keeps the redaction a property of the type rather than of the
+        // container that happens to hold it.
+        let password = dsn.password().expect("the authority carries one");
+        assert_eq!(format!("{password:?}"), "***");
+        assert_eq!(password.raw(), "hunter2");
     }
 
     #[test]

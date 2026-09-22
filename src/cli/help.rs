@@ -287,6 +287,494 @@ pub(crate) const fn entries() -> &'static [Entry] {
     &ENTRIES
 }
 
+/// What help states about one flag or one positional argument beyond the facts
+/// the declaration itself carries.
+///
+/// `FR-HELP-030` obliges help to state, in **one sentence**, what supplying an
+/// argument does — the object it acts on and the effect it has — beside the six
+/// facts of `FR-HELP-013`; and the sixth of those six, mutual exclusion, is a
+/// relation between two arguments and not a property of either. Neither can be
+/// introspected, so both live here, in the typed table `FR-HELP-022` makes the
+/// one source for the text help and the JSON document alike.
+///
+/// **The text cannot live on the declarations.** `clap`'s derive lifts a field's
+/// doc comment verbatim, and those name requirement identifiers in backticks;
+/// `FR-HELP-014` makes help self-contained and bars it from referring to any
+/// document outside the help system, so a renderer that lifted one would publish
+/// citations a caller cannot resolve. `FR-HELP-030` says so in its own words and
+/// rejects the alternative.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Documented {
+    /// The argument this row is about: a flag by its long form with both
+    /// dashes, or a positional argument by the value name help spells it with.
+    pub(crate) name: &'static str,
+
+    /// One sentence saying what supplying it does (`FR-HELP-030`).
+    ///
+    /// It names a thing the specification fixes rather than restating the
+    /// argument's own spelling, and it carries no requirement identifier: help
+    /// is self-contained, per `FR-HELP-014`, and a test holds every sentence of
+    /// this table to both.
+    pub(crate) purpose: &'static str,
+
+    /// The arguments this one may not be given with, at this node
+    /// (`FR-HELP-013`).
+    ///
+    /// Spelled as the reader meets them — a long form with its dashes — and
+    /// empty where the argument excludes nothing. The tree carries no
+    /// `conflicts_with` to introspect: every exclusion this corpus obliges is
+    /// refused away from the parser, so that the caller reads it in the four
+    /// labelled lines of `FR-ERR-008` rather than in the parser's words, and
+    /// this is the one place the fact is stated.
+    pub(crate) excludes: &'static [&'static str],
+}
+
+// The rows of the typed table, one per argument the tree declares. A flag that
+// more than one node declares is written **once**, here, and named by each of
+// those nodes below: `cli::local` declares such a flag once for exactly that
+// reason, and a sentence repeated per node would drift between two nodes one
+// row of `FR-GLOB-021` names together.
+
+/// `--pattern`, as every node that declares it states it.
+const PATTERN: Documented = Documented {
+    name: "--pattern",
+    purpose: "Keeps only the objects whose name matches the LIKE pattern given, \
+              in which % stands for any run of characters and _ for exactly \
+              one.",
+    excludes: &[],
+};
+/// `--format`, as every node that declares it states it.
+const FORMAT: Documented = Documented {
+    name: "--format",
+    purpose: "Chooses the representation of the result: aligned columns laid \
+              out for a person, or the JSON document anything parsing the \
+              output must read.",
+    excludes: &[],
+};
+/// `--pretty`, as every node that declares it states it.
+const PRETTY: Documented = Documented {
+    name: "--pretty",
+    purpose: "Indents the JSON document by two spaces with one key per line, \
+              instead of writing it on a single line.",
+    excludes: &[],
+};
+/// `--direct`, as every node that declares it states it.
+const DIRECT: Documented = Documented {
+    name: "--direct",
+    purpose: "Reads the server for this invocation and ignores whatever the \
+              project's cache already holds.",
+    excludes: &[],
+};
+/// `--no-cache`, as every node that declares it states it.
+const NO_CACHE: Documented = Documented {
+    name: "--no-cache",
+    purpose: "Leaves the project's cache as it was, storing nothing this \
+              invocation read.",
+    excludes: &[],
+};
+/// `--set`, as every node that declares it states it.
+const SET: Documented = Documented {
+    name: "--set",
+    purpose: "Defines one extra variable for the template, written as \
+              key=value, and may be given once per key.",
+    excludes: &[],
+};
+/// `--context`, as every node that declares it states it.
+const CONTEXT: Documented = Documented {
+    name: "--context",
+    purpose: "Takes the render context from the JSON document named, or from \
+              standard input when the name is -, so that no server is \
+              contacted.",
+    excludes: &["--database"],
+};
+/// `--dsn`, as every node that declares it states it.
+const DSN: Documented = Documented {
+    name: "--dsn",
+    purpose: "Supplies the whole connection as one URL, in place of the flags \
+              that set its parts one at a time.",
+    excludes: &["--host", "--port", "--user", "--schema"],
+};
+/// `--host`, as every node that declares it states it.
+const HOST: Documented = Documented {
+    name: "--host",
+    purpose: "Sets the host name or address the entry connects to.",
+    excludes: &["--dsn"],
+};
+/// `--port`, as every node that declares it states it.
+const PORT: Documented = Documented {
+    name: "--port",
+    purpose: "Sets the TCP port the entry connects to.",
+    excludes: &["--dsn"],
+};
+/// `--user`, as every node that declares it states it.
+const USER: Documented = Documented {
+    name: "--user",
+    purpose: "Sets the user the entry authenticates to the server as.",
+    excludes: &["--dsn"],
+};
+/// `--schema`, as every node that declares it states it.
+const SCHEMA: Documented = Documented {
+    name: "--schema",
+    purpose: "Sets the server-side database the entry reads the catalogue of.",
+    excludes: &["--dsn"],
+};
+/// `--tls`, as every node that declares it states it.
+const TLS: Documented = Documented {
+    name: "--tls",
+    purpose: "Sets how much the entry's connection encrypts and validates, from \
+              no transport security to a validated chain and a matching host \
+              name.",
+    excludes: &[],
+};
+/// `--password-command`, as every node that declares it states it.
+const PASSWORD_COMMAND: Documented = Documented {
+    name: "--password-command",
+    purpose: "Sets the command whose standard output supplies the entry's \
+              password, so that no password is written into the file.",
+    excludes: &[],
+};
+/// `--ca-file`, as every node that declares it states it.
+const CA_FILE: Documented = Documented {
+    name: "--ca-file",
+    purpose: "Names one file of certificates the entry validates the server's \
+              chain against.",
+    excludes: &[],
+};
+/// `--ca-path`, as every node that declares it states it.
+const CA_PATH: Documented = Documented {
+    name: "--ca-path",
+    purpose: "Names a directory of certificate files the entry validates the \
+              server's chain against.",
+    excludes: &[],
+};
+
+// The three object flags of `FR-RND-003` and `FR-CACHE-024`. `FR-RND-005`
+// refuses more than one kind in one invocation, which is the exclusion each of
+// the three states about the other two.
+
+/// `--table`, the object flag.
+const OBJECT_TABLE: Documented = Documented {
+    name: "--table",
+    purpose: "Narrows the invocation to the one table named, in place of the \
+              whole catalogue.",
+    excludes: &["--view", "--routine"],
+};
+/// `--view`, the object flag.
+const OBJECT_VIEW: Documented = Documented {
+    name: "--view",
+    purpose: "Narrows the invocation to the one view named, in place of the \
+              whole catalogue.",
+    excludes: &["--table", "--routine"],
+};
+/// `--routine`, the object flag.
+const OBJECT_ROUTINE: Documented = Documented {
+    name: "--routine",
+    purpose: "Narrows the invocation to the one routine named, in place of the \
+              whole catalogue, taking a bare name or one qualified as \
+              procedure:<name> or function:<name>.",
+    excludes: &["--table", "--view"],
+};
+
+// The positional arguments, one row per node that declares one: a value name
+// says as little about its purpose as a flag name does, and `FR-HELP-030`
+// makes the two one population for that reason.
+
+/// `NAME`, as the node that declares it states it.
+const SCHEMA_TABLE_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the table to describe.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const SCHEMA_VIEW_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the view to describe.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const SCHEMA_ROUTINE_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the routine to describe, bare or qualified as \
+              procedure:<name> or function:<name>.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const TEMPLATE_SHOW_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the template whose source to write.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const TEMPLATE_CHECK_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names a template to compile; every template the project holds is \
+              compiled when none is named.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const TEMPLATE_PATH_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the template whose location on disk to write.",
+    excludes: &[],
+};
+/// `TEMPLATE`, as the node that declares it states it.
+const RENDER_TEMPLATE: Documented = Documented {
+    name: "TEMPLATE",
+    purpose: "Names the template to render.",
+    excludes: &[],
+};
+/// `KEY`, as the node that declares it states it.
+const CFG_GET_KEY: Documented = Documented {
+    name: "KEY",
+    purpose: "Names the configuration key whose value to write.",
+    excludes: &[],
+};
+/// `KEY`, as the node that declares it states it.
+const CFG_SET_KEY: Documented = Documented {
+    name: "KEY",
+    purpose: "Names the configuration key to write into.",
+    excludes: &[],
+};
+/// `VALUE`, as the node that declares it states it.
+const CFG_SET_VALUE: Documented = Documented {
+    name: "VALUE",
+    purpose: "Supplies the value written into that key.",
+    excludes: &[],
+};
+/// `KEY`, as the node that declares it states it.
+const CFG_UNSET_KEY: Documented = Documented {
+    name: "KEY",
+    purpose: "Names the configuration key to remove from the file.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const ENTRY_ADD_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the database entry to create.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const ENTRY_SHOW_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the database entry whose settings to write.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const ENTRY_UPDATE_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the database entry to change.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const ENTRY_REMOVE_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the database entry to delete.",
+    excludes: &[],
+};
+/// `NAME`, as the node that declares it states it.
+const ENTRY_TEST_NAME: Documented = Documented {
+    name: "NAME",
+    purpose: "Names the database entry whose connection to try.",
+    excludes: &[],
+};
+/// `PATH`, as the node that declares it states it.
+const INIT_PATH: Documented = Documented {
+    name: "PATH",
+    purpose: "Names the directory to create the project in; the working \
+              directory is used when none is named.",
+    excludes: &[],
+};
+/// `COMMAND_PATH`, as the node that declares it states it.
+const HELP_COMMAND_PATH: Documented = Documented {
+    name: "COMMAND_PATH",
+    purpose: "Names the node whose help to write, one segment of its path per \
+              token, at any depth.",
+    excludes: &[],
+};
+
+/// The seven global flags of `FR-GLOB-001`, indexed by flag name.
+///
+/// `FR-GLOB-003` lists them **once**, in the `OPTIONS` of `tpl --help`, so they
+/// have no command path of their own and `FR-HELP-030` indexes them by name
+/// instead. The pair `FR-CLI-015` refuses is stated here, on each of its two
+/// members, which is the same place every local pair is stated.
+const GLOBAL_ARGUMENTS: [Documented; 7] = [
+    Documented {
+        name: "--database",
+        purpose: "Selects the [database.<name>] entry of .tpl/.cfg this \
+                  invocation reads through, in place of the one core.database \
+                  names.",
+        excludes: &[],
+    },
+    Documented {
+        name: "--tpl-dir",
+        purpose: "Names the .tpl folder to work in and suppresses the upward \
+                  search for one.",
+        excludes: &[],
+    },
+    Documented {
+        name: "--timeout",
+        purpose: "Bounds the whole invocation in seconds, measured from process \
+                  start, beside the per-phase deadlines the project sets.",
+        excludes: &[],
+    },
+    Documented {
+        name: "--verbose",
+        purpose: "Raises the diagnostic detail written to standard error by one \
+                  level per occurrence, up to three.",
+        excludes: &["--quiet"],
+    },
+    Documented {
+        name: "--quiet",
+        purpose: "Lowers the diagnostic detail written to standard error to \
+                  errors alone.",
+        excludes: &["--verbose"],
+    },
+    Documented {
+        name: "--help",
+        purpose: "Writes the help of the node it is written at, instead of doing \
+                  that node's work.",
+        excludes: &[],
+    },
+    Documented {
+        name: "--version",
+        purpose: "Writes the program name and its version, instead of doing any \
+                  command's work.",
+        excludes: &[],
+    },
+];
+
+/// Every local flag and positional argument, indexed by command path.
+///
+/// One row per node that declares one, in the order [`ENTRIES`] declares the
+/// nodes. The order inside a row is immaterial: the renderer and the JSON
+/// document both walk the **tree**, which fixes declaration order per
+/// `FR-HELP-023`, and read this table by name.
+///
+/// A node that declares no argument of its own has no row, which is what a node
+/// whose `OPTIONS` and `ARGUMENTS` sections are both omitted means.
+const ARGUMENTS: [(&[&str], &[Documented]); 28] = [
+    (&["schema", "info"], &[FORMAT, PRETTY, DIRECT, NO_CACHE]),
+    (
+        &["schema", "tables"],
+        &[PATTERN, FORMAT, PRETTY, DIRECT, NO_CACHE],
+    ),
+    (
+        &["schema", "table"],
+        &[SCHEMA_TABLE_NAME, FORMAT, PRETTY, DIRECT, NO_CACHE],
+    ),
+    (
+        &["schema", "views"],
+        &[PATTERN, FORMAT, PRETTY, DIRECT, NO_CACHE],
+    ),
+    (
+        &["schema", "view"],
+        &[SCHEMA_VIEW_NAME, FORMAT, PRETTY, DIRECT, NO_CACHE],
+    ),
+    (
+        &["schema", "routines"],
+        &[PATTERN, FORMAT, PRETTY, DIRECT, NO_CACHE],
+    ),
+    (
+        &["schema", "routine"],
+        &[SCHEMA_ROUTINE_NAME, FORMAT, PRETTY, DIRECT, NO_CACHE],
+    ),
+    (&["schema", "dump"], &[PRETTY, DIRECT, NO_CACHE]),
+    (&["template", "list"], &[FORMAT, PRETTY]),
+    (&["template", "show"], &[TEMPLATE_SHOW_NAME]),
+    (&["template", "check"], &[TEMPLATE_CHECK_NAME]),
+    (&["template", "path"], &[TEMPLATE_PATH_NAME, FORMAT, PRETTY]),
+    (
+        &["render"],
+        &[
+            RENDER_TEMPLATE,
+            OBJECT_TABLE,
+            OBJECT_VIEW,
+            OBJECT_ROUTINE,
+            SET,
+            CONTEXT,
+            DIRECT,
+            NO_CACHE,
+        ],
+    ),
+    (
+        &["cache", "load"],
+        &[OBJECT_TABLE, OBJECT_VIEW, OBJECT_ROUTINE, DIRECT, NO_CACHE],
+    ),
+    (
+        &["cache", "clean"],
+        &[OBJECT_TABLE, OBJECT_VIEW, OBJECT_ROUTINE],
+    ),
+    (&["cache", "status"], &[FORMAT, PRETTY]),
+    (&["cfg", "get"], &[CFG_GET_KEY, FORMAT, PRETTY]),
+    (&["cfg", "set"], &[CFG_SET_KEY, CFG_SET_VALUE]),
+    (&["cfg", "unset"], &[CFG_UNSET_KEY]),
+    (&["cfg", "list"], &[FORMAT, PRETTY]),
+    (
+        &["cfg", "database", "add"],
+        &[
+            ENTRY_ADD_NAME,
+            DSN,
+            HOST,
+            PORT,
+            USER,
+            SCHEMA,
+            TLS,
+            PASSWORD_COMMAND,
+            CA_FILE,
+            CA_PATH,
+        ],
+    ),
+    (&["cfg", "database", "list"], &[FORMAT, PRETTY]),
+    (
+        &["cfg", "database", "show"],
+        &[ENTRY_SHOW_NAME, FORMAT, PRETTY],
+    ),
+    (
+        &["cfg", "database", "update"],
+        &[
+            ENTRY_UPDATE_NAME,
+            DSN,
+            HOST,
+            PORT,
+            USER,
+            SCHEMA,
+            TLS,
+            PASSWORD_COMMAND,
+            CA_FILE,
+            CA_PATH,
+        ],
+    ),
+    (&["cfg", "database", "remove"], &[ENTRY_REMOVE_NAME]),
+    (
+        &["cfg", "database", "test"],
+        &[ENTRY_TEST_NAME, FORMAT, PRETTY],
+    ),
+    (&["init"], &[INIT_PATH]),
+    (&["help"], &[HELP_COMMAND_PATH, FORMAT, PRETTY]),
+];
+
+/// What help states about the argument `name` at the node `path` names.
+///
+/// A global flag is looked up by name and has no command path, per
+/// `FR-GLOB-003`; every other argument is looked up by the path of the node
+/// that declares it. The two spaces do not overlap — no local flag of this tree
+/// spells a global one — and the global set is tried first so that the root's
+/// own `OPTIONS`, which is the one place the seven appear, resolves them.
+///
+/// A linear scan, for the reason [`entry`] gives: the table is small and
+/// ordered, and no unordered map appears on this path.
+pub(crate) fn documented(path: &[&str], name: &str) -> Option<&'static Documented> {
+    if let Some(global) = GLOBAL_ARGUMENTS.iter().find(|stated| stated.name == name) {
+        return Some(global);
+    }
+
+    ARGUMENTS
+        .iter()
+        .find(|(declared, _)| *declared == path)
+        .and_then(|(_, stated)| stated.iter().find(|stated| stated.name == name))
+}
+
 /// Runs `tpl help`, in whichever of its two representations was asked for.
 ///
 /// `path` is the sequence of positional segments the caller wrote, of any
@@ -1934,9 +2422,43 @@ const ENTRIES: [Entry; 35] = [
 
 #[cfg(test)]
 mod tests {
-    use super::{Code, ENTRIES, Entry, entries, entry, resolve};
+    use super::{
+        ARGUMENTS, Code, Documented, ENTRIES, Entry, GLOBAL_ARGUMENTS, documented, entries, entry,
+        resolve,
+    };
     use crate::cli::{parse, tree};
     use crate::error::Error;
+
+    /// The name the typed table indexes one argument of the tree by: a flag by
+    /// its long form with both dashes, a positional argument by its value name.
+    fn key(argument: &clap::Arg) -> String {
+        if argument.is_positional() {
+            super::render::value_name(argument).to_owned()
+        } else {
+            format!(
+                "--{}",
+                argument
+                    .get_long()
+                    .unwrap_or_else(|| argument.get_id().as_str())
+            )
+        }
+    }
+
+    /// Every (node path, argument name) pair the **tree** declares, walked
+    /// rather than enumerated, with the seven global flags of the root among
+    /// them.
+    fn declared() -> Vec<(Vec<String>, String)> {
+        let tree = tree();
+        let mut pairs = Vec::new();
+
+        visit(&tree, &[], &mut |path, node| {
+            for argument in node.get_arguments() {
+                pairs.push((owned(path), key(argument)));
+            }
+        });
+
+        pairs
+    }
 
     /// The segments of a command path, as `tpl help` receives them.
     fn segments(path: &[&str]) -> Vec<String> {
@@ -1975,6 +2497,248 @@ mod tests {
     /// The path of `entry`, as the node walk writes it.
     fn owned(path: &[&str]) -> Vec<String> {
         path.iter().map(|&segment| segment.to_owned()).collect()
+    }
+
+    #[test]
+    fn fr_help_030_every_flag_and_positional_argument_of_the_tree_carries_a_sentence() {
+        // FR-HELP-030: one sentence per flag and per positional argument,
+        // saying what supplying it does. The population is read from the
+        // **tree**, so an argument added to a node is covered here without
+        // anything in this test changing — which is the property enumerating
+        // the arguments by hand would not have.
+        for (path, name) in declared() {
+            let segments: Vec<&str> = path.iter().map(String::as_str).collect();
+            let stated = documented(&segments, &name)
+                .unwrap_or_else(|| panic!("{} states no purpose for {name}", written(&segments)));
+
+            assert!(
+                !stated.purpose.trim().is_empty(),
+                "{} states an empty purpose for {name}",
+                written(&segments)
+            );
+            assert!(
+                stated.purpose.ends_with('.'),
+                "{} states no sentence for {name}: {:?}",
+                written(&segments),
+                stated.purpose
+            );
+        }
+    }
+
+    #[test]
+    fn fr_help_014_no_sentence_of_the_table_carries_a_requirement_identifier() {
+        // FR-HELP-014 makes help self-contained: it refers to no document
+        // outside the help system, and a requirement identifier is a citation
+        // of one. FR-HELP-030 says so in its own words, which is why the text
+        // lives here and not on the declarations, whose doc comments carry
+        // them.
+        //
+        // FR-HELP-015 bars a decorative character with it, and a backtick is
+        // `rustdoc` markup rather than anything a caller reads.
+        const PREFIXES: [&str; 8] = ["FR-", "NFR-", "BR-", "UC-", "OD-", "ADR-", "OQ-", "DIV-"];
+
+        let every = GLOBAL_ARGUMENTS
+            .iter()
+            .chain(ARGUMENTS.iter().flat_map(|(_, stated)| stated.iter()));
+
+        for stated in every {
+            for prefix in PREFIXES {
+                assert!(
+                    !stated.purpose.contains(prefix),
+                    "{} cites {prefix} in its sentence: {:?}",
+                    stated.name,
+                    stated.purpose
+                );
+            }
+
+            assert!(
+                !stated.purpose.contains('`'),
+                "{} carries a backtick: {:?}",
+                stated.name,
+                stated.purpose
+            );
+        }
+    }
+
+    #[test]
+    fn fr_help_022_the_table_states_nothing_about_an_argument_the_tree_does_not_declare() {
+        // The other direction of the walk above: a row whose node or whose
+        // argument left the tree is a row that can no longer be reached, and
+        // which would go on stating something of nothing.
+        let mut declared = declared();
+        declared.sort();
+
+        for (path, stated) in ARGUMENTS {
+            let owned: Vec<String> = path.iter().map(|&segment| segment.to_owned()).collect();
+
+            for row in stated {
+                assert!(
+                    declared
+                        .binary_search(&(owned.clone(), (*row.name).to_owned()))
+                        .is_ok(),
+                    "{} states {} and the tree declares no such argument there",
+                    written(path),
+                    row.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fr_help_013_every_mutual_exclusion_the_table_declares_names_an_argument_of_the_same_node() {
+        // FR-HELP-013's sixth fact. The tree declares no `conflicts_with` to
+        // introspect, so the pairs are stated here; what this holds is that
+        // each names an argument that exists where it is stated — a global flag
+        // for a global row, and an argument of that node for a local one — so
+        // the help cannot send a caller after a flag the node does not declare.
+        let tree = tree();
+
+        for stated in GLOBAL_ARGUMENTS {
+            for excluded in stated.excludes {
+                assert!(
+                    GLOBAL_ARGUMENTS.iter().any(|other| other.name == *excluded),
+                    "the global flag {} excludes {excluded}, which is not a global flag",
+                    stated.name
+                );
+            }
+        }
+
+        for (path, rows) in ARGUMENTS {
+            let mut node = &tree;
+            for segment in path {
+                node = node
+                    .find_subcommand(segment)
+                    .unwrap_or_else(|| panic!("{} is a node of the tree", written(path)));
+            }
+
+            let declared: Vec<String> = node.get_arguments().map(key).collect();
+
+            for row in rows {
+                for excluded in row.excludes {
+                    assert!(
+                        declared.iter().any(|name| name == excluded)
+                            || GLOBAL_ARGUMENTS.iter().any(|other| other.name == *excluded),
+                        "{} states that {} excludes {excluded}, which it does not declare",
+                        written(path),
+                        row.name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fr_cli_015_and_fr_rnd_005_state_their_pairs_symmetrically() {
+        // A pair is a relation, and a caller reading either member has to meet
+        // it. The two global flags of FR-CLI-015 and the three object flags of
+        // FR-RND-005 are the pairs both of whose members the same node
+        // declares, and each names the other.
+        for stated in GLOBAL_ARGUMENTS {
+            for excluded in stated.excludes {
+                let other = GLOBAL_ARGUMENTS
+                    .iter()
+                    .find(|other| other.name == *excluded)
+                    .expect("the excluded flag is a global flag");
+
+                assert!(
+                    other.excludes.contains(&stated.name),
+                    "{} excludes {excluded} and is not excluded back",
+                    stated.name
+                );
+            }
+        }
+
+        for (path, rows) in ARGUMENTS {
+            for row in rows {
+                for excluded in row.excludes {
+                    let Some(other) = rows.iter().find(|other| other.name == *excluded) else {
+                        // The one asymmetric pair of the tree: FR-RND-018
+                        // refuses --context beside a flag the **root**
+                        // declares, and FR-GLOB-003 forbids repeating a global
+                        // flag at another node, so it is stated on --context
+                        // alone.
+                        assert!(
+                            GLOBAL_ARGUMENTS.iter().any(|flag| flag.name == *excluded),
+                            "{} excludes {excluded}, which is neither local nor global",
+                            row.name
+                        );
+                        continue;
+                    };
+
+                    assert!(
+                        other.excludes.contains(&row.name),
+                        "{} excludes {excluded} at {} and is not excluded back",
+                        row.name,
+                        written(path)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fr_help_013_the_four_exclusions_this_corpus_obliges_are_all_stated() {
+        // A floor under the walks above, which would pass over a table that
+        // stated no exclusion at all. The four are FR-CLI-015, FR-RND-005,
+        // FR-RND-018 and FR-CFG-029, named by the node that refuses each.
+        let stated = |path: &[&str], name: &str| -> &'static [&'static str] {
+            documented(path, name)
+                .unwrap_or_else(|| panic!("{} states nothing about {name}", written(path)))
+                .excludes
+        };
+
+        // FR-CLI-015, the one global pair.
+        assert_eq!(stated(&[], "--quiet"), ["--verbose"]);
+        assert_eq!(stated(&[], "--verbose"), ["--quiet"]);
+
+        // FR-RND-005, on each of the three nodes that declare the object flags.
+        for path in [
+            &["render"][..],
+            &["cache", "load"][..],
+            &["cache", "clean"][..],
+        ] {
+            assert_eq!(stated(path, "--table"), ["--view", "--routine"]);
+            assert_eq!(stated(path, "--view"), ["--table", "--routine"]);
+            assert_eq!(stated(path, "--routine"), ["--table", "--view"]);
+        }
+
+        // FR-RND-018.
+        assert_eq!(stated(&["render"], "--context"), ["--database"]);
+
+        // FR-CFG-029, on both nodes that declare the entry flags. The discrete
+        // **connection** flags are the four that say where to connect.
+        for path in [
+            &["cfg", "database", "add"][..],
+            &["cfg", "database", "update"][..],
+        ] {
+            assert_eq!(
+                stated(path, "--dsn"),
+                ["--host", "--port", "--user", "--schema"]
+            );
+
+            for discrete in ["--host", "--port", "--user", "--schema"] {
+                assert_eq!(stated(path, discrete), ["--dsn"]);
+            }
+        }
+    }
+
+    #[test]
+    fn fr_help_030_a_row_is_written_once_for_a_flag_more_than_one_node_declares() {
+        // `cli::local` declares such a flag once, and the sentence follows the
+        // declaration: two nodes naming one flag read one row, so the text
+        // cannot drift between two nodes that one row of FR-GLOB-021 names
+        // together.
+        let shared: Vec<&Documented> = ARGUMENTS
+            .iter()
+            .flat_map(|(_, stated)| stated.iter())
+            .filter(|stated| stated.name == "--pretty")
+            .collect();
+
+        assert!(shared.len() > 1, "--pretty is declared by one node only");
+
+        for stated in &shared {
+            assert_eq!(**stated, *shared[0]);
+        }
     }
 
     /// The path of `entry` as a caller writes it, for a failure message.

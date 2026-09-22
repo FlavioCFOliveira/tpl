@@ -1,7 +1,7 @@
 ---
 title: The Context Document
 status: approved
-last-reviewed: 2026-09-20
+last-reviewed: 2026-09-21
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
 ---
 
@@ -673,8 +673,26 @@ variable is bound to a source, which is
   names, which is the whole of what makes `tpl schema dump` the round-trip
   partner of `tpl render --context` under `FR-SCH-022`. Nothing about what a
   member of one of those arrays contains is settled here; that is
-  [catalogue-coverage.md](catalogue-coverage.md) and the open questions it
-  carries.
+  [catalogue-coverage.md](catalogue-coverage.md), which fixes it.
+
+  *Corrected in the thirty-first edition: the second half of the last clause
+  named nothing.* It read *that is [catalogue-coverage.md] and the open
+  questions it carries*, which was true when it was written and stopped being
+  true in the seventh edition: that file's ten entries were all closed by the
+  observation pass of 2026-09-10, and its index has been empty since. A
+  reader following the clause arrived at a heading reading **None**, and read
+  it as a gap where the member shape is unsettled — which is the opposite of
+  what that file now holds. The clause names the file alone, because the file
+  alone is where the answer is.
+
+  *Rejected: keeping the clause and qualifying it — "and any open question it
+  carries".* A pointer that hedges whether its target has anything at the end
+  of it is a pointer the reader has to check before following, and the check is
+  the same one this correction made once. Also rejected: dropping the whole
+  sentence. Its first half is the boundary this requirement needs — the
+  collections are fixed here and their members are not — and losing it would
+  leave a reader of `FR-CTX-035` with no statement of where the member shape
+  is fixed at all.
 
   *Narrowed* `OQ-024` to the **metadata fields** of the `database` object,
   which `FR-CTX-036` now fixes.

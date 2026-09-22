@@ -25,8 +25,18 @@
 //! the order it was written, and is reduced to at most one before any command
 //! reads it.
 //!
+//! **The three flags that carry no value override themselves.** `FR-CLI-025`
+//! makes a repeated valueless flag **idempotent** — `tpl -q -q version` is
+//! `tpl -q version` — and `ArgAction::SetTrue` raises an `ArgumentConflict` on
+//! a second occurrence unless the argument is declared as overriding itself.
+//! The declaration is therefore `overrides_with` naming the flag's own
+//! identifier, which is the parser expressing the requirement rather than a
+//! rule of [`super::rules`] refusing it: there is nothing to refuse, and a
+//! rule that accepted the repetition after the parser had already rejected it
+//! would be a rule with no invocation to run on.
+//!
 //! What is deliberately **not** here: the refusal of `-q` together with `-v`
-//! (`FR-CLI-015`), the refusal of the repetition just described
+//! (`FR-CLI-015`), the refusal of the repetition of a flag that carries a value
 //! (`FR-CLI-014`), and the saturation of `FR-CLI-016`. All three are parsing
 //! rules, owned by [`super::rules`], and a `conflicts_with` written here would
 //! decide one of them in the parser's words rather than in the four labelled
@@ -112,7 +122,16 @@ pub(crate) struct Globals {
 
     /// Whether `-q/--quiet` was given, lowering the diagnostic level to errors
     /// only (`FR-GLOB-015`).
-    #[arg(short = 'q', long = "quiet", action = ArgAction::SetTrue, global = true)]
+    ///
+    /// It overrides itself, per `FR-CLI-025`: the flag carries no value, so a
+    /// second occurrence has the effect of the first.
+    #[arg(
+        short = 'q',
+        long = "quiet",
+        action = ArgAction::SetTrue,
+        overrides_with = "quiet",
+        global = true
+    )]
     pub(crate) quiet: bool,
 
     /// Whether `-h/--help` was given, at whichever node it appeared
@@ -121,10 +140,29 @@ pub(crate) struct Globals {
     /// It is a flag of this tree and not the parser's own: `OD-07` renders all
     /// seven sections of `FR-HELP-006` in `tpl`, so `disable_help_flag` is set
     /// on every node and this is the only `--help` the tree declares.
-    #[arg(short = 'h', long = "help", action = ArgAction::SetTrue, global = true)]
+    ///
+    /// It overrides itself, per `FR-CLI-025`, which names this flag as the one
+    /// the case is sharpest for: `-h/--help` is what a caller reaches for **to
+    /// recover from a failure**, so refusing `tpl -h -h` refuses the recovery
+    /// path itself.
+    #[arg(
+        short = 'h',
+        long = "help",
+        action = ArgAction::SetTrue,
+        overrides_with = "help",
+        global = true
+    )]
     pub(crate) help: bool,
 
     /// Whether `-V/--version` was given (`FR-GLOB-020`).
-    #[arg(short = 'V', long = "version", action = ArgAction::SetTrue, global = true)]
+    ///
+    /// It overrides itself, per `FR-CLI-025`.
+    #[arg(
+        short = 'V',
+        long = "version",
+        action = ArgAction::SetTrue,
+        overrides_with = "version",
+        global = true
+    )]
     pub(crate) version: bool,
 }

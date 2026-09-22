@@ -462,7 +462,7 @@ Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tab
 | Acesso MariaDB | `sqlx` + `tokio` | Versões, âmbito do runtime e candidato rejeitado: `ADR-003` e `ADR-005`, em `docs/adr/` |
 | Serialização | `serde` + `serde_json` | O contexto de render é `serde`-serializável |
 | Configuração | `toml` + `serde` na leitura; `toml_edit` na escrita | A escrita preserva comentários e ordem; `OD-09`, em `docs/spec-technical/open-decisions.md` |
-| Erros | `thiserror` na biblioteca, `anyhow` no binário | |
+| Erros | `thiserror` na biblioteca; o binário não carrega tipo de erro próprio | O `main.rs` lê o `exit_code` da biblioteca e devolve-o; `OD-32`, em `docs/spec-technical/open-decisions.md` |
 | Logging | Diagnósticos próprios, sem subscriber instalado | Sem `tracing` nem `tracing-subscriber`; controlado pela flag de verbosidade; `OD-17`, em `docs/spec-technical/open-decisions.md` |
 | uid do processo | `rustix`, `default-features = false`, `features = ["process"]` | `getuid` seguro; via `libc` exigiria `unsafe`; `OD-24`, em `docs/spec-technical/open-decisions.md` |
 
@@ -536,7 +536,7 @@ Conformidade com as [Rust API Guidelines](https://rust-lang.github.io/api-guidel
 
 ### Tipos e erros
 
-- **`Result` e `Option` com o operador `?`.** `unwrap`/`expect` fora de testes só com a invariante documentada na própria mensagem. O tipo de erro segue a tabela da Stack: `thiserror` na biblioteca, `anyhow` no binário.
+- **`Result` e `Option` com o operador `?`.** `unwrap`/`expect` fora de testes só com a invariante documentada na própria mensagem. O tipo de erro segue a tabela da Stack: `thiserror` na biblioteca, e o binário não carrega tipo de erro próprio.
 - **Newtypes para invariantes** — um nome de tabela já validado não é uma `String` qualquer.
 - **Genéricos ou `impl Trait`** em vez de indirecção desnecessária; `Box<dyn Trait>` só quando a heterogeneidade for real.
 - **Conversões por `From`/`TryFrom`**, e não por funções avulsas quando o trait serve.

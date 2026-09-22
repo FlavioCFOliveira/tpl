@@ -267,6 +267,14 @@ pub fn notice(text: &str) {
         Ok(mut stderr) => {
             let _ = stderr.write_all(line.as_bytes());
         }
+        // The one legitimate print in this repository: it is the fallback of
+        // a notice that must reach a plain `cargo test` run, and it is test
+        // support rather than a path the binary can reach.
+        #[allow(
+            clippy::print_stderr,
+            reason = "the fallback of a skip notice, which is worse than silence only if it is \
+                      not written at all"
+        )]
         Err(_) => eprint!("{line}"),
     }
 }

@@ -49,7 +49,7 @@ Out of scope: the wording of any individual message.
   | `69` | `EX_UNAVAILABLE` | Server unreachable: DNS, connection refused, network deadline exceeded, TLS failure | Check host and network; the operation is read-only and therefore repeatable |
   | `70` | `EX_SOFTWARE` | Internal error — a defect in `tpl` | Report it; not fixable by the caller |
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
-  | `74` | `EX_IOERR` | I/O failure reading `.tpl`, or writing to stdout, including a pipe closed mid-document in JSON | Check permissions and free space |
+  | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space |
   | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue | Fix the credentials, or request read access |
   | `78` | `EX_CONFIG` | No `.tpl` found; unsafe `.cfg` ownership or mode; malformed `.cfg`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
 
@@ -64,6 +64,60 @@ Out of scope: the wording of any individual message.
   producing conditions of a code are read in the modules the file index of the
   [README](README.md#file-index) lists, and are never assembled from this
   column.
+
+  *Amended in the thirty-first edition: the `74` cell characterises the class
+  its code reports, where it named one direction of it.* It read *I/O failure
+  reading `.tpl`, or writing to stdout*, which excludes two conditions this
+  corpus states under that code: `FR-CFG-041` rewrites `.tpl/.cfg` and exits
+  `74` when the write fails, and `FR-RND-035` exits `74` when a `--context`
+  file or stream cannot be read. Under the paragraph above a condition is
+  neither absent nor misfiled because no cell names it, so neither condition
+  was ungoverned; what was wrong is that the cell **characterised** the class
+  as reading `.tpl` and writing to stdout, and the class is I/O on what the
+  invocation reads or writes. The code set is unchanged, no other cell moves,
+  and the column is no more of an enumeration than it was: the kinds of file
+  and stream this system touches are what the cell names, not a list of the
+  conditions that can fail on them.
+
+  *Rejected: leaving the cell and relying on the paragraph above.* It is
+  correct and it is not what the cell is for. A cell that characterises a class
+  narrower than the class sends a reader looking for another code, which is the
+  reading that put `74` in five commands' help before any requirement said so.
+
+  *Amended in the thirty-third edition: the cell names a fourth kind, because
+  the class reaches four.* The cell and the note above named three — `.tpl` and
+  what it holds, a `--context` document, and stdout — and called them the kinds
+  of file and stream this system touches. **Trust material is a fourth.**
+  `FR-CONF-014` routes an entry of a `ca_path` the system cannot resolve, or
+  cannot read at its target, to this code, and nothing in this corpus requires
+  either key's path to lie inside `.tpl` — a conventional `CApath` is a system
+  trust store, which is the arrangement that requirement exists to serve.
+  Nothing was ungoverned while the count stood at three, because the paragraph
+  above says a condition is neither absent nor misfiled because no cell names
+  it, and no requirement rests on the count. What was wrong is the same thing the thirty-first edition corrected in
+  this cell: a characterisation narrower than the class it characterises. The
+  observation was recorded and deliberately not acted on by the edition that
+  made it, on the ground that it had no reading to choose between; this edition
+  has one.
+
+  *Rejected: turning the cell back into an enumeration of the four kinds.* It
+  is the reading the thirty-first edition refused and the nineteenth closed the
+  column against, and a fourth member is no argument for reopening either. The
+  cell characterises; four is not a list any more than three was, and the four
+  are named so that a reader of the cell can tell whether a failure of theirs
+  falls inside the class — which is what a characterisation is for. The count
+  is not load-bearing and no requirement cites it, so a fifth kind moves this
+  cell and nothing else.
+
+  *Rejected: a code of its own for trust material.* `FR-ERR-002` forbids
+  collapsing two conditions onto one code only where the caller's next step
+  would differ, and it does not differ here: a certificate that cannot be read
+  is answered by checking permissions on the path the configuration names,
+  which is the step this row already prints. `78` was the near alternative,
+  since the path comes from `.tpl/.cfg`, and the two codes divide on what
+  failed: `FR-CONF-014` takes `74` where the reading of a file failed, and
+  `FR-CONF-044` takes `78` where the directory named nothing to read, which is
+  a fault in the configuration and not in the filesystem.
 
   *Amended in the fifth edition.* The `78` row gains five conditions, all of
   them from decisions written into
@@ -274,7 +328,9 @@ Out of scope: the wording of any individual message.
   THEN the system SHALL exit `78`.
 
 - **FR-ERR-005**: IF a named database entry does not exist, THEN the system
-  SHALL exit `66` with a nearest-match suggestion.
+  SHALL exit `66` with a nearest-match suggestion. The condition arises only on
+  a command that requires an entry, per `FR-GLOB-025`; `FR-GLOB-007` owns the
+  rule and states the outcome where the command requires none.
 
   *Rationale.* Nothing selected is a configuration problem, pointing at the
   file. A name that does not resolve is a named object that does not exist, like
@@ -285,6 +341,15 @@ Out of scope: the wording of any individual message.
   *Amended in the fifth edition.* The last clause said "only in the `kind`
   field". `FR-ERR-015` withdraws that field; the argument is unchanged and now
   names the line that actually carries the distinction.
+
+  *Amended in the thirty-first edition.* The second sentence of each of the two
+  requirements above is a cross-reference and not a second rule.
+  `FR-GLOB-006` has qualified its `78` with *and the command requires one*
+  since the first edition and `FR-GLOB-007` carried no such qualifier, so read
+  literally this pair said that `tpl -d nope cfg list` is `66` while
+  `tpl cfg list` in a project with no `core.database` is `0`. `FR-GLOB-007` as
+  amended qualifies the `66` in the same terms and `FR-GLOB-025` names the
+  commands both qualifiers mean. Nothing here changes what a code means.
 
 ## Which code a configuration key produces
 
@@ -360,6 +425,23 @@ Out of scope: the wording of any individual message.
   Steps 2 and 3 SHALL be skipped for the commands `FR-PROJ-025` names, which
   require no project. Step 1 runs for every command without exception, so an
   unknown flag on `tpl --help` is still `64`.
+
+  **A step whose condition an invocation does not raise is not a step the
+  invocation skips.** Steps 2 and 3 are named above because they are skipped
+  for four commands that would otherwise have a project to discover, which is
+  an exemption. The other steps need none: step 4 is reached only by an
+  invocation that names a template, step 5 only by a command `FR-GLOB-025`
+  says requires a database entry, steps 6 and 7 only by one that reads the
+  catalogue, and step 8 only by a render. This order fixes the sequence in
+  which conditions are evaluated and does not assert that every invocation
+  raises every condition.
+
+  *Added in the thirty-first edition.* The paragraph states what was always
+  meant and was readable the other way: naming two steps as skipped invited the
+  contrast that the other six always run, and an implementer took it — the help
+  of roughly thirty commands was written on a reading of step 5 that this
+  requirement never stated. The reading was right, and it is now `FR-GLOB-007`
+  and `FR-GLOB-025` that say so.
 
   *Amended in the third edition.* The sentence about steps 2 and 3 is new. The
   order alone did not say whether `--help` reached discovery; `FR-PROJ-025` now
@@ -452,12 +534,30 @@ Out of scope: the wording of any individual message.
 
   *Accepted cost, stated plainly, because it is visible outside the process.*
   Under `--context -` the document is no longer read before the template name
-  is judged, so a producer at the other end of the pipe is cut off; where its
-  document does not fit the pipe buffer, `FR-ERR-026` makes that producer exit
-  `74` where it exited `0`. What a caller branches on is unchanged: the refusal
-  is downstream of the producer, so `66` is the status a shell reports for the
-  pair of `FR-RND-017` with `pipefail` and without it, and the producer's own
-  code is reachable only by inspecting each stage.
+  is judged, so a producer at the other end of the pipe is cut off. It exits
+  `74` under `FR-ERR-026` only where it had **already written bytes of its
+  document into the pipe** when the consumer went away; where it had not, its
+  first write finds the reader gone with nothing delivered, which is the silent
+  `0` of `FR-ERR-025`. What a caller branches on is unchanged either way: the
+  refusal is downstream of the producer, so `66` is the status a shell reports
+  for the pair of `FR-RND-017` with `pipefail` and without it, and the
+  producer's own code is reachable only by inspecting each stage.
+
+  *Corrected in the thirty-first edition: the stated condition was necessary
+  and not sufficient.* The thirtieth edition gave it as *where its document
+  does not fit the pipe buffer*, which is the condition under which the
+  producer is still writing when the consumer leaves — a necessary condition,
+  and short of the one that decides the code, which is whether a byte reached
+  the pipe. Measured with the fixture up, eight runs of eight of
+  `tpl schema dump --direct --no-cache | tpl render nosuch --context -` gave
+  `producer=0 consumer=66 pair=66` on every run: the consumer refuses in about
+  **3 ms**, on the fourth step of this order, while the producer is still
+  connecting and reading the catalogue, so no byte of the dump had been
+  written. The test
+  `fr_err_006_under_context_dash_the_producer_is_cut_off_and_the_pair_is_still_66`
+  asserts it. `FR-ERR-025` and `FR-ERR-026` are amended in the same edition to
+  say what puts a document in flight, so that the condition this note states is
+  the condition those two requirements state.
 
   *Rejected: leaving the order as it was and recording why it stands.* The
   ground would have had to be that one order for every command is worth what
@@ -545,7 +645,7 @@ Out of scope: the wording of any individual message.
   |---|---|
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
   | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or the structural rule of [context-document.md](context-document.md) it failed. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012` |
-  | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, or the key space of `FR-CONF-002` |
+  | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, the key space of `FR-CONF-002`, or the `--context` document and the collection of it the name was sought in |
   | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
@@ -580,6 +680,17 @@ Out of scope: the wording of any individual message.
   the row obliges is otherwise unchanged: the fact — an invariant or a panic —
   and where it happened. "Where" is the location the condition arose at, not
   the text a panic carried.
+
+  *Amended in the thirty-first edition: the `66` row names a fourth
+  population.* It named three, and `FR-RND-032` produces a `66` over a fourth:
+  an object flag naming a table, a view or a routine that is not in the
+  document supplied to `--context`. That population is neither the server-side
+  database — no server was reached, per `FR-RND-022` — nor the template root
+  nor the key space, so the row obliged a `cause` to name a population it did
+  not admit, and a `cause` naming the server-side database for a read that
+  touched no server is a wording false of the failure it reports, which the
+  paragraph above bans. No code changes and the other three populations are as
+  the first edition left them.
 
   *Amended in the twenty-fifth edition: the `69` row names a fifth phase.* It
   named four, and one statement this system issues belonged to none of them.
@@ -778,10 +889,11 @@ Out of scope: the wording of any individual message.
   specification enumerates is a literal of this requirement: a command or alias
   of the command tree of [cli-contract.md](cli-contract.md), a flag a node
   declares, and a key of the enumerated space of `FR-CONF-002`. Every other
-  value is subject to the character set, whatever its source; the values this
-  specification names are a table, a view, a routine, a template, a database
-  entry, the `<name>` segment of a `database.<name>` key, and the name of an
-  environment variable. Each such value SHALL be tested on its own, and the
+  value is subject to a character set, whatever its source — the set above,
+  except for the one population `FR-ERR-040` governs by a set of its own; the
+  values this specification names are a table, a view, a routine, a template, a
+  database entry, the `<name>` segment of a `database.<name>` key, and the name
+  of an environment variable. Each such value SHALL be tested on its own, and the
   separators that join names into a command or into a key are literals — the
   space between command-path segments, the `-` or `--` that introduces a flag,
   and the `.` between key segments.
@@ -819,6 +931,18 @@ Out of scope: the wording of any individual message.
   naming an entry outside the set is dropped by `FR-ERR-023`, exactly as that
   entry name would be dropped as a candidate in its own right.
 
+  *Amended in the thirty-first edition: one population is named that this
+  requirement governs and could not admit.* *Every other value is subject to
+  the character set, whatever its source* reaches a **flag value the caller
+  supplied in a separate token**, which `FR-CLI-018` obliges a `hint` to write
+  back in the corrected `--flag=value` form. It is not one of the values this
+  requirement enumerates and it is not a literal — a caller chooses it — so it
+  falls to the closing clause, and the closing clause refuses every one of
+  them: the condition of `FR-CLI-018` is that the value **begins with `-`**,
+  and no value beginning with `-` matches `[A-Za-z0-9_]{1,64}`. `FR-ERR-040`
+  states the set that governs it, and this requirement's own set is unchanged
+  for every other value.
+
 - **FR-ERR-023**: IF a nearest-match candidate is subject to that character set
   and falls outside it, THEN the system SHALL NOT present that candidate at all
   — neither as an executable suggestion nor as prose — and SHALL emit the
@@ -851,6 +975,82 @@ Out of scope: the wording of any individual message.
   hint — was rejected because a caller that copies a whole `hint` line does not
   reliably distinguish its prose half from its command half, which is the
   assumption `FR-ERR-022` exists to avoid relying on.
+
+- **FR-ERR-040**: A flag value the caller supplied in a separate token, written
+  into a `hint` under `FR-CLI-018`, SHALL be governed by the character set
+  `[A-Za-z0-9_-]{1,64}`, measured over the **whole value** including every
+  leading `-`. IF the value falls outside that set, THEN the system SHALL write
+  the corrected form with a placeholder in the value's position rather than the
+  value, and SHALL present the value nowhere else — neither elsewhere in the
+  `hint` nor as prose, on the ground `FR-ERR-023` states for a candidate its
+  own set refuses.
+
+  ```
+  hint:  write the value in one token: --pattern=-x
+  hint:  write the value in one token: --pattern=<value>
+  ```
+
+  *It is governed, and the question was whether it is.* `FR-ERR-022` enumerates
+  seven values it names and then closes with *every other value is subject to
+  the character set, whatever its source*, so a flag value is governed by that
+  closing clause and always was. What it could not be is governed by that
+  **set**: every value reaching `FR-CLI-018` begins with `-`, so the set
+  refuses all of them, and `FR-CLI-018`'s obligation to show the corrected form
+  would never once show a value. The set is the thing that yields, for this
+  population and no other.
+
+  *Why the hyphen is admitted and nothing else is.* `FR-ERR-022`'s ground is
+  that a `hint` is copied and run, so a value built into one must not be able
+  to end the command and start another. `[A-Za-z0-9_-]` holds no shell
+  metacharacter, no quotation mark, no whitespace and no newline, and the value
+  is written after an `=` that joins it to its flag in one token, so it cannot
+  be read as a flag of its own by the shell or by `tpl`. The twentieth
+  edition's refusal to widen the set of `FR-ERR-022` itself stands and is the
+  reason this is a second set: widening there is paid for by every untrusted
+  name, and the population that needs the hyphen is one.
+
+  *Why the bound is over the whole value.* It is the half the implementation
+  could not enforce. The admission test derived from `FR-ERR-022` splits a
+  value on `-` and bounds each segment at 64 characters, which bounds no value
+  at all: `tpl -d -a-a-a-a-a-a-a-a version` reaches the `hint` with every
+  segment one character long, and a value of any length composed the same way
+  reaches it too. `{1,64}` measured over the whole value gives that test
+  something to enforce, and 64 is `FR-ERR-022`'s own number, taken rather than
+  chosen so that the two sets differ in their alphabet and in nothing else.
+
+  *`FR-CLI-018` is satisfiable, and is satisfied both ways.* That requirement
+  obliges the `hint` to **show the corrected form**, and the corrected form is
+  `--flag=value` — the joining, not the value. A value the set admits is
+  written into it and a value the set refuses leaves a placeholder in its
+  position, and in both cases the caller is shown the shape their invocation
+  should have had. `FR-ERR-023` governs a nearest-match **candidate** and not
+  this value, so it is not extended here; what is borrowed from it is its
+  ground, that a value a set refuses is not shown at all rather than shown
+  beside a warning.
+
+  *Not exploitable as things stand, and stated so that the bound is not read as
+  a fix for a breach.* Nothing outside `[A-Za-z0-9_-]` ever reached a `hint`
+  through this path, because the admission test bounds the alphabet correctly
+  and bounds only the length wrongly. What was unbounded was how much of the
+  caller's own token could be written back to the caller's own terminal.
+
+  *Rejected: declaring a flag value ungoverned.* It is the reading that leaves
+  an untrusted value in a runnable `hint` with no test at all, and the closing
+  clause of `FR-ERR-022` says the opposite in terms. A later reader finding a
+  value in a `hint` and no rule governing it would reopen this, which is what
+  stating the answer here prevents.
+
+  *Rejected: widening `FR-ERR-022`'s set to `[A-Za-z0-9_-]{1,64}` for every
+  population.* The twentieth edition rejected exactly this and its ground is
+  undiminished: every widening is paid for by every untrusted name, and a
+  hyphen admitted for a caller's flag value would be admitted for a table name
+  the server chooses.
+
+  *Rejected: writing the placeholder form always, never the value.* It is safe
+  and it throws away the line's whole value to a calling agent, which is the
+  correction it copies. `FR-ERR-009` makes the `hint` the line that gives most
+  in return, and a hint that never names the value the caller wrote tells them
+  only that a rule exists.
 
 - **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, and every C0 control
   character in every value it interpolates into a message — catalogue names,
@@ -888,17 +1088,63 @@ Out of scope: the wording of any individual message.
 
 ## `EPIPE`
 
+**In flight** is defined in [glossary.md](glossary.md#in-flight). The two
+requirements below divide the outcomes of a closed stdout on that line and on
+no other.
+
+*Amended in the thirty-second edition: the definition moves to the glossary
+and this passage cites it.* The thirty-first edition wrote the definition
+here, following `NFR-PERF-007`'s treatment of *differential run*, which left
+the corpus with two conventions for where a defined term lives and broke the
+one [glossary.md](glossary.md) states of itself. The glossary governs; the
+decision, and the alternative rejected with it, are recorded at the head of
+that file. **Nothing about the line changes** — the definition there is this
+one, word for word on every clause `FR-ERR-025` and `FR-ERR-026` turn on, and
+no requirement of this file is amended.
+
 - **FR-ERR-025**: WHEN stdout is closed by the consumer and no JSON document is
-  mid-flight, the system SHALL terminate silently with exit `0`.
+  in flight, the system SHALL terminate silently with exit `0`.
 
   *Rationale.* `tpl … | head -1` is not an error. In `text`, a cut listing is
   exactly what `head` asked for.
 
-- **FR-ERR-026**: IF stdout is closed part-way through a JSON document, THEN the
-  system SHALL exit `74`.
+  *Amended in the thirty-first edition: "mid-flight" is defined above and the
+  wording follows it.* The word was read two ways and the readings disagree on
+  a real invocation. A producer that has begun composing a document but has
+  written no byte of it can be said to have one mid-flight; on the reading this
+  corpus needs it has not, because the rationale of `FR-ERR-026` turns on what
+  the **consumer received**, and a consumer that received nothing did not
+  receive truncated JSON. Nothing about `tpl` changes: this is the only
+  behaviour either requirement ever admitted, and it is what
+  `src/output/writer.rs` already does.
+
+- **FR-ERR-026**: IF stdout is closed while a JSON document is in flight, THEN
+  the system SHALL exit `74`.
 
   *Rationale.* The consumer received truncated JSON and cannot tell that it is
   incomplete.
+
+  *Amended in the thirty-first edition, with `FR-ERR-025` and for the same
+  reason.* "Part-way through a JSON document" is now "while a JSON document is
+  in flight", which the paragraph above defines, so the necessary and
+  sufficient condition for this code is stated rather than left to the word
+  *through*. A producer whose very first write fails is not part-way through
+  anything a consumer can see, and it is `FR-ERR-025`.
+
+  *Observed, 2026-09-21.* Eight runs of eight of
+  `tpl schema dump --direct --no-cache | tpl render nosuch --context -`, with
+  the fixture up, gave `producer=0 consumer=66 pair=66` on every run. The
+  consumer refuses in about 3 ms at step 4 of `FR-ERR-006`, before the producer
+  has connected, so the producer's first write finds the reader gone with no
+  byte emitted and this requirement is not reached. The note of `FR-ERR-006`
+  that records the cost of the move states the same condition, and the test is
+  `fr_err_006_under_context_dash_the_producer_is_cut_off_and_the_pair_is_still_66`.
+
+  *Rejected: qualifying the note of `FR-ERR-006` alone and leaving these two
+  as written.* The note is an account of a cost and these two are the
+  requirements a caller and an implementer read; a condition stated exactly in
+  a note and loosely in the requirement it cites is the second copy nobody
+  edits, pointing the wrong way round.
 
 ## Deadlines
 
@@ -971,8 +1217,19 @@ Out of scope: the wording of any individual message.
   a program branches on.
 
 - **BR-ERR-003**: No error message, at any verbosity, may disclose a credential,
-  the resolved DSN, or the contents of `.tpl/.cfg`. See `FR-GLOB-018` and
-  [security.md](security.md).
+  the resolved DSN, or the contents of `.tpl/.cfg`, with exactly one exception:
+  the `password_command` array **as stored**, where a requirement of this
+  specification obliges a `cause` line to name it. See `FR-GLOB-018`, which
+  owns the rule and the exception, `FR-CONF-033`, which carries the residual it
+  leaves, and [security.md](security.md).
+
+  *Amended in the thirty-first edition.* The rule barred the contents of
+  `.tpl/.cfg` from every error message while `FR-CONF-033` obliged the `cause`
+  of a non-zero `password_command` to name the command as stored, and
+  `FR-CONF-031` obliged the same of the output cap. The two specific
+  requirements govern; this rule states the exception rather than being read
+  past. Nothing else on this list yields: a credential is barred without
+  exception, and so is the resolved DSN and every other key of the file.
 
 ## Dependencies
 
@@ -982,6 +1239,10 @@ Out of scope: the wording of any individual message.
   `FR-ERR-024` restates for messages.
 - [security.md](security.md) — hint construction and redaction as a
   cross-cutting concern.
+- [configuration-model.md](configuration-model.md) — `FR-CONF-014`, which
+  routes an unreadable entry of a `ca_path` to the `74` of `FR-ERR-001`, and
+  `FR-CONF-044`, which answers a `ca_path` that yields nothing with `78`
+  instead; together they are why the `74` cell names trust material.
 
 ## Open questions
 
