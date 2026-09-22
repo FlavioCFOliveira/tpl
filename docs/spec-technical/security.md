@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-22
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -337,12 +337,27 @@ than reasoned, and both bear on the build.
 | The mode-to-driver mapping lives in exactly one place | Recorded in [`ADR-002`](../adr/adr-002-tls-mode-mapping.md), which `FR-CONF-038` requires and rule R3 of [`docs/adr/`](../adr/README.md) obliges; this document cites it and carries none of it | `FR-CONF-038`, `FR-CONF-013` |
 | The mode set is an admission test over the dependency table | Carried by [technology-stack.md](technology-stack.md#the-database-driver-and-the-five-tls-modes), where the criterion belongs to the stack rather than to this subject | `FR-CONF-036` |
 | Pinned trust material joins the root store rather than replacing it | A property of how the store is assembled, not a choice available here: pinning therefore enlarges what passes verification instead of restricting it, and no output or document may describe it as exclusive | `FR-CONF-039`, `FR-CONF-014`, [`OD-16`](open-decisions.md#od-16--the-tls-backend-and-the-root-store) |
+| An entry of a `ca_path` directory is judged at its **target** | `mariadb/` resolves the entry before deciding its kind, so what contributes is decided by what the name points at and not by what the name is. An entry that cannot be resolved, or cannot be read at its target, names **its own path in the directory** in the diagnostic. The target is not confined to the directory: no requirement bounds it, and the build adds no bound of its own | `FR-CONF-014`, `FR-ERR-034` row `74` |
+| A `ca_path` that contributes nothing refuses the invocation before the driver is reached | The test is a **per-key record of whether an entry contributed**, not the assembled bundle being empty: a `ca_file` declared beside it fills the bundle on its own, and the key that was honoured would otherwise mask the key that was not. `mariadb/` decides it while composing the driver options, before any address is resolved | `FR-CONF-044` |
 
 The trust anchors themselves, the rejection of the platform store and the
 consequence for reproducibility across hosts are
 [`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s and are not restated. The
 third limit of [overview.md](overview.md#the-three-limits-the-system-states-rather-than-overcomes)
 is the fourth row above, stated where a reader would otherwise assume more.
+
+**A symbolic link has three dispositions in this crate, and no component decides
+for another.** `render/` refuses one at every component below the template root,
+`project/` canonicalises before either file check, and `mariadb/` resolves a
+`ca_path` entry and judges what it resolves to — the first two are the tables of
+*Template containment* and *Project discovery* above, the third is the fifth row
+of this one. There is no shared path-policy helper: each disposition is written
+where its own requirement applies, and a single helper would have to carry the
+difference as a parameter. Why each requirement disposes as it does is
+`FR-CONF-014`'s weighing; which entries of a `ca_path` contribute is
+`FR-CONF-014`'s, and the hand-off of the assembled bundle to the driver is
+[`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s. None of the three is
+restated.
 
 ## The read-only promise in two parts
 

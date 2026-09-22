@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [README.md, open-decisions.md]
 ---
 
@@ -63,7 +63,16 @@ editions. The last two of them were written in the sprint that closed the first
 gap: eleven identifiers were added across the two, thirty entries of the
 divergence register were discharged and two were opened, and none of it is
 reflected in the rows below. **The mapping is current with the twenty-second
-edition and behind by ten.**
+edition and behind by ten.** That count is the one the last harvest recorded,
+not a fresh one.
+
+**Two rows of section 11 are harvested ahead of that gap**, on 2026-09-22:
+`FR-CONF-014` as the thirty-second edition amended it, and `FR-CONF-044`, which
+that edition added. Both were taken out of order because the concerns they force
+had **no technical answer anywhere in this folder** — no row here, and no
+passage in [security.md](security.md), where the trust material's assembly is
+answered. Nothing else of that edition, or of any other unharvested one, is
+reflected below.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -303,6 +312,8 @@ that honours it.
 | The five modes' observed behaviour against a TLS-offering and a TLS-less server is fixed; the **mapping onto the driver belongs in an ADR** and is cited, not restated | `FR-CONF-038` | `security`; [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) |
 | The **fixture is under obligation**: at each supported series it presents a server whose certificate names the host the tests reach it by, and retains a server offering no TLS. How either is provisioned is left to this folder, and both were provisioned on 2026-09-11 | `FR-CONF-038` as amended in the eighth edition; `FR-SRV-015`, `FR-SRV-029` | `operations`, `verification` |
 | Trust material is **additional** to the platform/bundled roots; exclusive trust is not deliverable and must not be claimed | `FR-CONF-039` | `security` (`OD-16`) |
+| An entry of a `ca_path` directory is judged on the kind of what it **resolves to**, and a failure to resolve names the entry's own path in the directory rather than being passed over. The target is not confined to the directory: no boundary is required and the build adds none | `FR-CONF-014` (thirty-second edition); `FR-ERR-034` row `74` | `security` |
+| A declared `ca_path` that contributes nothing refuses the invocation, and the test is a **per-key record of contribution** and not the assembled bundle being empty — a `ca_file` declared beside it fills the bundle on its own | `FR-CONF-044` | `security` |
 | `${VAR}` expands in six fields only; inside a DSN the URL is **parsed first**, expanded within the delimited field, then percent-encoded | `FR-CONF-015`, `FR-CONF-018` | `security`, `interfaces` |
 | Single-pass expansion, `$$` literal, unclosed brace `78`, undefined variable `78` | `FR-CONF-019` … `FR-CONF-022` | `interfaces` |
 | `password_command` runs **without a shell** from an argument array; metacharacters are literal | `FR-CONF-024`, `FR-CONF-026` | `security` |

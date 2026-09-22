@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [README.md, traceability.md]
 ---
 
@@ -9,9 +9,9 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Thirty-two entries, each a decision the repository could not settle on its own.
-**All thirty-two are settled. None is open.** Nineteen were settled by the
-product owner in the interview of 2026-09-10, by the establishment of the
+Thirty-three entries, each a decision the repository could not settle on its
+own. **Thirty-two are settled. One, `OD-33`, is open.** Nineteen were settled by
+the product owner in the interview of 2026-09-10, by the establishment of the
 decision register, and by the eighth edition of `/specification`; nine more were
 settled on 2026-09-11, together with all five residuals the eighth edition left
 inside settled entries. The fifth, `OD-22`'s, was work rather than a decision:
@@ -38,6 +38,13 @@ It is the fifth entry to prepare a correction to `CLAUDE.md`, and the user
 applied that correction on 2026-09-22. `OD-20` was narrowed the same day:
 `FR-ERR-039` names the edit-distance variant, so the entry holds only how the
 distance is computed.
+
+**One entry was added on 2026-09-22**, when sprint 18 delivered `examples/`:
+`OD-33`, whether `UC-013` joins the twelve-flow acceptance skeleton. It is the
+**one entry carrying `Open` today**, and it is open because the choice is not
+this folder's alone. `OD-04` was corrected the same day: the
+`[workspace]` table now carries a second exclusion, and the entry said it
+carried one.
 
 **One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
 that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
@@ -215,7 +222,7 @@ the last two rows below.
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
 | **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. `OD-30` is the one entry carrying it |
-| **Open** | Not decided. The entry names the options and the owner. **No entry carries this status today** |
+| **Open** | Not decided. The entry names the options and the owner. **`OD-33` is the one entry carrying it**, since 2026-09-22 |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
 ## Index
@@ -254,9 +261,11 @@ the last two rows below.
 | [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled, interim | — |
 | [OD-31](#od-31--the-models-shape-strings-fields-and-the-attribute) | The model's shape: strings, fields, and the attribute | Settled | — |
 | [OD-32](#od-32--anyhow-in-the-shipped-graph) | `anyhow` in the shipped graph | Settled | — |
+| [OD-33](#od-33--uc-013-and-the-twelve-flow-acceptance-skeleton) | `UC-013` and the twelve-flow acceptance skeleton | Open | user |
 
 Thirty-one entries are settled outright; `OD-19` alone carries an observation
-owed. Thirty-one and one are the whole of the thirty-two. `OD-30` is settled and
+owed, and `OD-33` is open. Thirty-one, one and one are the whole of the
+thirty-three. `OD-30` is settled and
 **interim**: it records an arrangement each later sprint removes one arm of, and
 it is discharged when no arm remains — one arm remains.
 
@@ -394,11 +403,24 @@ are recorded in `ADR-006` and are **not restated here**, per rule R3 of
 [`docs/adr/README.md`](../adr/README.md). The residual this entry carried was
 settled on 2026-09-11 and is part of the decision that record holds.
 
-**The manifest carries a `[workspace]` table, and it does not reopen this
-entry.** The table exists to exclude the vendored directory
+**The manifest carries a `[workspace]` table with two exclusions, and neither
+reopens this entry.** The first is the vendored directory
 [`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) places in the
 repository; that record states that it adds no second package and leaves
-`ADR-006`'s decision untouched.
+`ADR-006`'s decision untouched. The second, added in sprint 18, is
+`examples/rust-data-layer` — the crate the Rust worked example of `FR-EX-001`
+renders. It is generated rather than maintained, and it turns on a `sqlx`
+feature this package does not. Excluding it keeps it out of the workspace, so
+the mandated validation pipeline of `CLAUDE.md` *Desenvolvimento* neither
+compiles it nor resolves and fetches what it needs; its own acceptance signal is
+the compile gate `FR-EX-009` obliges the example to carry, run by the example's
+script and outside that pipeline.
+
+**The package count is what this entry decided.** `cargo metadata --no-deps`
+returns one workspace member, `tpl`, read on 2026-09-22; a root build therefore
+selects that package alone, which task #216 observed the same day of
+`cargo build --release`. A second package in the repository is not a second
+package in the build.
 
 ---
 
@@ -2284,6 +2306,41 @@ is cited above, not restated.
 
 ---
 
+## OD-33 — `UC-013` and the twelve-flow acceptance skeleton
+
+**Status: open.** Owner: the user, because one of the two options reaches the
+mandated validation pipeline, which `CLAUDE.md` *Desenvolvimento* fixes and this
+folder does not own.
+
+**The question.** `specification/use-cases.md` now holds thirteen flows.
+[verification.md](verification.md#the-twelve-end-to-end-flows) names twelve as
+the acceptance-test skeleton, and [README.md](README.md#verificationmd) and
+section 16 of [traceability.md](traceability.md) count the same twelve. Does
+`UC-013` become the thirteenth, or does the skeleton stay at twelve for a stated
+reason?
+
+**Why it is a decision and not a harvest.** The corpus does not settle it.
+`specification/use-cases.md` *Overview* says the flows exist to show how the
+requirements compose and to give each help text a source for its `EXAMPLES`
+section; it does not make them acceptance tests. That reading is this folder's,
+and so is the count. What makes `UC-013` different from the twelve is its
+acceptance signal: `FR-EX-009` puts it in a compile gate over four target
+languages, run by the worked example's own script, where the twelve are each
+placed under one of the two kinds that table names — *Integration* and *Server*
+— both of which `cargo test` runs.
+
+| Option | What it would cost |
+|---|---|
+| **A — `UC-013` joins as a thirteenth flow.** The table gains a row and the skeleton is the whole of `specification/use-cases.md` | The register of mandated tests would name a test that `cargo test --all-features` does not run, so *Kind* gains a third value beside *Integration* and *Server* and the pipeline that decides whether a mandated test passed is no longer the mandated pipeline alone. It would also bring four external toolchains — the four of `examples/README.md` — inside this folder's verification surface, each with a floor to state and to keep current |
+| **B — the skeleton stays at twelve, closed by a stated criterion rather than by a count.** `UC-013` is named as excluded, with the criterion: a flow enters the skeleton when a test in `tests/` can assert its postcondition | The exclusion has to be stated wherever the count appears — `verification.md`, `README.md` and the section 16 row of `traceability.md` — or the folder reads as unharvested against a corpus that has thirteen. And the one flow that exercises whether the commands compose into a delivered artefact would have no entry in the register of mandated tests, so nothing in this folder would say what verifies it |
+
+**Neither option is taken here, and the twelve are untouched meanwhile.** No row
+of the skeleton is renumbered, reworded or removed by this entry; what the three
+documents say today they say against `UC-001` … `UC-012` and remains true of
+those twelve.
+
+---
+
 ## Editorial defects, reported and corrected
 
 Two statements in `specification/` were stale when this register was written.
@@ -2301,12 +2358,13 @@ left hunting for an open defect.
 
 ## What remains
 
-No entry is open, so there is no order of work over the register. What remains
-is one obligation, and it blocks one statement.
+One entry is open and one obligation stands. Each blocks one statement, and
+neither blocks the other.
 
 | Order | What | Owner | Blocks |
 |---|---|---|---|
 | 1 | `OD-19`'s owed observation — `ADR-009`'s *owned copy* against a value whose members are borrowed, and the peak-memory consequence the record draws from that word | `adr-guardian` | No document of this folder may read *owned copy* as settling how an embedded value holds its members |
+| 2 | `OD-33`'s question — whether `UC-013` joins the acceptance skeleton, on the two options that entry states | user | No document of this folder may present its flow count as closed against the corpus; the twelve stand as written and `UC-013` is neither added to them nor named as excluded until this is answered |
 
 `OD-14`'s obligation, which stood first in this table, was discharged on
 2026-09-21: the observation was made, it went the other way, and the entry
