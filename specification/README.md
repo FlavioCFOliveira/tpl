@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty-seven editions. All are in force;
+The specification has been written in thirty-eight editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3624,6 +3624,31 @@ not judge, and raising an entry is not what this edition was authorised to do.
 It is named here so that the next reading of
 [upstream-divergences.md](upstream-divergences.md) has it, it blocks nothing,
 and no requirement of this corpus waits on it.
+
+### Thirty-eighth edition — a count that did not say what it counted
+
+`FR-CACHE-034` required `tpl cache status` to report, per collection, "the
+count of objects held", and left open whether an object file whose content
+cannot be read, is not valid UTF-8, or does not decode is held.
+`FR-CACHE-033` answers that question for a read and not for a report. The user
+decided that it is held.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The count is of object files present, not of objects readable** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-034` now defines `count` as
+  the number of files in the collection's folder that the arrangement versioned
+  by `cache_format` names as objects, whatever their content, and forbids
+  opening an object file to count it. A temporary file of a write in flight and
+  any other file that is not an object file are not counted. Whether a file can
+  serve stays with `FR-CACHE-033`, at read time. *Accepted cost:* a count can
+  include a file the next read treats as a miss. `FR-CACHE-025`,
+  `FR-CACHE-035`, `FR-CDOC-006` and `FR-CDOC-013` were read against the
+  decision and none conflicts with it, so none is amended. Neither root
+  document paraphrases the count, so the fifth validation rule owes nothing.
 
 ### Still out of scope
 

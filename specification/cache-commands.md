@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md]
 ---
 
@@ -241,7 +241,7 @@ tpl -d shop cache status
   |---|---|
   | `entry` | The name of the selected database entry |
   | `loaded_at` | The load time from `meta.json`, per `FR-CDOC-013`, or `null` when the cache is empty |
-  | `collections` | An array of objects, one per collection, each carrying `name`, the count of objects held, and whether the collection was loaded whole, per `FR-CDOC-006` |
+  | `collections` | An array of objects, one per collection, each carrying `name`, `count` — the number of object files the collection holds, as defined below — and whether the collection was loaded whole, per `FR-CDOC-006` |
 
   ```json
   {"schema_version":1,"source":"project","data":{"entry":"shop","loaded_at":"2026-09-10T08:14:22Z","collections":[{"name":"tables","count":14,"whole":true}]}}
@@ -258,6 +258,26 @@ tpl -d shop cache status
   Monday beside another read on Friday. Carrying a load time per object would
   answer more precisely and is not carried, because `FR-CDOC-013` fixes the
   field at the entry level.
+
+  The `count` of a collection SHALL be the number of object files present in
+  that collection's folder: every file that the on-disk arrangement versioned
+  by `cache_format`, per `FR-CDOC-002`, names as an object of that collection,
+  whether or not its content is readable, is valid UTF-8, or decodes as a
+  document. `tpl cache status` SHALL NOT open an object file to count it. A
+  temporary file of a write in flight, per `FR-CACHE-030`, and any other file
+  that is not an object file SHALL NOT be counted.
+
+  *Amended in the thirty-eighth edition.* The requirement said "the count of
+  objects held" and left open whether an object file whose content cannot be
+  read is held. The user decided that it is.
+
+  *Rationale.* The count reports what the cache holds, not what it can serve.
+  Whether a file can serve is decided at read time, where `FR-CACHE-033` makes
+  an unreadable file a miss and rewrites it. Counting by content would make a
+  status report read every cached byte to produce a number.
+
+  *Accepted cost.* A count can include a file that the next read treats as a
+  miss, per `FR-CACHE-033`, until that read rewrites it.
 
 - **FR-CACHE-035**: WHEN the cache for the selected entry is empty, the `data`
   of `tpl cache status` SHALL carry `loaded_at` `null` and `collections` an
