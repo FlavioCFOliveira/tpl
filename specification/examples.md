@@ -2,7 +2,7 @@
 title: Worked Examples
 status: approved
 last-reviewed: 2026-09-22
-related: [use-cases.md, template-environment.md, server-contract.md, render-command.md, cfg-commands.md]
+related: [use-cases.md, template-environment.md, server-contract.md, render-command.md, cfg-commands.md, project-and-discovery.md, template-commands.md]
 ---
 
 # Worked Examples
@@ -24,8 +24,8 @@ example renders is accepted by the target language's own toolchain, per
 
 In scope: what a worked example is, how many there are, which schemas they
 read, which server they read them from, what artefacts each one holds, the
-workflow each one drives, where its type mapping comes from, and what makes one
-correct.
+workflow each one drives, where that workflow runs, where its type mapping
+comes from, and what makes one correct.
 
 Out of scope: the content of any template, the content of any type mapping, the
 code any example renders, the tools a compile gate invokes, and how the server
@@ -68,7 +68,7 @@ exception and its two members.
 
   | Artefact | What it is |
   |---|---|
-  | Templates | The templates that produce the data layer's source files, held in the example's own `.tpl/templates/`, per `FR-TMPL-004` |
+  | Templates | The templates that produce the data layer's source files, held in a directory of the example's own beside the driver script and placed into the project's `.tpl/templates/` by the workflow, per `FR-EX-010` |
   | The type-mapping macro | The example's mapping from a catalogue type to a type of the target language, per `FR-EX-008` |
   | The driver script | One program that runs the workflow of `FR-EX-004` from beginning to end, written in Python for every example whatever the target language is |
   | The compile gate | The step that submits the rendered files to the target language's compiler and reports whether they were accepted, per `FR-EX-009` |
@@ -86,6 +86,20 @@ exception and its two members.
   its comparability and buys nothing: the driver invokes a command line, which
   every one of the four languages does equally badly and equally well.
 
+  *Amended in the thirty-fifth edition: the templates are the example's and the
+  project is the run's.* The first row read *held in the example's own
+  `.tpl/templates/`, per `FR-TMPL-004`*, and that could not hold together with
+  `FR-EX-004`, whose first step is `tpl init`: `FR-PROJ-014` exits `73` against
+  a destination that already has a `.tpl` and changes nothing, so an example
+  carrying one could never run the workflow this file obliges it to drive. The
+  two requirements were written in one edition and neither was read against the
+  other; the defect was found by the work that built the four examples, all of
+  which resolved it the same way. `FR-EX-010` writes that resolution down, and
+  this row now names where the templates are kept and cites it for where they
+  are put. `FR-TMPL-004` is unchanged and is where the requirement lands: a
+  template is a file under `.tpl/templates/` at the moment `tpl render` reads
+  it, which is what `FR-EX-010` obliges the workflow to arrange.
+
 ## The workflow a worked example drives
 
 - **FR-EX-004**: A worked example SHALL drive the whole workflow through the
@@ -99,6 +113,11 @@ exception and its two members.
   | Verify the access | `tpl cfg database test` | `FR-CFG-024`, `FR-CFG-039` |
   | Read the schema | `tpl schema …` | `FR-SCH-001` … `FR-SCH-015` |
   | Render | `tpl render` | `FR-RND-001` … `FR-RND-006` |
+
+  **Where this workflow runs, and how the example's templates reach
+  `.tpl/templates/` between its first step and its last, is `FR-EX-010`.** The
+  first step is possible only in a directory that holds no project when it
+  runs, and the fifth reads templates the first step did not write.
 
   *Rationale, and it is the whole reason the examples exist.* The primary
   consumer of `tpl` is an agent that has three channels and only three — the
@@ -125,6 +144,50 @@ exception and its two members.
   invocations plus whatever the example renders once for the whole database.
   `UC-008` and `BR-RND-002` already fix that iteration is the caller's job;
   here the caller is the driver script.
+
+- **FR-EX-010**: A worked example SHALL drive the workflow of `FR-EX-004` in a
+  **workspace**: a directory that holds no `.tpl` when the workflow starts and
+  in which `tpl init` creates the project. IF a previous run left a `.tpl`
+  there, THEN the workflow SHALL remove it before `tpl init` runs. The project
+  SHALL NOT be an artefact of the example: the example SHALL hold its templates
+  outside that project and SHALL place them under `.tpl/templates/` after
+  `tpl init` and before the first `tpl render`.
+
+  Three requirements decide those clauses. `FR-PROJ-014` exits `73` against a
+  destination that already has a `.tpl` and changes nothing, so an example that
+  kept its project could not run a second time. The project holds the database
+  entries the workflow's second step registers, and `FR-PROJ-019` gives its
+  `.cfg` mode `0600`. And `FR-TMPL-004` fixes where `tpl render` reads a
+  template from, which is why the templates have to be moved rather than merely
+  held: everything the example is — the four artefacts of `FR-EX-003` — and
+  every file it renders lives outside the `.tpl`, and only a copy of the
+  templates is inside it while the workflow runs.
+
+  *Rationale.* `FR-EX-003` and `FR-EX-004` could not both be satisfied
+  literally: one put the example's templates in its own `.tpl/templates/` and
+  the other began the workflow with the command that creates `.tpl` and refuses
+  to create it twice. What the two were reaching for is one arrangement, and it
+  is the one this requirement states: the project is a **product** of the
+  workflow rather than a part of the example, and the templates are a part of
+  the example that the workflow puts into the product. Placing them after
+  `tpl init` is also what makes `FR-EX-008`'s rationale hold: the Rust example
+  begins from the macro `FR-PROJ-017` writes and is free to **replace** it,
+  which it could not do if its own files were there first.
+
+  *Rejected: an example that carries a committed `.tpl/templates/`, and a
+  workflow that finds it already there.* It is the reading `FR-EX-003` invited
+  and it fails on `FR-PROJ-014`, which exits `73` and changes nothing: the
+  example could not drive the workflow `FR-EX-004` obliges it to drive, and the
+  demonstration would begin by stepping around the first command it exists to
+  demonstrate. Its mirror — dropping `tpl init` from `FR-EX-004` so that a
+  committed project becomes admissible — fails on that requirement's own
+  rationale, and costs more besides: the project carries `.tpl/.cfg`, so
+  committing it commits the entries of a run against a real server.
+
+  *Accepted cost.* A reader who opens a worked example before running it sees a
+  `templates/` directory that is not where `FR-TMPL-004` says a template lives,
+  and has to read this requirement to learn why. The alternative costs the
+  example its first command, which is the more expensive of the two.
 
 ## The schemas a worked example reads
 
@@ -261,6 +324,10 @@ exception and its two members.
 - [schema-commands.md](schema-commands.md) — the read commands of `FR-EX-004`.
 - [render-command.md](render-command.md) — `FR-RND-028`, which is why
   `FR-EX-005` redirects.
+- [project-and-discovery.md](project-and-discovery.md) — `FR-PROJ-014` and
+  `FR-PROJ-017`, which are why `FR-EX-010` reads as it does.
+- [template-commands.md](template-commands.md) — `FR-TMPL-004`, which fixes
+  where a template is read from.
 - [template-environment.md](template-environment.md) — `FR-ENV-011` and
   `BR-ENV-002`, which put the type mapping in the project.
 - [context-document.md](context-document.md) — `FR-CTX-014` and `FR-CTX-038`,

@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty-four editions. All are in force;
+The specification has been written in thirty-five editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -2610,7 +2610,7 @@ fourth population. The index of [open-questions.md](open-questions.md) stays
 empty.
 
 **Two of the fourteen change what `tpl` does.** A valueless flag written twice
-is accepted where the parser refuses it today, and every flag and every
+is accepted where the parser then refused it, and every flag and every
 positional argument must now say what it does in its help. Everything else
 states what was already in force, qualifies a rule that reached further than
 its ground, or corrects a sentence that had stopped being true.
@@ -2638,8 +2638,8 @@ its ground, or corrects a sentence that had stopped being true.
   two values disagreeing and a valueless flag has none. Six flags are reached —
   `-q/--quiet`, `--pretty`, `--direct`, `--no-cache`, `-h/--help` and
   `-V/--version` — and `-v/--verbose` is excluded, because `FR-CLI-016` counts
-  its repetitions. Refusing with `64`, which is what the parser produces today
-  and produces by accident, is rejected in the requirement's own text: the
+  its repetitions. Refusing with `64`, which is what the parser then produced
+  and produced by accident, is rejected in the requirement's own text: the
   meaning of `tpl -q -q` is not in doubt to anybody, and `tpl -h -h` refuses
   the very path a caller uses to recover from a refusal. `FR-GLOB-015` carries
   the cross-reference where the flag is declared.
@@ -3180,12 +3180,13 @@ whose every internal check passes.
 **Three things are named and not acted on.**
 
 - **The survey the second half was put to found one more of the same shape, and
-  it is not corrected here.** `FR-CLI-025` rejects *`64`, which is what the
+  it was not corrected here.** `FR-CLI-025` rejected *`64`, which is what the
   parser produces today* — an option named by the behaviour built, in the
   present tense and undated, in a requirement whose whole effect is to change
-  that behaviour, so the clause becomes false at the moment the requirement is
-  satisfied. Three near instances were read and judged not of the class, each
-  because an edition attribution dates the reading: two notes of
+  that behaviour, so the clause became false at the moment the requirement was
+  satisfied. The thirty-fifth edition corrected it. Three near instances were
+  read and judged not of the class, each because an edition attribution dates
+  the reading: two notes of
   [configuration-model.md](configuration-model.md) written *in the thirty-second
   edition* over what `src/diagnostics/cause.rs` already produced, and
   `FR-ERR-025`'s note written *in the thirty-first* over what
@@ -3202,11 +3203,113 @@ whose every internal check passes.
   ground the note at the foot of this file states for the count of validation
   rules.
 
-**`DIV-050` is checked and unchanged.** It records that `CLAUDE.md`'s tree
-names `examples/` as though the directory held something, and the directory
-still holds nothing: a requirement obliging the folder to exist is not the
-folder existing. The entry is due exactly as it was, and the task that creates
-the folder is what discharges its `examples/` limb.
+**`DIV-050` was checked and unchanged.** It records that `CLAUDE.md`'s tree
+names `examples/` as though the directory held something, and when this edition
+ran the directory held nothing: a requirement obliging the folder to exist is
+not the folder existing. The entry was due exactly as it was, and the task that
+created the folder is what discharged its `examples/` limb — `0110f8c`, in the
+thirty-fifth edition.
+
+### Thirty-fifth edition — a folder that arrived, a clause built to age, and two requirements that could not both hold
+
+Sprint 18 delivered `examples/` and the four worked examples the thirty-fourth
+edition described. Three things in this corpus fell due with it and are
+answered here in one pass. The register holds an entry raised over the folder's
+absence. One requirement carries the defect that edition found in another,
+named, and deliberately did not act on. And the two requirements it wrote about
+an example's templates and an example's workflow could not both be satisfied
+literally — which the work that built the four examples found, and resolved the
+same way in all four before this corpus said anything about it.
+
+**One identifier is assigned — `FR-EX-010` — none is retired and none is
+renumbered.** One term enters [glossary.md](glossary.md): *workspace*. No entry
+is raised in [upstream-divergences.md](upstream-divergences.md) and none
+changes status, though one is discharged in one more of its limbs. The index of
+[open-questions.md](open-questions.md) stays empty. **No figure is ratified and
+no baseline is set, and nothing this edition changes changes what `tpl` does.**
+
+- **A limb discharged by the repository catching up with the document** —
+  [upstream-divergences.md](upstream-divergences.md). `DIV-050` records that
+  `CLAUDE.md`'s project tree names six paths in the present indicative, and it
+  has been **partly discharged** since `d8e7e8a` and `4014dc4` made three of
+  them true. `0110f8c` created `examples/` on 2026-09-22, with the shared
+  driver, the four worked examples of `FR-EX-001` and a `README.md` of its own,
+  so the fourth line is now true of what is there rather than of a path that
+  merely exists. The entry stays **partly discharged** and owes two lines where
+  it owed three; `templates/` and `benches/` are untouched, and so is
+  `DIV-052`, which reads `benches/` from the other end. No count in that
+  register moves, because a status value is what it counts. The trigger was an
+  event in the repository and not an edit to either root document, which is the
+  direction the thirty-second edition widened the **Overstatement** kind to
+  cover.
+- **A rejected option that named the behaviour the requirement exists to
+  change** — [cli-contract.md](cli-contract.md). `FR-CLI-025` rejected *`64`,
+  which is what the parser produces today* and closed on *the parser that
+  refuses it*: the present tense, undated, over an implementation. It is the
+  instance the thirty-fourth edition's survey found beside `FR-CONF-014`'s two
+  clauses and named without correcting, and it is the worse of them — **this
+  requirement's whole effect is to change the behaviour the clause named**, so
+  the clause was false in the commit that wrote it and stayed false from the
+  moment the requirement was satisfied, telling every later reader that `tpl`
+  refuses what it accepts. The option is kept, is now named by what it does —
+  refusing the invocation with `64` — and is grounded in the outcome it
+  produces: no requirement of this corpus ever chose the refusal, and a caller
+  pays a whole invocation to learn something that changes nothing about what
+  they asked for. The reading of the implementation is kept beside it as an
+  `*Observed, 2026-09-22.*` note, in the form
+  [project-and-discovery.md](project-and-discovery.md) uses for its two
+  readings of `src/project/init.rs`: the six flags are declared as overriding
+  themselves, `tpl -q -q version` and `tpl -h -h` both exit `0`, and `455e48d`
+  carries the requirement and that declaration in one commit. The three near
+  instances that survey judged clean are re-read and unchanged, each dated by
+  the edition it attributes its reading to.
+- **Two requirements that could not both be satisfied literally** —
+  [examples.md](examples.md), [use-cases.md](use-cases.md) and
+  [glossary.md](glossary.md). `FR-EX-003` put a worked example's templates in
+  *the example's own `.tpl/templates/`* and `FR-EX-004` began that example's
+  workflow with `tpl init`, which `FR-PROJ-014` refuses with `73` against a
+  destination that already has a `.tpl`, changing nothing. An example cannot
+  carry a project and also create one. Both were written in the thirty-fourth
+  edition and neither was read against the other; the contradiction was found
+  by the work that built the driver, and all four examples resolved it
+  identically. `FR-EX-010` writes that resolution down: the workflow runs in a
+  **workspace** that holds no `.tpl` when it starts, the project `tpl init`
+  creates there is a product of the run and not an artefact of the example, and
+  the example's templates are held outside it and placed under
+  `.tpl/templates/` after `tpl init` and before the first `tpl render`, which
+  is where `FR-TMPL-004` obliges `tpl render` to read them from. Placing them
+  after `init` is also what makes `FR-EX-008`'s rationale hold, since an
+  example that may **replace** the macro `FR-PROJ-017` writes cannot have had
+  its own files there first. **Rejected: an example that carries a committed
+  `.tpl/templates/`** — the reading `FR-EX-003` invited — because it fails on
+  `FR-PROJ-014`, and its mirror, dropping `tpl init` from the workflow, fails
+  on `FR-EX-004`'s own rationale and would commit the entries of a run against
+  a real server. `UC-013` states the placement in its first step, names the
+  `73` as an alternate flow, and carries the two identifiers with it.
+
+**Four sentences of two closed editions are corrected, and nothing else in
+either is touched.** The thirty-fourth edition closed by naming three things it
+did not act on, and two of its sentences about them were in the present tense
+and have stopped being true: `DIV-050` *is checked and unchanged* and the
+directory *still holds nothing*, and `FR-CLI-025` *rejects* a clause it no
+longer carries. The thirty-first edition's record of `FR-CLI-025` carried the
+same defect as the requirement it recorded, twice — *where the parser refuses
+it today* and *which is what the parser produces today*. Every one of the four
+verbs is put in the past, and the two that name a defect this edition repaired
+say so. This is the treatment the thirty-third and thirty-fourth editions gave
+a closed edition's present-tense claim: a closed edition stays frozen as a
+narrative, and only a verb that has stopped being true is touched.
+
+**One thing is named and not acted on.** The commits table of
+[upstream-divergences.md](upstream-divergences.md) prefaces its list by saying
+that a number of the commits it names are *not edits to a root document at
+all*, and two of the commits it then names did edit `README.md` — `db7337d` and
+`db80114`, which it names for what they made true rather than for what they
+edited. This edition adds `0110f8c` to that table and moves the count from five
+of thirteen to six of fourteen, which is what the addition obliges; the
+looseness in the phrase predates the addition and belongs to a reading of that
+sentence, and nothing turns on it, because each commit is named individually
+with what it did.
 
 ### Still out of scope
 
@@ -3248,7 +3351,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [errors-and-exit-codes.md](errors-and-exit-codes.md) | `ERR` | Exit codes, validation order, message format, suggestions |
 | [security.md](security.md) | `SEC` | Cross-cutting security rules, each pointing at its owning module |
 | [use-cases.md](use-cases.md) | `UC` | End-to-end flows across the surface |
-| [examples.md](examples.md) | `EX` | The four worked examples in `examples/`: what one is, what it reads, what it holds, and what makes it correct |
+| [examples.md](examples.md) | `EX` | The four worked examples in `examples/`: what one is, what it reads, what it holds, where it runs, and what makes it correct |
 | [catalogue-coverage.md](catalogue-coverage.md) | `CAT` | What enters the model from the catalogue, and what is excluded |
 | [context-document.md](context-document.md) | `CTX` | The structure of the document that carries the model |
 | [template-environment.md](template-environment.md) | `ENV` | Filters, tests, global functions, and what is contract |
@@ -3865,6 +3968,19 @@ The second half of the edition — the two clauses of `FR-CONF-014` that
 described the code, and the order that requirement now cites rather than
 restates — touches no fixture and no measurement. The item below was untouched
 by this edition and stays outstanding.
+
+The thirty-fifth edition adds no obligation of either kind, and records none as
+discharged. It discharges one limb of `DIV-050`, corrects a rejected option
+that described the behaviour its own requirement exists to change, and
+reconciles the two requirements of [examples.md](examples.md) that could not
+both be satisfied literally. Nothing it changes touches a fixture or a
+measurement, and nothing it changes changes what `tpl` does. What `FR-EX-010`
+requires is already true of all four worked examples, which is where it was
+read from, so nothing is owed for it inside this corpus or outside it. The
+obligation the thirty-fourth edition recorded outside this corpus — the server
+carrying the three schemas of `FR-EX-006` — is not read here and stays as that
+edition left it. The item below was untouched by this edition and stays
+outstanding.
 
 The section therefore carries the item the twentieth edition recorded, and the
 eight it has held before are all accounted for below.

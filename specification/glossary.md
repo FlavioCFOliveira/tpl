@@ -499,6 +499,14 @@ and reports failure where any file is not accepted. Its verdict, and nothing
 earlier in the workflow, is what makes a worked example correct. See
 `FR-EX-009`.
 
+## workspace
+
+The directory a worked example drives its workflow in: it holds no `.tpl` when
+the workflow starts, `tpl init` creates the project there, and that project is
+a product of the run rather than an artefact of the example. The example's own
+files are held outside that project, and its templates are placed inside it
+before the first render. See `FR-EX-010`.
+
 ## volatile field
 
 A catalogue field the server changes without any change to the structure — a row

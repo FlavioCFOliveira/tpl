@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
@@ -54,6 +54,15 @@ within the day. `DIV-036` stays **partly discharged** and now owes one sentence
 where it owed a sentence and a file; `DIV-052` stays **due** and now waits on
 one thing where it waited on two. The counts above are unchanged, because a
 status value is what they count and neither moved.
+
+**A third entry was read against the working tree, on 2026-09-22, and it did
+not move either.** `0110f8c` created `examples/`, which is one of the three
+lines of `CLAUDE.md`'s project tree that `DIV-050` still recorded as absent.
+That entry stays **partly discharged** and now owes two lines where it owed
+three. The counts above are unchanged for the same reason, and the trigger was
+again an event in the repository rather than an edit to either document — the
+direction the thirty-second edition widened the **Overstatement** kind to
+cover.
 
 Three kinds of entry appear:
 
@@ -156,12 +165,12 @@ A **Status** takes one of three values.
   there is the sentence. It is not true of an **overstatement**, where what is
   wrong is that the sentence does not match the repository: such an entry
   discharges equally when the repository catches up with the document, and the
-  passage then stands untouched and correct. `DIV-046`, `DIV-051` and three
-  lines of `DIV-050` discharged that way, at `d8e7e8a` and `4014dc4`, with no
-  edit to either root document. **The commit named is then the one that made
-  the statement true**, and the entry says so, because an entry that merely
-  stopped being listed leaves the next reader to re-derive it. Two of those
-  entries carry a further clause, and it is the reason this amendment is worth
+  passage then stands untouched and correct. `DIV-046`, `DIV-051` and four
+  lines of `DIV-050` discharged that way, at `d8e7e8a`, `4014dc4` and
+  `0110f8c`, with no edit to either root document. **The commit named is then
+  the one that made the statement true**, and the entry says so, because an
+  entry that merely stopped being listed leaves the next reader to re-derive
+  it. Two of those entries carry a further clause, and it is the reason this amendment is worth
   making: **the correction they asked for must now not be made**, since a
   sentence saying the crate does not exist would today be false. A register
   whose remedies have outlived their condition is worse than one that is
@@ -226,7 +235,7 @@ are still owed.
 
 ## The commits named below
 
-Thirteen commits are named in the statuses, and each is named by its short
+Fourteen commits are named in the statuses, and each is named by its short
 hash alone after this table.
 
 | Commit | Date | Subject |
@@ -244,6 +253,7 @@ hash alone after this table.
 | `db7337d` | 2026-09-20 | feat(schema): wire the eight schema commands and the catalogue cache |
 | `db80114` | 2026-09-21 | feat(render): deliver the third arm and the context it assembles |
 | `8f936d4` | 2026-09-21 | docs(coord): condition parallelism on user authorisation alone |
+| `0110f8c` | 2026-09-22 | feat(examples): vendor sakila and world, and write the shared driver |
 
 `3f65b5f` wrote both root documents and is the state every entry of the first
 edition was raised against. Two commits carry most of the discharges, one per
@@ -252,13 +262,14 @@ discharges and nineteen halves. `e75996c` rewrote `README.md` whole and is
 behind thirty-one, which is why the remaining work of this file is now almost
 entirely `CLAUDE.md`'s — the reverse of what the fifteenth edition found.
 
-**Five of the thirteen are not edits to a root document at all**, and they are
+**Six of the fourteen are not edits to a root document at all**, and they are
 named because an **overstatement** discharges when the repository catches up
 with the text, on the rule at *[How an entry is read](#how-an-entry-is-read)*.
-`d8e7e8a` created the crate, `4014dc4` created `tests/`, and `db7337d` and
-`db80114` wired the arms that made two sentences of `README.md` stop being
-true. `1352a2d` is the sixth and is named for neither reason: it is where this
-register was opened, and `DIV-025` cites it for a search of the history.
+`d8e7e8a` created the crate, `4014dc4` created `tests/`, `0110f8c` created
+`examples/`, and `db7337d` and `db80114` wired the arms that made two sentences
+of `README.md` stop being true. `1352a2d` is the sixth and is named for neither
+reason: it is where this register was opened, and `DIV-025` cites it for a
+search of the history.
 
 ## Index
 
@@ -1773,17 +1784,39 @@ leave this entry standing.
 
 **Target**: `CLAUDE.md`, *Estrutura do Projecto*. **Kind**: overstatement.
 
-**Status**: **partly discharged**, re-read on 2026-09-21 at `8f936d4`. Three
-of the six lines are discharged by the repository catching up with the
-document, on the rule at *[How an entry is read](#how-an-entry-is-read)*:
-`d8e7e8a` created `Cargo.toml` and `src/` with all seven of the children this
-tree names, on 2026-09-12, and `4014dc4` created `tests/` on 2026-09-15. All
-nine paths are in the working tree, verified on 2026-09-21, and the paragraph
-under the tree now speaks of a `model/` that exists. **Three lines are due**:
-`templates/`, `benches/` and `examples/` are still absent, and the tree still
-names each with a comment saying what it holds. The correction is narrower
-than it was and is unchanged in kind — a qualifier on what is not yet there,
-and **neither the tree nor the decomposition under `src/` is to be removed**.
+**Status**: **partly discharged**, re-read on 2026-09-22 against the working
+tree, and last read against `CLAUDE.md` on 2026-09-21 at `8f936d4`. **Four of
+the six lines are discharged** by the repository catching up with the document,
+on the rule at *[How an entry is read](#how-an-entry-is-read)*: `d8e7e8a`
+created `Cargo.toml` and `src/` with all seven of the children this tree names,
+on 2026-09-12; `4014dc4` created `tests/` on 2026-09-15; and `0110f8c` created
+`examples/` on 2026-09-22. All ten paths are in the working tree, verified on
+2026-09-22, and the paragraph under the tree now speaks of a `model/` that
+exists. **Two lines are due**: `templates/` and `benches/` are still absent,
+and the tree still names each with a comment saying what it holds. The
+correction is narrower than it was and is unchanged in kind — a qualifier on
+what is not yet there, and **neither the tree nor the decomposition under
+`src/` is to be removed**.
+
+*The `examples/` line, and what makes it true.* The tree calls that directory
+*pipelines completos: schema → template → output*, and in the working tree of
+2026-09-22 it holds the shared driver of `examples/_driver/`, a `README.md` of
+its own, and the four worked examples `FR-EX-001` obliges — `go-data-layer`,
+`rust-data-layer`, `python-data-layer` and `node-data-layer` — each carrying
+its templates, its type-mapping macro, its driver script and the data layer it
+renders. The line
+is therefore true of what is there and not merely of a path that exists, which
+is what an **overstatement** discharges on. Two lines of the same tree are
+untouched by this: `templates/` and `benches/` are absent, and `DIV-052` reads
+`benches/` from the other end and is neither changed nor read here.
+
+*Corrected in the thirty-fifth edition.* The *Specification* clause below said
+that an agent taking the tree for a map finds nothing at **three** of the
+paths, and named `examples/` among them; it names two. That clause is dated and
+would otherwise stand as written under the rule at *[How an entry is
+read](#how-an-entry-is-read)*, and it is corrected because it is load-bearing
+for an entry still owed: it is where this entry states what the reader loses,
+and a cost counted over a path that now exists is a cost nobody has to pay.
 
 
 
@@ -1804,10 +1837,9 @@ the section belongs to that file exactly as *Installation* belongs to
 `README.md` under `DIV-046`, and only its tense is false. It is false of the
 repository rather than of a requirement, and false to the reader that file
 declares for itself: an agent that takes the tree for the map of what it may
-open finds nothing at three of them — `templates/`, `benches/` and
-`examples/` — where when this entry was raised it found nothing at any of the
-six. `87dd6e3` makes that reading the
-natural one, because it shows the tree being maintained against the
+open finds nothing at two of them — `templates/` and `benches/` — where when
+this entry was raised it found nothing at any of the six. `87dd6e3` makes that
+reading the natural one, because it shows the tree being maintained against the
 repository — three artefacts were added to it because they exist — which tells
 a reader the list is kept current.
 *Correction*: say at the head of the tree that no code artefact exists yet and

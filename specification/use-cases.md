@@ -237,10 +237,13 @@ here introduces behaviour of its own.
 - **Trigger**: an application needs types for one target language that match a
   database it does not own
 - **Preconditions**: a server of the most recent series of `FR-SRV-015` is
-  reachable and carries the three schemas of `FR-EX-006`; the destination
-  directory is writable
+  reachable and carries the three schemas of `FR-EX-006`; the workspace of
+  `FR-EX-010` is writable
 - **Main flow**:
-  1. Run `tpl init`. The project is created, per `UC-001`.
+  1. Run `tpl init` in the workspace. The project is created, per `UC-001`.
+     The example's own templates are then placed under `.tpl/templates/`, per
+     `FR-EX-010`, because that is where step 5 reads a template from, per
+     `FR-TMPL-004`.
   2. Run `tpl cfg database add <name> --host … --user … --schema <schema>`, once
      per schema read, per `UC-002`.
   3. Run `tpl cfg database test <name>`. The four steps of `FR-CFG-024` are
@@ -256,6 +259,9 @@ here introduces behaviour of its own.
      language's own compiler accepts them, or the example has failed, per
      `FR-EX-009`.
 - **Alternate flows**:
+  - Step 1 exits `73`: the workspace still holds the `.tpl` of an earlier run,
+    per `FR-PROJ-014`, and nothing is changed. `FR-EX-010` obliges the workflow
+    to remove it first, which is what makes an example re-runnable.
   - Step 3 exits `78`: the entry names a server outside the supported window,
     per `FR-CFG-043`, and no read is attempted.
   - Step 3 exits `0` with `can_read_catalogue` false: the entry's user cannot
@@ -274,8 +280,9 @@ here introduces behaviour of its own.
   interface, per `FR-EX-004`. Which types the rendered files declare is the
   example's type-mapping macro's, per `FR-EX-008` and `FR-ENV-011`, and not
   `tpl`'s
-- **Requirements**: `FR-EX-001` … `FR-EX-009`, `FR-PROJ-017`, `FR-CFG-024`,
-  `FR-CFG-045`, `FR-SCH-004`, `FR-RND-002`, `FR-RND-028`, `FR-ENV-011`
+- **Requirements**: `FR-EX-001` … `FR-EX-010`, `FR-PROJ-014`, `FR-PROJ-017`,
+  `FR-TMPL-004`, `FR-CFG-024`, `FR-CFG-045`, `FR-SCH-004`, `FR-RND-002`,
+  `FR-RND-028`, `FR-ENV-011`
 
 ## Dependencies
 
