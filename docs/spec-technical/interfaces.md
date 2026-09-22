@@ -248,8 +248,8 @@ candidate qualifies the suggestion is omitted rather than weakened
 (`FR-ERR-019`, `FR-ERR-020`, `FR-ERR-021`). The distance is the one
 `FR-ERR-039` fixes, implemented in the crate
 ([`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms));
-its cost as a budgeted path is
-[quality-attributes.md](quality-attributes.md#the-failure-path-is-a-budget).
+its cost as a measured path is
+[quality-attributes.md](quality-attributes.md#the-failure-path-is-a-measurement-point).
 The **population** is supplied by whichever component owns it — object names by
 `mariadb/`, template names by `render/`, entry and key names by
 `project/config.rs`, command and flag names by `cli/` — and `diagnostics/` owns
@@ -985,6 +985,6 @@ and are not one decision.
 | Everything persisted, the model's fields, the per-kind field lists, the default classification | [data-model.md](data-model.md) |
 | Credentials, redaction, containment as a subject, transport, the injection surfaces | `security.md` |
 | Observability, the content a new project ships, the build and the release gates | `operations.md` |
-| Budgets, determinism as a property, and how each is measured | [quality-attributes.md](quality-attributes.md) |
+| The measurement points, determinism as a property, and how each is measured | [quality-attributes.md](quality-attributes.md) |
 | The tests over every contract above, and the two in-process seams | `verification.md` |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

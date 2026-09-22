@@ -772,6 +772,6 @@ profile that makes the hook the whole of the reporting path is
 | The model's fields, the cache on disk, the configuration file, migration | [data-model.md](data-model.md) |
 | Trust boundaries as a subject, credentials, containment, transport, the injection surfaces | `security.md` |
 | The build, the targets, the release gates, observability, the content a new project ships | `operations.md` |
-| The budgets, determinism as a property, and how each is measured | [quality-attributes.md](quality-attributes.md) |
+| The measurement points, determinism as a property, and how each is measured | [quality-attributes.md](quality-attributes.md) |
 | The tests over every component above, the harness, and the two in-process seams | `verification.md` |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

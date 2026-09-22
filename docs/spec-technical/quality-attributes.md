@@ -1,7 +1,7 @@
 ---
 title: Quality Attributes
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-22
 related: [README.md, traceability.md, open-decisions.md, overview.md]
 ---
 
@@ -9,27 +9,64 @@ related: [README.md, traceability.md, open-decisions.md, overview.md]
 
 ## What this document is
 
-The properties of form the design is held to from the first commit, the nine
-budgets and what each is measured against, the protocol that decides when a
-figure becomes a limit, and the reliability and equivalence properties a caller
-may rely on. Every statement cites the requirement that forces it; no
-requirement text is reproduced here.
+The requirements of form the design is held to from the first commit, the nine
+measurement points and what each is measured over, the protocol a reading is
+taken under, what has been measured so far, and the reliability and equivalence
+properties a caller may rely on. Every statement cites the requirement that
+forces it; no requirement text is reproduced here.
 
-**No figure appears in this document.** A budget's provisional figure lives in
-`NFR-PERF-014` and a ratified one in `BENCHMARKS.md`, and `NFR-PERF-020` is the
-step that moves it from the first place to the second. A third copy would be the
-copy nobody updates, which is the point `DIV-035` carries against the root
-coordination document. A **budget** is a requirement's target; a **baseline**
-is a measurement. The two are never written in one place.
+**No figure fails a change.** `BR-PERF-008` gives no figure named in the
+functional corpus, and no figure recorded against it in `BENCHMARKS.md`, the
+power to fail, block, reject or gate a change, a release or a piece of work. The
+obligation toward speed and toward sparing use of the machine survives as
+**design and architecture**: it decides how `tpl` is built, and it decides
+nothing about whether a change is accepted. What still fails is the requirements
+of form, and the `WL-002` scalar with them — deterministic counts, absences and
+a size, none of them a figure — and each section below says so in its own words.
+What does not fail is a **timing**, a **memory reading**, or any comparison
+between two of them.
 
-The tests and the harness that take a measurement are `verification.md`; the
-build, the target matrix and the release gates are `operations.md`.
+**No figure appears in this document.** A measurement point's **adopted** figure
+lives in `NFR-PERF-014` and a **measured** one in `BENCHMARKS.md`, and
+`NFR-PERF-020` is the step that moves it from the first place to the second
+(`NFR-PERF-019`, `BR-PERF-006`). A third copy would be the copy nobody updates,
+which is the concern `DIV-035` carries.
+
+*Restated on 2026-09-22, against the thirty-sixth edition of
+`specification/performance-requirements.md`.* That edition withdrew the whole
+enforcement regime — the one figure that could fail a change on its own merits,
+the no-regression rule, and the two requirements that existed only to divide the
+set by them — and retired four identifiers with it, none of which is cited
+anywhere in this folder any more. The vocabulary went with the regime: a
+*budget* is a **measurement point**, a *provisional* figure is an **adopted**
+one, a *ratified* figure is a **recorded** one, and *baseline* — the regime's
+word for the figure a later measurement was failed against — has no referent.
+Every section below is restated in the vocabulary in force.
+**The requirements of form are untouched by the withdrawal**, and they are set
+out first so that no reader takes them for the gates that went.
+
+The tests and the container harness are `verification.md`; the build, the target
+matrix, the release gates and the measurement harness are `operations.md`.
 
 ## The six requirements of form
 
-`BR-PERF-001` prefers a form to a figure wherever both catch the same defect,
-so these six — not the budgets — are what constrains the design. Each is
-observable, permanent, and checkable with no stopwatch.
+**These are correctness invariants, they are the part of this subject that can
+fail something, and they are what survived the withdrawal.**
+Each states a deterministic count or a deterministic absence, observable from
+outside the process and independent of how fast the host is, so none of them is
+a figure and none is reached by `BR-PERF-008`. A cache hit that opened a
+connection is a **functional defect**, failing a test for the reason a wrong
+exit code fails one — not a slow run. `BR-PERF-001` records that a requirement
+of form is now the only instrument the performance corpus has that can catch a
+defect at all, which is why these six, and not the measurement points, are what
+constrains the design. Each is observable, permanent, and checkable with no
+stopwatch.
+
+**The integration suite carries all six**, under no feature and no flag, so each
+runs with the rest of the suite on `cargo test`; the assertions that need a
+server are gated on the fixture standing. Which test carries which, by which
+instrument, on which targets and under what gate is
+[verification.md](verification.md#the-register-of-mandated-tests)'s.
 
 | Requirement | The defect it forbids | The design decision it forces | Described in |
 |---|---|---|---|
@@ -81,9 +118,18 @@ applies.
 
 | Workload | What it is | Realised by |
 |---|---|---|
-| `WL-001` | The large workload, against which every budget that needs volume is measured | `scripts/mariadb/seed-bench.sql`, as schema `freight_wl001` |
-| `WL-002` | The verification scalar: the size of the compact dump of `WL-001`, which detects a change in the fixture or in the document shape with no server. **Unvalued**, and `BR-PERF-006` forbids inventing it | The same fixture; the fixture now exists, so the value can be computed and has not been |
+| `WL-001` | The large workload, over which every measurement point that needs volume is taken | `scripts/mariadb/seed-bench.sql`, as schema `freight_wl001` |
+| `WL-002` | The verification scalar: the size of the compact dump of `WL-001`, which detects a change in the fixture or in the document shape with no server. **Valued**: it was measured on 2026-09-22 and recorded in `BENCHMARKS.md` under `NFR-PERF-020`, byte-identical across five takes, and `BR-PERF-006` keeps the value there and not here | The same fixture, read through the document shape in force on the day of the reading |
 | `WL-003` | The small workload — the common path, because `FR-RND-002` gives one render per invocation and `BR-RND-002` moves iteration to the caller | The same file, as schema `freight_wl003` |
+
+**`WL-002` is a deterministic size and not a timing, and it did not lose its
+force with the gates.** The same fixture read through the same document shape
+produces the same byte count on every target and every machine, so a departure
+beyond the ±2% that requirement states is a statement about the fixture or about
+the document and never about how fast anything ran. It belongs with the
+requirements of form: a mismatch is a **functional defect** to be explained,
+which is what `BR-PERF-008` leaves standing. It may never be read as a
+performance result.
 
 `BR-PERF-002` keeps `seed.sql` and `seed-bench.sql` apart deliberately: one
 fixture serving both would hide an N+1 or make the correctness suite pay for the
@@ -94,114 +140,143 @@ that script verifies every count each workload states. The counts, the schema
 names and the load procedure are `scripts/mariadb/README.md`'s and are not
 restated here. The fixture itself is `verification.md`.
 
-## The nine budgets
+## The measurement set
 
-`NFR-PERF-014` fixes the set as exactly these nine and no others. The last
-column is the **standing of the figure**, in the vocabulary `NFR-PERF-019` and
-`BR-PERF-006` provide: *provisional* for a figure carried in `NFR-PERF-014` and
-marked, *unvalued* for a budget named with no figure supplied by any root
-document and none invented.
+`NFR-PERF-014` fixes the set as exactly these nine **measurement points** and no
+others, and each row of it fixes the invocation, the workload it is measured
+over, whether a server answers, and what the cache does while the reading is
+taken. A figure a point carries is a **reference figure**: informative, a target
+to build toward, and never a limit (`BR-PERF-008`).
 
-| # | Budget | Workload | Needs a server | Normative | Standing |
-|---|---|---|---|---|---|
-| 1 | `tpl --version` | none | no | no | Provisional, not ratified |
-| 2 | `tpl --help` | none | no | no | Provisional, not ratified |
-| 3 | Startup to the first byte of useful work | none | no | no | Provisional, not ratified |
-| 4 | `tpl schema dump` | `WL-001` | yes | no | Provisional, not ratified |
-| 5 | A cache-served read of one object | `WL-003` | no | **yes** | Unvalued, not ratified |
-| 6 | The failure path: a `64`, and a `66` with nearest match | `WL-001` | no | no | Unvalued, not ratified |
-| 7 | `tpl help --format json` | none | no | no | Unvalued, not ratified |
-| 8 | The canonical loop of 200 invocations | `WL-001` | yes | no | Unvalued, not ratified |
-| 9 | Peak resident memory | `WL-001` | yes | no | Provisional, not ratified |
-
-**None of the nine is ratified.** `BENCHMARKS.md` carries no entry recorded
-under `NFR-PERF-020`; its one entry states its own standing as a
-driver-selection record and departs from the protocol in three ways it names.
-Until a budget is ratified, `NFR-PERF-019` makes its provisional figure a
-working target and not a limit: it fails no change and is not a baseline.
-
-**Budget 5 is the one normative budget** (`NFR-PERF-015`). Two properties make
-it so, and both are structural rather than editorial: it is the invocation a
-caller repeats once per object, since `FR-RND-002` gives one render per
-invocation and `BR-RND-002` moves iteration to the caller; and it runs over the
-cache, so it needs no server (`NFR-PERF-013`) and is therefore the only budget
-that could ever gate a pipeline. It carries no provisional figure, and once it
-is ratified its target is to be stated in the text of `NFR-PERF-015` as well as
-in `BENCHMARKS.md` — the single deliberate exception to `BR-PERF-006`. Every other
-budget carries the no-regression rule of `NFR-PERF-017` only and no ratified
-target (`NFR-PERF-016`).
-
-**Which of the nine the fixture gates.** Budgets 4, 6, 8 and 9 are measured over
-`WL-001` and budget 5 over `WL-003`. Budgets 1, 2, 3 and 7 need neither fixture
-nor server; each waits only on the command it measures. Of the five that need
-the fixture, three also need a server — 4, 8 and 9 — and those three can never
-be normative, which is exactly what `NFR-PERF-013` requires.
-
-**Recorded contradiction — `BR-PERF-007` against the tree.** That rule states
-that *"the `seed-bench.sql` this file requires is still absent, and `WL-001` is
-what needs it"*, and both workloads were realised on 2026-09-21:
-`scripts/mariadb/seed-bench.sql` carries them, `seed-bench.sh` loads and
-verifies them, and a measurement over both has been taken and recorded in
-`scripts/mariadb/README.md`. **Both readings are recorded and neither is chosen
-here.** `/specification` governs, so nothing of this folder is written around
-the rule; what the rule says of the repository is simply older than the
-repository, which is the fifth validation rule's own case. The defect is owed to
-the functional owner and names `BR-PERF-007`. What follows for the five budgets
-— whether each is now measurable, and which move from provisional under the gate
-of `NFR-PERF-019` — is the functional owner's to restate and is not decided
+The sixth column says whether `NFR-PERF-014` carries a figure for the point and
+where that figure came from — **adopted** for one taken from a root document
+rather than measured (`NFR-PERF-019`), **none** for a point named with no figure
+supplied and none invented (`BR-PERF-006`). The seventh says where a reading has
+actually been taken; a measured figure is `BENCHMARKS.md`'s and appears nowhere
 here.
 
-**Recorded discrepancy.** [traceability.md](traceability.md) §23 reads *"Nine
-budgets, one normative, five needing a server"*. `NFR-PERF-014`'s `Server`
-column marks three, and `BR-PERF-007` counts five as needing the **fixture**.
-The table above follows `NFR-PERF-014`, which is the requirement. The
-distinction is load-bearing: it decides which budgets could gate a pipeline
-under `NFR-PERF-013`, so the row is reported rather than worked around.
+| # | Measurement point | Workload | Server | Cache | Figure in `NFR-PERF-014` | Measured on |
+|---|---|---|---|---|---|---|
+| 1 | `tpl --version` | none | no | not reached | Adopted | `aarch64-apple-darwin` |
+| 2 | `tpl --help` | none | no | not reached | Adopted | `aarch64-apple-darwin` |
+| 3 | Startup to the first byte of useful work, by `tpl template list` in a project holding no database entry | none | no | not reached | Adopted | `aarch64-apple-darwin` |
+| 4 | `tpl schema dump` | `WL-001` | yes | bypassed, `--direct --no-cache` | Adopted | `aarch64-apple-darwin`, series `12.3` |
+| 5 | A cache-served read of one object | `WL-003` | no | served from | None | `aarch64-apple-darwin`; **dispersion above the line** |
+| 6 | The failure path: a `64`, and a `66` with nearest match | `WL-001` | no | served from | None | `aarch64-apple-darwin`; the `64` half's **dispersion above the line** |
+| 7 | `tpl help --format json` | none | no | not reached | None | `aarch64-apple-darwin` |
+| 8 | The canonical loop of 200 invocations | `WL-001` | yes | empty when each run begins | None | `aarch64-apple-darwin`, series `12.3` |
+| 9 | Peak resident memory | `WL-001` | yes | bypassed, `--direct --no-cache` | Adopted | `aarch64-apple-darwin`, series `12.3` |
+
+**Point 6 is one point measured by two invocations**, and its figure is the
+slower of the two, with the other recorded beside it (`NFR-PERF-014`).
+
+**All nine were measured once, on one target, on 2026-09-22.** The campaign ran
+at the full protocol of `NFR-PERF-009` — the median of 200 runs after 20 warmups
+— on `aarch64-apple-darwin`, against series `12.3` for the three points whose
+reading reached a server, and it measured the `WL-002` scalar with them, against
+the same server. Every figure,
+every dispersion, the noise floor of the instrument on that host and the two
+conditions the campaign departed from are recorded in `BENCHMARKS.md` under
+`NFR-PERF-020`, and none of them is restated here.
+
+**Three of the four targets carry no figure at all.**
+`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl` and
+`x86_64-apple-darwin` were not measured, and nothing in the table above may be
+read as settled on them: `NFR-PERF-012` forbids carrying a figure from one
+target to another, and `BR-PERF-003` makes a point with a figure on one target
+and none on the other three **complete rather than short**.
+
+**Two readings sit above the dispersion line of `NFR-PERF-011`** — point 5, and
+the `64` half of point 6 — because the host was neither idle nor on mains power,
+which are two departures from `NFR-PERF-010` that `BENCHMARKS.md` records. That
+requirement settles what the five per cent is about: a dispersion above it is a
+statement about **the host the reading was taken on** and never about `tpl`, so
+neither reading is discarded, neither is a finding about the program, and both
+are recorded with the fact stated beside them. What follows is only this: neither
+stands as its point's reference figure until the reading is retaken on a quiet
+host. **Retaking them is registered as `#228` and is not resolved here.**
+
+**Five adopted figures are still carried in `NFR-PERF-014` beside a recorded
+reading of the same point** — points 1, 2, 3, 4 and 9. `NFR-PERF-020` obliges
+that requirement to be amended to remove each, which the recorded figure
+replaces. The amendment is the functional owner's, it is scheduled, and this
+folder states the state rather than working around it: until it is made, a
+reader of `NFR-PERF-014` sees a figure nobody measured next to one somebody did.
+
+**Which of the nine need the fixture.** Points 4, 6, 8 and 9 are measured over
+`WL-001` and point 5 over `WL-003`; points 1, 2, 3 and 7 need neither fixture
+nor server. Of the five needing the fixture, three need a server as well — 4, 8
+and 9 — which the `Server` column names and which `BR-PERF-007` counts. The
+requirement that once obliged one privileged point to run with no server is
+withdrawn with the class it governed, and which points reach a server is read
+from the `Server` and `Cache` columns of `NFR-PERF-014`.
+
+**Discharged — the contradiction this section recorded against `BR-PERF-007`.**
+That rule stated that `seed-bench.sql` was still absent while the file existed,
+and it was restated over the fixture that now exists in commit `455e48d`, on
+2026-09-21. Nothing is owed to the functional owner for it, and what the rule
+counts — five points needing the fixture, four needing neither it nor a server —
+is unchanged and is cited above.
+
+**What point 5 keeps, now that no figure is privileged.** It is still the
+invocation a caller repeats once per object, since `FR-RND-002` gives one render
+per invocation and `BR-RND-002` moves iteration to the caller, and it is still
+served from the cache with no server standing. What it no longer is, is the one
+figure that could stop anybody: the requirement that made it so is withdrawn,
+and `BR-PERF-008` denies that power to every figure alike.
 
 ## The measurement protocol
 
-The protocol is normative from now, and it is stated in `NFR-PERF-009` through
-`NFR-PERF-012`; its values are not restated here. What it obliges of this
-folder and of anything that records a result:
+The protocol binds **how a reading is taken and how it is written down**, and
+nothing else: it decides no outcome for the change that produced the reading. It
+is stated in `NFR-PERF-009` through `NFR-PERF-012` and its values are not
+restated here. What it obliges of anything that records a result:
 
 | Obligation | Requirement |
 |---|---|
 | A recorded measurement names the **target** it was taken on, drawn from the four of `NFR-PERF-018`; measurements on different targets are never compared | `NFR-PERF-012` |
 | A measurement that reaches a server additionally names the **series** it was taken against, because the four series of `FR-SRV-015` are four different programs answering the catalogue queries | `NFR-PERF-012`, as amended |
-| A run that fails the stated dispersion limit is invalid and is not recorded as a baseline | `NFR-PERF-011` |
-| Every normative budget runs over `--context` or over the cache, and therefore needs no server | `NFR-PERF-013` |
+| Every recorded figure carries the relative standard deviation of the samples behind it. One above five per cent is a statement about the **host**, never about `tpl`: it is recorded with that fact stated, never discarded, and it merely does not stand as its point's reference figure until the reading is retaken on a quiet host | `NFR-PERF-011` |
+| A measured figure is recorded in `BENCHMARKS.md` against its point, its target and, where a server answered, its series, stating the conditions it was taken under, its dispersion, and the invocation as a reader would retype it | `NFR-PERF-020` |
 
-**Ratification** is per budget and per target, under the four conditions of
-`NFR-PERF-020`; the four targets are measured at different times, so a budget
-ratified on one is not ratified on the others. The step that records a measured
-value in `BENCHMARKS.md` is the same step that removes the provisional figure
-from `NFR-PERF-014`. From ratification the budget is governed by `NFR-PERF-017`:
-a measurement worse than the recorded baseline for that budget on that target
-fails the change. A budget with **no** baseline fails nothing and its first
-valid measurement becomes the baseline — so an unvalued budget is constrained
-from its first measurement onward, not unconstrained. Where that gate sits in
-the release process is `operations.md`.
+**Recording is per point and per target**, because the four targets are measured
+at different times and a point measured on one is not measured on the others. The
+step that records a measured value in `BENCHMARKS.md` is the same step that
+removes the adopted figure from `NFR-PERF-014`, so that one figure has one home
+(`BR-PERF-006`). `NFR-PERF-020` is a **recording rule and not a gate**: nothing
+follows from a recorded figure by rule, and a reader who compares two of them —
+against the same point on the same target, which is the only comparison
+`NFR-PERF-012` admits — draws whatever the comparison is worth and no obligation
+from it.
 
-## The failure path is a budget
+The instrument that takes a reading, and the reason it can enforce nothing, are
+[operations.md](operations.md#the-measurement-harness)'s.
 
-Budget 6 exists because a wrong invocation is the invocation a calling agent
-makes most often while it is finding its way, and it must cost what a `64`
-costs (`BR-PERF-004`). The cost is real work: a `66` with a suggestion computes
-an edit distance against every existing name of the relevant population
-(`FR-ERR-019`), over the eight populations `FR-ERR-021` names, and over `WL-001`
-that population is large. `FR-ERR-020` omits the suggestion rather than offering
-a poor one, which bounds the output but not the computation.
+## The failure path is a measurement point
+
+Point 6 exists because a wrong invocation is the invocation a calling agent
+makes most often while it is finding its way. `BR-PERF-004` states the **design
+expectation** that it should cost what `tpl --version` costs, and the point
+exists so that the expectation can be checked against a reading instead of
+asserted; it obliges no figure, per `BR-PERF-008`. The cost is real work: a `66`
+with a suggestion computes an edit distance against every existing name of the
+relevant population (`FR-ERR-019`), over the eight populations `FR-ERR-021`
+names, and over `WL-001` that population is large. `FR-ERR-020` omits the
+suggestion rather than offering a poor one, which bounds the output but not the
+computation. The point's two halves — a refusal that computes nothing and a
+refusal that computes against 200 names — are what a reader compares, and
+`NFR-PERF-014` makes the slower of them the figure the point carries.
 
 The measure is `FR-ERR-039`'s, because it decides which candidates are offered
 and not only their order. How it is computed is
 [`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms):
 hand-rolled, no dependency, a three-row window — chosen partly *because* this is
-a budgeted path and the implementation must be ours to measure. Its surface is
+a measured path and the implementation must be ours to measure. Its surface is
 `interfaces.md`.
 
 ## Peak memory, and the two embeddings
 
-Budget 9 is the budget the model's shape presses on hardest. `FR-CTX-006`
+Point 9 is the point the model's shape presses on hardest. `FR-CTX-006`
 embeds the referenced table and `FR-CTX-010` embeds the referencing table, and
 `BR-CTX-001` and `FR-CTX-010`'s accepted cost each record what that does to the
 volume of the document; neither figure is restated here.
@@ -211,12 +286,19 @@ serialisation time is the architectural question the corpus leaves open, and it
 is settled in [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md)
 — materialise both — whose rationale, alternatives and consequences are **not**
 restated here, per rule R3 of [`docs/adr/README.md`](../adr/README.md). Two
-consequences bear on this document and are recorded in that record: the
-provisional peak-memory figure is the one most likely to be superseded upward by
-the first real measurement, which `NFR-PERF-019` permits without its ever having
-been a limit; and streaming remains available everywhere the dump is not,
-because `FR-SCH-016` and `FR-CTX-023` are what require the whole model to be in
-hand before the first byte of a dump can be trusted.
+consequences bear on this document and are recorded in that record: the adopted
+peak-memory figure is the one that record expected to move upward first, marked
+adopted under `NFR-PERF-019` and a limit at no point; and streaming remains
+available everywhere the dump is not, because `FR-SCH-016` and `FR-CTX-023` are
+what require the whole model to be in hand before the first byte of a dump can
+be trusted.
+
+**The first reading of point 9 did not move the figure upward.** It was taken on
+one target on 2026-09-22 and came in well under the adopted figure, which
+`BENCHMARKS.md` states as an observation and not as a verdict; the expectation
+`ADR-009` recorded is therefore unconfirmed on that target and untested on the
+other three. Nothing follows from the gap by rule (`BR-PERF-008`), and the record
+is unaffected: what it decided was the representation, not the figure.
 
 ## Reliability properties
 
@@ -261,16 +343,16 @@ Three bounds keep the exceptions from swallowing the promise:
 Verification is an integration test executed against every series
 (`FR-SRV-029`), which cannot be written until `tpl` can emit a document and is
 therefore `verification.md`'s. The consequence for measurement is
-`NFR-PERF-012` as amended: the three server-bound budgets carry a series as well
-as a target, and results from two series are not compared.
+`NFR-PERF-012` as amended: the three server-bound measurement points carry a
+series as well as a target, and results from two series are not compared.
 
 ## What this document defers, and to what
 
 | Subject | Where |
 |---|---|
-| Every measured figure and every recorded baseline | `BENCHMARKS.md` |
-| The harness, the fixture, and the tests that verify a property of form | `verification.md` |
-| The four targets, the validation pipeline, and where the regression gate sits in a release | `operations.md` |
+| Every measured figure, every dispersion, and the conditions a reading was taken under | `BENCHMARKS.md` |
+| The container harness, the fixture, and the tests that verify a requirement of form | `verification.md` |
+| The four targets, the validation pipeline, the release gates, and the measurement harness | `operations.md` |
 | Components, the invocation pipeline, lazy initialisation, and the deadline machinery | `architecture.md` |
 | Orderings as implemented, the error type, and the emitter | `interfaces.md` |
 | The model's shape, the per-kind field lists, and the cache on disk | `data-model.md` |

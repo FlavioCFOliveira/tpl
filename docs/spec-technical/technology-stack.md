@@ -401,6 +401,6 @@ without.
 | Every signature and every contract crossing a boundary | [interfaces.md](interfaces.md) |
 | Every measured figure, and the artefacts a measurement was taken on | `BENCHMARKS.md` |
 | The build, the four targets, the release gates, the validation pipeline, the measurement toolchain, and what the development host has installed | [operations.md](operations.md), with [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) |
-| The budgets these choices are measured against | [quality-attributes.md](quality-attributes.md) |
+| The measurement points these choices are read against | [quality-attributes.md](quality-attributes.md) |
 | Trust boundaries, credentials, and transport as subjects | `security.md`, with [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

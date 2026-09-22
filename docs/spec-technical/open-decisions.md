@@ -1576,8 +1576,8 @@ rows**.
 
 | Question | Answer | Why |
 |---|---|---|
-| Whose code | The crate's own | `CLAUDE.md` *Orçamento de dependências* prefers `std` and refuses a crate used for one function; and `BR-PERF-004` makes this a budgeted path — 200 comparisons for a `66` over `WL-001` — so the implementation has to be ours to measure |
-| How much state is held | Three rows of the comparison, rolled, and the supplied name decoded once per run | The transposition rule reaches back one row further than a plain substitution does, so rows `i`, `i - 1` and `i - 2` are the whole of what the recurrence reads (`src/diagnostics/suggest.rs`, `Matrix`, read 2026-09-21). A window bounded at all is what `FR-ERR-039` buys: it refuses the unrestricted form on the ground that it "reaches back to an arbitrary earlier position" and holds the whole comparison. Three rows also let the scratch be allocated once per population rather than once per candidate, which is what `BR-PERF-004`'s budget needs |
+| Whose code | The crate's own | `CLAUDE.md` *Orçamento de dependências* prefers `std` and refuses a crate used for one function; and `BR-PERF-004` makes this a measured path — 200 comparisons for a `66` over `WL-001` — so the implementation has to be ours to measure |
+| How much state is held | Three rows of the comparison, rolled, and the supplied name decoded once per run | The transposition rule reaches back one row further than a plain substitution does, so rows `i`, `i - 1` and `i - 2` are the whole of what the recurrence reads (`src/diagnostics/suggest.rs`, `Matrix`, read 2026-09-21). A window bounded at all is what `FR-ERR-039` buys: it refuses the unrestricted form on the ground that it "reaches back to an arbitrary earlier position" and holds the whole comparison. Three rows also let the scratch be allocated once per population rather than once per candidate, which is what a path traversed against 200 names for one refusal is worth doing (`BR-PERF-004`) |
 
 **Rejected.** A distance crate, for the dependency budget. The measure's own
 rejected alternatives — plain Levenshtein, and the unrestricted form — are
@@ -1953,9 +1953,9 @@ description under one owner and one scope — the confusion `CLAUDE.md` warns is
 **Status: settled, and discharged on 2026-09-21.**
 
 **Decision.** `scripts/mariadb/seed-bench.sql` is written in a **later sprint —
-the one that implements the catalogue reader**. Until then the five budgets that
-depend on it are stated as **provisional**, in the vocabulary `NFR-PERF-019`
-already provides.
+the one that implements the catalogue reader**. Until then the five measurement
+points that depend on it carry no measured figure, and whatever figure each
+carries is marked **adopted**, in the vocabulary `NFR-PERF-019` provides.
 
 **Discharged: the file exists, and the decision held.** It was written on
 2026-09-21, in the sprint the decision named, and `scripts/mariadb/README.md`
@@ -1965,10 +1965,18 @@ every count each workload states and is accepted by all four series and by the
 `--skip-ssl` server. The measurement the decision was waiting for was made at
 once: a full read of `WL-001` and a full read of `WL-003` cost **eleven
 catalogue statements each, on all four series**, which is `NFR-PERF-001`
-satisfied by measurement rather than by review. Which budgets that moves from
-provisional to ratified is `NFR-PERF-019`'s gate and
-[quality-attributes.md](quality-attributes.md)'s to state; nothing of this
-entry's decision or rationale changes.
+satisfied by measurement rather than by review. Which points have since been
+measured, on which target and under what conditions, is
+[quality-attributes.md](quality-attributes.md#the-measurement-set)'s to state;
+nothing of this entry's decision or rationale changes.
+
+*Amended on 2026-09-22, in vocabulary and in two statements that had stopped
+being true.* The thirty-sixth edition of `specification/performance-requirements.md`
+withdrew the performance gates, retired four identifiers and renamed what this
+entry called a *budget*, a *provisional* figure and a *ratified* one. The
+decision above and the rationale below are unchanged in substance: what this
+entry decided was **when the fixture is written**, and that is untouched by
+anything the edition did.
 
 **Rationale.** `WL-001` fixes the fixture's content — 200 tables, 2 400
 columns, 600 indexes, 180 foreign keys, 40 generated columns, 25 triggers, 30
@@ -1976,25 +1984,27 @@ views, 40 routines, comments on 60% of the tables — and `BR-PERF-002` keeps it
 separate from `seed.sql` on purpose, because one fixture serving both "would
 hide an N+1, which is invisible at ten tables". `BR-PERF-007` recorded, when
 this entry was written, that it was the one file of `scripts/mariadb/` still
-absent, and that `WL-001` is what needs it; **that rule still says so and the
-file now exists**, which is a contradiction owed to the functional owner and
-recorded in
-[quality-attributes.md](quality-attributes.md#the-nine-budgets). Writing it
-beside the reader it measures is the point at
+absent, and that `WL-001` is what needs it; **that rule was restated over the
+fixture that now exists, in commit `455e48d` on 2026-09-21, so nothing is owed
+to the functional owner for it** and
+[quality-attributes.md](quality-attributes.md#the-measurement-set) records the
+discharge. Writing it beside the reader it measures is the point at
 which an N+1 becomes detectable; writing it earlier produces a fixture nothing
 can be run against. `NFR-PERF-019` and `NFR-PERF-020` are exactly the mechanism
-for carrying a named, unmeasured budget without it being a limit, so
-`quality-attributes` can state all nine budgets today.
+for carrying a named, unmeasured point and for recording it when somebody
+measures it, so `quality-attributes` can state all nine today.
 
 **Rejected.** Writing it in this sprint, which produces a 200-table fixture
 with no reader to exercise it and no measurement to validate it against; and
 merging it into `seed.sql`, which `BR-PERF-002` forbids and which would make
 the correctness suite pay for 200 tables on every run.
 
-**Consequence to record.** `WL-002`'s byte scalar `N` could not be computed
-until the fixture existed, and the fixture now exists; `DIV-036` is the register
-entry of `/specification` that tracks what naming the file still owes the root
-coordination document, and what it owes is that register's to state.
+**Consequence to record, and discharged.** `WL-002`'s byte scalar `N` could not
+be computed until the fixture existed. It was computed on 2026-09-22 and
+recorded in `BENCHMARKS.md` under `NFR-PERF-020`, byte-identical across five
+takes. `DIV-036` is the register entry of `/specification` that tracks what
+naming the file still owes the root coordination document, and what it owes is
+that register's to state.
 
 ---
 

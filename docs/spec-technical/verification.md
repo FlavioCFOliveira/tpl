@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -15,12 +15,18 @@ specification and test vector at once, the properties that may only be observed
 from outside the process, the two seams that must not reach the published
 surface, and the twelve flows that are the acceptance skeleton.
 
-**No target and no budget appears here.** Every budget, its standing and the
-protocol that ratifies a figure are
-[quality-attributes.md](quality-attributes.md#the-nine-budgets); every measured
-figure is `BENCHMARKS.md`'s. **No build command appears here.** The pipeline
-that runs the suite, the gates a release passes and the fixture's operational
-standing are [operations.md](operations.md#the-mandatory-validation-pipeline).
+**No target and no measurement point appears here.** The nine measurement
+points, what each is measured over and the protocol a reading is taken under are
+[quality-attributes.md](quality-attributes.md#the-measurement-set); every
+measured figure is `BENCHMARKS.md`'s. **No build command appears here.** The
+pipeline that runs the suite, the gates a release passes, the measurement
+harness and the fixture's operational standing are
+[operations.md](operations.md#the-mandatory-validation-pipeline).
+
+**Nothing in this document is a performance check.** The requirements of form
+this suite asserts are deterministic counts and absences — a **functional
+defect** when one fails, for the reason a wrong exit code is one — and they are
+not timings. No figure gates any test here, per `BR-PERF-008`.
 
 **The harness is complete.**
 [The container harness](#the-container-harness) records what `scripts/mariadb/`
@@ -943,8 +949,8 @@ each value of the gate.
 
 | Subject | Where |
 |---|---|
-| Every budget, its standing, the measurement protocol and the three workloads | [quality-attributes.md](quality-attributes.md) |
-| Every measured figure and every recorded baseline | `BENCHMARKS.md` |
+| The nine measurement points, the measurement protocol and the three workloads | [quality-attributes.md](quality-attributes.md) |
+| Every measured figure, every dispersion, and the conditions a reading was taken under | `BENCHMARKS.md` |
 | The validation pipeline, the release gates and the fixture's operational standing | [operations.md](operations.md) |
 | The fixture's contents, its credentials, its deliberate omissions, the harness scripts and their recorded output, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
 | The record of every difference observed between the series — fourteen | `FR-SRV-038` |

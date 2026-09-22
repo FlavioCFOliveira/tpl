@@ -180,7 +180,7 @@ technical question this folder leaves under-determined.
 | The model and everything persisted | `data-model.md` |
 | Trust boundaries, credentials, transport, containment | `security.md` |
 | Build, targets, packaging, release gates, observability | `operations.md` |
-| Targets, budgets, and how each is measured | `quality-attributes.md` |
+| Targets, the measurement points, and how each is measured | `quality-attributes.md` |
 | Tests, harness, fixture | `verification.md` |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |
 
