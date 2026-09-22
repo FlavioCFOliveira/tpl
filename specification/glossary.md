@@ -1,8 +1,8 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-09-21
-related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md]
+last-reviewed: 2026-09-22
+related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md]
 ---
 
 # Glossary
@@ -471,6 +471,33 @@ directory is a template. See `FR-TMPL-004` and `FR-TMPL-005`.
 The path of a template relative to `.tpl/templates/`, with the `.jinja`
 extension optional on the command line and mandatory inside a template. See
 `FR-TMPL-006`, `FR-TMPL-007`, and `FR-TMPL-008`.
+
+## worked example
+
+A complete, runnable demonstration held in `examples/` that builds an
+application's data layer for one target language from a known database schema,
+driving the command line alone. What one is, how many there are, and what each
+one holds is fixed by [examples.md](examples.md) — `FR-EX-001` through
+`FR-EX-003`. The adjective is load-bearing: the `EXAMPLES` section of a help
+text, per `FR-HELP-006` and `FR-HELP-012`, and the `example.jinja` that
+`tpl init` writes, per
+`FR-PROJ-017`, are neither of them worked examples.
+
+## data layer
+
+The source files of one application, in one language, that declare a database's
+tables as types of that language and carry the code that reads and writes them.
+It is the output a worked example produces and `UC-013` realises; `FR-EX-002`
+fixes what it must be for an example to have produced one.
+
+## compile gate
+
+The step of a worked example that submits every file the example rendered to
+the toolchain that decides whether the target language accepts it — its
+compiler, or its own static type checker where the language has no compiler —
+and reports failure where any file is not accepted. Its verdict, and nothing
+earlier in the workflow, is what makes a worked example correct. See
+`FR-EX-009`.
 
 ## volatile field
 

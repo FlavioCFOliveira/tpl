@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,10 +25,19 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty-two editions. All are in force;
+The specification has been written in thirty-four editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
+
+*Corrected in the thirty-fourth edition: the count was one behind.* The line
+read *thirty-two editions* while the thirty-third was written, recorded below,
+and in force. It is the third time this sentence has been the thing an edition
+forgot: the twenty-third left it at twenty-two, the thirty-first at thirty, and
+the thirty-third at thirty-two, each corrected by the edition after it rather
+than by the one that moved past it. Whoever opens an edition changes this
+number in the same pass, and the check is the cheapest in this file — the
+number here equals the number of edition sections below it.
 
 ### First edition — the command-line surface
 
@@ -2827,9 +2836,9 @@ two files that had moved under it.
   refused** — [configuration-model.md](configuration-model.md). `FR-CONF-014`
   had one clause and answered neither question. A `CApath` directory in
   OpenSSL's and MariaDB's sense is conventionally a set of hash-named symbolic
-  links, and `trust` at `src/mariadb/connect.rs` selects entries on
+  links, and `trust` at `src/mariadb/connect.rs` **then** selected entries on
   `DirEntry::file_type`, which does not traverse one — so the arrangement the
-  key exists to serve yields an empty bundle, silently. The weighing is written
+  key exists to serve yielded an empty bundle, silently. The weighing is written
   into the requirement: this corpus states links twice and in opposite
   directions, refusing them inside `.tpl/templates/` under `FR-TMPL-024`
   because that directory is versioned, shared and printed, and following them
@@ -2843,9 +2852,9 @@ two files that had moved under it.
   requirement's own text — stderr is not contract, `-q` lowers it out of sight,
   and the caller redirecting it into a build log is the caller this condition
   exists for — and `69` and `74` are rejected for naming a server and an I/O
-  failure that are not at fault. The order is untouched, and `NFR-DET-001` with
-  it: entries are sorted over the names the directory holds and never over the
-  targets they resolve to.
+  failure that are not at fault. The order is untouched, and the determinism
+  with it; the thirty-fourth edition moved the statement of that order out of
+  the requirement and into the record that owns it.
 - **A term defined in two places, and the rule being broken was the glossary's
   own** — [glossary.md](glossary.md),
   [errors-and-exit-codes.md](errors-and-exit-codes.md) and
@@ -3059,6 +3068,146 @@ The second is that nineteen module *Actors* sections state a stake and one state
 a definition, and only the one that stated a definition was touched — the
 nineteen are the convention and are left alone.
 
+### Thirty-fourth edition — a folder the corpus had never described, and a rationale that described the code
+
+Sprint 18 delivers `examples/`, which both root documents have named since
+before there was a repository to hold it and which has never existed. This is
+that sprint's first reading of this corpus, and it is first because nothing
+else in the sprint can be written until the corpus says what an example is.
+The second half of the edition is unrelated to the first and travels with it
+because both are edits to this corpus and neither is large enough to be worth
+a reading of its own.
+
+**One file is added and one prefix with it.** No requirement identifier is
+retired and none is renumbered. No entry is raised in
+[upstream-divergences.md](upstream-divergences.md) and no entry of it changes
+status. The index of [open-questions.md](open-questions.md) stays empty. **No
+figure is ratified and no baseline is set, and nothing this edition changes
+changes what `tpl` does.**
+
+- **A deliverable with no requirement behind it** —
+  [examples.md](examples.md), [use-cases.md](use-cases.md) and
+  [glossary.md](glossary.md). `CLAUDE.md`'s project tree calls `examples/`
+  *complete pipelines: schema to template to output* and the root `README.md`
+  names it too; `DIV-050` records the overstatement, because the folder is not
+  there. What no document recorded at all is what would have to be in it. The
+  new file answers that in nine requirements and two business rules:
+  `FR-EX-001` fixes four worked examples, one for each of Go, Rust, Python and
+  Node.js; `FR-EX-002` fixes what one takes in and what it produces;
+  `FR-EX-003` fixes the four artefacts each one holds — templates, the
+  type-mapping macro, the driver script and the compile gate; `FR-EX-004`
+  obliges the whole workflow to be driven **through the command line alone**,
+  naming the five commands in order and forbidding any library interface;
+  `FR-EX-005` states the consequence that a rendered file is a redirection of
+  `tpl render`'s standard output, per `FR-RND-028`; `FR-EX-006` and `FR-EX-007`
+  fix the three schemas, the one server, and the conditions all four examples
+  share; `FR-EX-008` obliges each example to carry its own type mapping in the
+  form `FR-ENV-011` fixes; and `FR-EX-009` makes the compile gate's verdict the
+  acceptance signal. `UC-013` is the flow end to end. **The server is named by
+  criterion and never by number**, per `BR-SRV-005` — the most recent series of
+  `FR-SRV-015`.
+
+  **Why `freight` is the third schema, and it is the rejected option that says
+  so.** Covering every native type from `sakila` and `world` alone needs no
+  schema of the project's own and fails on the facts: neither published dataset
+  carries a `JSON`, `UUID`, `INET6` or `BIT` column, a generated column, a
+  system-versioned table or a sequence. A mapping written against those two
+  would satisfy `FR-EX-008` while leaving untested exactly the types a mapping
+  gets wrong, which `FR-CAT-051` and `FR-CTX-038` are the corpus's own evidence
+  for. `freight` carries the complement and nothing else is its purpose.
+
+  Three terms move into [glossary.md](glossary.md) with the file, under the
+  rule the thirty-second edition wrote and the thirty-third swept for: *worked
+  example*, *data layer* and *compile gate*, each citing the requirement that
+  fixes it rather than restating it. The adjective in *worked example* is
+  load-bearing, and the entry says so: the `EXAMPLES` section of a help text
+  and the `example.jinja` that `tpl init` writes are neither of them one.
+
+- **A rejected option named by the code, which had already misled a reader** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-014`'s amendment
+  note rejected *skipping a symbolic link, **which is the behaviour built***,
+  and a second clause of the same note said a dangling link *is skipped in
+  silence today*. Both asserted, in the present tense and without a date, what
+  `src/mariadb/connect.rs` did; both were false in the commit that wrote them,
+  because `455e48d` carries the amendment and the correction of that file
+  together. On 2026-09-22 a reading made for the project's architecture
+  decision records took the first as a standing claim and concluded that the
+  code still skipped links, an error caught only by reading the file. Each
+  clause now names the option by what it does and grounds it in the outcome it
+  produces, and the reading of the implementation is kept beside them as an
+  `*Observed, 2026-09-21.*` note — the shape
+  [project-and-discovery.md](project-and-discovery.md) already uses for its two
+  readings of `src/project/init.rs`. A rationale that describes an
+  implementation stops being true the moment the implementation is corrected,
+  and it stops without any signal.
+
+  **The same note held one fact twice, and the copy goes.** It stated that
+  entries are sorted into ascending path order, over the names the directory
+  holds, before any is read — clause for clause the decision the architecture
+  decision record for the TLS mode mapping states, and that record carries with
+  it the alternative it rejected and the published documentation grounding the
+  rejection, neither of which the copy carried. The requirement now keeps the
+  **outcome** — one configuration produces one bundle on every run and on every
+  host — and **cites** the record for the order, by role and not by number, in
+  the form `FR-ENV-003` already uses for the template engine's pin. *Rejected:
+  keeping the sentence here.* It costs a reader no hop and it was rejected
+  because the order is a mechanism where a requirement states the outcome a
+  caller observes, which is the ninth edition's ground, and because the two
+  copies had already begun to differ in content rather than merely repeat each
+  other. The duplicate-contribution clause **stays**, because that record cites
+  this requirement for it: identifiers flow up and roles flow down, and the
+  note is now written in both directions.
+
+**Two editorial corrections to the edition above.** The thirty-second
+edition's own record of `FR-CONF-014` carried the same defect as the
+requirement it recorded — it said `trust` at `src/mariadb/connect.rs`
+*selects* entries on `DirEntry::file_type` and that the arrangement *yields* an
+empty bundle, in the present tense — and its closing sentence restated the
+order this edition has stopped restating. The verbs are put in the past, which
+is the treatment the thirteenth and fourteenth editions gave a closed edition's
+present-tense claim, and the closing sentence now points at where the order
+lives. A closed edition stays frozen as a narrative; only a verb that has
+stopped being true is touched.
+
+**What found them.** Two things, and neither a rule of the list below. The
+first was a sprint reaching a deliverable the corpus had never described —
+`DIV-050` had recorded for two editions that the folder was missing and no
+reading had asked what belonged in it, because an entry never reaches past the
+reading that raised it. The second was a reader outside this corpus acting on a
+rationale and getting it wrong, which is the only instrument that finds a note
+whose every internal check passes.
+
+**Three things are named and not acted on.**
+
+- **The survey the second half was put to found one more of the same shape, and
+  it is not corrected here.** `FR-CLI-025` rejects *`64`, which is what the
+  parser produces today* — an option named by the behaviour built, in the
+  present tense and undated, in a requirement whose whole effect is to change
+  that behaviour, so the clause becomes false at the moment the requirement is
+  satisfied. Three near instances were read and judged not of the class, each
+  because an edition attribution dates the reading: two notes of
+  [configuration-model.md](configuration-model.md) written *in the thirty-second
+  edition* over what `src/diagnostics/cause.rs` already produced, and
+  `FR-ERR-025`'s note written *in the thirty-first* over what
+  `src/output/writer.rs` already does. `FR-CFG-041`'s rejected clause is the
+  clean case and needs nothing: it is written in the past tense throughout.
+- **`FR-CONF-014`'s provenance note names `ADR-002` by number**, where the
+  citation this edition adds names the record by role. The two forms now sit in
+  one requirement. Which form this corpus uses is a question for a reading that
+  covers it, not a by-product of a scoped task, and nothing is ambiguous while
+  they stand.
+- **The corpus holds twenty-seven files and two passages count twenty-six.**
+  Both are accounts of what the thirty-third edition's sweep covered, in the
+  past tense, and both stay true of that edition; neither is amended, on the
+  ground the note at the foot of this file states for the count of validation
+  rules.
+
+**`DIV-050` is checked and unchanged.** It records that `CLAUDE.md`'s tree
+names `examples/` as though the directory held something, and the directory
+still holds nothing: a requirement obliging the folder to exist is not the
+folder existing. The entry is due exactly as it was, and the task that creates
+the folder is what discharges its `examples/` limb.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -3099,6 +3248,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [errors-and-exit-codes.md](errors-and-exit-codes.md) | `ERR` | Exit codes, validation order, message format, suggestions |
 | [security.md](security.md) | `SEC` | Cross-cutting security rules, each pointing at its owning module |
 | [use-cases.md](use-cases.md) | `UC` | End-to-end flows across the surface |
+| [examples.md](examples.md) | `EX` | The four worked examples in `examples/`: what one is, what it reads, what it holds, and what makes it correct |
 | [catalogue-coverage.md](catalogue-coverage.md) | `CAT` | What enters the model from the catalogue, and what is excluded |
 | [context-document.md](context-document.md) | `CTX` | The structure of the document that carries the model |
 | [template-environment.md](template-environment.md) | `ENV` | Filters, tests, global functions, and what is contract |
@@ -3179,7 +3329,16 @@ because they constrain the whole module rather than one interaction.
 
 - The specification is written in English.
 - `tpl` is the subject of every functional requirement; "the system" and "tpl"
-  are the same actor.
+  are the same actor. **One class of requirement takes another subject, and it
+  is named here so that it is not read as drift.** Where a requirement fixes an
+  artefact of the repository rather than a behaviour of the binary, the
+  artefact is the subject: `FR-CONF-038`'s second paragraph obliges the fixture
+  of `scripts/mariadb/`, and every requirement of [examples.md](examples.md)
+  obliges a worked example. The test is whether the statement could be
+  satisfied by a change to `tpl` at all; where it could not, `tpl` is the wrong
+  subject and naming it would make the requirement unsatisfiable rather than
+  conventional. *Stated in the thirty-fourth edition, which wrote the second of
+  the two.*
 - Exit codes are always written as the bare number and, on first mention in a
   section, with the `sysexits.h` name: `78` (`EX_CONFIG`).
 - Command lines are shown in fenced blocks without a shell prompt, unless the
@@ -3688,6 +3847,24 @@ over a fixture that is now complete, names a fourth kind in the `74` cell of
 anything. Nothing it changes touches a fixture or a measurement, and nothing
 it changes changes what `tpl` does; one sentence of the root `CLAUDE.md` is
 owed under `DIV-036` and was owed before, more widely.
+
+The thirty-fourth edition adds no obligation inside this corpus and **one
+outside it**, and records none as discharged. It describes a folder the
+repository does not have: `examples/`, the four worked examples in it, the
+schemas they read and the server they read them from are all owed by the sprint
+that writes them, which is work a requirement in force obliges rather than debt
+of this corpus, in the terms the twenty-eighth through thirtieth editions used.
+The obligation outside this corpus is the one `FR-EX-006` and `FR-EX-007` name
+and deliberately do not own: a server of the most recent series of `FR-SRV-015`
+carrying `sakila`, `world` and `freight`, with `freight` authored to carry the
+native types and catalogue features the two published datasets do not. It is
+fixture work with an owner and a trigger, in the terms the eighth edition used
+for `FR-CONF-038`, and no requirement of this corpus waits on it: every
+requirement of [examples.md](examples.md) is complete on its own terms today.
+The second half of the edition — the two clauses of `FR-CONF-014` that
+described the code, and the order that requirement now cites rather than
+restates — touches no fixture and no measurement. The item below was untouched
+by this edition and stays outstanding.
 
 The section therefore carries the item the twentieth edition recorded, and the
 eight it has held before are all accounted for below.
