@@ -60,7 +60,8 @@
 
 use std::path::Path;
 
-use crate::cache::{Cache, Covered, Look};
+use crate::cache::paths::Collection;
+use crate::cache::{Cache, Covered, Listed, Look, Summary};
 use crate::deadline::{Clock, Deadlines, Seconds};
 use crate::error::Error;
 use crate::mariadb::{self, Target, catalogue};
@@ -344,11 +345,12 @@ impl<'a> Reader<'a> {
         // FR-CACHE-033 makes a file that will not decode a miss rather than a
         // condition — which is why the decode is part of the hit.
         //
-        // FR-CDOC-011 is discharged here and nowhere else: it obliges `source`
-        // to satisfy FR-CACHE-012 — a cached read states that it was cached —
-        // and this is the one call that presents a document the store served.
-        // The value is passed rather than defaulted, so a hit cannot reach the
-        // presentation carrying the value a live read would have carried.
+        // FR-CDOC-011 is discharged in this module and nowhere else: it
+        // obliges `source` to satisfy FR-CACHE-012 — a cached read states that
+        // it was cached — and this call, `serve_summary` and `serve_listing`
+        // are the three that present what the store served. The value is
+        // passed rather than defaulted, so a hit cannot reach the presentation
+        // carrying the value a live read would have carried.
         if !self.direct
             && let Some(loaded) = opened.cache.look(look)
             && let Some(document) = loaded.document()
@@ -356,6 +358,84 @@ impl<'a> Reader<'a> {
             return present(&document, Source::Cache, opened.entry());
         }
 
+        self.read_through(opened, present)
+    }
+
+    /// Serves `tpl schema info`: the metadata and the size of each collection,
+    /// from the cache where [`Cache::summary`] hits and from the server
+    /// otherwise (`FR-SCH-031`).
+    ///
+    /// It is [`Reader::serve`] with a narrower hit: the cache is asked for
+    /// `database.json` and three counts rather than for every object file, and
+    /// a miss is the same whole read, the same write and the same presentation
+    /// of what the server returned. `source` is set here, on both paths, for
+    /// the reason [`Reader::serve_from`] gives.
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`Reader::serve`] returns.
+    pub(super) fn serve_summary<T, P>(&self, present: P) -> Result<T, Error>
+    where
+        P: FnOnce(&Summary<'_>, Source) -> Result<T, Error>,
+    {
+        let opened = self.open()?;
+
+        if !self.direct
+            && let Some(held) = opened.cache.summary()
+            && let Some(summary) = held.summary()
+        {
+            return present(&summary, Source::Cache);
+        }
+
+        self.read_through(&opened, |document, source, _| {
+            present(&Summary::of(document), source)
+        })
+    }
+
+    /// Serves the `text` listing of `tpl schema tables`: four members of each
+    /// table, from the cache where the table collection is recorded whole and
+    /// every file decodes as a [`Listed`], and from the server otherwise
+    /// (`FR-SCH-026`, `FR-CDOC-007`).
+    ///
+    /// It is [`Reader::serve`] over [`Look::Collection`] with a reduced decode
+    /// on the hit: the same files are read and every one must decode, and a
+    /// miss is the same whole read, write and presentation. The `json` form
+    /// carries every table in full and is served by [`Reader::serve`].
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`Reader::serve`] returns.
+    pub(super) fn serve_listing<T, P>(&self, present: P) -> Result<T, Error>
+    where
+        P: FnOnce(&[Listed<'_>], Source) -> Result<T, Error>,
+    {
+        let opened = self.open()?;
+
+        if !self.direct
+            && let Some(loaded) = opened.cache.collection(Collection::Tables)
+            && let Some(listed) = loaded.listing()
+        {
+            return present(&listed, Source::Cache);
+        }
+
+        self.read_through(&opened, |document, source, _| {
+            let listed: Vec<Listed<'_>> = document.tables.iter().map(Listed::of).collect();
+            present(&listed, source)
+        })
+    }
+
+    /// The server half of every read: the whole catalogue is read, the cache
+    /// written unless `--no-cache` was given, and the document presented with
+    /// `source` set to `server` (`FR-CACHE-007`, `FR-SCH-035`).
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`Reader::fetch`] returns, what the fold and the document
+    /// build return, and whatever `present` returns.
+    fn read_through<T, P>(&self, opened: &Opened, present: P) -> Result<T, Error>
+    where
+        P: FnOnce(&DatabaseDocument<'_>, Source, &str) -> Result<T, Error>,
+    {
         let catalogue = self.fetch(opened)?;
         let model = catalogue.model()?;
         let document = document::context(&model)?;

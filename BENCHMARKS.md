@@ -1473,3 +1473,273 @@ hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-before -d bench_wl001 cache c
 # 4. The fixture down, and nothing left.
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet   # non-zero
 ```
+
+## 2026-09-22 — Four more rows of the waste register applied: `schema info`, the `schema tables` listing, the column decode, and the column fold
+
+*Sprint 19, tasks `#235`, `#236`, `#237` and `#238`. Target of record:
+`aarch64-apple-darwin`. Server of record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`).
+This entry records; it does not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+Rows 3, 5, 8 and 9 of the waste register were applied, one change per row, and
+measured against the binary of record in one interleaved campaign:
+
+| row | change | where |
+|---|---|---|
+| 3 | A cached `tpl schema info` reads `database.json` and counts the object files of each collection, instead of decoding all 272 files | `src/cache.rs`, `Cache::summary`, `Summary`; `src/cli/source.rs`, `serve_summary` |
+| 5 | The cached `text` listing of `tpl schema tables` decodes each table file into a four-member view that counts the columns, instead of a full `TableDocument` | `src/cache.rs`, `Listed`, `Loaded::listing`; `src/cli/source.rs`, `serve_listing` |
+| 8 | `Column` is decoded by a hand-written `Deserialize` that reads the same flat object without buffering it into serde's `Content` | `src/model/column.rs`, `decode` |
+| 9 | Each table's column vector is sized once, from the run of rows that belongs to it | `src/mariadb/catalogue/fold.rs`, `columns`, `attach` |
+
+**A cached `tpl schema info` fell from 12.282 ms to 2.100 ms (−82.9%) and
+from 12.94 MiB to 3.41 MiB of peak resident memory; the cached `text` listing of
+`tpl schema tables` from 11.180 ms to 7.578 ms (−32.2%); every other cached read
+of a whole collection by 0.905 to 0.936 ms (−3.5% to −6.6%) and 12 094 210 B
+in 20 247 blocks.** The server read moved by 0.016 ms, which is inside the
+floor of its own campaign; its 583 reallocations at the fold site became 4.
+Every output compared was byte-identical, with the exceptions stated under
+*What changed that a caller can see*.
+
+The labels were chosen so that each reaches one row: `schema info` decodes no
+column after the change, and the `text` listing counts columns without
+decoding them, so row 8 is measured on the four labels that still decode every
+column, and row 9 on the one label that folds a server read.
+
+### Workload
+
+`WL-001` (200 tables, 2 400 columns, 30 views, 40 routines: 272 cache files)
+and `WL-003`, loaded into `12.3` by `scripts/mariadb/seed-bench.sh`, which
+verified every count. The `startup` and `server` projects were built by the
+functions of `benches/fixture.sh`, the cache primed by `fixture_prime`, and the
+five templates of `examples/rust-data-layer/templates/rust/` copied into the
+`server` project, as in the previous entries.
+
+| label | invocation, in the `server` project | row |
+|---|---|---|
+| `info_c` | `tpl -d bench_wl001 schema info`, served from the cache | 3 |
+| `infojson_c` | `tpl -d bench_wl001 schema info --format json`, served from the cache | 3 |
+| `tables_c` | `tpl -d bench_wl001 schema tables`, served from the cache | 5 |
+| `tablesjson_c` | `tpl -d bench_wl001 schema tables --format json`, served from the cache | 8 |
+| `dump_c` | `tpl -d bench_wl001 schema dump`, served from the cache | 8 |
+| `rexample_c` | `tpl -d bench_wl001 render example --table accrual`, served from the cache | 8 |
+| `rschema_c` | `tpl -d bench_wl001 render rust/schema`, served from the cache | 8 |
+| `dump_d` | `tpl -d bench_wl001 schema dump --direct --no-cache` | 9 |
+
+### Candidates
+
+| arm | binary |
+|---|---|
+| `before` | `cargo build --release` at `c724b243` into a separate target directory: 3 934 112 B, sha256 `a9468af6228bb5835dff014f08aac4e95badcc4b91a0c2406b36ac1b29cef7b7` |
+| `before_twin` | the same file, measured as a second label: the A/A arm |
+| `after` | the working tree with the four changes: 3 967 232 B, sha256 `604f832ba919244aa1a68d185a29523f90f6f6d68fe7b6aa1b2723514dbeb812` |
+
+### Environment
+
+Apple M4, 10 cores, 32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0 `arm64`;
+`aarch64-apple-darwin`, built and run natively; `rustc` 1.98.1 (48a229cea
+2026-09-01); release profile `opt-level = 3`, `lto = "fat"`,
+`codegen-units = 1`, `panic = "abort"`, `strip = true`; `hyperfine` 1.20.0 with
+`--shell=none`; `/usr/bin/time -l`; `dhat` 0.3.3; the project fixture's `12.3`
+over Docker 29.5.2, `tls = "disabled"`, account `root`; mains power, Low Power
+Mode off; load average 2.30 to 3.24. Timing taken 2026-09-22, 22:04Z to 22:06Z.
+
+### Protocol
+
+- **Three arms rotated inside one `hyperfine` call per round**, the order moved
+  by one position each round, as in the previous entry.
+- The seven cached labels: 8 rounds of 40 runs after 5 warmups per arm, 320
+  samples each. `dump_d`: 8 rounds of 20 runs after 5 warmups, 160 samples
+  each.
+- **Peak resident memory**: `/usr/bin/time -l`, median of 7 runs, taken apart
+  from the timing campaign.
+- **Allocation**: one run per label and arm of a copy of the crate built with
+  `dhat` as the global allocator, outside the repository, as the campaign
+  entry describes; the copies differ from each other only by the four changes.
+  The fold site is attributed by the frames of `dhat-heap.json` that pass
+  through `catalogue::fold::columns` or `catalogue::fold::attach` below a
+  vector growth or reservation.
+- **Output identity**, before any timing: stdout, stderr and the exit code of
+  25 invocations were captured from both binaries and compared with
+  `diff -r`, listed under *What changed that a caller can see*.
+
+### The noise floor of the instrument on this host
+
+The A/A arm, `before` against `before_twin`, inside every campaign:
+
+| label | `before` | `before_twin` | difference |
+|---|---|---|---|
+| `info_c` | 12.282 ms | 12.266 ms | 0.016 ms (0.13%) |
+| `infojson_c` | 12.187 ms | 12.158 ms | 0.030 ms (0.24%) |
+| `tables_c` | 11.180 ms | 11.152 ms | 0.027 ms (0.25%) |
+| `tablesjson_c` | 13.750 ms | 13.760 ms | 0.011 ms (0.08%) |
+| `dump_c` | 14.802 ms | 14.849 ms | 0.047 ms (0.32%) |
+| `rexample_c` | 19.238 ms | 19.221 ms | 0.018 ms (0.09%) |
+| `rschema_c` | 25.804 ms | 25.837 ms | 0.033 ms (0.13%) |
+| `dump_d` | 26.251 ms | 26.235 ms | 0.015 ms (0.06%) |
+
+**A difference below 0.05 ms, or below 0.35% on any label, is not a difference
+in this entry.** Every change below is more than eighteen times the floor of
+its own label, except `dump_d`'s.
+
+### Results — wall time and memory
+
+Medians; `rsd` is of the `after` arm.
+
+| label | `before` | `after` | change | `after` rsd | p90, before → after | peak RSS, before → after |
+|---|---|---|---|---|---|---|
+| `info_c` | 12.282 ms | **2.100 ms** | −10.182 ms, −82.9% | 2.81% | 12.639 → 2.185 ms | 12.94 → 3.41 MiB |
+| `infojson_c` | 12.187 ms | **2.068 ms** | −10.119 ms, −83.0% | 2.59% | 12.523 → 2.152 ms | — |
+| `tables_c` | 11.180 ms | **7.578 ms** | −3.601 ms, −32.2% | 1.83% | 11.484 → 7.795 ms | 12.77 → 7.05 MiB |
+| `tablesjson_c` | 13.750 ms | **12.841 ms** | −0.908 ms, −6.6% | 1.64% | 14.066 → 13.162 ms | 12.72 → 12.75 MiB |
+| `dump_c` | 14.802 ms | **13.866 ms** | −0.936 ms, −6.3% | 1.71% | 15.189 → 14.223 ms | 12.91 → 13.02 MiB |
+| `rexample_c` | 19.238 ms | **18.333 ms** | −0.905 ms, −4.7% | 1.52% | 19.687 → 18.775 ms | 33.95 → 34.08 MiB |
+| `rschema_c` | 25.804 ms | **24.892 ms** | −0.912 ms, −3.5% | 1.75% | 26.209 → 25.377 ms | — |
+| `dump_d` | 26.251 ms | 26.235 ms | −0.016 ms, −0.1% | 1.97% | 26.773 → 26.759 ms | 8.62 → 8.22 MiB |
+
+No tail widened: the p90 moved with the median on every label.
+
+### Results — allocation
+
+`dhat`, one run each; total heap allocated over the run, and the heap at its
+peak.
+
+| label | total, before → after | blocks, before → after | at the peak, before → after |
+|---|---|---|---|
+| `info_c` | 23 945 727 → **657 342 B** | 48 926 → **2 640** | 8 224 224 → 341 750 B |
+| `tables_c` | 23 709 972 → **3 852 728 B** | 47 997 → **3 306** | 8 139 312 → 3 197 830 B |
+| `tablesjson_c` | 23 710 696 → **11 616 486 B** | 49 002 → **28 755** | 8 139 312 → 8 139 312 B |
+| `dump_c` | 23 963 520 → **11 869 310 B** | 50 096 → **29 849** | 8 224 216 → 8 224 216 B |
+| `rexample_c` | 42 396 382 → **30 302 172 B** | 121 723 → **101 476** | 26 742 242 → 26 742 242 B |
+| `dump_d` | 6 671 800 → **5 560 886 B** | 15 388 → **15 009** | 4 167 658 → 3 883 242 B |
+
+**The fold site, row 9.** Before, `fold::columns` grew each table's vector from
+empty: 1 976 832 B in 583 reallocations. After, `fold::attach` makes one
+allocation per table, exactly sized — 844 800 B in 200 blocks, which is 2 400
+columns of 352 B — and the one vector reused across runs grows 4 times,
+21 120 B. The 1 110 914 B and 379 blocks `dump_d` no longer allocates are this
+site's, to 2 B.
+
+### Observations, which are not verdicts
+
+- **Row 3 met its estimate.** The register estimated ≈ −10.2 ms and ≈ −9.4 MiB
+  for `schema info`; the change measures −10.182 ms and −9.53 MiB. The command
+  now sits 0.1 ms above the 1.992 ms the campaign entry measured for
+  `schema table` from the same cache — an observation across two campaigns, not
+  a comparison — and the JSON form costs the same as the text form, as it
+  should: both make the same three directory walks.
+- **Row 5 took about half its estimate.** The register estimated ≈ −6.9 ms; the
+  change measures −3.601 ms and −19.9 MB allocated. The listing still opens and
+  reads the 200 table files, and the reduced view still parses every byte of
+  them, skipping what it does not build; no profile of the `after` arm was
+  taken, so the split of the remaining 7.6 ms is not attributed here.
+- **Row 8 took under half its upper bound in time and all of it in
+  allocation.** The register's upper bound was ≈ −1.9 to −2.1 ms per whole
+  cached read; the change measures −0.905 to −0.936 ms on each of the four
+  labels, the same figure on every one of them because each decodes the same
+  2 400 columns. The allocations removed, 12 094 210 B in 20 247 blocks, are
+  the register's figure for the site, to 2 B.
+- **Row 9 is below the floor in time.** The register estimated ≈ −0.10 ms; the
+  change measures −0.016 ms against an A/A difference of 0.015 ms, on a label
+  whose time is mostly spent waiting on the server. What it establishes is the
+  allocation figure above.
+
+### What changed that a caller can see
+
+- **Output.** None of the following differs in a byte, stdout, stderr or exit
+  code, over the cache `WL-001` and `WL-003` primed by the binary of record:
+  `schema info` in `text`, `json` and `json --pretty`; `schema tables` in
+  `text`, with `--pattern acc%` and with a pattern matching nothing, in `json`
+  and `json --pretty`; `schema table accrual` in `text` and `json`;
+  `schema views`; `schema routines`; `schema dump` and `schema dump --pretty`;
+  `render example --table accrual`, `render rust/struct --table accrual` and
+  `render rust/schema`; the same `schema info`, `schema tables`, `schema dump`
+  and `render rust/schema` with `--direct --no-cache`; the three renders with
+  `--context` over a dump; `schema dump --direct --no-cache` over the fixture's
+  `freight` schema on `10.11`, `11.4`, `11.8` and `12.3`. The 272 files and
+  `meta.json`, apart from `loaded_at`, written by `cache load` are identical.
+- **A malformed `--context` document is refused identically.** Ten documents
+  with one column altered were refused by both binaries with the same `65` and
+  the same `cause`: a type member of the wrong kind; the same followed, in the
+  same column, by text that is not JSON (reported by position, as the derive
+  reported it); an own member of the wrong kind followed by the same text
+  (reported as a breach of the contract); a number out of range and a lone
+  surrogate under a member no field names (reported by position); a type
+  member and an own member given twice; `column_type` missing; a column that
+  is an array; and a document cut in the middle of a column. The unit tests
+  of `src/model/column.rs` decide 1 000-odd further documents against a copy
+  of the derive.
+- **The one difference: an object file only a fuller read refuses.** With one
+  table file cut to 100 bytes, replaced by the bytes `ff fe`, or given a column
+  whose `position` is a string, each invocation run once from a fresh copy of
+  the cache, with the server up:
+
+  | invocation | `before` | `after` |
+  |---|---|---|
+  | `schema info`, either form | a miss: `source` `server`, the file rewritten | a hit: `source` `cache`, the file left as it is |
+  | `schema tables` in `text`, the file cut or not UTF-8 | a miss, the file rewritten | the same |
+  | `schema tables` in `text`, the file valid JSON with a string `position` | a miss, the file rewritten | a hit, the file left as it is |
+  | `schema tables --format json`, `schema dump` | a miss, the file rewritten | the same |
+
+  The printed bytes are the same in every row but the JSON form of
+  `schema info`, whose `source` differs. The commands that still read the
+  file still miss on it and rewrite it, per `FR-CACHE-033`. `FR-SCH-031` puts
+  the `text` form of `schema info` outside that requirement and gives its JSON
+  form no count; no file this binary writes is one of these three.
+
+### Confounders
+
+- **The host was not idle**: the four containers of other projects named in the
+  earlier entries were still running, and the load average was 2.30 to 3.24.
+  The rotation and the A/A arm bound their effect; they do not remove it.
+- **One binary carries the four changes.** The attribution of each label to one
+  row rests on which code the label reaches, stated under *Workload*, not on
+  four separate builds.
+- **The binary of record was rebuilt**, at `c724b243`, into its own target
+  directory. It is 3 934 112 B, where the previous entry's `after` arm was
+  3 950 640 B; the difference was not investigated, and the arms here are
+  compared only with each other.
+- **`dhat` counts the heap only**, through an instrumented build, one run per
+  label, and its figures are never used as time.
+- **`dump_d` crosses Docker Desktop's port proxy**, and most of its time is the
+  server's.
+
+### What was not measured
+
+- **Three of the four targets**, as in the previous entries.
+- **Every TLS mode.** All server reads used `tls = "disabled"`.
+- **CPU profiles.** No `samply` profile of either arm was taken; the shares the
+  register cites are the campaign entry's.
+- **The canonical loop of 200 renders.** Row 8 removes about 0.9 ms from each
+  cached render; the loop was not re-run.
+- **`cache load`.** No change touches the serialisation or the write path.
+- **The 10.11, 11.4 and 11.8 series** for anything but output identity.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+# tpl-before: `cargo build --release --target-dir "$S/before-target"` at c724b243.
+cp "$S/before-target/release/tpl" "$S/tpl-before"; cp target/release/tpl "$S/tpl-after"
+
+# 1. The fixture and the projects, exactly as in the campaign entry's steps 1
+#    and 2, built and primed with tpl-before. Then, from "$S/work/server", for
+#    each invocation of the output identity list and each binary:
+"$S/tpl-$v" <args> >"$S/out-$v/<label>.out" 2>"$S/out-$v/<label>.err"; echo $? >"$S/out-$v/<label>.code"
+diff -r "$S/out-before" "$S/out-after"
+
+# 2. Each label: for round r of 8, rotate the three arms by r.
+hyperfine -N --warmup 5 --runs 40 --export-json "$S/t/<label>.r<r>.json" \
+  -n before "$S/tpl-before <args>" -n before_twin "$S/tpl-before <args>" -n after "$S/tpl-after <args>"
+
+# 3. Peak resident memory, median of 7.
+/usr/bin/time -l "$S/tpl-after" -d bench_wl001 schema info >/dev/null
+
+# 4. Allocation: two copies of the crate outside the repository — `git archive
+#    c724b243` and the working tree — each with `dhat = "0.3.3"`, `debug = 1`,
+#    `strip = false`, the `dhat` global allocator and profiler first in `main`;
+#    one run of each per label, from "$S/work/server".
+
+# 5. The fixture down, and nothing left.
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet   # non-zero
+```

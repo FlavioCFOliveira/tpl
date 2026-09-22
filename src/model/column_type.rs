@@ -229,6 +229,26 @@ pub struct ColumnType<'a> {
 }
 
 impl<'a> ColumnType<'a> {
+    /// The nine keys this type is serialised under, in field order.
+    ///
+    /// They are the keys a column carries as siblings of its own, per
+    /// `FR-CTX-015`, and [`Column`](super::column::Column)'s hand-written
+    /// decoding is what reads them: it has to tell them apart from the
+    /// column's own keys without buffering the object. The list is checked
+    /// against what the derive emits by a test of this module, so a field
+    /// added here and not there fails the suite rather than a decode.
+    pub(crate) const MEMBERS: [&'static str; 9] = [
+        "column_type",
+        "data_type",
+        "precision",
+        "scale",
+        "length",
+        "unsigned",
+        "charset",
+        "collation",
+        "values",
+    ];
+
     /// Decomposes the catalogue's statement of a type into the parts a
     /// template reads.
     ///
@@ -477,6 +497,35 @@ mod tests {
     use std::borrow::Cow;
 
     use super::{CatalogueType, ColumnType, RECOGNISED_DATA_TYPES};
+
+    #[test]
+    fn the_member_list_is_the_list_of_keys_the_derive_emits() {
+        // A value with every part set, so that no key is emitted `null` and
+        // every one appears — serialised directly, which is the object whose
+        // keys a column carries as siblings of its own.
+        let value = ColumnType::decompose(&CatalogueType {
+            column_type: "enum('a')",
+            data_type: "enum",
+            numeric_precision: Some(1),
+            numeric_scale: Some(0),
+            character_maximum_length: Some(1),
+            charset: Some("utf8mb4"),
+            collation: Some("utf8mb4_bin"),
+            ..CatalogueType::default()
+        });
+        let emitted = serde_json::to_value(&value).expect("a type serialises");
+        let keys: Vec<&str> = emitted
+            .as_object()
+            .expect("a type is emitted as an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+
+        let mut members = ColumnType::MEMBERS.to_vec();
+        members.sort_unstable();
+
+        assert_eq!(keys, members);
+    }
 
     /// The four-member `ENUM` of the fixture's `cargo_item.imdg_class`, whose
     /// second member carries a bare comma.

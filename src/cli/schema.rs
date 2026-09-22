@@ -36,7 +36,6 @@ pub(super) mod named;
 mod pattern;
 mod text;
 
-use std::borrow::Cow;
 use std::io::Write;
 
 use clap::{ArgAction, Args, Subcommand};
@@ -45,7 +44,7 @@ use serde::Serialize;
 use super::globals::Globals;
 use super::local::{self, Format};
 use super::source::Reader;
-use crate::cache::{Look, paths::Collection};
+use crate::cache::{Look, Summary, paths::Collection};
 use crate::error::Error;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::shape::TableDocument;
@@ -273,11 +272,13 @@ struct InfoData<'a, 'd> {
 /// attribute on [`DatabaseDocument`].* That type is the document
 /// `tpl schema dump` emits under `FR-SCH-034` and `tpl render --context`
 /// consumes under `FR-SCH-036`, and skipping three of its fields there would
-/// change both. The fields below are **borrowed** from it, so the reduction
-/// copies nothing and cannot disagree with the object it reduces: every member
-/// is the same member, under the same name and with the same value, which is
-/// what `FR-SCH-031` promises a caller that reads `data.database.name` from
-/// either command.
+/// change both. The fields below are **borrowed** from a [`Summary`], which
+/// holds the same four members of that object whichever source served them —
+/// the cache's `database.json`, or the document a server read built — so the
+/// reduction copies nothing and cannot disagree with the object it reduces:
+/// every member is the same member, under the same name and with the same
+/// value, which is what `FR-SCH-031` promises a caller that reads
+/// `data.database.name` from either command.
 ///
 /// The key order is the field order, per `OD-18`, and it is `FR-CTX-036`'s
 /// order with the collections removed from the end.
@@ -290,26 +291,26 @@ struct InfoData<'a, 'd> {
 #[derive(Debug, Serialize)]
 struct DatabaseMetadata<'a, 'd> {
     /// The schema's name.
-    name: &'a Cow<'d, str>,
+    name: &'a str,
 
     /// The schema's default character set.
-    charset: &'a Cow<'d, str>,
+    charset: &'a str,
 
     /// The schema's default collation.
-    collation: &'a Cow<'d, str>,
+    collation: &'a str,
 
     /// The server the read was made against (`FR-CTX-031`).
     server: &'a Server<'d>,
 }
 
 impl<'a, 'd> DatabaseMetadata<'a, 'd> {
-    /// The four members of `document` this command presents.
-    const fn of(document: &'a DatabaseDocument<'d>) -> Self {
+    /// The four members of `summary` this command presents.
+    fn of(summary: &'a Summary<'d>) -> Self {
         Self {
-            name: &document.name,
-            charset: &document.charset,
-            collation: &document.collation,
-            server: &document.server,
+            name: &summary.name,
+            charset: &summary.charset,
+            collation: &summary.collation,
+            server: &summary.server,
         }
     }
 }
@@ -359,21 +360,22 @@ pub(crate) fn run<W: Write>(
         Command::Info { output, caching } => {
             let (format, form) = representation(output);
 
-            Reader::new(globals, Some(caching)).serve(&Look::Everything, |document, source, _| {
-                match format {
-                    Format::Text => text::info(&mut *out, document),
-                    // FR-SCH-031: the named subset, not the whole object. The
-                    // two commands answer different questions and this is what
-                    // keeps them from emitting the same bytes.
-                    Format::Json => enveloped(
-                        &mut *out,
-                        source,
-                        form,
-                        InfoData {
-                            database: DatabaseMetadata::of(document),
-                        },
-                    ),
-                }
+            // PERF: the metadata and three counts, not the 272 object files of
+            // WL-001 decoded to present four members (BENCHMARKS.md,
+            // 2026-09-22).
+            Reader::new(globals, Some(caching)).serve_summary(|summary, source| match format {
+                Format::Text => text::info(&mut *out, summary),
+                // FR-SCH-031: the named subset, not the whole object. The
+                // two commands answer different questions and this is what
+                // keeps them from emitting the same bytes.
+                Format::Json => enveloped(
+                    &mut *out,
+                    source,
+                    form,
+                    InfoData {
+                        database: DatabaseMetadata::of(summary),
+                    },
+                ),
             })
         }
 
@@ -384,22 +386,28 @@ pub(crate) fn run<W: Write>(
         } => {
             let (format, form) = representation(output);
             let mut selector = selector(filter);
+            let reader = Reader::new(globals, Some(caching));
 
-            Reader::new(globals, Some(caching)).serve(
-                &Look::Collection(Collection::Tables),
-                |document, source, _| {
-                    let selected = filtered(selector.as_mut(), document.tables.iter(), |table| {
-                        &table.name
-                    });
+            match format {
+                // PERF: four members of each table, not every table decoded
+                // in full (BENCHMARKS.md, 2026-09-22).
+                Format::Text => reader.serve_listing(|listed, _| {
+                    let selected = filtered(selector.as_mut(), listed.iter(), |table| &table.name);
 
-                    match format {
-                        Format::Text => text::tables(&mut *out, &selected),
-                        Format::Json => {
-                            enveloped(&mut *out, source, form, Members::new(TABLES, &selected))
-                        }
-                    }
-                },
-            )
+                    text::tables(&mut *out, &selected)
+                }),
+                Format::Json => reader.serve(
+                    &Look::Collection(Collection::Tables),
+                    |document, source, _| {
+                        let selected =
+                            filtered(selector.as_mut(), document.tables.iter(), |table| {
+                                &table.name
+                            });
+
+                        enveloped(&mut *out, source, form, Members::new(TABLES, &selected))
+                    },
+                ),
+            }
         }
 
         Command::Views {

@@ -84,6 +84,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Error;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::{self, Named};
+use crate::model::document::shape::TableDocument;
 use crate::model::routine::RoutineKind;
 use crate::model::server::Server;
 use meta::Meta;
@@ -201,6 +202,173 @@ fn decode<'a, T: Deserialize<'a> + Named>(members: &'a [String]) -> Option<Vec<T
     Some(decoded)
 }
 
+impl Loaded {
+    /// The rows of the `text` listing of `tpl schema tables`, ordered by name,
+    /// or [`None`] where any table file fails to decode.
+    ///
+    /// Each file is decoded into [`Listed`], which reads the four members the
+    /// listing prints and parses the rest without building it; the order and
+    /// the miss are [`Loaded::document`]'s.
+    ///
+    /// *Rejected: decoding every [`TableDocument`] in full and dropping all but
+    /// four fields.* It was 62.0% of the samples of a cached text listing of
+    /// `WL-001` and allocated 23 709 970 B (`BENCHMARKS.md`, 2026-09-22).
+    pub(crate) fn listing(&self) -> Option<Vec<Listed<'_>>> {
+        decode(&self.tables)
+    }
+}
+
+/// One row of the `text` listing of `tpl schema tables` (`FR-SCH-026`): the
+/// four members of a table that listing prints.
+///
+/// It is a reduced view of [`TableDocument`], decoded from the same file: the
+/// four members are read as that type reads them, the columns are counted
+/// rather than built, and every other member is parsed and dropped, as serde
+/// drops a member no field names. The count is the length of the `columns`
+/// array, which is what the full decode's collection holds.
+///
+/// A file this view decodes and the full decode would refuse — JSON of the
+/// document's shape whose unprinted members break the contract — is served
+/// here where [`Loaded::document`] would have missed. No file this binary
+/// writes is one, and a torn or truncated file is not JSON and is a miss here
+/// too.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct Listed<'a> {
+    /// The table's name.
+    #[serde(borrow)]
+    pub(crate) name: Cow<'a, str>,
+
+    /// The storage engine.
+    #[serde(borrow)]
+    pub(crate) engine: Option<Cow<'a, str>>,
+
+    /// How many columns the table has.
+    #[serde(rename = "columns", deserialize_with = "counted")]
+    pub(crate) column_count: usize,
+
+    /// The comment, the empty string where none was given.
+    #[serde(borrow)]
+    pub(crate) comment: Cow<'a, str>,
+}
+
+impl<'a> Listed<'a> {
+    /// The row of `table`, for a listing the server served.
+    pub(crate) fn of(table: &'a TableDocument<'_>) -> Self {
+        Self {
+            name: Cow::Borrowed(&table.name),
+            engine: table.engine.as_deref().map(Cow::Borrowed),
+            column_count: table.columns.len(),
+            comment: Cow::Borrowed(&table.comment),
+        }
+    }
+}
+
+impl Named for Listed<'_> {
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+/// The length of an array, each member parsed and dropped.
+fn counted<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<usize, D::Error> {
+    /// The visitor that counts.
+    struct Counting;
+
+    impl<'de> serde::de::Visitor<'de> for Counting {
+        type Value = usize;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a sequence")
+        }
+
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<usize, A::Error> {
+            let mut counted = 0;
+            while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {
+                counted += 1;
+            }
+            Ok(counted)
+        }
+    }
+
+    deserializer.deserialize_seq(Counting)
+}
+
+/// What a cache hit for `tpl schema info` holds: the bytes of `database.json`
+/// and the number of object files of each collection.
+///
+/// It is [`Loaded`]'s counterpart for the one command that presents the
+/// database's own metadata and the size of each collection, and nothing of any
+/// member.
+#[derive(Debug)]
+pub(crate) struct Summarised {
+    /// The contents of `database.json`.
+    metadata: String,
+    /// The object files of each collection, in [`Collection::ALL`]'s order.
+    counts: [usize; 3],
+}
+
+impl Summarised {
+    /// What these bytes describe, or [`None`] where `database.json` fails to
+    /// decode, which is a miss per `FR-CACHE-033`.
+    pub(crate) fn summary(&self) -> Option<Summary<'_>> {
+        let metadata: Metadata<'_> = serde_json::from_str(&self.metadata).ok()?;
+        let [tables, views, routines] = self.counts;
+
+        Some(Summary {
+            name: metadata.name,
+            charset: metadata.charset,
+            collation: metadata.collation,
+            server: metadata.server,
+            tables,
+            views,
+            routines,
+        })
+    }
+}
+
+/// What `tpl schema info` presents (`FR-SCH-003`, `FR-SCH-031`): the three
+/// metadata fields of `FR-CTX-036`, the `server` object of `FR-CTX-031`, and
+/// the size of each of the three collections of `FR-CTX-035`.
+///
+/// Both sources produce it: [`Summarised::summary`] from the cache, and
+/// [`Summary::of`] from a document the server served. The members are the
+/// same members, under the same names and with the same values, that the
+/// `database` object of the context document carries, which is what
+/// `FR-SCH-031` promises a caller that reads `data.database.name` from either
+/// command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Summary<'a> {
+    /// The schema's name.
+    pub(crate) name: Cow<'a, str>,
+    /// The schema's default character set.
+    pub(crate) charset: Cow<'a, str>,
+    /// The schema's default collation.
+    pub(crate) collation: Cow<'a, str>,
+    /// The server the read was made against.
+    pub(crate) server: Server<'a>,
+    /// How many tables the database holds.
+    pub(crate) tables: usize,
+    /// How many views it holds.
+    pub(crate) views: usize,
+    /// How many routines it holds.
+    pub(crate) routines: usize,
+}
+
+impl<'a> Summary<'a> {
+    /// The summary of `document`, for a read the server served.
+    pub(crate) fn of(document: &'a DatabaseDocument<'_>) -> Self {
+        Self {
+            name: Cow::Borrowed(&document.name),
+            charset: Cow::Borrowed(&document.charset),
+            collation: Cow::Borrowed(&document.collation),
+            server: document.server.clone(),
+            tables: document.tables.len(),
+            views: document.views.len(),
+            routines: document.routines.len(),
+        }
+    }
+}
+
 /// What `tpl cache status` reports (`FR-CACHE-025`, `FR-CACHE-034`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Status {
@@ -245,9 +413,10 @@ pub(crate) struct Held {
 pub(crate) enum Look<'a> {
     /// The whole catalogue, all three collections recorded whole.
     ///
-    /// It is what `tpl schema info` and `tpl schema dump` ask for: the answer
-    /// is the whole database, so a collection that was never loaded whole makes
-    /// it a listing served short.
+    /// It is what `tpl schema dump` asks for: the answer is the whole
+    /// database, so a collection that was never loaded whole makes it a
+    /// listing served short. `tpl schema info` asks [`Cache::summary`]
+    /// instead, under the same rule.
     Everything,
 
     /// One whole collection (`FR-CDOC-007`).
@@ -314,6 +483,56 @@ impl Cache {
             tables: members(&layout.collection(Collection::Tables))?,
             views: members(&layout.collection(Collection::Views))?,
             routines: members(&layout.collection(Collection::Routines))?,
+        })
+    }
+
+    /// What `tpl schema info` presents, or [`None`] on a miss (`FR-SCH-031`).
+    ///
+    /// It is a hit exactly where [`Cache::everything`] is one for a store this
+    /// binary wrote: the record is read and checked first, all three
+    /// collections must be recorded whole, `database.json` must be readable,
+    /// and each collection's directory must be walkable. The collections are
+    /// **counted** rather than read, as `tpl cache status` counts them — the
+    /// same walk, admitted by the same [`paths::is_object`] — because the
+    /// command presents their sizes and nothing of their members. For a file
+    /// every write of this binary produces, the count is the number of members
+    /// [`Loaded::document`] decodes.
+    ///
+    /// **One difference from reading everything.** An object file that cannot
+    /// be read or decoded no longer makes this command a miss, because the
+    /// command no longer reads it: the file is counted, and it remains the
+    /// miss of `FR-CACHE-033` for every command that does read it.
+    /// `FR-SCH-031` puts the `text` form outside that requirement, and the
+    /// `json` form carries no count.
+    ///
+    /// *Rejected: decoding all 272 files of `WL-001` to present four members
+    /// and three counts.* It took 12.2 ms and allocated 23 945 725 B, where
+    /// `tpl schema table` from the same cache took 2.0 ms (`BENCHMARKS.md`,
+    /// 2026-09-22), which is what `FR-SCH-031` rejects as making this "the most
+    /// expensive command of this arm while presenting the least".
+    ///
+    /// *Rejected: skipping the three walks for the `json` form.* A store whose
+    /// collection directory is gone would then be a hit for one form and a
+    /// miss for the other, and the `source` of `FR-SCH-035` would depend on
+    /// `--format`. Three directory walks are the whole of the difference.
+    pub(crate) fn summary(&self) -> Option<Summarised> {
+        let layout = self.layout.as_ref()?;
+        let meta = self.meta()?;
+
+        if !Collection::ALL
+            .iter()
+            .all(|collection| meta.whole(*collection))
+        {
+            return None;
+        }
+
+        Some(Summarised {
+            metadata: read(&layout.database())?,
+            counts: [
+                count(&layout.collection(Collection::Tables))?,
+                count(&layout.collection(Collection::Views))?,
+                count(&layout.collection(Collection::Routines))?,
+            ],
         })
     }
 
@@ -675,6 +894,8 @@ fn members(directory: &Path) -> Option<Vec<String>> {
 /// How many object files `directory` holds, or [`None`] where the directory
 /// could not be walked.
 ///
+/// [`Cache::summary`] takes the size of each collection from it as well.
+///
 /// It is what `tpl cache status` reports (`FR-CACHE-025`, `FR-CACHE-034`):
 /// the count of objects **held**, which the directory listing answers without
 /// opening a file. The files it counts are the ones [`members`] reads — the
@@ -892,7 +1113,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{Cache, Collection, Layout, Meta, TEMPORARY, count, serialise, store};
+    use super::{
+        Cache, Collection, Layout, Listed, Meta, Summary, TEMPORARY, count, serialise, store,
+    };
     use crate::project::scratch::Scratch;
     use std::io::{Error, ErrorKind, Write};
     use std::path::Path;
@@ -1014,6 +1237,95 @@ mod tests {
                 ("routines", 0, false)
             ]
         );
+    }
+
+    /// A store holding the whole fixture, as a server read writes it.
+    fn stored(scratch: &Scratch) -> Cache {
+        let model = crate::model::document::fixture::database();
+        let document = crate::model::document::context(&model).expect("the fixture builds");
+        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+        cache.write(&document, super::Covered::Everything);
+        cache
+    }
+
+    #[test]
+    fn fr_sch_026_a_listed_row_is_the_four_members_of_the_table_decoded_in_full() {
+        let scratch = Scratch::new();
+        let cache = stored(&scratch);
+        let loaded = cache
+            .collection(Collection::Tables)
+            .expect("the tables are recorded whole");
+
+        let listed = loaded.listing().expect("every table file decodes");
+        let document = loaded.document().expect("every table file decodes");
+        let full: Vec<Listed<'_>> = document.tables.iter().map(Listed::of).collect();
+
+        assert!(!listed.is_empty());
+        assert_eq!(listed, full);
+    }
+
+    #[test]
+    fn fr_sch_026_a_table_file_that_is_not_json_is_a_miss_for_the_listing_too() {
+        let scratch = Scratch::new();
+        let cache = stored(&scratch);
+        let tables = layout(&scratch).collection(Collection::Tables);
+        let file = std::fs::read_dir(&tables)
+            .expect("the tables are stored")
+            .flatten()
+            .map(|entry| entry.path())
+            .find(|path| super::paths::is_object(path))
+            .expect("one table is stored");
+        let whole = std::fs::read(&file).expect("the table was stored");
+        std::fs::write(&file, &whole[..whole.len() / 2]).expect("writable");
+
+        let loaded = cache
+            .collection(Collection::Tables)
+            .expect("the files are readable");
+        assert!(loaded.listing().is_none());
+        assert!(loaded.document().is_none());
+    }
+
+    #[test]
+    fn fr_sch_031_a_summary_is_the_metadata_and_the_sizes_of_the_whole_document() {
+        // The fixture's restricted view and routine are not stored, so their
+        // collections are not recorded whole; the record is marked whole so
+        // that both lookups compared here are hits over the same files.
+        let scratch = Scratch::new();
+        let cache = stored(&scratch);
+        assert!(store(
+            &layout(&scratch).meta(),
+            &Meta::new([true, true, true])
+        ));
+
+        let held = cache.summary().expect("every collection is recorded whole");
+        let summary = held.summary().expect("the metadata decodes");
+        let loaded = cache
+            .everything()
+            .expect("every collection is recorded whole");
+        let document = loaded.document().expect("every file decodes");
+
+        assert_eq!(summary, Summary::of(&document));
+    }
+
+    #[test]
+    fn fr_sch_031_a_summary_is_a_miss_where_reading_everything_is_one_for_want_of_a_record() {
+        let scratch = Scratch::new();
+        let cache = stored(&scratch);
+        assert!(store(
+            &layout(&scratch).meta(),
+            &Meta::new([true, false, true])
+        ));
+
+        assert!(cache.summary().is_none());
+        assert!(cache.everything().is_none());
+
+        std::fs::remove_file(layout(&scratch).database()).expect("the metadata was stored");
+        assert!(store(
+            &layout(&scratch).meta(),
+            &Meta::new([true, true, true])
+        ));
+        assert!(cache.summary().is_none());
+        assert!(cache.everything().is_none());
     }
 
     #[test]

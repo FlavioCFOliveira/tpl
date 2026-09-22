@@ -415,10 +415,32 @@ fn tables(rows: &[MySqlRow]) -> Result<Tables<'_>, Error> {
 
 /// Attaches every column to its table (`FR-CAT-009`, `FR-CAT-052`).
 ///
-/// The collections are not pre-sized: the row count gives the schema's total
-/// and not any one table's, and counting per table would cost a second lookup
-/// per row to save a handful of reallocations per table.
+/// Each table's collection is sized once, from the rows in hand. The column
+/// read is ordered by table name and then by ordinal position, so a table's
+/// columns arrive as one run of consecutive rows: the run is gathered into one
+/// reused vector and moved into its table when the next table's rows begin,
+/// which sizes the table's vector exactly from the run's length.
+///
+/// The order of the statement is what makes this exact, and it is not what
+/// makes it correct. Where one table's rows do not arrive as a single run — two
+/// names the catalogue's collation compares equal and the byte comparison of
+/// [`Tables::position`] does not, interleaved — each run is appended to its
+/// table in the order it arrived, which is the order of the rows, and the only
+/// cost is a reallocation.
+///
+/// *Rejected: counting each table's rows in a first pass.* It needs a
+/// position per row carried from the first pass to the second, or a second
+/// decode of the owning name per row, to size what the run already sizes.
+///
+/// *Rejected: pushing straight into each table's vector, as before.* It grew
+/// every vector from empty: 583 reallocations and 1 976 832 B for the 2 400
+/// columns of `WL-001` (`BENCHMARKS.md`, 2026-09-22).
 fn columns<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Error> {
+    // PERF: one vector reused across runs, grown to the widest table once,
+    // and one exactly sized allocation per table.
+    let mut run: Vec<Column<'a>> = Vec::new();
+    let mut run_at: Option<usize> = None;
+
     for row in rows {
         let owner = text(row, "TABLE_NAME")?;
 
@@ -430,12 +452,27 @@ fn columns<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Erro
         };
         let column = column(row, owner)?;
 
-        if let Some(table) = tables.at(at) {
-            table.columns.push(column);
+        if run_at != Some(at) {
+            attach(tables, run_at, &mut run);
+            run_at = Some(at);
         }
+        run.push(column);
     }
 
+    attach(tables, run_at, &mut run);
+
     Ok(())
+}
+
+/// Moves one run of columns into the table at `at`, sizing its collection for
+/// them, and leaves `run` empty for the next.
+fn attach<'a>(tables: &mut Tables<'a>, at: Option<usize>, run: &mut Vec<Column<'a>>) {
+    if let Some(table) = at.and_then(|at| tables.at(at)) {
+        table.columns.reserve_exact(run.len());
+        table.columns.append(run);
+    } else {
+        run.clear();
+    }
 }
 
 /// One column (`FR-CAT-009`, `FR-CTX-019` … `FR-CTX-021`, `FR-CAT-041`).
