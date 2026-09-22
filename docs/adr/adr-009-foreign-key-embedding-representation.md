@@ -3,7 +3,7 @@ id: ADR-009
 title: The in-memory representation of the two foreign-key embeddings
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-22
 requirements: [FR-CTX-006, FR-CTX-007, FR-CTX-008, FR-CTX-009, FR-CTX-010, FR-CTX-023, FR-SCH-016, FR-SCH-022, BR-CTX-001, BR-SCH-004, NFR-PERF-014, NFR-PERF-019]
 supersedes: []
 superseded-by: null
@@ -83,12 +83,13 @@ figure is restated here. This record changes neither cost — the document alrea
 carries them — but it declines the one option that would have paid less than the
 document's own weight.
 
-**The provisional peak-memory budget is the figure most likely to move upward
-first.** `NFR-PERF-014` carries it as provisional under `NFR-PERF-019`, which
-exists precisely so that a figure can be superseded by the first real
-measurement without ever having been a limit in the meantime. Nothing in this
-record is invalidated by that move, and nothing in it should be read as a
-commitment to the current figure.
+**The adopted peak-memory figure is the one most likely to move upward first.**
+`NFR-PERF-014` carries it as adopted under `NFR-PERF-019`, which marks a figure
+somebody wrote down apart from one somebody measured, and has it superseded by
+the first measurement recorded under `NFR-PERF-020`. Neither is a limit —
+`BR-PERF-008` gives no figure that power — so the move costs nothing but the
+mark. Nothing in this record is invalidated by it, and nothing in it should be
+read as a commitment to the current figure.
 
 **Streaming stays available everywhere the dump is not.** The root coordination
 document requires memory to scale with the largest individual object rather than
@@ -119,5 +120,5 @@ none is a claim about a technology, so none carries a vendor source.
 | Both directions embed one level deep, carry columns, indexes and primary key in full, and are cut to names at the first hop by one rule applied in both directions | `specification/context-document.md`, `FR-CTX-006` … `FR-CTX-010` | 2026-09-11 |
 | The dump is a single JSON document, and every object referenced from another object in it is present in it | `specification/schema-commands.md`, `FR-SCH-016`; `specification/context-document.md`, `FR-CTX-023` | 2026-09-11 |
 | The dump round-trips through `--context` and carries a mandated byte-identity test | `specification/schema-commands.md`, `FR-SCH-022`, `BR-SCH-004` | 2026-09-11 |
-| The peak-memory budget over the reference workload is provisional and may be superseded upward by the first real measurement | `specification/performance-requirements.md`, `NFR-PERF-014`, `NFR-PERF-019` | 2026-09-11 |
+| The peak-memory figure over the reference workload is adopted rather than measured, and is superseded by the first measurement recorded against that point | `specification/performance-requirements.md`, `NFR-PERF-014`, `NFR-PERF-019`, `NFR-PERF-020` | 2026-09-22 |
 | Memory scales with the largest individual object in everything that does not require the complete document | `CLAUDE.md`, *Desempenho e Eficiência* | 2026-09-11 |

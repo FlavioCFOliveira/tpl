@@ -3,8 +3,8 @@ id: ADR-008
 title: Packaging and the build path for the four targets
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-11
-requirements: [FR-SRV-019, NFR-PERF-012, NFR-PERF-017, NFR-PERF-018]
+last-reviewed: 2026-09-22
+requirements: [FR-SRV-019, NFR-PERF-012, NFR-PERF-018]
 supersedes: []
 superseded-by: null
 ---
@@ -32,18 +32,20 @@ Two forces constrain the answer. The first is mechanical and `BENCHMARKS.md`
 names it: the Apple linker cannot emit ELF, so a Darwin development host cannot
 produce a `musl` artefact without a cross-linking toolchain. The second is
 evidential: `NFR-PERF-012` makes a recorded measurement meaningful only against
-the target it was taken on, and `NFR-PERF-017` fails a change that regresses
-against a recorded baseline. A build path that differs from the one that
-produced the recorded artefacts puts every later comparison in question before
-it is made.
+the target it was taken on, and `BR-PERF-008` makes every figure a reading kept
+for a reader rather than a verdict on a change. A build path that differs from
+the one that produced the recorded artefacts puts every later comparison in
+question before it is made — not because a comparison can refuse anything, but
+because two figures taken under two build paths are not readings of the same
+thing.
 
 ## Decision
 
 **`cargo-zigbuild` for the two `musl` targets; native builds for the two Darwin
 targets.** This reproduces the path `BENCHMARKS.md` records for the measured
 artefacts — `cargo-zigbuild` 0.23.4 with zig 0.16.0 — so that a later
-measurement is comparable with the recorded one, which is what `NFR-PERF-012`
-requires of a baseline and what `NFR-PERF-017` compares against.
+measurement can be read against the recorded one, which is the attribution
+`NFR-PERF-012` requires of a recorded figure.
 `cargo-zigbuild` is described by its publisher as compiling "Cargo project with
 zig as linker" (crates.io, verified 2026-09-11).
 
@@ -59,11 +61,11 @@ record is not the place to invent a constraint.
 
 - **`cross`, or a container-based build**, for the `musl` targets. Either may be
   right later, and neither produced the recorded figures. Adopting one now would
-  make the first post-decision measurement incomparable with the baseline it is
-  meant to be measured against, which is the one cost `NFR-PERF-012` and
-  `NFR-PERF-017` are written to prevent. This is a rejection on evidence, not on
-  the merits of the tools, and it expires the moment a re-measurement of all
-  four targets is done under a new path.
+  make the first post-decision measurement unreadable against the recorded
+  figures it would stand beside, which is the cost `NFR-PERF-012` is written to
+  prevent. This is a rejection on evidence, not on the merits of the tools, and
+  it expires the moment a re-measurement of all four targets is done under a new
+  path.
 
 - **Prescribing a CI pipeline now.** Refused because it would be aspiration
   rather than specification: a description of something imaginary in a corpus
@@ -79,16 +81,18 @@ record is not the place to invent a constraint.
 
 ## Consequences
 
-**Four obligations are carried by hand, and each is a hand that can forget.**
+**Three obligations are carried by hand, and each is a hand that can forget.**
 Until a pipeline exists, whoever runs the work carries: the five-command
 validation sequence the root coordination document mandates; `NFR-PERF-018`'s
-no-second-class rule across all four targets; `NFR-PERF-017`'s no-regression
-rule; and `FR-SRV-019`'s re-verification of the supported-series table before
-every release. They are listed because an unlisted manual obligation is one
-nobody is accountable for.
+no-second-class rule across all four targets; and `FR-SRV-019`'s re-verification
+of the supported-series table before every release. They are listed because an
+unlisted manual obligation is one nobody is accountable for.
+No performance figure joins that list: `BR-PERF-008` gives no figure the power
+to refuse a change, so nothing here is owed to a number before work can be
+called done.
 
 **The build path is part of the evidence, not only of the process.** A change to
-it invalidates the comparability of every recorded baseline in the same way a
+it invalidates the comparability of every recorded figure in the same way a
 profile change would — see `ADR-004`, where the same argument refuses a
 different change. Whoever changes it re-measures all four targets, or states
 that the figures before and after are not comparable.
@@ -116,6 +120,6 @@ of this record.
 | `cargo-zigbuild` compiles a "Cargo project with zig as linker"; 0.23.4 is its maximum stable release | crates.io crate index, `cargo-zigbuild` | 2026-09-11 |
 | The Apple linker cannot emit ELF; the measured artefacts were produced with `cargo-zigbuild` 0.23.4 and zig 0.16.0; every `musl` figure was taken inside a container; only the two `arm64` targets were measured | `BENCHMARKS.md`, "2026-09-10 — MariaDB driver selection", Environment and Results | 2026-09-11 |
 | The target set is exactly four, the two Linux targets are `musl` and statically linked, and no target is second class | `specification/performance-requirements.md`, `NFR-PERF-018` | 2026-09-11 |
-| A measurement names the target it was taken on and measurements on different targets are not compared; a measurement worse than the recorded baseline on the same target fails the change | `specification/performance-requirements.md`, `NFR-PERF-012`, `NFR-PERF-017` | 2026-09-11 |
+| A measurement names the target it was taken on and measurements on different targets are not compared; no figure named in the corpus and no figure recorded against it fails, blocks, rejects or gates a change | `specification/performance-requirements.md`, `NFR-PERF-012`, `BR-PERF-008` | 2026-09-22 |
 | The `gnu` triples are not targets | `specification/upstream-divergences.md`, `DIV-041` | 2026-09-11 |
 | The supported-series table is re-verified against its source before every release | `specification/server-contract.md`, `FR-SRV-019` | 2026-09-11 |

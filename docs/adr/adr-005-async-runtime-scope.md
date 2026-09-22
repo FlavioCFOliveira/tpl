@@ -3,7 +3,7 @@ id: ADR-005
 title: The scope of the async runtime
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-22
 requirements: [FR-PROJ-025, NFR-PERF-004, NFR-PERF-005, NFR-PERF-006, NFR-PERF-007]
 supersedes: []
 superseded-by: null
@@ -95,9 +95,9 @@ mechanism that needed a timer outside `mariadb/` would contradict this record
 and would be the defect.
 
 **The runtime's cost is not paid by the commands that cannot use it.** This is
-what `NFR-PERF-005` asks for, and it is also what makes the budgets of
-`NFR-PERF-014` for `tpl --version` and `tpl --help` reachable, since neither
-command can reach the module at all.
+what `NFR-PERF-005` asks for, and it is also what puts the reference figures
+`NFR-PERF-014` carries for `tpl --version` and `tpl --help` within reach, since
+neither command can reach the module at all.
 
 **The driver pin and the runtime scope move independently.** A change to
 `ADR-003` does not by itself change this record, and a change here does not

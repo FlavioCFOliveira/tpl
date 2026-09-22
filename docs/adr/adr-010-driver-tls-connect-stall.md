@@ -3,8 +3,8 @@ id: ADR-010
 title: The TLS connect stall in the pinned driver
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-12
-requirements: [FR-CONF-013, FR-CONF-036, NFR-PERF-012, NFR-PERF-014, NFR-PERF-017]
+last-reviewed: 2026-09-22
+requirements: [FR-CONF-013, FR-CONF-036, NFR-PERF-012, NFR-PERF-014]
 supersedes: []
 superseded-by: null
 ---
@@ -60,7 +60,8 @@ is `HZ/25`, so the wait is of the order of 40 ms. **It is a block, not a cost:**
 nothing is computing meanwhile, and removing either ingredient removes it. Every
 figure, every repeat, the protocol and the instrument's resolution are in
 `BENCHMARKS.md` and are **not restated here**, for the reason `BR-PERF-006`
-gives and `ADR-003` extends to a figure that is not a ratified budget.
+gives and `ADR-003` extends to a figure recorded against no measurement point of
+`NFR-PERF-014`.
 
 **It is a regression in a published version, already fixed upstream and not yet
 released.** `set_nodelay` was present in `sqlx-core` 0.7.4 through 0.8.6, was
@@ -81,11 +82,13 @@ recognise.
 
 **What the corpus makes of the defect.** `FR-CONF-013` defaults `tls` to
 `verify-identity`, so the default mode is one of the four that pay the stall;
-only `disabled` does not. Three of `NFR-PERF-014`'s nine budgets reach a server,
-and two of those three are time budgets — `tpl schema dump` over `WL-001`, and
-the canonical loop of 200 invocations — against provisional figures stated in
-milliseconds. `NFR-PERF-012` and `NFR-PERF-017` make the identity of the built
-artefact material to every baseline taken against it.
+only `disabled` does not. Three of `NFR-PERF-014`'s nine measurement points
+reach a server, and two of those three are timings — `tpl schema dump` over
+`WL-001`, and the canonical loop of 200 invocations — against adopted figures
+stated in milliseconds. Neither figure refuses anything, per `BR-PERF-008`; what
+the stall costs is exactly what those figures are kept to show, and
+`NFR-PERF-012` makes the identity of the built artefact material to every figure
+recorded against it.
 
 **What this record prescribed now exists.** It was written before there was a
 `Cargo.toml`, to prescribe what the sprint that creates the manifest must put
@@ -115,8 +118,8 @@ here so the manifest is written once: the entry SHALL be declared in the
 workspace-root manifest, because Cargo reads patch settings nowhere else; and
 the patched source SHALL be pinned to an immutable revision — a git `rev` or
 tag, or a path inside this repository — never a branch, because `NFR-PERF-012`
-requires a recorded baseline to name the artefact it was taken on and a floating
-source leaves that artefact unnameable.
+requires a recorded measurement to name the artefact it was taken on and a
+floating source leaves that artefact unnameable.
 
 **The condition that retires this record, stated so that it cannot be forgotten:
 the first `sqlx` release whose `sqlx-core` contains PR `#4336`.** On that
@@ -142,10 +145,10 @@ published source is a defect in it.
 
 **Of the three forms the immutability constraint admits, this is the
 strongest.** The bytes compiled are fixed by the commit of this repository the
-build was taken at, so a baseline names its artefact by naming that commit and
-its target, which is what `NFR-PERF-012` requires; no revision of a second
-repository has to be recorded, resolved, or still reachable for that name to
-keep its meaning. The vendored tree SHALL carry its provenance beside it: the
+build was taken at, so a recorded figure names its artefact by naming that
+commit and its target, which is what `NFR-PERF-012` requires; no revision of a
+second repository has to be recorded, resolved, or still reachable for that name
+to keep its meaning. The vendored tree SHALL carry its provenance beside it: the
 crate and version it was taken from, and the upstream change the added
 statement reproduces, PR `#4336`. Both are already facts of this record; what
 the vendored form adds is that they travel with the source, so the divergence
@@ -217,17 +220,14 @@ choice was made; either is the user's to overturn.
 - **Accepting the stall and building on the published crate unchanged.** The
   cost is a floor of the order of 40 ms on every connection that negotiates TLS,
   measured on the Linux target of record, on all four supported server series
-  and over both network paths tried. It is refused because of where the cost
-  would have to be absorbed: the two time budgets of `NFR-PERF-014` that reach a
-  server are stated in milliseconds, and each would have to be widened to
-  accommodate a defect in a dependency — the canonical loop of 200 invocations
-  pays the floor once per invocation, since `NFR-PERF-004` gives each invocation
-  its own connection. Under R2 this register is subordinate and cannot move a
-  requirement; the corpus would have to be amended through
-  `specification-manager`, so that `/specification` carried an upstream defect
-  as though it were a property of the system. The option taken costs one
-  statement and expires; this one costs an amendment to the corpus that would
-  outlive the defect.
+  and over both network paths tried. It is refused on design, which is where
+  `BR-PERF-008` leaves the obligation toward speed once no figure can refuse a
+  change: a 40 ms block on the default connection path is that obligation given
+  up rather than met, and it is paid once per invocation over the canonical loop
+  of 200, since `NFR-PERF-004` gives each invocation its own connection and
+  nothing is computing while it waits. The option taken costs one statement and
+  expires with the first release carrying PR `#4336`; this one carries an
+  upstream defect for as long as the package is built.
 
 - **A fork of `sqlx` pinned by revision, rather than a vendored copy.** Its
   merits are real and were put as such: it keeps this repository's tree free of
@@ -304,14 +304,14 @@ about it was settled differently. What that sprint sent back is three facts
 this record did not have: two of them are below, and the third settled the
 question the Decision left open about the workspace exclusion.
 
-**No artefact built under the patch is the published crate.** A baseline
+**No artefact built under the patch is the published crate.** A figure
 taken against it names an artefact that differs from `sqlx-core` 0.9.0 by one
 statement, and `NFR-PERF-012` requires that to be visible in what is recorded.
 Removing the patch when the fix ships changes the artefact again; the change
 should be behaviour-neutral by construction, since the statement removed is the
 statement the release adds. Under the vendored form that identity is cheap to
 state: the commit of this repository names the patched source exactly, so a
-baseline names the commit and the target and has named its artefact.
+recorded figure names the commit and the target and has named its artefact.
 
 **The stall is not a corner case, and the record should not be read as covering
 one.** `FR-CONF-013` defaults to `verify-identity`; four of its five modes can

@@ -3,7 +3,7 @@ id: ADR-001
 title: The template engine and its version pin
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-22
 requirements: [FR-ENV-001, FR-ENV-003, FR-ENV-018, FR-ENV-019, FR-ENV-037, FR-ENV-044]
 supersedes: []
 superseded-by: null
@@ -113,7 +113,7 @@ guarantee: `escape` is registered by `tpl` and belongs to group 1 under
 
 **A reader of `FR-ENV-003` cannot see the version without opening this file.**
 That cost is accepted, in the requirement's own words, and it is the same cost
-`BR-PERF-006` accepts for a ratified figure. It is paid for the same reason.
+`BR-PERF-006` accepts for a recorded figure. It is paid for the same reason.
 
 **Under R3, the number lives here alone.**
 `docs/spec-technical/technology-stack.md` cites `ADR-001` for the pin rather
