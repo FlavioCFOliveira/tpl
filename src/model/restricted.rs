@@ -28,6 +28,7 @@ use std::borrow::Cow;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::ToStatic;
 use super::document::order;
 
 /// A `restricted` marking that names no property (`FR-PRIV-016`).
@@ -107,6 +108,17 @@ impl<'a> Restricted<'a> {
     #[must_use]
     pub fn properties(&self) -> &[Cow<'a, str>] {
         &self.properties
+    }
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for Restricted<'_> {
+    type Static = Restricted<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        Restricted {
+            properties: self.properties.to_static(),
+        }
     }
 }
 

@@ -23,6 +23,7 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use super::ToStatic;
 use super::column_default::ColumnDefault;
 use super::column_type::ColumnType;
 
@@ -728,6 +729,39 @@ mod decode {
         fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self, A::Error> {
             while map.next_entry::<Self, Self>()?.is_some() {}
             Ok(self)
+        }
+    }
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for Generated<'_> {
+    type Static = Generated<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        Generated {
+            expression: self.expression.to_static(),
+            storage: self.storage,
+        }
+    }
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for Column<'_> {
+    type Static = Column<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        Column {
+            name: self.name.to_static(),
+            table_name: self.table_name.to_static(),
+            position: self.position,
+            column_type: self.column_type.to_static(),
+            nullable: self.nullable,
+            default: self.default.to_static(),
+            comment: self.comment.to_static(),
+            auto_increment: self.auto_increment,
+            invisible: self.invisible,
+            generated: self.generated.to_static(),
+            on_update: self.on_update.to_static(),
         }
     }
 }

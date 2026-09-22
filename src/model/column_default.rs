@@ -31,7 +31,7 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
-use super::collapse_doubled_apostrophes;
+use super::{ToStatic, collapse_doubled_apostrophes};
 
 /// The four characters the catalogue returns for a column defaulted to `NULL`.
 ///
@@ -301,6 +301,19 @@ fn is_decimal(written: &str) -> bool {
 /// Whether a run is one or more ASCII digits and nothing else.
 fn digits(run: &str) -> bool {
     !run.is_empty() && run.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for ColumnDefault<'_> {
+    type Static = ColumnDefault<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        match self {
+            Self::Literal(value) => ColumnDefault::Literal(value.to_static()),
+            Self::Expression(value) => ColumnDefault::Expression(value.to_static()),
+            Self::Null => ColumnDefault::Null,
+        }
+    }
 }
 
 #[cfg(test)]

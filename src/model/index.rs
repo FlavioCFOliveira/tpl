@@ -38,6 +38,8 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use super::ToStatic;
+
 /// The name the catalogue reports a primary key under (`FR-CAT-043`).
 ///
 /// This is the whole of how a primary key is told from any other unique index.
@@ -175,6 +177,35 @@ impl Index<'_> {
     #[must_use]
     pub fn is_primary_key(&self) -> bool {
         self.name == PRIMARY_KEY_NAME
+    }
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for IndexColumn<'_> {
+    type Static = IndexColumn<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        IndexColumn {
+            name: self.name.to_static(),
+            direction: self.direction,
+            prefix_length: self.prefix_length,
+        }
+    }
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for Index<'_> {
+    type Static = Index<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        Index {
+            name: self.name.to_static(),
+            unique: self.unique,
+            columns: self.columns.to_static(),
+            index_type: self.index_type.to_static(),
+            comment: self.comment.to_static(),
+            ignored: self.ignored,
+        }
     }
 }
 

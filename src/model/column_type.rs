@@ -44,7 +44,7 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
-use super::collapse_doubled_apostrophes;
+use super::{ToStatic, collapse_doubled_apostrophes};
 
 /// The `data_type` of a column whose raw string carries a member list.
 const ENUM: &str = "enum";
@@ -490,6 +490,25 @@ fn closing(body: &str) -> Option<usize> {
     }
 
     None
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for ColumnType<'_> {
+    type Static = ColumnType<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        ColumnType {
+            column_type: self.column_type.to_static(),
+            data_type: self.data_type.to_static(),
+            precision: self.precision,
+            scale: self.scale,
+            length: self.length,
+            unsigned: self.unsigned,
+            charset: self.charset.to_static(),
+            collation: self.collation.to_static(),
+            values: self.values.to_static(),
+        }
+    }
 }
 
 #[cfg(test)]

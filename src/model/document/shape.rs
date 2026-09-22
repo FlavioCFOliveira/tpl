@@ -58,6 +58,7 @@ use std::borrow::Cow;
 use serde::{Deserialize, Serialize};
 
 use super::order::Named;
+use crate::model::ToStatic;
 use crate::model::check_constraint::CheckConstraint;
 use crate::model::column::Column;
 use crate::model::foreign_key::{ForeignKeyColumn, ReferentialAction};
@@ -311,4 +312,73 @@ pub(crate) struct IncomingKey<'a> {
     /// The key itself, as the referencing table carries it.
     #[serde(borrow)]
     pub(crate) key: NamedKey<'a>,
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for DatabaseDocument<'_> {
+    type Static = DatabaseDocument<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        DatabaseDocument {
+            name: self.name.to_static(),
+            charset: self.charset.to_static(),
+            collation: self.collation.to_static(),
+            server: self.server.to_static(),
+            tables: self.tables.to_static(),
+            views: self.views.to_static(),
+            routines: self.routines.to_static(),
+        }
+    }
+}
+
+/// A copy that borrows nothing, at either depth of `FR-CTX-009`.
+impl<F: ToStatic, I: ToStatic> ToStatic for TableShape<'_, F, I> {
+    type Static = TableShape<'static, F::Static, I::Static>;
+
+    fn to_static(&self) -> Self::Static {
+        TableShape {
+            name: self.name.to_static(),
+            table_type: self.table_type,
+            engine: self.engine.to_static(),
+            collation: self.collation.to_static(),
+            comment: self.comment.to_static(),
+            columns: self.columns.to_static(),
+            indexes: self.indexes.to_static(),
+            primary_key: self.primary_key.to_static(),
+            foreign_keys: self.foreign_keys.to_static(),
+            referenced_by: self.referenced_by.to_static(),
+            triggers: self.triggers.to_static(),
+            check_constraints: self.check_constraints.to_static(),
+            restricted: self.restricted.to_static(),
+        }
+    }
+}
+
+/// A copy that borrows nothing, whatever the referenced table resolves to.
+impl<R: ToStatic> ToStatic for ForeignKeyShape<'_, R> {
+    type Static = ForeignKeyShape<'static, R::Static>;
+
+    fn to_static(&self) -> Self::Static {
+        ForeignKeyShape {
+            name: self.name.to_static(),
+            columns: self.columns.to_static(),
+            referenced_table: self.referenced_table.to_static(),
+            referenced_key: self.referenced_key.to_static(),
+            match_option: self.match_option.to_static(),
+            on_update: self.on_update.to_static(),
+            on_delete: self.on_delete.to_static(),
+        }
+    }
+}
+
+/// A copy that borrows nothing.
+impl ToStatic for IncomingKey<'_> {
+    type Static = IncomingKey<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        IncomingKey {
+            table: self.table.to_static(),
+            key: self.key.to_static(),
+        }
+    }
 }

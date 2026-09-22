@@ -19,6 +19,7 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use super::ToStatic;
 use super::restricted::Restricted;
 
 /// One view (`FR-CAT-047`).
@@ -76,6 +77,26 @@ pub struct View<'a> {
     /// way that entry fixes.
     #[serde(borrow, default, skip_serializing_if = "Option::is_none")]
     pub restricted: Option<Restricted<'a>>,
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for View<'_> {
+    type Static = View<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        View {
+            name: self.name.to_static(),
+            definition: self.definition.to_static(),
+            check_option: self.check_option.to_static(),
+            is_updatable: self.is_updatable,
+            definer: self.definer.to_static(),
+            security_type: self.security_type.to_static(),
+            character_set_client: self.character_set_client.to_static(),
+            collation_connection: self.collation_connection.to_static(),
+            algorithm: self.algorithm.to_static(),
+            restricted: self.restricted.to_static(),
+        }
+    }
 }
 
 #[cfg(test)]

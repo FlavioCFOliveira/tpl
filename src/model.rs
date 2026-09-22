@@ -231,6 +231,19 @@ macro_rules! catalogued {
                     .map(Self::from_catalogue_owned)
             }
         }
+
+        impl $crate::model::ToStatic for $name<'_> {
+            type Static = $name<'static>;
+
+            fn to_static(&self) -> Self::Static {
+                match self {
+                    $( Self::$variant => $name::$variant, )+
+                    Self::Unrecorded(carried) => {
+                        $name::Unrecorded($crate::model::ToStatic::to_static(carried))
+                    }
+                }
+            }
+        }
     };
 }
 
@@ -262,6 +275,67 @@ pub mod trigger;
 pub mod view;
 
 use std::borrow::Cow;
+
+/// A value copied into one that borrows nothing (`Cow<'static, str>` throughout).
+///
+/// The render context needs it. `minijinja` holds an object behind an
+/// `Arc<dyn Object + 'static>`, so a document it reads **on demand** — rather
+/// than converting it whole before the template runs — must own everything the
+/// template may reach. Every string is copied once, and nothing else is built:
+/// no map, no key and no `minijinja` value, which is what a whole conversion
+/// costs.
+///
+/// It is a trait rather than a method on each type so that the three
+/// containers the graph uses — [`Cow`] of a slice, [`Vec`] and [`Option`] —
+/// are written once, and so that the two instantiations of the document's
+/// table shape, which differ only by what a reference resolves to, are one
+/// generic implementation.
+///
+/// *Rejected: a `Clone` into a wider lifetime.* `Clone` keeps the lifetime of a
+/// borrowed [`Cow`], which is precisely the borrow that must end.
+pub(crate) trait ToStatic {
+    /// The same shape, borrowing nothing.
+    type Static: 'static;
+
+    /// Copies every borrowed string, and moves nothing out of `self`.
+    fn to_static(&self) -> Self::Static;
+}
+
+impl ToStatic for Cow<'_, str> {
+    type Static = Cow<'static, str>;
+
+    fn to_static(&self) -> Self::Static {
+        Cow::Owned(self.as_ref().to_owned())
+    }
+}
+
+impl<T: ToStatic> ToStatic for Option<T> {
+    type Static = Option<T::Static>;
+
+    fn to_static(&self) -> Self::Static {
+        self.as_ref().map(ToStatic::to_static)
+    }
+}
+
+impl<T: ToStatic> ToStatic for Vec<T> {
+    type Static = Vec<T::Static>;
+
+    fn to_static(&self) -> Self::Static {
+        self.iter().map(ToStatic::to_static).collect()
+    }
+}
+
+impl<T> ToStatic for Cow<'_, [T]>
+where
+    T: ToStatic + Clone,
+    T::Static: Clone,
+{
+    type Static = Cow<'static, [T::Static]>;
+
+    fn to_static(&self) -> Self::Static {
+        Cow::Owned(self.iter().map(ToStatic::to_static).collect())
+    }
+}
 
 /// The two characters the catalogue writes where a quoted value carries one
 /// apostrophe.

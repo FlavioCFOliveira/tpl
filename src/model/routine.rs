@@ -28,6 +28,7 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use super::ToStatic;
 use super::column_type::ColumnType;
 use super::restricted::Restricted;
 
@@ -168,6 +169,46 @@ pub struct Routine<'a> {
     /// the reason [`View::restricted`](super::view::View::restricted) gives.
     #[serde(borrow, default, skip_serializing_if = "Option::is_none")]
     pub restricted: Option<Restricted<'a>>,
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for RoutineParameter<'_> {
+    type Static = RoutineParameter<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        RoutineParameter {
+            name: self.name.to_static(),
+            mode: self.mode.to_static(),
+            parameter_type: self.parameter_type.to_static(),
+        }
+    }
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for Routine<'_> {
+    type Static = Routine<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        Routine {
+            name: self.name.to_static(),
+            kind: self.kind.to_static(),
+            return_type: self.return_type.to_static(),
+            parameters: self.parameters.to_static(),
+            body: self.body.to_static(),
+            body_kind: self.body_kind.to_static(),
+            parameter_style: self.parameter_style.to_static(),
+            is_deterministic: self.is_deterministic,
+            sql_data_access: self.sql_data_access.to_static(),
+            security_type: self.security_type.to_static(),
+            sql_mode: self.sql_mode.to_static(),
+            comment: self.comment.to_static(),
+            definer: self.definer.to_static(),
+            character_set_client: self.character_set_client.to_static(),
+            collation_connection: self.collation_connection.to_static(),
+            database_collation: self.database_collation.to_static(),
+            restricted: self.restricted.to_static(),
+        }
+    }
 }
 
 #[cfg(test)]

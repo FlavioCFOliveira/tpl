@@ -41,6 +41,8 @@
 //! format besides is a crate this project's dependency budget refuses for one
 //! call site.
 
+mod lazy;
+
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -162,6 +164,10 @@ pub(super) fn vars(set: &[String]) -> Result<BTreeMap<&str, &str>, Error> {
 /// whole-database form of `FR-RND-006`, which binds no object variable at all.
 /// The other four are written here and cannot be supplied from anywhere else,
 /// which is `FR-RND-024` held by construction.
+///
+/// `database` is reachable whole and converted only where the template reads
+/// it: [`lazy::database`] copies the document and answers every read exactly
+/// as the whole conversion would have.
 pub(super) fn assemble(
     database: &DatabaseDocument<'_>,
     bound: Option<(&'static str, Value)>,
@@ -170,7 +176,10 @@ pub(super) fn assemble(
 ) -> Value {
     let mut entries: Vec<(&'static str, Value)> = Vec::with_capacity(5);
 
-    entries.push((DATABASE, Value::from_serialize(database)));
+    // PERF: converting the whole document before the template ran was 41.4%
+    // of a render of `example` over `WL-001` (`BENCHMARKS.md`, 2026-09-22, row
+    // 6 of the waste register); a member is now converted when first read.
+    entries.push((DATABASE, lazy::database(database)));
 
     // FR-RND-006: absent, no object variable is bound, so a template written
     // for the whole database never has to defend itself against one.

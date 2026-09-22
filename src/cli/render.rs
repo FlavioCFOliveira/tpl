@@ -511,14 +511,14 @@ fn produce<W: std::io::Write>(
         assembly.environment.render(assembly.template, &context)
     });
 
-    // PERF: the context is the whole catalogue converted into `minijinja`
-    // values, and freeing it block by block cost 2.35 ms of a 21.8 ms render
-    // of `WL-001` (`BENCHMARKS.md`, 2026-09-22). When the process exits as
-    // soon as this command returns, the operating system reclaims that memory
-    // at exit anyway, so the value is leaked instead; a caller that carries
-    // on — a test — still frees it. It is released on the failure path as well, and
-    // it owns memory only, so stdout, its flush and the exit code are
-    // untouched either way.
+    // PERF: the context holds a copy of the catalogue and every member the
+    // template read; when it held the whole catalogue converted, freeing it
+    // block by block cost 2.35 ms of a 21.8 ms render of `WL-001`
+    // (`BENCHMARKS.md`, 2026-09-22). Where the process exits as soon as this
+    // command returns, the operating system reclaims that memory anyway, so
+    // the value is leaked instead; a caller that carries on — a test — still
+    // frees it. It is released on the failure path as well, and it owns memory
+    // only, so stdout, its flush and the exit code are untouched either way.
     assembly.ending.release(context);
     let produced = produced?;
 

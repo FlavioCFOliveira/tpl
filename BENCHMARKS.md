@@ -1743,3 +1743,282 @@ hyperfine -N --warmup 5 --runs 40 --export-json "$S/t/<label>.r<r>.json" \
 # 5. The fixture down, and nothing left.
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet   # non-zero
 ```
+
+## 2026-09-22 — Row 6 of the waste register applied: the render context converted where a template reads it
+
+*Sprint 19, task `#239`. Target of record: `aarch64-apple-darwin`. Server of
+record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry records; it does
+not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+Row 6 of the waste register was applied and measured against the binary of
+record in one interleaved campaign:
+
+| row | change | where |
+|---|---|---|
+| 6 | The `database` variable is a `minijinja` object over a copy of the document that converts a member the first time a template reads it, instead of a value converted whole before the template runs | `src/cli/render/context/lazy.rs`, `database`, `Database`, `Members`, `Table`; `src/cli/render/context.rs`, `assemble`; `src/model.rs`, `ToStatic`, with one implementation beside each model type |
+
+**Each cached render fell by 5.60 to 5.75 ms (−23.1% to −30.4%) and from
+34.2–34.5 MiB to 17.9–18.4 MiB of peak resident memory; the direct render by
+5.58 ms (−18.1%) and from 29.19 to 13.23 MiB; and the canonical loop of 200
+renders from 3 848.9 ms to 2 714.7 ms (−29.5%).** The allocations of the
+conversion, 18.5 MB in 72 895 blocks, became 3.65 MB in 51 975 blocks for the
+copy and at most 97 KB for what the three templates read. Every one of the
+5 461 invocations of the equivalence harness was byte-identical, stdout,
+stderr and exit code.
+
+Three levels are converted on demand — the database object, its three
+collections and each table — and everything below a table's field is converted
+by `Value::from_serialize`, as before, the first time that field is read. Each
+object caches what it converted, so a member read twice is one value.
+
+The document is copied first because `minijinja` holds an object behind an
+`Arc` with a `'static` bound and the document borrows the buffers of its source
+— the cache files, the `--context` bytes, the rows of a server read. The copy,
+`ToStatic`, copies every string and builds no map, key or `minijinja` value.
+Extending the borrow without a copy takes `unsafe`, which the crate forbids, or
+a self-referential dependency.
+
+### Workload
+
+`WL-001` and `WL-003`, loaded into `12.3` by `scripts/mariadb/seed-bench.sh`,
+which verified every count. The `startup` and `server` projects were built by
+the functions of `benches/fixture.sh` with the binary of record, the cache
+primed by `fixture_prime`, and the five templates of
+`examples/rust-data-layer/templates/rust/` copied into the `server` project, as
+in the previous entries.
+
+| label | invocation, in the `server` project |
+|---|---|
+| `rexample_c` | `tpl -d bench_wl001 render example --table accrual`, served from the cache |
+| `rstruct_c` | `tpl -d bench_wl001 render rust/struct --table accrual`, served from the cache |
+| `rschema_c` | `tpl -d bench_wl001 render rust/schema`, served from the cache |
+| `rexample_d` | `tpl -d bench_wl001 render example --table accrual --direct --no-cache` |
+| loop | `benches/loop200.sh <binary> bench_wl001 example <the 200 WL-001 table names>`, the cache emptied before every run |
+
+### Candidates
+
+| arm | binary |
+|---|---|
+| `before` | `cargo build --release` at `765dd1c9` into a separate target directory: 3 967 216 B, sha256 `9cdfe6745bb81d43402f8597c6eef3006906fc7e3f64425d2a853b9223cc8e76` |
+| `before_twin` | the same file, measured as a second label: the A/A arm |
+| `after` | the working tree with the change: 4 000 432 B, sha256 `1e64fb90abaf18e2b0a4521dc28ce208958be8e810b765c27750d62025e2f914` |
+
+### Environment
+
+Apple M4, 10 cores, 32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0 `arm64`;
+`aarch64-apple-darwin`, built and run natively; `rustc` 1.98.1 (48a229cea
+2026-09-01); release profile `opt-level = 3`, `lto = "fat"`,
+`codegen-units = 1`, `panic = "abort"`, `strip = true`; `hyperfine` 1.20.0 with
+`--shell=none`; `/usr/bin/time -l`; `dhat` 0.3.3; `samply`; the project
+fixture's `12.3` over Docker 29.8.1, `tls = "disabled"`, account `root`; mains
+power, Low Power Mode off; load average 2.13 to 2.66. Timing taken 2026-09-22,
+22:46Z to 22:50Z.
+
+### Protocol
+
+- **Three arms rotated inside one `hyperfine` call per round**, the order moved
+  by one position each round, as in the previous entries.
+- The three cached renders: 8 rounds of 40 runs after 5 warmups per arm, 320
+  samples each. `rexample_d`: 8 rounds of 20 runs after 5 warmups, 160 samples
+  each. The loop: 4 rounds of 3 runs after 1 warmup, 12 samples each, with
+  `--prepare "tpl-before -d bench_wl001 cache clean"`.
+- **Peak resident memory**: `/usr/bin/time -l`, median of 7 runs, taken apart
+  from the timing campaign.
+- **Allocation**: one run per label and arm of a copy of the crate built with
+  `dhat` as the global allocator, outside the repository, as the campaign
+  entry describes. The copy is attributed by the frames of `dhat-heap.json`
+  that pass through a `to_static`, and the conversion by the frames that pass
+  through `minijinja::value::serialize`.
+- **CPU attribution of the `after` arm**: one `samply` profile of `rexample_c`,
+  30 iterations at 20 kHz, from a symbolised build of the same tree. Only
+  shares are read from it.
+- **Output identity**, before any timing, by a harness run once per binary and
+  compared with `diff -r`, described under *What changed that a caller can
+  see*. The harness run twice with the binary of record was identical to
+  itself.
+
+### The noise floor of the instrument on this host
+
+The A/A arm, `before` against `before_twin`, inside every campaign:
+
+| label | `before` | `before_twin` | difference |
+|---|---|---|---|
+| `rexample_c` | 18.421 ms | 18.409 ms | 0.012 ms (0.07%) |
+| `rstruct_c` | 19.060 ms | 19.030 ms | 0.031 ms (0.16%) |
+| `rschema_c` | 24.873 ms | 24.788 ms | 0.086 ms (0.34%) |
+| `rexample_d` | 30.756 ms | 30.746 ms | 0.011 ms (0.03%) |
+| loop | 3 848.874 ms | 3 849.816 ms | 0.943 ms (0.02%) |
+
+**A difference below 0.1 ms on a render, or below 0.35% on any label, is not a
+difference in this entry.** Every change below is more than sixty times the
+floor of its own label.
+
+### Results — wall time and memory
+
+Medians; `rsd` is of the `after` arm.
+
+| label | `before` | `after` | change | `after` rsd | p90, before → after | peak RSS, before → after |
+|---|---|---|---|---|---|---|
+| `rexample_c` | 18.421 ms | **12.822 ms** | −5.599 ms, −30.4% | 1.81% | 18.751 → 13.188 ms | 34.16 → 17.94 MiB |
+| `rstruct_c` | 19.060 ms | **13.378 ms** | −5.683 ms, −29.8% | 1.55% | 19.426 → 13.694 ms | 34.45 → 18.31 MiB |
+| `rschema_c` | 24.873 ms | **19.125 ms** | −5.749 ms, −23.1% | 1.31% | 25.286 → 19.484 ms | 34.48 → 18.41 MiB |
+| `rexample_d` | 30.756 ms | **25.177 ms** | −5.579 ms, −18.1% | 1.82% | 31.147 → 25.599 ms | 29.19 → 13.23 MiB |
+| loop | 3 848.874 ms | **2 714.709 ms** | −1 134.2 ms, −29.5% | 0.24% | 3 857.2 → 2 725.3 ms | — |
+
+No tail widened: the p90 moved with the median on every label.
+
+### Results — allocation
+
+`dhat`, one run each; total heap allocated over the run, and the heap at its
+peak. `rexample_x` is `render example --table accrual --context <the WL-001
+dump>`, taken for allocation only.
+
+| label | total, before → after | blocks, before → after | at the peak, before → after |
+|---|---|---|---|
+| `rexample_c` | 30 302 174 → **15 497 427 B** | 101 476 → **80 807** | 26 742 242 → 11 958 855 B |
+| `rstruct_c` | 31 761 531 → **16 984 726 B** | 108 588 → **88 000** | 26 893 630 → 12 111 022 B |
+| `rschema_c` | 49 090 023 → **34 381 620 B** | 204 421 → **183 959** | 26 892 157 → 12 205 114 B |
+| `rexample_d` | 23 991 914 → **9 208 525 B** | 86 630 → **67 159** | 22 419 188 → 7 635 801 B |
+| `rexample_x` | 31 015 780 → **16 211 033 B** | 102 571 → **81 902** | 24 261 772 → 9 478 385 B |
+
+**Where the difference is.** Before, the conversion allocated 18 518 034 B in
+72 895 blocks on every render from the cache or a document, and 18 496 600 B
+in 71 693 blocks on the direct one. After, the copy allocates 3 649 349 B in
+51 975 blocks on every label, and the members converted on demand, outside the
+copy, are 464 B in 2 blocks for `example`, 28 406 B in 83 blocks for
+`rust/struct` and 96 808 B in 209 blocks for `rust/schema`: no template of the
+worked example reads `foreign_keys` or `referenced_by`, which carry the
+embedded tables of `FR-CTX-006` and `FR-CTX-010`. `schema dump` served from the
+cache, which does not render, was 11 869 312 → 11 869 310 B in 29 849 blocks
+in both arms.
+
+### Observations, which are not verdicts
+
+- **The change took about two thirds of the register's estimate in time and
+  three quarters of it in memory.** The register estimated ≈ −8.9 ms and
+  ≈ −21 MiB per render; the change measures −5.58 to −5.75 ms and −15.96 to
+  −16.22 MiB. The estimate was derived from the campaign entry's profile, taken
+  before row 7 removed the destructor of the converted context and before row
+  8 changed the column's decoding; and the copy remains.
+- **The gain is the same on every label, to 0.17 ms**, direct, cached or
+  whole-database, because each render stopped converting the same document and
+  started copying it; what differs between the labels is what they read, which
+  is small in all three.
+- **Where the time of `rexample_c` now goes**, from the profile of the `after`
+  arm: 45.7% of samples decode the 272 cache files (`Loaded::document`), 35.0%
+  open and read them (`Cache::look`), 8.6% copy the decoded document
+  (`to_static`), 3.0% drop the decoded document, and 0.2% run the template.
+  The first two are the cache's, and the campaign entry's non-findings keep the
+  one file per object of `FR-CACHE-030`.
+- **The loop fell by 1 134.2 ms, which is 5.67 ms per render**, within 0.07 ms
+  of the per-render gain of `rexample_c`: 199 renders of each run are served
+  from the cache, and the first, which reads the server and writes the cache,
+  gains what `rexample_d` gains.
+
+### What changed that a caller can see
+
+- **Output.** None of the 5 461 invocations of the harness differs in a byte,
+  stdout, stderr or exit code. The harness renders every template of the
+  project — `example`, the 22 templates of the four worked examples
+  (`examples/*/templates/`), and 28 probe templates written for this change —
+  under a set of bindings and sources:
+
+  | entry or document | sources | bindings |
+  |---|---|---|
+  | `freight` on `12.3` as `tpl_reader`, whose tables, views and routines carry the `restricted` marking | cache, `--direct --no-cache`, `--context` | none; four tables, two views, a function and a procedure |
+  | `freight` on `12.3` as `root`, whose foreign keys and `referenced_by` are populated | the same | none; five tables, a view, a function and a procedure |
+  | `freight` on `10.11`, `11.4`, `11.8` and the server without TLS, as `tpl_reader` | cache, `--direct --no-cache` | none; a table, a view, a procedure |
+  | the `root` dump with one column's `table_name` set to a table that does not exist | `--context` | none; two tables |
+  | the `root` dump with one table given a `restricted` marking | `--context <file>`, `--context -` | none; two tables |
+  | `WL-001` | cache, `--direct --no-cache`, `--context` | none; two tables |
+  | `WL-003` | the same | none |
+
+  The probes cover the key order and the iteration of the database, of every
+  table, view, routine and the server, with `length`, `items` and `dictsort`;
+  `|json`, `|pprint` and `|string` of the whole database and of its parts;
+  `sort` on whole objects and by attribute, `groupby`, `selectattr`,
+  `rejectattr`, `map` with dotted attributes, `unique`, `batch`, `slice`,
+  `first`, `last`, `reverse`, `sum`, slicing, negative indexing and repetition;
+  `==`, `!=`, `<`, `in` and `is sameas` over the collections and their members,
+  and between the bound object and the same object read through `database`;
+  `is mapping`, `is sequence` and truthiness; `namespace` over a member;
+  `debug`; the four lookups of `FR-ENV-020`; `primary_key` and `unique` over
+  every column of every table, and over a column whose table is absent; and,
+  one per template, a failure: an absent key at each level, an index past the
+  end, `restricted` on a complete table, an attribute of a collection, a call,
+  two method calls, five filters and a test given the wrong operand, a filter
+  that refuses its arguments, and arithmetic on the database. The exit codes,
+  the same for each binary, were 1 898 × `0`, 1 877 × `65`, 1 581 × `77`,
+  102 × `70`, 2 × `66` and 1 × `64`. The 102 `70`s are the document with a
+  hand-added `restricted` marking, with the marked table bound: the marking
+  names `triggers`, a property this reader does not record, and both binaries
+  report the internal invariant of `src/cli/schema/named.rs`. It is reported
+  outside this task and was not changed.
+- **Resident memory** is the one difference, and it is the one this change was
+  made for.
+
+### Confounders
+
+- **The host was not idle**: the four containers of other projects named in the
+  earlier entries were still running, and the load average was 2.13 to 2.66.
+  The rotation and the A/A arm bound their effect; they do not remove it.
+- **The `dhat` copies were taken one edit before the `after` arm**: `clippy`
+  then asked for `Value::from_serialize(table.table_type)` in place of
+  `Value::from_serialize(&table.table_type)`, which serialises the same value.
+  They are never used as time.
+- **A comment of `src/cli/render.rs` was edited after the campaign**, with its
+  line count kept. The binary rebuilt from the final tree has the same sha256
+  as the `after` arm, so the arm measured is the tree recorded.
+- **The binary grew by 33 216 B (+0.84%)**, the objects and the copy; the
+  `.text` share of each was not attributed.
+- **`rexample_d` and the first render of each loop run cross Docker Desktop's
+  port proxy**, and most of their time is the server's.
+
+### What was not measured
+
+- **Three of the four targets**, as in the previous entries.
+- **Every TLS mode.** All server reads used `tls = "disabled"`.
+- **A `samply` profile of the `before` arm**; the share the register cites is
+  the campaign entry's.
+- **A template that reads every member of the database.** Such a template pays
+  the copy and then the conversion it paid before; the harness renders three —
+  `probe/json`, `probe/pprint` and `probe/string` — for identity, and they were
+  not timed.
+- **The 10.11, 11.4 and 11.8 series** for anything but output identity.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+# tpl-before: `cargo build --release --target-dir "$S/before-target"` at 765dd1c9.
+cp "$S/before-target/release/tpl" "$S/tpl-before"; cp target/release/tpl "$S/tpl-after"
+
+# 1. The fixture: all five servers, because the harness reads every series.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
+./scripts/mariadb/seed-bench.sh 12.3
+#    The projects of the campaign entry's step 2, with tpl-before; a `freight`
+#    project holding one `tpl_reader` entry per port of scripts/mariadb/series.env
+#    and one `root` entry on 12.3; every template of examples/*/templates/ and
+#    the probe templates copied into both; each cache primed with
+#    `tpl-before cache load`, and each dump taken with `tpl-before schema dump`.
+
+# 2. Output identity: the harness, once per binary, then
+diff -r "$S/eq-before" "$S/eq-after"
+
+# 3. Each label: for round r of 8, rotate the three arms by r.
+hyperfine -N --warmup 5 --runs 40 --export-json "$S/t/<label>.r<r>.json" \
+  -n before "$S/tpl-before <args>" -n before_twin "$S/tpl-before <args>" -n after "$S/tpl-after <args>"
+
+# 4. The loop: 4 rounds, the same rotation.
+hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-before -d bench_wl001 cache clean" \
+  -n before "benches/loop200.sh $S/tpl-before bench_wl001 example $S/work/wl001-tables.txt" …
+
+# 5. Peak resident memory, median of 7; allocation, as in the previous entry,
+#    over `git archive 765dd1c9` and the working tree.
+/usr/bin/time -l "$S/tpl-after" -d bench_wl001 render example --table accrual >/dev/null
+
+# 6. The fixture down, and nothing left.
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet   # non-zero
+```
