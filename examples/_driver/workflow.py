@@ -157,8 +157,10 @@ class Outcome:
     project: Path
     #: The workspace the example was given.
     workspace: Path
-    #: The three schemas, read once each.
-    catalogue: Catalogue
+    #: The three schemas, read once each. Kept out of the default ``repr``: it
+    #: carries every column of every table, so printing an :class:`Outcome`
+    #: would print upwards of a megabyte of catalogue.
+    catalogue: Catalogue = field(repr=False)
     #: Every file written, in render order, as absolute paths.
     written: tuple[Path, ...]
     #: What ``cfg database test`` reported, one per entry.
