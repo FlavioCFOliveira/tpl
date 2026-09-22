@@ -50,22 +50,18 @@
 //! [`rules`], over the declarations of this tree, and reaches every node that
 //! declares both flags without naming one of them.
 //!
-//! # The interim arrangement
+//! # The interim arrangement is over
 //!
-//! One thing in this module is deliberately provisional, and it is named here
-//! so that it is not mistaken for finished work.
-//!
-//! **A leaf whose work is a later sprint reports `70`.** [`route`] gives each
-//! such leaf an arm that returns [`Error::InternalInvariant`] naming its
+//! **Every leaf of the tree now has an implementation.** While one did not,
+//! [`route`] gave it an arm returning [`Error::InternalInvariant`] naming its
 //! command path, which `FR-ERR-001` makes exit `70` — the code for a condition
-//! the caller cannot have caused and cannot correct, which is exactly what a
-//! parsed command with no implementation is. The arrangement is an arm per leaf
-//! rather than one catch-all so that each later sprint replaces **its own**
-//! entry, and so that the arm it must replace is named by its path rather than
-//! found by reading. What remains under it is `tpl cfg database test`, the one
-//! `cfg` subcommand that contacts a server.
+//! the caller cannot have caused and cannot correct, which is what a parsed
+//! command with no implementation is. The last of those arms was
+//! `tpl cfg database test`, and [`cfg::connectivity`] replaced it; no arm of
+//! [`route`] answers a parsed command with that guard any longer, and a test of
+//! this module asserts that none does.
 //!
-//! Nothing else is provisional here.
+//! Nothing here is provisional.
 //!
 //! - `tpl help` and `tpl version` are the two leaves that act: [`help::command`]
 //!   resolves a command path of any depth and writes either the seven sections
@@ -134,21 +130,6 @@ use crate::diagnostics::verbosity::Level;
 use crate::error::{self, Error};
 use crate::output;
 use crate::project;
-
-/// The interim outcome of a leaf whose implementation is a later sprint.
-///
-/// It expands to the guard of `FR-ERR-031`, which is the one place that decides
-/// a violated invariant is a `70` and the one that names where it was detected.
-/// The path is written once and carries into both the invariant and the arm a
-/// later sprint replaces.
-macro_rules! not_yet_implemented {
-    ($path:literal) => {
-        error::ensure_invariant(
-            false,
-            concat!("the command '", $path, "' has an implementation"),
-        )
-    };
-}
 
 /// One parsed invocation: the seven global flags, and the node they were given
 /// at.
@@ -703,16 +684,17 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
                         cfg::entries::remove(&cfg::Supplied::new(globals, None), name)
                     }
                     // The one cfg subcommand that contacts a server, per
-                    // FR-CFG-005 and FR-CACHE-010, and therefore the one the
-                    // sprint that opens a connection owns. FR-CACHE-010 also
-                    // keeps the store out of it — the command reaches a server
-                    // and reads nothing into the model — and FR-CACHE-011 keeps
-                    // the store and the server out of every other arm of this
-                    // match and of every `template` subcommand: none of them
+                    // FR-CFG-005 and FR-CACHE-010. That requirement also keeps
+                    // the store out of it — the command reaches a server and
+                    // reads nothing into the model — and FR-CACHE-011 keeps the
+                    // store and the server out of every other arm of this match
+                    // and of every `template` subcommand: none of them
                     // constructs a `Cache` or a session.
-                    Some(cfg::DatabaseCommand::Test { .. }) => {
-                        not_yet_implemented!("tpl cfg database test")
-                    }
+                    Some(cfg::DatabaseCommand::Test { name, output }) => cfg::connectivity::test(
+                        out,
+                        &cfg::Supplied::new(globals, Some(output)),
+                        name,
+                    ),
                 },
             }
         }
@@ -839,7 +821,8 @@ mod tests {
         (&["version"], &[]),
     ];
 
-    /// The leaves that have left the interim `70`.
+    /// The leaves that have left the interim `70`, which is now every one of
+    /// them.
     ///
     /// `tpl help` prints the help of the node its path names, in either of the
     /// two representations of `FR-HELP-001`, and `tpl version` prints the line
@@ -851,9 +834,13 @@ mod tests {
     /// list, print, check and locate the project's templates, per
     /// `FR-TMPL-002`. `tpl render` joins the two arms: it assembles the
     /// context of `FR-RND-023` from a catalogue read or a `--context`
-    /// document and renders one template, once. Every other leaf is still the
-    /// arrangement this module's own documentation describes.
-    const IMPLEMENTED: [&[&str]; 28] = [
+    /// document and renders one template, once. `tpl cfg database test` opens
+    /// a connection with one entry and reports the four steps of `FR-CFG-024`.
+    ///
+    /// The array is kept, rather than deleted as a list equal to [`LEAVES`],
+    /// because a leaf added to that one is a leaf whose implementation is a
+    /// decision: the body below fails until it is taken here as well.
+    const IMPLEMENTED: [&[&str]; 29] = [
         &["schema", "info"],
         &["schema", "tables"],
         &["schema", "table"],
@@ -882,6 +869,7 @@ mod tests {
         &["cfg", "database", "show"],
         &["cfg", "database", "update"],
         &["cfg", "database", "remove"],
+        &["cfg", "database", "test"],
     ];
 
     /// The six group nodes of `FR-CLI-008`, by the path a caller writes. None
@@ -1406,30 +1394,32 @@ mod tests {
     }
 
     #[test]
-    fn fr_err_030_every_unimplemented_leaf_reports_the_interim_seventy_naming_its_command_path() {
-        // The interim arrangement this module documents: a leaf parses, has no
-        // implementation, and says so as FR-ERR-030 does — never as a success
-        // and never as a usage error the caller could act on. IMPLEMENTED now
-        // holds twenty-eight of the twenty-nine leaves and this test ranges
-        // over the one that is left, `tpl cfg database test`; what each
-        // implemented leaf does instead is held to its own requirements by
-        // the tests of the module that owns it, which is where its behaviour
-        // is written.
-        for (path, operands) in LEAVES {
-            if IMPLEMENTED.contains(&path) {
-                continue;
-            }
-
-            let (result, written) = outcome(path, operands);
-            let reported = result.expect_err("no leaf is implemented yet");
-
-            assert_eq!(reported.exit_code(), 70, "{path:?}");
+    fn fr_err_030_no_leaf_of_the_tree_answers_with_the_interim_seventy_any_longer() {
+        // The interim arrangement this module documents is over. While a leaf
+        // had no implementation it parsed, reported `70` and named its own
+        // command path — never a success, and never a usage error the caller
+        // could act on. The last of those leaves was `tpl cfg database test`,
+        // and the four steps of FR-CFG-024 replaced it, so LEAVES and
+        // IMPLEMENTED are now the same set.
+        //
+        // What each implemented leaf does instead is held to its own
+        // requirements by the tests of the module that owns it, which is where
+        // its behaviour is written. This body asserts only that none of them is
+        // still the placeholder — and it fails the day a leaf is added to the
+        // tree without the decision being taken here.
+        for (path, _) in LEAVES {
             assert!(
-                reported.to_string().contains(&node_path(path)),
-                "{path:?} is not named by: {reported}"
+                IMPLEMENTED.contains(&path),
+                "{path:?} is a leaf of the tree with no implementation recorded, so it would \
+                 answer a parsed command with the `70` of FR-ERR-030"
             );
-            assert!(written.is_empty(), "{path:?} wrote {written:?}");
         }
+
+        assert_eq!(
+            IMPLEMENTED.len(),
+            LEAVES.len(),
+            "IMPLEMENTED names a path the tree does not carry"
+        );
     }
 
     /// The form one vector parses to.

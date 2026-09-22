@@ -73,12 +73,18 @@ mod statements;
 // header records, and it is declared here rather than inside the test module
 // because a `#[path]` inside an inline module resolves through a directory
 // that does not exist.
-// It is `pub(super)` because `super::fault` reaches the same harness and must
-// not declare it a second time: two `#[path]` items over one file are two
-// modules over one file.
+// It is `pub(crate)` because three modules reach the same harness and none of
+// them may declare it a second time: two `#[path]` items over one file are two
+// modules over one file, which `clippy::duplicate_mod` refuses and which would
+// give the harness's own `OnceLock` gate two instances in one binary.
+// `super::fault` is one of the three, and `crate::cli::cfg::connectivity` is
+// the third: `FR-CFG-024` gives that command four steps against a real server,
+// and the third of them is reachable only through the `#[cfg(test)]` seam of
+// `FR-ERR-031` that `super::window` owns — which an integration test cannot
+// see, so the body that exercises it is a unit test and needs the harness here.
 #[cfg(test)]
 #[path = "../../tests/support/fixture.rs"]
-pub(super) mod fixture;
+pub(crate) mod fixture;
 
 use std::panic::Location;
 
@@ -236,6 +242,64 @@ pub(crate) fn read(
     })
 }
 
+/// Runs the catalogue privilege probe of `FR-CFG-044` over a settled session.
+///
+/// It issues [`statements::probe`] — **one** `SELECT` against
+/// `INFORMATION_SCHEMA`, restricted to `schema` by a bind parameter — and reads
+/// its outcome for the two facts that requirement names, and for nothing else:
+/// whether the statement was answered without a privilege error, and whether it
+/// returned at least one row. The answer is true when both hold and false
+/// otherwise.
+///
+/// **No row is read.** The rows are counted and dropped; nothing of them
+/// reaches [`crate::model`], which is what `FR-CACHE-010` requires of the one
+/// command that calls this — it contacts the server and reads nothing into the
+/// model.
+///
+/// **A privilege refusal is an answer, not a condition.** `FR-CFG-045` fixes
+/// the exit code of a false at `0`, so a server that answers this statement
+/// with an error packet has answered it: the statement's text is a
+/// `&'static str` of the repertoire, valid on every series of `FR-SRV-015` per
+/// `FR-SRV-037`, and the only thing about it that can be refused is this
+/// reader's standing. A failure that is **not** an error packet — a socket that
+/// dropped, a TLS fault, a phase that outlived its bound — is the server
+/// ceasing to answer, and stays what `FR-ERR-034` makes it.
+///
+/// This is not the attempt-and-fall-back read `FR-SRV-023` forbids, for the two
+/// reasons `FR-CFG-044` gives: the statement is always the same one and is
+/// always issued, so nothing varies with the server; and what it reports is a
+/// property of the reader, which no other statement establishes, rather than a
+/// property of the series, which `FR-SRV-022` settles from the version probe.
+///
+/// # Errors
+///
+/// Returns [`Error::NetworkDeadlineExceeded`] where the statement outlived its
+/// bound, what [`fault::speaking`] classifies for a driver failure that is not
+/// the server's own answer, and [`Error::InternalInvariant`] where the session
+/// has already been closed — which no caller of this crate can arrange, because
+/// [`Session::close`] consumes the session.
+pub(crate) fn probe(
+    session: &mut Session,
+    target: &Target<'_>,
+    clock: &Clock,
+    schema: &str,
+) -> Result<bool, Error> {
+    let statement = statements::probe(schema);
+
+    match issue(session, target, clock, &statement)? {
+        // FR-CFG-044, the second fact: at least one row.
+        Ok(rows) => Ok(!rows.is_empty()),
+
+        // FR-CFG-044, the first fact. The server answered with an error packet,
+        // which for this statement is a privilege refusal; the discriminant
+        // read is the presence of a database error and nothing inside it, which
+        // is what `FR-GLOB-018` and `OD-06` leave a caller of the driver.
+        Err(driver) if driver.as_database_error().is_some() => Ok(false),
+
+        Err(driver) => Err(fault::speaking(&driver, target.host(), target.port())),
+    }
+}
+
 /// Issues one statement of the plan and takes its rows.
 ///
 /// The bound is the statement deadline of `FR-CONF-005` — `core.query_timeout`
@@ -251,6 +315,30 @@ fn fetch(
     clock: &Clock,
     statement: &Statement<'_>,
 ) -> Result<Vec<MySqlRow>, Error> {
+    issue(session, target, clock, statement)?
+        .map_err(|driver| fault::speaking(&driver, target.host(), target.port()))
+}
+
+/// Sends one statement and hands back what the driver answered.
+///
+/// It is [`fetch`] with the classification left to the caller, and the two
+/// exist because the two callers read a driver failure differently:
+/// [`fetch`] is a catalogue read, for which every failure is a condition of
+/// `FR-ERR-034`, while [`probe`] is `FR-CFG-044`, for which the server's own
+/// error packet is one of the two facts it reads and not a condition at all.
+/// The outer [`Err`] is the condition neither of them classifies — a phase that
+/// outlived its bound, or a session already closed.
+///
+/// Everything the statement is subject to is applied here and in one place: the
+/// bound of `FR-CONF-005` composed with `FR-GLOB-011`, the two diagnostic lines
+/// of `FR-GLOB-017`, and the bind parameters that keep every varying value out
+/// of the SQL text.
+fn issue(
+    session: &mut Session,
+    target: &Target<'_>,
+    clock: &Clock,
+    statement: &Statement<'_>,
+) -> Result<Result<Vec<MySqlRow>, sqlx::Error>, Error> {
     let bound = clock.bound(target.deadlines().of(Phase::CatalogueQuery));
     let expired = || {
         fault::expired(
@@ -307,8 +395,7 @@ fn fetch(
 
         match answered {
             Err(_) => Err(expired()),
-            Ok(Ok(rows)) => Ok(rows),
-            Ok(Err(driver)) => Err(fault::speaking(&driver, target.host(), target.port())),
+            Ok(answer) => Ok(answer),
         }
     })
 }

@@ -222,23 +222,7 @@ impl<'a> Reader<'a> {
             &expand::environment,
         )?;
 
-        // FR-CONF-040 and FR-CONF-041, in the order FR-ERR-006 reads the
-        // connection before the catalogue: an entry that describes no
-        // connection is refused before one that describes no read.
-        let missing = |key: EntryKey, flag, placeholder| Error::EntryKeyMissing {
-            entry: settings.entry().to_owned(),
-            key: format!("database.{}.{key}", settings.entry()),
-            file: configuration.file().to_owned(),
-            flag,
-            placeholder,
-        };
-
-        if settings.host().is_none() {
-            return Err(missing(EntryKey::Host, HOST_FLAG, HOST_PLACEHOLDER));
-        }
-        if settings.database().is_none() {
-            return Err(missing(EntryKey::Database, SCHEMA_FLAG, SCHEMA_PLACEHOLDER));
-        }
+        connection_keys(&settings, configuration.file())?;
 
         let cache = Cache::of(project.root(), settings.entry());
 
@@ -417,6 +401,44 @@ pub(super) fn project(tpl_dir: Option<&Path>) -> Result<(Project, Configuration)
     let configuration = project.configuration()?;
 
     Ok((project, configuration))
+}
+
+/// The two keys an invocation that opens a connection needs, checked in the
+/// order `FR-ERR-006` fixes (`FR-CONF-040`, `FR-CONF-041`).
+///
+/// An entry that describes no connection is refused before one that describes
+/// no read: `FR-CONF-040` is the host and `FR-CONF-041` the server-side
+/// database, and each `cause` names the file and the key the entry does not
+/// carry, per the `78` row of `FR-ERR-034`.
+///
+/// It is a free function so that the two callers apply **one** refusal rather
+/// than two that can drift: the cached read of [`Reader::open_from`], and
+/// `tpl cfg database test`, which `FR-CONF-041` names in as many words — the
+/// probe of `FR-CFG-044` "has nothing to restrict itself to" without a
+/// database, so that command exits `78` on such an entry and reports none of
+/// the four steps of `FR-CFG-024`.
+///
+/// # Errors
+///
+/// Returns [`Error::EntryKeyMissing`] naming whichever of the two keys the
+/// entry does not carry.
+pub(super) fn connection_keys(settings: &Settings, file: &Path) -> Result<(), Error> {
+    let missing = |key: EntryKey, flag, placeholder| Error::EntryKeyMissing {
+        entry: settings.entry().to_owned(),
+        key: format!("database.{}.{key}", settings.entry()),
+        file: file.to_owned(),
+        flag,
+        placeholder,
+    };
+
+    if settings.host().is_none() {
+        return Err(missing(EntryKey::Host, HOST_FLAG, HOST_PLACEHOLDER));
+    }
+    if settings.database().is_none() {
+        return Err(missing(EntryKey::Database, SCHEMA_FLAG, SCHEMA_PLACEHOLDER));
+    }
+
+    Ok(())
 }
 
 /// The entry such an invocation selects (`FR-GLOB-004` … `FR-GLOB-008`).

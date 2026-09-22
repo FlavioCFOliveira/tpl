@@ -121,6 +121,41 @@ impl<'a> Target<'a> {
         })
     }
 
+    /// The same target with no server-side database on the connection.
+    ///
+    /// One command asks for it, and `FR-CFG-044` is why: the probe of
+    /// `tpl cfg database test` is a `SELECT` against `INFORMATION_SCHEMA`
+    /// "restricted to the server-side database the entry names", and its answer
+    /// is the `can_read_catalogue` of `FR-CFG-039` — false where the reader
+    /// cannot see that database. A connection that carried the database as its
+    /// default schema would settle the same question at the handshake instead:
+    /// the server answers `1044` or `1049`, `super::fault` classifies the pair
+    /// as the `77` of `FR-PRIV-021`, and the probe is never reached. That is
+    /// the outcome `FR-CFG-045` rules out in as many words — a false "could
+    /// never be observed in the success document of `FR-CFG-039`, which would
+    /// make the field dead surface" — and it is the outcome that would make a
+    /// `77` from that command mean something other than the refused
+    /// authentication `FR-CFG-045` says it means.
+    ///
+    /// Nothing else changes: the host, the port, the credentials, the TLS mode
+    /// of `FR-CONF-037` and the deadlines of `FR-CONF-004` are the ones
+    /// [`Target::of`] resolved, so the connection this opens is the connection
+    /// every other command opens, minus a default schema no statement of this
+    /// command depends on. `FR-CONF-041` is untouched: the database the probe
+    /// covers is still the one the entry names, and it travels as the bind
+    /// parameter of [`super::catalogue::probe`].
+    ///
+    /// `database` being [`None`] is a state the classification already accounts
+    /// for — `super::fault::connecting` documents that no packet about a
+    /// database can arrive when none was sent.
+    #[must_use]
+    pub(crate) fn without_database(self) -> Self {
+        Self {
+            database: None,
+            ..self
+        }
+    }
+
     /// The database entry these settings came from.
     pub(crate) const fn entry(&self) -> &'a str {
         self.entry
