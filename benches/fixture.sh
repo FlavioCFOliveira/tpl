@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# The fixture, and the projects the budgets are measured in.
+# The fixture, and the projects the measurement points are measured in.
 #
 # This file is sourced by `run.sh` and is never run on its own.
 #
@@ -101,14 +101,14 @@ fixture_address() {
 FIXTURE_ENTRY_LARGE='bench_wl001'
 FIXTURE_ENTRY_SMALL='bench_wl003'
 
-# The two projects the budgets are measured in, under `$1`.
+# The two projects the measurement points are measured in, under `$1`.
 #
-#     <work>/startup   a project with no database entry at all, for the budgets
+#     <work>/startup   a project with no database entry at all, for the points
 #                      whose workload is `none` and which still have to discover
 #                      a project and read a configuration
 #     <work>/server    a project with one entry per benchmark workload
 #
-# They are separate because the budgets they serve are: `NFR-PERF-014` gives
+# They are separate because the points they serve are: `NFR-PERF-014` gives
 # three of the nine a workload of `none`, and measuring those inside a project
 # carrying two database entries would put the parse of those entries into a
 # figure that is supposed to carry no workload at all.
@@ -117,10 +117,11 @@ FIXTURE_ENTRY_SMALL='bench_wl003'
 # `SELECT, EXECUTE ON freight.*` and `seed-bench.sql` grants it nothing on
 # `freight_wl001` or `freight_wl003`, so a reader-backed entry would present an
 # empty catalogue — which `FR-PRIV-001` makes a silent success rather than an
-# error, and a benchmark over an empty catalogue is not a benchmark over
+# error, and a reading taken over an empty catalogue is not a reading over
 # `WL-001`.
+
 # The first of the two. It needs no fixture and no server, which is why it is
-# built on its own: the budgets whose workload is `none` must be measurable
+# built on its own: the points whose workload is `none` must be measurable
 # with nothing stood up.
 fixture_startup_project() {
     local work="$1" binary="$2"
@@ -168,8 +169,9 @@ CONFIGURATION
     chmod 600 "$work/server/.tpl/.cfg"
 }
 
-# Fills the cache of both entries from the server, so that the budgets
-# `NFR-PERF-013` keeps away from one can be measured with it down.
+# Fills the cache of both entries from the server, so that the two points
+# `NFR-PERF-014` gives `Server: no` and `Cache: served from` can be measured
+# with it down.
 fixture_prime() {
     local work="$1" binary="$2"
 
@@ -179,7 +181,7 @@ fixture_prime() {
 
 # ---------------------------------------------------------------- the subjects ---
 
-# The names the budgets need, discovered from the catalogue rather than written
+# The names the points need, discovered from the catalogue rather than written
 # down here. Sets `FIXTURE_WL001_NAMES`, `FIXTURE_WL003_TABLE` and
 # `FIXTURE_ABSENT_NAME`.
 #
@@ -219,7 +221,7 @@ fixture_subjects() {
 # and `BR-PERF-004` says why: the suggestion computes an edit distance against
 # every existing name, which over `WL-001` is 200 of them. A name at distance 1
 # from a real one is what makes `FR-ERR-020` offer a suggestion instead of
-# withholding it, so the budget measures the computation it exists to measure.
+# withholding it, so the point measures the computation it exists to measure.
 fixture_absent_name() {
     local names="$1" first suffix candidate
 

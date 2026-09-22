@@ -3,16 +3,18 @@
 # The measurement protocol of `NFR-PERF-009` through `NFR-PERF-012`, as code.
 #
 # This file is sourced by `run.sh` and is never run on its own. It holds the
-# whole of the protocol and nothing about any particular budget: what a sample
-# is, how a set of samples becomes a statistic, and what a record carries. A
-# budget names an invocation; this file says how it is measured and what is
-# printed about it.
+# whole of the protocol and nothing about any particular measurement point:
+# what a sample is, how a set of samples becomes a statistic, and what a record
+# carries. A measurement point names an invocation; this file says how it is
+# measured and what is printed about it.
 #
 # THIS IS AN INSTRUMENT AND NOT A GATE. It measures the machine as it finds it
-# and prints what it saw. It reads no baseline, compares nothing with anything,
-# computes no delta, passes no judgement on a figure, and never fails a run
-# because a number came out high. A record is a reading; what anybody does with
-# it is decided elsewhere and by a person.
+# and prints what it saw. It reads no earlier figure, compares nothing with
+# anything, computes no delta, passes no judgement on a figure, and never fails
+# a run because a number came out high. A record is a reading; what anybody
+# does with it is decided elsewhere and by a person. `BR-PERF-008` is the rule
+# underneath that: no figure of this corpus fails, blocks, rejects or gates
+# anything.
 #
 # The three obligations it implements, each cited where it is enforced:
 #
@@ -43,7 +45,17 @@ PROTOCOL_MIN_WARMUPS=20
 
 # The schema every record carries in its first field, so that a consumer can
 # tell one generation of this harness from another.
-PROTOCOL_RECORD_SCHEMA='tpl-bench/1'
+#
+# `tpl-bench/2` renames two fields and drops one, against `tpl-bench/1`. The
+# thirty-sixth edition of `specification/performance-requirements.md` made the
+# nine a **measurement set** of **measurement points**, so the field naming the
+# row became `point` and the field naming its words became `point_name`. The
+# field that marked the one point which could fail a change is gone with the
+# requirement that created it, which that edition withdrew and whose identifier
+# is retired. `cache` is added, because `NFR-PERF-020` obliges a record to state
+# the cache posture its point was measured under. A consumer written against
+# `tpl-bench/1` reads none of that by accident, which is what this field is for.
+PROTOCOL_RECORD_SCHEMA='tpl-bench/2'
 
 # ------------------------------------------------------------------- tools ---
 
@@ -123,8 +135,8 @@ protocol_digest() {
 }
 
 # `NFR-PERF-010`: the first execution of a freshly built binary is discarded.
-# It is executed here, once, before any sample of any budget is taken, and its
-# result is thrown away.
+# It is executed here, once, before any sample of any measurement point is
+# taken, and its result is thrown away.
 protocol_discard_first_execution() {
     "$1" --version >/dev/null 2>&1 || true
 }
@@ -137,7 +149,7 @@ protocol_discard_first_execution() {
 # hyperfine splits a command string on shell-like word boundaries even with the
 # shell disabled, so an argument carrying a space would otherwise become two.
 # Every element is single-quoted here and every embedded quote is escaped,
-# which makes the split exact for any argument a budget can name.
+# which makes the split exact for any argument a measurement point can name.
 protocol_quote_argv() {
     local piece out=''
 
@@ -221,7 +233,7 @@ protocol_rsd_over_threshold() {
 #
 #     protocol_sample_wall <runs> <warmups> <ignore-failure> <prepare> <export> <command>
 #
-# `ignore-failure` is `yes` for a budget whose subject exits non-zero by
+# `ignore-failure` is `yes` for a measurement point whose subject exits non-zero by
 # design, which is the failure path of `NFR-PERF-014` and nothing else.
 # `prepare` is a command string run before each timing run and excluded from
 # it, or empty. `command` is one already-quoted command string.
@@ -278,7 +290,7 @@ protocol_sample_rss() {
     esac
 
     if [ ! -x /usr/bin/time ]; then
-        printf 'benches: /usr/bin/time is needed for the peak-memory budget\n' >&2
+        printf 'benches: /usr/bin/time is needed for the peak-memory point\n' >&2
         return 1
     fi
 
@@ -336,16 +348,16 @@ protocol_sample_bytes() {
 # is printed. Nothing is withheld, nothing is compared with anything, and the
 # function's return status is success whenever it managed to write a line.
 #
-# The caller sets these. Eight of them are **JSON literals** and not plain
-# text, because each may be absent: `REC_BUDGET`, `REC_NORMATIVE`,
-# `REC_SERIES`, `REC_TLS`, `REC_AGGREGATION`, `REC_PARTS`, `REC_NOTE` and
-# `REC_DIGEST` are written either as `null` or as a quoted JSON value. The rest
-# are plain text.
+# The caller sets these. Seven of them are **JSON literals** and not plain
+# text, because each may be absent: `REC_POINT`, `REC_SERIES`, `REC_TLS`,
+# `REC_AGGREGATION`, `REC_PARTS`, `REC_NOTE` and `REC_DIGEST` are written
+# either as `null` or as a quoted JSON value. The rest are plain text.
 #
-#     REC_ID REC_BUDGET REC_NAME REC_NORMATIVE REC_WORKLOAD REC_QUANTITY
+#     REC_ID REC_POINT REC_NAME REC_WORKLOAD REC_QUANTITY
 #     REC_UNIT REC_TARGET REC_TARGET_SOURCE REC_SERIES REC_TLS REC_SERVER
-#     REC_COMMAND REC_WARMUPS REC_STANDING REC_METHOD REC_AGGREGATION
-#     REC_PARTS REC_NOTE REC_BINARY REC_DIGEST REC_HOST REC_TAKEN_AT
+#     REC_CACHE REC_COMMAND REC_WARMUPS REC_STANDING REC_METHOD
+#     REC_AGGREGATION REC_PARTS REC_NOTE REC_BINARY REC_DIGEST REC_HOST
+#     REC_TAKEN_AT
 protocol_emit() {
     local dispersed
 
@@ -354,9 +366,8 @@ protocol_emit() {
     jq -cn \
         --arg record "$PROTOCOL_RECORD_SCHEMA" \
         --arg id "$REC_ID" \
-        --argjson budget "$REC_BUDGET" \
-        --arg budget_name "$REC_NAME" \
-        --argjson normative "$REC_NORMATIVE" \
+        --argjson point "$REC_POINT" \
+        --arg point_name "$REC_NAME" \
         --arg workload "$REC_WORKLOAD" \
         --arg quantity "$REC_QUANTITY" \
         --arg unit "$REC_UNIT" \
@@ -365,6 +376,7 @@ protocol_emit() {
         --argjson series "$REC_SERIES" \
         --argjson tls "$REC_TLS" \
         --arg server "$REC_SERVER" \
+        --arg cache "$REC_CACHE" \
         --arg command "$REC_COMMAND" \
         --argjson n "$STAT_N" \
         --argjson warmups "$REC_WARMUPS" \
@@ -386,11 +398,11 @@ protocol_emit() {
         --arg host "$REC_HOST" \
         --arg taken_at "$REC_TAKEN_AT" \
         '{
-            record: $record, id: $id, budget: $budget, budget_name: $budget_name,
-            normative: $normative, workload: $workload,
+            record: $record, id: $id, point: $point, point_name: $point_name,
+            workload: $workload,
             quantity: $quantity, unit: $unit,
             target: $target, target_source: $target_source,
-            series: $series, tls: $tls, server: $server,
+            series: $series, tls: $tls, server: $server, cache: $cache,
             command: $command,
             n: $n, warmups: $warmups,
             median: $median, mean: $mean, stddev: $stddev,
@@ -403,9 +415,10 @@ protocol_emit() {
         }'
 }
 
-# One part of a multi-part budget, as a JSON object, for the `parts` array.
+# One part of a multi-part measurement point, as a JSON object, for the `parts`
+# array.
 #
-# It carries its own `n`, `median` and dispersion, because a budget made of two
+# It carries its own `n`, `median` and dispersion, because a point made of two
 # invocations is two readings and each is worth printing whole.
 protocol_part() {
     local label="$1" command="$2" warmups="$3" dispersed

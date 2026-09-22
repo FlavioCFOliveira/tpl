@@ -4,9 +4,10 @@
 #
 #     ./loop200.sh <binary> <entry> <template> <names-file>
 #
-# This is the eighth budget of `NFR-PERF-014` and it is the loop the help of
-# `tpl render` prints: one invocation per object, because `FR-RND-002` renders
-# once per invocation and `BR-RND-002` makes iterating the caller's job. What
+# This is the eighth measurement point of `NFR-PERF-014` and it is the loop the
+# help of `tpl render` prints: one invocation per object, because `FR-RND-002`
+# renders once per invocation and `BR-RND-002` makes iterating the caller's job.
+# What
 # `BR-PERF-005` says it measures is **200 process startups**, not 200 iterations
 # inside one process, so the startups are what this file performs and nothing
 # here is amortised across them.
@@ -16,13 +17,13 @@
 # program's cost and not `sh -c`'s; `hyperfine --shell=none` satisfies it and is
 # passed on every invocation this harness makes, this one included. Here the
 # loop **is** the subject: a caller who renders 200 objects writes exactly this,
-# and its cost is what the budget names. The driver is kept to a `read` and an
+# and its cost is what the point names. The driver is kept to a `read` and an
 # exec per line so that what it adds to the subject is as close to nothing as a
 # loop can be, and the record states that the loop was driven this way.
 #
 # It reads the names from a file rather than from `tpl schema tables`, which the
 # canonical loop pipes into it, for the same reason: the enumeration is one
-# invocation and the budget counts 200, so enumerating inside the measured
+# invocation and the point counts 200, so enumerating inside the measured
 # command would put a 201st there and make each run's work depend on a pipe.
 
 set -eu

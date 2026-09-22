@@ -1,16 +1,18 @@
 # The benchmark harness
 
-The instrument for the nine budgets of `NFR-PERF-014` and the `WL-002` scalar,
-taken under the protocol of `NFR-PERF-009` through `NFR-PERF-012`. It stands
-the MariaDB fixture up for the readings that need a server, takes it down for
-the readings that must not have one, and writes one machine-readable record per
-budget.
+The instrument for the nine **measurement points** of `NFR-PERF-014` and the
+`WL-002` scalar, taken under the protocol of `NFR-PERF-009` through
+`NFR-PERF-012`. It stands the MariaDB fixture up for the readings that need a
+server, takes it down for the readings that must not have one, and writes one
+machine-readable record per point.
 
 ## It measures, and it does nothing else
 
-This harness is an instrument, not a gate. It
+This harness is an instrument, not a gate. `BR-PERF-008` is the rule underneath
+that: no figure named in the corpus, and no figure recorded against it in
+`BENCHMARKS.md`, fails, blocks, rejects or gates a change. So this harness
 
-- reads no baseline, and never opens `BENCHMARKS.md`;
+- reads no earlier figure, and never opens `BENCHMARKS.md`;
 - compares nothing with anything, and computes no delta, no regression and no
   pass or fail;
 - withholds no figure, whatever it came out at;
@@ -48,7 +50,7 @@ cargo build --release
 ## Running it
 
 ```sh
-# the full campaign: nine budgets and the scalar, under the full protocol
+# the full campaign: nine points and the scalar, under the full protocol
 ./benches/run.sh
 
 # a reduced run that proves the harness works, in about a minute
@@ -84,7 +86,7 @@ fixture harness prints, go to **stderr**. So a campaign pipes cleanly:
 
 ### What the full campaign costs
 
-Around half an hour on an Apple M4, almost all of it the eighth budget: 220 runs
+Around half an hour on an Apple M4, almost all of it the eighth point: 220 runs
 of a 200-invocation loop is 44 000 process startups. The other nine readings
 together take under a minute, and the fixture adds about a minute of standing
 up, loading and tearing down. A proving run at `--runs 5 --warmups 2` does the
@@ -97,27 +99,53 @@ none is a judgement on it.
 
 | Field | What it is |
 |---|---|
-| `record` | the record schema, `tpl-bench/1` |
-| `id` | `budget-1` … `budget-9`, or `wl-002` |
-| `budget` | the row of `NFR-PERF-014`, or `null` for the scalar |
-| `budget_name` | that row's own words |
-| `normative` | `true` for the one normative budget of `NFR-PERF-015`, and for nothing else |
+| `record` | the record schema, `tpl-bench/2` |
+| `id` | `point-1` … `point-9`, or `wl-002` |
+| `point` | the row of `NFR-PERF-014`, by its `#`, or `null` for the scalar |
+| `point_name` | that row's own words |
 | `workload` | `WL-001`, `WL-003` or `none` |
 | `quantity`, `unit` | `wall_time` in `ms`, `peak_rss` in `bytes`, or `document_size` in `bytes` |
 | `target`, `target_source` | the target of `NFR-PERF-018`, and whether it was detected or given |
 | `series` | the series of `FR-SRV-015` a server answered as, or `null` where none did |
 | `tls` | the transport that entry asked for, or `null` |
 | `server` | `up`, `down` or `not required` while the reading was taken |
+| `cache` | the words of the `Cache` column `NFR-PERF-014` gives the point |
 | `command` | the invocation, as a reader would retype it |
 | `n`, `warmups` | the samples behind the figures, and the runs discarded before them |
 | `median`, `mean`, `stddev`, `min`, `max` | the sample, described |
 | `rsd_pct`, `rsd_over_5pct` | the dispersion, and whether it is above the five per cent `NFR-PERF-011` speaks of |
 | `standing` | `full` under both floors of `NFR-PERF-009`, `reduced` below either |
 | `protocol`, `method` | which protocol, and which instrument took the reading |
-| `aggregation`, `parts` | for a budget made of more than one invocation; `null` otherwise |
+| `aggregation`, `parts` | for a point made of more than one invocation; `null` otherwise |
 | `note` | what a reader of this figure has to know about how it was taken |
 | `binary`, `binary_sha256` | what was measured |
 | `host`, `taken_at` | where, and when |
+
+### What changed from `tpl-bench/1`
+
+The thirty-sixth edition of `specification/performance-requirements.md` made
+the nine a **measurement set** of **measurement points**, so `budget` became
+`point`, `budget_name` became `point_name`, and the `id` values became
+`point-1` … `point-9`. The `normative` field is **removed**: it marked the one
+point that could fail a change on its own merits, and the requirement that
+created that status is withdrawn and its identifier retired, so the field has
+nothing left to name. `cache` is **added**, because `NFR-PERF-020` obliges a
+record to state the cache posture its point was measured under, and
+`NFR-PERF-014` now fixes that posture in a column of its own.
+
+*Rejected: keeping `budget` and only dropping `normative`.* `budget` is the
+withdrawn regime's word. The corpus keeps it only where it still means a limit
+— the invocation timeout of `FR-GLOB-011` and the shared phase budget of
+`FR-CONF-005` — so a field of this record called `budget` sends a reader looking
+for a limit that does not exist. *Also rejected: `measurement_point`, and
+`measurement-point-1` for the `id`.* Exact, and too long for a value that
+prefixes every sample filename and is read line by line; `point` is the head of
+the corpus's own noun. *Also rejected: `mp-1`.* An abbreviation this corpus
+never uses. *Also rejected: keeping `normative: false` on every record as a
+tombstone.* It would state a property of a regime that no longer exists, and
+`false` on all ten records says nothing. *Also rejected: leaving the schema at
+`tpl-bench/1`.* The field exists so that a consumer can tell one generation from
+another, and this generation renames two fields, drops one and adds one.
 
 `median` is the median of `n` samples; for an even `n` it is the mean of the two
 middle values. `stddev` is the sample standard deviation, with `n - 1` in the
@@ -125,84 +153,108 @@ denominator. `rsd_pct` is `stddev / mean`, in per cent. One implementation
 computes all of them, for all three quantities, so the words mean one thing
 across every record.
 
-## The nine budgets, as wired
+## The nine points, as wired
 
-| # | Budget | Invocation | Fixture | Server |
-|---|---|---|---|---|
-| 1 | `tpl --version` | `tpl --version` | no | no |
-| 2 | `tpl --help` | `tpl --help` | no | no |
-| 3 | Startup to the first byte of useful work | `tpl template list` | no | no |
-| 4 | `tpl schema dump` | `tpl -d bench_wl001 schema dump --direct --no-cache` | yes | **up** |
-| 5 | A cache-served read of one object | `tpl -d bench_wl003 schema table <table>` | yes | **down** |
-| 6 | The failure path | a `64` and a `66`, both over `WL-001` | yes | **down** |
-| 7 | `tpl help --format json` | `tpl help --format json` | no | no |
-| 8 | The canonical loop of 200 invocations | `benches/loop200.sh` | yes | **up** |
-| 9 | Peak resident memory | `tpl -d bench_wl001 schema dump --direct --no-cache` | yes | **up** |
-| — | `WL-002` | the byte length of the compact dump of `WL-001` | yes | **up** |
+The `Cache` column is `NFR-PERF-014`'s own, reproduced here so that what the
+harness does can be checked against what that table fixes.
 
-Five of them need a decision the specification does not make, and each is made
-here, in the open.
+| # | Measurement point | Invocation | Fixture | Server | Cache |
+|---|---|---|---|---|---|
+| 1 | `tpl --version` | `tpl --version` | no | no | not reached |
+| 2 | `tpl --help` | `tpl --help` | no | no | not reached |
+| 3 | Startup to the first byte of useful work | `tpl template list` | no | no | not reached |
+| 4 | `tpl schema dump` | `tpl -d bench_wl001 schema dump --direct --no-cache` | yes | **up** | bypassed |
+| 5 | A cache-served read of one object | `tpl -d bench_wl003 schema table <table>` | yes | **down** | served from |
+| 6 | The failure path | a `64` and a `66`, both over `WL-001` | yes | **down** | served from |
+| 7 | `tpl help --format json` | `tpl help --format json` | no | no | not reached |
+| 8 | The canonical loop of 200 invocations | `benches/loop200.sh` | yes | **up** | empty when each run begins |
+| 9 | Peak resident memory | `tpl -d bench_wl001 schema dump --direct --no-cache` | yes | **up** | bypassed |
+| — | `WL-002` | the byte length of the compact dump of `WL-001` | yes | **up** | bypassed, by this harness's choice |
 
-**Budget 3 names a quantity and no invocation.** `/specification` says
-`Startup to the first byte of useful work`, with a workload of `none` and no
-server, and names no command. What is measured is `tpl template list` in a
-project carrying no database entry: the cheapest invocation that is *useful
-work* rather than static text — it discovers a project, reads a configuration,
-and presents a result of its own. `NFR-PERF-005` excuses help and version from
-discovery and from reading a configuration, so neither of them can carry this
-quantity, which is also why this budget's provisional figure is twice theirs.
-What the instrument times is the whole process, because hyperfine times a
-process and not a byte of output; for a command whose work is listing two files
-that is startup plus a rounding error. Every record of this budget carries the
-choice in its `note`.
+Five of them are worth a paragraph. **Four of the five are decided by
+`NFR-PERF-014` and not here** — the thirty-sixth edition settled point 3's
+invocation, point 6's aggregation and the cache posture of points 4, 8 and 9 —
+and each paragraph says which rule it follows. The fifth, the `WL-002` scalar,
+is not a row of that table, and the posture it is measured under is this
+harness's own and is stated as such.
 
-**Budget 4 passes `--direct --no-cache`.** Its row says `Server: yes` and its
-provisional figure is stated with server time included. Without those two flags
-the read is read-through: the first run would reach the server and the other 199
-would be served from the cache, and the median — which is what the protocol
-records — would be a cache figure under a row that says otherwise.
+**Point 3's invocation is fixed by `NFR-PERF-014`.** The row reads *Startup to
+the first byte of useful work, measured by `tpl template list` in a project
+holding no database entry*, with a workload of `none` and no server. Until the
+thirty-sixth edition it named a quantity and no command, and this harness chose
+one; that edition settled it, on the ground the harness had reasoned from, and
+the choice is no longer the harness's to make. `tpl template list` is the
+cheapest invocation that is *useful work* rather than static text — it discovers
+a project, reads a configuration, and presents a result of its own — where
+`NFR-PERF-005` excuses help and version from discovery and from reading a
+configuration, which is also why this row's adopted figure is twice theirs. What
+the instrument times is the whole process, because hyperfine times a process and
+not a byte of output; for a command whose work is listing two files that is
+startup plus a rounding error. Every record of this point says so in its
+`note`.
 
-**Budget 5 runs with the server taken down.** `NFR-PERF-013` requires every
-normative budget to run over `--context` or over the cache and therefore to need
-no server. The cache is filled while the server is up, the server is removed
-through `down.sh`, and `status.sh` is asked again before the reading is taken,
-so that the record's `server: down` is an observation and not an intention.
+**Point 4 passes `--direct --no-cache`, because its `Cache` column says so.**
+The column reads *bypassed, `--direct --no-cache`*, and `FR-CACHE-016` fixes
+those two flags as the pure read. Without them the read is read-through, per
+`FR-CACHE-006` and `FR-CACHE-007`: the first run would reach the server and the
+other 199 would be served from the cache, and the median — which is what the
+protocol records — would be a cache figure under a row that says a server
+answered. Point 9 carries the same column entry and is measured over this same
+invocation.
 
-**Budget 6 is two invocations.** The `64` is an undeclared flag on a real table;
-the `66` names a table one character away from a real one, so `FR-ERR-020`
-offers a suggestion instead of withholding it and the edit distance of
-`FR-ERR-019` is computed against all 200 names of `WL-001` — which is what
-`BR-PERF-004` says this budget exists to measure. The near-miss name is derived
-from a real table at run time and checked against the whole list, and both
-halves are run once and their exit codes checked before either is sampled. Each
-half is printed whole under `parts`; the budget's own figures are the slower
-half's, in full, so that the `median`, the `mean` and the dispersion of the
-record all describe one reading. `aggregation` says which rule chose them.
+**Point 5 runs with the server taken down.** Its row says `Server: no` and
+`Cache: served from`. The cache is filled while the server is up, the server is
+removed through `down.sh`, and `status.sh` is asked again before the reading is
+taken, so that the record's `server: down` and `cache: served from` are
+observations and not intentions.
 
-**Budget 8 is driven by `benches/loop200.sh`.** That is the loop the help of
+**Point 6 is one point measured by two invocations, and its figure is the slower
+of the two.** That aggregation is `NFR-PERF-014`'s, settled in the thirty-sixth
+edition, which also obliges both invocations to be recorded, each in full,
+beside the figure that stands for the point. The `64` is an undeclared flag on a
+real table; the `66` names a table one character away from a real one, so
+`FR-ERR-020` offers a suggestion instead of withholding it and the edit distance
+of `FR-ERR-019` is computed against all 200 names of `WL-001` — which is what
+`BR-PERF-004` says this point exists to measure, and why the `66` is the
+expensive half. The near-miss name is derived from a real table at run time and
+checked against the whole list, and both halves are run once and their exit
+codes checked before either is sampled. Each half is printed whole under
+`parts`; the point's own figures are the slower half's, in full, so that the
+`median`, the `mean` and the dispersion of the record all describe one reading.
+`aggregation` names the rule. The row's `Cache` column says *served from*; the
+`64` is refused before any read and reaches neither cache nor server.
+
+**Point 8 is driven by `benches/loop200.sh`.** That is the loop the help of
 `tpl render` prints — one invocation per object, because `FR-RND-002` renders
 once per invocation and `BR-RND-002` makes iterating the caller's job — and what
 `BR-PERF-005` says it measures is 200 **process startups**. The driver is a
 `read` and an exec per line and nothing else. `NFR-PERF-010` keeps a shell out
 of the *instrument*, which `--shell=none` satisfies here as everywhere; the loop
-is the subject, not a wrapper around it. The cache is emptied by hyperfine's
-`--prepare`, which is excluded from what it times, so every run is one server
-read followed by 199 cache hits — the same work each time, with the server in
-all of it.
+is the subject, not a wrapper around it. Its `Cache` column says *empty when
+each run begins*, and the thirty-sixth edition adds that emptying it is not part
+of what is measured: hyperfine's `--prepare` does both, since it runs before
+each timing run and is excluded from what it times. Every run is therefore one
+server read followed by 199 cache hits — the same work each time, with the
+server in all of it.
 
-**Budget 9 does not use hyperfine**, which measures time. `ru_maxrss` is read
+**Point 9 does not use hyperfine**, which measures time. `ru_maxrss` is read
 from outside the process, with `/usr/bin/time -l` on macOS (bytes) and
 `/usr/bin/time -v` on Linux (kbytes, scaled). The record says which. The
-invocation is budget 4's, because the whole-catalogue read is the
-memory-heaviest thing `tpl` does over this workload and the provisional figure
-of that row was stated for a database of 200 tables.
+invocation is point 4's, under the same `Cache` column entry, because — as the
+thirty-sixth edition states — the whole-catalogue read is the memory-heaviest
+thing `tpl` does over this workload and the adopted figure of that row was
+stated for a database of 200 tables.
 
-**The `WL-002` scalar is the length of the compact dump.** Compact is the
-default of `FR-OUT-007`; `--pretty` is what departs from it, and is not passed.
-The dump is server-read, so its envelope carries `source: server`; a
-cache-served dump of the same catalogue differs by the two bytes of that word.
-The scalar is taken more than once so that the record can report whether the
-size held still.
+**The `WL-002` scalar is the length of the compact dump.** It is not a row of
+`NFR-PERF-014` and fixes no cache posture, so bypassing the cache is this
+harness's choice and the record says so. Compact is the default of `FR-OUT-007`;
+`--pretty` is what departs from it, and is not passed. The dump is server-read,
+so its envelope carries `source: server`; a cache-served dump of the same
+catalogue differs by the two bytes of that word. The scalar is taken more than
+once so that the record can report whether the size held still. It is a
+deterministic size and not a timing: a departure beyond its ±2% is a statement
+about the fixture or the document shape, and is the one thing this directory
+measures that `BR-PERF-008` leaves able to fail.
 
 ## The fixture
 
@@ -221,7 +273,7 @@ credentials and the two benchmark schema names are read from `series.env` and
 from `status.sh --export` at run time, so a change to the fixture reaches this
 harness without anything here being edited.
 
-**The campaign leaves the fixture down.** Budgets 5 and 6 are measured after the
+**The campaign leaves the fixture down.** Points 5 and 6 are measured after the
 server has been removed, so that is where a run ends. Only the series the run
 was told to use is touched.
 
@@ -244,7 +296,7 @@ Everything the harness writes lives under `--work-dir`, `target/bench-work` by
 default, which `cargo clean` removes and git ignores:
 
 ```
-startup/            a project with no database entry, for budget 3
+startup/            a project with no database entry, for point 3
 server/             a project with one entry per benchmark workload
 wl001-tables.txt    the 200 table names, for the canonical loop
 samples/            the raw samples behind every figure, one file per reading
@@ -260,7 +312,7 @@ Every one of the ten readings measures **the distributed binary as a caller runs
 it**: a whole process, from `exec` to exit, with its startup, its configuration
 read, its connection and its output in the figure. A `criterion` benchmark
 measures a function inside a test binary and cannot see any of that, and the
-budgets that need a server standing up, a workload loaded and a cache primed
+points that need a server standing up, a workload loaded and a cache primed
 between two readings are orchestration rather than measurement.
 
 So the harness is a runner script beside the fixture's own scripts, and

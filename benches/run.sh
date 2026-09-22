@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 #
-# The benchmark harness: the nine budgets of `NFR-PERF-014` and the `WL-002`
-# scalar, measured under the protocol of `NFR-PERF-009` through
+# The benchmark harness: the nine measurement points of `NFR-PERF-014` and the
+# `WL-002` scalar, measured under the protocol of `NFR-PERF-009` through
 # `NFR-PERF-012`.
 #
 # Usage:
-#     ./run.sh                          # the full campaign: nine budgets and the scalar
-#     ./run.sh 1 2 3 7                  # only the budgets named
+#     ./run.sh                          # the full campaign: nine points and the scalar
+#     ./run.sh 1 2 3 7                  # only the points named
 #     ./run.sh wl-002                   # only the scalar
 #     ./run.sh --proving --runs 20 --warmups 3
 #                                       # a reduced run that proves the harness works
 #     ./run.sh --help
 #
 # Options:
-#     --runs N            timing runs per budget (default 200, the NFR-PERF-009 floor)
-#     --warmups N         warmup runs per budget (default 20, the same floor)
+#     --runs N            timing runs per point (default 200, the NFR-PERF-009 floor)
+#     --warmups N         warmup runs per point (default 20, the same floor)
 #     --proving           permit a run below either floor, and say so in every
 #                         record it produces
 #     --series NAME       the series of FR-SRV-015 to measure against (default 12.3)
@@ -26,7 +26,7 @@
 #     --out FILE          write the records here as well as to stdout
 #
 # Output:
-#     stdout   one JSON record per line, one line per budget
+#     stdout   one JSON record per line, one line per measurement point
 #     stderr   progress, and everything the fixture harness prints
 #
 # Exit code:
@@ -36,9 +36,11 @@
 #         fixture that would not stand up
 #
 # NO FIGURE CHANGES THE EXIT CODE. A campaign that completes exits `0` whatever
-# it measured. This is an instrument: it reads no baseline, compares nothing
-# with anything, computes no delta, and passes no judgement on a number. High,
-# low, slow or dispersed, the reading is printed in full and the run succeeds.
+# it measured. This is an instrument: it reads no earlier figure, compares
+# nothing with anything, computes no delta, and passes no judgement on a number.
+# High, low, slow or dispersed, the reading is printed in full and the run
+# succeeds. `BR-PERF-008` is the rule underneath that: no figure of this corpus
+# fails, blocks, rejects or gates anything.
 #
 # WHAT THIS DOES NOT DO. It does not write `BENCHMARKS.md`, and it does not
 # decide what any figure means. `NFR-PERF-011`'s five per cent is reported as
@@ -127,7 +129,7 @@ parse_arguments() {
             1|2|3|4|5|6|7|8|9|wl-002)
                          SELECTED=(${SELECTED[@]+"${SELECTED[@]}"} "$1"); shift ;;
             all)         shift ;;
-            *)           die "unknown budget: $1 (the budgets are 1..9 and wl-002)" ;;
+            *)           die "unknown measurement point: $1 (the points are 1..9 and wl-002)" ;;
         esac
     done
 
@@ -209,7 +211,7 @@ prepare() {
     fi
 
     # `NFR-PERF-010`: the first execution of a freshly built binary is
-    # discarded. It happens here, once, before any sample of any budget.
+    # discarded. It happens here, once, before any sample of any point.
     protocol_discard_first_execution "$BINARY"
 
     say "target   $TARGET ($TARGET_SOURCE)"
@@ -220,13 +222,17 @@ prepare() {
 
 # ------------------------------------------------------- record bookkeeping ---
 
-# Resets the per-record metadata to what most budgets carry, so that each
-# budget states only what is its own.
+# Resets the per-record metadata to what most points carry, so that each point
+# states only what is its own.
+#
+# `REC_CACHE` carries the words of the `Cache` column `NFR-PERF-014` gives the
+# point, which `NFR-PERF-020` obliges the record to state. `not reached` is the
+# column's entry for the four points whose workload is `none`, so it is the
+# default here and the other six say their own.
 record_defaults() {
     REC_ID=''
-    REC_BUDGET='null'
+    REC_POINT='null'
     REC_NAME=''
-    REC_NORMATIVE=false
     REC_WORKLOAD='none'
     REC_QUANTITY='wall_time'
     REC_UNIT='ms'
@@ -235,6 +241,7 @@ record_defaults() {
     REC_SERIES='null'
     REC_TLS='null'
     REC_SERVER='not required'
+    REC_CACHE='not reached'
     REC_COMMAND=''
     REC_WARMUPS="$WARMUPS"
     REC_STANDING="$STANDING"
@@ -310,46 +317,47 @@ wall() {
     protocol_stats < "$samples"
 }
 
-# ------------------------------------------------------- the four free budgets ---
+# ------------------------------------------------- the four free points ---
 
-# `NFR-PERF-014` rows 1, 2, 3 and 7: workload `none`, no fixture, no server.
-budget_1() {
+# `NFR-PERF-014` rows 1, 2, 3 and 7: workload `none`, no fixture, no server,
+# and a cache the invocation never reaches.
+point_1() {
     record_defaults
-    REC_ID='budget-1'; SLUG='budget-1'; REC_BUDGET=1
+    REC_ID='point-1'; SLUG='point-1'; REC_POINT=1
     REC_NAME='tpl --version'
 
     wall no '' "$WORK" "$BINARY" --version
     emit
 }
 
-budget_2() {
+point_2() {
     record_defaults
-    REC_ID='budget-2'; SLUG='budget-2'; REC_BUDGET=2
+    REC_ID='point-2'; SLUG='point-2'; REC_POINT=2
     REC_NAME='tpl --help'
 
     wall no '' "$WORK" "$BINARY" --help
     emit
 }
 
-# The third budget names a quantity and no invocation, and `/specification`
-# names none either: it is `Startup to the first byte of useful work`, with a
-# workload of `none` and no server. What is measured here is the cheapest
-# invocation that is **useful work** rather than static text — a command that
-# discovers the project, reads the configuration and presents a result of its
-# own — and `tpl template list` is that command. `NFR-PERF-005` excuses help and
-# version from discovery and from reading a configuration, so neither of them
-# can carry this quantity, which is also why the budget's provisional figure is
-# twice theirs.
+# `NFR-PERF-014` row 3: startup to the first byte of useful work.
+#
+# The invocation is not this harness's to choose. The thirty-sixth edition
+# settled it in the row itself — `tpl template list` in a project holding no
+# database entry — on the ground that it is the cheapest invocation which is
+# **useful work** rather than static text: it discovers a project, reads a
+# configuration and presents a result of its own, where `NFR-PERF-005` excuses
+# every form of help and of version from discovery and from reading a
+# configuration. That is also why this row's adopted figure is twice theirs.
 #
 # What the instrument actually times is the whole process, because hyperfine
 # times a process and not a byte of its output; for a command whose work is
-# listing two files, that is startup plus a rounding error, which is the
-# quantity the budget names. The record says so in its `note`.
-budget_3() {
+# listing two files, that is startup plus a rounding error. The record says so
+# in its `note`.
+point_3() {
     record_defaults
-    REC_ID='budget-3'; SLUG='budget-3'; REC_BUDGET=3
-    REC_NAME='Startup to the first byte of useful work'
-    REC_NOTE='"measured as the whole of tpl template list in a project carrying no database entry: the cheapest invocation that discovers a project, reads a configuration and presents a result of its own. /specification names the quantity and no invocation."'
+    REC_ID='point-3'; SLUG='point-3'; REC_POINT=3
+    REC_NAME='Startup to the first byte of useful work, measured by tpl template list in a project holding no database entry'
+    REC_NOTE='"the invocation is the one NFR-PERF-014 names for this row: tpl template list in a project holding no database entry. hyperfine times the whole process rather than the first byte of output; for a command whose work is listing two files that is startup plus a rounding error."'
 
     fixture_startup_project "$WORK" "$BINARY"
 
@@ -357,33 +365,36 @@ budget_3() {
     emit
 }
 
-budget_7() {
+point_7() {
     record_defaults
-    REC_ID='budget-7'; SLUG='budget-7'; REC_BUDGET=7
+    REC_ID='point-7'; SLUG='point-7'; REC_POINT=7
     REC_NAME='tpl help --format json'
 
     wall no '' "$WORK" "$BINARY" help --format json
     emit
 }
 
-# --------------------------------------------------- the budgets with a server ---
+# ----------------------------------------------- the points with a server ---
 
 # `NFR-PERF-014` row 4: `tpl schema dump` over `WL-001`, server time included.
 #
-# `--direct --no-cache` is what puts the server in the measurement and keeps it
-# there. Without them the read is read-through: the first run would reach the
-# server and the other 199 would be served by the cache, and the median — which
-# is what the protocol records — would be a cache figure under a row that says
-# `Server: yes`.
-budget_4() {
+# The `Cache` column of that row says `bypassed, --direct --no-cache`, and the
+# thirty-sixth edition states why: the read is read-through by default, per
+# `FR-CACHE-006` and `FR-CACHE-007`, so without those two flags the first run
+# would reach the server and the other 199 would be served from the cache, and
+# the median — which is what the protocol records — would be a cache figure
+# under a row that says a server answered. `FR-CACHE-016` fixes the two flags as
+# the pure read.
+point_4() {
     record_defaults
-    REC_ID='budget-4'; SLUG='budget-4'; REC_BUDGET=4
+    REC_ID='point-4'; SLUG='point-4'; REC_POINT=4
     REC_NAME='tpl schema dump'
     REC_WORKLOAD='WL-001'
     REC_SERIES="\"$SERIES\""
     REC_TLS="\"$TLS\""
     REC_SERVER='up'
-    REC_NOTE='"--direct --no-cache: every run reads the server, which is what the Server column of NFR-PERF-014 requires of this row."'
+    REC_CACHE='bypassed, --direct --no-cache'
+    REC_NOTE='"--direct --no-cache is the Cache column of this row of NFR-PERF-014, and FR-CACHE-016 fixes it as the pure read: every run reaches the server."'
 
     wall no '' "$WORK/server" \
         "$BINARY" -d "$FIXTURE_ENTRY_LARGE" schema dump --direct --no-cache
@@ -392,21 +403,22 @@ budget_4() {
 
 # `NFR-PERF-014` row 8: the canonical loop of 200 invocations over `WL-001`.
 #
-# Each run is one server read and 199 cache hits, which is what a caller pays:
-# the loop is read-through, so the first of its 200 invocations fills the cache
-# and the rest are served from it. The cache is emptied before each timing run
-# and not during it — `--prepare` is excluded from what hyperfine times — so
-# every run performs exactly the same work, and the server is in every one of
-# them.
-budget_8() {
+# The `Cache` column of that row says `empty when each run begins`, and the
+# thirty-sixth edition states that emptying it is not part of what is measured.
+# `--prepare` is what satisfies both halves: hyperfine runs it before each
+# timing run and excludes it from the figure. Each run is then one server read
+# and 199 cache hits, which is the same work every time and is what a caller's
+# loop over 200 objects actually does.
+point_8() {
     record_defaults
-    REC_ID='budget-8'; SLUG='budget-8'; REC_BUDGET=8
+    REC_ID='point-8'; SLUG='point-8'; REC_POINT=8
     REC_NAME='The canonical loop of 200 invocations'
     REC_WORKLOAD='WL-001'
     REC_SERIES="\"$SERIES\""
     REC_TLS="\"$TLS\""
     REC_SERVER='up'
-    REC_NOTE='"benches/loop200.sh drives the loop: one tpl render per table, 200 process startups, as BR-PERF-005 requires. The cache is emptied by hyperfine --prepare before each run and is not part of it, so each run is one server read and 199 cache hits."'
+    REC_CACHE='empty when each run begins'
+    REC_NOTE='"benches/loop200.sh drives the loop: one tpl render per table, 200 process startups, as BR-PERF-005 requires. The cache is emptied by hyperfine --prepare before each run and is excluded from what it times, which is the Cache column of this row of NFR-PERF-014; each run is one server read and 199 cache hits."'
 
     local clean
     clean="$(protocol_quote_argv "$BINARY" -d "$FIXTURE_ENTRY_LARGE" cache clean)"
@@ -420,12 +432,14 @@ budget_8() {
 # `NFR-PERF-014` row 9: peak resident memory over `WL-001`.
 #
 # `ru_maxrss`, taken outside the process, over the same invocation row 4
-# measures: the whole-catalogue read is the memory-heaviest thing `tpl` does
-# over this workload, and the provisional figure that row carries was stated
-# for a database of 200 tables.
-budget_9() {
+# measures and under the same `Cache` column entry — `bypassed,
+# --direct --no-cache`. The thirty-sixth edition states the ground: the
+# whole-catalogue read is the memory-heaviest thing `tpl` does over this
+# workload, and the adopted figure that row carries was stated for a database of
+# 200 tables.
+point_9() {
     record_defaults
-    REC_ID='budget-9'; SLUG='budget-9'; REC_BUDGET=9
+    REC_ID='point-9'; SLUG='point-9'; REC_POINT=9
     REC_NAME='Peak resident memory'
     REC_WORKLOAD='WL-001'
     REC_QUANTITY='peak_rss'
@@ -433,6 +447,7 @@ budget_9() {
     REC_SERIES="\"$SERIES\""
     REC_TLS="\"$TLS\""
     REC_SERVER='up'
+    REC_CACHE='bypassed, --direct --no-cache'
 
     local system
     system="$(uname -s)"
@@ -441,7 +456,7 @@ budget_9() {
     else
         REC_METHOD="/usr/bin/time -v, 'Maximum resident set size (kbytes)', scaled to bytes"
     fi
-    REC_NOTE='"ru_maxrss is read from outside the process and never from inside it. hyperfine does not take part in this budget: it measures time."'
+    REC_NOTE='"ru_maxrss is read from outside the process and never from inside it. hyperfine does not take part in this point: it measures time."'
 
     local samples argv
     samples="$WORK/samples/$SLUG.txt"
@@ -460,11 +475,18 @@ budget_9() {
 # `WL-002`, the verification scalar: the byte size of the compact
 # `tpl schema dump` of `WL-001`.
 #
+# It is not a row of `NFR-PERF-014` and carries no `Cache` column, so the
+# posture below is this harness's and is stated as such: the dump is taken
+# `--direct --no-cache` so that what is measured is the server-read document,
+# whose envelope carries `source: server`.
+#
 # Compact is the default of `FR-OUT-007` — `--pretty` is what departs from it —
 # so the invocation is the plain dump and the scalar is the length of what it
-# wrote. It is taken more than once and passed through the same dispersion gate
-# as everything else, because a document whose size is not stable is the very
-# thing `WL-002` exists to detect.
+# wrote. It is taken more than once and described by the same statistics as
+# everything else, because a document whose size is not stable is the very thing
+# `WL-002` exists to detect. `WL-002` is a deterministic size and not a timing:
+# a departure beyond its ±2% is a statement about the fixture or the document
+# shape, which `BR-PERF-008` leaves standing as a functional matter.
 scalar_wl002() {
     record_defaults
     REC_ID='wl-002'; SLUG='wl-002'
@@ -476,6 +498,7 @@ scalar_wl002() {
     REC_SERIES="\"$SERIES\""
     REC_TLS="\"$TLS\""
     REC_SERVER='up'
+    REC_CACHE='bypassed, --direct --no-cache; WL-002 is not a row of NFR-PERF-014 and fixes no posture'
     REC_METHOD='the byte length of what the compact dump wrote to stdout'
     REC_NOTE='"compact is the default of FR-OUT-007; --pretty is not passed. The dump is server-read, so its envelope carries source=server: a cache-served dump of the same catalogue differs from this figure by the two bytes of that word."'
 
@@ -495,23 +518,22 @@ scalar_wl002() {
     emit
 }
 
-# ------------------------------------------------ the budgets with no server ---
+# ---------------------------------------------- the points with no server ---
 
-# `NFR-PERF-014` row 5, the one normative budget: a cache-served read of one
-# object over `WL-003`.
+# `NFR-PERF-014` row 5: a cache-served read of one object over `WL-003`.
 #
-# `NFR-PERF-013` requires every normative budget to run over `--context` or over
-# the cache and therefore to need no server, so this is measured with the server
-# **down**: the cache was filled while it was up, and the gate is asked again
-# here to prove that nothing could have answered.
-budget_5() {
+# The row says `Server: no` and `Cache: served from`, so this is measured with
+# the server **down**: the cache was filled while it was up, and the gate is
+# asked again here to prove that nothing could have answered. Taking the server
+# away is what makes `served from` an observation rather than an intention.
+point_5() {
     record_defaults
-    REC_ID='budget-5'; SLUG='budget-5'; REC_BUDGET=5
+    REC_ID='point-5'; SLUG='point-5'; REC_POINT=5
     REC_NAME='A cache-served read of one object'
-    REC_NORMATIVE=true
     REC_WORKLOAD='WL-003'
     REC_SERVER='down'
-    REC_NOTE='"the server was taken down before this budget was measured, and the gate of scripts/mariadb/status.sh was asked again to prove it: NFR-PERF-013 keeps every normative budget away from a server."'
+    REC_CACHE='served from'
+    REC_NOTE='"the server was taken down before this point was measured, and the gate of scripts/mariadb/status.sh was asked again to prove it, so the Server and Cache columns NFR-PERF-014 gives this row are observed and not assumed."'
 
     wall no '' "$WORK/server" \
         "$BINARY" -d "$FIXTURE_ENTRY_SMALL" schema table "$FIXTURE_WL003_TABLE"
@@ -521,19 +543,26 @@ budget_5() {
 # `NFR-PERF-014` row 6: the failure path — a `64`, and a `66` with nearest match
 # over every existing name of `WL-001`.
 #
-# Two invocations, one budget. Each is sampled on its own and is printed whole
-# under `parts`; the budget's own figures are the slower half's, in full, so
-# that the `median`, the `mean` and the dispersion this record carries all
-# describe one reading rather than two averaged together. `aggregation` says
-# which rule chose them, and a reader who wants the other half has it beside.
-budget_6() {
+# **One point measured by two invocations, and its figure is the slower of the
+# two.** That is the row's own rule, settled in the thirty-sixth edition, and
+# both invocations are recorded, each in full, beside the figure that stands for
+# the point. Each half is sampled on its own and is printed whole under `parts`;
+# the point's own figures are the slower half's, in full, so that the `median`,
+# the `mean` and the dispersion this record carries all describe one reading
+# rather than two averaged together. `aggregation` says which rule chose them.
+#
+# The row says `Cache: served from`, and the `64` is refused before any read, so
+# it reaches neither cache nor server. That is the column describing the point,
+# which the thirty-sixth edition states in as many words.
+point_6() {
     record_defaults
-    REC_ID='budget-6'; SLUG='budget-6'; REC_BUDGET=6
+    REC_ID='point-6'; SLUG='point-6'; REC_POINT=6
     REC_NAME='The failure path: a 64, and a 66 with nearest match'
     REC_WORKLOAD='WL-001'
     REC_SERVER='down'
-    REC_AGGREGATION='"max-of-parts"'
-    REC_NOTE='"the 66 names a table one edit away from a real one, so FR-ERR-020 offers a suggestion rather than withholding it and the edit distance of FR-ERR-019 is computed against all 200 names of WL-001, which is what BR-PERF-004 says this budget exists to measure."'
+    REC_CACHE='served from'
+    REC_AGGREGATION='"the slower of the two invocations, per NFR-PERF-014"'
+    REC_NOTE='"the 66 names a table one edit away from a real one, so FR-ERR-020 offers a suggestion rather than withholding it and the edit distance of FR-ERR-019 is computed against all 200 names of WL-001, which is what BR-PERF-004 says this point exists to measure. The 64 is refused before any read and reaches neither cache nor server."'
 
     local first_real part_usage part_missing
     local usage_n usage_median usage_mean usage_stddev usage_min usage_max usage_rsd
@@ -543,7 +572,7 @@ budget_6() {
 
     first_real="$(head -1 "$FIXTURE_WL001_NAMES")"
 
-    SLUG='budget-6-64'
+    SLUG='point-6-64'
     wall yes '' "$WORK/server" \
         "$BINARY" -d "$FIXTURE_ENTRY_LARGE" schema table "$first_real" --no-such-flag
     usage_command="$REC_COMMAND"
@@ -552,7 +581,7 @@ budget_6() {
     usage_stddev="$STAT_STDDEV"; usage_min="$STAT_MIN"; usage_max="$STAT_MAX"
     usage_rsd="$STAT_RSD"
 
-    SLUG='budget-6-66'
+    SLUG='point-6-66'
     wall yes '' "$WORK/server" \
         "$BINARY" -d "$FIXTURE_ENTRY_LARGE" schema table "$FIXTURE_ABSENT_NAME"
     missing_command="$REC_COMMAND"
@@ -561,12 +590,13 @@ budget_6() {
     missing_stddev="$STAT_STDDEV"; missing_min="$STAT_MIN"; missing_max="$STAT_MAX"
     missing_rsd="$STAT_RSD"
 
-    SLUG='budget-6'
+    SLUG='point-6'
     REC_PARTS="[$part_usage,$part_missing]"
 
-    # The budget's own figures are the worse half's, in full, so that the
-    # `median`, the `mean` and the dispersion this record carries all describe
-    # one measurement rather than two averaged together.
+    # The point's own figures are the slower half's, in full, which is what
+    # `NFR-PERF-014` fixes for this row, so that the `median`, the `mean` and
+    # the dispersion this record carries all describe one measurement rather
+    # than two averaged together.
     if awk -v a="$usage_median" -v b="$missing_median" 'BEGIN { exit !(a > b) }'; then
         STAT_N="$usage_n"; STAT_MEDIAN="$usage_median"; STAT_MEAN="$usage_mean"
         STAT_STDDEV="$usage_stddev"; STAT_MIN="$usage_min"; STAT_MAX="$usage_max"
@@ -615,7 +645,7 @@ stand_the_fixture_up() {
     verify_the_failure_path
 }
 
-# The failure path is a budget only if it fails the way the budget says. Both
+# The failure path is this point only if it fails the way the row says. Both
 # halves are run once, here, and their exit codes are checked before either is
 # measured 200 times.
 verify_the_failure_path() {
@@ -628,26 +658,26 @@ verify_the_failure_path() {
         --no-such-flag >/dev/null 2>&1)
     code=$?
     set -e
-    [ "$code" -eq 64 ] || die "the 64 half of budget 6 exited $code, not 64"
+    [ "$code" -eq 64 ] || die "the 64 half of point 6 exited $code, not 64"
 
     set +e
     (cd "$WORK/server" && "$BINARY" -d "$FIXTURE_ENTRY_LARGE" schema table \
         "$FIXTURE_ABSENT_NAME" >/dev/null 2>"$WORK/samples/nearest.txt")
     code=$?
     set -e
-    [ "$code" -eq 66 ] || die "the 66 half of budget 6 exited $code, not 66"
+    [ "$code" -eq 66 ] || die "the 66 half of point 6 exited $code, not 66"
 
     grep -q 'hint' "$WORK/samples/nearest.txt" || die \
-        "the 66 half of budget 6 offered no suggestion, so it does not measure what BR-PERF-004 says it measures"
+        "the 66 half of point 6 offered no suggestion, so it does not measure what BR-PERF-004 says it measures"
 }
 
 take_the_fixture_down() {
-    say "fixture  taking $SERIES down, for the budgets NFR-PERF-013 keeps away from a server"
+    say "fixture  taking $SERIES down, for the two points NFR-PERF-014 gives Server: no"
     fixture_prime "$WORK" "$BINARY"
     teardown
 
     if fixture_is_up "$SERIES" >/dev/null 2>&1; then
-        die "$SERIES is still answering after down.sh, and budgets 5 and 6 need it silent"
+        die "$SERIES is still answering after down.sh, and points 5 and 6 need it silent"
     fi
 }
 
@@ -659,23 +689,23 @@ main() {
 
     trap teardown EXIT INT TERM
 
-    if selected 1; then budget_1; fi
-    if selected 2; then budget_2; fi
-    if selected 3; then budget_3; fi
-    if selected 7; then budget_7; fi
+    if selected 1; then point_1; fi
+    if selected 2; then point_2; fi
+    if selected 3; then point_3; fi
+    if selected 7; then point_7; fi
 
     if any_selected 4 5 6 8 9 wl-002; then
         stand_the_fixture_up
 
-        if selected 4; then budget_4; fi
+        if selected 4; then point_4; fi
         if selected wl-002; then scalar_wl002; fi
-        if selected 8; then budget_8; fi
-        if selected 9; then budget_9; fi
+        if selected 8; then point_8; fi
+        if selected 9; then point_9; fi
 
         take_the_fixture_down
 
-        if selected 5; then budget_5; fi
-        if selected 6; then budget_6; fi
+        if selected 5; then point_5; fi
+        if selected 6; then point_6; fi
     fi
 
     say ""
