@@ -500,7 +500,7 @@ A matriz concreta de alvos — target triples, escolha de libc, linkagem e forma
 ```
 tpl/
 ├── Cargo.toml
-├── BENCHMARKS.md            # baselines de desempenho, com o alvo em que foram medidas
+├── BENCHMARKS.md            # registo de leituras de desempenho, com o alvo em que foram medidas
 ├── knowledge-model.md       # modelo do grafo — só a skill knowledge-authority escreve
 ├── src/
 │   ├── main.rs              # entrypoint: parse, dispatch, mapeamento de exit codes
@@ -584,7 +584,7 @@ cargo test --all-features
 cargo audit
 ```
 
-Quando a alteração toque num caminho quente — leitura de catálogo, construção do contexto, render, arranque do processo — acresce a este pipeline a execução dos benchmarks e a comparação com a baseline em `BENCHMARKS.md`, conforme a **Disciplina de medição**.
+**Nada de desempenho acresce a este pipeline.** Uma alteração a um caminho quente — leitura de catálogo, construção do contexto, render, arranque do processo — é ocasião para tirar uma leitura e registá-la, nos termos da **Disciplina de medição**; nunca é condição para o trabalho estar concluído.
 
 `clippy` com `-D warnings` não é negociável. Um lint que se justifique suprimir exige `#[allow(...)]` local acompanhado de um comentário com a razão — nunca uma supressão ao nível do crate.
 
@@ -596,13 +596,17 @@ Usar **sempre** o agente `rust-elite-developer` para tarefas de programação em
 
 ## Desempenho e Eficiência
 
-O desempenho e a economia de recursos são requisitos de **primeira ordem**: pesam nas decisões de design tanto quanto a correcção funcional. Uma implementação correcta mas lenta, ou correcta mas gastadora, **não** satisfaz o requisito. O `tpl` é uma ferramenta de linha de comandos, invocada repetidamente e frequentemente dentro de loops e pipelines de build — cada milissegundo é pago muitas vezes.
+O desempenho e a economia de recursos são exigências de **desenho e de arquitectura**: pesam em cada decisão de construção do `tpl` — o que faz no arranque, quantas vezes vai ao servidor, quanto retém em memória. O `tpl` é uma ferramenta de linha de comandos, invocada repetidamente e frequentemente dentro de loops e pipelines de build — cada milissegundo é pago muitas vezes, e é para esse uso que se constrói rápido e frugal.
 
-**Os alvos numéricos não vivem aqui.** As propriedades exigidas, as cargas de referência e o protocolo de medição pertencem a `specification/performance-requirements.md`; as baselines efectivamente medidas vivem em `BENCHMARKS.md`.
+**Nenhum número reprova uma alteração.** Nenhuma figura da especificação, e nenhuma leitura registada em `BENCHMARKS.md`, reprova, bloqueia ou trava uma alteração, uma release ou uma peça de trabalho — é `BR-PERF-008`, em `specification/performance-requirements.md`. As regras desta secção são de construção, não de aceitação.
+
+**Os números não vivem aqui.** As propriedades exigidas, as cargas de referência, os pontos de medição e o protocolo pertencem a `specification/performance-requirements.md`; as leituras efectivamente medidas vivem em `BENCHMARKS.md`.
+
+**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes em cada `cargo test`. Quebrá-las é defeito funcional, não execução lenta.
 
 ### Regras de implementação
 
-- **Os round-trips ao catálogo não escalam com o número de objectos.** Um `N+1` no leitor de catálogo é um bug de desempenho, não uma questão de estilo.
+- **Os round-trips ao catálogo não escalam com o número de objectos.** Um `N+1` no leitor de catálogo é um defeito, não uma questão de estilo.
 - **Cada template é parseado uma única vez por processo.** O `Environment` do MiniJinja guarda o template compilado e reutiliza-o; reparsear por iteração é proibido.
 - **Nada de trabalho no arranque que não seja necessário ao comando invocado.** Sem inicialização estática pesada, sem construir o `Environment` para uma invocação que não renderiza, sem ligar à base de dados para um comando que não a use. Inicialização preguiçosa por defeito.
 - **I/O agregado.** Escrita através de writers com buffer; nunca um syscall por linha.
@@ -616,7 +620,7 @@ O desempenho e a economia de recursos são requisitos de **primeira ordem**: pes
 
 ### Disciplina de medição
 
-**Nenhuma afirmação de desempenho sem números, e nenhuma optimização sem medição antes e depois.** Intuição sobre o que é rápido não é evidência.
+**Nenhuma afirmação de desempenho sem números, e nenhuma optimização sem medição antes e depois.** Intuição sobre o que é rápido não é evidência. Os instrumentos abaixo são informativos: respondem a perguntas, a pedido de quem as faz, e não reprovam nada.
 
 | Ferramenta | Uso |
 |---|---|
@@ -626,7 +630,7 @@ O desempenho e a economia de recursos são requisitos de **primeira ordem**: pes
 | `samply` / `cargo flamegraph` | Atribuição de CPU a call sites |
 | `cargo bloat` | Contribuição de cada crate para o tamanho do binário |
 
-Os benchmarks vivem em `benches/` e correm contra o dataset dos containers MariaDB, para serem reproduzíveis. As baselines são registadas em `BENCHMARKS.md`, identificando o alvo em que foram medidas; **uma regressão face à baseline reprova a alteração** e tem de ser justificada ou corrigida antes de o trabalho ser dado por concluído.
+Os benchmarks vivem em `benches/` e correm contra o dataset dos containers MariaDB, para serem reproduzíveis. As leituras são registadas em `BENCHMARKS.md`, identificando sempre o alvo em que foram medidas, e números medidos em alvos diferentes não se comparam entre si. **`BENCHMARKS.md` é um registo de observações** — informativo, consultado a pedido, e nunca um gate.
 
 Para trabalho de optimização, usar o agente `rust-perf-engineer`; para investigação de causa-efeito entre implementação e comportamento medido (RAM, CPU, código vácuo ou redundante), usar `extreme-code-profiler`.
 
