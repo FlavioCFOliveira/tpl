@@ -1268,3 +1268,208 @@ For the series comparison, `up.sh`, `seed-bench.sh` and `down.sh` take the
 series names `10.11 11.4 11.8`, and a project holding one entry per port of
 `scripts/mariadb/series.env` is read with `schema dump --direct --no-cache`
 under the same rotation.
+
+## 2026-09-22 — Three rows of the waste register applied: the cache write, `cache status`, and the render context
+
+*Sprint 19, tasks `#232`, `#233` and `#234`. Target of record:
+`aarch64-apple-darwin`. Server of record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`).
+This entry records; it does not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+Rows 1, 2, 4 and 7 of the waste register of the previous entry were applied, one
+change per row, and each was measured against the binary of record in one
+interleaved campaign:
+
+| row | change | where |
+|---|---|---|
+| 1 | `store` no longer calls `sync_all` on each cache file | `src/cache.rs`, `store` |
+| 2 | `store` serialises through a `BufWriter`, flushed explicitly, before the rename | `src/cache.rs`, `serialise` |
+| 4 | `tpl cache status` counts the object files of each collection from the directory listing instead of reading them | `src/cache.rs`, `count` |
+| 7 | `tpl render` leaks its `minijinja` context instead of freeing it, where the process exits as soon as the command returns | `src/cli/render.rs`, `produce`; `src/cli.rs`, `Ending` |
+
+**A `WL-001` cache write fell from 2 450.3 ms to 61.1 ms (−97.5%), `tpl cache
+status` from 5.515 ms to 2.071 ms (−62.4%), each cached render by 2.23 to
+2.33 ms (−8.2% to −10.2%), and the canonical loop of 200 renders from
+6 828.6 ms to 4 042.0 ms (−40.8%).** Every output compared was byte-identical,
+with the one exception stated under *What changed that a caller can see*.
+
+Rows 1 and 2 were measured together, as the register's `nosyncbuf` variant was:
+they change one function, and neither was taken apart from the other here. The
+separate attribution of each is the previous entry's.
+
+### Workload
+
+`WL-001` (200 tables, 30 views, 40 routines: 272 cache files) and `WL-003`,
+loaded into `12.3` by `scripts/mariadb/seed-bench.sh`, which verified every
+count. The `startup` and `server` projects were built by the functions of
+`benches/fixture.sh`, the cache was primed by `fixture_prime`, and the five
+templates of `examples/rust-data-layer/templates/rust/` were copied into the
+`server` project, as in the previous entry.
+
+| label | invocation, in the `server` project |
+|---|---|
+| `cload` | `tpl -d bench_wl001 cache load` |
+| `cstatus` | `tpl -d bench_wl001 cache status` |
+| `rexample_c` | `tpl -d bench_wl001 render example --table accrual`, served from the cache |
+| `rstruct_c` | `tpl -d bench_wl001 render rust/struct --table accrual`, served from the cache |
+| `rschema_c` | `tpl -d bench_wl001 render rust/schema`, served from the cache |
+| loop | `benches/loop200.sh <binary> bench_wl001 example <the 200 WL-001 table names>`, the cache emptied before every run |
+
+### Candidates
+
+| arm | binary |
+|---|---|
+| `before` | the binary of record at `3e4daa8c`: 3 934 128 B, sha256 `16976d61065884ca3b5eac18e06efe8852410927eae7e0d232dd2eb12d33c927`, the same binary as the two previous entries |
+| `before_twin` | the same file, measured as a second label: the A/A arm |
+| `after` | the working tree with the three changes: 3 950 640 B, sha256 `5a5dd0c99784509df7442cb6ebcec8c4d003e011fd509df935b64d1331020df4` |
+
+### Environment
+
+As the previous entry, taken the same day on the same host: Apple M4, 10 cores,
+32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0 `arm64`; `aarch64-apple-darwin`,
+built and run natively; `rustc` 1.98.1 (48a229cea 2026-09-01); release profile
+`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`,
+`strip = true`; `hyperfine` 1.20.0 with `--shell=none`; `/usr/bin/time -l`; the
+project fixture's `12.3` over Docker 29.8.1, `tls = "disabled"`, account `root`;
+mains power, Low Power Mode off; load average 1.74 to 2.81. Taken 2026-09-22,
+19:35Z to 19:48Z.
+
+### Protocol
+
+- **Three arms rotated inside one `hyperfine` call per round**, the order moved
+  by one position each round, so that host drift spreads over all three.
+- `cstatus` and the three renders: 8 rounds of 40 runs after 5 warmups per arm,
+  320 samples each. `cload`: 8 rounds of 5 runs after 1 warmup, 40 samples
+  each. The loop: 4 rounds of 3 runs after 1 warmup, 12 samples each, with
+  `--prepare "tpl -d bench_wl001 cache clean"`.
+- **Peak resident memory**: `/usr/bin/time -l`, median of 7 runs, taken apart
+  from the timing campaign.
+- **Output identity**, before any timing: each command was run by both binaries
+  and stdout, stderr and the exit code compared with `cmp`; the two caches
+  written by `cache load` were compared with `diff -r -x meta.json`, and the two
+  `meta.json` files with `loaded_at` removed.
+
+### The noise floor of the instrument on this host
+
+The A/A arm, `before` against `before_twin`, inside every campaign:
+
+| label | `before` | `before_twin` | difference |
+|---|---|---|---|
+| `cload` | 2 450.349 ms | 2 449.979 ms | 0.370 ms (0.02%) |
+| `cstatus` | 5.515 ms | 5.525 ms | 0.010 ms (0.18%) |
+| `rexample_c` | 21.800 ms | 21.708 ms | 0.092 ms (0.42%) |
+| `rstruct_c` | 22.400 ms | 22.570 ms | 0.170 ms (0.76%) |
+| `rschema_c` | 28.220 ms | 28.195 ms | 0.025 ms (0.09%) |
+| loop | 6 828.557 ms | 6 821.296 ms | 7.261 ms (0.11%) |
+
+**A difference below 0.2 ms on a render, or below 0.8% on any label, is not a
+difference in this entry.** Every change below is more than ten times the
+floor of its own campaign.
+
+### Results
+
+Medians; `rsd` is of the `after` arm.
+
+| label | `before` | `after` | change | `after` rsd | peak RSS, before → after |
+|---|---|---|---|---|---|
+| `cload` | 2 450.349 ms | **61.147 ms** | −2 389.2 ms, −97.5% | 3.16% | — |
+| `cstatus` | 5.515 ms | **2.071 ms** | −3.444 ms, −62.4% | 2.97% | 6.78 → 3.30 MiB |
+| `rexample_c` | 21.800 ms | **19.566 ms** | −2.234 ms, −10.2% | 1.61% | 34.20 → 33.97 MiB |
+| `rstruct_c` | 22.400 ms | **20.160 ms** | −2.240 ms, −10.0% | 1.52% | — |
+| `rschema_c` | 28.220 ms | **25.895 ms** | −2.325 ms, −8.2% | 1.33% | 34.53 → 34.31 MiB |
+| loop | 6 828.557 ms | **4 042.036 ms** | −2 786.5 ms, −40.8% | 0.35% | — |
+
+The p90 moved with the median on every label: `cload` 2 486.5 → 64.6 ms,
+`cstatus` 5.819 → 2.150 ms, `rexample_c` 22.230 → 20.053 ms, `rstruct_c`
+22.893 → 20.638 ms, `rschema_c` 28.721 → 26.397 ms. No tail widened.
+
+Against the previous entry's attribution experiments, which were separate
+builds: `nosyncbuf` measured `cload` at 63.9 ms and the change measures
+61.1 ms; `forget` measured −2.351 ms on `rexample_c` and the change measures
+−2.234 ms. The loop gains −40.8% where the register estimated −33.6% for rows 1
+and 2 and −7.2% for row 7, measured apart: the two gains add, because they are
+in different parts of the loop — the first render alone pays the cache write,
+and every render pays the context destructor.
+
+`cstatus` now sits 0.35 ms above `tpl --version` as the previous entry measured
+it — an observation across two campaigns, not a comparison — which is
+what a command that discovers a project, reads its configuration and walks three
+directories costs; the 3.2 MB it read are no longer read, which is the 3.5 MiB
+of resident memory it no longer holds.
+
+The render's peak resident memory barely moves, as it should: the context is
+leaked after the peak has been reached, and the saving is time only.
+
+### What changed that a caller can see
+
+- **Output.** None of the following differs in a byte, stdout, stderr or exit
+  code: `cache status` in `text`, `json` and `json --pretty` over `WL-001` and
+  `WL-003`; the same with one table file truncated to 100 bytes, and with it
+  emptied; the same with `meta.json` emptied (an empty cache for both);
+  `render example` and `render rust/struct` with `--table accrual`, and
+  `render rust/schema`, from the cache and with `--direct --no-cache`;
+  `render example --context <dump>`; a `66` on an absent table; a `65` from a
+  template that fails during evaluation after writing text; and a render whose
+  stdout is closed after 10 bytes, which exits `0` from both. The 272 files and
+  their `0600` mode written by `cache load` are identical, and so is
+  `meta.json` apart from `loaded_at`.
+- **The one difference: an object file that cannot be read.** Before, a file
+  that was not UTF-8 or could not be opened made its whole collection report a
+  count of `0` beside `whole: true`; now it is counted like any other file. With
+  one table file replaced by the bytes `ff fe`, `before` reports `tables 0` and
+  `after` reports `tables 200`. No requirement makes the count a validation:
+  `FR-CACHE-034` asks for "the count of objects held".
+- **Durability.** A cache file is no longer forced to disk before its rename, so
+  a crash or a power loss can leave one empty or torn. Every read of the store
+  decodes what it reads and answers a miss for such a file, which `FR-CACHE-033`
+  requires; a unit test locks this in for `meta.json`.
+
+### Confounders
+
+- **The host was not idle**: the four containers of other projects named in the
+  previous entry were still running. The rotation and the A/A arm bound their
+  effect; they do not remove it.
+- **`cload` and the loop write to an SSD**, and their figures depend on the
+  file system as much as on `tpl`. Removing `sync_all` removes an
+  `F_FULLFSYNC` on this platform; on Linux, `fsync` is cheaper and the gain of
+  row 1 will be smaller.
+- **Two comments were edited after the campaign**, in `src/cache.rs` and
+  `src/cli/render.rs`. The binary rebuilt from the final tree has the same
+  sha256 as the `after` arm, so the arm measured is the tree recorded.
+
+### What was not measured
+
+- **Three of the four targets**, as in the previous entry. Rows 1 and 2 are the
+  platform-sensitive ones.
+- **Allocation counts.** None of the three changes alters what is allocated:
+  row 7 changes when memory is returned, not how much is taken.
+- **`schema` reads**, which none of the changes reaches.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+# tpl-before: `cargo build --release` at 3e4daa8c; tpl-after: the same with the change.
+cp <binary of record> "$S/tpl-before"; cp <binary with the change> "$S/tpl-after"
+
+# 1. The fixture and the projects, exactly as in the previous entry's steps 1
+#    and 2, then the output identity checks:
+cd "$S/work/server"
+for v in before after; do "$S/tpl-$v" -d bench_wl001 cache load; cp -R .tpl/.cache/bench_wl001 "$S/snap-$v"; done
+diff -r -x meta.json "$S/snap-before" "$S/snap-after"
+diff <(jq -S 'del(.loaded_at)' "$S/snap-before/meta.json") <(jq -S 'del(.loaded_at)' "$S/snap-after/meta.json")
+cmp <("$S/tpl-before" -d bench_wl001 cache status --format json) <("$S/tpl-after" -d bench_wl001 cache status --format json)
+cmp <("$S/tpl-before" -d bench_wl001 render rust/schema) <("$S/tpl-after" -d bench_wl001 render rust/schema)
+
+# 2. Each label: for round r of 8, rotate the three arms by r.
+hyperfine -N --warmup 5 --runs 40 --export-json "$S/<label>.r<r>.json" \
+  -n before "$S/tpl-before <args>" -n before_twin "$S/tpl-before <args>" -n after "$S/tpl-after <args>"
+
+# 3. The loop: 4 rounds, the same rotation.
+hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-before -d bench_wl001 cache clean" \
+  -n before "benches/loop200.sh $S/tpl-before bench_wl001 example $S/work/wl001-tables.txt" …
+
+# 4. The fixture down, and nothing left.
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet   # non-zero
+```

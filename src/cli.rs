@@ -573,7 +573,44 @@ where
 /// [`Error::InternalInvariant`], per the interim arrangement this module's
 /// documentation states.
 pub(crate) fn dispatch(invocation: &Invocation) -> Result<(), Error> {
-    route(&mut std::io::stdout().lock(), invocation)
+    route(&mut std::io::stdout().lock(), invocation, Ending::Process)
+}
+
+/// What follows the command once it returns.
+///
+/// It exists for one decision: whether a value the command is finished with is
+/// worth freeing. Where the process exits as soon as the command returns, the
+/// operating system reclaims the whole address space at once, and freeing a
+/// large value block by block first is work that changes nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ending {
+    /// The process exits when the command returns: [`dispatch`], reached from
+    /// the crate entry point.
+    Process,
+
+    /// The caller carries on: a test that runs a command in-process, where a
+    /// value left unfreed would accumulate across every test of the run.
+    // Only the in-process tests construct it; the binary always exits.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "constructed only by in-process tests")
+    )]
+    Caller,
+}
+
+impl Ending {
+    /// Disposes of `value`, which the command is finished with.
+    ///
+    /// Under [`Ending::Process`] the value is leaked, which is safe and runs
+    /// no destructor. Nothing it owns may need one to run for the invocation to
+    /// be correct: it must hold no buffered writer, no lock and no child
+    /// process, only memory.
+    fn release<T>(self, value: T) {
+        match self {
+            Self::Process => std::mem::forget(value),
+            Self::Caller => drop(value),
+        }
+    }
 }
 
 /// The one match from a parsed invocation to what it asks for.
@@ -597,7 +634,7 @@ pub(crate) fn dispatch(invocation: &Invocation) -> Result<(), Error> {
 /// Returns [`Error::InternalInvariant`] for a leaf with no implementation,
 /// whatever `tpl help` reports for a path that names no node, and
 /// [`Error::StdoutUnwritable`] where the text could not be written.
-fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
+fn route<W: Write>(out: &mut W, invocation: &Invocation, ending: Ending) -> Result<(), Error> {
     let command = match &invocation.form {
         // FR-GLOB-019 and FR-GLOB-020: both flags are answered at the node
         // they were given at, whatever that node is, and neither reaches a
@@ -639,6 +676,7 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation) -> Result<(), Error> {
                 set,
                 context,
                 caching,
+                ending,
             },
         ),
 
@@ -778,8 +816,8 @@ mod tests {
     use clap::error::ErrorKind;
 
     use super::{
-        Cli, Command, Error, Form, Invocation, Level, cfg, help, local, parse, parse_from, route,
-        schema, template, tree,
+        Cli, Command, Ending, Error, Form, Invocation, Level, cfg, help, local, parse, parse_from,
+        route, schema, template, tree,
     };
 
     /// Every leaf of the tree of `FR-CLI-002`, by the path a caller writes and
@@ -1035,7 +1073,7 @@ mod tests {
     fn outcome(path: &[&str], operands: &[&str]) -> (Result<(), Error>, String) {
         let invocation = invoked(path, operands);
         let mut written = Vec::new();
-        let result = route(&mut written, &invocation);
+        let result = route(&mut written, &invocation, Ending::Caller);
 
         (
             result,
@@ -1086,6 +1124,19 @@ mod tests {
             .iter()
             .map(|value| value.get_name().to_owned())
             .collect()
+    }
+
+    #[test]
+    fn a_value_released_at_process_end_runs_no_destructor_and_one_released_to_a_caller_does() {
+        use std::rc::Rc;
+
+        let tracked = Rc::new(());
+
+        Ending::Caller.release(Rc::clone(&tracked));
+        assert_eq!(Rc::strong_count(&tracked), 1);
+
+        Ending::Process.release(Rc::clone(&tracked));
+        assert_eq!(Rc::strong_count(&tracked), 2);
     }
 
     #[test]

@@ -629,7 +629,7 @@ impl Cache {
                 .iter()
                 .map(|collection| Held {
                     name: collection.name(),
-                    count: members(&layout.collection(*collection)).map_or(0, |held| held.len()),
+                    count: count(&layout.collection(*collection)).unwrap_or(0),
                     whole: meta.whole(*collection),
                 })
                 .collect(),
@@ -672,6 +672,34 @@ fn members(directory: &Path) -> Option<Vec<String>> {
     Some(held)
 }
 
+/// How many object files `directory` holds, or [`None`] where the directory
+/// could not be walked.
+///
+/// It is what `tpl cache status` reports (`FR-CACHE-025`, `FR-CACHE-034`):
+/// the count of objects **held**, which the directory listing answers without
+/// opening a file. The files it counts are the ones [`members`] reads — the
+/// same walk, admitted by the same [`paths::is_object`]. No requirement makes
+/// the count a validation, so a file is counted whatever its contents: one
+/// whose JSON would not decode was counted when the contents were read, and
+/// still is. The one file counted now and not before is one that cannot be
+/// opened or is not UTF-8, which used to turn the whole collection's count to
+/// `0` — a count of nothing beside a collection recorded whole.
+///
+/// *Rejected: reading every file to count it.* It read 3.2 MB for `WL-001` and
+/// was 93.3% of the command's samples (`BENCHMARKS.md`, 2026-09-22), for bytes
+/// that were dropped unread.
+fn count(directory: &Path) -> Option<usize> {
+    let mut held = 0;
+
+    for entry in fs::read_dir(directory).ok()? {
+        if paths::is_object(&entry.ok()?.path()) {
+            held += 1;
+        }
+    }
+
+    Some(held)
+}
+
 /// Writes `value` to `file`, through a temporary file in the same directory
 /// renamed over the target (`FR-CACHE-030`).
 ///
@@ -680,6 +708,16 @@ fn members(directory: &Path) -> Option<Vec<String>> {
 /// temporary carries the process id in its name, so two processes writing the
 /// same object write two temporaries and race only on the rename — which the
 /// operating system makes atomic.
+///
+/// **The file is not synced to disk before the rename, and nothing requires
+/// it.** No requirement asks the cache for durability across a crash or a
+/// power loss: `FR-CACHE-030` and `FR-CACHE-031` ask for atomicity against
+/// concurrent writers, which the rename gives, and a file that a crash leaves
+/// empty or torn does not decode — which `FR-CACHE-033` already makes a miss,
+/// read from the server and rewritten, with nothing reported. Every read of
+/// the store answers [`None`] for such a file: [`Cache::meta`],
+/// [`Loaded::document`] and [`Cache::database`] all decode what they read, and
+/// an empty or truncated JSON text does not decode.
 ///
 /// Answers whether the object is now stored. Every failure answers `false` and
 /// reports nothing, per `FR-CACHE-036`.
@@ -690,17 +728,15 @@ fn store<T: Serialize>(file: &Path, value: &T) -> bool {
     let temporary = directory.join(format!("{TEMPORARY}.{}.tmp", std::process::id()));
 
     let written = || -> std::io::Result<()> {
-        let mut handle = fs::OpenOptions::new()
+        let handle = fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .mode(MODE)
             .open(&temporary)?;
 
-        serde_json::to_writer(&mut handle, value).map_err(std::io::Error::from)?;
-        handle.write_all(b"\n")?;
-        handle.sync_all()?;
-        drop(handle);
+        // The handle is consumed, so the file is closed before the rename.
+        serialise(handle, value)?;
 
         fs::rename(&temporary, file)
     }();
@@ -713,6 +749,31 @@ fn store<T: Serialize>(file: &Path, value: &T) -> bool {
     }
 
     true
+}
+
+/// Writes `value` to `sink` as one line of compact JSON, through a buffer, and
+/// flushes it.
+///
+/// It is separate from [`store`] so that a sink refusing the bytes is
+/// observable from a test without a filesystem that refuses them.
+///
+/// # Errors
+///
+/// Returns the first error the serialisation, the write or the flush met.
+fn serialise<W: std::io::Write, T: Serialize>(sink: W, value: &T) -> std::io::Result<()> {
+    // PERF: `serde_json` writes one token at a time, so an unbuffered `File`
+    // costs one `write` syscall per token. Those syscalls and the per-file
+    // sync `store` no longer makes were 97.4% of a `WL-001` cache write
+    // (`BENCHMARKS.md`, 2026-09-22). The buffer turns a file into a handful of
+    // writes; the bytes are identical.
+    let mut buffered = std::io::BufWriter::new(sink);
+    serde_json::to_writer(&mut buffered, value).map_err(std::io::Error::from)?;
+    buffered.write_all(b"\n")?;
+
+    // Explicit, so that a failure is reported here: the drop of a `BufWriter`
+    // swallows it, and the rename that follows would then store an object
+    // whose last bytes were never written.
+    buffered.flush()
 }
 
 /// Removes every object file of `directory` that `written` does not name, and
@@ -826,5 +887,159 @@ where
         && fs::create_dir_all(parent).is_ok()
     {
         let _ = store(&file, member);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cache, Collection, Layout, Meta, TEMPORARY, count, serialise, store};
+    use crate::project::scratch::Scratch;
+    use std::io::{Error, ErrorKind, Write};
+    use std::path::Path;
+
+    /// A sink that refuses every byte it is handed.
+    struct Refusing;
+
+    impl Write for Refusing {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(Error::new(ErrorKind::StorageFull, "refused"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The layout of the entry `shop`, under a `.tpl` folder in `scratch`.
+    fn layout(scratch: &Scratch) -> Layout {
+        Layout::of(&scratch.path(".tpl"), "shop").expect("shop is a path component")
+    }
+
+    /// Whether `directory` holds a temporary file of `FR-CACHE-030`.
+    fn holds_temporary(directory: &Path) -> bool {
+        std::fs::read_dir(directory)
+            .expect("the directory exists")
+            .flatten()
+            .any(|entry| entry.file_name().to_string_lossy().starts_with(TEMPORARY))
+    }
+
+    #[test]
+    fn a_failure_the_buffer_meets_only_at_the_flush_is_reported() {
+        // The value is far smaller than the buffer, so no byte reaches the
+        // sink before the flush: the refusal surfaces there or nowhere, and a
+        // flush left to the drop of the buffer would swallow it.
+        let returned = serialise(Refusing, &"a value").expect_err("the sink refused the bytes");
+
+        assert_eq!(returned.kind(), ErrorKind::StorageFull);
+    }
+
+    #[test]
+    fn fr_cache_030_a_stored_object_is_one_line_of_compact_json() {
+        let scratch = Scratch::new();
+        let file = scratch.directory("store").join("object.json");
+        let value = serde_json::json!({"name": "orders", "columns": [1, 2, 3]});
+
+        assert!(store(&file, &value));
+
+        let mut expected = serde_json::to_vec(&value).expect("the value serialises");
+        expected.push(b'\n');
+        assert_eq!(
+            std::fs::read(&file).expect("the object was stored"),
+            expected
+        );
+        assert!(!holds_temporary(&scratch.path("store")));
+    }
+
+    #[test]
+    fn fr_cache_036_a_failed_rename_stores_nothing_and_leaves_no_temporary() {
+        // A non-empty directory at the target makes the rename fail after the
+        // temporary was written and flushed.
+        let scratch = Scratch::new();
+        let target = scratch.directory("store/object.json");
+        scratch.file("store/object.json/held", "untouched");
+
+        assert!(!store(&target, &"a value"));
+
+        assert!(target.is_dir());
+        assert_eq!(
+            std::fs::read_to_string(target.join("held")).expect("the target is untouched"),
+            "untouched"
+        );
+        assert!(!holds_temporary(&scratch.path("store")));
+    }
+
+    #[test]
+    fn fr_cache_034_a_count_is_of_the_object_files_held_whatever_they_contain() {
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        let tables = layout.collection(Collection::Tables);
+        std::fs::create_dir_all(&tables).expect("the scratch directory is writable");
+
+        std::fs::write(tables.join("orders.json"), "{\"name\":\"orders\"}\n")
+            .expect("the scratch directory is writable");
+        // A corrupted object, one that is not even UTF-8, the in-flight
+        // temporary of a write, and a file that is not an object at all.
+        std::fs::write(tables.join("lines.json"), "{\"name\":\"li").expect("writable");
+        std::fs::write(tables.join("rates.json"), [0xff, 0xfe]).expect("writable");
+        std::fs::write(tables.join(format!("{TEMPORARY}.1.tmp")), "{").expect("writable");
+        std::fs::write(tables.join("notes.txt"), "by hand").expect("writable");
+
+        assert_eq!(count(&tables), Some(3));
+        assert_eq!(count(&layout.collection(Collection::Views)), None);
+    }
+
+    #[test]
+    fn fr_cache_034_status_counts_a_corrupted_object_beside_the_record() {
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        let tables = layout.collection(Collection::Tables);
+        std::fs::create_dir_all(&tables).expect("the scratch directory is writable");
+        assert!(store(&layout.meta(), &Meta::new([true, false, false])));
+        std::fs::write(tables.join("orders.json"), "{}\n").expect("writable");
+        std::fs::write(tables.join("lines.json"), "").expect("writable");
+
+        let status = Cache::of(&scratch.path(".tpl"), "shop").status();
+
+        assert!(status.loaded_at.is_some());
+        let counted: Vec<(&str, usize, bool)> = status
+            .collections
+            .iter()
+            .map(|held| (held.name, held.count, held.whole))
+            .collect();
+        assert_eq!(
+            counted,
+            [
+                ("tables", 2, true),
+                ("views", 0, false),
+                ("routines", 0, false)
+            ]
+        );
+    }
+
+    #[test]
+    fn fr_cache_033_an_empty_or_truncated_record_is_an_empty_cache() {
+        // A crash after the rename and before the data reached the disk can
+        // leave `meta.json` empty or torn, and no sync guards against it: the
+        // record must then read as absent, which is the miss of FR-CACHE-033.
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
+        assert!(store(&layout.meta(), &Meta::new([true, true, true])));
+        let whole = std::fs::read(layout.meta()).expect("the record was stored");
+
+        for torn in [
+            &whole[..0],
+            &whole[..whole.len() / 2],
+            &whole[..whole.len() - 2],
+        ] {
+            std::fs::write(layout.meta(), torn).expect("writable");
+
+            let cache = Cache::of(&scratch.path(".tpl"), "shop");
+            let status = cache.status();
+
+            assert_eq!(status.loaded_at, None);
+            assert!(status.collections.is_empty());
+            assert!(cache.everything().is_none());
+        }
     }
 }

@@ -91,6 +91,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 
 use minijinja::Value;
 
+use super::Ending;
 use super::globals::Globals;
 use super::local::{Caching, Object};
 use super::schema::named::{self, Sought};
@@ -164,6 +165,10 @@ pub(super) struct Supplied<'a> {
 
     /// `--direct` and `--no-cache` (`FR-RND-025`).
     pub(super) caching: &'a Caching,
+
+    /// Whether the process exits when the render returns, which decides
+    /// whether the render context is freed (see [`produce`]).
+    pub(super) ending: Ending,
 }
 
 /// Which object the invocation bound, or the whole database (`FR-RND-003`
@@ -290,6 +295,9 @@ struct Assembly<'a> {
 
     /// What bounds the render (`FR-RND-033`, `FR-GLOB-012`).
     deadline: Bound,
+
+    /// What follows the render once it returns.
+    ending: Ending,
 }
 
 /// Runs `tpl render` (`FR-RND-001` … `FR-RND-034`).
@@ -389,6 +397,7 @@ fn from_catalogue<W: std::io::Write>(
         binding,
         defined,
         deadline: reader.clock().bound(opened.deadlines().of(Phase::Render)),
+        ending: supplied.ending,
     };
 
     reader.serve_from(&opened, &Look::Everything, |document, _, entry| {
@@ -451,6 +460,7 @@ fn from_document<W: std::io::Write>(
         deadline: reader
             .clock()
             .bound(settings::deadlines(&configuration).of(Phase::Render)),
+        ending: supplied.ending,
     };
 
     let bytes = read_document(path)?;
@@ -499,7 +509,18 @@ fn produce<W: std::io::Write>(
     let context = context::assemble(document, bound, assembly.defined, &at);
     let produced = bounded(assembly.deadline, || {
         assembly.environment.render(assembly.template, &context)
-    })?;
+    });
+
+    // PERF: the context is the whole catalogue converted into `minijinja`
+    // values, and freeing it block by block cost 2.35 ms of a 21.8 ms render
+    // of `WL-001` (`BENCHMARKS.md`, 2026-09-22). When the process exits as
+    // soon as this command returns, the operating system reclaims that memory
+    // at exit anyway, so the value is leaked instead; a caller that carries
+    // on — a test — still frees it. It is released on the failure path as well, and
+    // it owns memory only, so stdout, its flush and the exit code are
+    // untouched either way.
+    assembly.ending.release(context);
+    let produced = produced?;
 
     // FR-RND-028, and FR-OUT-019, which exempts a render's result from the
     // escaping of FR-OUT-018: the bytes the template produced, and no others.
@@ -639,6 +660,7 @@ fn bounded<T>(deadline: Bound, render: impl FnOnce() -> Result<T, Error>) -> Res
 #[cfg(test)]
 mod tests {
     use super::{Binding, Supplied, bounded, document_flag, position, run};
+    use crate::cli::Ending;
     use crate::cli::globals::Globals;
     use crate::cli::local::{Caching, Object};
     use crate::deadline::{Bound, Seconds};
@@ -722,6 +744,7 @@ mod tests {
             set: &set,
             context: &context,
             caching: &caching,
+            ending: Ending::Caller,
         };
         let mut written = Vec::new();
         let result = run(&mut written, &globals(Some(tpl_dir), None), &supplied);
