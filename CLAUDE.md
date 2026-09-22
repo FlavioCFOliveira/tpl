@@ -92,7 +92,7 @@ Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desen
 | Só se trabalha sobre **tarefa aberta**: no sprint `OPEN` e em `DOING` com `--commit-open` | **PARAR** e abri-la pela skill `roadmap-manager` |
 | **Nenhuma tarefa é executada directamente** — delega-se a um subagente, e a cada peça de trabalho o seu | **PARAR** e escolher o subagente |
 | **REGRA ZERO — um subagente de cada vez**, nunca em paralelo. Listar os agentes antes de cada lançamento | **PARAR** e serializar. O paralelismo exige **autorização expressa** do utilizador — única condição — e é excepção revogada no fim da tarefa |
-| A **procura de sinergia e convergência é por defeito** e nunca se espera do utilizador; trabalho com **objectivos complementares** ou **proximidade funcional ou técnica substancial** faz-se num **único esforço**, e cada natureza de trabalho de uma só vez | **PARAR** e reagrupar. Juntar tarefas é planeamento, e exige confirmação do utilizador |
+| A **procura de sinergia e convergência é por defeito**, nunca se espera do utilizador e **nunca é tarefa no `rmp`**; trabalho com **objectivos complementares** ou **proximidade funcional ou técnica substancial** faz-se num **único esforço**, e cada natureza de trabalho de uma só vez | **PARAR** e reagrupar. Juntar tarefas é planeamento, e exige confirmação do utilizador |
 | Escrita no Git **só** pela skill `gitflow` | **PARAR**. Nunca um `git commit` avulso, por trivial que seja |
 | Tarefas, sprints e comentários **só** pela skill `roadmap-manager` | **PARAR**. Nunca `rmp` invocado do Bash |
 | Conhecimento sobre o código **só** pela skill `knowledge-authority` | **PARAR**. Nunca `rmp graph …` directamente |
@@ -116,7 +116,7 @@ Correr esta verificação antes de qualquer trabalho. Um "não" em qualquer pont
 2. **Existe tarefa no `rmp` para este trabalho?** Se não — **PARAR** e criá-la pela skill `roadmap-manager`. Não se executa trabalho sem tarefa.
 3. **A tarefa está no sprint `OPEN`?** Se está em `BACKLOG`, ou num sprint `PENDING` ou `CLOSED` — **PARAR**. Trazê-la para o sprint aberto é acção de planeamento e **exige confirmação do utilizador**.
 4. **A tarefa está em `DOING`, aberta com `--commit-open <hash>`?** Se não, abrir agora, com o hash real de `git rev-parse HEAD`.
-5. **Há sinergia ou convergência por aproveitar?** Verificar **sempre**, sem esperar que o utilizador o peça, se outras tarefas — no `rmp` ou fora dele — têm objectivos complementares ou proximidade funcional ou técnica substancial com esta. Havendo, **PARAR**: propor ao utilizador juntá-las num único esforço e esperar pela decisão.
+5. **Há sinergia ou convergência por aproveitar?** Verificar **sempre**, sem esperar que o utilizador o peça, se outras tarefas — no `rmp` ou fora dele — têm objectivos complementares ou proximidade funcional ou técnica substancial com esta. Havendo, **PARAR**: propor ao utilizador juntá-las num único esforço e esperar pela decisão. A verificação **não gera tarefa própria** — é **A procura não é tarefa**, mais abaixo.
 6. **Que subagente executa cada peça do trabalho?** Decompor a tarefa e escolher por peça, avaliando os agentes efectivamente instalados. Sem especialista óbvio, o de propósito geral — **nunca** execução directa.
 7. **O âmbito está fechado?** O briefing é o que a tarefa define — título, descrição, requisitos, comentários — e mais nada. O que se descobrir fora dele **regista-se; não se executa**.
 8. **Durante o trabalho**, escrever o log à medida: `DECISION` com as opções rejeitadas, `FINDING` com o que se descobriu, `TEST` com a verificação e o resultado.
@@ -131,6 +131,12 @@ Correr esta verificação antes de qualquer trabalho. Um "não" em qualquer pont
 **Um objectivo atinge-se no menor número de tarefas ou de iterações possível**, maximizando os recursos internos disponíveis, para que a entrega seja mais rápida e custe menos ao utilizador.
 
 **NÃO DEVE SER NECESSÁRIO o utilizador pedir para procurar convergências e sinergias.** A procura nunca se espera dele: dar por si a executar tarefa a tarefa sem ter procurado o que as junta é motivo para **PARAR** e procurar. O que continua a exigir **confirmação do utilizador** é **juntar** as tarefas, nos termos de **Entre tarefas**, mais abaixo — procurar é por defeito, decidir é dele.
+
+### A procura não é tarefa
+
+**A procura de sinergia e de convergência NUNCA se regista como tarefa no `rmp`.** É modo de trabalho, não é trabalho: corre dentro do que já está aberto, não consome tarefa própria, não abre sprint e não precisa de autorização para acontecer. Estar prestes a criar uma tarefa para "procurar sinergias" é motivo para **PARAR**.
+
+Regista-se o **resultado**, e só havendo um: a proposta de juntar tarefas leva-se ao utilizador, e o que ele decidir regista-se pela skill `roadmap-manager` nas tarefas que o esforço junta. **Nenhum trabalho fora de uma tarefa aberta** governa o trabalho — não a procura, que o precede.
 
 ### A sinergia melhora o trabalho — nunca o piora
 
@@ -323,6 +329,8 @@ Falhar uma das duas basta para a tarefa **não** ser executável. Em concreto:
 Falhando qualquer uma das duas condições, **PARAR** e regularizar a tarefa pela skill `roadmap-manager` antes de escrever a primeira linha.
 
 **Trabalho descoberto a meio que não tenha tarefa própria regista-se como tarefa ou como comentário — nunca se executa.** É **Âmbito fechado**, em *Execução de Tarefas por Subagentes*, e vale aqui sem alteração.
+
+**Esta regra governa o trabalho, não a procura.** Procurar sinergia e convergência não é trabalho, não se regista como tarefa e não passa por este gate — é **A procura não é tarefa**, em *Sinergia e Convergência do Esforço*.
 
 O ciclo de vida da tarefa **NUNCA** é excepção à regra do topo desta secção: toda a transição de estado e todo o comentário passam pela skill `roadmap-manager`.
 
