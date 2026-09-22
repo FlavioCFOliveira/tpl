@@ -63,6 +63,15 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
   `cfg database` adds, lists, shows, updates, removes and tests the connection
   entries, through `--dsn`, `--host`, `--port`, `--user`, `--schema`, `--tls`,
   `--ca-file`, `--ca-path` and `--password-command`.
+- **Testing an entry.** `cfg database test` contacts the server an entry
+  describes and reports four steps in one order: the connection and its
+  authentication, the read-only session and its confirmation, the server's
+  series against the supported window, and a probe of the reader's catalogue
+  privileges. Exit `0` says the four steps ran, not that the entry is usable:
+  `can_read_catalogue` in the document is what says whether a read through it
+  would be complete. It is the one `cfg` subcommand that opens a connection, and
+  the last leaf of the command tree to be written — every node of the tree now
+  has an implementation.
 - **Reading the catalogue.** One connection, opened as late as possible and
   closed when the read ends, with the read-only session enforced before any
   statement. The catalogue is read from `INFORMATION_SCHEMA` in a fixed
@@ -101,6 +110,17 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
 - **Diagnostics.** Exit codes drawn from the `sysexits` set, one per condition;
   nearest-match suggestions on an unknown name; verbosity gated by `-v` and `-q`;
   and a panic hook that reports a defect in `tpl` as exit `70`.
+- **Worked examples.** `examples/` holds four complete demonstrations that build
+  an application's data layer — in Go, Rust, Python and Node.js — from three
+  known schemas through the command line alone, each ending in a compile gate
+  that submits every file it rendered to that language's own toolchain.
+- **The shared example driver.** `examples/_driver/` runs the five-command
+  workflow once for all four examples, checking every exit code, keeping stdout
+  and stderr apart, and redirecting each render's bytes into a file unchanged.
+- **The published datasets.** `sakila` and `world` are vendored verbatim under
+  `scripts/mariadb/datasets/`, each with the source URL, date and checksums it
+  was taken at, and `scripts/mariadb/seed-datasets.sh` loads them into a named
+  fixture server, re-grants the reader on them, and verifies what arrived.
 
 ## The record before this file
 

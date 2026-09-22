@@ -8,9 +8,9 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 
 ---
 
-> ## Status: partly implemented
+> ## Status: implemented, unreleased
 >
-> The table below is the whole command tree and the whole of what the binary does today. A command marked *not written* is specified in full and has no implementation: invoking it exits `70` and says so. Everything this file states about such a command describes the specification, not the binary.
+> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. `tpl` has never been released and no version has been tagged; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds.
 >
 > | Command | State |
 > |---|---|
@@ -18,15 +18,15 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 > | `tpl help`, `tpl help <path>`, `tpl help <path> --format json`, `-h/--help` at any node, `tpl version`, `-V/--version` | **works** |
 > | `tpl cfg get`, `set`, `unset`, `list` | **works** |
 > | `tpl cfg database add`, `list`, `show`, `update`, `remove` | **works** |
-> | `tpl cfg database test` | not written — it is the one `cfg` subcommand that opens a connection |
+> | `tpl cfg database test` | **works** — the one `cfg` subcommand that opens a connection |
 > | `tpl schema info`, `tables`, `table`, `views`, `view`, `routines`, `routine`, `dump` | **works** |
 > | `tpl cache load`, `clean`, `status` | **works** |
 > | `tpl template list`, `show`, `check`, `path` | **works** |
 > | `tpl render` | **works** |
 >
-> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no server at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout. `tpl cfg database test` is the one subcommand that has no implementation.
+> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no server at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout.
 >
-> The command tree is complete even where the commands are not: every node parses, every node has help, and `tpl help --format json` publishes the whole surface. A node whose work is not written exits `70` (`EX_SOFTWARE`) naming its own command path, which is a defect only in the sense that it is not yet built.
+> **And they compose.** [`examples/`](examples/README.md) holds four worked examples that build an application's data layer — in Go, Rust, Python and Node.js — out of three known schemas, through the command line alone, and each one ends by submitting what it rendered to that language's own compiler.
 
 ---
 
@@ -36,6 +36,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Quick start](#quick-start)
+- [Worked examples](#worked-examples)
 - [The `.tpl` project](#the-tpl-project)
 - [Configuration](#configuration)
 - [Global flags](#global-flags)
@@ -147,6 +148,27 @@ Steps 4, 5, 6 and 8 are read commands and accept `--format json` and `--pretty`,
 
 ---
 
+## Worked examples
+
+The commands above, composed into something whole. [`examples/`](examples/README.md) holds four complete demonstrations that build an application's **data layer** out of a database schema, using the command line and nothing else — no library interface of `tpl` is reached at any point. They are the subject of [`specification/examples.md`](specification/examples.md) and of its `UC-013`.
+
+| Example | Language | What decides it is correct |
+|---|---|---|
+| [`examples/go-data-layer/`](examples/go-data-layer/README.md) | Go | `go build ./...` and `go vet ./...` |
+| [`examples/rust-data-layer/`](examples/rust-data-layer/README.md) | Rust | `cargo build` and `cargo clippy -- -D warnings` |
+| [`examples/python-data-layer/`](examples/python-data-layer/README.md) | Python | `python -m compileall` and `mypy --strict` |
+| [`examples/node-data-layer/`](examples/node-data-layer/README.md) | Node.js | `node --check` and `tsc --checkJs --noEmit` |
+
+All four read the same three schemas — `sakila`, `world` and `freight`, **36 tables and 362 columns** — from one server of the most recent supported series, and each renders 111 to 114 files from as many invocations of `tpl render`, because a rendered file is a redirection the caller performs. The rendered trees are committed, so an example can be read without being run.
+
+**An example is correct when the code it renders compiles**, and not when `tpl` exited `0`: a render succeeds precisely when the template evaluated, which is a fact about the template and not about the file. Each example's compile gate is its acceptance signal, and a missing toolchain fails that gate rather than skipping it.
+
+The type mapping is the exercise. `tpl` ships no per-language type filter and never will — a type mapping is an opinion, and an opinion belongs to the project holding it — so each example carries its own macro, covering all **39 `data_type` values** the three schemas declare, of which 25 are carried by `freight` alone.
+
+The server is the project's own fixture rather than a database of yours. [`examples/README.md`](examples/README.md) is how to bring it up, what each example needs installed, and what exercising these templates against a real catalogue turned up.
+
+---
+
 ## The `.tpl` project
 
 `tpl` works on **projects**. A project is any directory containing a `.tpl` folder — the same way `git` uses `.git`.
@@ -250,7 +272,7 @@ A DSN takes the form `scheme://[user[:password]@]host[:port]/database`, with `my
 
 ### Keeping a password off disk
 
-Two mechanisms, and each is a key of the space above. Both take effect when the configuration is **resolved for a connection**, which no written command does yet: today they are stored, printed and validated, and not performed.
+Two mechanisms, and each is a key of the space above. Both take effect when the configuration is **resolved for a connection** — which is what every command that opens one does: the `schema` subcommands, `tpl cache load`, `tpl cfg database test`, and `tpl render` when its context comes from the database rather than from `--context`. The commands that only read or write `.tpl/.cfg` expand no variable and run no `password_command`.
 
 - **`${VAR}`** expands from the environment in six fields: `dsn`, `host`, `port`, `user`, `password`, and `database`. It is a single pass — an expanded value is never re-expanded — `$$` is a literal `$`, and an undefined variable or an unclosed `${` exits `78` rather than substituting nothing. It is deliberately **not** admitted in `tls` or in `password_command`, so no environment variable can weaken transport or choose the program that runs.
 - **`password_command`** is an argument **array**, executed directly, with no shell. Shell metacharacters are literal arguments. Its trimmed standard output is the password, read to a cap of 4096 bytes; its standard error goes to the null device; a non-zero exit is `78`. On the command line you write it as one string and `tpl` stores the array it splits into:
