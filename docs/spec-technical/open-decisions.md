@@ -34,10 +34,10 @@ and two amendments, and the third carries an observation now owed to
 
 **One entry was added on 2026-09-21**, when the backlog was cleared: `OD-32`,
 the removal of `anyhow` from the dependency graph, settled by the user that day.
-It is the fifth entry to prepare a correction to `CLAUDE.md` and the only one
-whose correction is still owed. `OD-20` was narrowed the same day: `FR-ERR-039`
-names the edit-distance variant, so the entry holds only how the distance is
-computed.
+It is the fifth entry to prepare a correction to `CLAUDE.md`, and the user
+applied that correction on 2026-09-22. `OD-20` was narrowed the same day:
+`FR-ERR-039` names the edit-distance variant, so the entry holds only how the
+distance is computed.
 
 **One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
 that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
@@ -89,9 +89,9 @@ the register itself rather than a record.
 ### Corrections owed to `CLAUDE.md`
 
 `CLAUDE.md` is coordination and **this folder never edits it**; five entries
-have prepared a correction to it. **Four were applied on 2026-09-11**, each
-entry now recording the commit that discharged it. The fifth was prepared on
-2026-09-21 and **has not been applied**.
+have prepared a correction to it, and **all five have been applied**. Four
+landed on 2026-09-11, each entry recording the commit that discharged it; the
+fifth was prepared on 2026-09-21 and applied by the user on 2026-09-22.
 
 | Entry | Correction | State |
 |---|---|---|
@@ -99,10 +99,10 @@ entry now recording the commit that discharged it. The fifth was prepared on
 | `OD-17` | The logging row loses `tracing` and `tracing-subscriber` | Applied. Task #20, commit `ee7363d` |
 | `OD-24` | The stack table gains a row for `rustix` | Applied. Task #20, commit `ee7363d` |
 | `OD-26` | *Fontes de Verdade* gains this folder as a fourth source | Applied. Task #46, commit `c6356df` |
-| `OD-32` | The *Stack* table's error row loses `anyhow` and states `thiserror` alone, and the *Tipos e erros* convention that repeats that row loses it with it | **Not applied.** Both lines still name `anyhow` at commit `8f936d4`, read 2026-09-21. It waits on **the user**, who is that file's only writer; no agent of this project may make it |
+| `OD-32` | The *Stack* table's error row loses `anyhow`, and the *Tipos e erros* convention that repeats that row loses it with it | **Applied 2026-09-22, by the user**, at both lines. The table's row now states the positive choice — `thiserror` in the library, no error type of the binary's own — and cites this entry by name; the convention states the same. Uncommitted in the working tree when this was read |
 
 **The whole register was re-read against `CLAUDE.md` at commit `8f936d4` on
-2026-09-21**, which is the file's current state. The re-read before it was at
+2026-09-21**, the last commit to touch the file. The re-read before it was at
 `c6356df` on 2026-09-11, and four commits have touched the file since —
 `b066cfa` (2026-09-15), `cd6ce7e` (2026-09-17), `6a0cce5` (2026-09-18) and
 `8f936d4` (2026-09-21), read from `git log -- CLAUDE.md`. **No ground this
@@ -117,14 +117,27 @@ and *Completude*, the launch gate for subagents, and the split of `rmp` between
 two skills. None of it grounds a technical decision, and none of it is cited
 here.
 
-**`OD-32` is the one entry claiming a correction is owed to `CLAUDE.md`, and it
-is still owed.** The two lines it names — 465 and 539 — both still read
-*"`thiserror` na biblioteca, `anyhow` no binário"* (read 2026-09-21), so nothing
-has been applied. `anyhow` has meanwhile been removed from `Cargo.toml`, so the file
-now names a dependency the graph does not carry. **This register cannot correct
-it**: `CLAUDE.md` is coordination and the user is its only writer, so the
-correction waits on the user and on nobody else. No entry names the root
-`README.md` at all.
+**`OD-32`'s correction was applied on 2026-09-22, and no entry now claims one
+is owed to `CLAUDE.md`.** The user applied it at both lines the entry named, 465
+and 539; `grep -n anyhow CLAUDE.md` returns no match anywhere in the file
+(2026-09-22), and the *Stack* table's error row now cites `OD-32` for the reason
+the binary carries no error type of its own. The disagreement that entry
+recorded — the coordination document naming a dependency the graph no longer
+carried — opened when `anyhow` left `Cargo.toml` and closed here. No entry names
+the root `README.md` at all.
+
+**The register was re-read against `CLAUDE.md` again on 2026-09-22**, because
+that edit is the trigger this convention names. The edit is two sentences wide
+and both are in the error row's subject, so the pass was narrow: every entry
+citing the file was read against it, and the nine sections named above all still
+resolve. **No ground moved.** Two entries touch the edited text, and the edit
+agrees with both — `OD-06`, whose reading of the entrypoint the row now states
+in the file's own words, and `OD-32`, whose correction it is. The three other
+rows this register has corrected in that table — `OD-09`'s configuration split,
+`OD-17`'s logging row and `OD-24`'s `rustix` row — are untouched. **One caveat
+the next re-read must carry**: the edit was uncommitted when it was read, so the
+commit that carries it is not yet known and the log row below names the working
+tree instead.
 
 One statement about the file is corrected by this re-read rather than by any
 entry: `OD-27` cited `DIV-036` for `scripts/mariadb/seed-bench.sql` as a file
@@ -177,12 +190,21 @@ the target file. **Every re-read this register has made is recorded with its
 commit and date**, so the next one starts from a known state rather than from
 the last edition of this folder.
 
+**An architecture decision record is a target on the same terms.** It is a file
+this folder cites and does not own, so an amendment to one triggers the same
+re-read as an edit to `CLAUDE.md` does. Two were amended on 2026-09-22 and both
+were read against every passage of this folder that cites them; the outcomes are
+the last two rows below.
+
 | Target | Re-read at | Date | Outcome |
 |---|---|---|---|
 | `CLAUDE.md` | `c6356df` | 2026-09-11 | Three entries claimed a correction `ee7363d` had already applied; each now records the commit that discharged it |
 | Root `README.md` | `87dd6e3` | 2026-09-11 | No passage of this folder quotes it, and no entry names it |
 | `specification/upstream-divergences.md` | — | 2026-09-11 | Eleven passages stale, in five files; all eleven now state the concern or the entry |
 | `CLAUDE.md` | `8f936d4` | 2026-09-21 | No ground moved. `OD-32`'s correction is confirmed still owed and still the user's |
+| `CLAUDE.md` | Working tree over HEAD `455e48d`; the edit is **not yet committed** | 2026-09-22 | No ground moved. `OD-32`'s correction is applied at both lines and the *Stack* table now cites that entry; the register carries no correction owed to this file |
+| [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) | Working tree over HEAD `455e48d`; the amendment is **not yet committed** | 2026-09-22 | Nothing this folder states moved. Its thirteen citations, in four files, name the five-mode mapping, the bundled anchors, the rejected platform store and the absence of a TLS version pin; what the amendment moved is the `ca_path` assembly, which no passage of this folder restates |
+| [`ADR-007`](../adr/adr-007-msrv.md) | Working tree over HEAD `455e48d`; the amendment is **not yet committed** | 2026-09-22 | Nothing this folder states moved. Its fifteen citations, in three files, name the rule and the figure it yields, and neither changed; what the amendment moved — the dependency-floor table and the graph's crate counts — this folder has never restated |
 
 ## Status legend
 
@@ -254,11 +276,13 @@ corrected `OD-18` and for the driver behaviour `OD-12` now records as observed,
 and **2026-09-21** for the manifest, dependency-graph and source readings
 `OD-32` rests on, for the reading of `src/mariadb/connect.rs` that `OD-12`'s
 third correction rests on, and for the engine behaviour `OD-14` now records as
-observed. Anything not verified says so in its own text. No claim rests on
-recollection.
+observed; and **2026-09-22** for the readings that confirm what `OD-32` decided
+has landed — the crate out of the manifest, the lock file and the resolved
+graph, and the correction applied to `CLAUDE.md`. Anything not verified says so
+in its own text. No claim rests on recollection.
 
-The last of those has a source of a different kind, and it is named here because
-the difference matters: it is a **test of this repository**, not a page of
+The engine behaviour `OD-14` records has a source of a different kind, and it is
+named here because the difference matters: it is a **test of this repository**, not a page of
 vendor documentation. The behaviour it records is **not confirmed in the
 engine's official documentation** for the pinned line, which is why the entry
 stood unverified for as long as it did; a test asserts it on every run and fails
@@ -572,9 +596,10 @@ underlying template-engine errors", so a render variant carries that chain, and
 the binary has no dynamic error to carry, so `anyhow` earns nothing under the
 dependency budget. Whether it stays was a dependency question for that document,
 and [`OD-32`](#od-32--anyhow-in-the-shipped-graph) settles it: the crate is
-removed, and the correction to the coordination document is prepared there for
-the user rather than made in this folder — as `OD-09` did for `toml_edit`.
-Nothing in this entry depended on the answer, and nothing in it moves.
+removed, and the correction to the coordination document was prepared there and
+applied by the user on 2026-09-22, this folder never editing that file — as
+`OD-09` did for `toml_edit`. Nothing in this entry depended on the answer, and
+nothing in it moves.
 
 **Unblocks.** `interfaces`, `architecture`.
 
@@ -2185,16 +2210,17 @@ but `model/`.
 
 ## OD-32 — `anyhow` in the shipped graph
 
-**Status: settled 2026-09-21, by the user.** The correction it prepares for
-`CLAUDE.md` is **owed**, and is listed above with the four that were applied.
+**Status: settled 2026-09-21, by the user. Fully discharged 2026-09-22.** The
+crate left the manifest, and the correction this entry prepared for `CLAUDE.md`
+was applied by the user; nothing in it is outstanding.
 
 **Decision.** **`anyhow` is removed from the dependency graph.** Nothing
 replaces it: the one error the binary handles is already handled without it.
 
-**The ground: the crate is declared and used by nothing.** `CLAUDE.md`
+**The ground: the crate was declared and used by nothing.** `CLAUDE.md`
 *Desempenho e Eficiência* admits a crate for what it does and refuses one used
-for a trivial function; this one is used for no function at all. Four readings
-establish it, all at commit `243c4d6` on 2026-09-21.
+for a trivial function; this one was used for no function at all. Four readings
+established it, all at commit `243c4d6` on 2026-09-21, before the removal.
 
 | What was read | How | What it returned |
 |---|---|---|
@@ -2224,27 +2250,37 @@ source does not name; the library's error type, its exit-code method and the
 diagnostic renderer are all where they were.
 
 **The MSRV is `ADR-007`'s.** [That record](../adr/adr-007-msrv.md) holds the
-rule, the graph the rule runs over and the crate that sets the figure; running
-it again over a graph one crate smaller is that record's work and not this
-entry's, and this entry restates none of it.
+rule, the graph the rule runs over and the crate that sets the figure. It has
+since re-run that rule over the graph this removal left, on 2026-09-22, and
+carries the result; running it was that record's work and not this entry's, and
+this entry restates none of it.
 
-**The correction prepared for `CLAUDE.md` is owed, and this folder cannot make
-it.** That file names the crate twice — in the *Stack* table's error row and in
-the *Tipos e erros* convention that repeats it (`CLAUDE.md`, lines 465 and 539,
-re-read at commit `8f936d4` on 2026-09-21) — and both still name it as the
-binary's error type. Both must lose it and state `thiserror` alone. **The file
-is coordination and the user is its only writer**, so the correction waits on
-the user: no task of this sprint applied it, and none could. It is the same
-handover [`OD-17`](#od-17--observability) made for `tracing` and
+**The correction prepared for `CLAUDE.md` was applied on 2026-09-22, by the
+user.** That file named the crate twice — in the *Stack* table's error row and
+in the *Tipos e erros* convention that repeats it, at lines 465 and 539 — and
+both named it as the binary's error type. Both now state the positive choice:
+`thiserror` in the library, and no error type of the binary's own. The table's
+row cites this entry for the reason, so the coordination document points here
+rather than restating the ground. `grep -n anyhow CLAUDE.md` returns no match
+(2026-09-22). **This folder never edits that file and the user is its only
+writer**, so the correction was prepared here and applied there, which is the
+same handover [`OD-17`](#od-17--observability) made for `tracing` and
 `tracing-subscriber` over the same table.
 
 **The manifest change was made, in the order this entry fixed.** `CLAUDE.md`
 *Stack* makes an alteration to that table an architecture decision, to be
-registered before it is implemented; this entry is the registration, and
-`anyhow` was removed from `[dependencies]` afterwards (read from `Cargo.toml`,
-2026-09-21). **The consequence is that `CLAUDE.md` now names a dependency the
-graph does not carry**, which is the cost of the correction being the user's
-alone and is stated here rather than left for the next reader to discover.
+registered before it is implemented; this entry is the registration, and the
+crate was removed from `[dependencies]` afterwards, at commit `455e48d`.
+`grep -n anyhow Cargo.toml Cargo.lock` returns no match and
+`cargo tree -i anyhow` reports no such package (2026-09-22), so the crate is out
+of the manifest, out of the lock file and out of the resolved graph.
+
+**The one disagreement this order cost is closed.** Between the manifest change
+and 2026-09-22 the coordination document named a dependency the graph no longer
+carried — the price of the correction being the user's alone, recorded here
+while it stood rather than left for the next reader to find. The user closed it
+the same sprint. What `ADR-007` had to do about the removal is that record's and
+is cited above, not restated.
 
 ---
 
@@ -2293,15 +2329,11 @@ reasoned; the second, one test per mapped `clap::ErrorKind` (`OD-08`), was
 discharged at commit `f8f335d` of 2026-09-15. Each is recorded as discharged in
 its own entry.
 
-**One correction is owed outside this folder, and it has not been made.**
-`OD-32` prepares the removal of `anyhow` from the two places `CLAUDE.md` names
-it — lines 465 and 539, both still naming it at commit `8f936d4` on 2026-09-21.
-**Only the user writes that file**, so the correction waits on the user and on
-no task of this project; it blocks no document of this folder, and it is listed
-with the four applied ones under
-[Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd). The crate is
-already out of `Cargo.toml`, so until the user applies it the coordination
-document names a dependency the graph does not carry.
+**No correction is owed outside this folder either.** The last one standing was
+`OD-32`'s, over the two places `CLAUDE.md` named `anyhow` — lines 465 and 539 —
+and **the user applied it on 2026-09-22**. All five corrections this register
+has ever prepared for that file are now applied, and each records where and when
+under [Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd).
 
 **`OD-27`'s consequence is discharged.** `scripts/mariadb/seed-bench.sql` was
 written on 2026-09-21, and `quality-attributes` and `verification` no longer

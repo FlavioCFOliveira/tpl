@@ -197,7 +197,7 @@ specification, which is how a fourth place starts drifting.
 | Record | Subject | Status | Serves | Superseded |
 |---|---|---|---|---|
 | [ADR-001](adr-001-template-engine-pin.md) | The template engine and its version pin | Accepted 2026-09-10 | `FR-ENV-003` | — |
-| [ADR-002](adr-002-tls-mode-mapping.md) | The TLS mode mapping onto the database driver | Accepted 2026-09-10 | `FR-CONF-038`, `FR-CONF-014` | — |
+| [ADR-002](adr-002-tls-mode-mapping.md) | The TLS mode mapping onto the database driver | Accepted 2026-09-10 | `FR-CONF-038`, `FR-CONF-014`, `FR-CONF-044` | — |
 | [ADR-003](adr-003-database-driver.md) | The database driver | Accepted 2026-09-10 | `FR-CONF-036`, `FR-CONF-038` | — |
 | [ADR-004](adr-004-release-profile-and-panic-path.md) | The release profile and the panic path | Accepted 2026-09-11 | `FR-ERR-030`, `FR-ERR-032`, `FR-ERR-034` | — |
 | [ADR-005](adr-005-async-runtime-scope.md) | The scope of the async runtime | Accepted 2026-09-10 | `NFR-PERF-005`, `NFR-PERF-007` | — |

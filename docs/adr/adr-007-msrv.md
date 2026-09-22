@@ -3,7 +3,7 @@ id: ADR-007
 title: The minimum supported Rust version
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-22
 requirements: []
 supersedes: []
 superseded-by: null
@@ -16,8 +16,9 @@ superseded-by: null
 Accepted, 2026-09-11. The **rule** below was settled on 2026-09-10; the floor it
 yields was established by verifying every direct dependency on 2026-09-11, and
 is higher than the figure the project carried before that verification. The
-rule was re-run over the resolved graph on 2026-09-12 and the floor did not
-move, which is why the `decided` date above is unchanged.
+rule was re-run over the resolved graph on 2026-09-12, and again on 2026-09-22
+after a dependency left it, and the floor did not move on either occasion —
+which is why the `decided` date above is unchanged.
 
 ## Context
 
@@ -34,8 +35,20 @@ would leave the next reader to rediscover this.
 
 Two facts fix the lower bound. The root coordination document fixes edition
 2024, and Rust 1.85.0 is the release that stabilised it (Rust Edition Guide,
-verified 2026-09-11). The same document deferred the number explicitly — "MSRV a
-fixar no `Cargo.toml`" — so nothing in the repository has ever stated one.
+verified 2026-09-11). When this record was opened, the same document deferred
+the number rather than stating it, and no file of the repository stated one.
+That is the gap this record was opened to close, and it is closed: commit
+`50153d6` of 2026-09-11 reduced the deferring row to a citation of this record,
+and `Cargo.toml` now carries `rust-version = "1.94.0"`.
+
+**The paragraph above is in the past tense deliberately.** It used to quote the
+deferral and to assert, in the present, that nothing in the repository stated an
+MSRV; both halves were falsified by that commit and by the pin. Leaving them on
+the ground that a Sources row dates them was weighed and refused: a date says
+when a claim was checked, not that the body may go on asserting it. This is the
+decay `OD-02` recorded for this same pair of documents, and the convention this
+folder keeps against it is to re-read a quotation against the file that owns it,
+not to date it and leave it standing.
 
 ## Decision
 
@@ -46,7 +59,7 @@ number moves under it:**
 2. the highest floor **declared by any dependency in the shipped graph**, which
    is `cargo tree -e normal,build` under `ADR-006`.
 
-**Applying the rule on 2026-09-12, over the resolved graph, the MSRV is
+**Applying the rule on 2026-09-22, over the resolved graph, the MSRV is
 `1.94.0`**, and `rust-version = "1.94.0"` goes in `Cargo.toml`. It is set by the
 driver crate `ADR-003` pins, which declares that floor; every other direct
 dependency declares a floor at or below the edition floor:
@@ -61,7 +74,6 @@ dependency declares a floor at or below the edition floor:
 | `serde_json` | 1.0.151 | 1.71 |
 | `thiserror` | 2.0.20 | 1.71 |
 | `minijinja`, `minijinja-contrib` | the version `ADR-001` pins | 1.70 |
-| `anyhow` | 1.0.104 | 1.68 |
 | `rustix` | 1.1.4 | 1.63 |
 | `serde` | 1.0.229 | 1.56 |
 
@@ -134,8 +146,8 @@ from its own documentation on 2026-09-10 gave 1.63. Both are below the edition
 floor, so neither binds and the difference changes no outcome.
 
 **The rule has been run over the whole shipped graph, and the floor did not
-move.** `cargo tree -e normal,build` prints 137 crates, `tpl` among them; of the
-136 dependencies, **116 declare a `rust-version` and 20 declare none** — and a
+move.** `cargo tree -e normal,build` prints 136 crates, `tpl` among them; of the
+135 dependencies, **115 declare a `rust-version` and 20 declare none** — and a
 crate that declares none declares no floor, so it constrains nothing. The
 highest declared floor is **1.94.0**, declared by the driver's own five crates —
 `sqlx`, `sqlx-core`, `sqlx-mysql`, `sqlx-macros`, `sqlx-macros-core` — and by no
@@ -146,6 +158,17 @@ one crate: `linux-raw-sys` 0.12.1 on the two Linux targets, in place of `errno`
 on the two macOS ones, declaring 1.63. Two direct dependencies have moved since
 the table above was read, without moving their floor: `toml` resolves at 1.1.6
 and `toml_edit` at 0.25.15, and both still declare 1.85.
+
+**A dependency has left the graph, and the floor did not move.** `anyhow`
+carried a declared floor of 1.68 and is no longer a dependency of this project;
+the decision that removed it, its ground and the alternative it rejected are
+`docs/spec-technical/open-decisions.md` entry `OD-32`, and are not restated
+here. It was the only crate to leave, so the counts above fall by one crate and
+one declaration; the figure it declared was below the edition floor and bound
+nothing, and the highest declared floor is the driver's either way. A
+dependency **leaving** the graph is therefore the one dependency change that
+cannot raise this floor — but it can lower it, when the crate that leaves is
+the crate that set it, so the rule is re-run on a removal exactly as on a bump.
 
 **The vendored copy of `ADR-010` does not reach this floor.** `sqlx-core` is
 read from `vendor/sqlx-core-0.9.0/` rather than from the crate index, and the
@@ -176,8 +199,11 @@ this record.
 |---|---|---|
 | Rust 1.85.0 is the release that stabilised the 2024 edition | The Rust Edition Guide, *Rust 2024* | 2026-09-11 |
 | The driver crate `ADR-003` pins declares `rust-version = "1.94.0"`, and is the maximum stable release of that crate | crates.io crate index, `sqlx`, version 0.9.0 | 2026-09-11 |
-| Declared floors: `clap` 4.6.6 → 1.85; `toml` 1.1.5 → 1.85; `toml_edit` 0.25.13 → 1.85; `tokio` 1.53.1 → 1.71; `serde_json` 1.0.151 → 1.71; `thiserror` 2.0.20 → 1.71; `anyhow` 1.0.104 → 1.68; `rustix` 1.1.4 → 1.63; `serde` 1.0.229 → 1.56 | crates.io crate index, one request per crate | 2026-09-11 |
-| The composition of the shipped graph, and the floor declared by every crate in it | `cargo tree -e normal,build` and `cargo metadata`, resolved against this repository's `Cargo.lock` at commit `be16e30` and run once per target `ADR-008` names; the `sqlx-core` figure is read from `vendor/sqlx-core-0.9.0/Cargo.toml`, which the `ADR-010` patch substitutes for the index copy | 2026-09-12 |
+| Declared floors: `clap` 4.6.6 → 1.85; `toml` 1.1.5 → 1.85; `toml_edit` 0.25.13 → 1.85; `tokio` 1.53.1 → 1.71; `serde_json` 1.0.151 → 1.71; `thiserror` 2.0.20 → 1.71; `rustix` 1.1.4 → 1.63; `serde` 1.0.229 → 1.56 | crates.io crate index, one request per crate | 2026-09-11 |
+| The composition of the shipped graph, and the floor declared by every crate in it | `cargo tree -e normal,build` and `cargo metadata`, resolved against this repository's `Cargo.lock` at commit `455e48d` and run once per target `ADR-008` names; the `sqlx-core` figure is read from `vendor/sqlx-core-0.9.0/Cargo.toml`, which the `ADR-010` patch substitutes for the index copy | 2026-09-22 |
+| `anyhow` is no longer declared and no longer appears in the shipped graph | `Cargo.toml` and `cargo tree -e normal,build`, at commit `455e48d` | 2026-09-22 |
+| The decision that removed `anyhow`, its ground and the alternative it rejected | `docs/spec-technical/open-decisions.md`, `OD-32` | 2026-09-22 |
 | The engine `ADR-001` pins declares 1.70 on the crate index; neither it nor the 1.63 read from its own documentation on 2026-09-10 — **not re-verified here** — reaches the edition floor | crates.io crate index, `minijinja` and `minijinja-contrib` | 2026-09-11 |
-| Edition 2024, with the MSRV deferred to `Cargo.toml` | `CLAUDE.md`, *Stack* | 2026-09-11 |
+| Edition 2024 | `CLAUDE.md`, *Stack*, the language row | 2026-09-22 |
+| That the same row deferred the number before this record existed, and that commit `50153d6` reduced it to a citation of this record | `git show 50153d6 -- CLAUDE.md` | 2026-09-22 |
 | The development toolchain and the toolchain the driver selection was measured under are two distinct figures, and both stand above the floor | `docs/spec-technical/operations.md`, *MSRV, the development toolchain, and the cross-build path*, whose inventory is `rustup show`, `rustc --version --verbose` and `cargo --version --verbose` taken on the development host; and `BENCHMARKS.md`, "2026-09-10 — MariaDB driver selection", *Environment* | 2026-09-11 |

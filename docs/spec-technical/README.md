@@ -40,12 +40,13 @@ the entry records what carries the two requirements the setting turned out not
 to decide, and `architecture.md` states it rather than declining to.
 
 **One entry was added and two were amended on 2026-09-21**, when the backlog was
-cleared. `OD-32` removes `anyhow` from the dependency graph and prepares the
-correction `CLAUDE.md` is owed for it; `technology-stack.md` cites it instead of
-carrying the question. `OD-12` is discharged of the phase attribution it owed
-`verification`, with three corrections against what the connection work
-observed. `OD-20` is narrowed to how the edit distance is computed, the measure
-itself now being `FR-ERR-039`'s.
+cleared. `OD-32` removes `anyhow` from the dependency graph and prepared the
+correction `CLAUDE.md` was owed for it, which the user applied on 2026-09-22;
+`technology-stack.md` lost the crate's two rows and cites the entry for the
+removal. `OD-12` is discharged of the phase attribution it owed `verification`,
+with three corrections against what the connection work observed. `OD-20` is
+narrowed to how the edit distance is computed, the measure itself now being
+`FR-ERR-039`'s.
 
 **Four documents were re-audited against the tree on 2026-09-21**, in the same
 clearance. `verification.md` was re-measured whole against the suite at commit

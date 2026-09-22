@@ -75,7 +75,6 @@ excludes dev-dependencies. Every crate below is a direct dependency of it.
 | `toml` | 1.1.6+spec-1.1.0 | crates.io crate index, `toml`, `max_stable_version` | 2026-09-11 |
 | `toml_edit` | 0.25.15+spec-1.1.0 | crates.io crate index, `toml_edit`, `max_stable_version` | 2026-09-11 |
 | `thiserror` | 2.0.20 | crates.io crate index, `thiserror`, `max_stable_version` | 2026-09-11 |
-| `anyhow` | 1.0.104 | crates.io crate index, `anyhow`, `max_stable_version` | 2026-09-11 |
 | `rustix` | 1.1.4 | crates.io crate index, `rustix`, `max_stable_version` | 2026-09-11 |
 | The TLS crates | **No version is fixed by decision.** They enter transitively through the driver's TLS feature; [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) states in terms that it pins no TLS crate version, and the versions `BENCHMARKS.md` records are a property of what was measured | `sqlx-core/Cargo.toml` at tag `v0.9.0` declares its optional `webpki-roots` dependency at `1`, so the bundled root set moves with any release of that major line | 2026-09-11 |
 
@@ -96,16 +95,20 @@ rejected option and cites the argument rather than reproducing it.
 | `toml` | The read path over `.tpl/.cfg`, through its document tree — spanned keys and spanned values — rather than through a `serde` derive | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which would put an editing document on the path that reads untrusted input; and a `serde` derive, which cannot name the offending key or its position |
 | `toml_edit` | The write path over `.tpl/.cfg`, preserving comments, spacing and the relative order of items | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml` alone, which would delete the commented example `FR-PROJ-018` requires on the first write |
 | `thiserror` | Derives the one public error enum and its `Display` | [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) | `anyhow` in the library; per-module enums composed by `From`; an exit code stored as a field ([`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)) |
-| `anyhow` | **Nothing.** The manifest declares it and no file of `src/` or `tests/` names it | `CLAUDE.md` *Stack* fixed it; [`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph) removes it | Keeping it declared as a reserve for a dynamic error the binary might one day carry ([`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph)) |
 | `rustix` | Supplies the process's own user identifier, the one value `std` does not give, for the ownership check of `FR-PROJ-010` | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) | `libc` with a local `unsafe` block; `nix`; a crate that resolves the user account; inferring ownership by attempting a write ([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid)) |
 
-**The observation this section carried is settled, and the decision has its
-home.** `anyhow` is removed from the dependency graph by
-[`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph), settled
-2026-09-21, which holds the ground, the alternative it refused and the
-correction `CLAUDE.md` is owed; none of it is restated here. The row above
-records the manifest as it stands at commit `243c4d6`, and it moves when the
-manifest does.
+**One crate left the graph, and both tables above lost its row.** `anyhow` was
+removed by [`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph),
+which holds the ground, the alternative it refused and the correction it
+prepared for `CLAUDE.md`; none of that is restated here. The removal landed at
+commit `455e48d`: `grep -n anyhow Cargo.toml` and `cargo tree -i anyhow` both
+return nothing, and the direct dependencies of the shipped graph are the eleven
+the tables name (`cargo tree -e normal,build --depth 1`, read 2026-09-22). The
+observation this section used to carry — that a binary reduced to calling the
+library, reading the exit code and returning carries no dynamic error — is that
+entry's ground and no longer this document's open question. Where the removal
+left the MSRV is [`ADR-007`](../adr/adr-007-msrv.md)'s, cited here and not
+restated.
 
 ## The template engine
 
