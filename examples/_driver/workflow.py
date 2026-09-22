@@ -317,7 +317,16 @@ def run(
             destination = workspace / destination
         tpl.render_to(destination, *render.arguments())
         written.append(destination)
-        say(f"render   {render.template} -> {destination.relative_to(workspace)}")
+        # `Render.destination` documents only that a *relative* path resolves
+        # against the workspace, so an absolute one may land outside it. That
+        # is a legitimate destination and `relative_to` raises on it, so the
+        # echo falls back to the absolute path rather than failing the run for
+        # the sake of a progress line.
+        try:
+            shown: Path | str = destination.relative_to(workspace)
+        except ValueError:
+            shown = destination
+        say(f"render   {render.template} -> {shown}")
 
     say(f"done     {len(written)} files, {len(tpl.log)} invocations")
 

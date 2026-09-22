@@ -1,0 +1,4 @@
+# tpl init creates this; it holds the database entries of the run, not the example.
+.tpl/
+# cargo build creates this; the rendered crate is built by the compile gate.
+target/

@@ -1,0 +1,27 @@
+# The crate the Rust worked example renders.
+#
+# It is excluded from the repository's workspace, in the root `Cargo.toml`, so
+# that `cargo build` and `cargo clippy` at the root neither compile it nor
+# fetch what it depends on. It is built by this example's own script, which is
+# the compile gate `FR-EX-009` requires.
+[package]
+name = "tpl-example-rust-data-layer"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85.0"
+publish = false
+description = "A data layer for sakila, world and freight, rendered from the catalogue by tpl."
+
+[lib]
+path = "src/lib.rs"
+
+# One dependency, and the rendered code names no other. `chrono` is not a
+# dependency of this crate: the temporal types the mapping uses are reached
+# through sqlx's own re-export, which the feature turns on.
+[dependencies]
+sqlx = { version = "0.9.0", default-features = false, features = [
+    "mysql",
+    "runtime-tokio",
+    "tls-rustls-ring-webpki",
+    "chrono",
+] }
