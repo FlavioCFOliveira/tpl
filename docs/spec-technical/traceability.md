@@ -446,7 +446,7 @@ what replaced it.
 |---|---|---|
 | Every collection is a JSON array; `[]` for empty; `null` reserved for an absent **scalar** | `FR-CTX-003` … `FR-CTX-005` | `interfaces` |
 | **Both** foreign-key directions embed one level deep and are cut to names at the first hop; one rule, so no traversal can fail to terminate | `FR-CTX-006` … `FR-CTX-010` | `interfaces`, `architecture` (`OD-19`); [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md) |
-| The double embedding roughly quadruples column volume and is the named pressure on the 32 MiB provisional budget | `FR-CTX-010` *Accepted cost*; `NFR-PERF-014` | `quality-attributes` (`OD-19`); [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md) |
+| The double embedding roughly quadruples column volume and is the named pressure on the adopted peak-memory figure | `FR-CTX-010` *Accepted cost*; `NFR-PERF-014` | `quality-attributes` (`OD-19`); [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md) |
 | A column default is a **three-way discriminated structure or `null`**, classified by an ordered eight-row shape table over the raw catalogue value, first match wins | `FR-CTX-011` … `FR-CTX-013`, `FR-CTX-037` | `interfaces`, `data-model` |
 | A doubled apostrophe collapses to one in a literal default and in an `ENUM` member; there is no backslash escape | `FR-CTX-037`, `FR-CTX-039` | `interfaces` |
 | An `ENUM`/`SET` member list is parsed from the raw type string by **quote state**, never by splitting on the comma | `FR-CTX-039` | `interfaces`, `verification` |
@@ -551,12 +551,14 @@ what replaced it.
 | The query count must be observable from the diagnostic stream, which makes one diagnostic line structurally load-bearing although stderr is not contract | `NFR-PERF-008`, `FR-GLOB-017` | `operations`, `verification` (`OD-17`) |
 | Exactly four targets; Linux is `musl`, statically linked; no target is second class. The parity is of **results**, not of instruments: one instrument of `NFR-PERF-007` exists on two targets only | `NFR-PERF-018` | `operations`, `verification` |
 | A Linux observation **may not be credited to either Darwin target**, and a trace taken inside a Linux container may not be credited to macOS, because the artefact observed is not the artefact distributed. What the two Darwin targets consequently do not catch is named by the requirement — a build that opened `.tpl/.cfg`, read it and discarded what it read — and a run on such a target must say which instrument established a clause | `NFR-PERF-005` as amended in the eleventh edition; `NFR-PERF-007`, `NFR-PERF-018` | `verification`, `operations` |
-| Nine budgets, one normative, five needing a server; a measurement names its target **and its server series** | `NFR-PERF-012`, `NFR-PERF-014` | `quality-attributes` |
-| The measurement protocol is normative: 200-run median, 20 warmups, no shell, idle host, first run of a fresh binary discarded, RSD ≤ 5% | `NFR-PERF-009` … `NFR-PERF-011` | `quality-attributes` |
-| Provisional figures are not limits; the ratification gate has four conditions and moves the figure to `BENCHMARKS.md` | `NFR-PERF-019`, `NFR-PERF-020`, `BR-PERF-006` | `quality-attributes` |
-| Regression against a recorded baseline on the same target fails the change | `NFR-PERF-017` | `operations`, `quality-attributes` |
+| Nine **measurement points**, each fixing its invocation, its workload, whether a server answers and the cache posture the reading is taken under; three reach a server and five need the fixture. A measurement names its target **and its server series** | `NFR-PERF-012`, `NFR-PERF-014`, `BR-PERF-007` | `quality-attributes` |
+| The protocol binds how a reading is taken and written down, and decides no outcome: 200-run median, 20 warmups, no shell, idle host on mains power, first run of a fresh binary discarded | `NFR-PERF-009`, `NFR-PERF-010` | `quality-attributes` |
+| A dispersion above five per cent is a statement about the **host**, not about `tpl`: the reading is recorded with that fact stated, never discarded, and merely does not stand as its point's reference figure until retaken on a quiet host | `NFR-PERF-011` | `quality-attributes` |
+| A figure is **adopted** where a document supplied it and **recorded** where somebody measured it; recording one in `BENCHMARKS.md` is the step that removes the adopted one, so a figure has one home | `NFR-PERF-019`, `NFR-PERF-020`, `BR-PERF-006` | `quality-attributes` |
+| **No figure fails a change.** No figure named in the corpus, and none recorded against it, fails, blocks, rejects or gates a change, a release or a piece of work; the obligation toward speed survives as design and architecture | `BR-PERF-008` | `quality-attributes`, `operations` |
+| What does fail is the requirements of form, and the `WL-002` scalar with them: deterministic counts, absences and a size, where a breach is a **functional defect** and not a slow run | `NFR-PERF-001` … `NFR-PERF-006`, `WL-002`, `BR-PERF-008` | `quality-attributes`, `verification` |
 | Three reference workloads and a byte scalar, `WL-001` kept separate from the correctness fixture so that one does not hide an N+1 in the other. `seed-bench.sql` carries it, and was written on 2026-09-21 | `WL-001` … `WL-003`, `BR-PERF-002`, `BR-PERF-007` | `verification` (`OD-27`) |
-| The failure path is a budget because nearest match computes an edit distance against every existing name | `BR-PERF-004` | `quality-attributes` (`OD-20`) |
+| The failure path is a measurement point because nearest match computes an edit distance against every existing name; that it should cost what `tpl --version` costs is a **design expectation** to be checked against a reading, never an obligation on a figure | `BR-PERF-004` | `quality-attributes` (`OD-20`) |
 
 ---
 
@@ -564,7 +566,7 @@ what replaced it.
 
 | Technical concern | Drawn from | Doc |
 |---|---|---|
-| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, budget, series. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
+| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
 | `plumbing` / `porcelain` name the two output audiences; the technical spec's naming of modules and types should not invent a third vocabulary | *plumbing*, *porcelain* | `interfaces` |
 | One term already carries two meanings by decision — `schema` (the arm, and the `--schema` flag) — and code naming must disambiguate rather than pick one | *schema (the word, two meanings)*; `FR-CFG-028` | `interfaces` |
 | `target` is defined as one of four build targets: the word is reserved and must not be reused for a render target | *target*; `NFR-PERF-018` | `operations`, `quality-attributes` |
@@ -577,7 +579,7 @@ what replaced it.
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | **Nothing is open**: no technical decision may be deferred by citing an open functional question | *Index* — empty; all 75 closed | `overview` |
-| Three obligations recur and are not questions: the series table re-verification, budget ratification, and the falsifiability of any observation-based requirement | *Overview*, "Complete means that no point of this specification is waiting on someone" | `operations`, `quality-attributes` |
+| Three obligations recur and are not questions: the series table re-verification, the recording of a measured figure where a point is measured, and the falsifiability of any observation-based requirement | *Overview*, "Complete means that no point of this specification is waiting on someone" | `operations`, `quality-attributes` |
 | An unsettled point is a **defect to report**, never an old identifier revived | *Overview*, final paragraph | `README`, `decisions` |
 | The closed table is the provenance trail for every fixed decision: a technical decision that contradicts one must cite the entry it reopens | *Closed* | `decisions` |
 
@@ -597,8 +599,8 @@ is named only where a row would otherwise imply a correction is outstanding.
 | The whole engine `Environment` surface is **not** contract; only the three groups are | `DIV-033` | `technology-stack` |
 | The target matrix is fixed and Linux is `musl`; the `gnu` triples are not targets. The linkage has an observable DNS consequence that must not be presented as pure packaging | `DIV-041` | `operations` |
 | `panic = "abort"` settles how a panic **ends** the process, not whether the process may report it first. The profile stands as written, `FR-ERR-030` as amended obliges the message and the code without obliging the panic path to be catchable, and `DIV-045` is discharged with nothing owed to the root coordination document | `DIV-045` | `architecture`, `technology-stack`, `operations` (`OD-28`); [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md) |
-| No performance figure is written in this folder: `NFR-PERF-014` holds a budget's provisional figure and `BENCHMARKS.md` its ratified one, and a third place would be the copy nobody updates | `DIV-035` | `quality-attributes` |
-| `WL-001` needs `scripts/mariadb/seed-bench.sql`; the budgets over that workload could not be measured until it existed, and it was written on 2026-09-21. What the entry still owes the root documents is that register's to state | `DIV-036` | `verification` (`OD-27`) |
+| No performance figure is written in this folder: `NFR-PERF-014` holds a measurement point's adopted figure and `BENCHMARKS.md` its recorded one, and a third place would be the copy nobody updates | `DIV-035` | `quality-attributes` |
+| `WL-001` needs `scripts/mariadb/seed-bench.sql`; the measurement points over that workload could not be measured until it existed, and it was written on 2026-09-21. What the entry still owes the root documents is that register's to state | `DIV-036` | `verification` (`OD-27`) |
 | The catalogue is read through `INFORMATION_SCHEMA` only: the closed list of `FR-SRV-006` has four entries, `SHOW` is not one of them, and no necessity admits a fifth | `DIV-031` | `security`, `interfaces` |
 | Determinism is over **stdout** only | `DIV-039` | `quality-attributes` |
 | Four things write inside `.tpl`: `tpl init`, `tpl cfg …`, `tpl cache load`, and any cached read command on a miss | `DIV-005` | `architecture` |

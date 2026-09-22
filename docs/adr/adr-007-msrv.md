@@ -111,7 +111,7 @@ two floors — does not change when the number does, and only its parameter move
   disqualified-and-chosen against `FR-CONF-036` at the version `ADR-003` pins,
   and every figure in `BENCHMARKS.md` was taken on that artefact; a different
   version is a different artefact, which `NFR-PERF-012` makes incomparable with
-  every recorded baseline. Buying a lower floor with a re-measurement of four
+  every recorded figure. Buying a lower floor with a re-measurement of four
   targets, and a re-verification of the five-mode mapping of `ADR-002`, is a
   trade nothing in the corpus asks for: no requirement names a toolchain
   version at all.

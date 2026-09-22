@@ -1,7 +1,7 @@
 ---
 title: Operations
 status: draft
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-22
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, technology-stack.md, data-model.md, quality-attributes.md]
 ---
 
@@ -11,17 +11,22 @@ related: [README.md, traceability.md, open-decisions.md, overview.md, architectu
 
 How the artefact is produced, validated, released and observed: the four
 targets and what their linkage obliges, the pipeline every change passes, the
-gates a release passes, where each of the four version numbers is bumped, what
-a new project receives, what the development host has installed, and what the
-container fixture supplies today.
+gates a release passes, the harness that takes a performance reading, where each
+of the four version numbers is bumped, what a new project receives, what the
+development host has installed, and what the container fixture supplies today.
 
-**No measured figure and no budget appears here.** Every figure is
-`BENCHMARKS.md`'s, which `BR-PERF-006` requires; every budget, the standing of
-its figure and the protocol that ratifies one are
-[quality-attributes.md](quality-attributes.md#the-nine-budgets). Versions, crate
-choices and the dependency budget are
+**No measured figure appears here.** Every figure is `BENCHMARKS.md`'s, which
+`BR-PERF-006` requires; the nine measurement points, what each is measured over
+and the protocol a reading is taken under are
+[quality-attributes.md](quality-attributes.md#the-measurement-set). Versions,
+crate choices and the dependency budget are
 [technology-stack.md](technology-stack.md); the tests themselves, and the
 harness that drives the containers, are `verification.md`.
+
+**No performance figure gates anything in this document.** `BR-PERF-008` denies
+every figure named in the functional corpus, and every figure recorded against
+it, the power to fail, block, reject or gate a change, a release or a piece of
+work; the pipeline below and the gates below carry none.
 
 ## The four targets, and what the linkage obliges
 
@@ -87,10 +92,14 @@ cargo audit
 | 4 | The test suite, with every feature active | See the two observations below |
 | 5 | The dependency graph against the advisory database | `cargo audit` is described by its publisher as auditing "`Cargo.lock` for crates with security vulnerabilities" (crates.io crate index and rustsec.org, `cargo-audit` 0.22.2, consulted 2026-09-11), so it needs a resolved lockfile |
 
-Benchmarks and a comparison against `BENCHMARKS.md` are added to the five when
-a change touches a hot path (`CLAUDE.md`, *Desenvolvimento*, *Disciplina de
-medição*). Which measurement is valid, and when a figure becomes a limit, are
-[quality-attributes.md](quality-attributes.md#the-measurement-protocol)'s.
+**Nothing is added to the five for a change to a hot path.** The root
+coordination document states that a hot-path change — the catalogue read, the
+context build, the render, process startup — is an **occasion to take a reading
+and record it**, and never a condition for the work being complete
+(`CLAUDE.md`, *Desenvolvimento*, with *Disciplina de medição*). The protocol a
+reading is taken under is
+[quality-attributes.md](quality-attributes.md#the-measurement-protocol)'s, and
+the harness that takes it is [below](#the-measurement-harness).
 
 **Observation — the pipeline names no target, so it exercises the host's.**
 `NFR-PERF-018` makes none of the four second class, so passing on the
@@ -141,7 +150,7 @@ restated. Three operational facts belong here.
   library and a binary, so the profile and the toolchain floor have no second
   copy to drift against, and the four targets share both.
 - **Changing the profile invalidates the comparability of every recorded
-  baseline**, on the same ground as changing the build path
+  figure**, on the same ground as changing the build path
   ([`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md),
   [`ADR-008`](../adr/adr-008-packaging-and-build-path.md), with `NFR-PERF-012`).
   Whoever changes it re-measures all four targets or states that the figures
@@ -233,10 +242,11 @@ is the path that is installed.
 The third column is `cargo install --list` for the cargo-installed binaries and
 the host's own report for `hyperfine` and Docker, all on 2026-09-11.
 
-The measurement toolchain is listed, not specified: what each tool is used to
-decide is `CLAUDE.md`'s table, the protocol that makes a result valid is
+The measurement toolchain is listed, not specified: what question each tool
+answers is `CLAUDE.md`'s table, the protocol a reading is taken under is
 [quality-attributes.md](quality-attributes.md#the-measurement-protocol), and
-every result is `BENCHMARKS.md`'s.
+every result is `BENCHMARKS.md`'s. That table's own preamble says what these
+tools are: instruments that answer a question on demand, and refuse nothing.
 
 **Three tools this document names were absent from the host until 2026-09-11**,
 when they were installed: `cargo-audit`, which is command 5 of the mandatory
@@ -276,22 +286,49 @@ readiness gate is the published port and its query path is `docker exec` into
 the container, both `scripts/mariadb/README.md`'s. Nothing else this document,
 `CLAUDE.md`'s two tables or any record names is missing from the host.
 
+## The measurement harness
+
+`benches/` holds the instrument that takes a reading of a measurement point of
+`NFR-PERF-014` and of the `WL-002` scalar. Four operational facts belong here;
+what it measures and under what protocol are
+[quality-attributes.md](quality-attributes.md#the-measurement-protocol)'s, and
+every figure it produced is `BENCHMARKS.md`'s.
+
+| Fact | Consequence |
+|---|---|
+| It is a **shell runner**: no `.rs` file under `benches/`, and no `[[bench]]` table or any other change in `Cargo.toml` | Cargo determines targets from the file layout and from those tables (The Cargo Book, *Cargo Targets*, **Target auto-discovery**, consulted 2026-09-22), so it infers **no bench target** here — `cargo metadata --no-deps` lists a lib, a bin and nine test targets and nothing else, read on 2026-09-22. The **mandatory validation pipeline is untouched**: nothing under `benches/` is compiled by any of its five commands, including the one that passes `--all-targets`, which is "equivalent to specifying `--lib --bins --tests --benches --examples`" (The Cargo Book, `cargo test`, consulted 2026-09-22) |
+| It **enforces nothing** | It reads no earlier figure, never opens `BENCHMARKS.md`, computes no delta and no regression, withholds no figure, and emits no verdict. A completed campaign exits `0` whatever it measured; its only non-zero exit means the instrument could not run at all |
+| The dispersion rule of `NFR-PERF-011` is **reported, not applied** | Every record carries the relative standard deviation of its samples and a plain boolean saying whether it exceeds five per cent. Both are data. Applying the rule to a field is a reader's act, not the harness's |
+| Its records carry the schema `tpl-bench/2` | One machine-readable record per reading, naming the point, the target, the workload, the cache posture and the conditions. It is the schema an entry of `BENCHMARKS.md` is written from |
+
+**The first fact is what keeps `BR-PERF-008` true of the build.** A bench target
+Cargo discovered would be built by `--all-targets` and would put a measurement
+instrument inside the one sequence that does stop work, which is exactly the
+shape the withdrawal removed. The invocation, the flags, the fixture sequencing
+and the record fields are `benches/README.md`'s and are not restated here.
+
 ## The release gates
 
-A gate is a check whose failure stops the release. Four are standing; the
-fifth fires only when a pin moves.
+A gate is a check whose failure stops the release. Three are standing; the
+fourth fires only when a pin moves.
 
 | Gate | What is checked | Trigger | Forced by |
 |---|---|---|---|
 | The validation pipeline | All five commands pass, in order | Every change, not only a release | `CLAUDE.md`, *Desenvolvimento* |
 | Every target | The pipeline passes on all four of `NFR-PERF-018`; a failure on one is a failure | Every release | `NFR-PERF-018`; carried by hand per [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) |
-| No regression | No measurement is worse than the recorded baseline for that budget on that target | Every release, and every change to a hot path | `NFR-PERF-017`, `NFR-PERF-012` |
 | The supported-series table | The table of `FR-SRV-015` is re-verified against its source, and its verification date moved | **Every release**, without exception | `FR-SRV-019`, `BR-SRV-004` |
 | The engine pin | Every name of `FR-ENV-018` still exists and still behaves as before | Only when the pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) moves | `FR-ENV-003` |
 
-**The no-regression gate binds nothing today.** No budget is ratified.
-[quality-attributes.md](quality-attributes.md#the-nine-budgets) records why, and
-what a budget carrying no baseline does and does not fail.
+**There is no performance gate, and the table above is short by one row that
+used to be there.** A fourth standing gate failed the release whose measurement
+was worse than the figure recorded for that point on that target. It is
+withdrawn with the requirement that imposed it: under `BR-PERF-008` no figure
+named in the functional corpus, and no figure recorded against it, fails, blocks,
+rejects or gates anything. A regression is therefore an **observation** — worth
+recording, worth investigating if somebody chooses to, and never a reason a
+release stops. [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) counts
+three obligations carried by hand where it once counted four, for the same
+reason.
 
 **The series gate is the one that decays on a calendar.** `BR-SRV-004` makes a
 wrong table stale rather than the criterion wrong, so the correction is always
@@ -477,9 +514,10 @@ There is no pipeline, and
 [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) declines to describe one
 rather than record an aspiration as though it were the state of the system.
 Every gate in this document is consequently carried by a person, and
-[`ADR-008`](../adr/adr-008-packaging-and-build-path.md) lists the four hand-carried
-obligations for that reason — an unlisted manual obligation is one nobody is
-accountable for.
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md) lists the three
+hand-carried obligations for that reason — an unlisted manual obligation is one
+nobody is accountable for. It listed four until the performance gate was
+withdrawn; no obligation is owed to a figure any more, per `BR-PERF-008`.
 
 Two properties make the absence tolerable rather than merely recorded.
 `BR-PROJ-001` makes behaviour fully determined by the contents of the project,
@@ -490,8 +528,8 @@ difference between two runs over unchanged inputs a defect rather than noise.
 
 | Subject | Where |
 |---|---|
-| Every measured figure and every recorded baseline | `BENCHMARKS.md` |
-| Every budget, its standing, and the protocol that ratifies one | [quality-attributes.md](quality-attributes.md) |
+| Every measured figure, every dispersion, and the conditions a reading was taken under | `BENCHMARKS.md` |
+| The nine measurement points, what each is measured over, and the protocol a reading is taken under | [quality-attributes.md](quality-attributes.md) |
 | The harness that drives the five containers, the mandated tests, and the two in-process seams | `verification.md` |
 | Crate versions, features, and the dependency budget | [technology-stack.md](technology-stack.md) |
 | The module map, the invocation pipeline, and lazy initialisation | [architecture.md](architecture.md) |

@@ -35,6 +35,24 @@ is settled. One of those is settled and **interim** — `OD-30`, which records a
 arrangement each later sprint removes one arm of — and it blocks nothing; one
 arm remains.
 
+**The whole folder was swept on 2026-09-22 against the thirty-sixth edition of
+`specification/performance-requirements.md`**, which withdrew the performance
+gates on the product owner's decision and retired four identifiers with them.
+Six documents carry substantive change and four carry a repaired cross-reference
+or a renamed term. `quality-attributes.md` is restated whole: the nine are a
+**measurement set** of measurement points rather than a table of limits, the
+requirements of form are set out as the correctness invariants that survived,
+and the first campaign — all nine points and the `WL-002` scalar, at full
+protocol, on one of the four targets — is recorded as a standing.
+`operations.md` loses the no-regression release gate and the benchmark step of
+the validation pipeline, and gains the measurement harness. `verification.md`,
+`traceability.md`, `open-decisions.md` (`OD-20`, `OD-27`) and this file follow.
+**No retired identifier and no word of the withdrawn vocabulary survives in this
+folder.** Two contradictions this folder had recorded are discharged: the one
+against `BR-PERF-007`, by commit `455e48d` on 2026-09-21, and the one between
+`quality-attributes.md` and `traceability.md` §23, by restating that section
+here.
+
 **One obligation was discharged on 2026-09-21**, when the render work was built:
 `OD-14`'s owed observation, about a **defined** `null` under the engine's strict
 undefined-behaviour setting. The answer was the opposite of the expected one, so
@@ -261,27 +279,31 @@ owning requirement, as `BR-SEC-001` requires of the functional file it mirrors.
 **Answers.** The four targets, the static `musl` linkage and its observable
 consequence. The mandatory validation pipeline. The release profile. MSRV, the
 toolchain and tools as installed on the development host, and the cross-build
-path for the musl targets. The release gates. The four version numbers and what
-a breaking change is. Observability. The content `tpl init` ships. The fixture
-as an operational asset. That no continuous-integration pipeline is prescribed.
+path for the musl targets. The measurement harness, and why it can enforce
+nothing. The release gates. The four version numbers and what a breaking change
+is. Observability. The content `tpl init` ships. The fixture as an operational
+asset. That no continuous-integration pipeline is prescribed.
 
 **Must not contain.** Measured figures, which are `BENCHMARKS.md` — including
 the toolchain a measurement was taken under, which is part of that record's
-environment and is not the development toolchain; budgets, which are
-`quality-attributes.md`.
+environment and is not the development toolchain; the measurement points and
+the protocol, which are `quality-attributes.md`.
 
 ### `quality-attributes.md`
 
-**Answers.** The six requirements of form and the design decisions each
-forces. Determinism over stdout, and the single source of
-non-reproducibility. The nine budgets, the one normative among them, and the
-distinction between a provisional and a ratified figure. The measurement
-protocol. The three reference workloads. The memory consequence of
-materialising the two foreign-key directions. The failure path as a budget. The
-reliability properties. Cross-series equivalence and its exceptions.
+**Answers.** The six requirements of form, the design decisions each forces, and
+why they are the part of this subject that can fail anything. Determinism over
+stdout, and the single source of non-reproducibility. The nine measurement
+points, what each is measured over and with what cache posture, the distinction
+between an adopted and a recorded figure, and what has been measured so far and
+on which target. The measurement protocol. The three reference workloads. The
+memory consequence of materialising the two foreign-key directions. The failure
+path as a measurement point. The reliability properties. Cross-series
+equivalence and its exceptions.
 
-**Must not contain.** Baselines, which are `BENCHMARKS.md`; the harness, which
-is `verification.md`.
+**Must not contain.** Measured figures, which are `BENCHMARKS.md`; the container
+harness, which is `verification.md`; the measurement harness, which is
+`operations.md`. No gate on a figure: `BR-PERF-008` leaves none to describe.
 
 ### `verification.md`
 
@@ -297,8 +319,9 @@ kind. The invocation surface observed on the process. The dump round-trip. The
 twelve end-to-end flows. Test naming by requirement identifier, and the suite's
 divergence from it.
 
-**Must not contain.** Targets or budgets, which are `quality-attributes.md`;
-the build pipeline, which is `operations.md`.
+**Must not contain.** Targets or measurement points, which are
+`quality-attributes.md`; the build pipeline and the measurement harness, which
+are `operations.md`.
 
 ### `decisions.md`
 

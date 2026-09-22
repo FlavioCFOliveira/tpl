@@ -3,7 +3,7 @@ id: ADR-004
 title: The release profile and the panic path
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-22
 requirements: [FR-ERR-001, FR-ERR-008, FR-ERR-030, FR-ERR-031, FR-ERR-032, FR-ERR-033, FR-ERR-034, FR-GLOB-018, FR-RND-034, BR-ERR-001]
 supersedes: []
 superseded-by: null
@@ -86,13 +86,13 @@ and `FR-ERR-032` require is present in the only artefact a caller ever runs.
     figure in this repository was taken under the aborting profile. Changing the
     profile to buy a wording that a hook already satisfies would be a trade made
     blind in both directions.
-  - **It costs the comparability of every recorded baseline.**
+  - **It costs the comparability of every recorded figure.**
     `NFR-PERF-012` makes a measurement meaningful only against one stated
-    target, and `NFR-PERF-017` fails a change that regresses against a baseline.
-    A profile change makes every existing figure incomparable with every later
-    one, so all four targets of `NFR-PERF-018` would have to be re-measured
-    before any later number meant anything — to obtain a behaviour already
-    obtainable.
+    target, and `BR-PERF-008` keeps a figure as evidence for a reader rather
+    than a verdict on a change. A profile change makes every existing figure
+    unreadable against every later one, so all four targets of `NFR-PERF-018`
+    would have to be re-measured before a later number could be read against an
+    earlier one — to obtain a behaviour already obtainable.
   - **It buys nothing observable.** `catch_unwind` and the hook produce the same
     four lines and the same exit status. What unwinding adds is the running of
     destructors on the way out, and the process is exiting.

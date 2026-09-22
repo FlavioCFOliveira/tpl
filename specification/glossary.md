@@ -2,7 +2,7 @@
 title: Glossary
 status: approved
 last-reviewed: 2026-09-22
-related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md]
+related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md]
 ---
 
 # Glossary
@@ -36,8 +36,8 @@ defect rather than closing it, since one unchecked precedent is exactly how
 the second instance arrived. And it is the weaker form of one copy: a pointer
 beside a definition that may move is a cross-reference to maintain, where an
 entry here and a citation to it is the shape this file already uses for
-`budget`, `provisional figure` and `cache hit / cache miss`, each of which
-defines the term here and cites the requirement that governs it.
+`measurement point`, `reference figure` and `cache hit / cache miss`, each of
+which defines the term here and cites the requirement that governs it.
 
 ## What counts as a definition
 
@@ -96,21 +96,34 @@ One of the three read-only capabilities `tpl` provides: exploring the database
 (`tpl render …`). Command groups that are not arms — `tpl cache …`,
 `tpl cfg …`, `tpl init`, `tpl help`, and `tpl version` — are auxiliary.
 
-## budget
+## measurement point
 
-A named performance measurement, listed in `NFR-PERF-014`, which states what is
-measured, over which reference workload, and whether a server is needed. A
-budget's **ratified** figure lives in `BENCHMARKS.md` and never in this
-specification, per `BR-PERF-006`. Until a budget is measured it may carry a
-**provisional figure** here instead.
+One of the nine points at which `tpl` is measured, listed in `NFR-PERF-014`,
+which states for each what is invoked, over which reference workload, whether a
+server answers, and what the cache does while the reading is taken. A point's
+**measured** figure lives in `BENCHMARKS.md` and never in this specification,
+per `BR-PERF-006`. Until a point is measured it may carry an adopted
+**reference figure** here instead. A measurement point bounds nothing and
+refuses nothing, per `BR-PERF-008`.
 
-## provisional figure
+*Renamed in the thirty-sixth edition, from `budget`.* That edition withdrew the
+power of any figure to fail a change, and *budget* names a quantity one may not
+exceed — a meaning this corpus keeps, and keeps only where it is true: the
+invocation timeout of `FR-GLOB-011` and the shared phase budget of
+`FR-CONF-005`. Leaving the word on a figure that limits nothing would have left
+one word carrying two opposite forces.
 
-A working target carried in the table of `NFR-PERF-014` and marked as
-provisional. It is not a limit: it fails no change, is not a baseline, and is
-superseded by the first valid measurement of that budget under the gate of
-`NFR-PERF-020`. See `NFR-PERF-019`. A number in this corpus that is neither
-marked provisional nor recorded in `BENCHMARKS.md` is a defect.
+## reference figure
+
+The figure a measurement point of `NFR-PERF-014` carries: a reading, informative
+and never a limit. A figure marked **adopted** was taken from a document rather
+than measured, per `NFR-PERF-019`, and is superseded by the first measurement of
+that point, recorded under `NFR-PERF-020`. A number in this corpus that is
+neither marked adopted nor recorded in `BENCHMARKS.md` is a defect.
+
+*Renamed in the thirty-sixth edition, from `provisional figure`.* *Provisional*
+named a figure waiting to become binding, and under `BR-PERF-008` nothing
+becomes binding.
 
 ## cache
 
@@ -308,9 +321,14 @@ distance over the names that do exist. See `FR-ERR-019`.
 
 ## normative budget
 
-The single budget whose target is stated in the text of its requirement and can
-therefore fail a change on its own, as opposed to the budgets that carry only
-the no-regression rule. There is exactly one, fixed by `NFR-PERF-015`.
+*Retired in the thirty-sixth edition.* The term named the single budget whose
+target was stated in the text of its requirement and which could therefore fail
+a change on its own, as opposed to the budgets carrying only the no-regression
+rule. `NFR-PERF-015` fixed it, `NFR-PERF-016` named the other eight against it,
+and both are withdrawn, so the term has no referent: no figure of this corpus
+fails a change, per `BR-PERF-008`. The entry is kept, and not deleted, because
+the term is read in closed editions of the [README](README.md) and in entries of
+[upstream-divergences.md](upstream-divergences.md) written while it had one.
 
 ## object
 
@@ -358,7 +376,7 @@ whenever the read misses. See `FR-CACHE-006` and `FR-CACHE-007`.
 
 ## reference workload
 
-One of the three databases against which a performance budget is measured:
+One of the three databases against which a measurement point is measured:
 `WL-001`, the large workload; `WL-002`, a verification scalar over it; and
 `WL-003`, the small workload that is the common path. Defined in
 [performance-requirements.md](performance-requirements.md).
@@ -457,9 +475,9 @@ a document — `FR-SRV-020` refuses it before the catalogue is read.
 
 One of the four build targets of `NFR-PERF-018`: Linux on amd64 and arm64,
 statically linked against `musl`, and macOS on amd64 and arm64. Every
-measurement, every baseline, and every budget is stated against one of them,
-and measurements on different targets are never compared, per `NFR-PERF-012`.
-None is second class.
+measurement, every recorded figure, and every measurement point is stated
+against one of them, and measurements on different targets are never compared,
+per `NFR-PERF-012`. None is second class.
 
 ## template
 

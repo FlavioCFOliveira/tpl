@@ -1,7 +1,7 @@
 ---
 title: Open Questions
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [README.md, catalogue-coverage.md, context-document.md, server-contract.md]
 ---
 
@@ -28,11 +28,12 @@ condition of `FR-SRV-041` with its limit written into that requirement.
 **Complete means that no point of this specification is waiting on someone.**
 It does not mean the corpus has stopped moving. Three obligations recur and
 none of them is an open question: `FR-SRV-019` requires the supported-series
-table to be re-verified before every release, `NFR-PERF-020` turns a
-provisional budget into a measured one, and any requirement resting on the
-fourth provenance of the [README](README.md#provenance) is falsifiable by a
-later observation. Each is work with an owner and a trigger, which is what
-distinguishes it from an entry here.
+table to be re-verified before every release, `NFR-PERF-020` requires a
+measurement point's figure to be recorded when somebody measures it, and any
+requirement resting on the fourth provenance of the
+[README](README.md#provenance) is falsifiable by a later observation. Each is
+work with an owner and a trigger, which is what distinguishes it from an entry
+here.
 
 If a point of this specification appears unsettled, it is a defect to be
 reported and corrected, or a new question to be raised with the next unused
@@ -151,3 +152,28 @@ to come here.
 | OQ-072 | The membership of the three type families | `FR-ENV-046` | Seventh edition |
 | OQ-075 | A field whose value differs because the servers' defaults differ | `FR-SRV-039`, with `BR-SRV-006` and `FR-SRV-026` as amended | Seventh edition |
 
+**Ten rows above name requirements the thirty-sixth edition withdrew or
+renamed, and each still records what closed its question.** `OQ-051` through
+`OQ-060` were closed by a number or a stated blank, and every one of them still
+has that number or that blank; what changed is the machinery around it.
+`NFR-PERF-015` is withdrawn, so `OQ-055` names a withdrawn requirement, which
+keeps its heading and a note saying what it required, per the identifier scheme
+of the [README](README.md#identifier-scheme). `NFR-PERF-019` and
+`NFR-PERF-020` are amended: what those rows call a *provisional* figure is an
+**adopted** one, and what they call a gate is a recording rule. The rows are
+left as the fifth edition wrote them, because each is a record of what answered
+a question on the day it was answered, and no answer has been withdrawn.
+
+**The thirty-seventh edition moved five of those answers and re-opened none.**
+All nine measurement points of `NFR-PERF-014` and the `WL-002` scalar were
+measured on 2026-09-22, and the five adopted figures the measurement superseded
+are removed from that requirement under `NFR-PERF-020`, which is the step that
+rule exists to oblige. The five rows whose answer was a **figure** are
+`OQ-051`, `OQ-052`, `OQ-053`, `OQ-054` and `OQ-059`, and a reader following any
+of them to `NFR-PERF-014` now finds no number in the table. That is not the
+question re-opening: what closed each of them was a figure, and the figure now
+lives in `BENCHMARKS.md`, where `BR-PERF-006` requires a measured one to live.
+The five rows whose answer was a **stated blank** — `OQ-055` through `OQ-058`,
+and `OQ-060` for the `WL-002` scalar — keep that answer unchanged, and each of
+those points has since been measured too, which is what a blank always
+anticipated.

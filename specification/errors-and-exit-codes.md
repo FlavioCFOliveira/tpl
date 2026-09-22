@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md]
 ---
 
@@ -814,7 +814,7 @@ Out of scope: the wording of any individual message.
   longer be computed from a bounded window of the comparison: the unrestricted
   form reaches back to an arbitrary earlier position and holds the whole
   comparison, plus an index over the alphabet of both names. `BR-PERF-004`
-  makes this a budgeted path — a `66` over `WL-001` compares against 200 names
+  makes this a measured path — a `66` over `WL-001` compares against 200 names
   — and a wrong invocation is the invocation a calling agent makes most often
   while it is finding its way.
 

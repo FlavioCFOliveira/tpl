@@ -3,7 +3,7 @@ id: ADR-003
 title: The database driver
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-22
 requirements: [FR-CONF-013, FR-CONF-036, FR-CONF-038, FR-SEC-021, NFR-PERF-004, NFR-PERF-012]
 supersedes: []
 superseded-by: null
@@ -63,12 +63,12 @@ only other way either could have been lived with.
 of the quantities `FR-CONF-036`'s *Provenance* names, and it refuted the
 suspicion that prompted it. The figures, the protocol, the noise floor and the
 confounders are in `BENCHMARKS.md` and are **not restated here**. `BR-PERF-006`
-states that discipline for a **ratified** figure — it lives in that file and
+states that discipline for a **recorded** figure — it lives in that file and
 nowhere else, because a value in two places is two sources for one truth — and
-this record extends it to a figure that is not ratified: `BENCHMARKS.md` marks
-the driver-selection entry a selection record rather than a budget under
-`NFR-PERF-020`, and a selection figure copied into a second file stops being
-true just as quietly.
+this record extends it to a figure recorded against no measurement point:
+`BENCHMARKS.md` marks the driver-selection entry a selection record rather than
+a reading of a point of `NFR-PERF-014` recorded under `NFR-PERF-020`, and a
+selection figure copied into a second file stops being true just as quietly.
 
 **What this record does not decide.** The runtime's flavour, its scope, and
 where it is built are `ADR-005`. The mapping of the five modes onto this
@@ -124,10 +124,12 @@ raise: re-checking the five-variant mapping of `ADR-002`, and re-checking the
 toolchain floor of `ADR-007`.
 
 **A version move is also a measurement move.** `NFR-PERF-012` makes a recorded
-baseline meaningful only against the artefact and target it was taken on, and
-`NFR-PERF-017` fails a change that regresses against one. A driver version other
-than the one pinned here is a different artefact from the one every recorded
-baseline was taken on.
+measurement meaningful only against the artefact and target it was taken on. A
+driver version other than the one pinned here is a different artefact from the
+one every recorded figure was taken on, so the figures either side of the move
+are not readings of the same thing. Nothing follows from that by rule —
+`BR-PERF-008` gives no figure the power to refuse a change — but a reader who
+compares them without knowing is reading two things as one.
 
 **The driver is used without a pool.** `NFR-PERF-004` allows at most one
 connection per invocation, and the process is ephemeral, so nothing a pool
