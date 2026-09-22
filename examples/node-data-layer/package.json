@@ -1,0 +1,22 @@
+{
+  "name": "tpl-example-node-data-layer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A data layer for sakila, world and freight, rendered by tpl from the catalogue.",
+  "exports": {
+    "./sakila": "./src/sakila/index.js",
+    "./world": "./src/world/index.js",
+    "./freight": "./src/freight/index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "mysql2": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^5.9.3"
+  }
+}

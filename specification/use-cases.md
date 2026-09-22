@@ -1,8 +1,8 @@
 ---
 title: Use Cases
 status: approved
-last-reviewed: 2026-09-10
-related: [schema-commands.md, render-command.md, cache-commands.md, cfg-commands.md]
+last-reviewed: 2026-09-22
+related: [schema-commands.md, render-command.md, cache-commands.md, cfg-commands.md, examples.md]
 ---
 
 # Use Cases
@@ -229,6 +229,60 @@ here introduces behaviour of its own.
     signal
 - **Requirements**: `FR-ERR-008`, `FR-ERR-009`, `FR-ERR-019` … `FR-ERR-024`,
   `FR-ERR-033`, `FR-ERR-034`
+
+## UC-013 — Build an application's data layer from a known schema
+
+- **Actor**: calling agent or operator, through the driver script of a worked
+  example
+- **Trigger**: an application needs types for one target language that match a
+  database it does not own
+- **Preconditions**: a server of the most recent series of `FR-SRV-015` is
+  reachable and carries the three schemas of `FR-EX-006`; the workspace of
+  `FR-EX-010` is writable
+- **Main flow**:
+  1. Run `tpl init` in the workspace. The project is created, per `UC-001`.
+     The example's own templates are then placed under `.tpl/templates/`, per
+     `FR-EX-010`, because that is where step 5 reads a template from, per
+     `FR-TMPL-004`.
+  2. Run `tpl cfg database add <name> --host … --user … --schema <schema>`, once
+     per schema read, per `UC-002`.
+  3. Run `tpl cfg database test <name>`. The four steps of `FR-CFG-024` are
+     reported, and `can_read_catalogue` is read from the `0` rather than
+     inferred from it, per `FR-CFG-045`.
+  4. Run `tpl -d <name> schema tables --format json` and take the table names
+     from `data`.
+  5. For each name, run
+     `tpl -d <name> render <language>/struct --table <name>` and redirect the
+     standard output to the file that table's type belongs in. `tpl render`
+     writes nowhere else, per `FR-RND-028`, so the redirection is the caller's.
+  6. Run the example's compile gate over every file written. The target
+     language's own compiler accepts them, or the example has failed, per
+     `FR-EX-009`.
+- **Alternate flows**:
+  - Step 1 exits `73`: the workspace still holds the `.tpl` of an earlier run,
+    per `FR-PROJ-014`, and nothing is changed. `FR-EX-010` obliges the workflow
+    to remove it first, which is what makes an example re-runnable.
+  - Step 3 exits `78`: the entry names a server outside the supported window,
+    per `FR-CFG-043`, and no read is attempted.
+  - Step 3 exits `0` with `can_read_catalogue` false: the entry's user cannot
+    see the catalogue, so step 4 would return an incomplete read under
+    `FR-PRIV-001` and the data layer would be short without saying so.
+  - Step 5 exits `65`: the template or the type-mapping macro would not parse,
+    per `FR-RND-030`, or would not evaluate — a type the macro has no branch
+    for is an undefined result — per `FR-RND-031`. Either names the template,
+    the line, and the column.
+  - Step 6 rejects a file: the render succeeded and the code is wrong. This is
+    the outcome the gate exists for, and `FR-EX-009` states why no earlier step
+    can report it.
+- **Postconditions**: the data layer compiles; the catalogue read is cached, per
+  `FR-CACHE-007`
+- **Notes**: every step is one command line and no step reaches a library
+  interface, per `FR-EX-004`. Which types the rendered files declare is the
+  example's type-mapping macro's, per `FR-EX-008` and `FR-ENV-011`, and not
+  `tpl`'s
+- **Requirements**: `FR-EX-001` … `FR-EX-010`, `FR-PROJ-014`, `FR-PROJ-017`,
+  `FR-TMPL-004`, `FR-CFG-024`, `FR-CFG-045`, `FR-SCH-004`, `FR-RND-002`,
+  `FR-RND-028`, `FR-ENV-011`
 
 ## Dependencies
 

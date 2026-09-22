@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -460,11 +460,10 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   there is no disclosure for a link to arrange. Following therefore widens
   nothing this corpus protects, and skipping costs the key its own convention.
 
-  *Rejected: skipping a symbolic link, which is the behaviour built.* `trust`,
-  in `src/mariadb/connect.rs`, selects directory entries on
-  `DirEntry::file_type`, which does not traverse a link, so a hash-named
-  `CApath` yields an empty bundle. It is rejected because its outcome is the
-  worst available: not a refusal and not a warning, but a
+  *Rejected: selecting each entry on the kind of the entry itself, so that a
+  symbolic link never contributes.* A hash-named `CApath` then yields an empty
+  bundle. It is rejected because its outcome is the worst available: not a
+  refusal and not a warning, but a
   `verify-ca` or `verify-identity` connection attempted on the public roots
   alone, which then fails — where it fails at all — with a transport error
   naming a certificate and never naming the key that was meant to admit it.
@@ -473,23 +472,85 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   the pinned authority was ever loaded. The two questions are answered together
   because either answer alone leaves the arrangement half-diagnosed.
 
+  *Observed, 2026-09-21, and recorded as a reading of that date rather than as
+  a standing claim.* `trust`, in `src/mariadb/connect.rs`, selected directory
+  entries on `DirEntry::file_type`, which does not traverse a link. The option
+  rejected above was therefore the behaviour built when this amendment was
+  drafted, and that is why the amendment was drafted; it is not what makes the
+  option wrong, and the paragraph above gives the ground that does.
+
   *Rejected: passing over an entry that cannot be resolved.* A dangling link in
-  a `CApath` is what a removed certificate leaves behind, and it is skipped in
-  silence today because `DirEntry::file_type` reads the link itself and never
-  asks what it points at. Under this requirement the resolution is attempted
-  and its failure is reported. The ground is the one `BR-CONF-004` states for
+  a `CApath` is what a removed certificate leaves behind, and any reader that
+  selects an entry on the kind of the entry itself passes over it in silence,
+  because that reading never asks what the link points at. Under this
+  requirement the resolution is attempted and its failure is reported. The
+  ground is the one `BR-CONF-004` states for
   the whole file: a reader that accepts what it does not understand is guessing
   at which authority the connection trusts. A skipped dangling link is a trust
   anchor the operator believes is loaded and is not, which is the failure this
   amendment exists to make visible, arriving one entry at a time instead of all
   at once.
 
-  *The order is untouched, and so is `NFR-DET-001`.* Entries are sorted into
-  ascending path order before any of them is read, over the names the directory
-  holds and never over the targets they resolve to, so one configuration
-  produces one bundle on every run and on every host exactly as before. Two
-  links resolving to one certificate contribute it twice; no requirement of
-  this corpus forbids that, and none is amended here to forbid it.
+  *Amended in the thirty-fourth edition: the two clauses above name the option
+  and not the code.* The first read *Rejected: skipping a symbolic link, which
+  is the behaviour built*, and asserted in the present tense, undated, what
+  `src/mariadb/connect.rs` did; the second said a dangling link *is skipped in
+  silence today*. Both were false in the commit that wrote them — `455e48d`
+  carries this amendment and the correction of that file together — and the
+  first had already misled a reader: on 2026-09-22 a reading made for the
+  project's architecture decision records took it as a standing claim and
+  concluded that the code still skipped links, an error caught only by reading
+  `src/mariadb/connect.rs`. A rationale that describes an implementation stops
+  being true the moment the implementation is corrected, and it stops without
+  any signal. The remedy this corpus already had is
+  [project-and-discovery.md](project-and-discovery.md)'s, where the two
+  readings of `src/project/init.rs` each carry an `*Observed, 2026-09-18.*`
+  note: a rejected option is named by what it does, its ground is the outcome
+  it produces, and a reading of the implementation is kept beside it as a dated
+  observation, which a later reader can weigh against the date instead of
+  taking on trust.
+
+  *The determinism is untouched, and the order that delivers it is cited rather
+  than restated.* One configuration produces one bundle on every run and on
+  every host, exactly as before: what reaches the driver is a function of
+  `ca_file`, of the names the `ca_path` directory holds, and of what those
+  names carry — and of nothing the filesystem decides. The order in which the
+  entries are assembled is fixed by **the project's architecture decision
+  record for the TLS mode mapping**, which that register's index lists as
+  serving this requirement. Two entries resolving to one certificate contribute
+  it twice; no requirement of this corpus forbids that, and none is amended
+  here to forbid it.
+
+  *Amended in the thirty-fourth edition: the order is cited and no longer
+  restated.* The note said *Entries are sorted into ascending path order before
+  any of them is read, over the names the directory holds and never over the
+  targets they resolve to* — which is, clause for clause, the decision that
+  record states, one fact held in two places. The copy here carried neither the
+  alternative that record rejected, taking the entries in the order the
+  directory yields them, nor the published documentation that grounds the
+  rejection, so a reader who found only this note got the rule without the
+  reason it is not the other rule, and a maintainer changing the order had two
+  places to change and one trigger to re-read. The citation is by role and not
+  by number, which is the form `FR-ENV-003` already uses for the template
+  engine's pin and the form that survives the register being renumbered.
+
+  *Rejected: keeping the sentence here and letting the record cite this
+  requirement for it.* It is the live alternative, because it costs a reader no
+  hop and because this corpus is meant to be self-sufficient. It is rejected on
+  two grounds. The order is a **mechanism** and a requirement states the
+  outcome a caller observes — the outcome is the sentence above, and it stays
+  here — which is the ground the ninth edition used when `FR-ERR-030` named a
+  mechanism the shipped binary cannot have. And the two copies had already
+  begun to differ in content rather than merely repeat each other, which is the
+  point at which one of them is the owner and the other is a summary nobody
+  re-reads.
+
+  *Accepted cost.* A reader of this requirement alone no longer learns which
+  order is used, and the citation points into a folder this corpus does not own
+  and has no trigger to re-read — the fifth validation rule's exposure, taken
+  deliberately. What bounds it is that the property this requirement guarantees
+  never left it, and that the record is subordinate: where it and this file
+  disagree, this file governs.
 
   *Provenance of the convention, stated because it is the one input this
   amendment did not verify.* That a `CApath` directory is conventionally a set

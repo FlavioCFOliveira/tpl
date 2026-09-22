@@ -13,7 +13,8 @@
 //! | The code and the four labelled lines each refusal carries | `FR-ERR-001`, `FR-ERR-008` |
 //! | That a refused write left the file byte for byte as it was | `FR-CFG-041`, `FR-CFG-048` |
 //! | That a second `tpl init` is refused `73` and changes nothing | `FR-PROJ-014`, `BR-ERR-001` |
-//! | That the password the file carries reaches neither stream, from any command | `BR-SEC-003` |
+//! | That a destination that cannot be created is refused `73` and changes nothing | `FR-PROJ-015`, `BR-ERR-001` |
+//! | That the password reaches neither stream, however the entry delivers it | `BR-SEC-003` |
 //!
 //! A unit test can show that a function returns the right error; only a process
 //! shows that the file on disk was not touched on the way, that stdout stayed
@@ -36,16 +37,27 @@
 //! is what `BR-SEC-003` says of it. Every other body here needs no server and
 //! is not gated at all.
 //!
-//! **What this file deliberately does not reach.** Three areas of the
-//! configuration are exercised by unit tests rather than here, because no body
-//! here arranges them: `${VAR}` expansion (`FR-CONF-021`, `FR-CONF-022`),
-//! `password_command` execution (`FR-CONF-023` … `FR-CONF-033`), and the
-//! composition of `--timeout` with a phase deadline (`FR-GLOB-012`). The
-//! sentinel of `BR-SEC-003` is a literal password, which is the arrangement
-//! that rule names; a sentinel delivered through `${VAR}` or through a child
-//! process would exercise two more credential paths, and neither is written
-//! here. The three are exercised by the unit tests of `project::config::expand`,
-//! `project::password` and `deadline`.
+//! # The sentinel travels all three credential paths
+//!
+//! `BR-SEC-003` names a literal password, and a literal password is one of the
+//! three ways an entry can supply one. The other two are exercised here beside
+//! it, each as a sweep of its own over the whole tree:
+//!
+//! | Arrangement | What it puts on the credential path | Requirement |
+//! |---|---|---|
+//! | `password = "<sentinel>"` | The value the file itself carries | `FR-CONF-002` |
+//! | `password = "${VAR}"` | The value the **environment** carries, reaching the process through the expansion | `FR-CONF-015`, `FR-CONF-021` |
+//! | `password_command = [...]` | The trimmed standard output of a **child process** | `FR-CONF-023` … `FR-CONF-033` |
+//!
+//! Each carries its own control, because a sweep over a credential that never
+//! reached the process proves nothing: the reference is shown to be `78` while
+//! undefined and to reach the connect phase once defined, and the child is
+//! shown to be `78` while absent and to reach the connect phase once present.
+//!
+//! **What this file deliberately does not reach.** One area of the
+//! configuration is exercised by unit tests rather than here, because no body
+//! here arranges it: the composition of `--timeout` with a phase deadline
+//! (`FR-GLOB-012`), which the unit tests of `deadline` cover.
 
 #[path = "support/fixture.rs"]
 mod fixture;
@@ -306,6 +318,57 @@ fn br_err_001_a_second_init_at_a_destination_that_already_carries_tpl_is_73() {
         );
         assert_eq!(mode_of(&folder.join(".cfg")), MODE);
     }
+}
+
+#[test]
+fn br_err_001_a_destination_that_cannot_be_created_is_73() {
+    // BR-ERR-001 asks for at least one **integration** test per exit code, and
+    // `73` has two conditions rather than one: FR-PROJ-014's, a destination
+    // that already holds a `.tpl`, which the body above covers; and
+    // FR-PROJ-015's, a destination that cannot be created, which is this one.
+    // The `73` row of FR-ERR-034 obliges the `cause` to say which of the two
+    // obstacles stopped it, so a test of one of them leaves the other half of
+    // that obligation unread.
+    //
+    // The obstacle is a **regular file** standing where a directory would have
+    // to be. It is chosen over an unwritable directory because it needs no
+    // privilege to arrange, behaves identically on both supported families, and
+    // is not defeated by a test run as a user the permission bits do not reach.
+    //
+    // FR-PROJ-013 is the control beside it: `tpl init` creates the destination
+    // and every missing parent, so the failure below is the obstacle and not
+    // the depth of the path.
+    let sandbox = Sandbox::new();
+
+    assert_eq!(code(&sandbox.run(&["init", "deep/under/here"])), 0);
+    assert!(sandbox.path("deep/under/here/.tpl").is_dir());
+
+    sandbox.write("blocking", "not a directory\n");
+
+    let destination = "blocking/under-a-file";
+    let written = assert_refused(
+        &sandbox.run(&["init", destination]),
+        73,
+        "tpl init under a regular file",
+    );
+    let cause = line(&written, "cause: ");
+
+    assert!(
+        cause.contains(destination),
+        "the cause names no destination: {cause:?}"
+    );
+    assert!(
+        !cause.contains("exists"),
+        "the cause reports the obstacle of FR-PROJ-014, and this is FR-PROJ-015's: {cause:?}"
+    );
+
+    // FR-PROJ-015 changes nothing either: the obstacle is still the file it
+    // was, and nothing was created beside it.
+    assert_eq!(
+        std::fs::read_to_string(sandbox.path("blocking")).expect("the obstacle is still there"),
+        "not a directory\n"
+    );
+    assert!(!sandbox.path(destination).exists());
 }
 
 // ------------------------------------------------------------ FR-PROJ-011 ---
@@ -638,6 +701,42 @@ const UNREACHABLE: &str = "127.0.0.1:1";
 /// at.
 const LOUDEST: [&str; 3] = ["-v", "-v", "-v"];
 
+/// The environment variable the second arrangement delivers the sentinel
+/// through (`FR-CONF-015`, `FR-CONF-021`).
+///
+/// It is not a `TPL_` name and must not become one: `FR-CONF-030` admits no
+/// environment layer in the precedence, so the only thing a variable does here
+/// is supply the value of a key the file already carries.
+const VARIABLE: &str = "SENTINEL_PASSWORD_OF_BR_SEC_003";
+
+/// The script the third arrangement delivers the sentinel through, relative to
+/// the sandbox.
+///
+/// A `password_command` child inherits `tpl`'s working directory, which is the
+/// sandbox root, so the entry names the script by this relative path and the
+/// file itself carries the sentinel — which keeps it out of `.tpl/.cfg`, for
+/// the reason [`sentinel_project`] states.
+const PRODUCER: &str = "password-of-br-sec-003.sh";
+
+/// The first of `candidates` that exists on this system.
+///
+/// The two supported families put a POSIX shell in one of two places, and a
+/// body that silently skipped would report nothing at all. It is the helper
+/// `src/project/password.rs` uses for the same reason, written again here
+/// because that one is a unit test's private helper.
+fn tool(candidates: &[&str]) -> String {
+    candidates
+        .iter()
+        .find(|path| Path::new(path).exists())
+        .map(|path| (*path).to_owned())
+        .unwrap_or_else(|| panic!("none of {candidates:?} exists on this system"))
+}
+
+/// The POSIX shell the producer of [`PRODUCER`] is run by.
+fn shell() -> String {
+    tool(&["/bin/sh", "/usr/bin/sh"])
+}
+
 /// A `.tpl/.cfg` selecting one entry at `address` whose password is the
 /// sentinel, written as a literal, which is the arrangement `BR-SEC-003` names.
 ///
@@ -645,6 +744,51 @@ const LOUDEST: [&str; 3] = ["-v", "-v", "-v"];
 ///
 /// Panics when `address` is not `host:port`.
 fn sentinel_configuration(address: &str) -> String {
+    entry(address, &format!("password = \"{SENTINEL}\"\n"))
+}
+
+/// The same entry with the password delivered through `${VAR}`
+/// (`FR-CONF-015`, `FR-CONF-021`).
+///
+/// The file carries the **reference** and the environment carries the value, so
+/// the sentinel enters the process only where the expansion runs. `FR-CFG-014`
+/// and the third row of `FR-CFG-021` keep the printers showing the reference as
+/// written, which is what makes this arrangement a second credential path
+/// rather than a second spelling of the first.
+///
+/// # Panics
+///
+/// Panics when `address` is not `host:port`.
+fn sentinel_by_variable(address: &str) -> String {
+    entry(address, &format!("password = \"${{{VARIABLE}}}\"\n"))
+}
+
+/// The same entry with the password produced by a child process
+/// (`FR-CONF-023` … `FR-CONF-033`).
+///
+/// The child's **standard output is the password**, per `FR-CONF-027`, so the
+/// sentinel lives in [`PRODUCER`] and not in `.tpl/.cfg`. The command is stored
+/// as the array `FR-CONF-023` fixes, and it is run directly and without a shell
+/// interpreting it, per `FR-CONF-024`: the shell named here is the program
+/// being executed, and the script is its argument.
+///
+/// # Panics
+///
+/// Panics when `address` is not `host:port`, and when no POSIX shell is found.
+fn sentinel_by_command(address: &str) -> String {
+    entry(
+        address,
+        &format!("password_command = [\"{}\", \"{PRODUCER}\"]\n", shell()),
+    )
+}
+
+/// One entry reaching `address` as `root`, with `credential` supplying the
+/// password however the arrangement supplies it.
+///
+/// # Panics
+///
+/// Panics when `address` is not `host:port`.
+fn entry(address: &str, credential: &str) -> String {
     let (host, port) = address
         .rsplit_once(':')
         .expect("an address is written host:port");
@@ -652,12 +796,27 @@ fn sentinel_configuration(address: &str) -> String {
     format!(
         "[core]\ndatabase = \"{SWEPT}\"\n\n\
          [database.{SWEPT}]\nhost = \"{host}\"\nport = {port}\n\
-         user = \"root\"\npassword = \"{SENTINEL}\"\n\
+         user = \"root\"\n{credential}\
          database = \"{SWEPT_SCHEMA}\"\ntls = \"disabled\"\n"
     )
 }
 
 /// A sandbox holding that configuration and one template, both named [`SWEPT`].
+///
+/// It also holds the producer of [`sentinel_by_command`], at [`PRODUCER`]. It
+/// is written for every arrangement rather than for that one, so that a sweep
+/// differs from another sweep in its `.tpl/.cfg` and in the environment it is
+/// given and in nothing else — and the two arrangements that do not name the
+/// script leave it unread, which is the state a sandbox with an unused file is
+/// in.
+///
+/// **The sentinel lives in the script and never in `.tpl/.cfg`.** `FR-CFG-021`
+/// redacts `password` and `dsn` and nothing else, and it is right not to
+/// redact `password_command`: the command is not the credential, its **standard
+/// output** is, per `FR-CONF-027`. Writing the sentinel as an argument of the
+/// command would therefore put it in a file `tpl cfg list` prints literally,
+/// per `FR-CFG-013`, and the sweep would be failing a command that leaked
+/// nothing it was not told to print.
 fn sentinel_project(configuration: &str) -> Sandbox {
     let sandbox = Sandbox::new();
 
@@ -666,6 +825,7 @@ fn sentinel_project(configuration: &str) -> Sandbox {
         &format!(".tpl/templates/{SWEPT}.jinja"),
         "{{ database.name }}\n",
     );
+    sandbox.write(PRODUCER, &format!("printf %s {SENTINEL}\n"));
 
     sandbox
 }
@@ -746,9 +906,13 @@ fn carries_sentinel(bytes: &[u8]) -> bool {
 /// project could disarm itself part-way through by removing the entry the
 /// sentinel lives in.
 ///
-/// `arrangement` names the half of the rule under test, so that a failure says
-/// which one saw the leak.
-fn sweep(configuration: &str, arrangement: &str) -> Vec<i32> {
+/// `environment` is what each run is given and is empty for every arrangement
+/// but the `${VAR}` one, whose value lives nowhere else. It is applied over a
+/// **cleared** environment, as every run in this file is.
+///
+/// `arrangement` names the case under test, so that a failure says which one
+/// saw the leak.
+fn sweep(configuration: &str, environment: &[(&str, &str)], arrangement: &str) -> Vec<i32> {
     let invocations = every_invocation(&sentinel_project(configuration));
     let mut codes = Vec::with_capacity(invocations.len());
 
@@ -759,7 +923,7 @@ fn sweep(configuration: &str, arrangement: &str) -> Vec<i32> {
         arguments.extend(invocation.iter().map(String::as_str));
 
         let spelled = format!("tpl {}", arguments.join(" "));
-        let printed = sandbox.run(&arguments);
+        let printed = sandbox.run_from(sandbox.root(), environment, &arguments);
 
         for (stream, bytes) in [("stdout", &printed.stdout), ("stderr", &printed.stderr)] {
             assert!(
@@ -820,7 +984,8 @@ fn br_sec_003_no_command_of_the_tree_writes_the_sentinel_at_maximum_verbosity() 
     // half needs no container, so it is not gated.
     let codes = sweep(
         &sentinel_configuration(UNREACHABLE),
-        "against an address no server answers on",
+        &[],
+        "a literal password, against an address no server answers on",
     );
 
     assert!(
@@ -845,7 +1010,8 @@ fn br_sec_003_no_command_of_the_tree_writes_the_sentinel_at_maximum_verbosity() 
 
     let codes = sweep(
         &sentinel_configuration(server.address()),
-        "against a fixture server that refuses the credential",
+        &[],
+        "a literal password, against a fixture server that refuses the credential",
     );
 
     assert!(
@@ -853,6 +1019,106 @@ fn br_sec_003_no_command_of_the_tree_writes_the_sentinel_at_maximum_verbosity() 
         "no command of the sweep carried the credential to {}, so the sweep says nothing \
          about what the authentication path writes: {codes:?}",
         server.name()
+    );
+}
+
+#[test]
+fn br_sec_003_a_sentinel_delivered_through_a_variable_reference_reaches_no_stream() {
+    // BR-SEC-003 over the second credential path, which the literal arrangement
+    // above cannot reach: the file carries `${VAR}` and the **environment**
+    // carries the value, per FR-CONF-015, so the sentinel enters the process
+    // only where the expansion of FR-CONF-021 runs. Nothing about that path is
+    // exercised by a literal password — the value never passes through the
+    // reader's expansion, and the printers of FR-CFG-021 print a reference
+    // rather than a redaction.
+    //
+    // **The control comes first, and it is the variable itself.** An undefined
+    // reference is FR-CONF-022's `78`, refused before a connection is opened;
+    // defined, the same entry reaches the connect phase and is the `69` of an
+    // address nothing answers on. The pair is what establishes that the value
+    // under test travelled from the environment into the resolved entry — with
+    // the variable undefined, the sweep below would be sweeping an invocation
+    // that never held the credential at all.
+    let configuration = sentinel_by_variable(UNREACHABLE);
+    let reaching = ["cfg", "database", "test", SWEPT];
+    let control = sentinel_project(&configuration);
+
+    assert_eq!(
+        code(&control.run(&reaching)),
+        78,
+        "FR-CONF-022: an undefined reference is refused before a connection: {}",
+        stderr(&control.run(&reaching))
+    );
+    assert_eq!(
+        code(&control.run_from(control.root(), &[(VARIABLE, SENTINEL)], &reaching)),
+        69,
+        "the defined reference did not reach the connect phase, so the sweep below \
+         would say nothing about what the expansion path writes"
+    );
+
+    let codes = sweep(
+        &configuration,
+        &[(VARIABLE, SENTINEL)],
+        "a password expanded from ${VAR}, against an address no server answers on",
+    );
+
+    assert!(
+        codes.contains(&69),
+        "no command of the sweep reached the connect phase, so the sweep says nothing \
+         about what the expansion path writes: {codes:?}"
+    );
+}
+
+#[test]
+fn br_sec_003_a_sentinel_produced_by_password_command_reaches_no_stream() {
+    // BR-SEC-003 over the third credential path: the password is the trimmed
+    // standard output of a child process, per FR-CONF-027, so the sentinel
+    // enters the process through a pipe and through nothing else. It is the
+    // path FR-CONF-032 exists for — the child's standard error goes to the null
+    // device and reaches no diagnostic and no message — and the only one of the
+    // three where a second process holds the credential.
+    //
+    // The sentinel lives in the script rather than in `.tpl/.cfg`, for the
+    // reason `sentinel_project` states: FR-CFG-021 redacts `password` and `dsn`
+    // and rightly not `password_command`, because the command is not the
+    // credential.
+    //
+    // **The control is the child.** With the producer removed the command
+    // cannot be executed and the invocation is FR-CONF-033's `78`, before a
+    // connection; with it in place the same entry reaches the connect phase and
+    // is `69`. The pair establishes that the credential the sweep carries is
+    // the one the child produced.
+    let configuration = sentinel_by_command(UNREACHABLE);
+    let reaching = ["cfg", "database", "test", SWEPT];
+    let control = sentinel_project(&configuration);
+
+    assert_eq!(
+        code(&control.run(&reaching)),
+        69,
+        "the child did not produce a password, so the sweep below would say nothing \
+         about what the password_command path writes: {}",
+        stderr(&control.run(&reaching))
+    );
+
+    std::fs::remove_file(control.path(PRODUCER)).expect("the sandbox is writable");
+
+    assert_eq!(
+        code(&control.run(&reaching)),
+        78,
+        "FR-CONF-033: a child that cannot be run is a configuration fault, refused \
+         before a connection"
+    );
+
+    let codes = sweep(
+        &configuration,
+        &[],
+        "a password produced by password_command, against an address no server answers on",
+    );
+
+    assert!(
+        codes.contains(&69),
+        "no command of the sweep reached the connect phase, so the sweep says nothing \
+         about what the password_command path writes: {codes:?}"
     );
 }
 

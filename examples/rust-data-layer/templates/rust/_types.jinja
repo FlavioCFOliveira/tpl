@@ -1,0 +1,264 @@
+{#-
+  The type mapping of the Rust worked example, and the naming rules that go
+  with it.
+
+  FR-ENV-009 is why this is not a filter of `tpl`, and BR-ENV-002 is why it
+  never will be: a type mapping is an opinion, and an opinion belongs to the
+  project that holds it. FR-ENV-011 fixes the form the opinion takes — a
+  template macro at this exact path — and FR-PROJ-017 has `tpl init` write a
+  starter one here, which this file replaces outright. FR-EX-008 fixes the
+  obligation: a Rust type for every value of `data_type` the model reports for
+  a column of `sakila`, `world` and `freight`. There are 39 of them, and all 39
+  are branched on below.
+
+  Nothing falls through. The final branch calls `fail()`, per FR-ENV-020 and
+  FR-SEM-014, so a type this file has never met ends the render with 65 and
+  names the column, rather than reaching the Rust compiler as a plausible
+  guess.
+
+  The mapping reads `data_type` through the `sql_type` filter of FR-ENV-039,
+  and the unsigned attribute through the `unsigned` part of FR-CTX-015, which
+  FR-CTX-038 derives from `column_type` because no catalogue field carries it.
+
+  Every mapping below was measured against the server of FR-EX-006: a real
+  column of each of the 39 types was read through `sqlx` 0.9 and decoded into
+  the type this file names. The types whose direction was in doubt — the two
+  adapters, the temporal types, the two address types and the integer a BIT
+  becomes — were bound back as query parameters as well. Where no type of the
+  standard battery decoded a column — DECIMAL and the eight spatial types —
+  the mapping names an adapter this example renders beside it, in
+  `rust/schema.jinja`.
+-#}
+
+{#-
+  value_type(column) — the Rust type of a column's value, nullability aside.
+
+  The opinions, stated here once rather than in every branch:
+
+  * An integer becomes the Rust integer of the same width, signed as the column
+    is. `isize` and `usize` are not used: their width is the platform's, and a
+    column's is the server's.
+  * BIT becomes `u64`. sqlx decodes a BIT column into any unsigned integer, and
+    MariaDB's BIT is at most 64 bits wide, so `u64` holds every declaration.
+  * DECIMAL becomes `super::Decimal`, an adapter over the exact decimal text
+    the server sends. It is the only lossless mapping that costs no dependency:
+    `f64` cannot hold `decimal(38,10)`, and sqlx refuses to decode a DECIMAL
+    into `String`. A project that wants arithmetic replaces this one branch
+    with `rust_decimal::Decimal` or `bigdecimal::BigDecimal` and turns on the
+    matching sqlx feature — which is the whole reason the mapping lives here
+    and not in `tpl`.
+  * DATE, DATETIME and TIMESTAMP become the chrono types sqlx documents for
+    them, reached through sqlx's own re-export so that the crate needs no
+    direct chrono dependency. TIMESTAMP is the only one of the three that
+    decodes into `DateTime<Utc>`, and DATETIME the only one that decodes into
+    `NaiveDateTime`; both were measured.
+  * TIME becomes `MySqlTime`, sqlx's own type. A MariaDB TIME is a signed
+    interval of up to ±838:59:59, which is not a time of day: `NaiveTime`
+    decodes the fixture's value and errors on any value outside a day.
+  * YEAR becomes `u16`, which is what sqlx accepts for the type.
+  * INET4 and INET6 become `std::net::Ipv4Addr` and `std::net::Ipv6Addr`. The
+    two arrive as character data and sqlx parses them, which makes the standard
+    library's own address types available at no cost.
+  * UUID becomes `String`. MariaDB's native UUID arrives as its 36-character
+    text, and sqlx's `Uuid` decodes 16 raw bytes, so the text is what this
+    server actually hands a caller.
+  * The eight spatial types become `super::Wkb`, an adapter over the bytes the
+    server sends: a four-byte SRID followed by well-known binary. sqlx decodes
+    a GEOMETRY column into nothing at all, which is what the adapter is for.
+  * A JSON column is not a branch of its own because the model never reports
+    one: MariaDB reports such a column as `longtext`, per FR-CAT-038.
+-#}
+{% macro value_type(column) -%}
+{%- set kind = column | sql_type -%}
+{%- if kind == "tinyint" -%}{{ "u8" if column.unsigned else "i8" }}
+{%- elif kind == "smallint" -%}{{ "u16" if column.unsigned else "i16" }}
+{%- elif kind == "mediumint" -%}{{ "u32" if column.unsigned else "i32" }}
+{%- elif kind == "int" -%}{{ "u32" if column.unsigned else "i32" }}
+{%- elif kind == "bigint" -%}{{ "u64" if column.unsigned else "i64" }}
+{%- elif kind == "bit" -%}u64
+{%- elif kind == "decimal" -%}super::Decimal
+{%- elif kind == "float" -%}f32
+{%- elif kind == "double" -%}f64
+{%- elif kind == "char" -%}String
+{%- elif kind == "varchar" -%}String
+{%- elif kind == "tinytext" -%}String
+{%- elif kind == "text" -%}String
+{%- elif kind == "mediumtext" -%}String
+{%- elif kind == "longtext" -%}String
+{%- elif kind == "enum" -%}String
+{%- elif kind == "set" -%}String
+{%- elif kind == "uuid" -%}String
+{%- elif kind == "binary" -%}Vec<u8>
+{%- elif kind == "varbinary" -%}Vec<u8>
+{%- elif kind == "tinyblob" -%}Vec<u8>
+{%- elif kind == "blob" -%}Vec<u8>
+{%- elif kind == "mediumblob" -%}Vec<u8>
+{%- elif kind == "longblob" -%}Vec<u8>
+{%- elif kind == "date" -%}sqlx::types::chrono::NaiveDate
+{%- elif kind == "datetime" -%}sqlx::types::chrono::NaiveDateTime
+{%- elif kind == "timestamp" -%}sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>
+{%- elif kind == "time" -%}sqlx::mysql::types::MySqlTime
+{%- elif kind == "year" -%}u16
+{%- elif kind == "inet4" -%}std::net::Ipv4Addr
+{%- elif kind == "inet6" -%}std::net::Ipv6Addr
+{%- elif kind == "geometry" -%}super::Wkb
+{%- elif kind == "geometrycollection" -%}super::Wkb
+{%- elif kind == "linestring" -%}super::Wkb
+{%- elif kind == "multilinestring" -%}super::Wkb
+{%- elif kind == "multipoint" -%}super::Wkb
+{%- elif kind == "multipolygon" -%}super::Wkb
+{%- elif kind == "point" -%}super::Wkb
+{%- elif kind == "polygon" -%}super::Wkb
+{%- else -%}
+{{- fail("rust/_types.jinja maps no Rust type onto the column " ~ column.table_name ~ "." ~ column.name ~ ", whose column_type is " ~ column.column_type ~ ". FR-EX-008 obliges this macro to cover every data_type the three schemas report: add a branch for it rather than letting an unmapped type reach the Rust compiler as a guess.") -}}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  field_type(column) — the Rust type of a struct field, nullability honoured.
+
+  A nullable column is not the same Rust type as a non-nullable one, and
+  `Option<T>` is where the language puts the difference: sqlx decodes a NULL
+  into `None` without erroring and refuses to decode one into `T`, so the
+  compiler makes a caller answer the question before it reads the value.
+-#}
+{% macro field_type(column) -%}
+{%- if column is nullable -%}Option<{{ value_type(column) }}>
+{%- else -%}{{ value_type(column) }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  filter_type(column) — the Rust type of one field of a search filter.
+
+  Always `Option<T>` over the value type, whether the column is nullable or
+  not: `None` means the field contributes no condition. Nullability is asked
+  separately, through the `…_is_null` field a nullable column also gets.
+-#}
+{% macro filter_type(column) -%}
+Option<{{ value_type(column) }}>
+{%- endmacro %}
+
+{#-
+  is_heap(column) — does the column's Rust type own a heap allocation?
+
+  Four of the types this mapping produces are not `Copy` — `String`, `Vec<u8>`
+  and the two adapters — and every one of the other thirty-five is. The
+  distinction is not cosmetic: the compile gate refuses a `.clone()` on a
+  `Copy` type as `clippy::clone_on_copy`, and it refuses a `&` on one passed to
+  a generic parameter as `clippy::needless_borrows_for_generic_args`. Both
+  macros below ask this question rather than restating its answer.
+
+  It was measured, not assumed: clippy named every field of the rendered crate
+  it wanted unborrowed, and the set is exactly the complement of the four.
+-#}
+{% macro is_heap(column) -%}
+{%- if value_type(column) in ["String", "Vec<u8>", "super::Decimal", "super::Wkb"] -%}yes
+{%- else -%}no
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  owned(expression, column) — read a field into an owned value.
+-#}
+{% macro owned(expression, column) -%}
+{%- set heap = is_heap(column) -%}
+{%- if "yes" in heap -%}{{ expression }}.clone()
+{%- else -%}{{ expression }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  bind(expression, column) — read a field into a query parameter.
+
+  A `Copy` value is passed by value; anything else is borrowed, because moving
+  it out of the row or the key the caller lent would not compile.
+-#}
+{% macro bind(expression, column) -%}
+{%- set heap = is_heap(column) -%}
+{%- if "yes" in heap -%}&{{ expression }}
+{%- else -%}{{ expression }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  sanitised(name) — a catalogue name with the punctuation Rust refuses in an
+  identifier replaced by an underscore.
+
+  This is needed because FR-ENV-031 passes a character outside `A-Za-z` through
+  the naming filters unchanged: `pascal` renders the column
+  `freight.legacy_edi_field.back`tick` as `Back`tick`, which is not an
+  identifier in any language. The underscore is chosen rather than removal
+  because `pascal` then treats the position as a word boundary, per
+  FR-ENV-030, and the column arrives as `BackTick`.
+
+  The set below is the ASCII punctuation a quoted MariaDB identifier may carry.
+  It is closed and it is not complete: a name beginning with a digit, or one
+  whose sanitised form collides with another column's, still renders an
+  identifier the Rust compiler refuses. That is deliberate — the compile gate
+  of FR-EX-009 is the reader that reports it, and it reports it before the code
+  is committed rather than after. A character outside ASCII is left alone: Rust
+  admits it in an identifier, and `freight.legacy_edi_field.posição` is the
+  column that proves it.
+-#}
+{% macro sanitised(name) -%}
+{{- name | replace("`", "_") | replace('"', "_") | replace("'", "_")
+         | replace("\\", "_") | replace("/", "_") | replace(".", "_")
+         | replace(",", "_") | replace(";", "_") | replace(":", "_")
+         | replace("?", "_") | replace("!", "_") | replace("*", "_")
+         | replace("+", "_") | replace("=", "_") | replace("<", "_")
+         | replace(">", "_") | replace("(", "_") | replace(")", "_")
+         | replace("[", "_") | replace("]", "_") | replace("{", "_")
+         | replace("}", "_") | replace("|", "_") | replace("^", "_")
+         | replace("~", "_") | replace("%", "_") | replace("&", "_")
+         | replace("#", "_") | replace("@", "_") | replace("$", "_")
+         | replace("-", "_") | replace(" ", "_") -}}
+{%- endmacro %}
+
+{#-
+  ident(name) — the lower-case Rust identifier for a catalogue name: a struct
+  field, a module, a variable.
+
+  A name whose snake case collides with a Rust keyword is written as a raw
+  identifier, `r#match`, which is a legal identifier for every keyword but
+  four. `crate`, `self`, `Self` and `super` cannot be raw, per the Reference,
+  so those four take a trailing underscore instead.
+
+  The list is the strict and reserved keywords of the 2024 edition. No column
+  of the three schemas needs it — `select` is a keyword of Go and of SQL but
+  not of Rust — so the escape is a guard rather than a demonstration, and the
+  compile gate is what would report its absence.
+-#}
+{% macro ident(name) -%}
+{%- set base = sanitised(name) | snake -%}
+{%- if base in ["crate", "self", "Self", "super"] -%}{{ base }}_
+{%- elif base in ["as", "async", "await", "break", "const", "continue", "dyn",
+                  "else", "enum", "extern", "false", "fn", "for", "gen", "if",
+                  "impl", "in", "let", "loop", "match", "mod", "move", "mut",
+                  "pub", "ref", "return", "static", "struct", "trait", "true",
+                  "type", "union", "unsafe", "use", "where", "while",
+                  "abstract", "become", "box", "do", "final", "macro",
+                  "override", "priv", "try", "typeof", "unsized", "virtual",
+                  "yield"] -%}r#{{ base }}
+{%- else -%}{{ base }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  type_name(name) — the Rust type name for a catalogue name.
+
+  FR-ENV-033 records what `pascal` costs: an acronym loses its case, so
+  `actor_id` becomes `ActorId` and not `ActorID`. The cost is accepted here
+  rather than bought back with an initialism list, which would be a second
+  opinion to maintain and a new way for two columns to collide on one field
+  name.
+
+  `Self` is the one Rust keyword a PascalCase name can collide with, and it
+  cannot be a raw identifier, so it takes a trailing underscore.
+-#}
+{% macro type_name(name) -%}
+{%- set base = sanitised(name) | pascal -%}
+{%- if base == "Self" -%}Self_
+{%- else -%}{{ base }}
+{%- endif -%}
+{%- endmacro %}

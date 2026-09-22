@@ -1,0 +1,379 @@
+{#-
+  The type mapping of the Node.js worked example, and the naming and quoting
+  rules that go with it.
+
+  FR-ENV-009 and FR-ENV-010 are why this is not a filter of `tpl`, and
+  BR-ENV-002 is why it never will be: a type mapping is an opinion, and an
+  opinion belongs to the project that holds it. FR-ENV-011 fixes the form the
+  opinion takes — a template macro — and FR-EX-008 fixes its obligation: a
+  JavaScript type for every value of `data_type` the model reports for a column
+  of `sakila`, `world` and `freight`. There are 39 of them, and all 39 are
+  branched on below.
+
+  Nothing falls through. The final branch calls `fail()`, per FR-ENV-020 and
+  FR-SEM-014, so a type this file has never met ends the render with 65 and
+  names the column, rather than reaching the type checker as a plausible guess.
+
+  The mapping reads `data_type` through the `sql_type` filter of FR-ENV-039.
+
+  Every mapping below was measured against the server of FR-EX-006: a real
+  non-NULL value of a real column of each of the 39 types was read through
+  mysql2 3.24.4 and its runtime type recorded. Nothing here was inferred from
+  the driver's documentation, and the three the measurement settled against the
+  obvious guess are BIGINT, the spatial types and BIT.
+-#}
+
+{#-
+  value_type(column) — the JavaScript type of a column's value, nullability
+  aside.
+
+  The opinions, stated here once rather than in every branch:
+
+  * The small integer types and the two floating-point types become `number`.
+    A JavaScript `number` is an IEEE-754 double and holds every integer up to
+    2^53 exactly, which covers TINYINT through INT, signed or unsigned, and
+    YEAR. Width and signedness are therefore deliberately **not** expressed,
+    and `column.unsigned` is read nowhere in this file.
+  * BIGINT becomes `string`, and this is the one mapping that is a decision
+    about the connection rather than only about the column. A BIGINT UNSIGNED
+    reaches 2^64-1 and a `number` loses integer precision above 2^53, silently.
+    Measured on this server: with mysql2's defaults `audit_event_id` arrives as
+    `number`; with `supportBigNumbers` and `bigNumberStrings` both set it
+    arrives as `string`. `connect` in `node/core.jinja` sets both, always, so
+    the type here is `string` unconditionally. `supportBigNumbers` alone was
+    rejected: it yields a `string` only when the value leaves the safe range,
+    which is the type `number | string` — a type no static checker can help a
+    caller with, and one whose shape depends on the data.
+  * DECIMAL becomes `string`, which is what mysql2 returns and what loses
+    nothing: a `number` cannot hold `decimal(38,10)`. Measured, and measured to
+    bind back: `WHERE gross_weight_kg = ?` with the returned string matches the
+    row it came from.
+  * The BigInt primitive was rejected for both. mysql2 offers no option that
+    produces one, so it would need a `typeCast` of this example's own, and a
+    row carrying a BigInt throws on `JSON.stringify`, which is the one thing a
+    caller of a Node data layer is most likely to do with a row.
+  * TIME becomes `string`. Measured: `06:00:00` arrives as the string
+    `"06:00:00"`. A MariaDB TIME is a signed interval of up to +/-838:59:59,
+    which is not a time of day, and JavaScript has no interval type at all.
+  * DATE, DATETIME and TIMESTAMP become `Date`, which is the only temporal type
+    the language has. Measured, and the limit is measured too: mysql2 builds
+    the `Date` in the connection's time zone, so a DATE of `2026-04-18` arrives
+    as local midnight and prints as `2026-04-17T23:00:00.000Z` in a UTC+1
+    process. The instant binds back unchanged — `WHERE payment_due_on = ?`
+    matches — so the round trip is exact; what is inexact is reading a
+    calendar date off the UTC fields of the result.
+  * BIT becomes `Buffer`. Measured: `bit(8)` carrying 7 arrives as
+    `<Buffer 07>`. The round-trip limit that follows is recorded in the
+    example's README, and it is the same one the Python example found.
+  * INET4, INET6 and UUID become `string`. Measured: the three arrive as
+    character data — `203.0.113.24`, `2001:db8:3f2b::c7`, and a UUID as its 36
+    characters of text rather than as 16 bytes.
+  * The binary and blob types become `Buffer`.
+  * The eight spatial types become `Buffer`, and that is a decision against
+    what the driver does by default. Measured: mysql2 parses a geometry column
+    into JavaScript objects — a POINT arrives as `{x, y}`, a LINESTRING as an
+    array of those, a POLYGON as an array of rings — and those objects do not
+    bind back: mysql2 serialises a plain object as a JSON string, so
+    `WHERE reference_marker = ?` with the parsed point matched 0 rows, and an
+    insert would store that JSON text. This example therefore asks the server
+    for well-known binary and hands it back through a function, which is what
+    `select_expression` and `bind` below are for, and that round trip was
+    measured to match.
+  * A JSON column is not a branch of its own because the model never reports
+    one: MariaDB reports such a column as `longtext`, per FR-CAT-038.
+-#}
+{% macro value_type(column) -%}
+{%- set kind = column | sql_type -%}
+{%- if kind == "tinyint" -%}number
+{%- elif kind == "smallint" -%}number
+{%- elif kind == "mediumint" -%}number
+{%- elif kind == "int" -%}number
+{%- elif kind == "year" -%}number
+{%- elif kind == "float" -%}number
+{%- elif kind == "double" -%}number
+{%- elif kind == "bigint" -%}string
+{%- elif kind == "decimal" -%}string
+{%- elif kind == "char" -%}string
+{%- elif kind == "varchar" -%}string
+{%- elif kind == "tinytext" -%}string
+{%- elif kind == "text" -%}string
+{%- elif kind == "mediumtext" -%}string
+{%- elif kind == "longtext" -%}string
+{%- elif kind == "enum" -%}string
+{%- elif kind == "set" -%}string
+{%- elif kind == "time" -%}string
+{%- elif kind == "uuid" -%}string
+{%- elif kind == "inet4" -%}string
+{%- elif kind == "inet6" -%}string
+{%- elif kind == "bit" -%}Buffer
+{%- elif kind == "binary" -%}Buffer
+{%- elif kind == "varbinary" -%}Buffer
+{%- elif kind == "tinyblob" -%}Buffer
+{%- elif kind == "blob" -%}Buffer
+{%- elif kind == "mediumblob" -%}Buffer
+{%- elif kind == "longblob" -%}Buffer
+{%- elif kind == "geometry" -%}Buffer
+{%- elif kind == "geometrycollection" -%}Buffer
+{%- elif kind == "linestring" -%}Buffer
+{%- elif kind == "multilinestring" -%}Buffer
+{%- elif kind == "multipoint" -%}Buffer
+{%- elif kind == "multipolygon" -%}Buffer
+{%- elif kind == "point" -%}Buffer
+{%- elif kind == "polygon" -%}Buffer
+{%- elif kind == "date" -%}Date
+{%- elif kind == "datetime" -%}Date
+{%- elif kind == "timestamp" -%}Date
+{%- else -%}
+{{- fail("node/_types.jinja maps no JavaScript type onto the column " ~ column.table_name ~ "." ~ column.name ~ ", whose column_type is " ~ column.column_type ~ ". FR-EX-008 obliges this macro to cover every data_type the three schemas report: add a branch for it rather than letting an unmapped type reach tsc as a guess.") -}}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  field_type(column) — the type of one property of a row, nullability honoured.
+
+  A nullable column is not the same JavaScript type as a non-nullable one, and
+  `T | null` is where the language puts the difference: mysql2 returns `null`
+  for a NULL, and `tsc --strict` makes a caller narrow the property before
+  reading the value. `undefined` is deliberately not part of it: the property
+  is always present on a row, and `undefined` is reserved for the filter, where
+  it means *no condition*.
+-#}
+{% macro field_type(column) -%}
+{%- if column is nullable -%}{{ value_type(column) }} | null
+{%- else -%}{{ value_type(column) }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  spatial(column) — non-empty for the eight spatial types, empty otherwise.
+
+  These are the columns whose value cannot travel as itself. `select_expression`
+  and `bind` are the two places that consequence is spent, and this macro is the
+  one place the membership is written down.
+-#}
+{% macro spatial(column) -%}
+{%- set kind = column | sql_type -%}
+{%- if kind in ["geometry", "geometrycollection", "linestring", "multilinestring",
+                "multipoint", "multipolygon", "point", "polygon"] -%}yes
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  select_expression(column) — the column as a SELECT list names it.
+
+  A spatial column is asked for as well-known binary, because the value mysql2
+  decodes from the wire format cannot be bound back. Every other column is
+  asked for as itself.
+
+  The alias keeps the result's column names equal to the catalogue's, which
+  costs nothing and makes a hand-run of one of these statements read the way
+  the table does.
+-#}
+{% macro select_expression(column) -%}
+{%- if spatial(column) -%}ST_AsWKB({{ sql_name(column.name) }}) AS {{ sql_name(column.name) }}
+{%- else -%}{{ sql_name(column.name) }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  bind(column) — the placeholder that carries one value of this column.
+
+  A spatial column's `Buffer` is well-known binary and MariaDB will not compare
+  or store it as a binary string, so it is read back into a geometry by the
+  server. Measured: `WHERE reference_marker = ST_GeomFromWKB(?)` matches the
+  row the bytes came from, and `WHERE reference_marker = ?` with those same
+  bytes matches nothing.
+
+  Every other column binds as itself.
+-#}
+{% macro bind(column) -%}
+{%- if spatial(column) -%}ST_GeomFromWKB(?)
+{%- else -%}?
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  braced(text) — `text` wrapped in the braces a JSDoc type annotation takes.
+
+  It exists because a template cannot write `{` immediately before `{{`: the
+  lexer reads the pair as the start of an expression. Escaping the brace once
+  here keeps every `@property` and `@param` tag in the templates readable.
+-#}
+{% macro braced(text) -%}
+{{- "{" }}{{ text }}{{ "}" -}}
+{%- endmacro %}
+
+{#-
+  sanitised(name) — a catalogue name with the punctuation JavaScript refuses in
+  an identifier replaced by an underscore.
+
+  This is needed because FR-ENV-031 passes a character outside `A-Za-z` through
+  the naming filters unchanged: `pascal` renders the column
+  `freight.legacy_edi_field.back`tick` as `Back`tick`, which is an identifier
+  in no language. The underscore is chosen rather than removal because the
+  naming filters then treat the position as a word boundary, per FR-ENV-030, so
+  the column arrives as `backTick` rather than as `backtick`.
+
+  The set below is the ASCII punctuation a quoted MariaDB identifier may carry.
+  It is closed and it is not complete: a name beginning with a digit, and two
+  names whose sanitised forms collide, still render code JavaScript refuses.
+  That is deliberate — the compile gate of FR-EX-009 is the reader that reports
+  it.
+
+  A character outside ASCII is left alone, and that is a decision rather than an
+  omission. JavaScript identifiers are defined over the Unicode ID_Start and
+  ID_Continue properties of UAX #31, which `ç` and `ã` both satisfy, so
+  `freight.legacy_edi_field.posição` is the property `posição` and is read as
+  `row.posição`. Replacing the two letters would lose information for no gain,
+  and there is no normalisation to worry about: the source of these files is
+  UTF-8 and the identifier is compared by code point.
+-#}
+{% macro sanitised(name) -%}
+{{- name | replace("`", "_") | replace('"', "_") | replace("'", "_")
+         | replace("\\", "_") | replace("/", "_") | replace(".", "_")
+         | replace(",", "_") | replace(";", "_") | replace(":", "_")
+         | replace("?", "_") | replace("!", "_") | replace("*", "_")
+         | replace("+", "_") | replace("=", "_") | replace("<", "_")
+         | replace(">", "_") | replace("(", "_") | replace(")", "_")
+         | replace("[", "_") | replace("]", "_") | replace("{", "_")
+         | replace("}", "_") | replace("|", "_") | replace("^", "_")
+         | replace("~", "_") | replace("%", "_") | replace("&", "_")
+         | replace("#", "_") | replace("@", "_") | replace("$", "_")
+         | replace("-", "_") | replace(" ", "_") -}}
+{%- endmacro %}
+
+{#-
+  ident(name) — the JavaScript property name for a catalogue name: a property
+  of a row, of a key, of a filter, and the name a repository takes on the
+  aggregate.
+
+  `camel` is the convention the language uses for a property, which is where
+  this example differs from Python's `snake` and Go's exported `Pascal`. The
+  difference is spelling and nothing else: all three read the same `name` field
+  of the same model.
+
+  **No keyword guard is needed, and that is a fact about JavaScript rather than
+  an oversight.** Every name this macro produces is used as a property — in an
+  object literal, in a `@property` tag, and in a member expression — and since
+  ES5 a reserved word is a legal property name in all three positions.
+  `freight.legacy_edi_field.select` is therefore the property `select`, read as
+  `row.select`, where the Python example needed PEP 8's trailing underscore for
+  its own keywords and Go needed none because `select` is not exported there.
+
+  The one JavaScript name that would misbehave as a property is `__proto__`,
+  which in an object literal sets the prototype instead of defining a property.
+  It is out of reach: FR-ENV-030 discards an empty word, so a leading or
+  trailing underscore cannot survive the word list, and a column called
+  `__proto__` arrives here as `proto`.
+-#}
+{% macro ident(name) -%}
+{{- sanitised(name) | camel -}}
+{%- endmacro %}
+
+{#-
+  constant(name) — the name of one member of a table's column constants.
+
+  UPPER_SNAKE is the convention for a constant, and it needs no guard for the
+  same reason `ident` needs none: the member is a property of a frozen object.
+
+  What it can produce is a name that keeps a non-ASCII letter's case, because
+  FR-ENV-031 case-folds over `A-Za-z` alone: `posição` becomes `POSIçãO`. That
+  is a legal JavaScript property name and it is what determinism costs, since a
+  case-folding that knew about `ç` would be a locale-dependent one.
+-#}
+{% macro constant(name) -%}
+{{- sanitised(name) | upper_snake -}}
+{%- endmacro %}
+
+{#-
+  type_name(name) — the name of a type this example declares for a catalogue
+  name: a row, a key, a filter, an ordering term, a repository.
+
+  FR-ENV-033 records what `pascal` costs: an acronym loses its case, so
+  `actor_id` becomes `ActorId` and not `ActorID`. The cost is accepted here
+  rather than bought back with an initialism list, which would be a second
+  opinion to maintain and a new way for two columns to collide on one property
+  name.
+
+  A type name declared by a `@typedef` is a name in the type space alone; it
+  can shadow nothing at run time, and no JavaScript keyword can reach it,
+  because `pascal` upper-cases the first letter of every word and every
+  keyword is lower case.
+-#}
+{% macro type_name(name) -%}
+{{- sanitised(name) | pascal -}}
+{%- endmacro %}
+
+{#-
+  sql_name(name) — a catalogue name as a statement's text names it.
+
+  `quote`, per FR-ENV-008 and FR-ENV-045, doubles a backtick inside the name
+  and encloses the whole in backticks, which is what MariaDB parses back to
+  exactly this name.
+
+  Nothing further is needed, and that is worth saying because the Python
+  example needed one more step. PyMySQL's paramstyle is `format` and builds the
+  final statement as `query % arguments`, so a `%` in an identifier had to be
+  doubled there. Every statement this example renders is executed through
+  `Connection.execute`, which is a server-side prepared statement: the SQL
+  reaches MariaDB unmodified and MariaDB counts the placeholders, so neither a
+  `%` nor a `?` inside a quoted identifier is a hazard here. That is also why
+  `Connection.query`, which interpolates client-side, is used nowhere in the
+  rendered code.
+-#}
+{% macro sql_name(name) -%}
+{{- name | quote -}}
+{%- endmacro %}
+
+{#-
+  js_string(text) — a JavaScript string literal carrying arbitrary text.
+
+  Emitted through the `json` filter of FR-ENV-036. A JSON string literal is a
+  JavaScript string literal — the escapes JSON defines are a subset of
+  JavaScript's — so a name carrying a quote, a backslash or a newline is
+  escaped rather than ending the literal early.
+
+  No rendered statement is built with a template literal, so a backtick inside
+  a quoted identifier is inert in the source as well as correct in the SQL.
+-#}
+{% macro js_string(text) -%}
+{{- text | json -}}
+{%- endmacro %}
+
+{#-
+  jsdoc_text(text) — arbitrary catalogue text, made safe on one line of a
+  `/** … */` block.
+
+  Two transformations, and both are needed because a block comment is the one
+  comment JavaScript has that its own content can close:
+
+  * `*/` is broken with a space. A generated column's expression, a table
+    comment and a column comment are catalogue text and may carry it, and the
+    sequence would end the JSDoc block and put the rest of the text into the
+    token stream.
+  * a newline becomes a space. A tag's description continues onto the following
+    lines until the next tag, so a catalogue line that happened to begin with
+    `@` would be read as a tag.
+
+  Catalogue text that must keep its shape — a table's own comment — is not
+  passed through here. It is written as `//` line comments instead, through the
+  `comment` filter of FR-ENV-038, because a line comment cannot be closed by
+  its own content and a newline in it produces another line comment.
+-#}
+{% macro jsdoc_text(text) -%}
+{{- text | replace("*/", "* /") | replace("\r", " ") | replace("\n", " ") -}}
+{%- endmacro %}
+
+{#-
+  declared(column) — the one-line description of a column's declaration, for
+  the `@property` tag that carries it.
+-#}
+{% macro declared(column) -%}
+{%- set text -%}
+`{{ column.name }}`, declared `{{ column.column_type }}` {{ "NULL" if column is nullable else "NOT NULL" }}
+{%- if column is auto_increment %} AUTO_INCREMENT{% endif %}
+{%- if column.invisible %} INVISIBLE{% endif %}
+{%- if column.generated %} {{ column.generated.storage }} AS ({{ column.generated.expression }}){% endif %}.
+{%- endset -%}
+{{- jsdoc_text(text) -}}
+{%- endmacro %}

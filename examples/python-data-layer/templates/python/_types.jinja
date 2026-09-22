@@ -1,0 +1,282 @@
+{#-
+  The type mapping of the Python worked example, and the naming rules that go
+  with it.
+
+  FR-ENV-009 and FR-ENV-010 are why this is not a filter of `tpl`, and
+  BR-ENV-002 is why it never will be: a type mapping is an opinion, and an
+  opinion belongs to the project that holds it. FR-ENV-011 fixes the form the
+  opinion takes — a template macro — and FR-EX-008 fixes its obligation: a
+  Python type for every value of `data_type` the model reports for a column of
+  `sakila`, `world` and `freight`. There are 39 of them, and all 39 are branched
+  on below.
+
+  Nothing falls through. The final branch calls `fail()`, per FR-ENV-020 and
+  FR-SEM-014, so a type this file has never met ends the render with 65 and
+  names the column, rather than reaching `mypy` as a plausible guess.
+
+  The mapping reads `data_type` through the `sql_type` filter of FR-ENV-039.
+
+  Every mapping below was measured against the server of FR-EX-006: a real
+  non-NULL value of a real column of each of the 39 types was read through
+  PyMySQL 1.2.3 and its `type()` recorded. Nothing here was inferred from a
+  driver's documentation, and the four that are commonly guessed wrong —
+  DECIMAL, TIME, BIT and the eight spatial types — are exactly the four the
+  measurement settled.
+-#}
+
+{#-
+  value_type(column) — the Python type of a column's value, nullability aside.
+
+  The opinions, stated here once rather than in every branch:
+
+  * Every integer type becomes `int`, and the column's width and signedness are
+    deliberately **not** expressed. A Python `int` is unbounded, so there is no
+    `int8` to narrow to and no unsigned form to distinguish; `column.unsigned`
+    is therefore read nowhere in this file, which is the one place this mapping
+    differs in kind from the Go and Rust examples rather than in spelling.
+  * YEAR becomes `int`. Measured: PyMySQL returns `2006`, not a date.
+  * DECIMAL becomes `decimal.Decimal`. Measured: PyMySQL decodes the column
+    into exactly that, and it is lossless — `float` cannot hold
+    `decimal(38,10)`. This is the standard library's own answer and it costs no
+    dependency, which is where Go had to settle for a string and Rust for an
+    adapter.
+  * TIME becomes `datetime.timedelta`. Measured: PyMySQL returns
+    `timedelta(seconds=21600)` for `06:00:00`. A MariaDB TIME is a signed
+    interval of up to ±838:59:59, which is not a time of day, and `timedelta`
+    is the type that says so. `datetime.time` would refuse every value outside
+    a day.
+  * DATE, DATETIME and TIMESTAMP become `datetime.date` and
+    `datetime.datetime`. Measured, and the two are not interchangeable: a DATE
+    column yields `datetime.date` and never a `datetime`.
+  * BIT becomes `bytes`. Measured: PyMySQL returns `b'\x07'` for `bit(8)`, not
+    an integer. The round-trip limit that follows from it is recorded in the
+    example's README, and a project that wants an integer replaces this one
+    branch and installs a decoder of its own through PyMySQL's `conv`.
+  * INET4, INET6 and UUID become `str`. Measured: the three arrive as character
+    data — a UUID as its 36 characters of text, not as 16 bytes — so `str` is
+    what the driver actually hands a caller, and the `ipaddress` and `uuid`
+    types of the standard library would be a claim about a conversion nothing
+    performs.
+  * The binary and blob types and the eight spatial types become `bytes`.
+    Measured: a spatial column arrives as a four-byte SRID followed by
+    well-known binary, and those bytes bind back unchanged — `WHERE geom = %s`
+    matches, which was measured too.
+  * A JSON column is not a branch of its own because the model never reports
+    one: MariaDB reports such a column as `longtext`, per FR-CAT-038.
+-#}
+{% macro value_type(column) -%}
+{%- set kind = column | sql_type -%}
+{%- if kind == "tinyint" -%}int
+{%- elif kind == "smallint" -%}int
+{%- elif kind == "mediumint" -%}int
+{%- elif kind == "int" -%}int
+{%- elif kind == "bigint" -%}int
+{%- elif kind == "year" -%}int
+{%- elif kind == "float" -%}float
+{%- elif kind == "double" -%}float
+{%- elif kind == "decimal" -%}decimal.Decimal
+{%- elif kind == "char" -%}str
+{%- elif kind == "varchar" -%}str
+{%- elif kind == "tinytext" -%}str
+{%- elif kind == "text" -%}str
+{%- elif kind == "mediumtext" -%}str
+{%- elif kind == "longtext" -%}str
+{%- elif kind == "enum" -%}str
+{%- elif kind == "set" -%}str
+{%- elif kind == "inet4" -%}str
+{%- elif kind == "inet6" -%}str
+{%- elif kind == "uuid" -%}str
+{%- elif kind == "bit" -%}bytes
+{%- elif kind == "binary" -%}bytes
+{%- elif kind == "varbinary" -%}bytes
+{%- elif kind == "tinyblob" -%}bytes
+{%- elif kind == "blob" -%}bytes
+{%- elif kind == "mediumblob" -%}bytes
+{%- elif kind == "longblob" -%}bytes
+{%- elif kind == "geometry" -%}bytes
+{%- elif kind == "geometrycollection" -%}bytes
+{%- elif kind == "linestring" -%}bytes
+{%- elif kind == "multilinestring" -%}bytes
+{%- elif kind == "multipoint" -%}bytes
+{%- elif kind == "multipolygon" -%}bytes
+{%- elif kind == "point" -%}bytes
+{%- elif kind == "polygon" -%}bytes
+{%- elif kind == "date" -%}datetime.date
+{%- elif kind == "datetime" -%}datetime.datetime
+{%- elif kind == "timestamp" -%}datetime.datetime
+{%- elif kind == "time" -%}datetime.timedelta
+{%- else -%}
+{{- fail("python/_types.jinja maps no Python type onto the column " ~ column.table_name ~ "." ~ column.name ~ ", whose column_type is " ~ column.column_type ~ ". FR-EX-008 obliges this macro to cover every data_type the three schemas report: add a branch for it rather than letting an unmapped type reach mypy as a guess.") -}}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  field_type(column) — the Python type of a dataclass field, nullability
+  honoured.
+
+  A nullable column is not the same Python type as a non-nullable one, and
+  `X | None` is where the language puts the difference: PyMySQL returns `None`
+  for a NULL, and `mypy --strict` makes a caller narrow the field before it
+  reads the value.
+-#}
+{% macro field_type(column) -%}
+{%- if column is nullable -%}{{ value_type(column) }} | None
+{%- else -%}{{ value_type(column) }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  filter_type(column) — the Python type of one field of a search filter.
+
+  Always `X | None`, whether the column is nullable or not: `None` means the
+  field contributes no condition. Whether the column is NULL is asked
+  separately, through the `…_is_null` field a nullable column also gets, and
+  that separation is why a filter field's `None` is never ambiguous.
+-#}
+{% macro filter_type(column) -%}
+{{ value_type(column) }} | None
+{%- endmacro %}
+
+{#-
+  sanitised(name) — a catalogue name with the punctuation Python refuses in an
+  identifier replaced by an underscore.
+
+  This is needed because FR-ENV-031 passes a character outside `A-Za-z` through
+  the naming filters unchanged: `pascal` renders the column
+  `freight.legacy_edi_field.back`tick` as `Back`tick`, which is not an
+  identifier in any language. The underscore is chosen rather than removal
+  because `pascal` then treats the position as a word boundary, per
+  FR-ENV-030, and the column arrives as `BackTick`.
+
+  The set below is the ASCII punctuation a quoted MariaDB identifier may carry.
+  It is closed and it is not complete: a name beginning with a digit, or one
+  whose sanitised form collides with another column's, still renders code
+  Python refuses. That is deliberate — the compile gate of FR-EX-009 is the
+  reader that reports it, and a duplicate name in a class body is exactly what
+  `mypy` reports as `Name "…" already defined`.
+
+  A character outside ASCII is left alone. Python admits it in an identifier,
+  under the XID rules of the Reference, and `freight.legacy_edi_field.posição`
+  is the column that proves it: removing the two letters would lose
+  information for no gain, and the identifier Python sees is NFKC-normalised,
+  which leaves both of them untouched.
+-#}
+{% macro sanitised(name) -%}
+{{- name | replace("`", "_") | replace('"', "_") | replace("'", "_")
+         | replace("\\", "_") | replace("/", "_") | replace(".", "_")
+         | replace(",", "_") | replace(";", "_") | replace(":", "_")
+         | replace("?", "_") | replace("!", "_") | replace("*", "_")
+         | replace("+", "_") | replace("=", "_") | replace("<", "_")
+         | replace(">", "_") | replace("(", "_") | replace(")", "_")
+         | replace("[", "_") | replace("]", "_") | replace("{", "_")
+         | replace("}", "_") | replace("|", "_") | replace("^", "_")
+         | replace("~", "_") | replace("%", "_") | replace("&", "_")
+         | replace("#", "_") | replace("@", "_") | replace("$", "_")
+         | replace("-", "_") | replace(" ", "_") -}}
+{%- endmacro %}
+
+{#-
+  ident(name) — the lower-case Python identifier for a catalogue name: a
+  dataclass field, a module, an attribute.
+
+  A name whose snake case is one of Python's 35 hard keywords takes a trailing
+  underscore, which is the convention PEP 8 states for exactly this case —
+  `class_`, not `klass`. The soft keywords `match`, `case`, `type` and `_` are
+  legal identifiers and are left alone.
+
+  No column of the three schemas needs the escape: `select` is a keyword of SQL
+  and of Go and is not one of Python's, and `freight.legacy_edi_field.select`
+  is therefore the field `select`. The list is a guard rather than a
+  demonstration, and the compile gate is what would report its absence.
+-#}
+{% macro ident(name) -%}
+{%- set base = sanitised(name) | snake -%}
+{%- if base in ["and", "as", "assert", "async", "await", "break", "class",
+                "continue", "def", "del", "elif", "else", "except", "false",
+                "finally", "for", "from", "global", "if", "import", "in", "is",
+                "lambda", "none", "nonlocal", "not", "or", "pass", "raise",
+                "return", "true", "try", "while", "with", "yield"] -%}{{ base }}_
+{%- else -%}{{ base }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  constant(name) — the upper-case Python identifier for a catalogue name: the
+  name of one member of a column enumeration.
+
+  UPPER_SNAKE is the convention for an enumeration member, and it needs no
+  keyword guard: every Python keyword is lower case but for `None`, `True` and
+  `False`, and `upper_snake` upper-cases every ASCII letter, so it can produce
+  `NONE` but never `None`. `enum.Enum`'s own reserved names — `mro` and the
+  `_sunder_` forms — are out of reach for the same reason, and FR-ENV-030
+  discards an empty word, so a leading or trailing underscore cannot survive
+  either.
+
+  What it can produce is a name that keeps a non-ASCII letter's case, because
+  FR-ENV-031 case-folds over `A-Za-z` alone: `posição` becomes `POSIçãO`. That
+  is a legal Python identifier and it is what determinism costs, since a
+  case-folding that knew about `ç` would be a locale-dependent one.
+-#}
+{% macro constant(name) -%}
+{{- sanitised(name) | upper_snake -}}
+{%- endmacro %}
+
+{#-
+  type_name(name) — the Python class name for a catalogue name.
+
+  FR-ENV-033 records what `pascal` costs: an acronym loses its case, so
+  `actor_id` becomes `ActorId` and not `ActorID`. The cost is accepted here
+  rather than bought back with an initialism list, which would be a second
+  opinion to maintain and a new way for two columns to collide on one field
+  name.
+
+  `None`, `True` and `False` are the only Python keywords `pascal` can produce,
+  since it upper-cases the first letter of a word and lower-cases the rest, and
+  a class cannot be named for one of them. They take a trailing underscore.
+-#}
+{% macro type_name(name) -%}
+{%- set base = sanitised(name) | pascal -%}
+{%- if base in ["None", "True", "False"] -%}{{ base }}_
+{%- else -%}{{ base }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  sql_name(name) — a catalogue name as a statement's text names it.
+
+  Two transformations, and each is answering a different tool:
+
+  * `quote`, per FR-ENV-008, doubles a backtick inside the name and encloses
+    the whole in backticks. That is what MariaDB parses back to exactly this
+    name.
+  * every `%` is then doubled. PyMySQL's paramstyle is `format`: it builds the
+    final statement as `query % arguments`, so a `%` inside an identifier would
+    be read as the start of a conversion, and a `%` beside an `s` would
+    silently consume an argument. Doubling is what `%`-formatting reads back as
+    one `%`, and it obliges every `execute` to be passed a tuple rather than
+    `None`, because `query % arguments` is what undoes it.
+
+  No column of the three schemas carries a `%`. The doubling costs one filter,
+  and it is the one failure of the set that would not announce itself.
+-#}
+{% macro sql_name(name) -%}
+{{- (name | quote) | replace("%", "%%") -}}
+{%- endmacro %}
+
+{#-
+  declared(column) — the one-line description of a column's declaration, for
+  the `#:` comment that stands above its field.
+
+  Built as a value rather than interpolated at the point of use so that the
+  whole of it can be passed through `comment`, per FR-ENV-038, which prefixes
+  **every** line. A generated column's expression and an `ENUM`'s member list
+  are catalogue text and may carry a newline; passed through `comment` a
+  newline yields another comment line, and passed inline it would end the
+  comment and put catalogue data into the token stream.
+-#}
+{% macro declared(column) -%}
+`{{ column.name }}`, declared `{{ column.column_type }}` {{ "NULL" if column is nullable else "NOT NULL" }}
+{%- if column is auto_increment %} AUTO_INCREMENT{% endif %}
+{%- if column.invisible %} INVISIBLE{% endif %}
+{%- if column.generated %} {{ column.generated.storage }} AS ({{ column.generated.expression }}){% endif %}.
+{%- endmacro %}

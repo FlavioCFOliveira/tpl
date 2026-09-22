@@ -13,6 +13,8 @@ observation was made against one series rather than all four, it says which.
 | `setup.sql` | The `freight` schema: DDL only |
 | `seed.sql` | The data, plus the statements that make the triggers, the sequence and the system-versioned table actually fire |
 | `seed-bench.sql` | The two benchmark workloads of `NFR-PERF-001`, `WL-001` and `WL-003`: DDL only, loaded on demand and not in the image |
+| `datasets/sakila/` | The Sakila sample database, vendored verbatim, with its licence and its provenance note: loaded on demand and not in the image |
+| `datasets/world/` | The World sample database, vendored verbatim, with its provenance note: loaded on demand and not in the image |
 | `tls/generate.sh` | Regenerates the TLS material below |
 | `tls/openssl.cnf` | The certificate profile: what the certificate says, including the names it carries |
 | `tls/ca.pem` | The fixture's root certificate, and the file to pass as `ca_file` |
@@ -23,6 +25,7 @@ observation was made against one series rather than all four, it says which.
 | `down.sh` | Stops and removes them, and proves nothing of the fixture is left |
 | `status.sh` | The gate: whether the fixture is up, answered without a client |
 | `seed-bench.sh` | Loads `seed-bench.sql` into a running server and counts what arrived |
+| `seed-datasets.sh` | Loads `sakila` and `world` into a named running server and counts what arrived |
 | `observe.sh` | The three instruments of `NFR-PERF-007` that need a server or a tracer, and the reading that identifies a build |
 | `series.env` | The inventory — one record per server — and the helpers the scripts share |
 | `probe-session.sql` | The connection-start sequence of `FR-SRV-006`, for a substitute client |
@@ -498,6 +501,301 @@ of a single table cost the reader the same eleven catalogue statements, which is
 the one `tests/schema_and_cache.rs` asserts for a full read of `freight`, whose
 23 objects are a third size again — so the count is now observed across three
 databases differing by two orders of magnitude in object count.
+
+### The published datasets
+
+`FR-EX-006` has all four worked examples read the same three schemas from one
+server of the most recent supported series: `sakila`, `world` and `freight`.
+`freight` is the fixture's own and is in the image. The other two are the
+published MySQL sample databases, vendored under `datasets/` and loaded on
+demand by `seed-datasets.sh`.
+
+Why two datasets nobody here wrote: a reader arrives at `sakila` and `world`
+already knowing what they contain, so the data layer an example renders can be
+judged against a schema they recognise rather than against one the project
+designed for the occasion. `freight` is the third schema because those two
+reach only part of the catalogue — between them they declare no generated
+column, no table comment, no sequence, no system-versioned table and no `JSON`,
+`UUID`, `INET6` or `BIT` column, and a type mapping that never meets one of
+those is a mapping nobody has exercised.
+
+| Directory | Schema | What it holds | Upstream |
+|---|---|---|---|
+| `datasets/sakila/` | `sakila` | 16 tables, 89 columns, 41 indexes, 22 foreign keys, 6 triggers, 7 views, 6 routines; 47 268 rows | `https://downloads.mysql.com/docs/sakila-db.tar.gz` |
+| `datasets/world/` | `world` | 3 tables, 24 columns, 5 indexes, 2 foreign keys, no view, routine or trigger; 5 302 rows | `https://downloads.mysql.com/docs/world-db.tar.gz` |
+
+Each directory carries a `NOTICE.md` recording the source URL, the date the
+archive was taken, its SHA-256 and the checksum of every file vendored out of
+it, and a `LICENSE` where upstream ships one. **`sakila` does and `world` does
+not**: the Sakila SQL files carry the BSD 3-clause text in their header, and
+`world-db.tar.gz` holds a single plain `mysqldump` with no copyright notice and
+no licence text at all. The absence is recorded in `datasets/world/NOTICE.md`
+rather than filled in with a guess.
+
+The SQL is vendored **byte for byte and unmodified**, which is what lets
+`NOTICE.md` state a checksum that can be checked against a fresh download. The
+one archive member left out is `sakila.mwb`, a MySQL Workbench binary model: it
+is not SQL and nothing loads it.
+
+**Neither is in the image**, on the same ground that keeps the benchmark
+workload out of it: only the worked examples read them, and a correctness run
+must not pay for 20 schemas and 113 catalogue objects it never touches.
+`seed-datasets.sh` is how they get in.
+
+#### Loading them
+
+```sh
+./up.sh                            # the datasets need a server to go into
+./seed-datasets.sh 12.3            # load into 12.3, then verify
+./seed-datasets.sh 12.3 11.8       # load into both
+./seed-datasets.sh --verify 12.3   # count what is there; load nothing
+./seed-datasets.sh --drop 12.3     # drop both schemas
+```
+
+**The server is required**, and that is the one place this script departs from
+`seed-bench.sh`, which loads into all five when told nothing. `FR-EX-006` reads
+one server of one series, so loading five is work no requirement asks for;
+naming the server also makes a typo an error instead of a silent no-op, and an
+unknown name exits `2` before anything is touched.
+
+Loading is idempotent — each dataset drops its schema before creating it — and
+the script asks the gate before it starts, because a load against a server that
+is not up fails halfway and leaves a partial schema behind. Its exit code is `0`
+when every named server holds both datasets at every stated count, `1` when one
+does not, and `2` when the invocation is wrong or the fixture is down.
+
+Never load them by hand. A `docker exec … < world.sql` puts the DDL in and skips
+the ten checks below, which are the whole of the verification that what
+arrived is what the file promised and that the examples can read it.
+
+Nine of the ten checks are catalogue counts. The quantities and the rule each
+is counted on are
+[the same ones `seed-bench.sh` uses](#what-it-verifies-and-how-each-quantity-is-counted),
+unchanged, so that both loaders answer the same question the same way. The
+expected figures live in `series.env` beside the benchmark ones.
+
+#### The grant, and the tenth check
+
+Both dataset files create their schema from nothing — `sakila-schema.sql` runs
+`DROP SCHEMA IF EXISTS sakila`, `world.sql` runs
+`DROP DATABASE IF EXISTS world` — and a dropped schema takes its grants with
+it. `seed-datasets.sh` therefore re-grants `tpl_reader` on every load, with the
+same `SELECT, EXECUTE` that `setup.sql` grants it on `freight`.
+
+That is not tidiness. `FR-EX-007` obliges all four worked examples to read the
+three schemas of `FR-EX-006` through entries that "differ in nothing a read can
+observe", and `INFORMATION_SCHEMA` shows a user only the objects it holds some
+privilege on. Ungranted, the reader sees **nothing** of a schema that is
+otherwise perfectly loaded, and an example would render an empty data layer,
+exit `0` and say nothing — which is the `FR-PRIV-001` hazard `UC-013` names in
+its second alternate flow.
+
+So the script asks a tenth question, and asks it **as the reader**, because a
+question asked as root answers about root. Here is the same `--verify` run
+against schemas that were loaded and not granted:
+
+```
+12.3
+  ok      sakila: tables=16 columns=89 indexes=41 foreign_keys=22 generated=0 triggers=6 views=7 routines=6 commented_tables=0
+  ok      world: tables=3 columns=24 indexes=5 foreign_keys=2 generated=0 triggers=0 views=0 routines=0 commented_tables=0
+  MISMATCH sakila: tpl_reader sees 0 objects, expected 23
+  MISMATCH world: tpl_reader sees 0 objects, expected 3
+
+seed-datasets.sh: 2 schema(s) did not match the dataset they carry
+```
+
+Nine checks pass and the tenth fails, which is the whole reason it exists. The
+expected figure is the schema's `tables + views`, counted as root and compared
+with what the reader can see.
+
+#### The gate, and an unknown name
+
+Three refusals, all before anything is touched. Against a fixture that is down:
+
+```sh
+./down.sh && ./seed-datasets.sh 12.3
+```
+```
+seed-datasets.sh: the fixture is not up for the named servers; run ./up.sh first
+```
+
+`--verify` is refused by the same gate and for the same reason — a count taken
+against a server that is not answering is not a count. Both exit `2`.
+
+With no server named, and with one that is not in the inventory:
+
+```
+$ ./seed-datasets.sh
+seed-datasets.sh: name the server to work on, for instance: seed-datasets.sh 12.3
+
+$ ./seed-datasets.sh 12.4
+seed-datasets.sh: unknown server: 12.4 (the names are in series.env)
+```
+
+Both exit `2`. The second is why the server is a required argument rather than a
+filter over all five: a filter that matches nothing loads nothing and exits `0`.
+
+#### The run
+
+```sh
+./seed-datasets.sh 12.3
+```
+```
+12.3
+  load    datasets/sakila/sakila-schema.sql into sakila on tpl-mariadb-12.3
+  load    datasets/sakila/sakila-data.sql into sakila on tpl-mariadb-12.3
+  grant   SELECT, EXECUTE on sakila to tpl_reader
+  load    datasets/world/world.sql into world on tpl-mariadb-12.3
+  grant   SELECT, EXECUTE on world to tpl_reader
+  ok      sakila: tables=16 columns=89 indexes=41 foreign_keys=22 generated=0 triggers=6 views=7 routines=6 commented_tables=0
+  ok      world: tables=3 columns=24 indexes=5 foreign_keys=2 generated=0 triggers=0 views=0 routines=0 commented_tables=0
+  ok      sakila: tpl_reader sees 23 of 23 objects
+  ok      world: tpl_reader sees 3 of 3 objects
+
+every named server holds sakila and world at the counts series.env states
+```
+
+Observed on 2026-09-22 against `12.3.3-MariaDB-ubu2404`. **Both datasets are
+accepted unmodified**, and the container log gained no `[ERROR]` line across the
+load — the same standard `setup.sql` and `seed-bench.sql` are held to. The log
+gained one line, and it is not from the load:
+
+```
+2026-09-22  8:31:28 259 [Warning] Aborted connection 259 to db: 'unconnected' user: 'unauthenticated' host: '172.17.0.1' (This connection closed normally without authentication)
+```
+
+That is `status.sh` asking the gate, which opens the published port, reads the
+handshake and closes without authenticating. Every invocation of the gate leaves
+one.
+
+The rows are there too, which the counts above do not say:
+
+| Table | Rows |
+|---|---|
+| `sakila.actor` | 200 |
+| `sakila.film` | 1 000 |
+| `sakila.film_text` | 1 000 |
+| `sakila.payment` | 16 044 |
+| `sakila.rental` | 16 044 |
+| `world.city` | 4 079 |
+| `world.country` | 239 |
+| `world.countrylanguage` | 984 |
+
+`sakila.film_text` is worth a glance: it is filled by the `ins_film` trigger and
+not by an `INSERT` of its own, so its 1 000 rows are evidence that the triggers
+loaded and fired.
+
+#### Three things about `sakila` on MariaDB
+
+**It declares 6 triggers, not the 3 its schema file shows.** `sakila-data.sql`
+adds `customer_create_date`, `payment_date` and `rental_date` to the
+`ins_film`, `upd_film` and `del_film` of `sakila-schema.sql`.
+
+**`sakila.address` has 8 columns on MariaDB and 9 on MySQL.** Its `location`
+column and the spatial index over it sit behind executable comments:
+
+```sql
+  /*!50705 location GEOMETRY */ /*!80003 SRID 0 */ /*!50705 NOT NULL,*/
+```
+
+MariaDB ignores every executable comment whose version number lies between
+`50700` and `99999`, so it declares neither, and errors on neither. The 603
+geometry values in `sakila-data.sql` sit behind the same `/*!50705 */` comment
+and are skipped with the column, so the two files stay consistent either way —
+which is why the comment is in both. The threshold was measured on this fixture
+rather than taken from documentation:
+
+```sh
+. ./series.env
+tpl_mariadb_sql 12.3 -N -B -e "
+    SET @a=1; /*!40000  SET @a=2*/; SELECT '40000',  @a;
+    SET @b=1; /*!50610  SET @b=2*/; SELECT '50610',  @b;
+    SET @c=1; /*!50699  SET @c=2*/; SELECT '50699',  @c;
+    SET @d=1; /*!50700  SET @d=2*/; SELECT '50700',  @d;
+    SET @e=1; /*!50705  SET @e=2*/; SELECT '50705',  @e;
+    SET @f=1; /*!80003  SET @f=2*/; SELECT '80003',  @f;
+    SET @g=1; /*!99999  SET @g=2*/; SELECT '99999',  @g;
+    SET @h=1; /*!100000 SET @h=2*/; SELECT '100000', @h;
+    SET @i=1; /*!120303 SET @i=2*/; SELECT '120303', @i;
+    SET @j=1; /*!120304 SET @j=2*/; SELECT '120304', @j;"
+```
+```
+40000   2
+50610   2
+50699   2
+50700   1
+50705   1
+80003   1
+99999   1
+100000  2
+120303  2
+120304  1
+```
+
+`2` means the comment ran. The server is `12.3.3`, so `120303` is its own
+version and `120304` is beyond it. The ignored band is exactly `[50700, 99999]`
+— the range MySQL 5.7 and 8.0 write their version-gated syntax into. Without
+it, `/*!80003 SRID 0 */` would reach the parser as a column attribute MariaDB
+does not have, and `sakila-schema.sql` would fail on `CREATE TABLE address`.
+
+**`world.sql` has no comment in that band at all.** It uses `40000`, `40014`,
+`40101`, `40103`, `40111` and `50503`, so MariaDB runs every one of them, and
+none guards a statement MariaDB lacks.
+
+#### What the two do not exercise
+
+This is `FR-EX-006`'s reason for a third schema, restated as a count. Over the
+three schemas on `12.3`, a column reports **39 distinct `data_type` values**.
+`sakila` and `world` between them reach 15 of them; `freight` reaches all 39.
+
+The 15 the published datasets do reach:
+
+```
+blob  char  datetime  decimal  enum  int  mediumint  mediumtext
+set  smallint  text  timestamp  tinyint  varchar  year
+```
+
+The 24 they do not, each of which only `freight` declares:
+
+| Group | Values |
+|---|---|
+| Fixed-width and floating numerics | `bigint`, `double`, `float` |
+| Temporal | `date`, `time` |
+| Binary | `binary`, `varbinary`, `tinyblob`, `mediumblob`, `longblob` |
+| Text | `tinytext`, `longtext` |
+| MariaDB's own | `bit`, `uuid`, `inet4`, `inet6` |
+| Spatial | `geometry`, `point`, `linestring`, `polygon`, `multipoint`, `multilinestring`, `multipolygon`, `geometrycollection` |
+
+Beyond the type list, neither published dataset declares a generated column, a
+table comment, a sequence or a system-versioned table — the `generated=0` and
+`commented_tables=0` in the run above are that, measured.
+
+There is no `json` in the 39, and its absence is not an omission in `freight`.
+MariaDB's `JSON` is an alias, so a column declared `JSON` never reports a
+`data_type` of `json`:
+
+```sh
+tpl_mariadb_sql 12.3 -B -e "
+    CREATE DATABASE tpl_probe_json;
+    CREATE TABLE tpl_probe_json.t (id INT, doc JSON);
+    SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA='tpl_probe_json' AND TABLE_NAME='t';
+    SELECT CONSTRAINT_NAME, CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS
+      WHERE CONSTRAINT_SCHEMA='tpl_probe_json';
+    DROP DATABASE tpl_probe_json;"
+```
+```
+COLUMN_NAME     DATA_TYPE       COLUMN_TYPE
+id              int             int(11)
+doc             longtext        longtext
+
+CONSTRAINT_NAME CHECK_CLAUSE
+doc             json_valid(`doc`)
+```
+
+What survives into the catalogue is `longtext` plus a `json_valid()` check
+constraint, so a type mapping written over `data_type` — which is what
+`FR-EX-008` obliges — will never be handed a `json` to map.
 
 ## Connecting
 

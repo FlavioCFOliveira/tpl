@@ -1,0 +1,190 @@
+{#-
+  The type mapping of the Go worked example, and the naming rules that go with
+  it.
+
+  FR-ENV-010 is why this is not a filter of `tpl`, and BR-ENV-002 is why it
+  never will be: a type mapping is an opinion, and an opinion belongs to the
+  project that holds it. FR-ENV-011 fixes the form the opinion takes — a
+  template macro — and FR-EX-008 fixes its obligation: a Go type for every
+  value of `data_type` the model reports for a column of `sakila`, `world` and
+  `freight`. There are 39 of them, and all 39 are branched on below.
+
+  Nothing falls through. The final branch calls `fail()`, per FR-ENV-020 and
+  FR-SEM-014, so a type this file has never met ends the render with 65 and
+  names the column, rather than reaching the Go compiler as a plausible guess.
+
+  The mapping reads `data_type` through the `sql_type` filter of FR-ENV-039,
+  and the unsigned attribute through the `unsigned` part of FR-CTX-015, which
+  FR-CTX-038 derives from `column_type` because no catalogue field carries it.
+-#}
+
+{#-
+  go_value_type(column) — the Go type of a column's value, nullability aside.
+
+  The opinions, stated here once rather than in every branch:
+
+  * An integer becomes the Go integer of the same width, signed as the column
+    is. `int` and `uint` are not used: their width is the platform's, and a
+    column's is the server's.
+  * A DECIMAL becomes a `string`. It is the only lossless mapping the standard
+    library offers — `float64` cannot hold `decimal(38,10)` — and it is what
+    the driver returns for the type. A project that wants arithmetic replaces
+    this one branch with its own decimal type, which is the whole reason the
+    mapping lives here and not in `tpl`.
+  * DATE, DATETIME and TIMESTAMP become `time.Time`, which obliges the caller
+    to open the connection with `parseTime=true`.
+  * TIME becomes a `string`. A MariaDB TIME is a signed interval of up to
+    ±838:59:59, which is not a time of day and does not fit `time.Time`.
+  * YEAR becomes `uint16`, which is the driver's own scan type for it.
+  * INET4, INET6 and UUID become `string`. Observed against the fixture server:
+    the three arrive as character data — `ColumnType.DatabaseTypeName` reports
+    `CHAR` — carrying their textual presentation.
+  * BIT becomes `[]byte`. The driver returns the bit string as raw bytes.
+  * The eight spatial types become `[]byte`, which is the well-known binary the
+    server sends behind a four-byte SRID prefix.
+  * A JSON column is not a branch of its own because the model never reports
+    one: MariaDB reports such a column as `longtext`, per FR-CAT-038.
+-#}
+{% macro go_value_type(column) -%}
+{%- set kind = column | sql_type -%}
+{%- if kind == "tinyint" -%}{{ "uint8" if column.unsigned else "int8" }}
+{%- elif kind == "smallint" -%}{{ "uint16" if column.unsigned else "int16" }}
+{%- elif kind == "mediumint" -%}{{ "uint32" if column.unsigned else "int32" }}
+{%- elif kind == "int" -%}{{ "uint32" if column.unsigned else "int32" }}
+{%- elif kind == "bigint" -%}{{ "uint64" if column.unsigned else "int64" }}
+{%- elif kind == "decimal" -%}string
+{%- elif kind == "float" -%}float32
+{%- elif kind == "double" -%}float64
+{%- elif kind == "bit" -%}[]byte
+{%- elif kind == "char" -%}string
+{%- elif kind == "varchar" -%}string
+{%- elif kind == "tinytext" -%}string
+{%- elif kind == "text" -%}string
+{%- elif kind == "mediumtext" -%}string
+{%- elif kind == "longtext" -%}string
+{%- elif kind == "enum" -%}string
+{%- elif kind == "set" -%}string
+{%- elif kind == "binary" -%}[]byte
+{%- elif kind == "varbinary" -%}[]byte
+{%- elif kind == "tinyblob" -%}[]byte
+{%- elif kind == "blob" -%}[]byte
+{%- elif kind == "mediumblob" -%}[]byte
+{%- elif kind == "longblob" -%}[]byte
+{%- elif kind == "date" -%}time.Time
+{%- elif kind == "datetime" -%}time.Time
+{%- elif kind == "timestamp" -%}time.Time
+{%- elif kind == "time" -%}string
+{%- elif kind == "year" -%}uint16
+{%- elif kind == "inet4" -%}string
+{%- elif kind == "inet6" -%}string
+{%- elif kind == "uuid" -%}string
+{%- elif kind == "geometry" -%}[]byte
+{%- elif kind == "geometrycollection" -%}[]byte
+{%- elif kind == "linestring" -%}[]byte
+{%- elif kind == "multilinestring" -%}[]byte
+{%- elif kind == "multipoint" -%}[]byte
+{%- elif kind == "multipolygon" -%}[]byte
+{%- elif kind == "point" -%}[]byte
+{%- elif kind == "polygon" -%}[]byte
+{%- else -%}
+{{- fail("go/_types.jinja maps no Go type onto the column " ~ column.table_name ~ "." ~ column.name ~ ", whose column_type is " ~ column.column_type ~ ". FR-EX-008 obliges this macro to cover every data_type the three schemas report: add a branch for it rather than letting an unmapped type reach the Go compiler as a guess.") -}}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  go_type(column) — the Go type of a struct field, nullability honoured.
+
+  A nullable column is not the same Go type as a non-nullable one, and
+  `sql.Null[T]` is where the standard library puts the difference: it scans a
+  NULL without erroring, it is a `driver.Valuer`, and `Valid` is the one
+  question a caller must answer before reading `V`.
+
+  Verified against the fixture server: `sql.Null[string]`, `sql.Null[uint16]`
+  and `sql.Null[[]byte]` each scan a real column of `freight`, and
+  `sql.Null[uint16]` is accepted as a query parameter.
+-#}
+{% macro go_type(column) -%}
+{%- if column is nullable -%}sql.Null[{{ go_value_type(column) }}]
+{%- else -%}{{ go_value_type(column) }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  go_filter_type(column) — the Go type of one field of a search filter.
+
+  A filter field is optional, so it is the value type made nilable: a pointer,
+  except where the value type is already a slice and carries a nil of its own.
+  A nil field contributes no condition to the WHERE clause.
+-#}
+{% macro go_filter_type(column) -%}
+{%- if go_value_type(column) == "[]byte" -%}[]byte
+{%- else -%}*{{ go_value_type(column) }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  go_read(expression, column) — read a filter field into a query argument.
+
+  The pointer form is dereferenced; the slice form is already the value.
+-#}
+{% macro go_read(expression, column) -%}
+{%- if go_value_type(column) == "[]byte" -%}{{ expression }}
+{%- else -%}*{{ expression }}
+{%- endif -%}
+{%- endmacro %}
+
+{#-
+  go_sanitised(name) — a catalogue name with the punctuation Go refuses in an
+  identifier replaced by an underscore.
+
+  This is needed because FR-ENV-031 passes a character outside `A-Za-z`
+  through the naming filters unchanged: `pascal` renders the column
+  `freight.legacy_edi_field.back`tick` as `Back`tick`, which is not an
+  identifier in any language. The underscore is chosen rather than removal
+  because `pascal` then treats the position as a word boundary, per
+  FR-ENV-030, and the column arrives as `BackTick`.
+
+  The set below is the ASCII punctuation a quoted MariaDB identifier may carry.
+  It is closed and it is not complete: a name beginning with a digit, or one
+  whose sanitised form collides with another column's, still renders an
+  identifier the Go compiler refuses. That is deliberate — the compile gate of
+  FR-EX-009 is the reader that reports it, and it reports it before the code is
+  committed rather than after.
+-#}
+{% macro go_sanitised(name) -%}
+{{- name | replace("`", "_") | replace('"', "_") | replace("'", "_")
+         | replace("\\", "_") | replace("/", "_") | replace(".", "_")
+         | replace(",", "_") | replace(";", "_") | replace(":", "_")
+         | replace("?", "_") | replace("!", "_") | replace("*", "_")
+         | replace("+", "_") | replace("=", "_") | replace("<", "_")
+         | replace(">", "_") | replace("(", "_") | replace(")", "_")
+         | replace("[", "_") | replace("]", "_") | replace("{", "_")
+         | replace("}", "_") | replace("|", "_") | replace("^", "_")
+         | replace("~", "_") | replace("%", "_") | replace("&", "_")
+         | replace("#", "_") | replace("@", "_") | replace("$", "_") -}}
+{%- endmacro %}
+
+{#-
+  go_exported(name) — the exported Go identifier for a catalogue name.
+
+  FR-ENV-033 records what `pascal` costs: an acronym loses its case, so
+  `actor_id` becomes `ActorId` and not `ActorID`. The cost is accepted here
+  rather than bought back with an initialism list, which would be a second
+  opinion to maintain and a new way for two columns to collide on one field
+  name.
+-#}
+{% macro go_exported(name) -%}
+{{- go_sanitised(name) | pascal -}}
+{%- endmacro %}
+
+{#-
+  go_unexported(name) — the unexported Go identifier for a catalogue name.
+
+  Every use of this macro appends a suffix, so the result is never a bare Go
+  keyword: a table called `select` yields `selectInsert` and `selectSQL`, both
+  of which are identifiers. Nothing else in the rendered package derives a
+  lower-case name from catalogue data, for that reason.
+-#}
+{% macro go_unexported(name) -%}
+{{- go_sanitised(name) | camel -}}
+{%- endmacro %}

@@ -1,0 +1,4 @@
+# tpl init creates this; it holds the database entries of the run, not the example.
+.tpl/
+# npm install creates this; the compile gate needs it and it is not the example.
+node_modules/

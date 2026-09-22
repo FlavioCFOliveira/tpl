@@ -579,6 +579,32 @@ const fn three<'a>(
     }
 }
 
+/// The one statement of the catalogue privilege probe (`FR-CFG-044`).
+///
+/// It is [`SCHEMA`] — the schema row the first entry of every plan below
+/// already issues — bound to the database the entry names, and it is that
+/// statement rather than a new one on purpose. `FR-CFG-044` requires "exactly
+/// one `SELECT` against `INFORMATION_SCHEMA`, restricted to the server-side
+/// database the entry names", and says of itself that it "is therefore already
+/// the first entry of `FR-SRV-006`" and "widens nothing": reusing the constant
+/// is what makes that true of the bytes sent rather than of an argument about
+/// them. A second text would be a second statement in the closed list of
+/// `FR-SRV-006` for a fact the first already answers.
+///
+/// Its three columns are read for neither their names nor their values.
+/// `FR-CFG-044` reads the result for two facts only — that the statement was
+/// answered without a privilege error, and that it returned at least one row —
+/// and [`super::probe`] is where both are read.
+///
+/// *Rejected: a listing of the database's tables.* `FR-CFG-044` rejects it by
+/// name, on the ground that it answers the same boolean while making the
+/// command's cost and correctness depend on a field list; and it would answer
+/// **false** for a database the reader can see and that holds no table, which
+/// is not what the probe is defined to prove.
+pub(super) fn probe(schema: &str) -> Statement<'_> {
+    one(Read::Schema, SCHEMA, schema)
+}
+
 /// The statements one read issues, in the order they are issued
 /// (`NFR-PERF-001`, `NFR-PERF-002`).
 ///
@@ -652,12 +678,41 @@ pub(super) fn plan<'a>(schema: &'a str, scope: &'a Scope<'a>) -> Vec<Statement<'
 
 #[cfg(test)]
 mod tests {
-    use super::{Read, Scope, Statement, plan};
+    use super::{Read, Scope, Statement, plan, probe};
     use crate::model::routine::RoutineKind;
 
     /// The eleven statements of a full read, which is the count
     /// `NFR-PERF-001` fixes.
     const FULL_READ: usize = 11;
+
+    #[test]
+    fn fr_cfg_044_the_probe_is_one_statement_and_it_is_one_the_repertoire_already_holds() {
+        // FR-CFG-044: "exactly one SELECT against INFORMATION_SCHEMA,
+        // restricted to the server-side database the entry names", which "is
+        // therefore already the first entry of FR-SRV-006" and "widens
+        // nothing". Both halves are read off the value: one statement, whose
+        // text is byte for byte the schema row every plan issues, with the
+        // schema as its only bind.
+        let statement = probe("freight");
+        let schema_row = &plan("freight", &Scope::Everything)[0];
+
+        assert_eq!(statement.sql(), schema_row.sql());
+        assert_eq!(statement.read().slot(), Read::Schema.slot());
+        assert!(statement.sql().contains("INFORMATION_SCHEMA.SCHEMATA"));
+        assert!(statement.sql().starts_with("SELECT "));
+        assert_eq!(statement.binds().collect::<Vec<_>>(), ["freight"]);
+    }
+
+    #[test]
+    fn nfr_perf_002_the_probe_costs_the_same_whatever_the_database_is_called() {
+        // NFR-PERF-002, which FR-CFG-044 cites as a reason for one statement:
+        // the probe's cost does not grow with the number of objects, and its
+        // text does not vary at all — the schema travels as a bind parameter,
+        // so nothing a caller supplies is composed into SQL.
+        for schema in ["freight", "a", "a_schema_no_server_of_the_fixture_carries"] {
+            assert_eq!(probe(schema).sql(), probe("freight").sql(), "{schema}");
+        }
+    }
 
     #[test]
     fn nfr_perf_001_a_full_read_issues_one_statement_per_object_kind_and_no_more() {

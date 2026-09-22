@@ -39,13 +39,17 @@
 //! privilege probe of `FR-CFG-044`, whose result is a boolean and not model
 //! content.
 //!
-//! Both hold by absence. No code path of this module, of [`entries`] or of
-//! [`keys`] reaches [`crate::cache`], so no subcommand of the arm has a route
-//! to the store; and the nine that are not `database test` reach
-//! [`crate::mariadb`] no more than they reach the cache. `database test` is the
-//! one leaf of the tree still unwritten, and the sprint that opens a connection
-//! owns it; what this arm fixes for it now is that a connection is the only
-//! thing it may reach for.
+//! The first holds by absence, over the whole arm: no code path of this module,
+//! of [`entries`], of [`keys`] or of [`connectivity`] reaches [`crate::cache`],
+//! so no subcommand of the arm has a route to the store — including the one
+//! that contacts a server.
+//!
+//! The second holds by absence over the nine: they reach [`crate::mariadb`] no
+//! more than they reach the cache. [`connectivity`] is the exception
+//! `FR-CACHE-010` makes, and it is a module of its own so that the exception is
+//! one file rather than one arm of a match: the connection, the four steps of
+//! `FR-CFG-024` and the report of `FR-CFG-039` are all there, and neither
+//! [`entries`] nor [`keys`] names a type of [`crate::mariadb`].
 //!
 //! What is absent is a requirement in its own right. `FR-CFG-030` forbids a
 //! `--password` or `-p` flag on any command, and `FR-GLOB-023` generalises it
@@ -55,6 +59,7 @@
 //! acceptable: `tpl` warns, and does not prevent.
 
 pub(crate) mod coherence;
+pub(crate) mod connectivity;
 pub(crate) mod entries;
 pub(crate) mod keys;
 
@@ -64,10 +69,12 @@ use clap::{ArgAction, Args, Subcommand};
 
 use super::globals::Globals;
 use super::local::{self, Format};
+use crate::deadline::{Clock, Seconds};
 use crate::error::Error;
 use crate::output::Form;
 use crate::project::Project;
 use crate::project::config::entry::TlsMode;
+use crate::project::settings;
 
 /// What one `cfg` invocation supplies that every subcommand of the arm reads.
 ///
@@ -86,6 +93,16 @@ pub(crate) struct Supplied<'a> {
     format: Format,
     /// Whether `--pretty` was given (`FR-OUT-008`).
     pretty: bool,
+    /// `--timeout`, the overall budget of `FR-GLOB-011`.
+    ///
+    /// It is carried for [`connectivity`] alone, which is the one subcommand of
+    /// the arm with a blocking phase to bound: `FR-GLOB-012` composes the
+    /// budget with every phase deadline, and the four steps of `FR-CFG-024` run
+    /// over three of them. The other nine touch `.tpl/` and nothing else, so
+    /// they have nothing for it to compose with; carrying it once here rather
+    /// than passing a second argument to one subcommand is what keeps
+    /// `FR-CLI-014`'s reduction in one place.
+    budget: Option<Seconds>,
 }
 
 impl<'a> Supplied<'a> {
@@ -100,12 +117,19 @@ impl<'a> Supplied<'a> {
                 .and_then(|output| output.format.first().copied())
                 .unwrap_or(Format::Text),
             pretty: output.is_some_and(|output| output.pretty.pretty),
+            budget: globals.timeout.first().copied().map(Seconds::new),
         }
     }
 
     /// The representation the result is written in.
     pub(crate) const fn format(self) -> Format {
         self.format
+    }
+
+    /// The clock the blocking phases of `tpl cfg database test` are bounded by
+    /// (`FR-GLOB-011`, `FR-GLOB-012`).
+    fn clock(self) -> Clock {
+        settings::clock(self.budget)
     }
 }
 
@@ -424,11 +448,17 @@ pub(crate) mod tests {
         }
 
         /// What one subcommand of the arm was supplied.
-        fn supplied(&self, format: Format, pretty: bool) -> Supplied<'_> {
+        ///
+        /// No budget: `--timeout` is `FR-GLOB-011`'s and only [`connectivity`]
+        /// has a blocking phase for it to bound, so a harness that supplies one
+        /// would be supplying it to nine subcommands that cannot read it.
+        /// [`connectivity`]'s own bodies compose the value they need.
+        pub(crate) fn supplied(&self, format: Format, pretty: bool) -> Supplied<'_> {
             Supplied {
                 tpl_dir: Some(self.tpl.as_path()),
                 format,
                 pretty,
+                budget: None,
             }
         }
 

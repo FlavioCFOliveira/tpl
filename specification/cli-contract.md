@@ -1,7 +1,7 @@
 ---
 title: CLI Contract
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
 
@@ -232,13 +232,40 @@ tpl
   declare, so `tpl init --pretty --pretty` is `64` for the flag being unknown
   there and not for being written twice.
 
-  *Rejected: `64`, which is what the parser produces today.* It is the outcome
-  and not a decision — the refusal was given a message in the sixth sprint
-  without the question being put — and the only ground available for it is
-  `FR-CLI-014`'s, which is about a value. Refusing also costs the caller a
-  whole invocation to learn something that changes nothing about what they
-  asked for: the meaning of `tpl -q -q` is not in doubt to anybody, including
-  the parser that refuses it.
+  *Rejected: refusing the invocation with `64`.* It was the outcome and not a
+  decision: no requirement of this corpus ever chose it, and the thirty-first
+  edition recorded that the refusal had been given its message in the sixth
+  sprint without the question being put. The only ground available for it is
+  `FR-CLI-014`'s, which is two values disagreeing, and a valueless flag has
+  none. Refusing also costs the caller a whole invocation to learn something
+  that changes nothing about what they asked for: the meaning of `tpl -q -q` is
+  not in doubt to anybody, including a parser that would refuse it.
+
+  *Observed, 2026-09-22, and recorded as a reading of that date rather than as
+  a standing claim.* Each of the six flags is declared as overriding itself —
+  `-q/--quiet`, `-h/--help` and `-V/--version` in `src/cli/globals.rs`,
+  `--pretty`, `--direct` and `--no-cache` in `src/cli/local.rs` — and the
+  binary built from that source accepted both repetitions: `tpl -q -q version`
+  printed `tpl 0.1.0` and exited `0`, and `tpl -h -h` exited `0`. `455e48d`
+  carries this requirement and that declaration in one commit, so the option
+  rejected above has not been the built behaviour at any moment since this
+  requirement was published.
+
+  *Amended in the thirty-fifth edition: the option is named by what it does.*
+  The clause read *Rejected: `64`, which is what the parser produces today* and
+  closed on *the parser that refuses it*. Both asserted, in the present tense
+  and undated, what the implementation did, and both were false in the commit
+  that wrote them, which is the defect the thirty-fourth edition corrected in
+  `FR-CONF-014` and named here without acting on it. This is the worse of the
+  two instances, and worse for a reason of its own: **this requirement's whole
+  effect is to change the behaviour the clause named**, so the clause became
+  false at the moment the requirement was satisfied and would have gone on
+  telling a reader that `tpl` still refuses what it accepts. The rejected
+  option is kept and is now named by what it does and grounded in the outcome
+  it produces; the reading of the implementation is kept beside it as a dated
+  observation, in the form
+  [project-and-discovery.md](project-and-discovery.md) uses for its two
+  readings of `src/project/init.rs`.
 
   *Rejected: `64` for the four flags a command declares and acceptance for the
   two that end the invocation.* It splits one rule over two sets with no

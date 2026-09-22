@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-22
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -28,8 +28,10 @@ would produce a technical statement with no trace, which this folder does not
 admit. A document listed as *unblocked* has no entry against it and has simply
 not been written.
 
-As of 2026-09-21 every entry of `open-decisions.md` is settled and **no document
-waits**. One entry is settled and **interim** — `OD-30`, which records an
+As of 2026-09-22 one entry of `open-decisions.md` is open — `OD-33`, whether
+`UC-013` joins the acceptance skeleton — and **no document waits**: what it
+blocks is a statement in a written document, not a document. Every other entry
+is settled. One of those is settled and **interim** — `OD-30`, which records an
 arrangement each later sprint removes one arm of — and it blocks nothing; one
 arm remains.
 
@@ -130,7 +132,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: thirty-two settled entries, each carrying its rejected options or citing the record that holds them, the obligations that survive settlement with their owners, and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: thirty-two settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. Nothing bounds it: `OD-14`'s owed observation was made on 2026-09-21 and the entry records the answer |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
@@ -247,7 +249,8 @@ never written to a diagnostic stream. The sentinel property. `${VAR}` expansion
 and its ordering inside a DSN. The child process. The discovery boundary,
 canonicalisation, ownership and mode checks. Template containment. The
 injection surfaces. Transport, including the mode set explicitly on every
-connection and the trust material that widens rather than narrows. The
+connection, the trust material that widens rather than narrows, and how a
+directory of trust material is resolved and when it refuses. The
 read-only promise in its two parts. The four template capability prohibitions.
 
 **Must not contain.** A second statement of any rule. Each entry cites its
