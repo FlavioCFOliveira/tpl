@@ -180,14 +180,33 @@ variable is bound to a source, which is
   references. Two consequences follow, and both are recorded rather than
   discovered:
 
-  - The adopted peak-memory figure of `NFR-PERF-014` — `< 32 MiB` over
-    `WL-001` — was supplied by the root `CLAUDE.md` before either embedding
-    existed. It is the adopted figure most likely to be superseded upward by
-    the first real measurement, and `NFR-PERF-019` is what allows that to
-    happen without the figure ever having been a limit — as, since
-    `BR-PERF-008`, no figure of this corpus is.
-  - The `WL-002` scalar of `N` bytes is unvalued for this reason among others,
-    and the amendment to `WL-002` states it.
+  - The peak-memory measurement point of `NFR-PERF-014` carried an adopted
+    figure, supplied by the root `CLAUDE.md` before either embedding existed,
+    and this note expected the first real measurement to supersede it
+    **upward**. It did not. The point was measured on 2026-09-22 on
+    `aarch64-apple-darwin` and came in at about a quarter of the figure that had
+    been adopted for it, so the adopted figure is removed from `NFR-PERF-014`
+    under `NFR-PERF-020` and the cost this embedding adds is carried, on that
+    host, well inside what was anticipated. The reading is in `BENCHMARKS.md`
+    and is not restated here, per `BR-PERF-006`; it fails nothing, per
+    `BR-PERF-008`; and it names one target of the four, so nothing is settled on
+    the other three.
+  - The `WL-002` scalar of `N` bytes was unvalued for this reason among others,
+    and the amendment to `WL-002` states it. It has since been measured and is
+    recorded in `BENCHMARKS.md` under `NFR-PERF-020`, so the scalar is live: a
+    later read of the same fixture through the same document shape that falls
+    outside its ±2% band is a functional defect to be explained, which is what
+    `WL-002` says it is.
+
+  *Corrected in the thirty-seventh edition, in both bullets, because the
+  measurement they anticipated has been taken.* The first predicted the
+  direction the adopted figure would move in and named the figure itself, which
+  made this file a second home for it; the prediction was wrong and the figure
+  is removed from `NFR-PERF-014`, so the bullet now records what happened and
+  keeps no number. The second said the `WL-002` scalar is unvalued, which it no
+  longer is. **What neither correction touches is this requirement's accepted
+  cost**: the embedding still doubles what `FR-CTX-006` had already doubled, and
+  that is a fact about the document and not about how any host measured it.
 
   *Rejected.* Names only, which is what the second edition left in place by not
   composing the two decisions. It is the cheapest document and it makes the

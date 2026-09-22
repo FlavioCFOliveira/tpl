@@ -163,3 +163,17 @@ of the [README](README.md#identifier-scheme). `NFR-PERF-019` and
 **adopted** one, and what they call a gate is a recording rule. The rows are
 left as the fifth edition wrote them, because each is a record of what answered
 a question on the day it was answered, and no answer has been withdrawn.
+
+**The thirty-seventh edition moved five of those answers and re-opened none.**
+All nine measurement points of `NFR-PERF-014` and the `WL-002` scalar were
+measured on 2026-09-22, and the five adopted figures the measurement superseded
+are removed from that requirement under `NFR-PERF-020`, which is the step that
+rule exists to oblige. The five rows whose answer was a **figure** are
+`OQ-051`, `OQ-052`, `OQ-053`, `OQ-054` and `OQ-059`, and a reader following any
+of them to `NFR-PERF-014` now finds no number in the table. That is not the
+question re-opening: what closed each of them was a figure, and the figure now
+lives in `BENCHMARKS.md`, where `BR-PERF-006` requires a measured one to live.
+The five rows whose answer was a **stated blank** — `OQ-055` through `OQ-058`,
+and `OQ-060` for the `WL-002` scalar — keep that answer unchanged, and each of
+those points has since been measured too, which is what a blank always
+anticipated.

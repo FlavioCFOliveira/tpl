@@ -20,10 +20,20 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Fifty-five entries are recorded. As of 2026-09-22, six are due in full,
-forty-five are discharged, and four are partly discharged.** Ten entries still
-owe something: seven owe it to `CLAUDE.md` and three to `README.md`, and no
+**Fifty-five entries are recorded. As of 2026-09-22, four are due in full,
+forty-seven are discharged, and four are partly discharged.** Eight entries
+still owe something: five owe it to `CLAUDE.md` and three to `README.md`, and no
 entry is in both counts.
+
+*The counts moved in the thirty-seventh edition, and two entries moved them.*
+`DIV-055` is discharged by `9562fb2` and `DIV-052` by `abbfe70`, so two entries
+leave the **due** count and join the discharged one, and both were owed to
+`CLAUDE.md`. `DIV-050` discharged one more of its lines, at `abbfe70`, and stays
+**partly discharged**, so it moves no count — a status value is what these
+counts count. The four that remain due in full are `DIV-032` and `DIV-041`,
+owed to `CLAUDE.md`, and `DIV-053` and `DIV-054`, owed to `README.md`. The four
+partly discharged are `DIV-001`, whose remaining half is `README.md`'s, and
+`DIV-036`, `DIV-037` and `DIV-050`, whose remaining parts are all `CLAUDE.md`'s.
 
 **The asymmetry has reversed, and one commit did it.** `e75996c` rewrote the
 root `README.md` whole on 2026-09-17 — 192 lines in, 365 out — and it is what
@@ -34,6 +44,12 @@ section, and by making the corrections eleven entries asked for in so many
 words. `README.md` owed thirty-two corrections before it and owes three
 after it. The remaining work of this register is now almost entirely
 `CLAUDE.md`'s.
+
+*Corrected in the thirty-seventh edition, in the last sentence.* It was written
+when `CLAUDE.md` owed seven entries against `README.md`'s three. Two of those
+seven are discharged, so the split is **five to three**, and *almost entirely*
+overstates it. The asymmetry stands and is smaller: `CLAUDE.md` owes the
+majority of what is left, and no longer the bulk of it.
 
 **The pass the thirty-first edition left owed is this one, and it is made.**
 All fifty-two entries then recorded were re-read on 2026-09-21 against
@@ -53,7 +69,9 @@ was waiting on, so both entries carried a clause that had stopped being true
 within the day. `DIV-036` stays **partly discharged** and now owes one sentence
 where it owed a sentence and a file; `DIV-052` stays **due** and now waits on
 one thing where it waited on two. The counts above are unchanged, because a
-status value is what they count and neither moved.
+status value is what they count and neither moved. *The one thing `DIV-052` was
+then waiting on arrived the next day, at `abbfe70`, and the thirty-seventh
+edition discharged that entry; `DIV-036` is where this paragraph left it.*
 
 **One entry is added by the thirty-sixth edition, and it was not raised by an
 edit to either file.** `DIV-055` records two passages of `CLAUDE.md` stating
@@ -62,12 +80,24 @@ summaries of `NFR-PERF-017` when they were written, and that requirement is
 withdrawn, so they became owed without anybody touching the file they are owed
 to — the direction the thirty-second edition's extension of the fifth
 validation rule covers, and the second entry raised in it after `DIV-053`. The
-counts above move with it: one more entry, one more due in full, one more owed
+counts above moved with it: one more entry, one more due in full, one more owed
 to `CLAUDE.md`. `DIV-052` is raised against one of the same two passages, for a
 different defect and with a different correction, and it is amended in the same
 edition where this one made it false; neither discharges the other, and that
 entry's **Kind** is a question named there and left for the next reading of
 this file.
+
+**Both entries are discharged by the thirty-seventh edition, which is that next
+reading, and they discharged apart.** `9562fb2` removed both of `DIV-055`'s
+passages from `CLAUDE.md`, and `abbfe70` created `benches/` with the measurement
+harness in it, which made `DIV-052`'s sentence true without anybody editing the
+file. **The Kind question is settled there and is settled by that fact**: a
+Kind classifies the defect an entry records and not the passage it points at,
+and the proof is that one sentence carrying two defects discharged on two
+different conditions, by two different commits, through events of two different
+sorts. An entry with one Kind could have described only one of them. The
+grounds, and the two alternatives rejected with them, are under
+[DIV-052](#div-052).
 
 **A third entry was read against the working tree, on 2026-09-22, and it did
 not move either.** `0110f8c` created `examples/`, which is one of the three
@@ -77,6 +107,16 @@ three. The counts above are unchanged for the same reason, and the trigger was
 again an event in the repository rather than an edit to either document — the
 direction the thirty-second edition widened the **Overstatement** kind to
 cover.
+
+**`DIV-050` was read against the working tree once more, later the same day,
+and still did not move.** `abbfe70` created `benches/`, the second of the two
+lines that entry then owed, so it now owes **one** — `templates/`, which is
+still absent. It stays **partly discharged**, because an entry is never recorded
+as discharged while any part of it stands, and the counts above are unchanged
+for the third time and for the same reason. The trigger was again an event in
+the repository. The same commit discharged `DIV-052`, which reads that directory
+from the other end, and the two were read separately against their own passages,
+which is what both entries give as the reason they are recorded apart.
 
 Three kinds of entry appear:
 
@@ -107,18 +147,33 @@ Three kinds of entry appear:
 
 *The third kind is added in the sixteenth edition*, and five entries carry it:
 `DIV-046` and `DIV-054` against `README.md`, and `DIV-050`, `DIV-051` and
-`DIV-052` against `CLAUDE.md`. Three of the five are discharged, two of them by
-the repository catching up with the document rather than by an edit to it. No
-one of the five discharges another, because each is corrected in the passage
-it was raised against. The first four were raised on one fact — that the
-repository then held no crate — and `DIV-046` and `DIV-051` are the closest
-pair among them: they record the same eight `cargo` commands, under headings
-that are each other's translation, once in each root document, and `d8e7e8a`
-discharged both. `DIV-052` needed a second fact beside the first, and it is why
-that entry alone is still due: there are no benchmarks to live in the directory
-its passage names, and the fixture they are said to run against is itself
-incomplete, which is what `DIV-036` still owes. `DIV-054` is the fifth and is
-of the opposite direction, which is what widened the kind.
+`DIV-052` against `CLAUDE.md`. **Three of the five are discharged in full —
+`DIV-046`, `DIV-051` and `DIV-052` — and every one of the three by the
+repository catching up with the document rather than by an edit to it. A
+fourth, `DIV-050`, is partly discharged the same way and owes one line. The
+fifth, `DIV-054`, is due.** No one of the five discharges another, because each
+is corrected in the passage it was raised against. The first four were raised on
+one fact — that the repository then held no crate — and `DIV-046` and `DIV-051`
+are the closest pair among them: they record the same eight `cargo` commands,
+under headings that are each other's translation, once in each root document,
+and `d8e7e8a` discharged both. `DIV-052` needed a second fact beside the first,
+and it is why that entry outlived them: a benchmark had to be written before the
+directory its passage names held anything. `abbfe70` wrote one, on 2026-09-22.
+`DIV-054` is the fifth and is of the opposite direction, which is what widened
+the kind.
+
+*Corrected in the thirty-seventh edition, in the counts and in the clause
+naming what `DIV-052` waited on.* The closing clause said that entry *alone is
+still due* because there are no benchmarks and the fixture they run against is
+incomplete. The fixture was completed in the thirty-third edition and that
+entry's Status was narrowed then; the benchmark arrived at `abbfe70`, and both
+halves of the clause are paid. The counts are restated against the Index rather
+than carried forward, which is the third validation rule of the
+[README](README.md#maintenance-debt) applied here: the paragraph read *three of
+the five are discharged, two of them by the repository catching up*, and the
+Index of the day held two discharged, not three, each of them by the repository
+catching up. Counting a paragraph's own claim correctly establishes nothing
+about whether it matches the table it describes.
 
 *The seventeenth edition closes that kind in `CLAUDE.md`* and adds no entry to
 it. The sixteenth edition's sweep left one candidate in that file unjudged —
@@ -223,10 +278,11 @@ which is the defect this specification records against the root documents.
 ## When this file is re-read
 
 The classification below was made against `README.md` at `db80114` and
-`CLAUDE.md` at `8f936d4`, on 2026-09-21 — the last commit to touch each. **It
-stops being true the moment either file is edited.** That is how `DIV-031` came
-to ask, through four editions and one amendment of its own, for the removal of
-a clause that had been gone since `0ea5624`.
+`CLAUDE.md` at `9562fb2`, the last commit to touch each — the first on
+2026-09-21 and the second on 2026-09-22. **It stops being true the moment
+either file is edited.** That is how `DIV-031` came to ask, through four
+editions and one amendment of its own, for the removal of a clause that had
+been gone since `0ea5624`.
 
 *Restated in the thirty-second edition, with the commits it now names.* The
 fifteenth edition made the classification at `87dd6e3` and wrote this section
@@ -236,6 +292,22 @@ to say that it decays. It did. `README.md` was edited three times after it —
 out of date against both, which the thirty-first edition recorded and did not
 pay. **This edition paid it**, and the classification below is of the state
 above and of no other.
+
+*Paid again in the thirty-seventh edition, against `CLAUDE.md` at `9562fb2`.*
+That file has been edited three times since `8f936d4`, all on 2026-09-22 —
+`3a360d6`, then `6a66d14`, then `9562fb2` — so the classification above stopped
+being true of it, on this section's own terms. The three edits were read against
+every entry whose **Target** is that file. **Only `9562fb2` reaches any of
+them**: it rewrote both passages of `DIV-055`, it rewrote the second half of the
+sentence `DIV-052` is raised against and left that entry's own clause standing,
+and it changed one comment line inside the project tree `DIV-050` targets.
+`3a360d6` touched the `Erros` row of the *Stack* table and the *Tipos e erros*
+bullet that restates it; `6a66d14` touched the synergy rules, the pre-flight
+checklist and the open-task gate. **No entry of this register targets any
+passage either of those two commits touched**, so neither discharges anything
+and neither changes a status. `README.md` is untouched since `db80114`, and the
+classification of every entry against it stands as the thirty-second edition
+made it.
 
 The obligation that replaces the presumption is recorded in
 [README.md](README.md#maintenance-debt) as the fifth validation rule of this
@@ -249,7 +321,7 @@ are still owed.
 
 ## The commits named below
 
-Fourteen commits are named in the statuses, and each is named by its short
+Seventeen commits are named in the statuses, and each is named by its short
 hash alone after this table.
 
 | Commit | Date | Subject |
@@ -268,22 +340,29 @@ hash alone after this table.
 | `db80114` | 2026-09-21 | feat(render): deliver the third arm and the context it assembles |
 | `8f936d4` | 2026-09-21 | docs(coord): condition parallelism on user authorisation alone |
 | `0110f8c` | 2026-09-22 | feat(examples): vendor sakila and world, and write the shared driver |
+| `abbfe70` | 2026-09-22 | chore(benches): add the measurement harness for the nine budgets |
+| `9562fb2` | 2026-09-22 | docs: make performance guidance design, not a gate |
+| `fe428da` | 2026-09-22 | feat(benches): measure the nine points and record the observations |
 
 `3f65b5f` wrote both root documents and is the state every entry of the first
 edition was raised against. Two commits carry most of the discharges, one per
 file. `0ea5624` reduced `CLAUDE.md` to agent coordination and is behind twelve
 discharges and nineteen halves. `e75996c` rewrote `README.md` whole and is
-behind thirty-one, which is why the remaining work of this file is now almost
-entirely `CLAUDE.md`'s — the reverse of what the fifteenth edition found.
+behind thirty-one, which is why the majority of the remaining work of this file
+is `CLAUDE.md`'s — the reverse of what the fifteenth edition found. *The
+thirty-seventh edition narrowed the claim here as it narrowed it in the
+[Overview](#overview), and for the same arithmetic: the split is five entries
+to three, not the seven to three it was written against.*
 
-**Six of the fourteen are not edits to a root document at all**, and they are
+**Eight of the seventeen are not edits to a root document at all**, and they are
 named because an **overstatement** discharges when the repository catches up
 with the text, on the rule at *[How an entry is read](#how-an-entry-is-read)*.
 `d8e7e8a` created the crate, `4014dc4` created `tests/`, `0110f8c` created
-`examples/`, and `db7337d` and `db80114` wired the arms that made two sentences
-of `README.md` stop being true. `1352a2d` is the sixth and is named for neither
-reason: it is where this register was opened, and `DIV-025` cites it for a
-search of the history.
+`examples/`, `abbfe70` created `benches/` with the measurement harness in it,
+`fe428da` took the first readings from that harness, and `db7337d` and
+`db80114` wired the arms that made two sentences of `README.md` stop being true.
+`1352a2d` is the eighth and is named for neither reason: it is where this
+register was opened, and `DIV-025` cites it for a search of the history.
 
 ## Index
 
@@ -340,10 +419,10 @@ search of the history.
 | [DIV-049](#div-049) | `README.md` | Contradiction | Discharged, `e75996c` | The entry flag table omits `--ca-file` and `--ca-path` |
 | [DIV-050](#div-050) | `CLAUDE.md` | Overstatement | Partly, `CLAUDE.md` | The project tree, in a repository with no crate |
 | [DIV-051](#div-051) | `CLAUDE.md` | Overstatement | Discharged, `d8e7e8a` | The eight `cargo` commands, in a repository with no crate |
-| [DIV-052](#div-052) | `CLAUDE.md` | Overstatement | Due | The benchmark directory, in a repository with no benchmarks |
+| [DIV-052](#div-052) | `CLAUDE.md` | Overstatement | Discharged, `abbfe70` | The benchmark directory, in a repository with no benchmarks |
 | [DIV-053](#div-053) | `README.md` | Contradiction | Due | Four commands said to perform no discovery at all |
 | [DIV-054](#div-054) | `README.md` | Overstatement | Due | Two passages saying no command reaches a server |
-| [DIV-055](#div-055) | `CLAUDE.md` | Contradiction | Due | A regression against a recorded baseline said to fail the change |
+| [DIV-055](#div-055) | `CLAUDE.md` | Contradiction | Discharged, `9562fb2` | A regression against a recorded baseline said to fail the change |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1024,11 +1103,12 @@ is the one stated above and nothing more.
 
 **Target**: `CLAUDE.md`, project structure. **Kind**: contradiction.
 
-**Status**: **due**, re-read on 2026-09-21 at `8f936d4`. The sentence stands
+**Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The sentence stands
 in *Estrutura do Projecto*, below the project tree and unchanged since
-`3f65b5f`, through all five commits that have touched `CLAUDE.md` since this
-entry was last checked. It is one of the ten entries this register still owes
-something on, and one of the seven owed to that file.
+`3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
+most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
+this passage. It is one of the eight entries this register still owes something
+on, and one of the five owed to that file.
 
 *Corrected in the thirty-sixth edition, with `DIV-041`.* The sentence read
 *one of the seven corrections this register still owes and one of the six owed
@@ -1041,6 +1121,13 @@ terms so that a reader comparing the two is comparing one count. This is the
 third validation rule of the [README](README.md#maintenance-debt) applied to a
 count rather than to a record: correcting one restatement of a figure
 establishes nothing about the others.
+
+*Corrected again in the thirty-seventh edition, with `DIV-041`, and the sweep
+was made first.* Discharging `DIV-052` and `DIV-055` takes the Overview to
+eight entries owing and five owed to `CLAUDE.md`, and both halves here follow
+it. Every restatement of either count was found before any was changed — this
+entry, `DIV-041` and `DIV-052`, which is the whole of them — so that the defect
+the note above records is not repeated by the edition correcting it.
 
 
 
@@ -1293,6 +1380,17 @@ and that *the budgets over `WL-001` wait on `seed-bench.sql`, per
 narrower than it was and the link is kept for it: `DIV-052`'s sentence is still
 false, and this entry's remaining line still describes a fixture wrongly.
 
+*Corrected in the thirty-seventh edition, because half of the link has been
+paid and this entry is still owed.* `DIV-052` is discharged: `abbfe70` created
+`benches/` and put the measurement harness in it, so the sentence that entry
+was raised over is true and the directory the paragraph above calls one *the
+repository has not got* is in the working tree. **What this entry still owes is
+unchanged**, and so is the reason the two were never one: the coverage
+paragraph of *Testes contra MariaDB* still names two of the fixture's three SQL
+scripts, and making that correction produces no benchmark and touches no other
+section. The link is kept because it records why neither entry discharged the
+other, which is the fact that decided how both were raised.
+
 ## DIV-037
 
 **Target**: both. **Kind**: contradiction.
@@ -1420,14 +1518,21 @@ sentence.
 
 **Target**: `CLAUDE.md`, supported platforms. **Kind**: migration.
 
-**Status**: **due**, re-read on 2026-09-21 at `8f936d4`. The deferral stands
-verbatim under *Plataformas Suportadas*, unmoved by any of the five commits
-that have touched `CLAUDE.md` since this entry was last checked, and the two
-rules beside it still restate what `NFR-PERF-018` and `NFR-PERF-012` carry. It
-is one of the ten entries this register still owes something on.
+**Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The deferral stands
+verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
+`9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
+`NFR-PERF-012` carry. It is one of the eight entries this register still owes
+something on.
 
 *Corrected in the thirty-sixth edition, with `DIV-032`*, and for the reason
 given there.
+
+*Corrected again in the thirty-seventh edition, with `DIV-032`*, and for the
+reason given there. The re-read against `9562fb2` covered the whole of this
+entry's **Target**: the deferral is untouched, and so are the two rules beside
+it — including the one this entry quotes as *correctly* stating that a
+performance baseline always names the target it was measured on, which that
+commit left exactly as it stood.
 
 
 
@@ -1815,18 +1920,34 @@ leave this entry standing.
 **Target**: `CLAUDE.md`, *Estrutura do Projecto*. **Kind**: overstatement.
 
 **Status**: **partly discharged**, re-read on 2026-09-22 against the working
-tree, and last read against `CLAUDE.md` on 2026-09-21 at `8f936d4`. **Four of
-the six lines are discharged** by the repository catching up with the document,
-on the rule at *[How an entry is read](#how-an-entry-is-read)*: `d8e7e8a`
-created `Cargo.toml` and `src/` with all seven of the children this tree names,
-on 2026-09-12; `4014dc4` created `tests/` on 2026-09-15; and `0110f8c` created
-`examples/` on 2026-09-22. All ten paths are in the working tree, verified on
-2026-09-22, and the paragraph under the tree now speaks of a `model/` that
-exists. **Two lines are due**: `templates/` and `benches/` are still absent,
-and the tree still names each with a comment saying what it holds. The
-correction is narrower than it was and is unchanged in kind — a qualifier on
-what is not yet there, and **neither the tree nor the decomposition under
-`src/` is to be removed**.
+tree and against `CLAUDE.md` at `9562fb2`. **Five of the six lines are
+discharged** by the repository catching up with the document, on the rule at
+*[How an entry is read](#how-an-entry-is-read)*: `d8e7e8a` created
+`Cargo.toml` and `src/` with all seven of the children this tree names, on
+2026-09-12; `4014dc4` created `tests/` on 2026-09-15; `0110f8c` created
+`examples/` on 2026-09-22; and `abbfe70` created `benches/` the same day. All
+eleven paths are in the working tree, verified on 2026-09-22, and the paragraph
+under the tree now speaks of a `model/` that exists. **One line is due**:
+`templates/` is still absent, and the tree still names it with a comment saying
+what it holds. The correction is narrower than it was and is unchanged in
+kind — a qualifier on what is not yet there, and **neither the tree nor the
+decomposition under `src/` is to be removed**.
+
+*The `benches/` line, and what makes it true, recorded in the thirty-seventh
+edition.* The tree calls that directory *benchmarks*, and `abbfe70` put the
+measurement harness there — `run.sh`, `protocol.sh`, `fixture.sh`, `loop200.sh`
+and a `README.md` of its own — with `fe428da` taking the first readings from it
+and recording them in `BENCHMARKS.md`. The line is therefore true of what is
+there and not merely of a path that exists, which is what an **overstatement**
+discharges on. `DIV-052` reads the same absence from the other end and is
+discharged by the same commit, in the same edition; neither discharged the
+other, and each was read against its own passage, which is the ground both
+entries give for being recorded apart.
+
+*The entry stays partly discharged, and no count of the Overview moves.* One
+line is still owed, and **an entry is never recorded as discharged while any
+part of it stands**. A status value is what the Overview counts, and this one
+did not change.
 
 *The `examples/` line, and what makes it true.* The tree calls that directory
 *pipelines completos: schema → template → output*, and in the working tree of
@@ -1836,9 +1957,12 @@ its own, and the four worked examples `FR-EX-001` obliges — `go-data-layer`,
 its templates, its type-mapping macro, its driver script and the data layer it
 renders. The line
 is therefore true of what is there and not merely of a path that exists, which
-is what an **overstatement** discharges on. Two lines of the same tree are
-untouched by this: `templates/` and `benches/` are absent, and `DIV-052` reads
-`benches/` from the other end and is neither changed nor read here.
+is what an **overstatement** discharges on. Two lines of the same tree were
+untouched by this: `templates/` and `benches/` were both absent, and `DIV-052`
+read `benches/` from the other end and was neither changed nor read here. *The
+verbs of the last sentence are put in the past by the thirty-seventh edition,
+which discharged the `benches/` line and `DIV-052` with it; `templates/` is
+where the entry now stands alone.*
 
 *Corrected in the thirty-fifth edition.* The *Specification* clause below said
 that an agent taking the tree for a map finds nothing at **three** of the
@@ -1847,6 +1971,13 @@ would otherwise stand as written under the rule at *[How an entry is
 read](#how-an-entry-is-read)*, and it is corrected because it is load-bearing
 for an entry still owed: it is where this entry states what the reader loses,
 and a cost counted over a path that now exists is a cost nobody has to pay.
+
+*Corrected again in the thirty-seventh edition, on the same ground and for the
+same clause.* `abbfe70` created `benches/`, so the clause names **one** path
+where it named two. The entry is still owed, so the clause is still
+load-bearing, and the same reasoning applies: a reader is told exactly which
+path the tree promises and the repository does not have, and that is now
+`templates/` alone.
 
 
 
@@ -1867,8 +1998,8 @@ the section belongs to that file exactly as *Installation* belongs to
 `README.md` under `DIV-046`, and only its tense is false. It is false of the
 repository rather than of a requirement, and false to the reader that file
 declares for itself: an agent that takes the tree for the map of what it may
-open finds nothing at two of them — `templates/` and `benches/` — where when
-this entry was raised it found nothing at any of the six. `87dd6e3` makes that
+open finds nothing at one of them — `templates/` — where when this entry was
+raised it found nothing at any of the six. `87dd6e3` makes that
 reading the natural one, because it shows the tree being maintained against the
 repository — three artefacts were added to it because they exist — which tells
 a reader the list is kept current.
@@ -2085,18 +2216,25 @@ it, are written there.
 **Target**: `CLAUDE.md`, the *Disciplina de medição* subsection of *Desempenho
 e Eficiência*. **Kind**: overstatement.
 
-**Status**: **due**, re-read on 2026-09-21 at `8f936d4`, and re-read again the
-same day against the working tree. The sentence stands, untouched by the five
-commits that have edited `CLAUDE.md` since this entry was raised, and nothing
-about it has been discharged by the repository either: `benches/` is still
-absent from the working tree, and no benchmark of any kind is tracked. This is
-the one **overstatement** of the four that the crate did not discharge, because
-its claim was never about a manifest — `DIV-046` and `DIV-051` fell to
-`d8e7e8a` and `DIV-050` fell to it in part. **What it waits on is now one thing
-and not two**: a benchmark being written. The fixture it also waited on is
-complete, `DIV-036` no longer owes `seed-bench.sql`, and a benchmark over
-`WL-001` has a database to run against. It is one of the ten entries this
-register still owes something on, and one of the seven owed to `CLAUDE.md`.
+**Status**: **discharged** by `abbfe70`, re-read on 2026-09-22 against the
+working tree and against `CLAUDE.md` at `9562fb2`. **The repository caught up
+with the sentence**, which is the second sense a *Discharged* value takes under
+*[How an entry is read](#how-an-entry-is-read)*: `abbfe70` created `benches/`
+and put the measurement harness in it — `run.sh`, `protocol.sh`, `fixture.sh`,
+`loop200.sh` and a `README.md` of its own — and that harness runs against the
+MariaDB containers, which it stands up through `scripts/mariadb/` and loads with
+`seed-bench.sql`. `fe428da` then took the first readings from it, so the
+sentence is true twice over: benchmarks live there, and they have run against
+that dataset and produced a record. **The commit named is `abbfe70`, the one
+that made the statement true.**
+
+**The clause this entry was raised against survives the edit to that
+subsection.** `9562fb2` rewrote the sentence's second half — `DIV-055`'s
+business, discharged there — and left *Os benchmarks vivem em `benches/` e
+correm contra o dataset dos containers MariaDB, para serem reproduzíveis*
+standing. That is this entry's clause, unchanged and now true, so the discharge
+is of the passage this entry actually records and not of a sentence somebody
+else rewrote.
 
 *Corrected in the thirty-third edition.* The last sentence read *one of the
 seven corrections this register still owes*, where the Overview counts nine
@@ -2109,6 +2247,12 @@ the two is comparing one count.
 sentence follows them. The same edition found the thirty-third's correction had
 been made here and nowhere else, and corrected `DIV-032` and `DIV-041` with
 it.
+
+*Both corrections are spent, in the thirty-seventh edition.* This entry owes
+nothing, so it is in no count of entries owing, and the sentence the two notes
+above were correcting is gone with the **due** status. They are kept because
+they are the record of a figure restated in four places and corrected in one,
+which is the lesson the Overview's counts are maintained under.
 
 
 
@@ -2169,6 +2313,40 @@ correction is. It is left for the next reading of this file, on the rule the
 sixteenth and seventeenth editions used for a candidate a sweep could not
 judge. Nothing turns on it while it stands: both defects are recorded, each
 with its own correction, and `DIV-055` names this entry as `DIV-052` names it.
+
+**Settled in the thirty-seventh edition, which is that next reading: the Kind
+stays `overstatement`, and it stays because a Kind classifies the defect the
+entry records and never the passage the entry points at.** That is what
+*[How an entry is read](#how-an-entry-is-read)* already implies of every clause
+of an entry — **Target** names where to look, **Kind** names what is wrong,
+**Status** names what is still owed — and it is the same criterion `DIV-051`
+settled for where an entry goes: the shape of the correction decides, not the
+proximity of the passages. One sentence carrying two defects is two entries with
+two kinds, and it always was.
+
+**What settles it is not the argument but what happened to the two entries.**
+They discharged separately, by different commits, through events of different
+sorts.
+This one discharged when the repository caught up with the text, at `abbfe70`,
+with nobody editing `CLAUDE.md` — which is what an **overstatement** discharges
+on, and only an overstatement. `DIV-055` discharged when somebody deleted a
+clause, at `9562fb2` — which is what a **contradiction** discharges on. A single
+entry carrying one Kind could not have described both discharge conditions, and
+whoever made either edit would have been left holding an entry that was half
+paid. The separation was right, and the Kind belongs to the entry that records
+the defect.
+
+*Rejected: moving this entry's Kind to `contradiction` because its sentence was
+contradicted.* It would have made the Kind a property of the passage, and a
+passage can carry any number of defects while an entry records one. Under that
+reading this entry would have become a contradiction it never asserted, would
+have been read as discharged by `9562fb2`, which did not touch its clause, and
+the false tense it was raised over would have gone unrecorded until somebody
+raised it again. *Also rejected: merging the two entries once both were
+discharged*, on the ground that the distinction stopped mattering. A discharged
+entry is kept in place so that a reference written before the discharge resolves
+to an explanation, and merging two would leave one of the two identifiers
+resolving to nothing.
 
 *Why this is an entry of its own and not a widening of `DIV-051`.* The
 criterion is the one `DIV-051` settled: **the shape of the correction decides
@@ -2418,13 +2596,34 @@ test fail. The widening, and the fourth kind rejected in its place, are in the
 *Desenvolvimento*, and the closing sentence of *Disciplina de medição* in
 *Desempenho e Eficiência*. **Kind**: contradiction.
 
-**Status**: **due**, raised on 2026-09-22 against `CLAUDE.md` at `8f936d4`.
-Both passages stand. Neither was edited into error: each was an exact summary
-of `NFR-PERF-017` when it was written, and the thirty-sixth edition withdrew
-that requirement, which is the direction the thirty-second edition's extension
-of the fifth validation rule covers — an entry becomes owed when this corpus
-amends a requirement the target document paraphrases, without anybody touching
-the file it is owed to.
+**Status**: **discharged** by `9562fb2`, re-read on 2026-09-22 against
+`CLAUDE.md` at that commit. **Both passages are corrected, each in the way this
+entry asked for.** Under *Pipeline de validação obrigatório*, the sentence that
+added the benchmarks and a comparison against the baseline to the pipeline is
+replaced by one saying that nothing of performance is added to it — that a
+change to a hot path is an occasion to take a reading and record it, and never a
+condition for the work being done — which is the second of the two corrections
+offered below. Under *Disciplina de medição*, the clause **uma regressão face à
+baseline reprova a alteração** and the *justificada ou corrigida* that hung on
+it are gone; what the sentence now states is where readings are recorded, that
+each names its target, and that figures from different targets are never
+compared, which is `NFR-PERF-012` and is true. Nothing this entry records is
+owed any longer.
+
+*What the same commit added, which this entry did not ask for and does not
+object to.* The section now states in its own words that no figure reproves a
+change, citing `BR-PERF-008`, and that what does reprove are the requirements of
+form. Both are this corpus's own statements, correctly attributed, and neither
+creates a second source: the file cites the requirement rather than restating
+any figure, which is what `DIV-035` asked of it and got.
+
+*Raised and discharged within one sprint, which is the fifth validation rule
+working as written.* This entry became owed on 2026-09-22 when `a7332fc`
+withdrew `NFR-PERF-017`, and it was paid the same day by an edit to the file it
+was owed to. The trigger for raising it was an amendment inside this corpus, the
+direction the thirty-second edition's extension covers; the trigger for
+discharging it was an edit to the target, the direction the rule was written
+for. Both halves of the rule are exercised by one entry.
 
 
 

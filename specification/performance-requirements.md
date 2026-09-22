@@ -24,8 +24,8 @@ connection, one invocation opens at most one connection, the commands of
 `FR-PROJ-025` read no configuration. These are deterministic counts and
 deterministic absences, not timings. A cache hit that opened a connection is a
 **functional defect**, caught the way a wrong exit code is caught. They are
-correctness invariants, they are asserted by the integration suite on every
-run of it, and nothing here weakens them.
+correctness invariants, the integration suite asserts each of them wherever the
+instrument it needs is reachable on the run, and nothing here weakens them.
 
 The second is a **measurement set**: nine points at which `tpl` is measured,
 over three reference workloads, on four targets, under a protocol that fixes
@@ -37,9 +37,13 @@ somebody wants to know, and never to decide whether work is done.
 `BENCHMARKS.md` is where a measured figure lives. It is a register of
 observations: informative, consulted on demand, and never a gate.
 
-No figure is invented. Where the project's root documents supplied one it is
+No figure is invented. Where the project's root documents supplied one it was
 adopted and marked as adopted, and its origin is stated; where they supplied
-none, the point is named and left unvalued, per `BR-PERF-006`.
+none, the point was named and left unvalued, per `BR-PERF-006`. **No adopted
+figure remains in this file.** The thirty-seventh edition removed the last
+five, each superseded by the first measurement of its point, per
+`NFR-PERF-019` and `NFR-PERF-020`. The rule is kept for a measurement point
+this corpus may yet add.
 
 *Amended in the thirty-sixth edition, which withdrew the enforcement this file
 carried.* The file fixed a protocol whose end was to turn a figure into a
@@ -53,12 +57,22 @@ figures were meant to defend is carried by design and architecture instead.
 The requirements of form are untouched, and the section that holds them now
 says what they are, so that no reader takes them for the gates that went.
 
+*Amended in the thirty-seventh edition, which recorded the first measurement of
+this set.* All nine measurement points and the `WL-002` scalar were measured on
+one of the four targets, and the five adopted figures the measurement
+superseded are removed from `NFR-PERF-014`, per `NFR-PERF-020`. The same
+edition narrowed the claim this Overview made about the integration suite to
+what is actually asserted on a given run. Neither change reinstates anything:
+`BR-PERF-008` is untouched, and a figure that moved to `BENCHMARKS.md` is as
+informative there as it was here.
+
 ## Scope
 
 In scope: the requirements of form and what they are, the three reference
 workloads, the target set, the measurement protocol, the measurement set with
-the invocation and the cache posture of each of its nine points, the reference
-figures it carries, and the rule by which a measured figure is recorded.
+the invocation and the cache posture of each of its nine points, where each
+point's reference figure stands, and the rule by which a measured figure is
+recorded.
 
 Out of scope: every measured figure and every reading, which live in
 `BENCHMARKS.md`; the tools used to measure and how a measuring harness is
@@ -86,12 +100,12 @@ eight of this section stand together. A cache hit that opened a connection is a
 **functional defect**, not a slow run, and it fails a test for the reason a
 wrong exit code fails one.
 
-**The integration suite asserts them on every run of it, and that does not
-change.** Nothing in the thirty-sixth edition's withdrawal reaches this section.
-What was withdrawn was the power of a *figure* to refuse a change, and none of
-these is a figure; a reader who takes them for the gates that went has read them
-as timings, which they are not. `BR-PERF-008` draws the line in one sentence and
-this section is the side of it that enforces.
+**The integration suite asserts them, and that does not change.** Nothing in
+the thirty-sixth edition's withdrawal reaches this section. What was withdrawn
+was the power of a *figure* to refuse a change, and none of these is a figure; a
+reader who takes them for the gates that went has read them as timings, which
+they are not. `BR-PERF-008` draws the line in one sentence and this section is
+the side of it that enforces.
 
 *Observed, 2026-09-22.* The assertions exist and run with the rest of the suite,
 under no feature and no flag. `tests/outside_the_process.rs` is written as the
@@ -99,6 +113,44 @@ observation `NFR-PERF-007` requires and carries `NFR-PERF-001`, `NFR-PERF-002`,
 `NFR-PERF-004`, `NFR-PERF-005` and `NFR-PERF-006`; `tests/schema_and_cache.rs`
 carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
 `NFR-PERF-001` beside them.
+
+**What an assertion needs in order to run, settled in the thirty-seventh
+edition.** This section said the suite asserts them *on every run of it*, and
+that is wider than what any run does. An assertion runs where the instrument it
+needs is reachable, and `NFR-PERF-007` fixes four instruments and binds each to
+the targets it exists on. Two of the four need something a given run may not
+have:
+
+| What is asserted | What the assertion needs | What a run without it does |
+|---|---|---|
+| Everything observed through the server's statement record or its connection record: `NFR-PERF-001`, `NFR-PERF-002`, `NFR-PERF-003`, `NFR-PERF-004`, `NFR-PERF-006`, and the connection clause of `NFR-PERF-005` | The fixture of `scripts/mariadb/` standing | Skips the assertion and states the reason |
+| The discovery clause and the configuration clause of `NFR-PERF-005`, observed by a differential run | A binary, and nothing else | Runs, on all four targets of `NFR-PERF-018` |
+| The same two clauses observed **as syscalls** | A host that affords the syscall trace, which is the two Linux targets | Skips the assertion and states the reason; the differential run is then the whole of the evidence, which `NFR-PERF-005` states in its own text |
+
+**A skipped assertion is not a weakened requirement.** Every clause in the table
+above holds on all four targets and is verified on all four; what varies between
+runs is whether a given run can see it, and a run that cannot **skips the
+assertion with a stated reason and never passes it silently**. `NFR-PERF-018`'s
+parity clause is untouched, and the one place where the evidence is genuinely
+weaker on two targets is the file-open observation, which `NFR-PERF-005` names,
+bounds and states the consequence of.
+
+*Why this is narrowed rather than qualified.* The wider sentence was reported
+as a divergence by the technical specification, which records in
+`docs/spec-technical/verification.md` that the assertions needing a server are
+gated on the fixture and that the syscall trace runs on neither Darwin target.
+That folder correctly declined to reconcile the two by rewriting this one. The
+narrower statement is the true one, so it is the one this file makes; leaving
+the bold claim and appending a qualification would have let a reader stop at the
+claim, which is what a bold sentence invites.
+
+*Rejected: reading the wider sentence as being about the requirements rather
+than about the assertions.* Under that reading it says the invariants hold at
+all times, which is true and is what the requirements already say in their own
+words. It is not how the sentence reads next to *the integration suite*, and it
+is not what a verification suite would be written from — which is the same
+ground `NFR-PERF-005` gave for refusing to treat its three-syscall sentence as
+a summary.
 
 - **NFR-PERF-001**: The number of catalogue queries the system issues for a full
   read SHALL NOT depend on the number of objects in the database. The count over
@@ -529,6 +581,18 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
   what remains is not a question but a measurement this requirement now
   schedules.
 
+  *Observed, 2026-09-22, on `aarch64-apple-darwin` against series `12.3`: N is
+  measured, and this scalar is live.* The compact `tpl schema dump` of `WL-001`
+  was taken five times and produced the same byte count on every take, and it is
+  recorded in `BENCHMARKS.md` under `NFR-PERF-020` with the ±2% band it fixes.
+  The value is not restated here, per `BR-PERF-006`. What changes with the
+  measurement is that the invariant can now be checked: a later read of the same
+  fixture through the same document shape that falls outside the band is a
+  **functional defect** to be explained, on the terms stated above, and never a
+  performance result. The scalar is a size and not a duration, so the run count
+  of `NFR-PERF-009` does not govern it and the record states how many takes it
+  had.
+
 - **WL-003** — the small workload. A database of one table, 12 columns, and 3
   indexes. **The three count the primary key**, on the rule `WL-001` states and
   for the grounds stated there: they are `PRIMARY`, one unique key and one
@@ -724,27 +788,90 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
 
 - **NFR-PERF-014**: The measurement set SHALL be exactly the following nine
   **measurement points**, and no others. Each row SHALL fix the invocation
-  measured, the workload it is measured over, whether a server answers, and what
-  the cache does while the reading is taken. Every figure in the last column is
-  a **reference figure** and is informative: it is a target to build toward and
-  never a limit, per `BR-PERF-008`, and a figure marked *adopted* was taken from
-  a root document rather than measured, per `NFR-PERF-019`.
+  measured, the workload it is measured over, whether a server answers, what the
+  cache does while the reading is taken, and where that point's **reference
+  figure** stands. A reference figure is informative: it is a target to build
+  toward and never a limit, per `BR-PERF-008`. The last column SHALL carry a
+  figure only where that figure is **adopted**, per `NFR-PERF-019`; a measured
+  figure lives in `BENCHMARKS.md` and is pointed at from here rather than
+  restated, per `BR-PERF-006`.
 
   | # | Measurement point | Workload | Server | Cache | Reference figure |
   |---|---|---|---|---|---|
-  | 1 | `tpl --version` | none | no | not reached | < 5 ms wall time, adopted |
-  | 2 | `tpl --help` | none | no | not reached | < 5 ms wall time, adopted |
-  | 3 | Startup to the first byte of useful work, measured by `tpl template list` in a project holding no database entry | none | no | not reached | < 10 ms, adopted |
-  | 4 | `tpl schema dump` | `WL-001` | yes | bypassed, `--direct --no-cache` | < 500 ms, server time included, adopted |
-  | 5 | A cache-served read of one object | `WL-003` | no | served from | none |
-  | 6 | The failure path: a `64`, and a `66` with nearest match over every existing name | `WL-001` | no | served from | none |
-  | 7 | `tpl help --format json` | none | no | not reached | none |
-  | 8 | The canonical loop of 200 invocations | `WL-001` | yes | empty when each run begins | none |
-  | 9 | Peak resident memory | `WL-001` | yes | bypassed, `--direct --no-cache` | < 32 MiB, adopted |
+  | 1 | `tpl --version` | none | no | not reached | recorded |
+  | 2 | `tpl --help` | none | no | not reached | recorded |
+  | 3 | Startup to the first byte of useful work, measured by `tpl template list` in a project holding no database entry | none | no | not reached | recorded |
+  | 4 | `tpl schema dump` | `WL-001` | yes | bypassed, `--direct --no-cache` | recorded |
+  | 5 | A cache-served read of one object | `WL-003` | no | served from | none standing |
+  | 6 | The failure path: a `64`, and a `66` with nearest match over every existing name | `WL-001` | no | served from | recorded |
+  | 7 | `tpl help --format json` | none | no | not reached | recorded |
+  | 8 | The canonical loop of 200 invocations | `WL-001` | yes | empty when each run begins | recorded |
+  | 9 | Peak resident memory | `WL-001` | yes | bypassed, `--direct --no-cache` | recorded |
+
+  **What the last column says, and what it does not.** `recorded` means a
+  reading of that point stands in `BENCHMARKS.md` and is this corpus's reference
+  figure for it; the value is there and is not repeated here, per `BR-PERF-006`.
+  `none standing` means a reading of that point exists there and may not stand
+  as its reference figure, which is `NFR-PERF-011`'s rule and no other. Neither
+  token says **on how many targets** the point has been measured: a recorded
+  figure names the target it was taken on, per `NFR-PERF-012`, and `BR-PERF-003`
+  records that no point is required to be measured on every one. No cell carries
+  an **adopted** figure any longer, and the removal is set out below.
 
   **Point 6 is one point measured by two invocations, and its figure is the
   slower of the two.** Both invocations SHALL be recorded, each in full, beside
   the figure that stands for the point.
+
+  *Amended in the thirty-seventh edition: the five adopted figures are removed,
+  each superseded by the first measurement of its point.* The nine points and
+  the `WL-002` scalar were measured on 2026-09-22 on `aarch64-apple-darwin`, at
+  the full protocol of `NFR-PERF-009` — the median of 200 runs after 20
+  warmups — against series `12.3` for the three points whose `Server` column
+  says `yes`, and recorded in `BENCHMARKS.md` under `NFR-PERF-020`.
+  `NFR-PERF-019` makes the first measurement of a point supersede that point's
+  adopted figure, and `NFR-PERF-020` obliges this table to be amended to remove
+  it, so that one figure has one home. Points 1, 2, 3, 4 and 9 carried one, and
+  all five are gone.
+
+  **The removal is per point and per target, and one target of four was
+  measured.** `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl` and
+  `x86_64-apple-darwin` carry **no figure for any point of this set**, and
+  nothing in this table may be read as settled on them. What the removal leaves
+  on those three is nothing at all: not the adopted figure, which is superseded,
+  and not the measured one, which `NFR-PERF-012` forbids carrying across
+  targets. `BR-PERF-003` records that this is completeness and not shortfall — a
+  point with a figure on one target and none on the other three is complete.
+
+  **What the removal does not reach.** Points 5, 6, 7 and 8 carried no adopted
+  figure, so nothing was removed from them; their cells changed only because the
+  last column now says where a figure stands rather than whether one was
+  adopted.
+
+  **Two readings of that campaign do not stand, and neither belongs to a point
+  that had an adopted figure.** Point 5 came back with a relative standard
+  deviation of 8.294% and the `64` half of point 6 with 7.513%, both above the
+  five per cent of `NFR-PERF-011`, because the host ran on battery and was not
+  idle — a departure from `NFR-PERF-010` that the record states. Neither may
+  stand as its point's reference figure until the reading has been retaken on a
+  quiet host, which is registered as rmp `#228` and is not settled here. Neither
+  is a statement about `tpl`. Point 5 therefore has **no standing reference
+  figure**, which is what its cell says. Point 6 has one: its figure is the
+  slower half, which is the `66`, whose dispersion is inside the line; the noisy
+  reading is the `64` recorded beside it, and the aggregation rule above is what
+  makes that distinction, not this note.
+
+  **The two dispersions are cited and the two readings are not**, on the
+  treatment `NFR-PERF-011` gives its own pair: a dispersion is the field that
+  says how much to trust a figure, and it is what this corpus's rule turns on,
+  so it is stated where the rule is applied. The wall times the two came with
+  are in `BENCHMARKS.md` and are not here, per `BR-PERF-006`.
+
+  **This reinstates no gate.** A figure that moved from this table to
+  `BENCHMARKS.md` is informative in both places, per `BR-PERF-008`, and nothing
+  about being measured rather than adopted gives it the power to fail, block,
+  reject or gate anything. `NFR-PERF-019`'s own rationale says why the mark
+  never had anything to do with the gates: an adopted figure was weaker as
+  **evidence**, not weaker at refusing, because neither refuses.
 
   *Amended in the thirty-sixth edition, which renamed the set, removed one
   column and added two.* Four changes, and each is stated so that a reader
@@ -769,8 +896,30 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
   discovers a project, reads a configuration and presents a result of its own,
   where `NFR-PERF-005` excuses every form of `help` and of `version` from
   discovery and from reading a configuration, so neither of those could ever
-  carry this quantity. It is also why this point's adopted figure is twice
+  carry this quantity. It was also why this point's adopted figure was twice
   theirs.
+
+  *Corrected in the thirty-seventh edition, in the last sentence, which the
+  measurement contradicts.* The adopted figures gave points 1 and 2 one value
+  and this point twice it, on the ground that this point is useful work where
+  the others are static text — and that ground is stated here, in this corpus,
+  and not only in the document the figures came from. Measured on
+  `aarch64-apple-darwin`, this point sits **0.8% above point 2** and 7.7% above
+  point 1, not 100% above either. The discovery and the configuration read that
+  distinguish it cost, on that host, a small fraction of what the ratio
+  anticipated: the gap over point 2 is real — it is above the noise floor
+  `BENCHMARKS.md` states for that host — and it is at the edge of what the
+  instrument resolves.
+
+  **The choice of invocation is untouched by this, and that is why it is worth
+  saying.** What made `tpl template list` the right invocation is that it is the
+  cheapest thing this corpus has that does useful work rather than print static
+  text, which is a fact about what `NFR-PERF-005` excuses `help` and `version`
+  from and not about what the work costs. What the measurement retires is the
+  **arithmetic** the adopted figure was justified by, and the adopted figure is
+  retired with it, per `NFR-PERF-020`. Nothing follows from the gap by rule, per
+  `BR-PERF-008`, and the figures behind these two percentages are in
+  `BENCHMARKS.md` and are not restated here, per `BR-PERF-006`.
 
   *Rejected: stating that any command satisfying the description serves.* It was
   the live alternative, since the row describes a quantity rather than a
@@ -826,31 +975,57 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
   the column describes the point, and the note under `BR-PERF-004` describes the
   two halves.
 
-  *Provenance of the five adopted figures.* They are the four figures the root
-  `CLAUDE.md` states, adopted unchanged and marked as adopted, filling five
-  cells. `< 5 ms` is one line there covering both `tpl --version` and
-  `tpl --help`; `NFR-PERF-014` splits that point in two, per `OQ-052`, and
-  each half inherits the same figure until a measurement separates them. The
-  `< 500 ms` line is stated there as dominated by server time, which is why
-  this table records the server column beside it. The `< 32 MiB` figure is
-  stated there for a database of 200 tables, which is `WL-001`. The correction
-  owed to that file was `DIV-035`, and it is discharged.
+  *Provenance of the five adopted figures this table carried until the
+  thirty-seventh edition.* They were the four figures the root `CLAUDE.md`
+  stated, adopted unchanged and marked as adopted, filling five cells. One line
+  there covered both `tpl --version` and `tpl --help`; `NFR-PERF-014` split that
+  point in two, per `OQ-052`, and each half inherited the same figure until a
+  measurement separated them. The `tpl schema dump` line was stated there as
+  dominated by server time, which is why this table records the server column
+  beside it. The peak-memory line was stated there for a database of 200 tables,
+  which is `WL-001`. The correction owed to that file was `DIV-035`, and it is
+  discharged.
+
+  *Amended in the thirty-seventh edition: the four values are no longer quoted
+  here.* The paragraph named each figure, which was right while the table
+  carried them and is wrong now that it does not. A provenance note keeping the
+  numbers would be the second home `NFR-PERF-020` removes them to prevent, and
+  it would be the copy nobody updates — which is `DIV-035`'s own argument,
+  pointed at this corpus. What the note exists to record is **where the figures
+  came from**, and how four of them filled five cells, and that is what it now
+  says. The values are in `BENCHMARKS.md`, whose record of the first campaign
+  states each adopted figure beside the reading that superseded it.
 
   *Amended in the fifteenth edition.* The paragraph above is a record of where
   five provisional figures came from, and it is true of `CLAUDE.md` as it stood
   when they were adopted; `0ea5624` has since removed the budget table it
   quotes, which is what discharged `DIV-035`. Nothing here changes: the figures
-  keep the provenance they were adopted with, `NFR-PERF-019` still marks them,
-  and `NFR-PERF-020` still removes each on the first real measurement. Only the
+  keep the provenance they were adopted with, `NFR-PERF-019` marked them, and
+  `NFR-PERF-020` removed each on the first real measurement. Only the
   sentence claiming a correction is owed is corrected.
 
-  *Why the other four are blank.* `CLAUDE.md` supplies no figure for them, and
-  `BR-PERF-006` forbids inventing one. Three of the four did not exist as
-  measurement points before this specification created them, and the fourth —
+  *Corrected in the thirty-seventh edition, in one clause of the note above.*
+  `NFR-PERF-019` marked five figures and now marks none, because
+  `NFR-PERF-020` did the removing it was written to do. The clause stays as
+  the fifteenth edition wrote it except for that verb, on the treatment this
+  file gives a closed edition's present-tense claim, and the rest of the note
+  is unaffected: the provenance is still the provenance, and the correction
+  `DIV-035` asked for is still discharged.
+
+  *Why the other four carried no figure.* `CLAUDE.md` supplied no figure for
+  them, and `BR-PERF-006` forbids inventing one. Three of the four did not exist
+  as measurement points before this specification created them, and the fourth —
   the 200-invocation loop — replaced a `render --all-tables` line whose figure
   measured a quantity `FR-RND-007` removed, per `BR-PERF-005`, so that figure
-  cannot be carried across. A blank is a point that is named and measured when
+  cannot be carried across. A blank was a point that is named and measured when
   somebody measures it, its figure then recorded under `NFR-PERF-020`.
+
+  *Amended in the thirty-seventh edition: all four have been measured.* Points
+  5, 6, 7 and 8 were read in the first campaign and their figures are recorded
+  in `BENCHMARKS.md`, so no cell of this table is blank any more. Point 5's
+  reading does not stand as its reference figure, for the reason `NFR-PERF-011`
+  gives and the removal note above states. Nothing about why each was blank
+  changes, which is why the paragraph is kept and put in the past.
 
   *Amended in the thirty-sixth edition, in its last sentence only.* The note
   closed by saying that a blank *is not a budget that is unconstrained, because
@@ -858,7 +1033,7 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
   requirement is withdrawn, so the sentence named a constraint that no longer
   exists — and under `BR-PERF-008` a blank is no more and no less constrained
   than a figure is, since neither constrains anything. The four points are
-  unchanged and so is the reason each is blank.
+  unchanged and so is the reason each was blank.
 
   *Checked in the thirty-first edition against a failure on a live database,
   and no row is added.* The failure-path row runs over `WL-001` with
@@ -907,10 +1082,18 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
 
   *Amended in the fifth edition.* The last column previously cited an open
   question per row, `OQ-051` through `OQ-059`. Those ten entries are closed:
-  what they held open was a **number**, and this requirement now carries an
+  what they held open was a **number**, and this requirement then carried an
   adopted figure or a stated blank for every one of them, under a protocol that
   says what happens to it. The `Server` column is new, and exists so that
   `BR-PERF-007` can be true.
+
+  *Corrected in the thirty-seventh edition, in one clause of the note above.*
+  The table carries neither an adopted figure nor a blank now: every point has
+  been measured, the five adopted figures are removed, and what the last column
+  carries is where each point's reference figure stands. The protocol that says
+  what happens to a number is the same protocol, and it is what moved them.
+  None of the ten questions re-opens, and [open-questions.md](open-questions.md)
+  records that beside the rows.
 
   **Throughout this file, a note attributed to an earlier edition uses the
   words that edition had.** *Budget* is a measurement point of this table, *normative*
@@ -949,6 +1132,50 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
   *Accepted cost.* A reader must consult the mark as well as the number. That
   is deliberate: a number in this file that is not marked adopted and is not in
   `BENCHMARKS.md` is a defect.
+
+  *Amended in the thirty-seventh edition: what a superseding measurement has to
+  satisfy is stated, because the first one departed from part of it.* This
+  requirement names `NFR-PERF-009`, `NFR-PERF-010` and `NFR-PERF-012`, and read
+  alone it admits no departure from any of them — while `NFR-PERF-020`, which
+  records the result, provides in its first clause for a record that states *in
+  what respect it departed*. The two are reconciled in the direction
+  `NFR-PERF-020` already fixed. **A measurement supersedes an adopted figure
+  when it is taken at the protocol of `NFR-PERF-009`, names its target per
+  `NFR-PERF-012` and its series where a server answered, states every respect in
+  which it departed from `NFR-PERF-010`, and carries a relative standard
+  deviation inside the line of `NFR-PERF-011`.** A reading outside that line
+  supersedes nothing, because `NFR-PERF-011` forbids it to stand as its point's
+  reference figure at all.
+
+  This is not a relaxation of `NFR-PERF-010`. That requirement states the
+  conditions a quiet reading is taken under, and `NFR-PERF-011` is how this
+  corpus detects that they did not hold — per reading, by measurement, and in a
+  field every record carries — rather than per campaign and by assumption. A
+  departure is therefore recorded, and what it cost is read off the dispersion
+  of each reading.
+
+  *Rejected: reading `taken under NFR-PERF-010` as admitting no departure at
+  all.* It was the live alternative, since the requirement names three
+  requirements and qualifies none of them. It would have disqualified all ten
+  readings of the first campaign, eight of which carry a dispersion saying the
+  host was quiet enough, and would have left five adopted figures standing
+  against measurements nobody disputes. It also puts this corpus where the
+  thirty-sixth edition took `NFR-PERF-011` out of: treating a fact about the
+  host as a verdict on the reading instead of as the field that says how much to
+  trust it.
+
+  *Observed, 2026-09-22: every adopted figure this corpus held was measured for
+  the first time, and the mark earned its keep.* The nine measurement points and
+  the `WL-002` scalar were read on `aarch64-apple-darwin`, and each of the five
+  cells this requirement marked was superseded by the reading of its point and
+  removed from `NFR-PERF-014` under `NFR-PERF-020`. **Every one of the five came
+  in below the figure that had been adopted for it, and the widest of them by
+  more than an order of magnitude.** That is the evidence for what the rationale
+  above asserts: a figure somebody wrote down is not a figure somebody measured,
+  and these five were not close. The values are in `BENCHMARKS.md`, which states
+  each adopted figure beside the reading that superseded it, and none is
+  restated here, per `BR-PERF-006`. Nothing follows from the gaps by rule, per
+  `BR-PERF-008`.
 
 - **NFR-PERF-020**: WHEN a measurement point of `NFR-PERF-014` is measured on a
   target of `NFR-PERF-018`, the measured figure SHALL be recorded in
@@ -995,6 +1222,18 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
   and saying nothing about what happens when somebody measures one — which is
   how a specification and a register drift apart, and is the outcome
   `BR-PERF-006` was written against.
+
+  *Observed, 2026-09-22: this rule has run once, over ten readings.* Nine
+  measurement points and the `WL-002` scalar were recorded in `BENCHMARKS.md`
+  against `aarch64-apple-darwin`, and against series `12.3` for the three points
+  whose `Server` column says `yes`. Every record states the three clauses above,
+  including the two clauses of `NFR-PERF-010` the campaign departed from — an
+  idle host and mains power — and the dispersion of each reading against the
+  five per cent of `NFR-PERF-011`. The amendment this requirement obliges was
+  made to `NFR-PERF-014` in the thirty-seventh edition, and it removed five
+  adopted figures, which is the whole of what *one figure has one home* asks
+  for. The rule is per point and per target, so it has run for one target of
+  four and is owed again the first time anybody measures on another.
 
 - **NFR-PERF-015**: *Withdrawn in the thirty-sixth edition.* This requirement
   made the cache-served read of one object over `WL-003` the **one normative
@@ -1088,6 +1327,24 @@ carries `NFR-PERF-003` and `NFR-PERF-008`, and the eleven-statement count of
   point — a refusal that computes nothing and a refusal that computes against
   200 names — are what a reader compares. Nothing about what the point measures
   changes, and `NFR-PERF-014` states the aggregation of its two halves.
+
+  *Observed, 2026-09-22, on `aarch64-apple-darwin`: the expectation has been
+  checked against a reading, which is what the point exists for.* The `66` half —
+  the refusal that computes an edit distance against the 200 names of `WL-001` —
+  cost **17.7% more** than `tpl --version`, and the `64` half, which computes
+  nothing, **5.9% more**. The two halves differ by about twenty times the noise
+  floor `BENCHMARKS.md` states for that host, so the difference between them is
+  the edit distance and not the instrument, which is the quantity this rule says
+  the point exists to measure.
+
+  **Nothing follows from this by rule**, per `BR-PERF-008`. The expectation
+  above is a design one, the reading is evidence for a reader, and the figures
+  behind these two percentages are in `BENCHMARKS.md` and are not restated here,
+  per `BR-PERF-006`. What a reader may take from it is that a wrong invocation
+  cost, on that host and on that day, within a fifth of the cheapest invocation
+  `tpl` has. The `64` half's reading carries a dispersion above the line of
+  `NFR-PERF-011` and does not stand as a reference figure; the percentage above
+  is cited for the comparison this rule asks for and not as that half's figure.
 
 - **BR-PERF-005**: The 200-invocation loop replaces the `render --all-tables`
   line of the original budget table, which measured a flag that `FR-RND-007`

@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty-six editions. All are in force;
+The specification has been written in thirty-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3381,8 +3381,10 @@ nothing it changes changes what `tpl` does.**
   `WL-003`, a cache hit opens no connection, one invocation opens at most one
   connection, the commands of `FR-PROJ-025` read no configuration. A cache hit
   that opened a connection is a **functional defect**, not a slow run. The
-  integration suite asserts them on every run of it and already did, which the
-  section records as an *Observed* note naming the two files that carry them.
+  integration suite asserts them and already did, which the section records as
+  an *Observed* note naming the two files that carry them. *The clause read
+  `on every run of it` until the thirty-seventh edition narrowed it to what a
+  run actually asserts; the reason is under that edition.*
   Saying this is the point: without it, a reader meeting eight `NFR-PERF`
   identifiers directly above a withdrawn gate takes them for the same thing.
   `WL-002` is stated as being of the same kind for the same reason — a byte
@@ -3477,6 +3479,151 @@ nothing it changes changes what `tpl` does.**
   carrying one defect of each kind should hold one entry or two is a question
   for the next reading of that register, not for the edition that made the
   second defect appear.
+
+### Thirty-seventh edition — the figures are measured, and a claim narrower than the suite
+
+Sprint 15 built a measurement harness, measured the nine points of
+`NFR-PERF-014` and the `WL-002` scalar for the first time, and recorded the
+readings in `BENCHMARKS.md`. Three things in this corpus fell due with that and
+are answered here in one pass. `NFR-PERF-020` obliges an adopted figure to be
+removed by the step that records the measurement replacing it, and five were
+still standing. The register holds two entries the sprint's other commits
+discharged, and its counts are restated for them. And the technical
+specification reported one divergence it correctly declined to settle by
+rewriting this corpus.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md). Two entries of
+[upstream-divergences.md](upstream-divergences.md) are discharged, `DIV-052` and
+`DIV-055`, one more limb of `DIV-050` is discharged, and one question that
+register left named is settled. The index of
+[open-questions.md](open-questions.md) stays empty. **This edition records
+figures and reinstates no gate: `BR-PERF-008` is untouched, and nothing it
+changes changes what `tpl` does.**
+
+- **Five adopted figures removed, per point and per target** —
+  [performance-requirements.md](performance-requirements.md),
+  [context-document.md](context-document.md),
+  [open-questions.md](open-questions.md). `fe428da` measured all nine points and
+  the `WL-002` scalar at the full protocol of `NFR-PERF-009` — the median of 200
+  runs after 20 warmups — on `aarch64-apple-darwin`, against series `12.3` for
+  the three points that reach a server, and recorded them under `NFR-PERF-020`.
+  Points 1, 2, 3, 4 and 9 carried an adopted figure and carry none now: an
+  adopted figure that stayed beside the measurement replacing it is the second
+  source `BR-PERF-006` exists to prevent. **The removal is per point and per
+  target, and one target of four was measured**, so the table says so in its own
+  words: the other three carry no figure for any point, not the adopted one and
+  not the measured one, and `NFR-PERF-012` forbids carrying a figure across
+  targets. The last column no longer holds values at all — it says where each
+  point's reference figure stands — and the provenance note stops quoting the
+  four numbers it was written to explain the origin of, for the reason
+  `DIV-035` gave `CLAUDE.md`. Two readings do not stand, per `NFR-PERF-011`:
+  point 5 at 8.294% dispersion and the `64` half of point 6 at 7.513%, because
+  the host ran on battery and was not idle. Neither point had an adopted figure,
+  so the removal reaches neither, and retaking them on a quiet host is rmp
+  `#228` and is not settled here.
+- **What supersession requires, because the first measurement departed from part
+  of it** — [performance-requirements.md](performance-requirements.md).
+  `NFR-PERF-019` names `NFR-PERF-009`, `NFR-PERF-010` and `NFR-PERF-012` and
+  admits no departure from any, while `NFR-PERF-020` provides in terms for a
+  record that states *in what respect it departed*. The campaign met two of
+  `NFR-PERF-010`'s four clauses. The two are reconciled in the direction
+  `NFR-PERF-020` already fixed: a measurement supersedes when it is taken at the
+  protocol of `NFR-PERF-009`, names its target and its series, states every
+  departure from `NFR-PERF-010`, and carries a dispersion inside
+  `NFR-PERF-011`'s line. *Rejected: reading it as admitting no departure at
+  all*, which would have discarded eight readings whose own dispersion says the
+  host was quiet enough, and would have treated a fact about a machine as a
+  verdict on a reading — which is what the thirty-sixth edition took
+  `NFR-PERF-011` out of.
+- **Four observations the campaign produced, and where each belongs** —
+  [performance-requirements.md](performance-requirements.md),
+  [context-document.md](context-document.md). Each is recorded where the corpus
+  says something the reading bears on, and nowhere else. `NFR-PERF-019` records
+  that every one of the five adopted figures came in below the figure adopted
+  for it, the widest by more than an order of magnitude, which is the evidence
+  for what its own rationale asserts about a figure somebody wrote down.
+  `NFR-PERF-014` corrects the ground it gave for point 3's adopted figure being
+  twice points 1 and 2's: measured, point 3 is **0.8%** above point 2, not 100%,
+  and the discovery and configuration read that distinguish it cost a small
+  fraction of what the ratio anticipated — **the choice of invocation is
+  untouched**, because what made `tpl template list` right is what
+  `NFR-PERF-005` excuses `help` and `version` from and not what the work costs.
+  `BR-PERF-004` records the check it exists to make possible: a wrong invocation
+  cost **17.7% more** than `tpl --version`. And `FR-CTX-010`'s accepted cost
+  predicted the peak-memory figure would be superseded **upward**; it was not,
+  and that bullet is corrected and stops restating the figure. Nothing follows
+  from any of the four by rule, per `BR-PERF-008`.
+- **A claim about the suite wider than any run** —
+  [performance-requirements.md](performance-requirements.md). The *Requirements
+  of form* section said the integration suite asserts them **on every run of
+  it**, and `docs/spec-technical/verification.md` records the narrower
+  arrangement: the assertions needing a server are gated on the fixture
+  standing, and the syscall trace of `NFR-PERF-007` runs on neither Darwin
+  target. That folder reported the divergence and correctly declined to settle
+  it by rewriting this one. **It is settled here by narrowing the wording to
+  what is verified**, with a table saying what each assertion needs and what a
+  run without it does — skip, with a stated reason, and never pass silently.
+  A skipped assertion is not a weakened requirement: every clause in that table
+  holds on all four targets and is verified on all four, and the one place the
+  evidence is genuinely weaker is the file-open observation, which
+  `NFR-PERF-005` already names and bounds. *Rejected: stating the gap and
+  keeping the sentence*, which leaves a reader who stops at the bold claim
+  carrying away what the qualification withdraws.
+- **Two entries the sprint discharged, and the question one of them left named**
+  — [upstream-divergences.md](upstream-divergences.md). `DIV-055` is discharged
+  by `9562fb2`, which removed both passages imposing a performance gate from
+  `CLAUDE.md`; it was raised and paid inside one sprint, and it exercises both
+  halves of the fifth validation rule — raised because this corpus amended a
+  requirement that file paraphrased, discharged because somebody edited the
+  file. `DIV-052` is discharged by `abbfe70`, which created `benches/` with the
+  measurement harness in it, so the sentence saying benchmarks live there and
+  run against the containers' dataset is true; that is the repository catching
+  up with the document, and `fe428da` then took readings from it. The same
+  commit discharges one more line of `DIV-050`, which stays **partly
+  discharged** and owes `templates/` alone. **The Kind question `DIV-052` left
+  named is settled**: the Kind stays *overstatement*, because a Kind classifies
+  the defect an entry records and not the passage it points at — and the proof
+  is that one sentence carrying two defects discharged on two conditions, by
+  events of two different sorts, which one entry could not have described.
+  *Rejected: moving the Kind to contradiction*, and *rejected: merging the two
+  entries now both are discharged*, which would leave one identifier resolving
+  to nothing.
+- **The register's counts, restated against its own Index** —
+  [upstream-divergences.md](upstream-divergences.md). Eight entries owe
+  something where ten did, five to `CLAUDE.md` where seven did, and forty-seven
+  are discharged where forty-five were. Every restatement of those counts was
+  found before any was changed — the Overview, `DIV-032`, `DIV-041` and
+  `DIV-052` — which is what the thirty-sixth edition's own note asks of the
+  edition that moves them. Two further claims are narrowed by the same
+  arithmetic: that the remaining work is *almost entirely* `CLAUDE.md`'s, which
+  at five to three it is not, and the count of how many entries of the third
+  kind are discharged, which is restated against the Index rather than carried
+  forward and did not match it before. The fifth validation rule is paid for
+  three commits that had touched `CLAUDE.md` since the last pass — `3a360d6`,
+  `6a66d14` and `9562fb2` — and the first two reach no entry's passage.
+
+**Two sentences of a closed edition are corrected, and nothing else in it is
+touched.** The thirty-sixth edition named two statements outside this corpus
+that it made false and did not own: the budget tables of
+`docs/spec-technical/quality-attributes.md`, corrected by `66e0bbf`, and **the
+four architecture decision records that argue from `NFR-PERF-017`**, reconciled
+by `2c3d60f` — which changed **eight**. The count was this corpus asserting
+something about a folder it does not read, and it is corrected with the
+discharge recorded beside it. This is the treatment the thirty-third and
+thirty-fourth editions gave a closed edition's present-tense claim.
+
+**One thing is named and not acted on.** `9562fb2` added a sentence to
+`CLAUDE.md` stating that the requirements of form are asserted by the test suite
+**em cada `cargo test`**, which is the same claim this edition narrowed in
+[performance-requirements.md](performance-requirements.md) and is wider than
+what a run without the fixture asserts. Whether that is an **overstatement**
+owed to that file is a judgement for a reading of the section it sits in, on the
+rule the sixteenth and seventeenth editions used for a candidate a sweep could
+not judge, and raising an entry is not what this edition was authorised to do.
+It is named here so that the next reading of
+[upstream-divergences.md](upstream-divergences.md) has it, it blocks nothing,
+and no requirement of this corpus waits on it.
 
 ### Still out of scope
 
@@ -4170,6 +4317,43 @@ register above covers the two root documents and nothing else. Nothing this
 edition changes touches a fixture or a measurement, and nothing it changes
 changes what `tpl` does. The item below was untouched by it and stays
 outstanding.
+
+**All three obligations this edition recorded outside the corpus are
+discharged, and one of its counts was wrong.** `DIV-055` is discharged by
+`9562fb2`, which removed both passages from `CLAUDE.md`; the register records it
+and the commit. `66e0bbf` corrected `docs/spec-technical/`, including the budget
+tables of `quality-attributes.md`. And `2c3d60f` reconciled the decision
+records — **eight of them, not the four this paragraph counts**:
+`adr-001-template-engine-pin`, `adr-003-database-driver`,
+`adr-004-release-profile-and-panic-path`, `adr-005-async-runtime-scope`,
+`adr-007-msrv`, `adr-008-packaging-and-build-path`,
+`adr-009-foreign-key-embedding-representation` and
+`adr-010-driver-tls-connect-stall`. The count of four was this corpus asserting
+something about a folder it does not read, which is the defect the fifth
+validation rule guards against in the other direction; the number is corrected
+here and the sentence is otherwise left as the edition wrote it. The
+identification of the eight is `2c3d60f`'s and not this corpus's: what is
+recorded here is that the obligation was named, that it was met, and by which
+commit.
+
+The thirty-seventh edition adds no obligation of either kind, and **discharges
+the three the thirty-sixth recorded outside this corpus** — the entry
+`DIV-055`, the budget tables of `docs/spec-technical/quality-attributes.md` and
+the decision records that argued from `NFR-PERF-017` — each named in the
+paragraph above with the commit that paid it. It removes five adopted figures
+that a measurement superseded, states what a superseding measurement has to
+satisfy, records four observations of the first campaign where the corpus says
+something each bears on, narrows one claim about the integration suite to what
+is verified, and discharges two entries of
+[upstream-divergences.md](upstream-divergences.md) with one more limb of a
+third. Nothing it changes touches a fixture, and what it changes about a
+measurement is where a figure lives rather than how one is taken. One
+observation is named and not acted on, and it is about a file this corpus does
+not own: `9562fb2` added to `CLAUDE.md` the claim that the requirements of form
+are asserted **em cada `cargo test`**, which is the wider form this edition
+narrowed here, and whether an entry is owed for it is a judgement for a reading
+of that section. It is debt only in the sense `DIV-036` is, and it blocks
+nothing. The item below was untouched by this edition and stays outstanding.
 
 The section therefore carries the item the twentieth edition recorded, and the
 eight it has held before are all accounted for below.
