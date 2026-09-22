@@ -20,10 +20,10 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Fifty-four entries are recorded. As of 2026-09-21, five are due in full,
-forty-five are discharged, and four are partly discharged.** Nine entries still
-owe something: six owe it to `CLAUDE.md` and three to `README.md`, and no entry
-is in both counts.
+**Fifty-five entries are recorded. As of 2026-09-22, six are due in full,
+forty-five are discharged, and four are partly discharged.** Ten entries still
+owe something: seven owe it to `CLAUDE.md` and three to `README.md`, and no
+entry is in both counts.
 
 **The asymmetry has reversed, and one commit did it.** `e75996c` rewrote the
 root `README.md` whole on 2026-09-17 — 192 lines in, 365 out — and it is what
@@ -54,6 +54,20 @@ within the day. `DIV-036` stays **partly discharged** and now owes one sentence
 where it owed a sentence and a file; `DIV-052` stays **due** and now waits on
 one thing where it waited on two. The counts above are unchanged, because a
 status value is what they count and neither moved.
+
+**One entry is added by the thirty-sixth edition, and it was not raised by an
+edit to either file.** `DIV-055` records two passages of `CLAUDE.md` stating
+that a regression against a recorded baseline fails the change. Both were exact
+summaries of `NFR-PERF-017` when they were written, and that requirement is
+withdrawn, so they became owed without anybody touching the file they are owed
+to — the direction the thirty-second edition's extension of the fifth
+validation rule covers, and the second entry raised in it after `DIV-053`. The
+counts above move with it: one more entry, one more due in full, one more owed
+to `CLAUDE.md`. `DIV-052` is raised against one of the same two passages, for a
+different defect and with a different correction, and it is amended in the same
+edition where this one made it false; neither discharges the other, and that
+entry's **Kind** is a question named there and left for the next reading of
+this file.
 
 **A third entry was read against the working tree, on 2026-09-22, and it did
 not move either.** `0110f8c` created `examples/`, which is one of the three
@@ -329,6 +343,7 @@ search of the history.
 | [DIV-052](#div-052) | `CLAUDE.md` | Overstatement | Due | The benchmark directory, in a repository with no benchmarks |
 | [DIV-053](#div-053) | `README.md` | Contradiction | Due | Four commands said to perform no discovery at all |
 | [DIV-054](#div-054) | `README.md` | Overstatement | Due | Two passages saying no command reaches a server |
+| [DIV-055](#div-055) | `CLAUDE.md` | Contradiction | Due | A regression against a recorded baseline said to fail the change |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1012,8 +1027,20 @@ is the one stated above and nothing more.
 **Status**: **due**, re-read on 2026-09-21 at `8f936d4`. The sentence stands
 in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through all five commits that have touched `CLAUDE.md` since this
-entry was last checked. It is one of the seven corrections this register still
-owes and one of the six owed to that file.
+entry was last checked. It is one of the ten entries this register still owes
+something on, and one of the seven owed to that file.
+
+*Corrected in the thirty-sixth edition, with `DIV-041`.* The sentence read
+*one of the seven corrections this register still owes and one of the six owed
+to that file*, where the Overview counted nine and six. The thirty-third
+edition corrected the identical sentence in `DIV-052` and swept no further, so
+two entries kept a figure the Overview had left behind; the thirty-sixth
+edition moved the Overview again, to ten and seven, which made the second half
+wrong as well. Both halves are now the Overview's, stated in the Overview's own
+terms so that a reader comparing the two is comparing one count. This is the
+third validation rule of the [README](README.md#maintenance-debt) applied to a
+count rather than to a record: correcting one restatement of a figure
+establishes nothing about the others.
 
 
 
@@ -1397,7 +1424,10 @@ sentence.
 verbatim under *Plataformas Suportadas*, unmoved by any of the five commits
 that have touched `CLAUDE.md` since this entry was last checked, and the two
 rules beside it still restate what `NFR-PERF-018` and `NFR-PERF-012` carry. It
-is one of the seven corrections this register still owes.
+is one of the ten entries this register still owes something on.
+
+*Corrected in the thirty-sixth edition, with `DIV-032`*, and for the reason
+given there.
 
 
 
@@ -2065,14 +2095,20 @@ its claim was never about a manifest — `DIV-046` and `DIV-051` fell to
 `d8e7e8a` and `DIV-050` fell to it in part. **What it waits on is now one thing
 and not two**: a benchmark being written. The fixture it also waited on is
 complete, `DIV-036` no longer owes `seed-bench.sql`, and a benchmark over
-`WL-001` has a database to run against. It is one of the nine entries this
-register still owes something on, and one of the six owed to `CLAUDE.md`.
+`WL-001` has a database to run against. It is one of the ten entries this
+register still owes something on, and one of the seven owed to `CLAUDE.md`.
 
 *Corrected in the thirty-third edition.* The last sentence read *one of the
 seven corrections this register still owes*, where the Overview counts nine
 entries owing, six to `CLAUDE.md` and three to `README.md`. The figure is now
 the Overview's, stated in the Overview's own terms so that a reader comparing
 the two is comparing one count.
+
+*Corrected again in the thirty-sixth edition, which moved the Overview.*
+`DIV-055` takes the counts to ten owing and seven owed to `CLAUDE.md`, and this
+sentence follows them. The same edition found the thirty-third's correction had
+been made here and nowhere else, and corrected `DIV-032` and `DIV-041` with
+it.
 
 
 
@@ -2085,30 +2121,54 @@ MariaDB, para serem reproduzíveis. As baselines são registadas em
 face à baseline reprova a alteração** e tem de ser justificada ou corrigida
 antes de o trabalho ser dado por concluído." Nothing in the subsection carries
 a tense or a marker.
-*Specification*: none, and that is what the third kind records. No requirement
-of this corpus is contradicted and nothing is owed to this folder. What the
-subsection states is in force, and it states it correctly: `NFR-PERF-009`
-through `NFR-PERF-013` fix the measurement protocol, `NFR-PERF-012` obliges a
-measurement to name the target it was taken on, and `NFR-PERF-017` fails the
-change that produces a measurement worse than the baseline recorded for the
-same budget on the same target. Where a benchmark lives is no requirement of
-this corpus — it names no directory — and `DIV-035` left the discipline with
-`CLAUDE.md` when it took the figures out of that file, so the subsection
-belongs where it is, exactly as *Installation* belongs to `README.md` under
-`DIV-046`. Only the tense of one clause is false, and it is false of the
-repository rather than of a requirement: an agent that reads the sentence for
-what to re-run before claiming a speed-up is sent to a directory that is not
-there, and one that reads it for what produced the baselines in
-`BENCHMARKS.md` is told something that file denies of itself.
+*Specification*: none **for what this entry records**, and that is what the
+third kind means. Nothing is owed to this folder for the claim this entry was
+raised over. Of what the subsection states, `NFR-PERF-009`, `NFR-PERF-010` and
+`NFR-PERF-012` fix the measurement protocol and `NFR-PERF-012` obliges a
+measurement to name the target it was taken on, all three in force. Where a
+benchmark lives is no requirement of this corpus — it names no directory — and
+`DIV-035` left the discipline with `CLAUDE.md` when it took the figures out of
+that file, so the subsection belongs where it is, exactly as *Installation*
+belongs to `README.md` under `DIV-046`. What this entry finds false is the
+tense of one clause, and it is false of the repository rather than of a
+requirement: an agent that reads the sentence for what to re-run before
+claiming a speed-up is sent to a directory that is not there, and one that
+reads it for what produced the baselines in `BENCHMARKS.md` is told something
+that file denies of itself.
 *Correction*: say at the head of the subsection that no benchmark exists yet
 and that the sentence says where they will live, or mark that one sentence.
-**Neither the discipline nor the location is to be removed.** No claim without
-numbers, the baseline recorded in `BENCHMARKS.md` against a named target, and a
-regression failing the change are obligations in force today — they governed
-both campaigns `BENCHMARKS.md` already holds, and each of those entries says
-where it departs from the normative protocol — and `benches/` is where a
-benchmark should go the day one is written. What is wrong is the assertion that
-benchmarks are there, and nothing else in the subsection.
+**Neither the discipline nor the location is removed by this entry.** No claim
+without numbers, and the figure recorded in `BENCHMARKS.md` against a named
+target, are obligations in force — they governed both campaigns
+`BENCHMARKS.md` already holds, and each of those entries says where it departs
+from the normative protocol — and `benches/` is where a benchmark should go the
+day one is written. What this entry finds wrong is the assertion that
+benchmarks are there. **The subsection's last clause is wrong for a second and
+unrelated reason, which `DIV-055` records**, and the two corrections are made
+together or in either order.
+
+*Amended in the thirty-sixth edition, in the two paragraphs above and nowhere
+else.* Three sentences had stopped being true. The *Specification* paragraph
+said flatly that **no requirement of this corpus is contradicted** and that
+what the subsection states **is in force**, and cited `NFR-PERF-017` for the
+clause that a regression against the baseline reproves the change. That
+requirement is withdrawn and `BR-PERF-008` contradicts the clause, so the
+paragraph asserted the opposite of what this corpus now holds. The *Correction*
+paragraph carried the same claim from the other side, listing a regression
+failing the change among the obligations *in force today*, and it was the
+sentence an editor would have read as a reason to keep the clause. `DIV-055` is
+raised for the contradiction, against this same sentence and against a second
+passage of the file, because the correction differs: this entry asks for a
+tense to be qualified and that one asks for a clause to go.
+
+**The Kind is left at overstatement and the question is named, not settled.**
+This passage now carries one defect of each kind, and whether an entry whose
+target sentence is contradicted keeps a kind describing a different defect in
+it is a question about how this register classifies, not about what either
+correction is. It is left for the next reading of this file, on the rule the
+sixteenth and seventeenth editions used for a candidate a sweep could not
+judge. Nothing turns on it while it stands: both defects are recorded, each
+with its own correction, and `DIV-055` names this entry as `DIV-052` names it.
 
 *Why this is an entry of its own and not a widening of `DIV-051`.* The
 criterion is the one `DIV-051` settled: **the shape of the correction decides
@@ -2351,6 +2411,81 @@ acts on the passage fails, which the *Development* clause does squarely, since
 a contributor who acts on it skips the fixture and watches a server-dependent
 test fail. The widening, and the fourth kind rejected in its place, are in the
 [Overview](#overview).
+
+## DIV-055
+
+**Target**: `CLAUDE.md`, the *Pipeline de validação obrigatório* subsection of
+*Desenvolvimento*, and the closing sentence of *Disciplina de medição* in
+*Desempenho e Eficiência*. **Kind**: contradiction.
+
+**Status**: **due**, raised on 2026-09-22 against `CLAUDE.md` at `8f936d4`.
+Both passages stand. Neither was edited into error: each was an exact summary
+of `NFR-PERF-017` when it was written, and the thirty-sixth edition withdrew
+that requirement, which is the direction the thirty-second edition's extension
+of the fifth validation rule covers — an entry becomes owed when this corpus
+amends a requirement the target document paraphrases, without anybody touching
+the file it is owed to.
+
+
+
+*Says*: under *Pipeline de validação obrigatório*, after the five commands,
+"Quando a alteração toque num caminho quente — leitura de catálogo, construção
+do contexto, render, arranque do processo — acresce a este pipeline a execução
+dos benchmarks e a comparação com a baseline em `BENCHMARKS.md`, conforme a
+**Disciplina de medição**." Under *Disciplina de medição*, closing the
+subsection, "As baselines são registadas em `BENCHMARKS.md`, identificando o
+alvo em que foram medidas; **uma regressão face à baseline reprova a
+alteração** e tem de ser justificada ou corrigida antes de o trabalho ser dado
+por concluído."
+*Specification*: [performance-requirements.md](performance-requirements.md) —
+`BR-PERF-008`, under which no figure named in this corpus and no figure
+recorded against it in `BENCHMARKS.md` fails, blocks, rejects or gates a
+change. `NFR-PERF-017`, which both passages summarise, is withdrawn, as are
+`NFR-PERF-015` and `NFR-PERF-016` with it. The first passage adds a comparison
+against a baseline to the pipeline that decides whether work is finished, which
+is a gate on a figure; the second states the gate itself. **What is not
+contradicted is the rest of either passage**: the five commands of the
+mandatory pipeline are correctness checks and are untouched, no claim without
+numbers stands, a figure recorded against a named target stands per
+`NFR-PERF-012`, and the ambition of *Desempenho e Eficiência* — that a correct
+but slow or wasteful implementation does not satisfy the requirement — is
+exactly what `BR-PERF-008` keeps, as design and architecture.
+*Correction*: in the first passage, remove the sentence, or reduce it to
+saying that a change to a hot path is an occasion to take a reading and record
+it. In the second, remove the clause **uma regressão face à baseline reprova a
+alteração** and what hangs on it — *e tem de ser justificada ou corrigida antes
+de o trabalho ser dado por concluído* — leaving the sentence stating where
+baselines are recorded and that each names its target, which is true and is
+`NFR-PERF-012`. Nothing else in either subsection is wrong on this ground.
+
+*Why this is an entry of its own and not a widening of `DIV-052`.* The
+criterion is the one `DIV-051` settled and `DIV-054` applied: **the shape of
+the correction decides where an entry goes**, not the proximity of the
+passages. `DIV-052` is raised against the same sentence as this entry's second
+passage, and the two corrections are different operations with different
+discharge conditions. That entry asks for a **tense** to be qualified, and it
+discharges when a benchmark exists to live in the directory the sentence names;
+this entry asks for a **clause** to be deleted, and it discharges only when
+somebody deletes it. An editor who makes either is left with the other. They
+also have different reach: this entry's first passage is in another top-level
+section, which `DIV-052` does not target at all, and **Target** is the
+authority on where to look when an entry is re-checked.
+
+*Why one entry for two sections.* This is `DIV-054`'s case and not
+`DIV-051`'s. The two passages state one claim — that a regression against a
+recorded baseline fails the change — written once in each section, and they
+stopped being true at the same instant and for one reason. Whoever establishes
+the fact for one has established it for the other, and the deletion is the same
+deletion made twice.
+
+*What this entry does not ask for, stated because a reader of `DIV-052` was
+told the opposite.* That entry says in as many words that neither the
+discipline nor the location is to be removed, and lists a regression failing
+the change among the obligations in force. That was true when it was written
+and is not now; the sentence is corrected there, and this entry is what
+replaces it. The discipline this entry leaves alone is the two halves of it
+that survive: no claim without numbers, and a figure recorded against a named
+target.
 
 ## A candidate read, and not recorded
 

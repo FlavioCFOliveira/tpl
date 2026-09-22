@@ -1,7 +1,7 @@
 ---
 title: The Context Document
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
 ---
 
@@ -150,7 +150,7 @@ variable is bound to a source, which is
 
   *Accepted cost.* Over a database with 180 foreign keys across 200 tables, the
   embedding roughly doubles the column volume of the document. That cost is
-  carried by the memory budget and by the `WL-002` scalar of
+  carried by the peak-memory measurement point and by the `WL-002` scalar of
   [performance-requirements.md](performance-requirements.md).
 
 - **FR-CTX-010**: `referenced_by` SHALL be a collection, per `FR-CAT-013` and
@@ -180,11 +180,12 @@ variable is bound to a source, which is
   references. Two consequences follow, and both are recorded rather than
   discovered:
 
-  - The provisional peak-memory figure of `NFR-PERF-014` — `< 32 MiB` over
+  - The adopted peak-memory figure of `NFR-PERF-014` — `< 32 MiB` over
     `WL-001` — was supplied by the root `CLAUDE.md` before either embedding
-    existed. It is the provisional figure most likely to be superseded upward
-    by the first real measurement, and `NFR-PERF-019` is what allows that to
-    happen without the figure having been a limit in the meantime.
+    existed. It is the adopted figure most likely to be superseded upward by
+    the first real measurement, and `NFR-PERF-019` is what allows that to
+    happen without the figure ever having been a limit — as, since
+    `BR-PERF-008`, no figure of this corpus is.
   - The `WL-002` scalar of `N` bytes is unvalued for this reason among others,
     and the amendment to `WL-002` states it.
 

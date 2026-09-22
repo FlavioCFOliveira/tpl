@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty-five editions. All are in force;
+The specification has been written in thirty-six editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -1166,15 +1166,28 @@ neither.
 
 **The correction preserves the measurement discipline.** No performance claim
 without numbers, the baseline recorded in `BENCHMARKS.md` against a named
-target, and a regression failing the change are obligations in force today, and
-they governed both campaigns that file already holds; `NFR-PERF-009` through
-`NFR-PERF-013` and `NFR-PERF-017` carry the same rules in this corpus, and
-`DIV-035` left the discipline with `CLAUDE.md` when it took the figures out.
+target, and a regression failing the change were obligations in force when this
+was written, and they governed both campaigns that file already holds;
+`NFR-PERF-009` through `NFR-PERF-013` and `NFR-PERF-017` carried the same rules
+in this corpus, and `DIV-035` left the discipline with `CLAUDE.md` when it took
+the figures out.
 What is wrong is the assertion of state in front of it, so `DIV-052` asks for a
 qualifier on one clause and says in as many words that neither the discipline
 nor the location is to be removed. An entry read as *drop the benchmark rule*
 would take the project's only statement of what fails a change out of the file
 every agent reads first.
+
+*Four verbs of the paragraph above are put in the past by the thirty-sixth
+edition, and its last sentence is answered by it.* `BR-PERF-008` withdraws the
+third of the three obligations — a regression failing the change — and
+`NFR-PERF-013` and `NFR-PERF-017` are withdrawn with it, so this corpus no
+longer carries that rule and `CLAUDE.md`'s two statements of it now contradict
+it; `DIV-055` is the entry raised for them, and what it asks for is exactly the
+removal this paragraph argued against. The other two obligations stand — no
+claim without numbers, and a figure recorded against a named target — and so
+does the sixteenth edition's reasoning about why `DIV-052` is an entry of its
+own, which turns on the shape of a correction and not on what any rule
+requires.
 
 **The relation to `DIV-036` is written in both directions, and neither covers
 the other.** That entry is partly discharged and still owes
@@ -2870,7 +2883,9 @@ two files that had moved under it.
   absolute into a two-case rule whose new case has no test, it legitimises the
   drift that produced the defect, and it is the weaker form of one copy where
   the file already has the stronger one in `budget`, `provisional figure` and
-  `cache hit / cache miss`. **Nothing about `tpl` changes**, and neither
+  `cache hit / cache miss` — the first two renamed by the thirty-sixth edition
+  to `measurement point` and `reference figure`, which is where a reader looking
+  for them now finds the same shape. **Nothing about `tpl` changes**, and neither
   requirement is amended: what moved is where the sentence lives. One
   cross-reference follows it, in [output-formats.md](output-formats.md), which
   named the two requirements as defining the term.
@@ -2972,13 +2987,18 @@ was owed before and is owed more narrowly now.
   ground that it would be *the sixth budget needing a server*, where three rows
   carry `Server: yes` and five is `BR-PERF-007`'s count of the budgets needing
   the **fixture**; and `DIV-052` called itself one of *seven* corrections where
-  that register's own Overview counts nine entries owing. Both are corrected
-  against the figures they meant to cite. **`NFR-PERF-001` is recorded as
+  that register's own Overview counted nine entries owing. Both are corrected
+  against the figures they meant to cite. *The verb is put in the past by the
+  thirty-sixth edition, which raised `DIV-055` and took that Overview to ten —
+  and found the thirty-third's correction had been made in one entry of three,
+  which it corrected in the other two.* **`NFR-PERF-001` is recorded as
   measured**, dated, with the condition it was read under: eleven catalogue
   statements against eleven, on all four series, from a fresh project with an
-  empty cache. That record ratifies nothing, and says so — ratification is
+  empty cache. That record ratifies nothing, and says so — ratification was
   `NFR-PERF-009` through `NFR-PERF-012` under the gate of `NFR-PERF-020`, and a
-  statement count is a requirement of form.
+  statement count is a requirement of form. *The verb is put in the past by the
+  thirty-sixth edition, which took the gate out of that requirement; the record
+  itself is unchanged and denies the same thing it denied.*
 - **Two counts that did not say how they were counted** —
   [performance-requirements.md](performance-requirements.md). `WL-003` named
   three indexes and `WL-001` six hundred, and an index count admits two
@@ -3311,6 +3331,153 @@ looseness in the phrase predates the addition and belongs to a reading of that
 sentence, and nothing turns on it, because each commit is named individually
 with what it did.
 
+### Thirty-sixth edition — the figures stop refusing, and three readings nobody had chosen
+
+The product owner decided that the benchmarks exist as **informative
+instruments**, that no gate is built on one, and that no test runs constantly
+for that purpose — and, asked what becomes of the requirements this file states
+as forms rather than as figures, decided that those **survive as correctness
+invariants**. The obligation toward speed and toward sparing use of
+the machine stays, as **design and architecture**: it shapes how `tpl` is built
+and decides nothing about whether a change is accepted.
+[performance-requirements.md](performance-requirements.md) is rewritten to that
+decision, and three holes the first measuring harness fell into are settled with
+it.
+
+**One identifier is assigned — `BR-PERF-008` — and four are retired:
+`NFR-PERF-013`, `NFR-PERF-015`, `NFR-PERF-016` and `NFR-PERF-017`.** Four more
+are amended — `NFR-PERF-011`, `NFR-PERF-014`, `NFR-PERF-019` and
+`NFR-PERF-020` — and none of the four touches how a number is taken, which
+`NFR-PERF-009`, `NFR-PERF-010` and `NFR-PERF-012` fix and this edition leaves
+alone. Two terms are renamed in
+[glossary.md](glossary.md) and one is retired there. One entry is raised in
+[upstream-divergences.md](upstream-divergences.md), `DIV-055`, and one is
+amended, `DIV-052`. The index of [open-questions.md](open-questions.md) stays
+empty. **No figure is measured and none is recorded by this edition, and
+nothing it changes changes what `tpl` does.**
+
+- **No figure fails a change** —
+  [performance-requirements.md](performance-requirements.md). `BR-PERF-008` is
+  the rule the rest of the edition follows from: no figure named in this corpus,
+  and no figure recorded against it in `BENCHMARKS.md`, fails, blocks, rejects or
+  gates a change. Three requirements are withdrawn to make it true, and a fourth
+  follows them.
+  `NFR-PERF-015` named the **one normative budget**, whose whole content was the
+  power to refuse a change over a number; `NFR-PERF-016` existed only to say
+  that the other eight carried the no-regression rule instead; and
+  `NFR-PERF-017` was that rule — a measurement worse than the recorded baseline
+  failed the change that produced it. `NFR-PERF-013` goes with them, not because
+  it gated anything but because its subject was the normative budget and its
+  rationale argued from continuous integration: the class it governed is now
+  empty, and the fact it was read for — which points need a server — is in the
+  `Server` column of `NFR-PERF-014`, where it always was. **`BENCHMARKS.md` is
+  restated as what it now is**: a register of observations, informative,
+  consulted on demand, never a gate.
+- **The requirements of form survive, and the section says what they are** —
+  [performance-requirements.md](performance-requirements.md). `NFR-PERF-001`
+  through `NFR-PERF-008` are untouched and are now introduced as **correctness
+  invariants**: deterministic counts and deterministic absences, independent of
+  how fast the host is — statements over `WL-001` equal statements over
+  `WL-003`, a cache hit opens no connection, one invocation opens at most one
+  connection, the commands of `FR-PROJ-025` read no configuration. A cache hit
+  that opened a connection is a **functional defect**, not a slow run. The
+  integration suite asserts them on every run of it and already did, which the
+  section records as an *Observed* note naming the two files that carry them.
+  Saying this is the point: without it, a reader meeting eight `NFR-PERF`
+  identifiers directly above a withdrawn gate takes them for the same thing.
+  `WL-002` is stated as being of the same kind for the same reason — a byte
+  count is deterministic, and a departure from it is a finding about the fixture
+  or the document shape and never a performance result.
+- **A dispersion rule that did not say what it was about** —
+  [performance-requirements.md](performance-requirements.md). `NFR-PERF-011`
+  barred a run whose relative standard deviation exceeds five per cent from
+  being recorded as a baseline, and called it *invalid*, which left two readings
+  on top of each other: that the instrument was noisy, and that the application
+  degraded. **The corpus takes the first**, and now says so — dispersion across
+  repeated runs of one unchanged binary measures the machine underneath it and
+  measures nothing about the program. The reading is no longer discarded but
+  recorded with its dispersion, and it is never a finding about `tpl`. The five
+  per cent line is kept and the requirement now carries the evidence for
+  stating it as a caution: at full protocol on the measurement host,
+  `tpl --version` produced 4.63% and `tpl help --format json` 3.33%, so the two
+  cheapest invocations in the set sit close enough to the line that a loaded
+  machine crosses it. *Rejected: moving the line to ten per cent*, which would
+  have said nothing about what the number means, and *rejected: withdrawing the
+  rule with the gates*, since dispersion is the one field that says how much to
+  trust a figure.
+- **Three readings a shell script had chosen and this corpus had not** —
+  [performance-requirements.md](performance-requirements.md). Each appeared the
+  moment something tried to measure against `NFR-PERF-014`, and each is settled
+  as an informative reference figure, which naming an invocation does not
+  undo. **The third point named a quantity and no command**: it is now
+  `tpl template list` in a project holding no database entry, the cheapest
+  invocation that is useful work rather than static text, where `NFR-PERF-005`
+  excuses every form of `help` and of `version` from the discovery and the
+  configuration read this point exists to include. *Rejected: letting any
+  command satisfying the description serve*, because two readings from two
+  commands are two quantities. **The sixth point is two invocations and said
+  nothing about how they combine**: its figure is the **slower half**, recorded
+  whole, with the other half beside it, on the ground `BR-PERF-004` gives — the
+  `66` computes an edit distance against 200 names and is the half that carries
+  the quantity. *Rejected: splitting the row*, which is a change to a set fixed
+  at nine, and *rejected: the mean of the two*, which no invocation produces.
+  **Three points said `Server: yes` and nothing about the cache**: a
+  read-through read would have made the fourth and the ninth **cache figures**
+  after their first run, under rows saying a server answered, so those two
+  bypass the cache with `--direct --no-cache`, the pure read of `FR-CACHE-016`,
+  while the eighth starts each run with the cache empty, because one server read
+  followed by 199 cache hits is what a caller's loop over 200 objects does. A
+  `Cache` column now carries the answer per row, and the rows are numbered,
+  because three of them had to be discussed by position.
+- **A word that kept a meaning the corpus had withdrawn** —
+  [glossary.md](glossary.md),
+  [performance-requirements.md](performance-requirements.md). A **budget** is a
+  quantity one may not exceed, and this corpus keeps the word where that is
+  still true — the invocation timeout of `FR-GLOB-011` and the shared phase
+  budget of `FR-CONF-005`. Leaving it on nine figures that limit nothing would
+  have left one word carrying two opposite forces, in one corpus, four sections
+  apart. The nine are **renamed** and not redefined: they are **measurement
+  points**, collectively the measurement set, and what they carry is a
+  **reference figure**. The two marks are renamed with the requirements that own
+  them — a *provisional* figure is an **adopted** one, per `NFR-PERF-019`, and a
+  *ratified* figure is a **recorded** one, per `NFR-PERF-020`, since *ratified*
+  meant binding and nothing binds. The term *normative budget* is retired in the
+  glossary and its entry kept, because closed editions and the register read
+  it.
+  `NFR-PERF-019` keeps the job the rename leaves it — separating a figure
+  somebody measured from a figure somebody wrote down — and `NFR-PERF-020`
+  keeps the recording and loses the gate, stating what a record must carry so
+  that a reading can be read years later by somebody who was not there.
+  *Rejected: withdrawing `NFR-PERF-019` and `NFR-PERF-020` with the other
+  three*, which would leave nine points, five figures nobody measured, and no
+  rule about what happens when somebody measures one.
+- **The register, read against what this edition amends** —
+  [upstream-divergences.md](upstream-divergences.md). The fifth validation rule,
+  as the thirty-second edition extended it, says an entry decays when this
+  corpus amends a requirement a root document paraphrases. It does here.
+  `CLAUDE.md` states, in its mandatory validation pipeline, that a change to a
+  hot path adds the benchmarks and a comparison against the baseline, and its
+  *Disciplina de medição* closes by stating that a regression against the
+  baseline **reproves the change**. Both were exact summaries of `NFR-PERF-017`
+  and are contradicted by `BR-PERF-008`, so `DIV-055` is raised for them, due in
+  full. `DIV-052` is raised against the second of those two passages already,
+  for a different defect and with a different correction, and it is amended
+  here only where this edition made it false: its *Specification* paragraph said
+  that no requirement of this corpus is contradicted, and its *Correction* that
+  a regression failing the change is an obligation in force today. Neither is
+  true now. The register's counts move with the new entry — ten entries owing,
+  seven of them to `CLAUDE.md` — and moving them found the same figure restated
+  in three entries and corrected in one: the thirty-third edition corrected
+  `DIV-052` and swept no further, so `DIV-032` and `DIV-041` had kept a number
+  the Overview left behind, and this edition's move made the half of theirs
+  that was still right wrong as well. Both are corrected, which is the third
+  validation rule applied to a count: correcting one restatement of a figure
+  establishes nothing about the others. **One thing is named and not acted
+  on**: `DIV-052`'s **Kind** is still *overstatement*, and whether a passage
+  carrying one defect of each kind should hold one entry or two is a question
+  for the next reading of that register, not for the edition that made the
+  second defect appear.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -3320,11 +3487,12 @@ with what it did.
   to express, and no requirement names one.
 - The text of any catalogue query. What is read is specified; how it is read is
   not.
-- Every **ratified** performance figure and every measured baseline. Those live
-  in `BENCHMARKS.md`, cited by the requirement that needs them. A budget that
-  has not been measured may carry a **provisional** figure in `NFR-PERF-014`,
-  marked as such under `NFR-PERF-019` and removed from this corpus by the same
-  step that records the real one, per `NFR-PERF-020`.
+- Every **measured** performance figure and every reading. Those live in
+  `BENCHMARKS.md`, cited by the requirement that needs them. A measurement point
+  that has not been measured may carry an **adopted** reference figure in
+  `NFR-PERF-014`, marked as such under `NFR-PERF-019` and removed from this
+  corpus by the same step that records the real one, per `NFR-PERF-020`. No
+  figure in either place fails a change, per `BR-PERF-008`.
 - The pinned version of the template engine. `FR-ENV-003` requires the pin to
   exist, to be recorded in the project's architecture decision records, and to
   be cited from there; the number never enters this corpus.
@@ -3359,7 +3527,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [server-contract.md](server-contract.md) | `SRV` | The supported version window, differences between series, the closed statement list, the read-only promise |
 | [privileges-and-completeness.md](privileges-and-completeness.md) | `PRIV` | Complete and incomplete reads, and how a short read is reported |
 | [cache-documents.md](cache-documents.md) | `CDOC` | Cache versions, completeness records, and the `source` field |
-| [performance-requirements.md](performance-requirements.md) | `PERF` | Requirements of form, reference workloads, measurement protocol |
+| [performance-requirements.md](performance-requirements.md) | `PERF` | Requirements of form, reference workloads, measurement protocol, the measurement set |
 | [open-questions.md](open-questions.md) | `OQ` | Points this specification cannot yet fix |
 | [upstream-divergences.md](upstream-divergences.md) | `DIV` | Corrections owed to the root `CLAUDE.md` and `README.md`, and what discharged each |
 
@@ -3980,6 +4148,27 @@ read from, so nothing is owed for it inside this corpus or outside it. The
 obligation the thirty-fourth edition recorded outside this corpus — the server
 carrying the three schemas of `FR-EX-006` — is not read here and stays as that
 edition left it. The item below was untouched by this edition and stays
+outstanding.
+
+The thirty-sixth edition adds no obligation inside this corpus and **one
+outside it**, and records none as discharged. It withdraws the performance
+gates on the product owner's decision, reclassifies the requirements of form as
+the correctness invariants they always were, settles what the dispersion rule
+of `NFR-PERF-011` is a statement about, and fixes the invocation, the
+aggregation and the cache posture that three points of `NFR-PERF-014` had left
+to whoever measured them. The obligation outside this corpus is `DIV-055`:
+`CLAUDE.md` states, in two places, that a regression against a recorded
+baseline fails the change, which `BR-PERF-008` now contradicts. Like every
+entry of [upstream-divergences.md](upstream-divergences.md) it is a work list
+for whoever holds the pen on that file, it blocks nothing here, and no
+requirement of this corpus waits on it. **Two further statements outside this
+corpus are made false by this edition and are not this register's to hold**:
+the budget tables of `docs/spec-technical/quality-attributes.md`, which restate
+the withdrawn vocabulary, and the four architecture decision records that argue
+from `NFR-PERF-017` — each belongs to the agent that owns its folder, and the
+register above covers the two root documents and nothing else. Nothing this
+edition changes touches a fixture or a measurement, and nothing it changes
+changes what `tpl` does. The item below was untouched by it and stays
 outstanding.
 
 The section therefore carries the item the twentieth edition recorded, and the
