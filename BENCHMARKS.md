@@ -3819,3 +3819,122 @@ hyperfine -N -i --warmup 1 --runs 5 [--prepare "<restore>"] --export-json "$S/c/
 ./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
 ```
+
+## 2026-09-23 — Row 4 of the third register applied: each indent written in one call
+
+*Sprint 19, task `#245`. Target of record: `aarch64-apple-darwin`. Server of
+record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry records; it does
+not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+`--pretty` is now serialised through `Indented`, a formatter of the project's
+own in `src/output/json.rs`, instead of `serde_json::to_writer_pretty`. It is
+`PrettyFormatter`'s logic with the default two-space indent, except that the
+comma, the newline and the whole indent of a separator are one `write_all` of
+a slice of a static run covering 32 levels; a deeper level is written in more
+than one call. `FR-OUT-008` is now held by a test that pins the formatter to
+`PrettyFormatter` at every depth up to 131, rather than by the encoder's
+default.
+
+**The pretty cached dump of `WL-001` fell from 17.76 to 15.16 ms (−14.7%), and
+the pretty table listing from 16.26 to 14.12 ms (−13.2%), with the same bytes
+out.** That is `#243`'s `ind243` reproduced on the shipped code, within 0.13 ms
+of each of its figures. The compact control is inside its noise.
+
+### Candidates
+
+Both arms were built from `git archive 31fd7d7` in a scratch directory, from
+paths of the same length, each into its own target directory; `after` carries
+this change's `src/output/json.rs` and nothing else.
+
+| arm | binary |
+|---|---|
+| `before` | `31fd7d7`: 4 000 432 B, sha256 `68ec49bb…1482` |
+| `after` | `31fd7d7` with this change: 4 000 432 B, sha256 `a82d977a…9ce5` |
+| `before_twin` | the `before` file, measured as a third label: the A/A arm |
+
+The in-repository `target/release/tpl` with this change is 4 000 448 B, sha256
+`ee48fd0a…de93`; the 16 B are the longer source path embedded in it.
+
+### Environment
+
+As `#243`'s: Apple M4, 10 cores, 32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0
+`arm64`; `rustc` 1.98.1 (48a229cea 2026-09-01), the release profile of
+`ADR-004`; `hyperfine` 1.20.0 (`-N`); `/usr/bin/time -l`. The fixture's `12.3`
+alone during timing, seeded by `scripts/mariadb/seed-bench.sh`, `tls =
+"disabled"`, account `root`; the `server` project built by
+`benches/fixture.sh` and primed with `before`. Mains power, not charging; load
+2.49 to 2.75. Taken 2026-09-23, 07:57Z to 07:58Z (UTC).
+
+### Protocol
+
+`#243`'s: 8 rounds, the three labels rotated by one position per round and the
+three arms rotated inside one `hyperfine` call per label per round; 40 runs
+after 5 warmups per arm per round, 320 samples per arm and label.
+
+**Byte identity**, before any timing. Every command that declares `--pretty`
+was run with both arms and stdout, stderr and the exit code compared: 975
+invocations, every one identical.
+
+| sweep | invocations | what it covers |
+|---|---|---|
+| `WL-001` and `WL-003` on `12.3` | 617 | `help --format json --pretty` bare and at each of the 34 node paths; for both entries, cached and `--direct --no-cache`: `schema info`, `tables`, `tables --pattern`, `views`, `routines`, `dump`, and `schema table`, `view`, `routine` for every object, plus an absent table (`66`); `cache status`, `cfg database show`, `cfg database test` per entry; `template list`, `template path` (and its `66`), `cfg get`, `cfg list`, `cfg database list` |
+| `freight` on all five servers | 358 | per server, cached and `--direct --no-cache`: the four listings, `dump`, and every table, view and routine; `cache status`, `cfg database show`, `cfg database test`; `cfg list`, `cfg database list`, `template list` |
+
+41.2 MB and 25.7 MB of pretty output respectively; the deepest indent reached
+is 12 levels.
+
+### Results
+
+Medians; the A/A column is `before` against `before_twin`.
+
+| label | command | `before` | `after` | change | A/A | p90, `before` → `after` | per-round change |
+|---|---|---|---|---|---|---|---|
+| `dumppretty_c` | `tpl -d bench_wl001 schema dump --pretty` | 17.762 ms | **15.155 ms** | **−2.607 ms, −14.7%** | 0.185 ms | 18.31 → 15.86 ms | −2.78 to −2.35 ms |
+| `tablespretty_c` | `tpl -d bench_wl001 schema tables --format json --pretty` | 16.263 ms | **14.116 ms** | **−2.146 ms, −13.2%** | 0.045 ms | 16.71 → 14.52 ms | −2.22 to −2.01 ms |
+| `dump_c` | `tpl -d bench_wl001 schema dump`, the compact control | 13.752 ms | 13.790 ms | +0.038 ms | 0.023 ms | 14.64 → 14.56 ms | −0.45 to +0.26 ms |
+
+Peak resident memory of `dumppretty_c`, `/usr/bin/time -l`, median of 7:
+13.13 → 13.05 MiB, inside the spread of the samples (12.94 to 13.17 MiB for `before`, 13.03 to 13.14 MiB for `after`).
+
+- **The gain is the calls, not the bytes.** Every round moved the two pretty
+  labels by 12 to 49 times their A/A, and the compact form, which does not
+  reach the formatter, by less than its per-round spread.
+- **The binary did not grow**: both arms are 4 000 432 B. `ind243`, `#243`'s
+  instrument of the same change, was 16 512 B larger; it was not examined why.
+
+### Not measured
+
+- `help --format json --pretty`, which `#243` put at −0.035 ms, and the
+  single-object pretty reads, where it found nothing.
+- The series `10.11`, `11.4` and `11.8`, raised for the identity sweep and the
+  test suite, not for timing.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+mkdir -p "$S/src/31fd7d7" "$S/src/aft0245"
+git archive 31fd7d7 | tar -x -C "$S/src/31fd7d7"
+git archive 31fd7d7 | tar -x -C "$S/src/aft0245"; cp src/output/json.rs "$S/src/aft0245/src/output/json.rs"
+(cd "$S/src/31fd7d7" && cargo build --release --target-dir "$S/t-31fd7d7"); cp "$S/t-31fd7d7/release/tpl" "$S/tpl-before"
+(cd "$S/src/aft0245" && cargo build --release --target-dir "$S/t-aft0245"); cp "$S/t-aft0245/release/tpl" "$S/tpl-after"
+
+# 1. The fixture, through its harness only; 12.3 alone for timing.
+./scripts/mariadb/up.sh 12.3; ./scripts/mariadb/status.sh --quiet 12.3
+./scripts/mariadb/seed-bench.sh 12.3
+
+# 2. The server project, with benches/fixture.sh's functions:
+#    fixture_inventory; fixture_address 12.3;
+#    fixture_server_project "$S/work" "$S/tpl-before" disabled; fixture_prime "$S/work" "$S/tpl-before"
+
+# 3. For round r of 8, the three labels rotated by r, the three arms rotated by r:
+hyperfine -N --warmup 5 --runs 40 --export-json "$S/c/<label>.r<r>.json" \
+  -n before "$S/tpl-before <args>" -n after "$S/tpl-after <args>" -n before_twin "$S/tpl-before <args>"
+
+# 4. The identity sweep over freight and the pipeline need all five servers;
+#    then the fixture down, and nothing left.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
+```

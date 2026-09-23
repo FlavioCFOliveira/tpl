@@ -20,11 +20,30 @@
 use std::io::{self, Write};
 
 use serde::Serialize;
+use serde_json::ser::Formatter;
 
 use super::envelope::Document;
 
 /// The byte every JSON document ends with, per `FR-OUT-007`.
 const TERMINATOR: u8 = b'\n';
+
+/// The indent of one nesting level, per `FR-OUT-008`.
+const INDENT: &[u8] = b"  ";
+
+/// The nesting levels [`SEPARATOR`] covers in one slice. Deeper levels are
+/// still written correctly, in more than one call.
+const COVERED_LEVELS: usize = 32;
+
+/// A comma, a newline and the indent of [`COVERED_LEVELS`] levels.
+///
+/// Every separator the indented form writes is a prefix of this run, or of it
+/// without its first byte: `",\n"` or `"\n"` followed by two spaces per level.
+const SEPARATOR: &[u8; 2 + COVERED_LEVELS * INDENT.len()] = &{
+    let mut run = [b' '; 2 + COVERED_LEVELS * INDENT.len()];
+    run[0] = b',';
+    run[1] = b'\n';
+    run
+};
 
 /// Which of the two forms a document is written in.
 ///
@@ -47,10 +66,11 @@ pub(crate) enum Form {
 /// `FR-OUT-032` holds by construction on the way in: the encoder is never
 /// handed a document that is not enveloped.
 ///
-/// The indented form is `serde_json`'s own pretty printer, whose default indent
-/// is the two spaces `FR-OUT-008` fixes, so the requirement is met by the
-/// encoder's default rather than by a setting that could be changed without
-/// noticing.
+/// The indented form is written through [`Indented`], the project's own
+/// formatter, which lays out `serde_json`'s pretty form — the two-space indent
+/// with one key per line that `FR-OUT-008` fixes — byte for byte. The layout is
+/// therefore the project's to keep, and a test pins it to `serde_json`'s
+/// `PrettyFormatter` at every depth.
 ///
 /// # Errors
 ///
@@ -68,17 +88,185 @@ where
 {
     match form {
         Form::Compact => serde_json::to_writer(&mut *writer, document),
-        Form::Indented => serde_json::to_writer_pretty(&mut *writer, document),
+        Form::Indented => write_indented(&mut *writer, document),
     }
     .map_err(io::Error::from)?;
 
     writer.write_all(&[TERMINATOR])
 }
 
+/// Serialises `value` to `writer` in the indented form of `FR-OUT-008`,
+/// without the terminator.
+fn write_indented<W, T>(writer: W, value: &T) -> serde_json::Result<()>
+where
+    W: Write,
+    T: Serialize + ?Sized,
+{
+    value.serialize(&mut serde_json::Serializer::with_formatter(
+        writer,
+        Indented::default(),
+    ))
+}
+
+/// The indented form of `FR-OUT-008`: `serde_json`'s `PrettyFormatter` with its
+/// default two-space indent, byte for byte.
+///
+/// PERF: `PrettyFormatter` writes an indent with one `write_all` per nesting
+/// level, and the comma before it with another. This writes the comma, the
+/// newline and the whole indent as one slice of [`SEPARATOR`]. #243 measured
+/// the pretty `schema dump` of `WL-001` at 17.70 → 15.03 ms with the same
+/// bytes; see `BENCHMARKS.md`, 2026-09-23, task #245.
+#[derive(Debug, Default)]
+struct Indented {
+    /// How many containers are open around the next value.
+    level: usize,
+    /// Whether the innermost open container has written a value yet, which
+    /// decides whether its closing bracket goes on a line of its own.
+    has_value: bool,
+}
+
+impl Indented {
+    /// Writes an optional comma, a newline, and the indent of the current
+    /// level, in one call where the level is within [`COVERED_LEVELS`].
+    fn separate<W>(&self, writer: &mut W, comma: bool) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        let start = usize::from(!comma);
+        let covered = self.level.min(COVERED_LEVELS);
+        writer.write_all(&SEPARATOR[start..2 + covered * INDENT.len()])?;
+
+        let mut remaining = self.level - covered;
+        while remaining > 0 {
+            let chunk = remaining.min(COVERED_LEVELS);
+            writer.write_all(&SEPARATOR[2..2 + chunk * INDENT.len()])?;
+            remaining -= chunk;
+        }
+
+        Ok(())
+    }
+
+    /// Opens a container.
+    fn open<W>(&mut self, writer: &mut W, bracket: &[u8]) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.level += 1;
+        self.has_value = false;
+        writer.write_all(bracket)
+    }
+
+    /// Closes a container, on a line of its own unless it is empty.
+    fn close<W>(&mut self, writer: &mut W, bracket: &[u8]) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.level = self.level.saturating_sub(1);
+        if self.has_value {
+            self.separate(writer, false)?;
+        }
+        writer.write_all(bracket)
+    }
+}
+
+impl Formatter for Indented {
+    fn begin_array<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.open(writer, b"[")
+    }
+
+    fn end_array<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.close(writer, b"]")
+    }
+
+    fn begin_array_value<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.separate(writer, !first)
+    }
+
+    fn end_array_value<W>(&mut self, _writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.has_value = true;
+        Ok(())
+    }
+
+    fn begin_object<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.open(writer, b"{")
+    }
+
+    fn end_object<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.close(writer, b"}")
+    }
+
+    fn begin_object_key<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.separate(writer, !first)
+    }
+
+    fn begin_object_value<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        writer.write_all(b": ")
+    }
+
+    fn end_object_value<W>(&mut self, _writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self.has_value = true;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Form, write_document};
+    use serde_json::{Value, json};
+
+    use super::{COVERED_LEVELS, Form, write_document, write_indented};
     use crate::output::envelope::{Collection, Document, Source};
+
+    /// `value` in the indented form, and in `serde_json`'s `PrettyFormatter`.
+    fn both(value: &Value) -> (String, String) {
+        let mut ours = Vec::new();
+        write_indented(&mut ours, value).expect("a buffer accepts every write");
+
+        let theirs = serde_json::to_vec_pretty(value).expect("a buffer accepts every write");
+
+        (
+            String::from_utf8(ours).expect("the encoder emits UTF-8"),
+            String::from_utf8(theirs).expect("the encoder emits UTF-8"),
+        )
+    }
+
+    /// Wraps `leaf` in `depth` containers, alternating objects and arrays,
+    /// each holding a sibling before and after so every separator is reached.
+    fn nested(depth: usize, leaf: Value) -> Value {
+        (0..depth).fold(leaf, |inner, level| {
+            if level % 2 == 0 {
+                json!({ "before": level, "inner": inner, "after": [], "empty": {} })
+            } else {
+                json!([level, inner, "a \"quoted\"\n\ttext", null, true, 1.5])
+            }
+        })
+    }
 
     /// Writes a document to a buffer and returns it as text.
     fn emitted(form: Form) -> String {
@@ -120,8 +308,7 @@ mod tests {
 
     #[test]
     fn fr_out_008_an_indented_document_has_a_two_space_indent_and_one_key_per_line() {
-        // FR-OUT-008: a two-space indent with one key per line, which is
-        // serde_json's own default.
+        // FR-OUT-008: a two-space indent with one key per line.
         let document = emitted(Form::Indented);
 
         assert_eq!(
@@ -159,6 +346,59 @@ mod tests {
             assert!(at("\"schema_version\"") < at("\"source\""), "{document}");
             assert!(at("\"source\"") < at("\"data\""), "{document}");
             assert!(at("\"data\"") < at("\"tables\""), "{document}");
+        }
+    }
+
+    #[test]
+    fn fr_out_008_the_indented_form_is_pretty_formatter_byte_for_byte_at_every_depth() {
+        // FR-OUT-008: the layout is the project's own formatter, so a test and
+        // not the encoder's default is what keeps it serde_json's two-space
+        // form. Every depth up to well past the covered run, where the indent
+        // is written in more than one call.
+        for depth in 0..=COVERED_LEVELS * 3 + 1 {
+            for leaf in [
+                json!(0),
+                json!([]),
+                json!({}),
+                json!(["x"]),
+                json!({ "k": "v" }),
+            ] {
+                let (ours, theirs) = both(&nested(depth, leaf));
+                assert_eq!(ours, theirs, "depth {depth}");
+            }
+        }
+    }
+
+    #[test]
+    fn fr_out_008_a_single_deep_chain_matches_pretty_formatter() {
+        // One container per level and nothing beside it: only the opening
+        // separators and the closing indents, at every level past the run.
+        let deep = (0..COVERED_LEVELS * 4 + 3).fold(json!("leaf"), |inner, level| {
+            if level % 2 == 0 {
+                json!([inner])
+            } else {
+                json!({ "k": inner })
+            }
+        });
+
+        let (ours, theirs) = both(&deep);
+        assert_eq!(ours, theirs);
+    }
+
+    #[test]
+    fn fr_out_008_scalars_and_empty_containers_match_pretty_formatter() {
+        for value in [
+            json!(null),
+            json!(true),
+            json!(-7),
+            json!(2.25),
+            json!("s"),
+            json!([]),
+            json!({}),
+            json!([[], {}, [[]], { "a": {} }]),
+        ] {
+            let (ours, theirs) = both(&value);
+            assert_eq!(ours, theirs, "{value}");
         }
     }
 }
