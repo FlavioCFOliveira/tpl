@@ -1,7 +1,7 @@
 ---
 title: Performance Requirements
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [server-contract.md, cache-commands.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md, glossary.md]
 ---
 
@@ -259,6 +259,11 @@ a summary.
 
 - **NFR-PERF-003**: A cache hit SHALL open no connection and SHALL issue no
   catalogue query.
+
+  *Note added in the fortieth edition.* Under `FR-CACHE-038` a render that
+  began serving from the cache can reach a file that is a miss. That invocation
+  is a miss and not a hit, per `FR-CACHE-006`, so the connection it opens under
+  `FR-CACHE-039` is outside this requirement and within `NFR-PERF-004`.
 
 - **NFR-PERF-004**: One invocation SHALL open at most one connection.
 

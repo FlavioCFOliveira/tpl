@@ -1,7 +1,7 @@
 ---
 title: The Context Document
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
 ---
 
@@ -844,6 +844,11 @@ emits — `FR-SCH-018` keeps them out of it.
 
 - **FR-CTX-029**: `now` SHALL be evaluated once per invocation, at render time,
   and every reference to it in one render SHALL yield the same value.
+
+  *Note added in the fortieth edition.* When a render is abandoned under
+  `FR-CACHE-039`, the render that follows it uses the value of `now` evaluated
+  for the abandoned render, per that requirement. The value is still evaluated
+  once per invocation, and nothing of the abandoned render is observable.
 
   *Rationale.* A template that interpolates `now` twice must not produce two
   timestamps, and `FR-RND-002` gives one render per invocation, so there is one

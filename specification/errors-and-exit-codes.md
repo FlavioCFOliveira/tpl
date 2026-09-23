@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md]
 ---
 
@@ -581,6 +581,14 @@ Out of scope: the wording of any individual message.
   selects the entry, expands `${VAR}` and obtains the password, none of which
   an invocation that cannot render has a use for, and the `78` it can raise is
   a fault the caller meets on the next invocation anyway.
+
+  *Note added in the fortieth edition.* A miss discovered during the render
+  step, under `FR-CACHE-039`, returns the invocation to the cache-or-connection
+  step. A condition of that step or of catalogue object resolution raised then
+  is reported with that step's code. A render condition raised before the miss
+  is reached is reported as the first failure, and no connection is opened.
+  This is one order still: the render that was abandoned produced no result,
+  and the steps run again in their order for the render that does.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.

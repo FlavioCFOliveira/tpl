@@ -222,6 +222,38 @@ fn component(name: &str) -> Option<&str> {
     ordinary.then_some(name)
 }
 
+/// The name, and for a routine the kind, that the object file at `path` holds
+/// under this layout, or [`None`] where no object of `collection` is stored
+/// there.
+///
+/// It is the inverse of [`Layout::table`], [`Layout::view`] and
+/// [`Layout::routine`]: every path those three compose answers the name and the
+/// kind it was composed from, and a path none of them can compose answers
+/// [`None`] — a file name that is not UTF-8, a name [`component`] refuses, or a
+/// routine file whose first segment is neither of the two kinds of
+/// `FR-CDOC-014`. It is what lets a render learn the members of a collection
+/// from the directory listing alone, per `FR-CACHE-038`.
+pub(super) fn member_of(
+    collection: Collection,
+    path: &Path,
+) -> Option<(Option<RoutineKind<'static>>, &str)> {
+    let stem = path.file_name()?.to_str()?.strip_suffix(DOT_JSON)?;
+
+    match collection {
+        Collection::Tables | Collection::Views => Some((None, component(stem)?)),
+        Collection::Routines => {
+            let (spelled, name) = stem.split_once('.')?;
+            // The spelling is read back through `lower`, the one place it is
+            // written, so the two directions cannot drift apart.
+            let kind = [RoutineKind::Procedure, RoutineKind::Function]
+                .into_iter()
+                .find(|kind| lower(kind) == Some(spelled))?;
+
+            Some((Some(kind), component(name)?))
+        }
+    }
+}
+
 /// Whether `path` is one of this layout's object files.
 ///
 /// It is what a directory walk keeps: a regular file whose name ends in the
@@ -238,7 +270,7 @@ pub(super) fn is_object(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Collection, Layout, component, is_object, lower};
+    use super::{Collection, Layout, component, is_object, lower, member_of};
     use crate::model::routine::RoutineKind;
     use std::path::Path;
 
@@ -357,5 +389,45 @@ mod tests {
         assert!(!is_object(Path::new("/c/tables/.orders.json.tmp")));
         assert!(!is_object(Path::new("/c/tables/orders")));
         assert!(!is_object(Path::new("/c/tables/.orders.json")));
+    }
+
+    #[test]
+    fn fr_cache_038_a_path_answers_the_name_and_kind_it_was_composed_from() {
+        // The listing of FR-CACHE-038 names each member from its path, so
+        // every path the layout composes must read back as what composed it,
+        // a dotted name included.
+        let layout = Layout::of(tpl(), "shop").expect("a component");
+        let table = layout.table("order.lines").expect("a component");
+        let view = layout.view("v_sales").expect("a component");
+
+        assert_eq!(
+            member_of(Collection::Tables, &table),
+            Some((None, "order.lines"))
+        );
+        assert_eq!(member_of(Collection::Views, &view), Some((None, "v_sales")));
+
+        for kind in [RoutineKind::Procedure, RoutineKind::Function] {
+            let routine = layout.routine(&kind, "calc.vat").expect("a component");
+
+            assert_eq!(
+                member_of(Collection::Routines, &routine),
+                Some((Some(kind), "calc.vat"))
+            );
+        }
+    }
+
+    #[test]
+    fn fr_cache_038_a_path_no_write_composes_names_no_member() {
+        // A routine file without one of the two kinds of FR-CDOC-014, in
+        // either case, and a name the component gate refuses.
+        for (collection, path) in [
+            (Collection::Routines, "/c/routines/calc_vat.json"),
+            (Collection::Routines, "/c/routines/PROCEDURE.calc_vat.json"),
+            (Collection::Routines, "/c/routines/package.calc_vat.json"),
+            (Collection::Routines, "/c/routines/procedure..json"),
+            (Collection::Tables, "/c/tables/orders"),
+        ] {
+            assert_eq!(member_of(collection, Path::new(path)), None, "{path}");
+        }
     }
 }

@@ -336,6 +336,35 @@ pub(crate) fn database() -> Database<'static> {
     }
 }
 
+/// A model the cache stores whole: three tables, two views and a procedure and a
+/// function of one name, none of them marked `restricted`.
+///
+/// [`database`] marks its view and its routine, and `FR-CACHE-037` keeps a
+/// marked object out of the cache, so a store written from it records neither
+/// collection whole. The two routines share a name, which is the ambiguity of
+/// `FR-SCH-010` and the one case where two members of a collection sort as
+/// equal.
+pub(crate) fn whole() -> Database<'static> {
+    let mut views = vec![view("v_consignment_manifest"), view("v_carrier_directory")];
+    for view in &mut views {
+        view.restricted = None;
+    }
+
+    let mut procedure = routine("sp_book_consignment");
+    procedure.restricted = None;
+    let function = Routine {
+        kind: RoutineKind::Function,
+        ..procedure.clone()
+    };
+
+    Database {
+        tables: vec![carrier(), consignment(), consignment_leg()],
+        views,
+        routines: vec![procedure, function],
+        ..database()
+    }
+}
+
 /// A model carrying `tables` and nothing else.
 pub(crate) fn database_of(tables: Vec<Table<'static>>) -> Database<'static> {
     Database {

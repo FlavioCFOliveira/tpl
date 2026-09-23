@@ -193,6 +193,11 @@ Out of scope: when the cache is consulted or written, which is
   restating its mechanism. The argument is unchanged: a file left in place
   holds what the fresh read would have written.
 
+  *Note added in the fortieth edition.* Under `FR-CACHE-038` one render reads
+  its files at different instants. A file may be replaced between them, which
+  `FR-CDOC-015` already disclaims, or removed, which is a miss under
+  `FR-CACHE-039`.
+
   *Rejected.* Caching the dump as a single document alongside the per-object
   files, which would give a cached dump the same guarantee as a live read, at
   the cost of storing everything twice and of two copies that drift apart.

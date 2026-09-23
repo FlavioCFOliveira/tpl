@@ -43,7 +43,10 @@
 
 mod lazy;
 
+pub(super) use lazy::Store;
+
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use minijinja::Value;
@@ -175,12 +178,41 @@ pub(super) fn assemble(
     defined: &BTreeMap<&str, &str>,
     at: &str,
 ) -> Value {
-    let mut entries: Vec<(&'static str, Value)> = Vec::with_capacity(5);
-
     // PERF: converting the whole document before the template ran was 41.4%
     // of a render of `example` over `WL-001` (`BENCHMARKS.md`, 2026-09-22, row
     // 6 of the waste register); a member is now converted when first read.
-    entries.push((DATABASE, lazy::database(database)));
+    assembled(lazy::database(database), bound, defined, at)
+}
+
+/// The render context of `FR-RND-023`, with `database` served from the cache
+/// files `store` names (`FR-CACHE-038`).
+///
+/// It is [`assemble`] with one source changed: each member of a collection is
+/// read from its file the first time the template reaches it, and the four
+/// other variables are written exactly as [`assemble`] writes them.
+pub(super) fn assemble_shelved(
+    store: &Arc<Store>,
+    bound: Option<(&'static str, Value)>,
+    defined: &BTreeMap<&str, &str>,
+    at: &str,
+) -> Value {
+    // PERF: reading and decoding every cache file before a render bound to one
+    // table was 9.1 ms of 11.3 ms (`BENCHMARKS.md`, 2026-09-23, `#243` row 1);
+    // a member's file is now read when the template first reaches it.
+    assembled(lazy::shelved(store), bound, defined, at)
+}
+
+/// The context of `FR-RND-023`, from its `database` value and the other four
+/// sources.
+fn assembled(
+    database: Value,
+    bound: Option<(&'static str, Value)>,
+    defined: &BTreeMap<&str, &str>,
+    at: &str,
+) -> Value {
+    let mut entries: Vec<(&'static str, Value)> = Vec::with_capacity(5);
+
+    entries.push((DATABASE, database));
 
     // FR-RND-006: absent, no object variable is bound, so a template written
     // for the whole database never has to defend itself against one.

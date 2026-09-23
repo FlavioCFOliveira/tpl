@@ -1,5 +1,5 @@
 //! The catalogue cache: `.tpl/.cache/`, read through on every cached read and
-//! written on every miss (`FR-CACHE-001` … `FR-CACHE-037`, `FR-CDOC-001` …
+//! written on every miss (`FR-CACHE-001` … `FR-CACHE-039`, `FR-CDOC-001` …
 //! `FR-CDOC-016`).
 //!
 //! | Submodule | Subject | Forced by |
@@ -86,8 +86,9 @@ use crate::error::Error;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::{self, Named};
 use crate::model::document::shape::TableDocument;
-use crate::model::routine::RoutineKind;
+use crate::model::routine::{Routine, RoutineKind};
 use crate::model::server::Server;
+use crate::model::view::View;
 use meta::Meta;
 use paths::{Collection, Layout};
 
@@ -201,6 +202,143 @@ fn decode<'a, T: Deserialize<'a> + Named>(members: &'a [String]) -> Option<Vec<T
     order::sort_by_name(&mut decoded);
 
     Some(decoded)
+}
+
+/// What a render served from the cache reads before it starts (`FR-CACHE-038`):
+/// the bytes of `database.json`, and the members of each collection as the
+/// directory listing names them.
+///
+/// It is [`Loaded`]'s counterpart for `tpl render`, which binds the whole
+/// `database` but reaches, as a rule, a small part of it. No object file is
+/// opened here: each [`Shelf`] names one, and the file is read and decoded only
+/// when the template first reaches that member, through [`Shelf::read`] and one
+/// of [`Shelf::table`], [`Shelf::view`] and [`Shelf::routine`].
+///
+/// **The members are ordered here**, by the one comparator
+/// [`Loaded::document`] orders by, over the names the paths hold. For every
+/// file this binary writes, the name a path holds is the name the file holds,
+/// so the order, the length and the members of each collection are those an
+/// up-front read of the same files produces. A file whose contents name
+/// another object is refused when it is reached, which is the only point at
+/// which the difference can be seen.
+///
+/// *Rejected: reading each file's name up front to order the collection.* The
+/// open is most of the cost of a file (`BENCHMARKS.md`, 2026-09-23, `#243`),
+/// and `FR-CACHE-038` forbids reading a member's file before it is reached.
+#[derive(Debug)]
+pub(crate) struct Shelved {
+    /// The contents of `database.json`.
+    metadata: String,
+    /// The tables, ordered by name.
+    tables: Vec<Shelf>,
+    /// The views, ordered by name.
+    views: Vec<Shelf>,
+    /// The routines, ordered by name.
+    routines: Vec<Shelf>,
+}
+
+impl Shelved {
+    /// The database's own members — the three metadata fields and the `server`
+    /// object — with its three collections empty, or [`None`] where
+    /// `database.json` fails to decode, which is a miss per `FR-CACHE-033`.
+    ///
+    /// The collections are the shelves: [`Shelved::tables`],
+    /// [`Shelved::views`] and [`Shelved::routines`].
+    pub(crate) fn head(&self) -> Option<DatabaseDocument<'_>> {
+        let metadata: Metadata<'_> = serde_json::from_str(&self.metadata).ok()?;
+
+        Some(DatabaseDocument {
+            name: metadata.name,
+            charset: metadata.charset,
+            collation: metadata.collation,
+            server: metadata.server,
+            tables: Vec::new(),
+            views: Cow::Owned(Vec::new()),
+            routines: Cow::Owned(Vec::new()),
+        })
+    }
+
+    /// The tables, ordered by name.
+    pub(crate) fn tables(&self) -> &[Shelf] {
+        &self.tables
+    }
+
+    /// The views, ordered by name.
+    pub(crate) fn views(&self) -> &[Shelf] {
+        &self.views
+    }
+
+    /// The routines, ordered by name.
+    pub(crate) fn routines(&self) -> &[Shelf] {
+        &self.routines
+    }
+}
+
+/// One member of a collection, known by its file and not yet read
+/// (`FR-CACHE-038`).
+#[derive(Debug)]
+pub(crate) struct Shelf {
+    /// The name the path holds.
+    name: String,
+    /// The kind the path holds, for a routine; [`None`] for a table or a view.
+    kind: Option<RoutineKind<'static>>,
+    /// The object file.
+    file: PathBuf,
+}
+
+impl Shelf {
+    /// The routine's kind, as its path holds it; [`None`] for a table or a
+    /// view.
+    pub(crate) const fn kind(&self) -> Option<&RoutineKind<'static>> {
+        self.kind.as_ref()
+    }
+
+    /// The contents of the member's file, or [`None`] on a miss
+    /// (`FR-CACHE-033`): absent — removed since the listing was read, which
+    /// `FR-CACHE-039` names — unreadable, or not UTF-8.
+    pub(crate) fn read(&self) -> Option<String> {
+        read(&self.file)
+    }
+
+    /// The table `bytes` hold, or [`None`] on a miss.
+    ///
+    /// The decode is [`Loaded::document`]'s, so a file is refused here exactly
+    /// where an up-front read would have refused it. A file that decodes and
+    /// names another table than its path is refused as well: the collection was
+    /// ordered and counted by the path, so serving it would present a member
+    /// out of the order and under a name the rest of the render has already
+    /// seen. No write of this binary produces one.
+    pub(crate) fn table<'a>(&self, bytes: &'a str) -> Option<TableDocument<'a>> {
+        self.decoded(bytes)
+    }
+
+    /// The view `bytes` hold, or [`None`] on a miss, on the terms of
+    /// [`Shelf::table`].
+    pub(crate) fn view<'a>(&self, bytes: &'a str) -> Option<View<'a>> {
+        self.decoded(bytes)
+    }
+
+    /// The routine `bytes` hold, or [`None`] on a miss, on the terms of
+    /// [`Shelf::table`]; the kind must be the one the path holds as well.
+    pub(crate) fn routine<'a>(&self, bytes: &'a str) -> Option<Routine<'a>> {
+        let routine: Routine<'a> = self.decoded(bytes)?;
+
+        (self.kind.as_ref() == Some(&routine.kind)).then_some(routine)
+    }
+
+    /// The member `bytes` hold, where it names this shelf's member.
+    fn decoded<'a, T: Deserialize<'a> + Named>(&self, bytes: &'a str) -> Option<T> {
+        let member: T = serde_json::from_str(bytes).ok()?;
+
+        (member.name() == self.name).then_some(member)
+    }
+}
+
+impl Named for Shelf {
+    /// The member's name, as its path holds it.
+    fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl Loaded {
@@ -484,6 +622,35 @@ impl Cache {
             tables: members(&layout.collection(Collection::Tables))?,
             views: members(&layout.collection(Collection::Views))?,
             routines: members(&layout.collection(Collection::Routines))?,
+        })
+    }
+
+    /// What a render reads before it starts, or [`None`] on a miss
+    /// (`FR-CACHE-038`).
+    ///
+    /// It is a hit exactly where [`Cache::everything`] would reach its object
+    /// files: the record is read and checked first, all three collections must
+    /// be recorded whole, `database.json` must be readable, and each
+    /// collection's directory must be walkable. The object files are listed
+    /// and not opened. A listed file whose path no write of this binary
+    /// composes — see [`paths::member_of`] — is a miss here, because its member
+    /// cannot be named or ordered without opening it.
+    pub(crate) fn shelved(&self) -> Option<Shelved> {
+        let layout = self.layout.as_ref()?;
+        let meta = self.meta()?;
+
+        if !Collection::ALL
+            .iter()
+            .all(|collection| meta.whole(*collection))
+        {
+            return None;
+        }
+
+        Some(Shelved {
+            metadata: read(&layout.database())?,
+            tables: shelve(layout, Collection::Tables)?,
+            views: shelve(layout, Collection::Views)?,
+            routines: shelve(layout, Collection::Routines)?,
         })
     }
 
@@ -899,6 +1066,33 @@ fn members(directory: &Path) -> Option<Vec<String>> {
             held.push(read(&path)?);
         }
     }
+
+    Some(held)
+}
+
+/// The members of one collection, named and ordered by their paths, or
+/// [`None`] where the directory could not be walked or a listed object file
+/// holds no member this layout can name.
+///
+/// The walk is [`members`]'s, admitted by the same [`paths::is_object`], and
+/// the order is [`decode`]'s: a stable sort by the one comparator, over the
+/// walk's own order, so two members of one name keep the order an up-front
+/// read would have kept them in.
+fn shelve(layout: &Layout, collection: Collection) -> Option<Vec<Shelf>> {
+    let mut held = Vec::new();
+
+    for entry in fs::read_dir(layout.collection(collection)).ok()? {
+        let file = entry.ok()?.path();
+
+        if paths::is_object(&file) {
+            let (kind, name) = paths::member_of(collection, &file)?;
+            let name = name.to_owned();
+
+            held.push(Shelf { name, kind, file });
+        }
+    }
+
+    order::sort_by_name(&mut held);
 
     Some(held)
 }
@@ -1606,5 +1800,123 @@ mod tests {
             assert!(status.collections.is_empty());
             assert!(cache.everything().is_none());
         }
+    }
+
+    /// A store of the entry `shop` whose three collections are recorded whole.
+    fn whole(scratch: &Scratch) -> Cache {
+        let model = crate::model::document::fixture::whole();
+        let document = crate::model::document::context(&model).expect("the fixture builds");
+        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+        cache.write(&document, super::Covered::Everything);
+        cache
+    }
+
+    #[test]
+    fn fr_cache_038_the_listing_names_and_orders_what_an_up_front_read_decodes() {
+        // The names, their order and the count of each collection, from the
+        // paths alone, against the document the same files decode into.
+        use crate::model::document::order::Named as _;
+
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        let loaded = cache.everything().expect("the store is whole");
+        let expected = loaded.document().expect("every file decodes");
+        let listed = cache.shelved().expect("the store is whole");
+        let names = |shelves: &[super::Shelf]| -> Vec<String> {
+            shelves
+                .iter()
+                .map(|shelf| shelf.name().to_owned())
+                .collect()
+        };
+
+        assert_eq!(
+            names(listed.tables()),
+            expected
+                .tables
+                .iter()
+                .map(|table| table.name.to_string())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            names(listed.views()),
+            expected
+                .views
+                .iter()
+                .map(|view| view.name.to_string())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            names(listed.routines()),
+            expected
+                .routines
+                .iter()
+                .map(|routine| routine.name.to_string())
+                .collect::<Vec<_>>()
+        );
+        for (shelf, routine) in listed.routines().iter().zip(expected.routines.iter()) {
+            assert_eq!(shelf.kind(), Some(&routine.kind));
+        }
+        assert_eq!(
+            listed.head().expect("database.json decodes").name,
+            expected.name
+        );
+    }
+
+    #[test]
+    fn fr_cache_038_a_damaged_object_file_leaves_the_listing_a_hit() {
+        // FR-CACHE-033 as amended: the listing opens no object file, so a
+        // damaged one is not a miss of it. The same store read up front is.
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        std::fs::write(
+            layout(&scratch)
+                .collection(Collection::Views)
+                .join("v_carrier_directory.json"),
+            "{ torn",
+        )
+        .expect("writable");
+
+        assert!(cache.shelved().is_some());
+        assert!(cache.everything().expect("readable").document().is_none());
+    }
+
+    #[test]
+    fn fr_cache_038_the_listing_is_a_miss_where_the_record_or_a_path_is() {
+        // Before the render: the record of FR-CDOC-006, `database.json`, a
+        // collection directory, and a path no write composes are each a miss.
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        let layout = layout(&scratch);
+
+        std::fs::write(
+            layout.collection(Collection::Routines).join("stray.json"),
+            "{}",
+        )
+        .expect("writable");
+        assert!(cache.shelved().is_none(), "a path no write composes");
+
+        std::fs::remove_file(layout.collection(Collection::Routines).join("stray.json"))
+            .expect("removable");
+        assert!(cache.shelved().is_some(), "the control");
+
+        std::fs::remove_dir_all(layout.collection(Collection::Views)).expect("removable");
+        assert!(cache.shelved().is_none(), "a collection directory");
+
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        std::fs::remove_file(
+            super::paths::Layout::of(&scratch.path(".tpl"), "shop")
+                .expect("a component")
+                .database(),
+        )
+        .expect("removable");
+        assert!(cache.shelved().is_none(), "database.json");
+
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        cache
+            .clean_one(Collection::Tables, cache.table_file("carrier"))
+            .expect("removable");
+        assert!(cache.shelved().is_none(), "a collection not recorded whole");
     }
 }

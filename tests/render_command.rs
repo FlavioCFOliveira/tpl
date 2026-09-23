@@ -20,6 +20,7 @@
 //! | `FR-CTX-029`, `FR-CTX-030` | `now` is one instant per invocation, and a template that does not reference it repeats byte for byte |
 //! | `FR-CTX-026`, `FR-RND-024` | `vars` is this invocation's `--set` flags and nothing else, and a document that carries `vars`, `tpl` or `now` has those values ignored |
 //! | `FR-CACHE-016`, `FR-RND-025` | `--direct --no-cache` renders without touching a file of the store |
+//! | `FR-CACHE-038`, `FR-CACHE-039`, `FR-RND-034` | A render from the store that reaches a damaged file is abandoned, and the invocation is one server read, one write and one result on stdout, exactly as a miss found before the render |
 //!
 //! # Why most of this file needs the fixture
 //!
@@ -696,6 +697,114 @@ fn fr_rnd_016_and_fr_rnd_026_one_template_and_one_object_render_the_same_bytes_f
                  rendered different bytes from one read straight from the server"
             );
         }
+    }
+}
+
+// ------------------------------------------ FR-CACHE-038 and FR-CACHE-039 ---
+
+#[test]
+fn fr_cache_039_a_miss_reached_during_a_render_is_one_server_read_and_one_result() {
+    // FR-CACHE-039: a render served from the store reads each object file when
+    // the template first reaches it, and a file that is then a miss abandons the
+    // render. The invocation is a miss like any other — one connection, per
+    // NFR-PERF-004, the write of FR-CACHE-007, and a render from the server's
+    // document — and nothing of the abandoned render reaches stdout, per
+    // FR-RND-034: the template below writes the database before it reaches a
+    // table, so a byte that escaped would stand before the one result.
+    //
+    // The control is the miss the fortieth edition did not change, found
+    // before the render starts: the bound table's own file damaged. Both are
+    // compared with the render a warm store served, and with each other.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_039_a_miss_reached_during_a_render_is_one_server_read_and_one_result",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let control =
+            fixture::connections_attributable_to(server, || fixture::connect_once(server));
+        assert_eq!(
+            control, 1,
+            "{name}: the connection record did not count a connection that was made"
+        );
+
+        let sandbox = project(server, &[(WHOLE, WHOLE_SOURCE)]);
+        let tables = sandbox.path(&format!(".tpl/.cache/{ENTRY}/tables"));
+        let render = ["render", WHOLE, "--table", TABLE, "--set", TITLE.0];
+        let mut unstored = render.to_vec();
+        unstored.push("--no-cache");
+
+        succeeds(&sandbox, &["cache", "load"]);
+        let from_cache = succeeds(&sandbox, &render);
+        assert!(
+            from_cache.contains(&format!("BOUND {TABLE} ")),
+            "{name}: the control render carries no model"
+        );
+
+        let bound = tables.join(format!("{TABLE}.json"));
+        let reached = std::fs::read_dir(&tables)
+            .expect("the store holds its tables")
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path != &bound)
+            .max()
+            .expect("the fixture carries a second table");
+        let held = std::fs::read(&reached).expect("the store is ours");
+
+        for (case, damaged, arguments, rewritten) in [
+            ("reached during the render", &reached, &render[..], true),
+            ("found before the render", &bound, &render[..], true),
+            ("reached, under --no-cache", &reached, &unstored[..], false),
+        ] {
+            let original = std::fs::read(damaged).expect("the store is ours");
+            std::fs::write(damaged, "{ torn").expect("the store is ours");
+
+            let mut printed = None;
+            let opened = fixture::connections_attributable_to(server, || {
+                printed = Some(sandbox.run(arguments));
+            });
+            let printed = printed.expect("the body ran");
+
+            assert_eq!(
+                code(&printed),
+                Some(0),
+                "{name}, {case}: {}",
+                stderr(&printed)
+            );
+            assert!(
+                printed.stderr.is_empty(),
+                "{name}, {case}: FR-CACHE-033 reports nothing: {}",
+                stderr(&printed)
+            );
+            assert!(
+                stdout(&printed) == from_cache,
+                "{name}, {case}: stdout is not the one result the warm store rendered"
+            );
+            assert_eq!(
+                opened, 1,
+                "{name}, {case}: NFR-PERF-004 allows one connection"
+            );
+
+            let now = std::fs::read(damaged).expect("the store is ours");
+            if rewritten {
+                assert_eq!(
+                    now, original,
+                    "{name}, {case}: FR-CACHE-007 rewrote the file"
+                );
+            } else {
+                assert_eq!(now, b"{ torn", "{name}, {case}: FR-CACHE-014 wrote nothing");
+                std::fs::write(damaged, &original).expect("the store is ours");
+            }
+        }
+
+        assert_eq!(
+            std::fs::read(&reached).expect("the store is ours"),
+            held,
+            "{name}: the store ends as it began"
+        );
     }
 }
 

@@ -3938,3 +3938,213 @@ hyperfine -N --warmup 5 --runs 40 --export-json "$S/c/<label>.r<r>.json" \
 ./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
 ```
+
+## 2026-09-23 — Row 1 of the third register applied: a cached render reads an object file when the template reaches it
+
+*Sprint 19, task `#246`. Target of record: `aarch64-apple-darwin`. Server of
+record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry records; it does
+not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+`tpl render` served from the cache now reads `meta.json`, `database.json`, the
+listing of each collection and the bound object's file before the render, and
+every other object file the first time the template reaches that object
+(`FR-CACHE-038`). The `database` the template sees is still whole. A file that
+is a miss when it is reached abandons the render, which has written nothing,
+and the invocation is answered as any miss is: one server read, the cache
+write, and a render from the server's document (`FR-CACHE-039`). An abandoned
+render reads no further file, and its deadline no longer ends the process: the
+render that follows has its own.
+
+**A cached render bound to one object fell from 10.9–11.7 ms to 2.3–3.0 ms
+(−8.6 to −8.8 ms, −75% to −80%), its peak resident memory from 13.5–14.2 MiB
+to 4.2–4.9 MiB, and the canonical 200-render loop from 2 377.9 to 624.2 ms
+(−73.8%).** That is `#243`'s `bnd243` upper bound (−9.1 ms, −76.0% on the
+loop) within 0.5 ms per render, with the whole `database` still bound. A
+template that reads the whole database pays for the bookkeeping: `{{ database |
+json }}` is 0.42 ms (+1.6%) slower. A miss found during the render costs the
+part of the render that preceded it.
+
+### Candidates
+
+Both arms were built from `git archive b9a33df` in a scratch directory, from
+paths of the same length, each into its own target directory; `after` carries
+this change's `src/` and nothing else.
+
+| arm | binary |
+|---|---|
+| `before` | `b9a33df`: 4 000 432 B, sha256 `a82d977a…9ce5` — `#245`'s `after`, byte for byte (`b9a33df` is that change) |
+| `after` | `b9a33df` with this change: 4 017 024 B, sha256 `2d5ca3c5…8e02` |
+| `before_twin` | the `before` file, measured as a third label: the A/A arm |
+
+The binary grew by 16 592 B. The in-repository `target/release/tpl` with this
+change is also 4 017 024 B, sha256 `5f49ef9a…38fa`; the bytes differ where the
+source path is embedded.
+
+The figures are those of a second campaign, run after the abandoned render was
+made to read no further file and to outlive its deadline. A first campaign over
+the change without those two properties gave the same results within 0.25 ms
+on every label but the loop, whose absolute level differed between the two
+sessions (`before` 2 519.3 ms, `after` 638.9 ms, −74.6%); `rmiss_reach` was
++19.08 ms there.
+
+### Environment
+
+As `#243`'s: Apple M4, 10 cores, 32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0
+`arm64`; `rustc` 1.98.1 (48a229cea 2026-09-01), the release profile of
+`ADR-004`; `hyperfine` 1.20.0 (`-N`); `/usr/bin/time -l`. All five fixture
+servers were up; timing reached only `12.3`, seeded by
+`scripts/mariadb/seed-bench.sh`, `tls = "disabled"`, account `root`. The
+`server` project was built by `benches/fixture.sh` and primed with `before`.
+Mains power, not charging; load 2.34 to 2.90. Taken 2026-09-23 (UTC): the main
+campaign 09:21Z to 09:25Z, the loop 09:25Z to 09:27Z, peak memory after. The
+fixture was taken down and raised again between the two campaigns, and
+`WL-001` and `WL-003` seeded again.
+
+Probe templates, written into the `server` project and not in the repository,
+as `#243` wrote them: `probe/whole_json` (`{{ database | json }}`, 3 182 266 B),
+`probe/whole_walk` (the recursive walk, 979 214 B — `#243`'s output size),
+`probe/view` and `probe/routine`.
+
+### Protocol
+
+`#243`'s: 8 rounds, the 17 labels rotated by one position per round and the
+three arms rotated inside one `hyperfine` call per label per round. 40 runs
+after 5 warmups per arm per round (320 samples); `rwwalk_c` 20 after 3 and
+`rexample_d` 20 after 5 (160); the two miss labels 5 after 1 (40), with a
+`--prepare` that replaces one object file with `{ torn` by a write to a
+temporary and a rename, never by `cp`. The loop: `benches/loop200.sh`, 4 rounds
+of 3 runs after 1 warmup (12 samples per arm), `--prepare "tpl -d bench_wl001
+cache clean"`, as `#243`. Peak resident memory: median of 7.
+
+**Byte identity**, before any timing. Every invocation was run with both arms
+and stdout, the exit code and stderr compared; stderr after masking the
+duration `-vvv` prints (`phase: render took …ms`). 10 393 invocations, every
+one identical.
+
+| sweep | invocations | what it covers |
+|---|---|---|
+| `freight` on `10.11`, `11.4`, `11.8`, `12.3` and the server without TLS | 4 180 | every worked template of `examples/*/templates/` (`go/`, `node/`, `python/`, `rust/`) and the `example` of `tpl init`, 19 in all: whole-database, bound with `--table`, `--view` and `--routine` (bare and qualified) to every object, with `-vvv`, `-q` and `--set`, and to an absent table; 2 590 exit `0`, 1 495 exit `65` (a template bound to an object it was not written for), 95 exit `66` |
+| `WL-001` and `WL-003` on `12.3` | 6 213 | the same, over 200 tables, 30 views and 40 routines; 4 641 exit `0`, 1 534 exit `65`, 38 exit `66` |
+
+25.2 MB and 138.7 MB of stdout respectively. No `meta.json` was rewritten
+during either sweep, so every render was served from the cache and none was
+abandoned. Both sweeps were run for each of the two `after` builds, with the
+same result.
+
+### Results
+
+Medians; the A/A column is `before` against `before_twin`.
+
+| label | command | `before` | `after` | change | A/A | p90, `before` → `after` | per-round change |
+|---|---|---|---|---|---|---|---|
+| `rexample_c` | `tpl -d bench_wl001 render example --table accrual` | 11.021 ms | **2.336 ms** | **−8.684 ms, −78.8%** | 0.007 ms | 11.36 → 2.42 ms | −8.83 to −8.61 ms |
+| `rexample_vvv_c` | the same with `-vvv` | 10.972 ms | **2.347 ms** | **−8.625 ms, −78.6%** | 0.132 ms | 11.32 → 2.42 ms | −8.84 to −8.58 ms |
+| `rexample_q_c` | the same with `-q` | 11.061 ms | **2.342 ms** | **−8.719 ms, −78.8%** | 0.043 ms | 11.34 → 2.40 ms | −8.88 to −8.61 ms |
+| `rexample_to_c` | the same with `--timeout 30` | 10.978 ms | **2.338 ms** | **−8.640 ms, −78.7%** | 0.025 ms | 11.31 → 2.43 ms | −8.81 to −8.51 ms |
+| `rexample_set_c` | the same with `--set title=Accrual` | 10.973 ms | **2.337 ms** | **−8.636 ms, −78.7%** | 0.115 ms | 11.19 → 2.45 ms | −8.73 to −8.55 ms |
+| `rstruct_c` | `tpl -d bench_wl001 render rust/struct --table accrual` | 11.685 ms | **2.983 ms** | **−8.703 ms, −74.5%** | 0.023 ms | 11.97 → 3.06 ms | −8.89 to −8.59 ms |
+| `rview_c` | `tpl -d bench_wl001 render probe/view --view v_booking_line_summary` | 11.015 ms | **2.254 ms** | **−8.761 ms, −79.5%** | 0.047 ms | 11.39 → 2.34 ms | −8.96 to −8.58 ms |
+| `rroutine_c` | `tpl -d bench_wl001 render probe/routine --routine fn_consignment_hazard_count` | 10.931 ms | **2.272 ms** | **−8.659 ms, −79.2%** | 0.049 ms | 11.26 → 2.37 ms | −8.86 to −8.57 ms |
+| `rschema_c` | `tpl -d bench_wl001 render rust/schema` | 17.493 ms | **16.761 ms** | **−0.732 ms, −4.2%** | 0.114 ms | 17.87 → 17.20 ms | −0.91 to −0.53 ms |
+| `rwjson_c` | `tpl -d bench_wl001 render probe/whole_json` | 26.124 ms | **26.539 ms** | **+0.415 ms, +1.6%** | 0.174 ms | 26.43 → 26.92 ms | +0.17 to +0.81 ms |
+| `rwwalk_c` | `tpl -d bench_wl001 render probe/whole_walk` | 105.232 ms | 104.915 ms | −0.317 ms | 0.069 ms | 107.57 → 106.63 ms | −1.11 to +0.52 ms |
+| `rmiss_reach` | `probe/whole_json`, with the last table's file damaged | 50.142 ms | **68.003 ms** | **+17.861 ms, +35.6%** | 0.019 ms | 50.75 → 68.72 ms | +17.42 to +18.42 ms |
+| `rmiss_bound` | `example --table accrual`, with the bound table's file damaged | 36.012 ms | **31.244 ms** | **−4.767 ms, −13.2%** | 0.195 ms | 36.55 → 31.57 ms | −5.29 to −4.27 ms |
+| `rexample_x` | `render example --table accrual --context <dump>`, control | 8.028 ms | 7.991 ms | −0.037 ms | 0.024 ms | 8.21 → 8.14 ms | −0.12 to +0.01 ms |
+| `rexample_d` | the same `--direct --no-cache`, control | 23.586 ms | 23.618 ms | +0.032 ms | 0.006 ms | 24.07 → 24.06 ms | −0.15 to +0.15 ms |
+| `table_c` | `tpl -d bench_wl001 schema table accrual`, control | 1.949 ms | 1.950 ms | +0.001 ms | 0.021 ms | 2.02 → 2.02 ms | −0.04 to +0.04 ms |
+| `dump_c` | `tpl -d bench_wl001 schema dump`, control | 13.354 ms | 13.370 ms | +0.017 ms | 0.016 ms | 13.65 → 13.80 ms | −0.10 to +0.11 ms |
+
+The canonical loop (12 samples per arm):
+
+| label | `before` | `after` | change | A/A | per-round change |
+|---|---|---|---|---|---|
+| loop | 2 377.9 ms | **624.2 ms** | **−1 753.7 ms, −73.8%** | 0.8 ms | −1 766.2 to −1 743.3 ms |
+
+Peak resident memory, `/usr/bin/time -l`, median of 7:
+
+| label | `before` | `after` |
+|---|---|---|
+| `rexample_c` | 13.70 MiB | 4.52 MiB |
+| `rstruct_c` | 14.17 MiB | 4.92 MiB |
+| `rview_c` | 13.50 MiB | 4.16 MiB |
+| `rroutine_c` | 13.56 MiB | 4.17 MiB |
+| `rschema_c` | 14.27 MiB | 13.77 MiB |
+| `rwjson_c` | 42.27 MiB | 43.08 MiB |
+| `rwwalk_c` | 37.58 MiB | 36.48 MiB |
+| `rexample_x`, control | 13.47 MiB | 13.27 MiB |
+| `rmiss_reach` | 41.92 MiB | 70.48 MiB |
+
+- **A bound render now costs what `schema table` costs plus the render.**
+  2.25 to 2.98 ms against `table_c`'s 1.95 ms: the three files read up front
+  (`meta.json`, `database.json` and the bound object's), three directory
+  listings, and the template. Every round moved every bound
+  label by more than 100 times its A/A.
+- **`rust/schema` reads only `database.tables`**, so the 70 view and routine
+  files are no longer read: −0.73 ms, about 10 µs per file, an attribution by
+  arithmetic and not by profile.
+- **A template that reads every file pays for the bookkeeping.** `rwjson_c`
+  reads all 270 object files as before and is 0.42 ms slower, positive in every
+  round, and 0.8 MiB heavier at its peak. The cause was
+  not attributed; the candidates are the per-member path and name kept from the
+  listing, the per-member `Arc` and slot, and the file reads interleaved with
+  the render instead of preceding it. `rwwalk_c` reads the same files and its
+  change is inside its per-round spread.
+- **A miss found during the render costs the render it abandoned.**
+  `rmiss_reach` is the costly case: `probe/whole_json` reads 199 of the 200
+  tables and converts them before it reaches the damaged last one, then reads
+  the server and renders again; the abandoned render's memory is not freed, so
+  the peak is 28.6 MiB higher. The `json` filter already fails at the miss, so
+  stopping the abandoned render saves nothing here: the cost is the work before
+  the miss, and the change against the first campaign (+19.08 → +17.86 ms) is
+  not attributed. `rmiss_bound` is the miss found before the render, which
+  `before` found only after reading all 272 files: it is now 4.8 ms cheaper.
+
+### Not measured
+
+- A miss removed rather than damaged, and a miss reached near the render
+  deadline; the second is held by a unit test of the deadline, not timed.
+- The series `10.11`, `11.4` and `11.8`, raised for the identity sweep and the
+  test suite, not for timing.
+- A profile of `rwjson_c`'s +0.51 ms.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+mkdir -p "$S/src/b9a33df" "$S/src/aft0246"
+git archive b9a33df | tar -x -C "$S/src/b9a33df"
+git archive b9a33df | tar -x -C "$S/src/aft0246"
+for f in $(git diff --name-only b9a33df -- src); do cp "$f" "$S/src/aft0246/$f"; done
+(cd "$S/src/b9a33df" && cargo build --release --target-dir "$S/t-b9a33df"); cp "$S/t-b9a33df/release/tpl" "$S/tpl-before"
+(cd "$S/src/aft0246" && cargo build --release --target-dir "$S/t-aft0246"); cp "$S/t-aft0246/release/tpl" "$S/tpl-after"
+
+# 1. The fixture, through its harness only.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
+./scripts/mariadb/seed-bench.sh 12.3
+
+# 2. The server project, with benches/fixture.sh's functions:
+#    fixture_inventory; fixture_address 12.3;
+#    fixture_server_project "$S/work" "$S/tpl-before" disabled; fixture_prime "$S/work" "$S/tpl-before";
+#    fixture_subjects "$S/work" "$S/tpl-before"; the rust/ templates and the four probes copied in.
+
+# 3. For round r of 8, the 17 labels rotated by r, the three arms rotated by r:
+hyperfine -N -i --warmup 5 --runs 40 --export-json "$S/c/<label>.r<r>.json" \
+  [--prepare "<replace one object file with '{ torn' by temporary and rename>"] \
+  -n before "$S/tpl-before <args>" -n after "$S/tpl-after <args>" -n before_twin "$S/tpl-before <args>"
+#    the loop, 4 rounds:
+hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-before -d bench_wl001 cache clean" \
+  -n before "benches/loop200.sh $S/tpl-before bench_wl001 example $S/work/wl001-tables.txt" …
+
+# 4. Peak memory:
+/usr/bin/time -l "$S/tpl-after" -d bench_wl001 render example --table accrual >/dev/null
+
+# 5. The identity sweep: a project with one entry per series on freight and two on
+#    WL-001 and WL-003, every template of examples/*/templates/ copied in, and each
+#    invocation run with both arms, stdout, stderr and the exit code compared.
+
+# 6. The pipeline needs all five servers; then the fixture down, and nothing left.
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
+```

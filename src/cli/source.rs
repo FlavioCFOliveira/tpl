@@ -414,23 +414,16 @@ impl<'a> Reader<'a> {
     /// [`Reader::serve`] over a project already opened, handing the
     /// presentation the document as [`Served`].
     ///
-    /// The two exist because `tpl render` needs steps 2, 3 and 5 in hand
-    /// **before** the read: `FR-TMPL-023` builds its template root from the
-    /// project the read was made through and `FR-CONF-004` resolves the render
-    /// deadline from the same file, and neither reaches the presentation. Every
-    /// other caller has no such need and calls [`Reader::serve`], which is this
-    /// function with the opening done for it.
+    /// `tpl render` does not come through here: it needs steps 2, 3 and 5 in
+    /// hand before the read, and it reads the cache under `FR-CACHE-038`
+    /// rather than whole, so it opens through [`Reader::open_from`] and
+    /// reaches the server through [`Reader::read_through`].
     ///
     /// # Errors
     ///
     /// Returns what [`Reader::fetch`] returns, what the fold and the document
     /// build return, and whatever `present` returns.
-    pub(super) fn serve_from<T, P>(
-        &self,
-        opened: &Opened,
-        look: &Look<'_>,
-        present: P,
-    ) -> Result<T, Error>
+    fn serve_from<T, P>(&self, opened: &Opened, look: &Look<'_>, present: P) -> Result<T, Error>
     where
         P: FnOnce(Served<'_, '_>, Source, &str) -> Result<T, Error>,
     {
@@ -540,11 +533,15 @@ impl<'a> Reader<'a> {
     /// written unless `--no-cache` was given, and the document presented with
     /// `source` set to `server` (`FR-CACHE-007`, `FR-SCH-035`).
     ///
+    /// `tpl render` calls it directly on a miss, including the miss
+    /// `FR-CACHE-039` finds during a render; that is the one connection of
+    /// `NFR-PERF-004`, because nothing before it opened one.
+    ///
     /// # Errors
     ///
     /// Returns what [`Reader::fetch`] returns, what the fold and the document
     /// build return, and whatever `present` returns.
-    fn read_through<T, P>(&self, opened: &Opened, present: P) -> Result<T, Error>
+    pub(super) fn read_through<T, P>(&self, opened: &Opened, present: P) -> Result<T, Error>
     where
         P: FnOnce(Served<'_, '_>, Source, &str) -> Result<T, Error>,
     {

@@ -3684,6 +3684,68 @@ none conflicts with it, so none is amended. No use case or glossary entry says
 every file is rewritten. Neither root document paraphrases `FR-CACHE-030`, so
 the fifth validation rule owes nothing.
 
+### Fortieth edition — a render that reads only what its template reaches
+
+A cached render read and decoded every object file of its entry, even when it
+was bound to one table. The user chose lazy loading, as decided for rmp `#246`:
+the `database` a template sees stays whole, and an object's file is read only
+when the template reaches that object. Narrowing the context to the bound
+object was rejected.
+
+**Two identifiers are assigned, `FR-CACHE-038` and `FR-CACHE-039`; none is
+retired and none is renumbered.** No term enters or leaves
+[glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **What is read, and when** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-038` reads `database.json`, each collection's listing and the bound
+  object's file before the render, and every other object file no earlier than
+  the template's first reach of it. Where the path of every object file names
+  the object that file holds, the `database` a template sees is the document an
+  up-front read of the same files would produce. Reverting to the up-front read
+  to keep that equivalence for files `tpl` never writes was rejected.
+- **A miss found during the render** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-039` abandons the render, reads the server once as any miss does,
+  and renders again from the server's document. No byte of the abandoned render
+  reaches stdout. The second render has its own full deadline and keeps the
+  first render's `now`.
+- **A file no read consults** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-033` now applies to the files a read consults. A damaged file the
+  template never reaches is not a miss of that invocation and is left as it is.
+  The same clause states, without changing it, what `tpl schema info` already
+  did: it opens no object file. A second clause makes two files `tpl` never
+  writes a miss for a render under `FR-CACHE-038`: an object file whose content
+  names an object other than the one its path names, found when the file is
+  read, and a file whose name no object's path could take, found when the listing is
+  read. `BR-CACHE-001` was read against both clauses and is not contradicted:
+  the check is one the binary makes before serving, and the layout stays
+  outside the plumbing contract. *Accepted cost:* a damaged file stays damaged
+  until a read consults it.
+- **Hit and miss** — `FR-CACHE-006`, the glossary entry *cache hit / cache
+  miss* and `NFR-PERF-003` in
+  [performance-requirements.md](performance-requirements.md) say that an
+  invocation is a hit only if no file it reads is a miss.
+- **The render and its order** — `FR-RND-002` and `FR-RND-034` in
+  [render-command.md](render-command.md), and `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). An abandoned render is
+  not the invocation's render, leaves nothing on stdout, and returns the
+  invocation to the cache-or-connection step.
+- **Deadline, `now`, coherence and diagnostics** — `FR-CONF-005` in
+  [configuration-model.md](configuration-model.md), `FR-CTX-029` in
+  [context-document.md](context-document.md), `BR-CDOC-004` in
+  [cache-documents.md](cache-documents.md), and `FR-GLOB-017` in
+  [global-flags.md](global-flags.md) each carry a note citing the two new
+  requirements.
+
+`FR-CACHE-007`, `FR-CACHE-014`, `FR-CACHE-031`, `FR-CDOC-007`, `FR-CDOC-015`,
+`FR-RND-022`, `FR-RND-023`, `FR-RND-032`, `FR-ENV-015`, `FR-ENV-017`,
+`NFR-PERF-004`, `NFR-DET-001` and `BR-SCH-004` were read against the decision
+and none conflicts with it, so none is amended. For a template and a cache in
+which nothing is missing, every output is what it was. Both root documents say
+that a cache hit opens no connection, which stays true, so the fifth validation
+rule owes nothing.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
