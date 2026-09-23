@@ -34,21 +34,28 @@
 //! `crate::render::lookup` clone the values they compare rather than rebuild
 //! them.
 //!
-//! # Why the document is copied first
+//! # Why the document is copied only where the caller carries on
 //!
 //! `minijinja` holds an object behind an `Arc` with a `'static` bound, and the
 //! document borrows the buffers its source was read into — the cache files,
-//! the `--context` bytes, the rows of a server read. The document is therefore
-//! copied once into a [`DatabaseDocument<'static>`] through
-//! [`ToStatic`], which copies each string and builds nothing else.
+//! the `--context` bytes, the rows of a server read. Where the process exits
+//! when the command returns, those buffers are leaked and the document arrives
+//! [`Served::leaked`], already borrowing `'static` data, and is held as it is.
+//! Otherwise it arrives [`Served::borrowed`] and is copied once into
+//! a [`DatabaseDocument<'static>`] through [`ToStatic`], which copies each
+//! string and builds nothing else; the copy is freed with the context.
 //!
 //! *Rejected: converting the whole document, as before.* It is the cost this
 //! module removes.
 //!
-//! *Rejected: extending the borrow instead of copying.* The bound is the
-//! engine's and the borrow belongs to the caller; ending it early without a
-//! copy takes `unsafe`, which this crate forbids, or a self-referential
-//! dependency, which the budget refuses.
+//! *Rejected: copying on both endings, as `#239` did.* The copy cost 0.81 to
+//! 1.08 ms and 3.65 MB of every render of `WL-001`, and made a template that
+//! reads the whole database 1 ms slower than the whole conversion
+//! (`BENCHMARKS.md`, 2026-09-22, row 3 of the waste register).
+//!
+//! *Rejected: ending the borrow without a copy or a leak.* It takes `unsafe`,
+//! which this crate forbids, or a self-referential dependency, which the
+//! budget refuses.
 //!
 //! *Rejected: lazy objects below a table's fields — a column, an index.* A
 //! template that reads a table's columns reads them all, and the one member
@@ -57,11 +64,13 @@
 //! changes no outcome a measured template reaches.
 
 use std::fmt;
+use std::ops::Deref;
 use std::sync::{Arc, OnceLock};
 
 use minijinja::Value;
 use minijinja::value::{Enumerator, Object, ObjectRepr};
 
+use crate::cli::source::Served;
 use crate::model::ToStatic;
 use crate::model::document::DatabaseDocument;
 
@@ -100,18 +109,44 @@ const TABLE_KEYS: [&str; 13] = [
 /// The position of `restricted` in [`TABLE_KEYS`].
 const RESTRICTED: usize = 12;
 
-/// The `database` variable, over a copy of `document` (`FR-RND-023`).
-pub(super) fn database(document: &DatabaseDocument<'_>) -> Value {
+/// The `database` variable, over `document` (`FR-RND-023`).
+pub(super) fn database(document: Served<'_, '_>) -> Value {
+    let document = match document.leaked_document() {
+        Some(leaked) => Held::Leaked(leaked),
+        None => Held::Copied(Arc::new(document.to_static())),
+    };
+
     Value::from_object(Database {
-        document: Arc::new(document.to_static()),
+        document,
         members: Default::default(),
     })
+}
+
+/// The document every object of this module reads from: leaked, or a copy
+/// shared among them and freed with the last.
+#[derive(Debug, Clone)]
+enum Held {
+    /// A document that borrows buffers leaked for the rest of the process.
+    Leaked(&'static DatabaseDocument<'static>),
+    /// A copy of a document whose buffers the caller frees.
+    Copied(Arc<DatabaseDocument<'static>>),
+}
+
+impl Deref for Held {
+    type Target = DatabaseDocument<'static>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Leaked(document) => document,
+            Self::Copied(document) => document,
+        }
+    }
 }
 
 /// The `database` object: seven members, each converted when first read.
 struct Database {
     /// The document every member is read from.
-    document: Arc<DatabaseDocument<'static>>,
+    document: Held,
 
     /// The converted members, by position in [`DATABASE_KEYS`].
     members: [OnceLock<Value>; DATABASE_KEYS.len()],
@@ -181,7 +216,7 @@ enum Collection {
 /// first read.
 struct Members {
     /// The document the collection is read from.
-    document: Arc<DatabaseDocument<'static>>,
+    document: Held,
 
     /// Which collection this is.
     collection: Collection,
@@ -192,13 +227,9 @@ struct Members {
 
 impl Members {
     /// The collection as a value, holding `len` members not yet converted.
-    fn value(
-        document: &Arc<DatabaseDocument<'static>>,
-        collection: Collection,
-        len: usize,
-    ) -> Value {
+    fn value(document: &Held, collection: Collection, len: usize) -> Value {
         Value::from_object(Self {
-            document: Arc::clone(document),
+            document: document.clone(),
             collection,
             members: (0..len).map(|_| OnceLock::new()).collect(),
         })
@@ -208,7 +239,7 @@ impl Members {
     fn convert(&self, index: usize) -> Value {
         match self.collection {
             Collection::Tables => Value::from_object(Table {
-                document: Arc::clone(&self.document),
+                document: self.document.clone(),
                 index,
                 members: Default::default(),
             }),
@@ -248,7 +279,7 @@ impl fmt::Debug for Members {
 /// first read.
 struct Table {
     /// The document the table is read from.
-    document: Arc<DatabaseDocument<'static>>,
+    document: Held,
 
     /// The table's position in `database.tables`.
     index: usize,
@@ -333,6 +364,8 @@ impl fmt::Debug for Table {
 #[cfg(test)]
 mod tests {
     use super::database;
+    use crate::cli::source::Served;
+    use crate::model::ToStatic;
     use crate::model::document;
     use crate::model::restricted::Restricted;
     use minijinja::Value;
@@ -435,16 +468,32 @@ mod tests {
         let mut built = document::context(&model).expect("the fixture model is coherent");
 
         same(
-            &database(&built),
+            &database(Served::borrowed(&built)),
             &Value::from_serialize(&built),
             "database",
         );
 
         built.tables[0].restricted = Restricted::new(vec![Cow::Borrowed("triggers")]);
         same(
-            &database(&built),
+            &database(Served::borrowed(&built)),
             &Value::from_serialize(&built),
             "restricted",
+        );
+    }
+
+    #[test]
+    fn fr_rnd_023_a_leaked_document_answers_as_a_copied_one() {
+        // The document the exiting process hands over is held as it is, not
+        // copied; what it answers must not depend on which. The one fixture
+        // copy leaked here is the price of a `'static` document in a test.
+        let model = document::fixture::database();
+        let built = document::context(&model).expect("the fixture model is coherent");
+        let leaked: &'static _ = Box::leak(Box::new(built.to_static()));
+
+        same(
+            &database(Served::leaked(leaked)),
+            &Value::from_serialize(&built),
+            "leaked",
         );
     }
 
@@ -455,7 +504,7 @@ mod tests {
         // so.
         let model = document::fixture::database();
         let built = document::context(&model).expect("the fixture model is coherent");
-        let lazy = database(&built);
+        let lazy = database(Served::borrowed(&built));
         let first = lazy.get_attr("tables").expect("the collection is readable");
         let second = lazy.get_attr("tables").expect("the collection is readable");
 

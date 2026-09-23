@@ -578,10 +578,14 @@ pub(crate) fn dispatch(invocation: &Invocation) -> Result<(), Error> {
 
 /// What follows the command once it returns.
 ///
-/// It exists for one decision: whether a value the command is finished with is
-/// worth freeing. Where the process exits as soon as the command returns, the
+/// It exists for one decision: whether memory the command holds is worth
+/// freeing. Where the process exits as soon as the command returns, the
 /// operating system reclaims the whole address space at once, and freeing a
-/// large value block by block first is work that changes nothing.
+/// large value block by block first is work that changes nothing. Two things
+/// follow from it: [`Ending::release`] disposes of a value the command is
+/// finished with, and a catalogue read leaks the buffers its document borrows,
+/// so that the document outlives the read without being copied (see
+/// `source::Served`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Ending {
     /// The process exits when the command returns: [`dispatch`], reached from
@@ -653,7 +657,7 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation, ending: Ending) -> Resu
 
         Some(Command::Schema(read)) => match &read.command {
             None => node_help(out, &["schema"]),
-            Some(command) => schema::run(out, &invocation.globals, command),
+            Some(command) => schema::run(out, &invocation.globals, command, ending),
         },
 
         Some(Command::Template(read)) => match &read.command {
@@ -682,7 +686,7 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation, ending: Ending) -> Resu
 
         Some(Command::Cache(store)) => match &store.command {
             None => node_help(out, &["cache"]),
-            Some(command) => cache::run(out, &invocation.globals, command),
+            Some(command) => cache::run(out, &invocation.globals, command, ending),
         },
 
         Some(Command::Cfg(config)) => {

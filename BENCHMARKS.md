@@ -2629,3 +2629,396 @@ CARGO_PROFILE_RELEASE_STRIP=false cargo bloat --release --crates -n 12 --target-
 ./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet   # non-zero
 ```
+
+## 2026-09-23 — Rows 3 and 4 of the second register applied; row 2 measured and stopped
+
+*Sprint 19, tasks `#241` and `#242`. Target of record: `aarch64-apple-darwin`.
+Server of record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry
+records; it does not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+Rows 3 and 4 of `#240`'s register were applied as one change (`#241`), and row
+2 was measured by two single-variable experiments before anything was
+implemented (`#242`):
+
+| row | task | change | where |
+|---|---|---|---|
+| 3, 4 | `#241` | Under `Ending::Process` a read leaks the buffers its document borrows — the cache files, the `--context` bytes, the rows of a server read and the model folded from them — so the document borrows `'static` data: `tpl render` holds it without copying it, and no read frees it before the process exits. Under `Ending::Caller` (the in-process tests) the owners are dropped and the render copies, as before | `src/cli/source.rs`, `Served`, `leak`, `Reader::serve_from`, `Reader::read_through`; `src/cli/render.rs`, `from_document`, `produce`; `src/cli/render/context/lazy.rs`, `database`, `Held`; `Reader::new` and the `run` of `src/cli/schema.rs` and `src/cli/cache.rs`, which now carry the `Ending` |
+| 2 | `#242` | **None.** Validating `foreign_keys` and `referenced_by` without building them measured −0.11 to −0.24 ms per cached render, at the spread of two separate builds, against an estimate of −1.4 to −3.8 ms | — |
+
+**Each cached render fell by 1.52 to 1.55 ms (−8.0% to −12.4%), the `--context`
+render by 1.28 ms (−13.8%), the direct render by 1.36 ms (−5.5%), and the
+canonical loop of 200 renders from 2 672.2 ms to 2 362.9 ms (−11.6%).** Peak
+resident memory fell by 4.19 to 4.48 MiB on every render. The regression
+`#240` established for a template that reads the whole database is gone:
+`probe/whole_json` is 1.15 to 1.28 ms faster on all three sources and its peak
+is 4.2 to 4.4 MiB lower. A cached `schema dump` and `schema tables --format json` are
+0.26 to 0.29 ms faster, and a direct `schema dump` 0.21 ms, which is the
+destructor row 4 named. Every one of the 5 839 invocations of the equivalence
+harness answered alike, byte for byte, on stdout, stderr and exit code, except
+for the load time a cache write records.
+
+**Row 2 is not worth implementing as the register framed it.** Its estimate
+took the decode of the two members to be the cost. The experiments separate
+the two parts: not decoding them at all saves 1.49 to 1.63 ms per cached render,
+but validating them as the typed decode does, and building nothing, saves 0.11
+to 0.24 ms. About 1.4 ms of the 1.6 ms is the validation, and `FR-CACHE-033`
+requires it before the render starts, because a file that fails it is a miss.
+What remains to be saved by deferring the construction is under a quarter of a
+millisecond, before the cost of deferring it.
+
+### Workload
+
+`WL-001` (200 tables, 2 400 columns, 600 indexes, 180 foreign keys, 30 views,
+40 routines: 272 cache files) and `WL-003`, loaded into `12.3` by
+`scripts/mariadb/seed-bench.sh`, which verified every count. The `startup`,
+`server` and `freight` projects and the two probe templates `probe/whole_json`
+and `probe/whole_walk` are `#240`'s, in the same scratch directory outside the
+repository. Both caches were reloaded with `tpl-before cache load` and were
+byte-identical to what `#240` measured, `meta.json` apart. `--context` reads the
+compact `WL-001` dump, which `tpl-before schema dump` reproduced byte for byte,
+`source` apart.
+
+The labels are `#240`'s:
+
+| label | invocation, in the `server` project |
+|---|---|
+| `rexample_c`, `rstruct_c`, `rschema_c` | `render example --table accrual`, `render rust/struct --table accrual`, `render rust/schema`, from the cache |
+| `rwjson_c`, `rwwalk_c` | `render probe/whole_json`, `render probe/whole_walk`, from the cache |
+| `rexample_x`, `rwjson_x` | `render example --table accrual`, `render probe/whole_json`, each with `--context <dump>` |
+| `rexample_d`, `rwjson_d` | `render example --table accrual`, `render probe/whole_json`, `--direct --no-cache` |
+| `dump_c`, `tablesjson_c`, `dump_d` | `schema dump` and `schema tables --format json` from the cache; `schema dump --direct --no-cache` |
+| `table_c`, `tables_c` | `schema table accrual` and the `text` form of `schema tables`, from the cache: the two controls. The first reaches the changed path with one table; the second is served by `Reader::serve_listing`, which the change does not reach |
+| loop | `benches/loop200.sh <binary> bench_wl001 example <the 200 WL-001 table names>`, the cache emptied before every run |
+
+### Candidates
+
+| arm | binary |
+|---|---|
+| `before` | `cargo build --release` of `git archive ab091db` in a scratch directory: 4 000 416 B, sha256 `bee72ac35b48f21a8fc74bcddced4f7eafa573ecc2007bc712e19d88f96b20b5`. `ab091db` changes only this file against `d140084`, so this is `#240`'s `now` rebuilt |
+| `before_twin` | the same file, measured as a third label: the A/A arm |
+| `after` | `target/release/tpl` of the working tree with `#241`: 4 000 448 B, sha256 `53ed347097269c4a53a0fd830029101ea1ab7a0a7da528ecc8dbaa09d530ab16`, the binary the validation pipeline built |
+
+The experiments of `#242` are copies of the `#241` tree, one change each, each
+built into its own target directory from a path of the same length:
+
+| variant | the one change |
+|---|---|
+| `ctl241` | none: the `#241` tree built from the scratch copy, 4 000 432 B, sha256 `5e7b921a926df61d7014d08568a45e957fa77668fd6f40260881302e6f2dfc7b`; the arm every variant is compared with |
+| `skipfk` | `foreign_keys` and `referenced_by` of `TableShape` read through `serde::de::IgnoredAny` and left empty: the members are parsed as JSON and nothing is built or checked. It accepts documents `ctl241` refuses, and is an instrument only |
+| `validfk` | the same two members read through private mirrors of `ForeignKeyShape`, `IncomingKey`, the embedded `TableShape` and `Index`, derived with the same field names, order and attributes, in which every collection is a sequence visitor that decodes each element with its real type and drops it; the members are then left empty. Every leaf — `Column`, `IndexColumn`, `ForeignKeyColumn`, `ReferentialAction`, `TableType`, `Trigger`, `CheckConstraint`, `Restricted` — is decoded by its own implementation |
+
+**`validfk` refuses what `ctl241` refuses, at the same point.** Over 23
+documents, each the `root` dump of `freight` with one fault inside or beside a
+member of `foreign_keys` or `referenced_by` (listed under *What changed that a
+caller can see*), `render probe/keys --context` exited with the same code and
+wrote the same stdout and stderr, position included, under both binaries on
+every refusal. `skipfk` accepted 13 of the 18 documents the other two refuse:
+every fault but the four that are not JSON and the one outside the members.
+
+### Environment
+
+| | |
+|---|---|
+| Host | Apple M4, 10 cores, 32 GiB |
+| System | macOS 26.6.2 (build 25G83), Darwin 25.6.0 `arm64` |
+| Target | `aarch64-apple-darwin`, built and run natively |
+| Toolchain | `rustc` 1.98.1 (48a229cea 2026-09-01); release profile `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true` |
+| Instruments | `hyperfine` 1.20.0 (`-N`); `samply` 0.13.1 at 20 kHz; `dhat` 0.3.3; `/usr/bin/time -l` |
+| Server | the project fixture's `12.3` alone during timing, `tls = "disabled"`, account `root`, Docker 29.8.1; all five servers for the equivalence harness and the test suite |
+| Power | mains (`AC Power`, battery 80%, not charging) |
+| Load | 1.69 to 3.12 over the session; see *Confounders* |
+| Taken | 2026-09-23: the experiments 00:08Z to 00:14Z, the equivalence harness 00:17Z to 00:20Z, the main campaign and the loop 00:21Z to 00:28Z, then memory, allocation and profiles |
+
+### Protocol
+
+- **Wall time, as in the previous entries.** 8 rounds per label, the labels
+  rotated by one position per round and the arms rotated inside one
+  `hyperfine` call per label per round. Cached and `--context` labels: 40 runs
+  after 5 warmups per arm per round, 320 samples. Direct labels and
+  `rwwalk_c`: 20 runs after 5 (or 3) warmups, 160 samples. The loop: 4 rounds of
+  3 runs after 1 warmup, 12 samples per arm, with
+  `--prepare "tpl-before -d bench_wl001 cache clean"`.
+- **The experiments of `#242`** were two campaigns of the same shape: the first
+  over `ctl241`, `skipfk` and `ctl241_twin` on six render labels, the second
+  over `ctl241`, `validfk`, `skipfk` and `ctl241_twin` on four. Each variant is
+  compared with `ctl241`, never with `after`.
+- **Peak resident memory.** `/usr/bin/time -l`, median of 7, both arms.
+- **Allocation.** One run per label and arm of two copies built with `dhat` as
+  the global allocator, `debug = 1`, `strip = false`: `#240`'s copy of
+  `d140084` for `before` and the same edit over the `#241` tree for `after`.
+- **CPU attribution of `after`.** `samply` over a symbolised build of the
+  `#241` tree, 30 iterations of `rexample_c` and of `dump_c`: 9 064 and 11 404
+  on-CPU samples. Only shares are read from it.
+- **Output identity**, before any timing, by one harness run per binary over
+  the same restored caches, compared with `diff -r`; see *What changed that a
+  caller can see*.
+
+### The noise floor of the instrument on this host
+
+The A/A arm, `before` against `before_twin`, in the main campaign:
+
+| class | labels | largest A/A difference |
+|---|---|---|
+| single-object and listing controls | 2 | 0.008 ms (`tables_c`) |
+| cached and `--context` renders | 7 | 0.078 ms (`rschema_c`, 0.41%); 0.221 ms on the 118 ms `rwwalk_c` (0.19%) |
+| cached whole reads | 2 | 0.073 ms (`dump_c`, 0.53%) |
+| direct reads and renders | 3 | 0.051 ms (`rwjson_d`, 0.13%) |
+| the loop | 1 | 5.142 ms (0.19%) |
+
+In the experiments the A/A arm, `ctl241` against `ctl241_twin`, was 0.001 to
+0.134 ms. **A difference below 0.1 ms on a render or read, or below 0.5% on the
+loop, is not a difference in this entry**, and a difference between two
+separate builds is not established below `#240`'s spread of such builds, 0.003
+to 0.321 ms on these labels.
+
+### Results — wall time and memory
+
+Medians. `rsd` is of `after`.
+
+| label | `before` | `after` | change | `after` rsd | p90, before → after | p99, before → after | peak RSS, before → after |
+|---|---|---|---|---|---|---|---|
+| `rexample_c` | 12.528 ms | **10.980 ms** | −1.548 ms, −12.4% | 1.69% | 12.815 → 11.218 ms | 13.051 → 11.599 ms | 18.00 → 13.68 MiB |
+| `rstruct_c` | 13.181 ms | **11.649 ms** | −1.532 ms, −11.6% | 2.00% | 13.516 → 11.933 ms | 13.978 → 12.302 ms | 18.34 → 14.15 MiB |
+| `rschema_c` | 18.959 ms | **17.435 ms** | −1.524 ms, −8.0% | 1.47% | 19.341 → 17.841 ms | 19.653 → 18.139 ms | 18.43 → 14.17 MiB |
+| `rwjson_c` | 27.182 ms | **25.903 ms** | −1.280 ms, −4.7% | 0.84% | 27.522 → 26.172 ms | 27.800 → 26.526 ms | 46.45 → 42.25 MiB |
+| `rwwalk_c` | 117.827 ms | **116.753 ms** | −1.074 ms, −0.9% | 1.26% | 119.317 → 118.667 ms | 120.673 → 121.751 ms | 47.65 → 43.37 MiB |
+| `rexample_x` | 9.244 ms | **7.964 ms** | −1.280 ms, −13.8% | 1.29% | 9.440 → 8.078 ms | 9.779 → 8.320 ms | 17.56 → 13.34 MiB |
+| `rwjson_x` | 23.589 ms | **22.442 ms** | −1.147 ms, −4.9% | 0.88% | 23.884 → 22.731 ms | 24.270 → 23.001 ms | 46.04 → 41.81 MiB |
+| `rexample_d` | 24.601 ms | **23.242 ms** | −1.358 ms, −5.5% | 1.45% | 24.974 → 23.715 ms | 25.692 → 24.223 ms | 13.12 → 8.64 MiB |
+| `rwjson_d` | 39.296 ms | **38.039 ms** | −1.257 ms, −3.2% | 0.89% | 39.660 → 38.412 ms | 40.417 → 38.706 ms | 41.65 → 37.21 MiB |
+| `dump_c` | 13.708 ms | **13.420 ms** | −0.288 ms, −2.1% | 1.72% | 14.051 → 13.770 ms | 14.369 → 14.176 ms | 13.07 → 13.10 MiB |
+| `tablesjson_c` | 12.580 ms | **12.320 ms** | −0.260 ms, −2.1% | 1.38% | 12.826 → 12.589 ms | 13.069 → 12.912 ms | 12.82 → 12.81 MiB |
+| `dump_d` | 25.692 ms | **25.481 ms** | −0.211 ms, −0.8% | 1.19% | 26.136 → 25.827 ms | 26.379 → 26.187 ms | 8.31 → 8.25 MiB |
+| `table_c`, control | 1.973 ms | **1.971 ms** | −0.002 ms | 2.39% | 2.032 → 2.040 ms | 2.109 → 2.125 ms | 3.76 → 3.71 MiB |
+| `tables_c`, control | 7.530 ms | **7.537 ms** | +0.007 ms | 2.12% | 7.756 → 7.797 ms | 8.034 → 8.083 ms | 7.06 → 7.12 MiB |
+| loop | 2 672.238 ms | **2 362.927 ms** | −309.3 ms, −11.6% | 0.79% | 2 685.4 → 2 371.7 ms | 2 691.9 → 2 403.8 ms | — |
+
+The p90 and p99 moved with the median on every label but one: the p99 of
+`rwwalk_c` rose by 1.08 ms, over 160 samples of a 118 ms invocation whose p90
+fell by 0.65 ms.
+
+### Results — allocation
+
+`dhat`, one run each (total allocated, blocks, heap at its peak):
+
+| label | total, before → after | blocks, before → after | at the peak, before → after |
+|---|---|---|---|
+| `rexample_c` | 15 497 405 → **11 848 150 B** | 80 807 → **28 833** | 11 958 855 → 8 309 594 B |
+| `rstruct_c` | 16 984 704 → **13 335 465 B** | 88 000 → **36 026** | 12 111 022 → 8 461 777 B |
+| `rschema_c` | 34 381 598 → **30 733 951 B** | 183 959 → **131 985** | 12 205 114 → 8 557 461 B |
+| `rwjson_c` | 58 694 492 → **55 046 861 B** | 227 471 → **175 497** | 37 688 460 → 34 040 823 B |
+| `rexample_x` | 16 211 011 → **12 561 860 B** | 81 902 → **29 928** | 9 478 385 → 8 244 432 B |
+| `rexample_d` | 9 208 503 → **5 559 720 B** | 67 159 → **15 186** | 7 635 801 → 3 987 012 B |
+| `dump_c` | 11 869 288 → 11 869 590 B | 29 849 → 29 851 | 8 224 216 → 8 224 312 B |
+| `tablesjson_c` | 11 616 464 → 11 616 766 B | 28 755 → 28 757 | 8 139 312 → 8 139 408 B |
+| `dump_d` | 5 560 864 → 5 561 638 B | 15 009 → 15 012 | 3 883 242 → 3 884 010 B |
+
+**Every render allocates 3 647 631 to 3 649 255 B less, in 51 973 or 51 974
+fewer blocks**, which is the copy `#240` measured (3 649 349 B in 51 975
+blocks) less the boxes the leak takes.
+The reads that do not render allocate 302 B more in two blocks, and 774 B in
+three on the direct read: the boxes that move each leaked owner to the heap. The
+heap at the end of the run is where the difference now shows: the leaked
+document and its buffers are 8.06 to 8.31 MB still held when a cached read
+exits, where `before` had freed all but 1 132 B on the reads that do not render.
+
+### Results — the experiments of `#242`
+
+Medians of 320 samples (160 for `rexample_d`). Each variant against `ctl241`:
+
+| label | `ctl241` | `skipfk` | change | `validfk` | change | A/A |
+|---|---|---|---|---|---|---|
+| `rexample_c` | 11.042 ms | 9.422 ms | −1.621 ms, −14.7% | 10.803 ms | **−0.240 ms, −2.2%** | 0.013 ms |
+| `rstruct_c` | 11.625 ms | 10.067 ms | −1.558 ms, −13.4% | 11.385 ms | **−0.240 ms, −2.1%** | 0.017 ms |
+| `rschema_c` | 17.281 ms | 15.793 ms | −1.488 ms, −8.6% | 17.176 ms | **−0.106 ms, −0.6%** | 0.065 ms |
+| `rexample_x` | 8.008 ms | 6.131 ms | −1.877 ms, −23.4% | 7.467 ms | −0.541 ms, −6.8% | 0.018 ms |
+
+The first campaign agreed with the second to 0.06 ms on every shared figure,
+and measured `skipfk` at −0.150 ms on `rexample_d`, which no cache file reaches,
+and at −11.0 ms on `rwjson_c`, whose output `skipfk` shortens; neither is a
+figure of row 2.
+
+- **The upper bound of row 2 is −1.5 to −1.6 ms per cached render**, not the
+  register's −1.4 to −3.8 ms: `skipfk` still parses the members, and the copy
+  and the destructor that the register's share included were removed by `#241`.
+- **The part that deferring the construction could save is −0.11 to −0.24 ms**:
+  `validfk` performs every check the typed decode performs and builds nothing.
+  That is 2% of a cached render and at the spread of two separate builds, and
+  it is an upper bound: a deferred member must also be built on first read,
+  from bytes the document would have to keep.
+- **The rest, about 1.4 ms, is the validation**, and above all the decode of the
+  column lists of the 360 tables embedded in those members.
+- **`rexample_x` gains more, −0.54 ms**, because the `--context` path reads each
+  embedded table back only for its name, and `validfk` also spares the build of
+  the embedding that the model no longer carries. It is not a figure a lazy
+  member would reach.
+
+### Where the remaining cost goes
+
+Shares of on-CPU samples of `after`; inclusive, so they overlap.
+
+- **A cached render, `rexample_c` (10.980 ms).** Reading the 272 files is 40.8%
+  (`open` 28.8%), decoding them 53.7%. Of the decode, the column lists are
+  40.6%, the tables embedded in the two reference members 32.4%, and the two
+  members themselves 34.3%. The template and its context are 2.4%. The copy and
+  the destructor of the document no longer appear.
+- **`schema dump` from the cache, `dump_c` (13.420 ms).** Reading is 33.6% and
+  decoding 43.1%; the serialisation of the output is the largest self share,
+  10.6%. The destructor no longer appears; row 1 of `#240` stands as it was.
+
+### The register after this entry
+
+`#240`'s rows 5 to 8 stand, at or below the floor, and are not repeated.
+
+| # | Path | State after this entry | Gain left | Effort |
+|---|---|---|---|---|
+| 1 | The compact `schema dump` and `schema tables --format json`, from the cache | Unchanged. The bytes of every object file are printed verbatim | ≈ −5 to −6 ms per compact cached read, estimate, as `#240` stated; not in the loop | `M`–`L` |
+| 2 | Every cached render | **Measured and stopped.** Deferring the construction is worth −0.11 to −0.24 ms. The 1.4 ms of validation is the miss check of `FR-CACHE-033`, and only a weaker check could remove it — JSON syntax alone, as `#236` settled for the `text` listing — which is a question for the specification, not an optimisation | ≤ −0.24 ms as specified; ≤ −1.6 ms (≈ −320 ms over the loop) under a syntax-only miss check | `L` |
+| 2a | The `--context` render | New, from row 2. `crate::model::document::read` decodes every embedded table in full and keeps only its name | ≤ −0.54 ms per `--context` render, estimate; not in the loop | `M` |
+| 3 | Every render | **Applied** (`#241`): −1.07 to −1.55 ms and −3.65 MB per render, the destructor of row 4 included for a cached render | — | — |
+| 4 | Every cached whole read and cached render | **Applied** (`#241`): −0.26 to −0.29 ms per cached whole read, the render's share inside row 3's figure | — | — |
+
+### What changed that a caller can see
+
+- **Output.** Nothing. The harness was run once per binary over the same
+  restored caches, 5 839 invocations each, and `diff -r` of the two trees found
+  14 differing files: 8 `cache status` outputs and 6 copies of the `meta.json` a
+  miss rewrote, each carrying the `loaded_at` a cache write records. With
+  `loaded_at` set aside, every line matched.
+  The exit codes, the same under both binaries, were 2 313 × `0`, 1 672 × `65`,
+  1 725 × `77`, 110 × `70`, 18 × `66` and 1 × `64`. The harness has three parts:
+  - **Every render** of `#239`'s harness — `example`, the 22 templates of
+    `examples/*/templates/`, `#239`'s 28 probes, `#240`'s two whole-database
+    probes, and two new probes that read every member of `foreign_keys` and
+    `referenced_by`, embedded tables included, and the bound table's — over
+    `freight` on `12.3` as `tpl_reader` and as `root`, on `10.11`, `11.4`,
+    `11.8` and the server without TLS as `tpl_reader`, `WL-001` and `WL-003`,
+    from the cache, `--direct --no-cache`, `--context <file>` and
+    `--context -`: 5 349 invocations. The 110 `70`s are `#239`'s document with
+    a hand-added `restricted` marking, now reached by eight more probes.
+  - **Every `schema` read** in both forms and with `--pretty`, including a
+    table that does not exist, from the cache and `--direct --no-cache`, over
+    the same eight entries; `cache status --format json`; and, last, a
+    `schema dump --direct` that rewrites the store, `cache load` and
+    `cache load --table`, with the store compared afterwards: 259 invocations.
+  - **Corrupted input**, 231 invocations. The `freight` table file of
+    `consignment`, which carries three outgoing and three incoming keys, was
+    replaced by each of 23 variants, and a view file (given an unknown key, and
+    truncated), `database.json` (without `server`) and `meta.json` (an unknown
+    format) by four more, each followed by six commands — `render
+    probe/keys`, `render probe/fk`, `render example --table consignment`,
+    `render probe/fkbound --table consignment`, `schema dump` and
+    `schema table consignment --format json` — and the file compared
+    afterwards. The same 23 faults were applied to the `root` dump, rendered
+    with `--context <file>` twice and with `--context -` once. The faults,
+    inside a member of `foreign_keys` or `referenced_by` unless stated: a
+    column of an embedded table given a string position; a key's `name`
+    removed; a rule given a number; an embedded index replaced by a number; an
+    embedded table given an empty `restricted`; `foreign_keys` set to `null`;
+    a key's `columns` given an object; an embedded column's `nullable` given a
+    string; an incoming key's `key` removed; its `referenced_table` given a
+    number; an embedded table's `foreign_keys` given a number; `referenced_by`
+    given an object; an unknown key holding a number, and one holding an
+    object; a syntax error; a duplicated `name`; the file truncated inside the
+    member; an unknown key holding a lone surrogate, and one holding `1e999`; a
+    syntax error in `referenced_by`; a fault of type followed by a syntax error
+    later in the file; and, outside the members, a column's `nullable` given a
+    string and an optional `engine` removed. Every corrupted cache file was a
+    miss under both binaries, answered from the server and rewritten byte for
+    byte as it was before the fault, except the six the decode accepts — the
+    five unknown keys and the removed optional — which both binaries served
+    from the file as it was. Every malformed document was the same `65`,
+    with the same position where the text is not JSON, or the same render.
+- **Resident memory** falls on every render, by the copy.
+- **In-process callers** — the unit and integration tests, under
+  `Ending::Caller` — free every owner and copy the document, as before.
+
+### Confounders
+
+- **The host was not idle.** The four containers of other projects named in
+  `#240` ran throughout, and the load average was 1.69 to 3.12. The rotation
+  and the A/A arms bound their effect; they do not remove it. `hyperfine`
+  printed 30 warnings about statistical outliers or a slow first run.
+- **`before` and `after` are separate builds from different paths**, a scratch
+  directory and the repository: `#240` measured up to 0.32 ms between two such
+  builds on these labels. Every render figure is more than four times that,
+  and the two controls moved by 0.002 and 0.007 ms. The cached whole reads,
+  −0.26 to −0.29 ms, are at that spread, and are consistent with `#240`'s
+  `forgetdoc` experiment (−0.22 to −0.34 ms) rather than established by this
+  campaign.
+- **The experiments' `ctl241` is not `after`**: it is the same tree built from a
+  scratch copy, so that each variant differs from its control by one change and
+  not also by the path. It measured 11.042 to 11.086 ms on `rexample_c` where
+  `after` measured 10.980 ms in the main campaign.
+- **`rwjson_c` of `before` is `#240`'s `now` rebuilt, not `prev`.** The
+  regression that entry measured against `prev` (26.530 ms) is gone in the sense
+  that `after` is 25.903 ms here, but the two figures come from two campaigns.
+- **`dhat` counts the heap only**, through an instrumented build, one run per
+  label, and is never used as time. The `before` copy is `#240`'s, of
+  `d140084`, whose `src/` is `ab091db`'s.
+- **The `samply` shares carry the profiler's overhead and overlap**; the
+  experiments, not the shares, decide row 2. The shares put the two reference
+  members at 34.3% of `rexample_c` (≈ 3.8 ms) where skipping them entirely saves
+  1.6 ms.
+- **Timing ran against `12.3` alone.** The other four servers were brought
+  down through `scripts/mariadb/down.sh` for the campaigns and brought back up
+  through `scripts/mariadb/up.sh` for the harness and the test suite, whose
+  gate, `status.sh --quiet`, answered `0` each time.
+
+### What was not measured
+
+- **Three of the four targets.** A leak and a copy are allocator work, and
+  their cost differs by libc.
+- **Every TLS mode.** All server reads used `tls = "disabled"`.
+- **The series `10.11`, `11.4` and `11.8`** for anything but output identity.
+- **`cache load`**, which the change does not reach: it reads the server and
+  writes the store without presenting a document.
+- **A lazy implementation of row 2.** `validfk` bounds it from above and was not
+  taken further; the syntax-only miss check was not measured apart from
+  `skipfk`, which also skips the members' construction.
+- **Row 2a as an experiment**; its figure is `validfk`'s on `rexample_x`, an
+  upper bound.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+mkdir -p "$S/src/ab091db"; git archive ab091db | tar -x -C "$S/src/ab091db"
+(cd "$S/src/ab091db" && cargo build --release --target-dir "$S/t-ab091db")
+cp "$S/t-ab091db/release/tpl" "$S/tpl-before"; cargo build --release; cp target/release/tpl "$S/tpl-after"
+
+# 1. The fixture, through its harness only: all five servers for the harness.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet      # read the gate, not up.sh
+./scripts/mariadb/seed-bench.sh 12.3
+#    #240's projects and probes; every cache reloaded with `tpl-before cache load`
+#    and kept as a snapshot, restored before each binary's harness run.
+
+# 2. Output identity: render, schema and corruption harnesses per binary, then
+diff -r "$S/q241/before" "$S/q241/after"
+
+# 3. Timing against 12.3 alone.
+./scripts/mariadb/down.sh 10.11 11.4 11.8 notls; ./scripts/mariadb/status.sh --quiet 12.3
+#    for round r of 8, the labels rotated by r, the three arms rotated by r:
+hyperfine -N -i --warmup 5 --runs 40 --export-json "$S/m241/<label>.r<r>.json" \
+  -n before "$S/tpl-before <args>" -n after "$S/tpl-after <args>" -n before_twin "$S/tpl-before <args>"
+#    the loop, 4 rounds:
+hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-before -d bench_wl001 cache clean" \
+  -n before "benches/loop200.sh $S/tpl-before bench_wl001 example $S/work/wl001-tables.txt" …
+
+# 4. The experiments: copies of the #241 tree, one edit each, as the Candidates
+#    table states, each with its own --target-dir; the same rotation over
+#    (ctl241 skipfk ctl241_twin) and (ctl241 validfk skipfk ctl241_twin).
+
+# 5. Memory, allocation and profiles.
+/usr/bin/time -l "$S/tpl-after" -d bench_wl001 render example --table accrual >/dev/null
+CARGO_PROFILE_RELEASE_DEBUG=true CARGO_PROFILE_RELEASE_STRIP=false \
+  cargo build --release --target-dir "$S/t-prof241"                # from the scratch copy
+samply record -s -r 20000 --iteration-count 30 --reuse-threads --unstable-presymbolicate \
+  -o "$S/prof241/rexample_c.json.gz" -- "$S/t-prof241/release/tpl" -d bench_wl001 render example --table accrual
+
+# 6. The pipeline needs all five servers; then the fixture down, and nothing left.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
+```

@@ -57,7 +57,22 @@
 //! write that will not land are each the miss or the missed optimisation their
 //! own requirement makes them, and the exit code and every byte of stdout are
 //! what they would have been.
+//!
+//! # Where the process ends, the read's buffers are leaked
+//!
+//! A document borrows the buffers it was decoded from: the cache files, or the
+//! rows of a server read and the model folded from them. Under
+//! [`Ending::Process`] those owners are leaked rather than dropped, and the
+//! document borrows `'static` data ([`Served::leaked`]). That removes two costs
+//! (`BENCHMARKS.md`, 2026-09-22, rows 3 and 4 of the waste register): the
+//! destructor of the decoded document and its buffers, 0.41 ms of a cached
+//! render of `WL-001`, which the exiting process has no use for; and the copy
+//! `tpl render` took of the whole document, 0.81 to 1.08 ms and 3.65 MB,
+//! because `minijinja` holds the `database` object under a `'static` bound.
+//! Under [`Ending::Caller`] — a test that carries on — the owners are dropped
+//! as before, and the render copies ([`Served::borrowed`]).
 
+use std::ops::Deref;
 use std::path::Path;
 
 use crate::cache::paths::Collection;
@@ -73,6 +88,7 @@ use crate::project::config::expand;
 use crate::project::config::keys::EntryKey;
 use crate::project::settings::{self, Settings};
 
+use super::Ending;
 use super::globals::Globals;
 use super::local::Caching;
 
@@ -89,7 +105,8 @@ const SCHEMA_FLAG: &str = "--schema";
 const SCHEMA_PLACEHOLDER: &str = "<database>";
 
 /// What one invocation supplies to a read: the project, the entry, the budget,
-/// and the two cache flags.
+/// the two cache flags, and whether the process exits when the command
+/// returns.
 ///
 /// It is the counterpart of `cfg`'s own `Supplied`, and it exists for the same
 /// reason: a command takes one argument rather than four vectors it must reduce
@@ -113,6 +130,79 @@ pub(super) struct Reader<'a> {
 
     /// `--no-cache`: store nothing (`FR-CACHE-014`).
     no_cache: bool,
+
+    /// Whether the process exits when the command returns, which decides
+    /// whether a read's buffers are leaked or dropped (see [`Served`]).
+    ending: Ending,
+}
+
+/// The document a read produced, as a presentation receives it, and whether
+/// it lives for the rest of the process.
+///
+/// It dereferences to the [`DatabaseDocument`], so a presentation that only
+/// reads the document cannot tell a [`Served::leaked`] one from a
+/// [`Served::borrowed`] one. The one caller that must keep the document beyond
+/// the presentation — the `database` variable of `tpl render`, which
+/// `minijinja` holds under a `'static` bound — keeps a leaked document as it is
+/// ([`Served::leaked_document`]) and copies a borrowed one.
+///
+/// It is a struct and not a two-variant enum because a document is invariant
+/// in its lifetime (a `Cow` of a slice is), so no one reference type can hold
+/// both a `'static` document and one that borrows the caller's buffers.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Served<'a, 'd> {
+    /// The document.
+    document: &'a DatabaseDocument<'d>,
+
+    /// The same document where it borrows buffers leaked for the rest of the
+    /// process, under [`Ending::Process`]; [`None`] where the owners are
+    /// dropped once the presentation returns, under [`Ending::Caller`].
+    leaked: Option<&'static DatabaseDocument<'static>>,
+}
+
+impl<'a, 'd> Served<'a, 'd> {
+    /// A document whose owners the caller drops once the presentation
+    /// returns.
+    pub(super) const fn borrowed(document: &'a DatabaseDocument<'d>) -> Self {
+        Self {
+            document,
+            leaked: None,
+        }
+    }
+
+    /// The document, where it lives for the rest of the process.
+    pub(super) const fn leaked_document(&self) -> Option<&'static DatabaseDocument<'static>> {
+        self.leaked
+    }
+}
+
+impl Served<'static, 'static> {
+    /// A document whose owners are leaked for the rest of the process:
+    /// neither it nor anything it borrows is ever freed.
+    pub(super) const fn leaked(document: &'static DatabaseDocument<'static>) -> Self {
+        Self {
+            document,
+            leaked: Some(document),
+        }
+    }
+}
+
+impl<'d> Deref for Served<'_, 'd> {
+    type Target = DatabaseDocument<'d>;
+
+    fn deref(&self) -> &Self::Target {
+        self.document
+    }
+}
+
+/// `value`, moved to the heap and leaked for the rest of the process.
+///
+/// It is safe and runs no destructor, so it is reserved to
+/// [`Ending::Process`], where the operating system reclaims the memory when the
+/// process exits. What is leaked must own memory only — no buffered writer, no
+/// lock, no child process — for the same reason [`Ending::release`] states.
+pub(super) fn leak<T>(value: T) -> &'static T {
+    Box::leak(Box::new(value))
 }
 
 /// The entry and the store one invocation acts on.
@@ -161,13 +251,14 @@ impl<'a> Reader<'a> {
     ///
     /// `caching` is [`None`] for a command that declares neither flag, which
     /// `FR-CACHE-020` leaves without either behaviour to choose.
-    pub(super) fn new(globals: &'a Globals, caching: Option<&Caching>) -> Self {
+    pub(super) fn new(globals: &'a Globals, caching: Option<&Caching>, ending: Ending) -> Self {
         Self {
             tpl_dir: globals.tpl_dir.first().map(std::path::PathBuf::as_path),
             requested: globals.database.first().map(String::as_str),
             budget: globals.timeout.first().copied().map(Seconds::new),
             direct: caching.is_some_and(|caching| caching.direct),
             no_cache: caching.is_some_and(|caching| caching.no_cache),
+            ending,
         }
     }
 
@@ -315,10 +406,13 @@ impl<'a> Reader<'a> {
     {
         let opened = self.open()?;
 
-        self.serve_from(&opened, look, present)
+        self.serve_from(&opened, look, |served, source, entry| {
+            present(&served, source, entry)
+        })
     }
 
-    /// [`Reader::serve`] over a project already opened.
+    /// [`Reader::serve`] over a project already opened, handing the
+    /// presentation the document as [`Served`].
     ///
     /// The two exist because `tpl render` needs steps 2, 3 and 5 in hand
     /// **before** the read: `FR-TMPL-023` builds its template root from the
@@ -338,7 +432,7 @@ impl<'a> Reader<'a> {
         present: P,
     ) -> Result<T, Error>
     where
-        P: FnOnce(&DatabaseDocument<'_>, Source, &str) -> Result<T, Error>,
+        P: FnOnce(Served<'_, '_>, Source, &str) -> Result<T, Error>,
     {
         // FR-CACHE-006: the cache is consulted first, and a hit opens no
         // connection. FR-CACHE-013 skips the lookup outright, and
@@ -353,9 +447,27 @@ impl<'a> Reader<'a> {
         // carrying the value a live read would have carried.
         if !self.direct
             && let Some(loaded) = opened.cache.look(look)
-            && let Some(document) = loaded.document()
         {
-            return present(&document, Source::Cache, opened.entry());
+            // PERF: under Ending::Process the files' bytes are leaked, so the
+            // document borrows them for the rest of the process and is never
+            // freed or copied (this module's documentation). A miss leaks the
+            // bytes it could not decode, which the server read then outlives.
+            match self.ending {
+                Ending::Process => {
+                    if let Some(document) = leak(loaded).document() {
+                        return present(
+                            Served::leaked(leak(document)),
+                            Source::Cache,
+                            opened.entry(),
+                        );
+                    }
+                }
+                Ending::Caller => {
+                    if let Some(document) = loaded.document() {
+                        return present(Served::borrowed(&document), Source::Cache, opened.entry());
+                    }
+                }
+            }
         }
 
         self.read_through(opened, present)
@@ -387,8 +499,8 @@ impl<'a> Reader<'a> {
             return present(&summary, Source::Cache);
         }
 
-        self.read_through(&opened, |document, source, _| {
-            present(&Summary::of(document), source)
+        self.read_through(&opened, |served, source, _| {
+            present(&Summary::of(&served), source)
         })
     }
 
@@ -418,8 +530,8 @@ impl<'a> Reader<'a> {
             return present(&listed, Source::Cache);
         }
 
-        self.read_through(&opened, |document, source, _| {
-            let listed: Vec<Listed<'_>> = document.tables.iter().map(Listed::of).collect();
+        self.read_through(&opened, |served, source, _| {
+            let listed: Vec<Listed<'_>> = served.tables.iter().map(Listed::of).collect();
             present(&listed, source)
         })
     }
@@ -434,17 +546,32 @@ impl<'a> Reader<'a> {
     /// build return, and whatever `present` returns.
     fn read_through<T, P>(&self, opened: &Opened, present: P) -> Result<T, Error>
     where
-        P: FnOnce(&DatabaseDocument<'_>, Source, &str) -> Result<T, Error>,
+        P: FnOnce(Served<'_, '_>, Source, &str) -> Result<T, Error>,
     {
         let catalogue = self.fetch(opened)?;
-        let model = catalogue.model()?;
-        let document = document::context(&model)?;
+        let hand = |served: Served<'_, '_>| {
+            if !self.no_cache {
+                opened.cache.write(&served, Covered::Everything);
+            }
 
-        if !self.no_cache {
-            opened.cache.write(&document, Covered::Everything);
+            present(served, Source::Server, opened.entry())
+        };
+
+        // PERF: under Ending::Process the rows and the model are leaked, so
+        // the document borrows them for the rest of the process and is never
+        // freed or copied (this module's documentation).
+        match self.ending {
+            Ending::Process => {
+                let model = leak(leak(catalogue).model()?);
+
+                hand(Served::leaked(leak(document::context(model)?)))
+            }
+            Ending::Caller => {
+                let model = catalogue.model()?;
+
+                hand(Served::borrowed(&document::context(&model)?))
+            }
         }
-
-        present(&document, Source::Server, opened.entry())
     }
 
     /// The clock this invocation's blocking phases are bounded by
@@ -538,6 +665,7 @@ pub(super) fn entry_of<'c>(
 #[cfg(test)]
 mod tests {
     use super::Reader;
+    use crate::cli::Ending;
     use crate::cli::globals::Globals;
     use crate::cli::local::Caching;
 
@@ -562,7 +690,7 @@ mod tests {
 
         for (direct, no_cache) in [(false, false), (true, false), (false, true), (true, true)] {
             let carried = Caching { direct, no_cache };
-            let reader = Reader::new(&supplied, Some(&carried));
+            let reader = Reader::new(&supplied, Some(&carried), Ending::Caller);
 
             assert_eq!(reader.direct, direct);
             assert_eq!(reader.no_cache, no_cache);
@@ -575,7 +703,7 @@ mod tests {
         // and the absence is carried rather than defaulted from a flag those
         // commands never parsed.
         let supplied = globals(Some("shop"));
-        let reader = Reader::new(&supplied, None);
+        let reader = Reader::new(&supplied, None, Ending::Caller);
 
         assert!(!reader.direct && !reader.no_cache);
         assert_eq!(reader.requested(), Some("shop"));

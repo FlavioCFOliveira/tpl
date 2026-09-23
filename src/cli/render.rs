@@ -95,7 +95,7 @@ use super::Ending;
 use super::globals::Globals;
 use super::local::{Caching, Object};
 use super::schema::named::{self, Sought};
-use super::source::{self, Reader};
+use super::source::{self, Reader, Served, leak};
 use crate::cache::Look;
 use std::time::Instant;
 
@@ -167,7 +167,8 @@ pub(super) struct Supplied<'a> {
     pub(super) caching: &'a Caching,
 
     /// Whether the process exits when the render returns, which decides
-    /// whether the render context is freed (see [`produce`]).
+    /// whether the context source's buffers and the render context are freed
+    /// (see [`Served`] and [`produce`]).
     pub(super) ending: Ending,
 }
 
@@ -375,7 +376,7 @@ fn from_catalogue<W: std::io::Write>(
     binding: &Binding<'_>,
     defined: &BTreeMap<&str, &str>,
 ) -> Result<(), Error> {
-    let reader = Reader::new(globals, Some(supplied.caching));
+    let reader = Reader::new(globals, Some(supplied.caching), supplied.ending);
     // Steps 2 and 3, made once: the template root of FR-TMPL-023 and the
     // render deadline of FR-CONF-004 are both properties of the project this
     // read is made through, and a second walk could resolve a second project
@@ -400,14 +401,14 @@ fn from_catalogue<W: std::io::Write>(
         ending: supplied.ending,
     };
 
-    reader.serve_from(&opened, &Look::Everything, |document, _, entry| {
+    reader.serve_from(&opened, &Look::Everything, |served, _, entry| {
         produce(
             out,
             &assembly,
-            document,
+            served,
             Sought::Catalogue {
                 entry,
-                database: &document.name,
+                database: &served.name,
             },
         )
     })
@@ -444,7 +445,7 @@ fn from_document<W: std::io::Write>(
     defined: &BTreeMap<&str, &str>,
     path: &Path,
 ) -> Result<(), Error> {
-    let reader = Reader::new(globals, Some(supplied.caching));
+    let reader = Reader::new(globals, Some(supplied.caching), supplied.ending);
     // Steps 2 and 3.
     let (project, configuration) = source::project(reader.tpl_dir())?;
     let environment = Environment::new(project.root());
@@ -464,18 +465,33 @@ fn from_document<W: std::io::Write>(
     };
 
     let bytes = read_document(path)?;
-    let model = document::read(&bytes, path)?;
-    let built = document::context(&model)?;
+    let mut hand = |served: Served<'_, '_>| {
+        produce(
+            out,
+            &assembly,
+            served,
+            Sought::Document {
+                path,
+                database: &served.name,
+            },
+        )
+    };
 
-    produce(
-        out,
-        &assembly,
-        &built,
-        Sought::Document {
-            path,
-            database: &built.name,
-        },
-    )
+    // PERF: under Ending::Process the bytes and the model are leaked, so the
+    // document borrows them for the rest of the process and the render keeps
+    // it without a copy (`super::source`'s documentation).
+    match assembly.ending {
+        Ending::Process => {
+            let model = leak(document::read(bytes.leak(), path)?);
+
+            hand(Served::leaked(leak(document::context(model)?)))
+        }
+        Ending::Caller => {
+            let model = document::read(&bytes, path)?;
+
+            hand(Served::borrowed(&document::context(&model)?))
+        }
+    }
 }
 
 /// Steps 7 and 8 of `FR-ERR-006`, over whichever source produced `document`.
@@ -497,11 +513,11 @@ fn from_document<W: std::io::Write>(
 fn produce<W: std::io::Write>(
     out: &mut W,
     assembly: &Assembly<'_>,
-    document: &DatabaseDocument<'_>,
+    document: Served<'_, '_>,
     at: Sought<'_>,
 ) -> Result<(), Error> {
     // 7 — FR-RND-032.
-    let bound = assembly.binding.bind(document, at)?;
+    let bound = assembly.binding.bind(&document, at)?;
 
     // 8 — FR-RND-030, FR-RND-031, FR-RND-033. `now` is read here, which is
     // render time, and once, which is FR-CTX-029.
@@ -511,14 +527,15 @@ fn produce<W: std::io::Write>(
         assembly.environment.render(assembly.template, &context)
     });
 
-    // PERF: the context holds a copy of the catalogue and every member the
-    // template read; when it held the whole catalogue converted, freeing it
-    // block by block cost 2.35 ms of a 21.8 ms render of `WL-001`
-    // (`BENCHMARKS.md`, 2026-09-22). Where the process exits as soon as this
-    // command returns, the operating system reclaims that memory anyway, so
-    // the value is leaked instead; a caller that carries on — a test — still
-    // frees it. It is released on the failure path as well, and it owns memory
-    // only, so stdout, its flush and the exit code are untouched either way.
+    // PERF: the context holds every member the template read, and under
+    // Ending::Caller a copy of the catalogue; when it held the whole catalogue
+    // converted, freeing it block by block cost 2.35 ms of a 21.8 ms render of
+    // `WL-001` (`BENCHMARKS.md`, 2026-09-22). Where the process exits as soon
+    // as this command returns, the operating system reclaims that memory
+    // anyway, so the value is leaked instead; a caller that carries on — a
+    // test — still frees it. It is released on the failure path as well, and
+    // it owns memory only, so stdout, its flush and the exit code are
+    // untouched either way.
     assembly.ending.release(context);
     let produced = produced?;
 

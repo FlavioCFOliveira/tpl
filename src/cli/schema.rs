@@ -41,6 +41,7 @@ use std::io::Write;
 use clap::{ArgAction, Args, Subcommand};
 use serde::Serialize;
 
+use super::Ending;
 use super::globals::Globals;
 use super::local::{self, Format};
 use super::source::Reader;
@@ -355,6 +356,7 @@ pub(crate) fn run<W: Write>(
     out: &mut W,
     globals: &Globals,
     command: &Command,
+    ending: Ending,
 ) -> Result<(), Error> {
     match command {
         Command::Info { output, caching } => {
@@ -363,20 +365,22 @@ pub(crate) fn run<W: Write>(
             // PERF: the metadata and three counts, not the 272 object files of
             // WL-001 decoded to present four members (BENCHMARKS.md,
             // 2026-09-22).
-            Reader::new(globals, Some(caching)).serve_summary(|summary, source| match format {
-                Format::Text => text::info(&mut *out, summary),
-                // FR-SCH-031: the named subset, not the whole object. The
-                // two commands answer different questions and this is what
-                // keeps them from emitting the same bytes.
-                Format::Json => enveloped(
-                    &mut *out,
-                    source,
-                    form,
-                    InfoData {
-                        database: DatabaseMetadata::of(summary),
-                    },
-                ),
-            })
+            Reader::new(globals, Some(caching), ending).serve_summary(
+                |summary, source| match format {
+                    Format::Text => text::info(&mut *out, summary),
+                    // FR-SCH-031: the named subset, not the whole object. The
+                    // two commands answer different questions and this is what
+                    // keeps them from emitting the same bytes.
+                    Format::Json => enveloped(
+                        &mut *out,
+                        source,
+                        form,
+                        InfoData {
+                            database: DatabaseMetadata::of(summary),
+                        },
+                    ),
+                },
+            )
         }
 
         Command::Tables {
@@ -386,7 +390,7 @@ pub(crate) fn run<W: Write>(
         } => {
             let (format, form) = representation(output);
             let mut selector = selector(filter);
-            let reader = Reader::new(globals, Some(caching));
+            let reader = Reader::new(globals, Some(caching), ending);
 
             match format {
                 // PERF: four members of each table, not every table decoded
@@ -418,7 +422,7 @@ pub(crate) fn run<W: Write>(
             let (format, form) = representation(output);
             let mut selector = selector(filter);
 
-            Reader::new(globals, Some(caching)).serve(
+            Reader::new(globals, Some(caching), ending).serve(
                 &Look::Collection(Collection::Views),
                 |document, source, _| {
                     let selected =
@@ -442,7 +446,7 @@ pub(crate) fn run<W: Write>(
             let (format, form) = representation(output);
             let mut selector = selector(filter);
 
-            Reader::new(globals, Some(caching)).serve(
+            Reader::new(globals, Some(caching), ending).serve(
                 &Look::Collection(Collection::Routines),
                 |document, source, _| {
                     let selected =
@@ -467,7 +471,7 @@ pub(crate) fn run<W: Write>(
         } => {
             let (format, form) = representation(output);
 
-            Reader::new(globals, Some(caching)).serve(
+            Reader::new(globals, Some(caching), ending).serve(
                 &Look::Table(name),
                 |document, source, entry| {
                     let found = named::table(document, name, sought(entry, document))?;
@@ -489,7 +493,7 @@ pub(crate) fn run<W: Write>(
         } => {
             let (format, form) = representation(output);
 
-            Reader::new(globals, Some(caching)).serve(
+            Reader::new(globals, Some(caching), ending).serve(
                 &Look::View(name),
                 |document, source, entry| {
                     let found = named::view(document, name, sought(entry, document))?;
@@ -514,7 +518,7 @@ pub(crate) fn run<W: Write>(
             // decided at step 1 of FR-ERR-006 — before the read below.
             let wanted = named::routine_token(name, ROUTINE)?;
 
-            Reader::new(globals, Some(caching)).serve(
+            Reader::new(globals, Some(caching), ending).serve(
                 &look_for(&wanted),
                 |document, source, entry| {
                     let found =
@@ -535,9 +539,12 @@ pub(crate) fn run<W: Write>(
         Command::Dump { pretty, caching } => {
             let form = form(pretty.pretty);
 
-            Reader::new(globals, Some(caching)).serve(&Look::Everything, |document, source, _| {
-                enveloped(&mut *out, source, form, DatabaseData { database: document })
-            })
+            Reader::new(globals, Some(caching), ending).serve(
+                &Look::Everything,
+                |document, source, _| {
+                    enveloped(&mut *out, source, form, DatabaseData { database: document })
+                },
+            )
         }
     }
 }
