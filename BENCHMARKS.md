@@ -4821,3 +4821,148 @@ hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-before -d bench_wl001 cache c
 # 4. The pipeline needs all five servers; then the fixture down, and nothing left.
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
 ```
+
+## 2026-09-23 — Row 3 of the fourth register applied: a 64 KiB stdout buffer
+
+*Sprint 19, task `#249`. Target of record: `aarch64-apple-darwin`. Server of
+record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry records; it does
+not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+The one buffer every result reaches stdout through, `src/output/writer.rs`, now
+holds 64 KiB instead of the standard library's 8 KiB. **The pretty cached dump
+of `WL-001` fell from 14.73 to 14.02 ms (−0.71 ms, −4.8%), and the pretty table
+listing from 13.62 to 13.02 ms (−0.59 ms, −4.4%), with the same bytes out.**
+That is `#247`'s estimate (−0.65 and −0.56 ms). The compact forms gained
+0.15 to 0.19 ms; `--version`, a bound cached render and a single-object read
+did not move beyond their per-round spread.
+
+### Choosing the size
+
+Six builds of `22d420f`, identical but for the capacity, measured together in
+one rotated campaign of the protocol below with seven arms (the control twice,
+as the A/A). Medians of 320 samples, change against the 8 KiB control:
+
+| capacity | `dumppretty_c` | `tablespretty_c` | `dump_c` | `tablesjson_c` | `version` |
+|---|---|---|---|---|---|
+| 8 KiB (control) | 14.629 ms | 13.524 ms | 13.236 ms | 12.266 ms | 1.665 ms |
+| 16 KiB | −0.395 ms | −0.284 ms | −0.088 ms | −0.095 ms | −0.005 ms |
+| 32 KiB | −0.513 ms | −0.398 ms | −0.140 ms | −0.126 ms | −0.012 ms |
+| **64 KiB** | **−0.587 ms** | **−0.519 ms** | −0.164 ms | −0.158 ms | −0.006 ms |
+| 128 KiB | −0.586 ms | −0.516 ms | −0.126 ms | −0.190 ms | −0.017 ms |
+| 8 MiB, the whole output | −0.253 ms | −0.147 ms | −0.090 ms | −0.098 ms | +0.007 ms |
+| 8 KiB, A/A | +0.026 ms | +0.067 ms | −0.013 ms | −0.013 ms | −0.008 ms |
+
+64 KiB is the smallest capacity that takes the whole gain on the two pretty
+reads: 128 KiB takes the same, and 32 KiB about 80% of it. A buffer as large
+as the whole output gains less; why was not examined. A first run of the same
+campaign, whose raw exports were lost with the scratch directory, gave the
+same ranking (64 KiB −0.64 and −0.51 ms, 128 KiB −0.52 and −0.58 ms, 8 MiB
+−0.19 and −0.29 ms).
+
+The buffer is reserved, not filled: a command that prints little touches only
+the pages its bytes reach, and `--version`'s peak resident memory moved by one
+16 KiB page.
+
+### Candidates
+
+Both arms were built from `git archive 22d420f` in a scratch directory, from
+paths of the same length, each into its own target directory; `after` carries
+this change's `src/output/writer.rs` and nothing else.
+
+| arm | binary |
+|---|---|
+| `before` | `22d420f`: 4 017 040 B, sha256 `19cb1ef5…63c7` — `#248`'s `after`, byte for byte |
+| `after` | `22d420f` with this change: 4 017 040 B, sha256 `43e7bc94…` — the 64 KiB candidate above, byte for byte |
+| `before_twin` | the `before` file, measured as a third label: the A/A arm |
+
+The in-repository `target/release/tpl` with this change is 4 033 568 B, sha256
+`4995c368…7804`.
+
+### Environment
+
+As `#243`'s: Apple M4, 10 cores, 32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0
+`arm64`; `rustc` 1.98.1 (48a229cea 2026-09-01), the release profile of
+`ADR-004`; `hyperfine` 1.20.0 (`-N`); `/usr/bin/time -l`. All five fixture
+servers were up; timing reached only `12.3`, seeded by
+`scripts/mariadb/seed-bench.sh`, `tls = "disabled"`, account `root`; the
+`server` project built by `benches/fixture.sh` and primed with `before`. Mains
+power, not charging; load 2.06 to 4.22. Taken 2026-09-23 (UTC): the candidates
+11:29Z to 11:31Z, the two arms 11:35Z to 11:36Z, peak memory after.
+
+### Protocol
+
+`#243`'s: 8 rounds, the labels rotated by one position per round and the arms
+rotated inside one `hyperfine` call per label per round; 40 runs after 5
+warmups per arm per round, 320 samples per arm and label. Peak resident memory:
+median of 7.
+
+**Byte identity**, before any timing. Every invocation was run with both arms
+and stdout, the exit code and stderr (the `-vvv` duration masked) compared:
+7 160 invocations and 126.4 MB of stdout, every one identical.
+
+| sweep | invocations | what it covers |
+|---|---|---|
+| `freight` on the five servers | 1 233 | `help` bare and at each of the 34 node paths, in `text`, `json` and `json --pretty`; per server, cached and `--direct --no-cache`, in all three forms: `schema info`, `tables`, `tables --pattern`, `views`, `routines`, every table, view and routine, and an absent table (`66`); `schema dump` compact and `--pretty`; `cache status`, `cfg database show`, `cfg database test` in the three forms; `cfg list`, `cfg database list`, `template list`, `template path`, `template show`, `version`, `--version` |
+| `WL-001` and `WL-003` on `12.3` | 1 842 | the same over the two entries |
+| renders of `freight` on the five servers | 4 085 | `#246`'s render sweep: the 19 worked templates, whole-database and bound to every object, with `-vvv`, `-q`, `--set` and an absent table |
+
+A consumer that closes early was checked on a real pipe with both arms, three
+times each: `schema dump --pretty | head -c 100` exits `74`
+(`FR-ERR-026`), `schema tables | head -1` and `schema dump | true` exit `0`
+(`FR-ERR-025`), identically.
+
+### Results
+
+Medians; the A/A column is `before` against `before_twin`.
+
+| label | command | `before` | `after` | change | A/A | p90, `before` → `after` | per-round change |
+|---|---|---|---|---|---|---|---|
+| `dumppretty_c` | `tpl -d bench_wl001 schema dump --pretty` | 14.725 ms | **14.017 ms** | **−0.708 ms, −4.8%** | 0.008 ms | 14.99 → 14.36 ms | −0.82 to −0.54 ms |
+| `tablespretty_c` | `tpl -d bench_wl001 schema tables --format json --pretty` | 13.615 ms | **13.021 ms** | **−0.594 ms, −4.4%** | 0.004 ms | 13.94 → 13.27 ms | −0.71 to −0.53 ms |
+| `dump_c` | `tpl -d bench_wl001 schema dump` | 13.287 ms | **13.099 ms** | **−0.187 ms, −1.4%** | 0.009 ms | 13.59 → 13.44 ms | −0.42 to +0.03 ms |
+| `tablesjson_c` | `tpl -d bench_wl001 schema tables --format json` | 12.248 ms | **12.097 ms** | **−0.151 ms, −1.2%** | 0.004 ms | 12.45 → 12.38 ms | −0.23 to +0.04 ms |
+| `version` | `tpl --version`, control | 1.668 ms | 1.679 ms | +0.011 ms | 0.012 ms | 1.73 → 1.74 ms | −0.02 to +0.06 ms |
+| `rstruct_c` | `tpl -d bench_wl001 render rust/struct --table accrual`, control | 2.978 ms | 2.963 ms | −0.015 ms | 0.001 ms | 3.08 → 3.06 ms | −0.06 to +0.01 ms |
+| `table_c` | `tpl -d bench_wl001 schema table accrual`, control | 1.921 ms | 1.939 ms | +0.018 ms | 0.001 ms | 1.99 → 2.00 ms | −0.05 to +0.05 ms |
+
+Peak resident memory, `/usr/bin/time -l`, median of 7: `dumppretty_c`
+13.14 → 12.91 MiB; `tablespretty_c` 12.77 → 12.61 MiB; `version`
+2.58 → 2.59 MiB; `rstruct_c` 5.05 → 4.98 MiB; `table_c` 3.77 → 3.77 MiB.
+
+- **The gain is the writes.** The two pretty whole reads, 7.2 MB and 6.7 MB,
+  gain 0.59 to 0.71 ms in every round; the compact forms, about half the bytes,
+  gain less and not in every round.
+- **Small outputs pay nothing measurable.** `version`, `table_c` and
+  `rstruct_c` moved by less than their per-round spread.
+
+### Not measured
+
+- The series `10.11`, `11.4` and `11.8`, raised for the identity sweep and the
+  test suite, not for timing.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+for n in ctl0249 k016249 k032249 k064249 k128249 m008249; do
+  mkdir -p "$S/src/$n"; git archive 22d420f | tar -x -C "$S/src/$n"; done
+# In each candidate but the control, src/output/writer.rs builds the buffer with
+# BufWriter::with_capacity(<16384 | 32768 | 65536 | 131072 | 8388608>, …).
+for n in ctl0249 k016249 k032249 k064249 k128249 m008249; do
+  (cd "$S/src/$n" && cargo build --release --target-dir "$S/t-$n"); done
+
+# 1. The fixture, through its harness only.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
+./scripts/mariadb/seed-bench.sh 12.3
+
+# 2. The server project, with benches/fixture.sh's functions, primed with the control.
+
+# 3. For round r of 8, the labels rotated by r, the arms rotated by r:
+hyperfine -N --warmup 5 --runs 40 --export-json "$S/c/<label>.r<r>.json" \
+  -n ctl "$S/t-ctl0249/release/tpl <args>" -n k16 … -n ctl_twin "$S/t-ctl0249/release/tpl <args>"
+
+# 4. The pipeline needs all five servers; then the fixture down, and nothing left.
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
+```
