@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-two editions. All are in force;
+The specification has been written in forty-three editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3869,6 +3869,77 @@ none is amended. `tpl cfg` validates and lists keys by reference to
 `FR-CONF-002` and needs no change. By the fifth validation rule the root
 `README.md` owes one correction, `DIV-056`, because it counts the key space;
 `CLAUDE.md` paraphrases none of the requirements amended.
+
+### Forty-third edition — help and errors a caller can act on alone
+
+The audit of sprint 21, recorded in `HELP-AUDIT.md` at the repository root as
+rmp `#259`, read every help text and every error message for what a calling
+agent learns from help, exit code and stderr alone. Nine of its findings need
+a change to this corpus, and this edition writes them for rmp `#260`. The
+other findings need none and are not touched here.
+
+**Six identifiers are assigned — `FR-HELP-031`, `FR-HELP-032`,
+`FR-HELP-033`, `FR-ENV-047`, `FR-ERR-041` and `BR-ERR-004`; none is retired
+and none is renumbered.** No term enters or leaves
+[glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The template surface carries signatures** (H-03) —
+  [template-environment.md](template-environment.md). `FR-ENV-005` now holds
+  one item object per name, and `FR-ENV-047` fixes the item: `name`,
+  `signature`, `operand`, `arguments` with type, requirement and default, and
+  a one-sentence `purpose`, for groups 1 and 2. The members of the arrays
+  change type from string to object; no release has been made, so
+  `schema_version` stays `1`, per `FR-OUT-038`.
+- **The context variables are published** (H-02) —
+  [help-and-version.md](help-and-version.md). `FR-HELP-017` adds a fifth key
+  of `data`, `context_variables`, after the last, and `FR-HELP-032` fixes it:
+  the seven top-level variables of `FR-RND-023`, each with its type, the flag
+  that binds it where one does, and its meaning. `FR-HELP-022` holds both new
+  sets of values in its typed table.
+- **The text help of `tpl render` states the same material** (H-02, H-03) —
+  `FR-HELP-033` lists the variables, every filter, test and function of groups
+  1 and 2 with its signature and purpose, and the statement that group 3 is
+  unguaranteed, inside `DESCRIPTION`. `FR-HELP-006` is unchanged.
+- **Every leaf says what it touches** (H-10) — `FR-HELP-031` ends every leaf's
+  `DESCRIPTION`, and its JSON `description`, with four statements: whether it
+  connects to a server, whether it needs a database entry, which files it
+  writes, and what it prints.
+- **Template names and project paths can be written into a hint** (H-07,
+  E-22) — [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-041`
+  governs a template name and a filesystem path of the project or of
+  `--tpl-dir` by the set `[A-Za-z0-9_./-]`, at most 1024 characters and not
+  beginning with `-`. `FR-ERR-022`, `FR-ERR-023` and `FR-SEC-019` in
+  [security.md](security.md) cite it. A nested template name can now be
+  suggested, and the example of `FR-PROJ-011` in
+  [project-and-discovery.md](project-and-discovery.md) carries the absolute
+  path.
+- **A hint must be able to succeed** — `BR-ERR-004` bars a hint that names a
+  command which cannot succeed in the state found, and requires the known
+  value instead of a placeholder, subject to the character sets. It sharpens
+  `FR-ERR-009`, which asked for a concrete, runnable command and did not say
+  it must succeed. The `hint` of `FR-CONF-011` in
+  [configuration-model.md](configuration-model.md) is amended to meet it.
+- **Two `cause` rows name the instance** (E-03, E-08) — `FR-ERR-034`. The `65`
+  row names the key path and the expected type in a `--context` document,
+  instead of citing a file of this corpus. The `78` row names the path
+  `--tpl-dir` named and that no upward search was made, and `FR-PROJ-008`
+  states the condition, the message and the hint.
+- **Two `cfg` invocations gain a stated outcome** (E-14, E-25) —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-007` makes a block key given to
+  `tpl cfg get` a `64` whose hint is `tpl cfg database show` or
+  `tpl cfg list`, and `FR-ERR-035` gains the routing row. `FR-CFG-020` makes
+  `tpl cfg database update` with no field flag a `64` whose hint lists the
+  flags of `FR-CFG-027`.
+
+`FR-HELP-006`, `FR-HELP-007`, `FR-HELP-014`, `FR-HELP-019`, `FR-HELP-029`,
+`FR-ENV-004`, `FR-ENV-016`, `FR-ENV-020`, `FR-RND-020`, `FR-RND-023`,
+`FR-CTX-026` through `FR-CTX-028`, `FR-GLOB-009`, `FR-GLOB-025`,
+`FR-PROJ-006`, `FR-CFG-016`, `FR-CONF-040`, `FR-CONF-041`, and `FR-ERR-040`
+were read against the changes and none conflicts with them, so none is
+amended. Neither root document paraphrases a requirement this edition
+amends, so the fifth validation rule owes nothing.
 
 ### Still out of scope
 

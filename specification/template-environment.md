@@ -107,15 +107,17 @@ of the context variables, which belongs to
 
   Each of the three SHALL be an object carrying exactly `guarantee`, `filters`,
   `tests`, and `functions`, in that order. `guarantee` SHALL carry the value the
-  table gives it. Each of the other three SHALL be an array of names, or `null`
-  WHERE the group cannot be enumerated, per `FR-OUT-012`:
+  table gives it. Each of the other three SHALL be an array carrying one item
+  object per name, of the shape `FR-ENV-047` fixes, or `null` WHERE the group
+  cannot be enumerated, per `FR-OUT-012`:
 
   ```json
-  {"registered":{"guarantee":"contract","filters":[…],"tests":[…],"functions":[…]},"inherited":{"guarantee":"pinned","filters":[…],"tests":[],"functions":[]},"other":{"guarantee":"none","filters":null,"tests":null,"functions":null}}
+  {"registered":{"guarantee":"contract","filters":[{"name":"pascal",…},…],"tests":[…],"functions":[…]},"inherited":{"guarantee":"pinned","filters":[…],"tests":[],"functions":[]},"other":{"guarantee":"none","filters":null,"tests":null,"functions":null}}
   ```
 
-  The arrays SHALL carry the names the requirements of this file already fix,
-  and this requirement SHALL NOT restate them: `registered.filters` the names of
+  The arrays SHALL carry one item for each of the names the requirements of
+  this file already fix, and this requirement SHALL NOT restate them:
+  `registered.filters` the names of
   `FR-ENV-006` followed by those of `FR-ENV-007`, `registered.tests` those of
   `FR-ENV-014`, `registered.functions` those of `FR-ENV-020`, and
   `inherited.filters` those of `FR-ENV-018`, each in the order the requirement
@@ -165,6 +167,72 @@ of the context variables, which belongs to
   paid for the uniformity: a caller reads the three groups with one routine, and
   an edition that came to guarantee an inherited test would fill an array that
   is already there rather than change the shape of the value.
+
+  *Amended in the forty-third edition.* Each array carried bare names, so a
+  caller learned that `indent` and `column` exist and not what either takes or
+  does; the audit of rmp `#259`, finding H-03, observed that an agent cannot
+  call `column(...)` or `indent` correctly from the document. Each name is now
+  an item object that carries its signature and its purpose, per `FR-ENV-047`.
+  The three groups, their keys, their order and the names they hold are
+  unchanged. Replacing a string by an object changes the type of the array's
+  members, which `FR-OUT-014` classifies as breaking; no release of the binary
+  has been made, so `schema_version` stays `1`, per `FR-OUT-038`.
+
+  *Rejected: a fifth key per group, `signatures`, beside the name arrays.* It
+  keeps every array as it was, and it states each name twice, in two arrays
+  that must be kept in step and joined by the caller. One item per name states
+  it once.
+
+- **FR-ENV-047**: Each item of the arrays of `FR-ENV-005` SHALL be an object
+  carrying exactly `name`, `signature`, `operand`, `arguments`, and `purpose`,
+  in that order:
+
+  | Key | Value |
+  |---|---|
+  | `name` | The name a template writes, as `FR-ENV-005` places it |
+  | `signature` | The form a template writes to use it: `value \| name(arguments)` for a filter, `value is name` for a test, `name(arguments)` for a function; a filter that takes no argument is written `value \| name` |
+  | `operand` | The type of value the filter or the test accepts on its left, or `null` for a function, which has none |
+  | `arguments` | An array of the arguments the template passes, in positional order, each an object carrying exactly `name`, `type`, `required`, and `default`, in that order; `[]` WHERE there are none |
+  | `purpose` | One sentence stating what the item returns or does |
+
+  In an argument object, `required` SHALL be a boolean, and `default` SHALL be
+  the default value as a template would write it — `2`, `""`, `false` — or
+  `null` WHERE the argument is required or has no default. Every `type`, and
+  every `operand` that is not `null`, SHALL be one of `any`, `string`,
+  `integer`, `boolean`, `list`, `object`, `column`, `table`, `view`, and
+  `routine`.
+
+  ```json
+  {"name":"indent","signature":"value | indent(n)","operand":"string","arguments":[{"name":"n","type":"integer","required":true,"default":null}],"purpose":"Prefixes every line after the first with n spaces."}
+  {"name":"column","signature":"column(table, name)","operand":null,"arguments":[{"name":"table","type":"string","required":true,"default":null},{"name":"name","type":"string","required":true,"default":null}],"purpose":"Returns the named column of the named table, or fails the render."}
+  ```
+
+  For a name of group 1, every value SHALL agree with the requirement of this
+  file that fixes the name's behaviour — the operand accepted, the arguments
+  and whether each is required — and SHALL NOT state a behaviour that
+  requirement does not fix. For a name of group 2, every value SHALL agree with
+  the pinned engine version of `FR-ENV-003`. The `purpose` sentence is help
+  text: its wording is not fixed here, and it SHALL name no requirement, file
+  or document outside the help system, per `FR-HELP-014`.
+
+  The values SHALL come from the typed table of `FR-HELP-022`, indexed by name.
+  The suite SHALL assert that every name the environment registers has an item
+  in that table and that the table holds no item for a name it does not
+  register.
+
+  *Rationale.* The document is the one invocation in which a calling agent loads
+  the whole surface, per `FR-HELP-016`, and a name without its arguments is a
+  name the agent must call wrongly before it learns how to call it. Stated as
+  fields rather than prose, the signature is addressable: an agent can check an
+  argument count or a type without parsing a sentence.
+
+  *Rejected: `signature` and `purpose` alone, without `operand` and
+  `arguments`.* The signature string names the arguments and not their types,
+  and `sql_type` and the seven tests refuse every operand but a column, per
+  `FR-ENV-039` and `FR-ENV-040`. That refusal is the misuse the fields exist to
+  prevent.
+
+  *Added in the forty-third edition,* for rmp `#260`.
 
 ## Filters that `tpl` registers
 

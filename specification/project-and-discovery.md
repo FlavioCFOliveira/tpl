@@ -1,8 +1,8 @@
 ---
 title: Project and Discovery
 status: approved
-last-reviewed: 2026-09-21
-related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md]
+last-reviewed: 2026-09-23
+related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md, errors-and-exit-codes.md]
 ---
 
 # Project and Discovery
@@ -227,6 +227,32 @@ maintain it.
   SHALL suppress the walk. It SHALL be subject to every check below without
   exemption.
 
+  IF a command that requires a project is given a `--tpl-dir` path that does
+  not exist or is not a directory, THEN the system SHALL exit `78`
+  (`EX_CONFIG`). The `error` and `cause` lines SHALL name the path and state
+  why it is not usable, and the `cause` SHALL state that `--tpl-dir` disabled
+  the upward search, per the `78` row of `FR-ERR-034`. Neither line SHALL
+  describe a walk. The `hint` SHALL name `--tpl-dir` as the value to correct,
+  and SHALL NOT suggest a `tpl init` that creates a project anywhere but at
+  the path named: WHERE the path's last segment is `.tpl`, the `hint` SHALL
+  carry `tpl init` with the path's parent directory, built under
+  `FR-ERR-041`.
+
+  ```
+  error: the folder named by --tpl-dir does not exist: /srv/shop/.tpl
+  cause: --tpl-dir disabled the upward search; nothing exists at /srv/shop/.tpl
+  hint:  correct --tpl-dir, or create the project with: tpl init /srv/shop
+  exit:  78 (EX_CONFIG)
+  ```
+
+  *Amended in the forty-third edition.* The requirement did not say what a
+  `--tpl-dir` naming nothing produces, and the implementation reported
+  `the walk upward ended at /nonexistent/.tpl`, a walk the flag had
+  suppressed, with a hint to run `tpl init` in the current directory, per
+  finding E-03 of the audit of rmp `#259`. `FR-PROJ-006` still governs the
+  failed walk, and this clause governs the case with no walk. The code is
+  unchanged: `78`, as for a project that is not found.
+
 ## Trust checks
 
 - **FR-PROJ-009**: The system SHALL canonicalise the resolved `.tpl` path before
@@ -241,9 +267,17 @@ maintain it.
   ```
   error: .tpl/.cfg has unsafe permissions
   cause: mode 0644; group and other must have no access
-  hint:  chmod 600 .tpl/.cfg
+  hint:  chmod 600 /home/ana/shop/.tpl/.cfg
   exit:  78 (EX_CONFIG)
   ```
+
+  The `hint` SHALL carry the absolute path of the file, built under
+  `FR-ERR-041`, so that it succeeds from any directory, per `BR-ERR-004`. The
+  same holds for the `hint` of `FR-PROJ-010`.
+
+  *Amended in the forty-third edition.* The example showed the relative form
+  `chmod 600 .tpl/.cfg`, which fails when run from a subdirectory of the
+  project, per finding E-22 of the audit of rmp `#259`.
 
   *Rationale.* A `.cfg` writable by anyone else can choose the
   `password_command` that runs with the caller's privileges.

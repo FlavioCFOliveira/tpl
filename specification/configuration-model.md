@@ -478,8 +478,15 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 
   *Accepted cost.* A DSN copied from another tool, which commonly carries
   parameters such as a connection charset or a socket path, is refused rather
-  than partly honoured. The refusal names the `?` and the `hint` points at
-  `tpl cfg database add` with the discrete flags.
+  than partly honoured. The refusal names the `?`, and the `hint` names
+  `.tpl/.cfg`, the entry's `dsn` key, and the edit that removes the `?` and
+  everything after it.
+
+  *Amended in the forty-third edition.* The `hint` pointed at
+  `tpl cfg database add` with the discrete flags. That command cannot succeed
+  for an entry the file already carries, per `FR-CFG-017`, and `BR-ERR-004`
+  bars a `hint` naming a command that cannot
+  succeed.
 
 - **FR-CONF-012**: A TLS parameter in a DSN SHALL be a special case of
   `FR-CONF-011` and SHALL exit `78` for the same reason as any other parameter.

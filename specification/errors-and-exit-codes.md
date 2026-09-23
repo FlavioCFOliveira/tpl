@@ -368,6 +368,7 @@ Out of scope: the wording of any individual message.
   | Where the key was met | Code | Stated by |
   |---|---|---|
   | Named on the invocation of `tpl cfg set`, and outside the enumerated key space of `FR-CONF-002` | `64` | `FR-CFG-009`, and `FR-CFG-010` where the key is in that space and the value does not conform to the type declared for it |
+  | Named on the invocation of `tpl cfg get` in the form of a block — `core`, `database`, or `database.<name>` — rather than a key of `FR-CONF-002` | `64` | `FR-CFG-007` |
   | Named on the invocation of `tpl cfg get`, or of `tpl cfg unset` as a key or as a block, and absent from `.tpl/.cfg` | `66` | `FR-CFG-007`, `FR-CFG-012` |
   | Carried by `.tpl/.cfg`, anywhere in the file, and outside the enumerated key space of `FR-CONF-002` | `78` | `FR-CONF-034` |
 
@@ -393,6 +394,12 @@ Out of scope: the wording of any individual message.
   file carries and the space refuses is the configuration failing to describe a
   usable connection, which is what `78` means and what the fifth edition's note
   under `FR-ERR-001` says of the five conditions it added there.
+
+  *Amended in the forty-third edition.* The row for a block given to
+  `tpl cfg get` is new, and is decided by `FR-CFG-007`. It is evaluated before
+  the question of presence, so a block form is `64` whether or not the file
+  carries the block. It does not collide with the other rows: `tpl cfg unset`
+  accepts a block, per `FR-CFG-011`, and `tpl cfg get` does not.
 
   *This requirement routes; it does not restate.* Each of the three conditions
   belongs to the module that owns the command or the file, and the three
@@ -667,14 +674,14 @@ Out of scope: the wording of any individual message.
   | Code | The `cause` line SHALL name |
   |---|---|
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
-  | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or the structural rule of [context-document.md](context-document.md) it failed. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012`. For a render bound, which bound was exceeded, its resolved value, and the key of `FR-CONF-002` that raises it, per `FR-RND-036`, `FR-RND-037` and `FR-RND-039` |
+  | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or, for a document that does not match the contract, the key path of the first member in document order that fails it and what the contract expects there: the type expected, that the key is required, or, for a reference `FR-CTX-042` governs, the table named and that `tables` does not carry it. It SHALL NOT cite a file of this specification. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012`. For a render bound, which bound was exceeded, its resolved value, and the key of `FR-CONF-002` that raises it, per `FR-RND-036`, `FR-RND-037` and `FR-RND-039` |
   | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, the key space of `FR-CONF-002`, or the `--context` document and the collection of it the name was sought in |
   | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
   | `74` | The path or stream that failed, the operation attempted on it, and what the filesystem or the stream returned |
   | `77` | For authentication, the user and the host the server refused, and that the refusal came from the server. For privileges, which property of which object could not be read, per `FR-PRIV-013` |
-  | `78` | The key and the file, with the value found and the value expected; or, where the fault is not a key, the specific condition — the directory the walk ended at without finding `.tpl`, the name of the undefined variable, or the series found and why it is not supported, per `FR-SRV-030` |
+  | `78` | The key and the file, with the value found and the value expected; or, where the fault is not a key, the specific condition — the directory the walk ended at without finding `.tpl`; or, WHERE `--tpl-dir` suppressed the walk, the path it named, why that path is not usable, and that no upward search was made, per `FR-PROJ-008`; the name of the undefined variable, or the series found and why it is not supported, per `FR-SRV-030` |
 
   `0` is the tenth code of `FR-ERR-001` and produces no message.
 
@@ -722,6 +729,18 @@ Out of scope: the wording of any individual message.
   met by its `cause`. The clause added obliges the bound, its resolved value and
   the key that raises it, so the caller learns both what stopped the render and
   where to change it. The other clauses are unchanged.
+
+  *Amended in the forty-third edition: the `65` row names the fault in a
+  `--context` document, and the `78` row the path `--tpl-dir` named.* The `65`
+  row asked for "the structural rule of context-document.md it failed", and
+  the implementation obeyed it: the `cause` restated the rule and cited a file
+  the caller does not have, and named no key, per finding E-08 of the audit of
+  rmp `#259`. The row now asks for the key path and what was expected there,
+  which is the instance this requirement prefers to the category. The `78` row
+  named only the directory a walk ended at, and `--tpl-dir` suppresses the
+  walk, so a wrong `--tpl-dir` was reported as a walk that never happened,
+  per finding E-03. The row now names the path the flag named. The other
+  clauses of both rows are unchanged.
 
   *Amended in the twenty-fifth edition: the `69` row names a fifth phase.* It
   named four, and one statement this system issues belonged to none of them.
@@ -921,10 +940,11 @@ Out of scope: the wording of any individual message.
   of the command tree of [cli-contract.md](cli-contract.md), a flag a node
   declares, and a key of the enumerated space of `FR-CONF-002`. Every other
   value is subject to a character set, whatever its source — the set above,
-  except for the one population `FR-ERR-040` governs by a set of its own; the
-  values this specification names are a table, a view, a routine, a template, a
-  database entry, the `<name>` segment of a `database.<name>` key, and the name
-  of an environment variable. Each such value SHALL be tested on its own, and the
+  except for the populations `FR-ERR-040` and `FR-ERR-041` govern by sets of
+  their own; the values this specification names are a table, a view, a
+  routine, a template, a database entry, the `<name>` segment of a
+  `database.<name>` key, and the name of an environment variable. Each such
+  value SHALL be tested on its own, and the
   separators that join names into a command or into a key are literals — the
   space between command-path segments, the `-` or `--` that introduces a flag,
   and the `.` between key segments.
@@ -975,8 +995,21 @@ Out of scope: the wording of any individual message.
   states the set that governs it, and this requirement's own set is unchanged
   for every other value.
 
-- **FR-ERR-023**: IF a nearest-match candidate is subject to that character set
-  and falls outside it, THEN the system SHALL NOT present that candidate at all
+  *Amended in the forty-third edition: two populations are governed by a third
+  set.* A template name is a path relative to `.tpl/templates/`, per
+  `FR-TMPL-006`, so every nested template carries a `/` and the set above
+  refused all of them: `tpl template show rust/_type` offered no suggestion,
+  although `rust/_types` is one edit away, while the help promised the nearest
+  matches, per finding H-07 of the audit of rmp `#259`. A filesystem path
+  written into a hint was refused for the same reason, so a hint could name
+  `.tpl/.cfg` only in the relative form, which fails when run from a
+  subdirectory of the project, per finding E-22. `FR-ERR-041` states the set
+  that governs both, and the set above is unchanged for every other value.
+
+- **FR-ERR-023**: IF a nearest-match candidate is subject to the character set
+  that governs it — that of `FR-ERR-022`, or that of `FR-ERR-041` for a
+  template name — and falls outside it, THEN the system SHALL NOT present that
+  candidate at all
   — neither as an executable suggestion nor as prose — and SHALL emit the
   generic hint alone.
 
@@ -998,6 +1031,10 @@ Out of scope: the wording of any individual message.
   which candidates the set governs, and this rule drops those and no others;
   what it does to a candidate it governs is unchanged, and so is the ground
   for it.
+
+  *Amended in the forty-third edition.* A template name is governed by the set
+  of `FR-ERR-041`, and this rule drops a template candidate that falls outside
+  that set. What it does to a dropped candidate is unchanged.
 
   *Accepted cost.* A caller that mistypes the name of an object whose real name
   contains a character outside `[A-Za-z0-9_]` receives no suggestion, only the
@@ -1083,6 +1120,57 @@ Out of scope: the wording of any individual message.
   correction it copies. `FR-ERR-009` makes the `hint` the line that gives most
   in return, and a hint that never names the value the caller wrote tells them
   only that a rule exists.
+
+- **FR-ERR-041**: A template name, and a filesystem path written into a
+  `hint`, SHALL be governed by the character set `[A-Za-z0-9_./-]`, measured
+  over the whole value, which SHALL be at most 1024 characters long and SHALL
+  NOT begin with `-`. The paths this requirement governs are the path of the
+  project's `.tpl` folder or of a file inside it, as resolved under
+  `FR-PROJ-009`, and the path a caller named with `--tpl-dir`, or its parent
+  directory.
+
+  IF a template name that is a nearest-match candidate falls outside the set,
+  THEN the system SHALL drop it, per `FR-ERR-023`. IF a path falls outside the
+  set, THEN the system SHALL write a placeholder in the path's position, and
+  SHALL present the path nowhere else in the `hint`, on the ground
+  `FR-ERR-040` states for a flag value.
+
+  ```
+  hint:  did you mean 'rust/_types'? list the templates with: tpl template list
+  hint:  restrict the file's mode with: chmod 600 /home/ana/shop/.tpl/.cfg
+  hint:  restrict the file's mode with: chmod 600 <project>/.tpl/.cfg
+  ```
+
+  *Why these characters.* `/` and `.` are the characters a path is made of, and
+  `-` is common in a file name. None of the three is a shell metacharacter, and
+  the set holds no quotation mark, no whitespace, and no newline, so a value it
+  admits cannot end the command it is written into and start another. A value
+  that began with `-` could be read as an option by the command it is passed
+  to, so none may.
+
+  *Why 1024.* It is `PATH_MAX` on macOS, the smaller of the two limits of the
+  supported systems; Linux fixes 4096. A longer path cannot be passed to a
+  command on every supported system, so a hint carrying one could not succeed
+  on all of them. The number is taken rather than chosen, as `FR-ERR-040`
+  takes 64.
+
+  *Rejected: quoting the value instead of testing it.* Quoting admits every
+  byte, and the value is escaped by `FR-ERR-024` after it is quoted, so a path
+  holding a newline would reach the caller as a different path. A set the
+  value either meets or does not keeps one rule for every population:
+  what is written is what is run.
+
+  *Rejected: widening the set of `FR-ERR-022` for every value.* The ground the
+  twentieth edition gave stands: every widening is paid for by every untrusted
+  name, and a `/` admitted for a template name would be admitted for a table
+  name the server chooses.
+
+  *Accepted cost.* A project under a directory whose name holds a space, or
+  any other character outside the set, receives a placeholder where the path
+  would stand, and the caller substitutes it.
+
+  *Added in the forty-third edition,* for rmp `#260`, from findings H-07 and
+  E-22 of the audit of rmp `#259`.
 
 - **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, and every C0 control
   character in every value it interpolates into a message — catalogue names,
@@ -1262,6 +1350,29 @@ no requirement of this file is amended.
   requirements govern; this rule states the exception rather than being read
   past. Nothing else on this list yields: a credential is barred without
   exception, and so is the resolved DSN and every other key of the file.
+
+- **BR-ERR-004**: A `hint` SHALL NOT name a command that cannot succeed in the
+  state the invocation found. A `tpl cfg` command cannot succeed while
+  `.tpl/.cfg` fails step 3 of `FR-ERR-006`, because no `cfg` subcommand is
+  excused from that step, per `FR-ERR-035`; for such a fault the `hint` SHALL
+  name the file, the position, and the edit to make. WHERE the invocation knows
+  a value the `hint` needs — the command path, the template, the database
+  entry, the key, or the path of the project — the `hint` SHALL carry that
+  value and not a placeholder. A placeholder is admissible only WHERE
+  `FR-ERR-022`, `FR-ERR-040` or `FR-ERR-041` refuses the value, or WHERE the
+  value is one only the caller knows, such as a new host or a new value for a
+  key.
+
+  *What this adds to `FR-ERR-009`.* That requirement asks for a concrete,
+  runnable command wherever one exists. A command can be concrete and runnable
+  and still fail: `tpl cfg set database.s6.port 3306` for a `.tpl/.cfg` whose
+  port is `0` fails with the same `78`, per finding E-01 of the audit of rmp
+  `#259`. A placeholder where the value is known is not concrete: the audit
+  found `<entry>` printed for an entry the invocation had named, per finding
+  E-07. This rule states both outcomes, which a caller copying the line
+  depends on.
+
+  *Added in the forty-third edition,* for rmp `#260`.
 
 ## Dependencies
 

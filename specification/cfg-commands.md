@@ -1,7 +1,7 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-23
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md]
 ---
 
@@ -82,8 +82,35 @@ tpl cfg database test   <name>
   THEN the system SHALL exit `66` (`EX_NOINPUT`) with a nearest-match suggestion
   over the keys that do exist.
 
+  IF the key supplied to `tpl cfg get` has the form of a block — `core`,
+  `database`, or `database.<name>` — rather than of a key of `FR-CONF-002`,
+  THEN the system SHALL exit `64` (`EX_USAGE`), whether or not the file
+  carries the block. The `cause` SHALL name the key and state that it names a
+  block and not one value. The `hint` SHALL carry
+  `tpl cfg database show <name>` WHERE the key is `database.<name>` and the
+  entry exists, and `tpl cfg list` otherwise, per `BR-ERR-004`.
+
+  ```
+  error: 'database.shop' names a whole entry, not one value
+  cause: tpl cfg get reads one key; database.shop is the block of entry 'shop'
+  hint:  show the entry with: tpl cfg database show shop
+  exit:  64 (EX_USAGE)
+  ```
+
   *Rationale.* Exiting `0` with empty output would be indistinguishable from a
   key whose value is empty.
+
+  *Amended in the forty-third edition.* The block form is new. The requirement
+  stated only the absent key, so `tpl cfg get database.shop`, for an entry that
+  exists, reported that the key "is not set" with `66`, which is false of a
+  block the file carries, per finding E-14 of the audit of rmp `#259`. The
+  code is `64` because the fault is in the token the caller wrote and the
+  caller can rewrite it, which is what `64` means under `FR-ERR-035`; the
+  block's presence does not change the next step.
+
+  *Rejected: `66` with a cause that says the key names a block.* `66` sends a
+  caller to list what exists and choose another name, and the name the caller
+  chose does exist.
 
 - **FR-CFG-008**: `tpl cfg set <key> <value>` SHALL write the value under that
   key. `FR-CFG-048` states when a write to a key of a database entry is
@@ -143,6 +170,26 @@ tpl cfg database test   <name>
   by the flags supplied, leaving the rest of the entry untouched. `FR-CFG-048`
   states what happens where a field the flags name and a field they leave alone
   cannot stand together.
+
+  IF `tpl cfg database update` is invoked with none of the flags of
+  `FR-CFG-027`, THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL leave
+  `.tpl/.cfg` unchanged. The condition is decided at argument parsing, step 1
+  of `FR-ERR-006`, before the entry is resolved. The `cause` SHALL state that
+  no field flag was given, and the `hint` SHALL list every flag of
+  `FR-CFG-027`.
+
+  ```
+  error: nothing to change: tpl cfg database update needs at least one field flag
+  cause: no field flag was given for entry 'shop'
+  hint:  give at least one of --dsn, --host, --port, --user, --schema, --tls, --password-command, --ca-file, --ca-path
+  exit:  64 (EX_USAGE)
+  ```
+
+  *Amended in the forty-third edition.* The requirement did not say what an
+  invocation with no field flag does, and it exited `0` and changed nothing,
+  which a caller reads as success, per finding E-25 of the audit of rmp `#259`.
+  `FR-CFG-016` already refuses `tpl cfg database add` with no connection flag
+  with `64`; `update` now refuses its own empty invocation with the same code.
 
 - **BR-CFG-001**: `add` creates and `update` changes. Neither silently does the
   other's job: there is no `--force` that replaces wholesale, and no idempotent

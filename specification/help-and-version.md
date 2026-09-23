@@ -1,8 +1,8 @@
 ---
 title: Help and Version
 status: approved
-last-reviewed: 2026-09-21
-related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md]
+last-reviewed: 2026-09-23
+related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md, context-document.md, render-command.md]
 ---
 
 # Help and Version
@@ -203,6 +203,96 @@ alongside the command it documents.
   positional argument, so the two populations are not separable in the first
   place.
 
+- **FR-HELP-031**: The `DESCRIPTION` section of every leaf SHALL end with four
+  statements, in plain words and in this order:
+
+  1. Whether the command connects to a database server: never, always, or only
+     on a cache miss, per the requirement that owns the command.
+  2. Whether it requires a `[database.<name>]` entry of `.tpl/.cfg`, selected
+     by `-d/--database` or by `core.database`, per `FR-GLOB-025`.
+  3. Whether it writes files, and if it does, which: `.tpl/.cfg`, the cache
+     folder of the selected entry under `.tpl/.cache/`, the artefacts of
+     `tpl init`, or a path the invocation names.
+  4. What it writes to stdout.
+
+  ```
+  Connects to the server only when .tpl/.cache/ does not hold the tables.
+  Needs a database entry (-d or core.database). Writes what it read to the
+  entry's folder under .tpl/.cache/. Prints the tables, one row each.
+  ```
+
+  Each statement SHALL be true of the command as the requirement that owns its
+  behaviour states it, and SHALL NOT name that requirement, per `FR-HELP-014`.
+  Two statements MAY be joined in one sentence WHERE the order above is kept.
+  A statement SHALL NOT be omitted because its answer is no:
+  `Does not contact the server.` and `Writes no file.` are statements of this
+  requirement. The same four statements SHALL end the `description` of the
+  leaf's entry in the JSON command tree, per `FR-HELP-019`.
+
+  *Rationale.* A caller reading one leaf's help must learn from it alone
+  whether the command can run where it stands — with no server, with no entry,
+  in a read-only checkout — and what it will leave behind. Before this
+  requirement those facts were stated in the group help of `tpl schema` and
+  `tpl cache` and in no leaf, so `tpl schema tables --help` did not say that it
+  needs an entry, connects on a miss, and writes `.tpl/.cache/`; and
+  `tpl cache status --help` did not say that it never contacts the server.
+
+  *Weighed against `BR-HELP-002`.* The statements are repeated in every leaf,
+  which is the level at which a caller reads them; the group help is the level
+  a caller skips. The cost is two to four lines per leaf.
+
+  *Rejected: stating the four facts only where the answer is yes.* The absence
+  of a statement would then carry meaning, and a caller cannot tell an absent
+  statement from an omitted one.
+
+  *Added in the forty-third edition,* for rmp `#260`, from finding H-10 of the
+  audit of rmp `#259`.
+
+- **FR-HELP-033**: The `DESCRIPTION` section of `tpl render` SHALL state,
+  before the four statements of `FR-HELP-031`:
+
+  1. Every context variable of `FR-HELP-032`, one line each, with what it holds
+     and, for `table`, `view` and `routine`, the flag that binds it.
+  2. Every filter, test and function of contract groups 1 and 2 of
+     `FR-ENV-001`, grouped as filters, tests and functions, each with its
+     `signature` and its `purpose` of `FR-ENV-047`, marked as contract or as
+     pinned to the engine version.
+  3. That everything else the engine offers works and carries no guarantee,
+     per `FR-ENV-004`.
+
+  ```
+  A template sees these variables:
+    database  The whole database: name, server, tables, views, routines.
+    table     The table named by --table. Absent without --table.
+    ...
+  Filters (contract):
+    value | indent(n)       Prefixes every line after the first with n spaces.
+    ...
+  ```
+
+  The lines SHALL come from the typed table of `FR-HELP-022`, so the text and
+  the JSON document state the same signatures and the same sentences. The list
+  SHALL appear in no other node's help, per `BR-HELP-002`.
+
+  *Rationale.* `FR-HELP-014` makes help self-contained, and a caller that reads
+  text help and never requests JSON had no channel that named a variable or a
+  filter signature. `tpl render` is the command that runs a template, so its
+  help is where a caller writing one looks.
+
+  *Why inside `DESCRIPTION`.* `FR-HELP-006` admits seven sections and no other.
+  The list describes what the command gives the template it runs, which is
+  description, and placing it there leaves the layout unchanged.
+
+  *Accepted cost.* The help of `tpl render` grows by about forty lines. It is
+  paid in one node, the one a template author reads, and nowhere else.
+
+  *Rejected: an eighth section, `TEMPLATE SURFACE`.* It amends `FR-HELP-006`
+  and `FR-HELP-007` for one node, and every parser of the layout would learn a
+  section that only one help carries.
+
+  *Added in the forty-third edition,* for rmp `#260`, from findings H-02 and
+  H-03 of the audit of rmp `#259`.
+
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help
   system itself. `SEE ALSO` SHALL reference only other `tpl` commands.
@@ -226,20 +316,21 @@ alongside the command it documents.
   contradicts: a subtree is a tree, and every entry carries its full `path`.
   `FR-HELP-019` now settles the shape — `data.commands` is flat — and a subtree
   under it is a selection over that array rather than a nesting of it. What is
-  emitted is otherwise the same document: `FR-HELP-017` requires all four keys
+  emitted is otherwise the same document: `FR-HELP-017` requires every key
   of `data` in both forms, and `FR-HELP-029` states the selection.
 
 - **FR-HELP-017**: The document SHALL be the envelope of `FR-OUT-024`, with
   `source` set to `binary` per `FR-OUT-026`, and a `data` carrying
-  `tpl_version`, `global_flags`, `commands`, and `template_surface`, in that
-  order:
+  `tpl_version`, `global_flags`, `commands`, `template_surface`, and
+  `context_variables`, in that order:
 
   ```json
-  {"schema_version":1,"source":"binary","data":{"tpl_version":"0.1.0","global_flags":[…],"commands":[…],"template_surface":{…}}}
+  {"schema_version":1,"source":"binary","data":{"tpl_version":"0.1.0","global_flags":[…],"commands":[…],"template_surface":{…},"context_variables":[…]}}
   ```
 
-  All four keys SHALL be present in every document of this form, whatever path
-  argument `FR-HELP-029` reduces `commands` by.
+  All five keys SHALL be present in every document of this form, whatever path
+  argument `FR-HELP-029` reduces `commands` by. What `context_variables`
+  contains is fixed by `FR-HELP-032`.
 
   The `data` of this document SHALL be an **open** set of keys. A later edition
   MAY add a key to it, and SHALL place the new key after the last, so that the
@@ -282,6 +373,49 @@ alongside the command it documents.
   flags a command declares. Also rejected: a document of its own, reached by a
   command of its own, which adds a node to a tree `FR-CLI-002` closes in order
   to publish material `FR-ENV-005` already requires this document to carry.
+
+  *Amended in the forty-third edition.* `context_variables` is new, and is
+  placed after the last key, as this requirement's own rule for a new key
+  requires. The document named every filter, test and function a template may
+  call and none of the variables it reads, so an agent writing its first
+  template had to guess `database`, `table`, `vars`, `tpl` and `now`, per
+  finding H-02 of the audit of rmp `#259`. Adding a key is not breaking, per
+  `FR-OUT-014`.
+
+  *Rejected: a fourth key of `template_surface`.* That value holds the three
+  contract groups of `FR-ENV-001`, in three objects of one shape, and a caller
+  reads them with one routine. A list of variables is a different shape, and
+  its content belongs to [context-document.md](context-document.md) and
+  [render-command.md](render-command.md), not to the file that owns the
+  surface.
+
+- **FR-HELP-032**: `data.context_variables` SHALL be an array carrying one
+  object per top-level context variable of `FR-RND-023` — `database`, `table`,
+  `view`, `routine`, `vars`, `tpl`, and `now`, in that order — each carrying
+  exactly `name`, `type`, `bound_by`, and `purpose`, in that order:
+
+  | Key | Value |
+  |---|---|
+  | `name` | The variable's name |
+  | `type` | `object` or `string`, as `FR-CTX-001`, `FR-CTX-026`, `FR-CTX-027` and `FR-CTX-028` fix it |
+  | `bound_by` | `null` WHERE the variable is present in every render, per `FR-RND-023` and `FR-RND-024`; otherwise the object flag whose presence binds it: `--table`, `--view` or `--routine` |
+  | `purpose` | One sentence stating what the variable holds |
+
+  ```json
+  {"name":"table","type":"object","bound_by":"--table","purpose":"The table named by --table: its columns, indexes and foreign keys."}
+  ```
+
+  Each `purpose` SHALL agree with the requirement that fixes the variable's
+  content and SHALL name no requirement, file or document outside the help
+  system, per `FR-HELP-014`. The values SHALL come from the typed table of
+  `FR-HELP-022`.
+
+  *Rationale.* The variables are the first thing a template reads, and the
+  document is where a calling agent loads the whole surface, per `FR-HELP-016`.
+  `bound_by` states as data what a template author otherwise learns from a
+  render failure: that `table` exists only when `--table` is given.
+
+  *Added in the forty-third edition,* for rmp `#260`.
 
 - **FR-HELP-018**: `data.global_flags` SHALL carry the global flags once, and
   each command SHALL carry `"inherits_globals": true` instead of repeating
@@ -338,8 +472,15 @@ alongside the command it documents.
 
 - **FR-HELP-022**: `examples`, `exit_codes` and the statement of purpose of
   `FR-HELP-030` SHALL come from a typed table indexed by command path, which
-  feeds both the text help and the JSON document. The system SHALL NOT derive
-  any of the three by parsing help text.
+  feeds both the text help and the JSON document. The same table SHALL hold the
+  item values of `FR-ENV-047`, indexed by name, and the variable values of
+  `FR-HELP-032`, indexed by variable. The system SHALL NOT derive any of these
+  by parsing help text.
+
+  *Amended in the forty-third edition.* The signatures and purposes of the
+  template surface and the meanings of the context variables join the table,
+  for the reason the rest is held there: each is written once and read by the
+  text help of `FR-HELP-033` and by the JSON document.
 
   *Amended in the thirty-first edition.* The purpose sentence joins the two
   this requirement already held, and for the reason they are held here: it is
@@ -445,8 +586,11 @@ alongside the command it documents.
   `global_flags`.
 - [output-formats.md](output-formats.md) — the JSON contract rules the document
   obeys.
-- [template-environment.md](template-environment.md) — `FR-ENV-005`, which owns
-  what `data.template_surface` contains.
+- [template-environment.md](template-environment.md) — `FR-ENV-005` and
+  `FR-ENV-047`, which own what `data.template_surface` contains.
+- [render-command.md](render-command.md) and
+  [context-document.md](context-document.md) — `FR-RND-023` and the
+  requirements of the context variables, which `FR-HELP-032` publishes.
 
 ## Open questions
 
