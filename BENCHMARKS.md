@@ -4148,3 +4148,538 @@ hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-before -d bench_wl001 cache c
 # 6. The pipeline needs all five servers; then the fixture down, and nothing left.
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
 ```
+
+## 2026-09-23 — Fourth waste-hunting pass: the whole command surface at `ba10788`
+
+*Sprint 19, task `#247`. Target of record: `aarch64-apple-darwin`. Server of
+record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry records; it does
+not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+Every node of the command tree, every alias, both output forms of every command
+that has two, every help form, the version forms and the error paths were
+measured again at `ba10788`, after `#244`, `#245` and `#246`, with `#243`'s
+instruments, protocol, labels and fixture, and with `#243`'s binary of record
+as the baseline arm of the same rotated campaign. Nothing was changed: `src/`,
+`Cargo.toml` and `Cargo.lock` are untouched, and every instrumented or altered
+binary was built from a throwaway copy of the crate outside the repository.
+
+**Against `#243`'s binary, measured side by side, the three changes are
+confirmed and nothing else moved.** A cached render bound to one object fell
+from 11.13–11.86 ms to 2.32–3.03 ms (−8.76 to −8.87 ms, −74% to −79%), and the
+canonical 200-render loop from 2 434.7 to 628.8 ms (−74.2%); every whole write
+of an unchanged store halved (`cache load` 64.50 → 30.57 ms); the two pretty
+whole reads fell by 2.27 and 2.64 ms (−14%). The 64 start-up-class labels are
+within 0.026 ms of `#243`, the 10 writers and server probes within 0.047 ms,
+and the direct reads within 0.17 ms, each at the floor of its class.
+
+**One new row is above the noise floor by two orders of magnitude, and was
+established by a single-variable experiment:**
+
+- **A lookup of a table by name reads the file of every table listed before
+  it.** `is primary_key`, `is unique` and the global `column()` resolve the
+  column's table by a linear scan of `database.tables`, and under `#246` each
+  member the scan passes is read, validated and decoded from its file. Answering
+  a lookup of the bound table from the bound table took `rust/struct --table
+  yard_position`, the last of 200, from 11.41 to 3.37 ms (−70.5%), and a
+  `rust/struct` loop over all 200 tables from 1 604.9 to 785.6 ms (−51.0%).
+  The canonical loop renders `example`, which makes no lookup, and is not
+  affected.
+
+**The campaign does not stop**: that row is 259 times the A/A of the
+invocation it affects and 167 times the A/A of the loop it affects, on eight
+of the worked templates of `examples/`. Its first step is a question for the
+specification, not code. It stops for every other path; see *The verdict*.
+
+### The surface
+
+`#243`'s inventory, unchanged: `tpl help --format json` lists 34 nodes, 5
+groups and 29 leaves, and 7 aliases. `#243`'s 116 labels were measured under
+the same names, with the same invocations, projects and probe templates, and
+three labels were added:
+
+| label | what it is for |
+|---|---|
+| `rstruct_last_c` | `render rust/struct --table yard_position`: the same template as `rstruct_c` bound to the **last** table of the listing instead of the first, which is where the lookup of the new row costs most |
+| `rmiss_reach` | `#246`'s label: `probe/whole_json` with the last table's file replaced by `{ torn`, a miss reached during the render (`FR-CACHE-039`) |
+| `rmiss_bound` | `#246`'s label: `example --table accrual` with the bound table's file damaged, a miss found before the render |
+
+Beside the canonical loop, a second loop, `loop_struct`, renders
+`rust/struct` once per table with `benches/loop200.sh`, as the canonical loop
+renders `example`.
+
+**How the leaves map to labels** is `#243`'s table, *The surface*, row for row;
+`render` now has 26 labels and the two loops. Where a family is reported as
+one line below, it is because its labels run one path; that is said in each
+line.
+
+### Results — per family, against `#243`
+
+Medians; the full per-label table follows. A/A is `now` against `now_twin`.
+
+| family | labels | `b243` → `now` | change | largest A/A in the family |
+|---|---|---|---|---|
+| `version`, `-V`, `version` | 3 | 1.721–1.738 → 1.718–1.736 ms | within 0.003 ms | 0.004 ms |
+| `help` in every form, `tpl` bare, the 5 groups bare and `cfg db` | 15 | 1.820–1.996 → 1.816–1.991 ms | within 0.025 ms | 0.010 ms |
+| error paths: `64` twice, `78`, `69` twice, the two template `66`s | 7 | 1.723–1.973 → 1.717–1.971 ms | within 0.026 ms | 0.022 ms |
+| `template list`, `show`, `check`, `path`, both forms | 7 | 1.836–1.964 → 1.831–1.962 ms | within 0.015 ms | 0.011 ms |
+| `cfg list`, `get`, `database list`, `show`, both forms and the alias | 9 | 1.856–1.883 → 1.851–1.883 ms | within 0.020 ms | 0.017 ms |
+| `cfg set`, `unset`, `database add`, `update`, `remove`, `init` | 6 | 1.983–2.150 → 1.988–2.131 ms | within 0.018 ms | 0.020 ms |
+| `cfg database test`, both forms | 2 | 3.976–4.006 → 3.959–3.988 ms | within 0.047 ms | 0.017 ms |
+| `cache status`, `cache clean` with and without `--table` | 4 | 2.051–2.394 → 2.050–2.362 ms | within 0.042 ms | 0.014 ms |
+| `schema info`, three forms | 3 | 2.082–2.090 → 2.074–2.097 ms | within 0.016 ms | 0.013 ms |
+| cached single-object reads: `table`, `view`, `routine`, every form, alias and `--tpl-dir`; the two collection listings `views` and `routines` | 18 | 1.933–2.506 → 1.930–2.511 ms | within 0.016 ms | 0.023 ms |
+| cached `schema tables` (text, alias, `--pattern`) and compact `--format json`; compact `schema dump` | 5 | 7.61–13.59 → 7.63–13.57 ms | within 0.077 ms | 0.088 ms |
+| **pretty whole reads**: `schema dump --pretty`, `schema tables --format json --pretty` | 2 | 16.14–17.66 → 13.88–15.02 ms | **−2.27 and −2.64 ms (−14%), `#245`** | 0.055 ms |
+| direct reads, `--direct --no-cache`, every `schema` leaf | 9 | 11.55–25.98 → 11.38–25.87 ms | within 0.17 ms | 0.093 ms |
+| **whole store writes**: `cache load`, the `66` with the server up, `schema dump --direct` | 3 | 64.2–66.8 → 30.5–32.9 ms | **−33.7 to −33.9 ms (−51% to −53%), `#244`** | 0.094 ms |
+| `cache load --table` | 1 | 23.31 → 23.00 ms | −0.31 ms, 2.8 times its A/A; `#244`'s two unchanged objects | 0.111 ms |
+| **cached renders bound to one object**: `example` with `-vvv`, `-q`, `--timeout`, `--set` and without, `rust/struct` on the first table, `--view`, `--routine` | 8 | 11.13–11.86 → 2.32–3.03 ms | **−8.76 to −8.87 ms (−74% to −79%), `#246`** | 0.021 ms |
+| cached `rust/struct` on the last table | 1 | 12.40 → 11.67 ms | −0.73 ms (−5.9%): `#246`'s saving, mostly spent again by the new row | 0.042 ms |
+| cached whole-database renders: `rust/schema`, `probe/whole_json`, `probe/whole_walk` | 3 | 17.72 / 26.18 / 105.04 → 17.05 / 26.64 / 105.47 ms | −0.67, **+0.46** and +0.43 ms | 0.324 ms |
+| `--context` renders, file and standard input | 5 | 8.08–22.74 → 8.07–22.72 ms | within 0.049 ms | 0.088 ms |
+| direct renders | 6 | 23.54–38.39 → 23.46–38.42 ms | within 0.10 ms | 0.112 ms |
+| a miss found before the render, `rmiss_bound` | 1 | 70.06 → 31.30 ms | −38.8 ms: `#244`'s write and `#246`'s early miss | 0.168 ms |
+| a miss reached during the render, `rmiss_reach` | 1 | 83.70 → 67.89 ms | −15.8 ms: `#244`'s write, less `#246`'s +17.9 ms | 0.037 ms |
+| **the canonical loop**, 200 × `example` | 1 | 2 434.7 → 628.8 ms | **−1 805.8 ms (−74.2%), `#246`** | 0.7 ms |
+| the `rust/struct` loop, 200 × `rust/struct` | 1 | 2 586.0 → 1 618.1 ms | **−967.8 ms (−37.4%)** | 2.2 ms |
+
+### Results — every path, against `#243`
+
+Medians; `rsd` is of `now`. A change is in bold where it is at least 0.1 ms and
+more than twice the A/A difference of its label. `<w>` is the scratch work
+directory. The heap is `dhat`'s, one run: total allocated, and held at the
+peak. Peak RSS is `/usr/bin/time -l`, median of 7 per arm.
+
+| label | invocation | exit | `b243` | `now` | change | A/A | `now` rsd | heap total / at peak, `now` | peak RSS, `b243` → `now` |
+|---|---|---|---|---|---|---|---|---|---|
+| `version` | `tpl --version` | 0 | 1.723 ms | **1.725 ms** | +0.002 ms | 0.004 ms | 3.32% | 372 219 / 260 186 B | 2.62 → 2.59 MiB |
+| `version_V` | `tpl -V` | 0 | 1.721 ms | **1.718 ms** | −0.003 ms | 0.001 ms | 2.62% | 372 205 / 260 172 B | — |
+| `version_cmd` | `tpl version` | 0 | 1.738 ms | **1.736 ms** | −0.003 ms | 0.003 ms | 2.48% | 379 201 / 262 460 B | — |
+| `bare` | `tpl` | 0 | 1.835 ms | **1.839 ms** | +0.004 ms | 0.005 ms | 2.57% | 665 139 / 259 211 B | — |
+| `help` | `tpl --help` | 0 | 1.843 ms | **1.840 ms** | −0.002 ms | 0.005 ms | 2.52% | 666 227 / 260 177 B | 2.97 → 3.00 MiB |
+| `help_h` | `tpl -h` | 0 | 1.839 ms | **1.843 ms** | +0.005 ms | 0.007 ms | 2.64% | 666 219 / 260 169 B | — |
+| `help_cmd` | `tpl help` | 0 | 1.864 ms | **1.864 ms** | +0.001 ms | 0.007 ms | 2.54% | 676 517 / 264 084 B | — |
+| `helpjson` | `tpl help --format json` | 0 | 1.933 ms | **1.941 ms** | +0.008 ms | 0.003 ms | 2.26% | 738 383 / 264 156 B | — |
+| `helpjson_p` | `tpl help --format json --pretty` | 0 | 1.996 ms | **1.972 ms** | −0.025 ms | 0.009 ms | 2.50% | 739 558 / 264 673 B | 3.06 → 3.17 MiB |
+| `helppath` | `tpl help schema table` | 0 | 1.853 ms | **1.861 ms** | +0.008 ms | 0.003 ms | 2.80% | 668 018 / 264 704 B | — |
+| `helppathjson` | `tpl help schema table --format json` | 0 | 1.820 ms | **1.818 ms** | −0.002 ms | 0.009 ms | 2.36% | 658 550 / 264 824 B | — |
+| `nodehelp` | `tpl schema table --help` | 0 | 1.988 ms | **1.991 ms** | +0.002 ms | 0.010 ms | 2.34% | 1 402 971 / 670 751 B | 3.66 → 3.64 MiB |
+| `g_schema` | `tpl schema` | 0 | 1.838 ms | **1.843 ms** | +0.005 ms | 0.004 ms | 2.32% | 766 046 / 332 393 B | — |
+| `g_template` | `tpl template` | 0 | 1.827 ms | **1.825 ms** | −0.002 ms | 0.003 ms | 3.57% | 701 957 / 295 031 B | — |
+| `g_cache` | `tpl cache` | 0 | 1.839 ms | **1.816 ms** | −0.023 ms | 0.007 ms | 2.44% | 697 987 / 291 680 B | — |
+| `g_cfg` | `tpl cfg` | 0 | 1.827 ms | **1.834 ms** | +0.007 ms | 0.000 ms | 2.91% | 722 501 / 307 934 B | — |
+| `g_cfgdb` | `tpl cfg database` | 0 | 1.840 ms | **1.853 ms** | +0.013 ms | 0.007 ms | 4.00% | 838 535 / 374 562 B | — |
+| `g_cfgdb_alias` | `tpl cfg db` | 0 | 1.853 ms | **1.856 ms** | +0.003 ms | 0.005 ms | 2.67% | 838 523 / 374 550 B | — |
+| `fail64` | `tpl -d bench_wl001 schema table accrual --no-such-flag` | 64 | 1.761 ms | **1.762 ms** | +0.001 ms | 0.000 ms | 2.58% | 478 252 / 329 994 B | — |
+| `fail64_cmd` | `tpl schemx` | 64 | 1.723 ms | **1.717 ms** | −0.006 ms | 0.002 ms | 2.94% | 358 075 / 256 301 B | — |
+| `fail78_noproj` | `tpl schema tables` | 78 | 1.858 ms | **1.884 ms** | +0.026 ms | 0.022 ms | 3.67% | 502 204 / 338 578 B | — |
+| `fail69_conn` | `tpl schema tables` | 69 | 1.962 ms | **1.966 ms** | +0.004 ms | 0.012 ms | 2.61% | 561 995 / 338 578 B | 3.50 → 3.56 MiB |
+| `fail69_conn_d` | `tpl schema table accrual --direct --no-cache` | 69 | 1.973 ms | **1.971 ms** | −0.002 ms | 0.003 ms | 3.61% | 566 770 / 340 923 B | — |
+| `fail66_tpl` | `tpl template show nosuch` | 66 | 1.889 ms | **1.890 ms** | +0.001 ms | 0.000 ms | 2.59% | 442 491 / 299 951 B | — |
+| `fail66_rnd` | `tpl render nosuch` | 66 | 1.901 ms | **1.894 ms** | −0.007 ms | 0.007 ms | 2.45% | 399 695 / 265 003 B | — |
+| `fail66` | `tpl -d bench_wl001 schema table accrualx` | 66 | 64.225 ms | **30.511 ms** | **−33.714 ms, −52.5%** | 0.016 ms | 1.54% | 6 411 483 / 4 200 767 B | 8.38 → 8.78 MiB |
+| `tlist` | `tpl template list` | 0 | 1.856 ms | **1.848 ms** | −0.008 ms | 0.003 ms | 3.20% | 446 615 / 300 012 B | 3.00 → 3.00 MiB |
+| `tlistjson` | `tpl template list --format json` | 0 | 1.847 ms | **1.862 ms** | +0.015 ms | 0.008 ms | 3.22% | 447 083 / 300 108 B | — |
+| `tlist_srv` | `tpl template list` | 0 | 1.865 ms | **1.860 ms** | −0.005 ms | 0.011 ms | 2.44% | 448 460 / 300 012 B | — |
+| `tshow` | `tpl template show rust/schema` | 0 | 1.845 ms | **1.859 ms** | +0.015 ms | 0.011 ms | 4.30% | 460 441 / 299 971 B | — |
+| `tcheck` | `tpl template check rust/schema` | 0 | 1.964 ms | **1.962 ms** | −0.002 ms | 0.003 ms | 2.54% | 510 331 / 299 975 B | — |
+| `tpath` | `tpl template path rust/struct` | 0 | 1.836 ms | **1.831 ms** | −0.005 ms | 0.000 ms | 2.43% | 448 013 / 300 632 B | — |
+| `tpathjson` | `tpl template path rust/struct --format json` | 0 | 1.840 ms | **1.837 ms** | −0.003 ms | 0.001 ms | 2.42% | 448 361 / 300 752 B | — |
+| `cfglist` | `tpl cfg list` | 0 | 1.856 ms | **1.851 ms** | −0.005 ms | 0.016 ms | 2.50% | 482 092 / 312 891 B | 3.17 → 3.23 MiB |
+| `cfglistjson` | `tpl cfg list --format json` | 0 | 1.862 ms | **1.861 ms** | −0.001 ms | 0.014 ms | 2.30% | 483 913 / 312 987 B | — |
+| `cfgget` | `tpl cfg get core.database` | 0 | 1.856 ms | **1.877 ms** | +0.020 ms | 0.017 ms | 2.63% | 483 114 / 313 516 B | — |
+| `cfggetjson` | `tpl cfg get core.database --format json` | 0 | 1.862 ms | **1.865 ms** | +0.003 ms | 0.008 ms | 3.31% | 483 453 / 313 636 B | — |
+| `cfgset` | `tpl cfg set core.database bench_wl001` | 0 | 1.988 ms | **1.988 ms** | −0.000 ms | 0.003 ms | 2.28% | 496 882 / 313 759 B | — |
+| `cfgunset` | `tpl cfg unset core.query_timeout` | 0 | 1.983 ms | **1.997 ms** | +0.015 ms | 0.020 ms | 2.96% | 495 693 / 312 880 B | — |
+| `dblist` | `tpl cfg database list` | 0 | 1.880 ms | **1.874 ms** | −0.005 ms | 0.002 ms | 2.32% | 597 898 / 379 311 B | — |
+| `dblist_alias` | `tpl cfg db list` | 0 | 1.883 ms | **1.866 ms** | −0.017 ms | 0.008 ms | 2.60% | 597 886 / 379 299 B | — |
+| `dblistjson` | `tpl cfg database list --format json` | 0 | 1.872 ms | **1.879 ms** | +0.007 ms | 0.001 ms | 2.80% | 598 390 / 379 431 B | — |
+| `dbshow` | `tpl cfg database show bench_wl001` | 0 | 1.876 ms | **1.883 ms** | +0.007 ms | 0.005 ms | 2.43% | 600 108 / 379 955 B | 3.30 → 3.33 MiB |
+| `dbshowjson` | `tpl cfg database show bench_wl001 --format json` | 0 | 1.880 ms | **1.882 ms** | +0.002 ms | 0.006 ms | 2.47% | 600 120 / 380 075 B | — |
+| `dbadd` | `tpl cfg database add scratch --host 127.0.0.1 --port 13309 --user root --schema freight_wl003 --tls disabled` | 0 | 2.047 ms | **2.033 ms** | −0.014 ms | 0.003 ms | 2.18% | 629 204 / 385 137 B | 3.36 → 3.45 MiB |
+| `dbupdate` | `tpl cfg database update scratch --port 13309` | 0 | 2.028 ms | **2.021 ms** | −0.007 ms | 0.001 ms | 2.96% | 624 579 / 380 455 B | — |
+| `dbremove` | `tpl cfg database remove scratch` | 0 | 2.022 ms | **2.032 ms** | +0.010 ms | 0.009 ms | 2.84% | 620 297 / 379 284 B | — |
+| `dbtest` | `tpl cfg database test bench_wl001` | 0 | 4.006 ms | **3.959 ms** | −0.047 ms | 0.017 ms | 3.00% | 675 200 / 379 955 B | — |
+| `dbtestjson` | `tpl cfg database test bench_wl001 --format json` | 0 | 3.976 ms | **3.988 ms** | +0.013 ms | 0.001 ms | 2.90% | 675 212 / 380 075 B | — |
+| `init` | `tpl init <w>/initdir` | 0 | 2.150 ms | **2.131 ms** | −0.018 ms | 0.005 ms | 2.24% | 379 352 / 264 399 B | 2.75 → 2.75 MiB |
+| `cstatus` | `tpl -d bench_wl001 cache status` | 0 | 2.051 ms | **2.063 ms** | +0.012 ms | 0.002 ms | 2.50% | 604 443 / 298 915 B | 3.31 → 3.36 MiB |
+| `cstatusjson` | `tpl -d bench_wl001 cache status --format json` | 0 | 2.064 ms | **2.050 ms** | −0.014 ms | 0.003 ms | 2.55% | 587 744 / 299 035 B | — |
+| `cload` | `tpl -d bench_wl001 cache load` | 0 | 64.501 ms | **30.572 ms** | **−33.930 ms, −52.6%** | 0.094 ms | 1.14% | 6 337 249 / 4 199 983 B | 8.41 → 8.59 MiB |
+| `cloadtable` | `tpl -d bench_wl001 cache load --table accrual` | 0 | 23.305 ms | **22.995 ms** | **−0.309 ms, −1.3%** | 0.111 ms | 1.70% | 5 544 427 / 3 913 154 B | 8.23 → 8.19 MiB |
+| `cclean` | `tpl -d bench_wl003 cache clean` | 0 | 2.394 ms | **2.362 ms** | −0.032 ms | 0.014 ms | 4.81% | 456 081 / 297 991 B | — |
+| `ccleantable` | `tpl -d bench_wl003 cache clean --table consignment` | 0 | 2.258 ms | **2.216 ms** | −0.042 ms | 0.011 ms | 4.63% | 469 225 / 299 086 B | — |
+| `info_c` | `tpl -d bench_wl001 schema info` | 0 | 2.082 ms | **2.097 ms** | +0.014 ms | 0.009 ms | 2.74% | 657 326 / 341 734 B | 3.44 → 3.47 MiB |
+| `infojson_c` | `tpl -d bench_wl001 schema info --format json` | 0 | 2.090 ms | **2.074 ms** | −0.016 ms | 0.013 ms | 2.25% | 657 395 / 341 854 B | — |
+| `infopretty_c` | `tpl -d bench_wl001 schema info --format json --pretty` | 0 | 2.090 ms | **2.087 ms** | −0.003 ms | 0.011 ms | 2.46% | 658 570 / 342 371 B | — |
+| `tables_c` | `tpl -d bench_wl001 schema tables` | 0 | 7.613 ms | **7.690 ms** | +0.077 ms | 0.049 ms | 2.02% | 3 852 712 / 3 197 830 B | 7.14 → 7.14 MiB |
+| `tables_alias_c` | `tpl -d bench_wl001 schema tbls` | 0 | 7.667 ms | **7.652 ms** | −0.016 ms | 0.003 ms | 2.02% | 3 852 708 / 3 197 830 B | — |
+| `tablesjson_c` | `tpl -d bench_wl001 schema tables --format json` | 0 | 12.532 ms | **12.567 ms** | +0.036 ms | 0.030 ms | 1.92% | 11 616 766 / 8 139 408 B | 12.80 → 12.84 MiB |
+| `tablespretty_c` | `tpl -d bench_wl001 schema tables --format json --pretty` | 0 | 16.144 ms | **13.875 ms** | **−2.269 ms, −14.1%** | 0.055 ms | 1.55% | 11 617 941 / 8 139 408 B | 12.83 → 12.86 MiB |
+| `tablespat_c` | `tpl -d bench_wl001 schema tables --pattern acc%` | 0 | 7.626 ms | **7.631 ms** | +0.006 ms | 0.048 ms | 2.13% | 3 832 814 / 3 183 012 B | — |
+| `table_c` | `tpl -d bench_wl001 schema table accrual` | 0 | 1.986 ms | **2.001 ms** | +0.014 ms | 0.009 ms | 2.62% | 621 578 / 342 365 B | 3.73 → 3.80 MiB |
+| `table_alias_c` | `tpl -d bench_wl001 schema tbl accrual` | 0 | 1.987 ms | **1.982 ms** | −0.005 ms | 0.004 ms | 3.97% | 621 574 / 342 361 B | — |
+| `tablejson_c` | `tpl -d bench_wl001 schema table accrual --format json` | 0 | 1.989 ms | **1.988 ms** | −0.002 ms | 0.003 ms | 2.41% | 575 980 / 342 485 B | — |
+| `tablepretty_c` | `tpl -d bench_wl001 schema table accrual --format json --pretty` | 0 | 2.002 ms | **1.993 ms** | −0.009 ms | 0.006 ms | 2.50% | 577 155 / 343 002 B | — |
+| `table3_c` | `tpl -d bench_wl003 schema table consignment` | 0 | 1.968 ms | **1.981 ms** | +0.013 ms | 0.018 ms | 2.44% | 849 845 / 342 381 B | — |
+| `views_c` | `tpl -d bench_wl001 schema views` | 0 | 2.304 ms | **2.302 ms** | −0.002 ms | 0.010 ms | 2.15% | 606 942 / 341 801 B | — |
+| `views_alias_c` | `tpl -d bench_wl001 schema vws` | 0 | 2.297 ms | **2.313 ms** | +0.016 ms | 0.014 ms | 2.47% | 606 938 / 341 797 B | — |
+| `viewsjson_c` | `tpl -d bench_wl001 schema views --format json` | 0 | 2.302 ms | **2.301 ms** | −0.001 ms | 0.009 ms | 2.97% | 604 330 / 341 921 B | — |
+| `view_c` | `tpl -d bench_wl001 schema view v_booking_line_summary` | 0 | 1.937 ms | **1.930 ms** | −0.007 ms | 0.009 ms | 2.41% | 541 644 / 342 422 B | 3.50 → 3.52 MiB |
+| `view_alias_c` | `tpl -d bench_wl001 schema vw v_booking_line_summary` | 0 | 1.933 ms | **1.933 ms** | +0.001 ms | 0.005 ms | 2.38% | 541 640 / 342 418 B | — |
+| `routines_c` | `tpl -d bench_wl001 schema routines` | 0 | 2.486 ms | **2.475 ms** | −0.010 ms | 0.005 ms | 1.85% | 734 131 / 341 810 B | — |
+| `routines_alias_c` | `tpl -d bench_wl001 schema rtns` | 0 | 2.476 ms | **2.480 ms** | +0.004 ms | 0.006 ms | 2.30% | 734 123 / 341 802 B | — |
+| `routinesjson_c` | `tpl -d bench_wl001 schema routines --format json` | 0 | 2.506 ms | **2.511 ms** | +0.005 ms | 0.005 ms | 2.60% | 729 519 / 341 930 B | — |
+| `routine_c` | `tpl -d bench_wl001 schema routine fn_consignment_hazard_count` | 0 | 2.481 ms | **2.478 ms** | −0.003 ms | 0.010 ms | 1.97% | 739 205 / 342 451 B | 3.84 → 3.86 MiB |
+| `routine_alias_c` | `tpl -d bench_wl001 schema rtn fn_consignment_hazard_count` | 0 | 2.477 ms | **2.493 ms** | +0.016 ms | 0.023 ms | 3.44% | 739 197 / 342 443 B | — |
+| `dump_c` | `tpl -d bench_wl001 schema dump` | 0 | 13.590 ms | **13.574 ms** | −0.016 ms | 0.088 ms | 1.51% | 11 869 590 / 8 224 312 B | 13.11 → 13.14 MiB |
+| `dumppretty_c` | `tpl -d bench_wl001 schema dump --pretty` | 0 | 17.659 ms | **15.019 ms** | **−2.640 ms, −14.9%** | 0.019 ms | 1.40% | 11 872 845 / 8 224 312 B | 13.12 → 13.19 MiB |
+| `tpldir_c` | `tpl --tpl-dir <w>/server/.tpl -d bench_wl001 schema table accrual` | 0 | 1.996 ms | **1.994 ms** | −0.002 ms | 0.002 ms | 2.32% | 626 804 / 344 174 B | — |
+| `info_d` | `tpl -d bench_wl001 schema info --direct --no-cache` | 0 | 23.383 ms | **23.323 ms** | −0.060 ms | 0.059 ms | 1.53% | 5 563 309 / 3 884 483 B | — |
+| `tables_d` | `tpl -d bench_wl001 schema tables --direct --no-cache` | 0 | 23.461 ms | **23.474 ms** | +0.014 ms | 0.092 ms | 1.66% | 5 601 696 / 3 922 760 B | — |
+| `table_d` | `tpl -d bench_wl001 schema table accrual --direct --no-cache` | 0 | 23.452 ms | **23.411 ms** | −0.041 ms | 0.079 ms | 2.20% | 5 610 178 / 3 887 643 B | 8.45 → 8.34 MiB |
+| `table3_d` | `tpl -d bench_wl003 schema table consignment --direct --no-cache` | 0 | 11.549 ms | **11.382 ms** | −0.167 ms | 0.093 ms | 2.53% | 820 031 / 343 229 B | — |
+| `views_d` | `tpl -d bench_wl001 schema views --direct --no-cache` | 0 | 23.295 ms | **23.377 ms** | +0.081 ms | 0.009 ms | 1.56% | 5 566 307 / 3 887 378 B | — |
+| `view_d` | `tpl -d bench_wl001 schema view v_booking_line_summary --direct --no-cache` | 0 | 23.381 ms | **23.398 ms** | +0.017 ms | 0.045 ms | 1.57% | 5 564 686 / 3 884 472 B | — |
+| `routines_d` | `tpl -d bench_wl001 schema routines --direct --no-cache` | 0 | 23.348 ms | **23.371 ms** | +0.023 ms | 0.001 ms | 1.40% | 5 568 408 / 3 889 458 B | — |
+| `routine_d` | `tpl -d bench_wl001 schema routine fn_consignment_hazard_count --direct --no-cache` | 0 | 23.308 ms | **23.268 ms** | −0.040 ms | 0.066 ms | 2.01% | 5 573 322 / 3 884 865 B | — |
+| `dump_d` | `tpl -d bench_wl001 schema dump --direct --no-cache` | 0 | 25.976 ms | **25.865 ms** | **−0.111 ms, −0.4%** | 0.041 ms | 1.86% | 5 561 638 / 3 884 010 B | 8.23 → 8.28 MiB |
+| `dump_dw` | `tpl -d bench_wl001 schema dump --direct` | 0 | 66.811 ms | **32.928 ms** | **−33.883 ms, −50.7%** | 0.066 ms | 1.41% | 6 415 005 / 4 200 751 B | — |
+| `rexample_c` | `tpl -d bench_wl001 render example --table accrual` | 0 | 11.279 ms | **2.405 ms** | **−8.873 ms, −78.7%** | 0.015 ms | 2.39% | 762 108 / 269 312 B | 13.69 → 4.48 MiB |
+| `rexample_vvv_c` | `tpl -vvv -d bench_wl001 render example --table accrual` | 0 | 11.247 ms | **2.404 ms** | **−8.843 ms, −78.6%** | 0.007 ms | 2.13% | 764 822 / 270 157 B | — |
+| `rexample_q_c` | `tpl -q -d bench_wl001 render example --table accrual` | 0 | 11.162 ms | **2.401 ms** | **−8.761 ms, −78.5%** | 0.021 ms | 2.60% | 762 828 / 269 623 B | — |
+| `rexample_to_c` | `tpl --timeout 30 -d bench_wl001 render example --table accrual` | 0 | 11.236 ms | **2.408 ms** | **−8.828 ms, −78.6%** | 0.005 ms | 2.12% | 764 825 / 270 395 B | — |
+| `rexample_set_c` | `tpl -d bench_wl001 render example --table accrual --set title=Accrual` | 0 | 11.238 ms | **2.394 ms** | **−8.844 ms, −78.7%** | 0.013 ms | 2.23% | 764 449 / 269 958 B | — |
+| `rstruct_c` | `tpl -d bench_wl001 render rust/struct --table accrual` | 0 | 11.862 ms | **3.032 ms** | **−8.830 ms, −74.4%** | 0.004 ms | 1.66% | 2 249 423 / 410 201 B | 14.12 → 4.92 MiB |
+| `rschema_c` | `tpl -d bench_wl001 render rust/schema` | 0 | 17.720 ms | **17.049 ms** | **−0.671 ms, −3.8%** | 0.071 ms | 1.71% | 30 380 819 / 8 512 524 B | 14.16 → 13.97 MiB |
+| `rview_c` | `tpl -d bench_wl001 render probe/view --view v_booking_line_summary` | 0 | 11.130 ms | **2.320 ms** | **−8.809 ms, −79.2%** | 0.004 ms | 2.41% | 658 018 / 269 381 B | 13.53 → 4.05 MiB |
+| `rroutine_c` | `tpl -d bench_wl001 render probe/routine --routine fn_consignment_hazard_count` | 0 | 11.189 ms | **2.318 ms** | **−8.871 ms, −79.3%** | 0.011 ms | 2.91% | 659 409 / 269 422 B | 13.50 → 4.09 MiB |
+| `rwjson_c` | `tpl -d bench_wl001 render probe/whole_json` | 0 | 26.180 ms | **26.641 ms** | **+0.462 ms, +1.8%** | 0.059 ms | 1.13% | 48 462 722 / 34 115 196 B | 42.20 → 43.20 MiB |
+| `rwwalk_c` | `tpl -d bench_wl001 render probe/whole_walk` | 0 | 105.037 ms | **105.466 ms** | +0.429 ms | 0.324 ms | 0.89% | 824 088 933 / 29 621 960 B | 37.66 → 36.80 MiB |
+| `rexample_x` | `tpl render example --table accrual --context <w>/wl001-dump.json` | 0 | 8.089 ms | **8.123 ms** | +0.034 ms | 0.021 ms | 1.97% | 12 561 860 / 8 244 432 B | 13.36 → 13.44 MiB |
+| `rexample_xin` | `tpl render example --table accrual --context - < <w>/wl001-dump.json` | 0 | 8.200 ms | **8.215 ms** | +0.016 ms | 0.051 ms | 1.71% | 17 775 506 / 9 264 544 B | 15.25 → 15.34 MiB |
+| `rschema_x` | `tpl render rust/schema --context <w>/wl001-dump.json` | 0 | 14.519 ms | **14.470 ms** | −0.049 ms | 0.046 ms | 1.32% | 31 447 661 / 8 244 333 B | — |
+| `rview_x` | `tpl render probe/view --view v_booking_line_summary --context <w>/wl001-dump.json` | 0 | 8.079 ms | **8.066 ms** | −0.013 ms | 0.026 ms | 1.69% | 12 491 795 / 8 244 450 B | — |
+| `rwjson_x` | `tpl render probe/whole_json --context <w>/wl001-dump.json` | 0 | 22.741 ms | **22.715 ms** | −0.025 ms | 0.088 ms | 1.03% | 49 396 005 / 31 560 455 B | 41.81 → 41.81 MiB |
+| `rexample_d` | `tpl -d bench_wl001 render example --table accrual --direct --no-cache` | 0 | 23.730 ms | **23.640 ms** | −0.091 ms | 0.012 ms | 1.56% | 5 559 720 / 3 987 012 B | 8.69 → 8.77 MiB |
+| `rstruct_d` | `tpl -d bench_wl001 render rust/struct --table accrual --direct --no-cache` | 0 | 24.338 ms | **24.288 ms** | −0.050 ms | 0.022 ms | 1.70% | 7 046 997 / 4 139 195 B | — |
+| `rschema_d` | `tpl -d bench_wl001 render rust/schema --direct --no-cache` | 0 | 30.061 ms | **30.070 ms** | +0.010 ms | 0.098 ms | 1.34% | 24 447 197 / 4 234 879 B | — |
+| `rview_d` | `tpl -d bench_wl001 render probe/view --view v_booking_line_summary --direct --no-cache` | 0 | 23.556 ms | **23.455 ms** | −0.100 ms | 0.112 ms | 2.59% | 5 489 731 / 3 923 354 B | — |
+| `rroutine_d` | `tpl -d bench_wl001 render probe/routine --routine fn_consignment_hazard_count --direct --no-cache` | 0 | 23.544 ms | **23.495 ms** | −0.049 ms | 0.061 ms | 2.10% | 5 490 291 / 3 924 091 B | — |
+| `rwjson_d` | `tpl -d bench_wl001 render probe/whole_json --direct --no-cache` | 0 | 38.392 ms | **38.420 ms** | +0.027 ms | 0.099 ms | 1.29% | 42 374 183 / 29 718 239 B | 37.25 → 37.33 MiB |
+| `viewjson_c` | `tpl -d bench_wl001 schema view v_booking_line_summary --format json` | 0 | 1.940 ms | **1.943 ms** | +0.003 ms | 0.001 ms | 3.00% | 541 560 / 342 542 B | — |
+| `routinejson_c` | `tpl -d bench_wl001 schema routine fn_consignment_hazard_count --format json` | 0 | 2.485 ms | **2.479 ms** | −0.006 ms | 0.003 ms | 2.37% | 730 541 / 342 571 B | — |
+| `rstruct_last_c` | `tpl -d bench_wl001 render rust/struct --table yard_position` | 0 | 12.401 ms | **11.673 ms** | **−0.728 ms, −5.9%** | 0.042 ms | 2.12% | 14 222 619 / 8 543 872 B | 14.30 → 14.02 MiB |
+| `rmiss_reach` | `tpl -d bench_wl001 render probe/whole_json`, `tables/yard_position.json` damaged | 0 | 83.700 ms | **67.887 ms** | **−15.813 ms, −18.9%** | 0.037 ms | 0.72% | 90 726 660 / 56 124 837 B | 41.86 → 70.62 MiB |
+| `rmiss_bound` | `tpl -d bench_wl001 render example --table accrual`, `tables/accrual.json` damaged | 0 | 70.060 ms | **31.299 ms** | **−38.762 ms, −55.3%** | 0.168 ms | 1.16% | 6 619 898 / 4 314 745 B | 13.38 → 9.50 MiB |
+
+The two loops (12 samples per arm):
+
+| label | `b243` | `now` | change | A/A | `now` rsd | per-round change |
+|---|---|---|---|---|---|---|
+| loop, 200 × `example` | 2 434.7 ms | **628.8 ms** | **−1 805.8 ms, −74.2%** | 0.7 ms | 2.69% | −1 812.9 to −1 749.7 ms |
+| `loop_struct`, 200 × `rust/struct` | 2 586.0 ms | **1 618.1 ms** | **−967.8 ms, −37.4%** | 2.2 ms | 0.72% | −1 018.4 to −951.9 ms |
+
+**Output identity**, before any timing. Every label was run once with `now` and
+once with `b243`, and stdout, stderr and the exit code compared: all 119
+matched except the `loaded_at` of the two `cache status` forms, which records
+the last write, and the stderr of `-vvv`, which reports the render's duration.
+
+### Results — the experiments
+
+Copies of `git archive ba10788`, one change each, each built into its own
+target directory from a path of the same length:
+
+| variant | the one change | binary |
+|---|---|---|
+| `ctl247` | none: the arm every variant is compared with | 4 017 024 B, sha256 `1adaa747…3ad8` |
+| `lkp247` | `lookup::member`, `src/render/lookup.rs:60`, answers a lookup in `tables` from the `table` variable when that variable is a table carrying the name sought, before scanning `database.tables`. **An instrument**: it covers the bound table only, which is every lookup the worked templates make under `--table` | 4 017 024 B, sha256 `b64a41ba…652c` |
+| `buf247` | `BufWriter::with_capacity(64 * 1024, …)` in place of `BufWriter::new`, `src/output/writer.rs:191` | 4 017 024 B, sha256 `320ace09…b236` |
+
+Every variant matched `ctl247` on all 119 labels, as `now` matched `b243`.
+`lkp247` was also compared with `ctl247` over every worked template of
+`examples/*/templates/` (`go/`, `node/`, `python/`, `rust/`) and `example`, 19
+in all, each rendered bound to every table of `WL-001` and unbound: 3 819
+invocations, stdout, stderr and the exit code identical on every one (3 806
+exit `0`, 13 exit `65`).
+
+One rotated campaign of the main campaign's shape over four arms — `ctl247`,
+`lkp247`, `buf247`, `ctl247_twin` — on 12 labels, 320 samples per arm and
+label, and the `rust/struct` loop over `ctl247`, `lkp247` and `ctl247_twin`,
+12 samples per arm. Each variant against `ctl247`:
+
+| label | `ctl247` | variant | change | A/A of `ctl247` | per-round change |
+|---|---|---|---|---|---|
+| **`lkp247`**, the bound table answered without a scan | | | | | |
+| `rstruct_last_c` | 11.408 ms | 3.365 ms | **−8.043 ms, −70.5%** | 0.031 ms | −8.213 to −7.918 ms |
+| `loop_struct` | 1 604.9 ms | 785.6 ms | **−819.3 ms, −51.0%** | 4.9 ms | −826.8 to −809.2 ms |
+| `rstruct_c`, the first table: the scan stops at once | 3.013 ms | 3.002 ms | −0.011 ms | 0.014 ms | −0.041 to +0.052 ms |
+| `rexample_c`, no lookup | 2.354 ms | 2.356 ms | +0.003 ms | 0.007 ms | −0.036 to +0.024 ms |
+| `rschema_c`, not bound | 16.754 ms | 16.704 ms | −0.050 ms | 0.019 ms | −0.359 to +0.246 ms |
+| **`buf247`**, a 64 KiB output buffer | | | | | |
+| `dumppretty_c`, 7.2 MB out | 14.698 ms | 14.050 ms | **−0.648 ms, −4.4%** | 0.024 ms | −0.895 to −0.310 ms |
+| `tablespretty_c`, 6.7 MB out | 13.692 ms | 13.137 ms | **−0.555 ms, −4.1%** | 0.046 ms | −0.732 to −0.374 ms |
+| `dump_c`, 3.18 MB out | 13.274 ms | 13.154 ms | −0.120 ms, −0.9% | 0.006 ms | −0.326 to +0.025 ms |
+| `tablesjson_c` | 12.302 ms | 12.200 ms | −0.102 ms, −0.8% | 0.015 ms | −0.307 to +0.110 ms |
+| `rwjson_c`, 3.18 MB out through `emit_verbatim` | 26.392 ms | 26.544 ms | +0.151 ms | 0.023 ms | −0.617 to +0.395 ms |
+| `helpjson_p`, 130 kB out | 1.948 ms | 1.942 ms | −0.006 ms | 0.003 ms | −0.028 to +0.029 ms |
+| `table_c`, `rexample_x`, controls | 1.965 / 7.992 ms | 1.973 / 7.999 ms | +0.008 / +0.007 ms | 0.012 / 0.029 ms | inside ±0.21 ms |
+
+- **`lkp247` is an upper bound on row 1, not a design.** It removes the scan
+  only where the name sought is the bound table's; a template that resolves
+  another table by name still scans. It measures the cost of reading and
+  decoding the files of the tables listed before the one sought: 8.0 ms for
+  199 tables, about 40 µs per table, and on the loop, whose table positions are
+  0 to 199, 819 ms over 200 renders, about 4.1 ms per render on average.
+  `rstruct_c` binds the first table, so its scan stops at once and it gains
+  nothing.
+- **`buf247` is established on the pretty whole reads only.** Every round moved
+  both by 13 to 40 times their A/A. On the compact dump and the compact table
+  listing the median moved by −0.10 to −0.12 ms, but at least one round of eight moved
+  the other way, so it is not established there. On `probe/whole_json` it is
+  inside the per-round spread.
+
+### Where the remaining cost goes
+
+Shares of on-CPU samples of `now`'s code in a symbolised build of `ba10788`
+(`debug = true`, `strip = false`), `samply` at 20 kHz; inclusive, so they
+overlap. A figure in milliseconds is a share multiplied by the median of
+`now`: an estimate, and an upper bound. Folded stacks of the five profiles
+named *flame graph* below are in the scratch directory, and `samply load` on
+each `.json.gz` renders its flame graph.
+
+**The start-up floor is measured, not estimated.** An empty `fn main() {}`
+under the release profile, `nop`, run rotated with three labels in one further
+campaign (320 samples each):
+
+| label | median | above `nop` |
+|---|---|---|
+| `nop`, the process-spawn floor: `exec`, `dyld`, and nothing of `tpl` | 1.301 ms (A/A 0.011 ms) | — |
+| `version` | 1.692 ms | 0.391 ms: the parser tree, 83.4% of its samples in `clap` |
+| `table_c` | 1.960 ms | 0.659 ms |
+| `rexample_c` | 2.348 ms | 1.047 ms |
+
+- **A cached render bound to one object, `rexample_c` (2.405 ms; flame
+  graph).** 1.30 ms of it is the spawn floor. Of the samples: the three
+  directory listings of `FR-CACHE-038`, `tpl::cache::shelve`, 27.0% — the
+  `getdirentries` and directory `open` calls 14.6%, and the 12.4% above them
+  building a `Shelf` per entry, joining its path (3.0%) and sorting the members
+  (2.3%); the parser tree 13.6%; project discovery and configuration 12.6%
+  (a `canonicalize` 3.1%); the template's path resolution, `Root::find`, 8.1%
+  (a `canonicalize` 7.3%); the render 15.9%, of which loading and compiling the
+  template 6.2%; the bound table's read, decode and conversion 7.3%; `malloc`
+  19.6% self. The render deadline's timer thread is 5.1% of the samples, on
+  another core. The profile of the canonical loop driven by a child-following
+  driver (`loop_example`; flame graph) has the same shape: within 0.8 points on
+  each of those rows but the parser tree, 10.5% against 13.6%.
+- **`rust/struct` bound to the last table, `rstruct_last_c` (11.673 ms; flame
+  graph).** `lookup::member` is 82.6%, and the 199 table files it reads, `Shelf`
+  reads and decodes, 53.1%. The `rust/struct` loop (`loop_struct`; flame graph)
+  is 72.3% `lookup::member`. That is row 1.
+- **`probe/whole_json` from the cache, `rwjson_c` (26.641 ms, +0.46 ms against
+  `b243`; flame graph).** Against a profile of `#243`'s code on the same label:
+  4.1% more samples in all, and the `open` system call's self share 14.20%
+  against 12.62%, which is about half the extra samples. The files are opened
+  one at a time, interleaved with the render, where `#243`'s code opened them
+  all before it; that the interleaving costs the extra `open` time is
+  **hypothesised, not established**. `FR-CACHE-038` forbids reading a file
+  before the template reaches it.
+- **A miss reached during the render, `rmiss_reach` (67.887 ms).** The render
+  it abandons reads 199 files and converts them before it reaches the damaged
+  one, then the server is read, the store written and the render made again, as
+  `FR-CACHE-039` requires. Its peak resident memory is 70.62 MiB against
+  41.86 MiB for `b243`: the abandoned render's context is released through
+  `Ending::release`, `src/cli/render.rs:611`, which leaks it for the process
+  exit, so it is still held while the second render runs.
+- **The cached dumps, `dump_c` (13.574 ms) and `dumppretty_c` (15.019 ms).**
+  Reading is 33.4% and 30.2% (`open` 24.0% and 22.0%), decoding
+  (`Loaded::document`) 43.2% and 38.6%, serialising 21.3% and 29.3%. The
+  `write` calls are 1.15% and 4.66%: row 2, which `buf247` measured.
+- **A `--context` render, `rexample_x` (8.123 ms).** `model::document::read`
+  is 88.2%; `finish_grow` 7.2%.
+- **Allocation.** A bound cached render now allocates 762 108 B and holds
+  269 312 B at its peak, against 11 848 144 B and 8 309 594 B at `#243`.
+  `rstruct_last_c` allocates 14 222 619 B and holds 8 543 872 B, the 199 tables
+  its lookup decodes. `rexample_xin` still allocates 5 213 646 B more than
+  `rexample_x` and holds 1 020 112 B more.
+
+### The waste register, sorted by estimated gain
+
+Effort is `#231`'s: `S` (one function, no interface change), `M` (a new code
+path or a hand-written serde implementation), `L` (a new abstraction across
+modules). "Established" means a single-variable experiment above measured the
+gain; "estimate" means a profile share multiplied by a measured median, an
+upper bound unless stated otherwise. `#243`'s rows 1, 2 and 4 were applied by
+`#246`, `#244` and `#245` and are confirmed above; its rows 3, 5, 6, 7 and 8 are
+restated here with this pass's figures.
+
+| # | Path | Evidence | Cause in code | Why it is vacuous for the command | Estimated gain | Effort | Functional risk |
+|---|---|---|---|---|---|---|---|
+| 1 (new) | A cached render that resolves a table by name: `is primary_key`, `is unique`, `column()`, `table()` — eight of the worked templates of `examples/`: `go/struct`, `go/sql`, `node/model`, `node/mysql2`, `python/dataclass`, `python/pymysql`, `rust/struct`, `rust/sqlx` | `lkp247` −8.04 ms on `rstruct_last_c` (A/A 0.031 ms); −819.3 ms (−51.0%) on `loop_struct` (A/A 4.9 ms); `lookup::member` 82.6% of `rstruct_last_c`'s samples and 72.3% of the loop's | The linear scan `members.try_iter().ok()?.find(…)`, `src/render/lookup.rs:63`, reads each member it passes through `Members::convert`, `src/cli/render/context/lazy.rs:517`, and `Store::table`, `:285`, which reads, validates and decodes its file | The member sought is found by the name its path already holds; the files of the members passed are read only to compare their names, and for a lookup of the bound table the member is already read | **−8.0 ms (−70%) per render bound to the last of 200 tables, and −819 ms (−51%) on a 200-render `rust/struct` loop, established as an upper bound**; about 40 µs per table listed before the one sought. None on the canonical loop | `S` for the bound table; `M` for a lookup by the listing's names | `FR-CACHE-038` reads a file "the first time the template reaches that object", and `lazy.rs:48`–`51` records *reading a member's name from the listing* as rejected because it reads "reaches" loosely. Whether a lookup by name reaches the members it passes — and so whether a damaged file listed earlier must still abandon the render under `FR-CACHE-039` — is a question for the specification. `FR-ENV-015`, `FR-ENV-020` and `FR-CTX-022` fix what the lookup answers, not how |
+| 2 (`#243` row 3) | The compact `schema dump` and `schema tables --format json`, from the cache | Unchanged: 13.574 and 12.567 ms; decode 43.2% and read 33.4% of `dump_c` | `Loaded::document`, `src/cache.rs:175`, over `Cache::everything`, `:609`, and the presentation reached from `src/cli/schema.rs:543` | As `#240` stated | ≈ −5 to −6 ms per compact cached whole read, estimate, as `#240` stated; not in either loop | `M`–`L` | As `#240` stated |
+| 3 (`#243` row 6) | Whole reads written to stdout, `--pretty` above all | `buf247` −0.648 ms on `dumppretty_c` and −0.555 ms on `tablespretty_c` (A/A 0.024 and 0.046 ms); −0.10 to −0.12 ms on the compact forms, not established | `BufWriter::new(Tracked::new(stream))`, `src/output/writer.rs:191`: 8 KiB, about 880 `write` calls for the 7.2 MB pretty dump | A larger buffer issues fewer `write` calls for the same bytes | **−0.55 to −0.65 ms per pretty whole read (−4%), established**; ≤ −0.12 ms per compact whole read, not established; nothing on one object or on `help` | `S` | None to the bytes. A consumer that closes the stream early is detected after up to 64 KiB instead of 8 KiB (`FR-ERR-025`); the outcome is the same |
+| 4 (new) | Every cached render, bound or not; the canonical loop | `tpl::cache::shelve` 27.0% of `rexample_c`'s samples: the listing system calls 14.6%, and 12.4% above them | `shelve`, `src/cache.rs:1081`: a `PathBuf` and a `String` per entry, a `Vec` grown from empty, and `order::sort_by_name` | The listing is required; the per-entry allocations and the growth are not | ≤ −0.30 ms per bound cached render (12.4% of 2.405 ms), and ≤ −78 ms on the canonical loop (12.4% of 628.8 ms), estimate, upper bound. Not an experiment | `S`–`M` | `FR-CACHE-038` requires the listing of each collection before the render; `NFR-DET-002` requires the order, so the sort stays |
+| 5 (`#243` row 5) | Every decode of the store and of a `--context` document | `finish_grow` 7.2% of `rexample_x`, 4.9% of `dump_c`, 5.9% of `rexample_c` (2.9 points of it inside `shelve`, row 4) | `serde`'s sequence visitor grows each `Vec` from empty: `columns`, `src/model/document/shape.rs:179`, and the other collections of the shape | The reallocations copy what the final vector holds | ≤ −0.58 ms per `--context` render, ≤ −0.66 ms per cached dump, ≤ −0.07 ms per bound cached render beyond row 4, estimate, upper bound | `M` | None |
+| 6 (`#243` row 7, `#242` row 2a) | The `--context` render | Unchanged: `model::document::read`, `src/model/document.rs:137`, 88.2% of `rexample_x` | As `#242` stated | As `#242` stated | ≤ −0.54 ms per `--context` render, estimate, as `#242` stated | `M` | As `#242` stated |
+| 7 (new) | A cached render that reads the whole database | `rwjson_c` +0.462 ms (+1.8%) against `b243`, A/A 0.059 ms; `rwwalk_c` +0.43 ms inside its A/A of 0.32 ms | Hypothesised: the files opened one at a time during the render, `open` 14.20% of the samples against 12.62% at `#243` | Not attributed | ≤ −0.46 ms per whole-database cached render, estimate; nothing on a bound render | `M` | If the hypothesis holds, the cost is `FR-CACHE-038`'s, which forbids reading a file before the template reaches it |
+| 8 (new) | A miss reached during the render | `rmiss_reach` 67.887 ms and 70.62 MiB peak, against 41.86 MiB for `b243`; `#246` measured +17.9 ms against the up-front read | The abandoned render's work before the miss; its context released through `Ending::release`, `src/cli/render.rs:611`, which leaks it until the process exits | The time is the work `FR-CACHE-039` abandons; the 28.8 MiB is held while the second render runs | Time: none reducible without reading up front, which `FR-CACHE-038` forbids. Memory: ≈ −28.8 MiB at the peak by freeing the abandoned context, estimate; its time not measured | `S` for the memory | `FR-CACHE-039` requires the abandon and the restart. Only a damaged cache reaches this path |
+| 9 (`#243` row 8) | `render --context -` | +0.092 ms against the same document from a file (A/A 0.051 and 0.021 ms); +5 213 646 B allocated, +1 020 112 B at the peak | `Vec::new()` and `read_to_end`, `src/cli/render.rs:782`–`785` | The growth from empty reallocates for a document whose size a redirected file states | **At the floor in time, established in bytes** | `S` | None |
+
+### The verdict: does the campaign stop?
+
+The floor of this pass: 0.000 to 0.023 ms on a start-up-class invocation, up
+to 0.088 ms on a cached read or render, up to 0.112 ms on a direct read or
+render, 0.7 ms (0.1%) on the canonical loop and 2.2 ms (0.1%) on the
+`rust/struct` loop. **Start-up floor and code are distinguished**: 1.301 ms of
+every invocation is the spawn floor (`nop`: `exec` and `dyld`), which no change
+to `tpl`'s code reaches. Above it, 0.39 ms is the parser tree every invocation
+builds, 83% `clap`; `#240`'s rows 5 and 6 found at most 0.08 ms of it
+removable, and the rest is the parser the stack names. Everything else in the
+register is code.
+
+| # | Gain against its own invocation | Against a loop | Worth a further round? |
+|---|---|---|---|
+| 1 | 70% of `rust/struct` bound to the last table; 259 times its A/A | 51% of the `rust/struct` loop, 167 times its A/A; none on the canonical loop | **Yes — after the specification.** It is the largest established item, on the path eight of the worked templates of `examples/` take. The first step is `specification-manager`, on what "reaches" means for a lookup |
+| 2 | ≈ 40% of a compact cached dump, estimate | none | **Yes**, as `#240` stated; still an estimate after four passes |
+| 3 | 4% of a pretty whole read; 13 to 40 times its A/A in every round | none | **Marginal.** Established and `S`, but 0.6 ms on a 14 ms command |
+| 4 | ≤ 12% of a bound cached render, estimate | ≤ 12% of the canonical loop, estimate | **Only after an experiment.** It is the largest candidate left on the canonical loop, and an upper bound |
+| 5 | ≤ 7% of a `--context` render, estimate | ≤ 3% of the canonical loop, inside row 4 | **Only after an experiment** |
+| 6 | ≤ 6.6% of a `--context` render, estimate | none | **Marginal**, as `#242` left it |
+| 7 | ≤ 1.8% of a whole-database render | none | **No.** Unattributed, and likely required by `FR-CACHE-038` |
+| 8 | memory only, on a damaged cache | none | **No** for time, which `FR-CACHE-039` requires; the memory is a question of taste on a path only a damaged store reaches |
+| 9 | at the floor | none | **No.** Insignificant |
+
+**The campaign does not stop.** Its largest remaining gain, row 1, is 70% of
+the invocation it affects and 51% of a 200-render loop over the worked
+`rust/struct` template — 259 and 167 times the noise floors of those
+commands — and it is neither start-up floor nor a cost the specification
+requires as it stands. **For the canonical loop the campaign is close to
+stopping**: 2.35 ms per render, of which 1.30 ms is the spawn floor and
+0.39 ms the parser tree, and the largest candidate left there, row 4, is an
+estimate of at most 0.30 ms. **It stops for every other path**: start-up, help
+and version in all their forms, the error paths, discovery, the `cfg` and
+`template` commands and every configuration write, `init`, `cache status` and
+`cache clean`, the single-object and listing reads in both forms and through
+every alias, the direct reads and renders, and the whole store writes. Each
+candidate left there is at or below the floor, or is a cost the specification
+requires.
+
+### Refuted hypotheses and non-findings, stated so they are not rediscovered
+
+- **The render deadline's timer thread is not a wall-time cost.** Its samples,
+  5.1% of `rexample_c`'s, are on another core; creating it is 0.8%.
+- **`rust/struct` bound to the first table pays nothing for the lookup**:
+  `lkp247` moved `rstruct_c` by −0.011 ms against an A/A of 0.014 ms. The cost
+  is in proportion to the position of the table in the listing.
+- **The canonical loop does not reach row 1**: `example` makes no lookup, and
+  `lkp247` moved `rexample_c` by +0.003 ms.
+- **The seven aliases are still their canonical commands**, within 0.019 ms on
+  the start-up-class labels and 0.038 ms on `schema tables`.
+- **The `json` form of every command other than the whole reads still costs
+  what its `text` form costs**, within 0.043 ms (`help schema table`, whose
+  `json` form is the faster).
+- **`-vvv`, `-q`, `--timeout` and `--set` still add nothing measurable** to a
+  cached render: 2.394 to 2.408 ms against 2.405 ms.
+- **`#244` reaches `cache load --table`**: −0.31 ms, 2.8 times its A/A, two
+  unchanged objects left in place, as `#244` measured (−0.107 ms there).
+- **Nothing on the start-up, help, configuration, template, direct-read or
+  `--context` paths moved since `#243`**, and nothing regressed but `rwjson_c`,
+  which `#246` recorded (+0.42 ms there, +0.46 ms here).
+
+### Confounders — read this before the tables
+
+- **The host was not idle.** The four containers of other projects named in
+  `#240` ran throughout. The load average was 4.04 at the start of the main
+  campaign, just after the builds, and 2.11 to 3.14 for the rest of it; 1.83 to
+  2.70 during the experiments. The rotation and the A/A arms bound this; they
+  do not remove it. `hyperfine` printed 460 warnings in the main campaign,
+  about statistical outliers or a slow first run.
+- **`b243` is `#243`'s `now` itself**, the file measured then, sha256
+  `53ed3470…ab16`, kept in the scratch directory, not a rebuild. `now` is
+  `target/release/tpl` at `ba10788`, sha256 `5f49ef9a…38fa`, `#246`'s
+  in-repository binary byte for byte.
+- **The experiments' `ctl247` is not `now`**: the same source, built from a
+  scratch path, with another sha256. It measured `rexample_c` at 2.354 ms
+  where `now` measured 2.405 ms in the main campaign. Every variant is compared
+  with it, never with `now`.
+- **The profiles of the loops were driven by a Python script**, not by
+  `benches/loop200.sh`: `bash` is a protected system binary on macOS, and
+  `samply` cannot follow its children. The script execs the same 200
+  invocations; its own samples are excluded. It ran over a primed store, so
+  unlike the timed loop it contains no first-render miss.
+- **`samply` shares carry the profiler's overhead, overlap, and are
+  function-level**; an inlined function is counted in its caller.
+- **`dhat` counts the heap only**, one run per label, through an instrumented
+  build, and is never used as time. It and the memory readings were taken
+  between campaigns, never during one.
+- **The server path crosses Docker Desktop's port proxy** (Docker 29.8.1, where
+  `#243` ran 29.5.2), and the benchmark projects authenticate as `root`
+  (`#224`). `up.sh 12.3` exited `2` on success (`#223`), and the filtered gate
+  `status.sh --quiet 12.3`, which answered `0`, was read instead.
+
+### What was not measured — stated, not implied
+
+- **Three of the four targets.** Rows 1 and 4 are file-system and allocator
+  costs, which differ by operating system.
+- **Every TLS mode**, and the series `10.11`, `11.4` and `11.8`, raised only
+  for the test suite.
+- **A lookup of a table other than the bound one**, of a view or of a routine
+  (`view()`, `routine()`), which scan their collections the same way; and
+  `lkp247`'s peak memory.
+- **Rows 2, 4, 5, 6, 7 and 8 as experiments.** They are estimates.
+- `#243`'s list of untested forms stands: a connection that times out,
+  `password_command`, the `--dsn` and TLS-file forms of `cfg database add` and
+  `update`, `cache load` and `cache clean` with `--view` or `--routine`, and
+  the `65` of a template that fails to compile or of an expired deadline.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+cargo build --release; cp target/release/tpl "$S/tpl-now"            # ba10788, the binary of record
+cp /path/to/243/tpl-now "$S/tpl-b243"                                # #243's binary of record, 53ed3470…ab16;
+#   or: git archive 7c0fdaf into "$S/src/7c0fdaf" and cargo build --release there (another sha256)
+
+# 1. The fixture, through its harness only; 12.3 alone for timing.
+./scripts/mariadb/up.sh 12.3; ./scripts/mariadb/status.sh --quiet 12.3   # read the gate, not up.sh
+./scripts/mariadb/seed-bench.sh 12.3
+
+# 2. The projects, with benches/fixture.sh's functions and tpl-now: fixture_startup_project,
+#    fixture_server_project (disabled), fixture_prime, fixture_subjects; the rust/ templates and
+#    #243's four probes copied into server; mut, dead and empty as #243's Workload table states;
+#    the --context dump with `tpl-now -d bench_wl001 schema dump`.
+
+# 3. Wall time: for round r of 8, the 119 labels rotated by r, the three arms rotated by r;
+#    40 runs after 5 warmups (A), 20 after 5 (D; 2 for init), 20 after 3 (rwwalk_c), 5 after 1 (W):
+hyperfine -N -i --warmup 5 --runs 40 --export-json "$S/c1/<label>.r<r>.json" \
+  [--prepare "<restore, or: replace one object file with '{ torn' by temporary and rename>"] \
+  [--input "$S/work/wl001-dump.json"] \
+  -n b243 "$S/tpl-b243 <args>" -n now "$S/tpl-now <args>" -n now_twin "$S/tpl-now <args>"
+#    the two loops, 4 rounds of 3 after 1, template example and then rust/struct:
+hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-now -d bench_wl001 cache clean" \
+  -n b243 "benches/loop200.sh $S/tpl-b243 bench_wl001 <template> $S/work/wl001-tables.txt" …
+
+# 4. The experiments: copies of `git archive ba10788` under paths of equal length, one edit each
+#    as the table states, each with its own --target-dir; the same rotation over
+#    (ctl247 lkp247 buf247 ctl247_twin) on 12 labels, and the rust/struct loop over
+#    (ctl247 lkp247 ctl247_twin). The identity sweep: every examples/*/templates/ template
+#    and example, bound to each of the 200 tables and unbound, run with ctl247 and lkp247.
+
+# 5. The spawn floor: an empty `fn main() {}` under the release profile, rotated with
+#    tpl-now --version, schema table accrual and render example --table accrual, 8 × 40 after 5.
+
+# 6. Profiles, allocation, memory.
+CARGO_PROFILE_RELEASE_DEBUG=true CARGO_PROFILE_RELEASE_STRIP=false \
+  cargo build --release --target-dir "$S/t-prof"                   # from the scratch copy
+samply record -s -r 20000 --iteration-count 200 --reuse-threads --unstable-presymbolicate \
+  -o "$S/prof/rexample_c.json.gz" -- "$S/t-prof/release/tpl" -d bench_wl001 render example --table accrual
+samply record -s -r 20000 --reuse-threads --unstable-presymbolicate -o "$S/prof/loop_struct.json.gz" \
+  -- python3 loopdrv.py "$S/t-prof/release/tpl" "$S/work/wl001-tables.txt" rust/struct   # one exec per table
+samply load "$S/prof/rexample_c.json.gz"                                                  # the flame graph
+/usr/bin/time -l "$S/tpl-now" -d bench_wl001 render example --table accrual >/dev/null
+
+# 7. The pipeline needs all five servers; then the fixture down, and nothing left.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
+```
