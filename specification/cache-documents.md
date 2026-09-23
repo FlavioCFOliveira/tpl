@@ -1,7 +1,7 @@
 ---
 title: Cache Documents
 status: approved
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-23
 related: [cache-commands.md, context-document.md, output-formats.md, catalogue-coverage.md]
 ---
 
@@ -178,7 +178,7 @@ Out of scope: when the cache is consulted or written, which is
   recognises that neither promise applies.
 
 - **BR-CDOC-004**: The cache is written on a miss, per `FR-CACHE-007`, one file
-  per object renamed into place, per `FR-CACHE-030`, and takes no lock, per
+  per object written as `FR-CACHE-030` requires, and takes no lock, per
   `FR-CACHE-031`. It can
   therefore legitimately hold one table read on Monday beside another read on
   Friday, and a dump assembled from it is a document that never existed on any
@@ -186,6 +186,12 @@ Out of scope: when the cache is consulted or written, which is
   consequence of a cache that changes only when it is told to, which
   `BR-CACHE-004` establishes deliberately. What was missing was the declaration,
   and `FR-CDOC-015` is it.
+
+  *Amended in the thirty-ninth edition.* The rule said each file was "renamed
+  into place". `FR-CACHE-030` now lets a file already holding byte-identical
+  content stay where it is, so the rule cites that requirement instead of
+  restating its mechanism. The argument is unchanged: a file left in place
+  holds what the fresh read would have written.
 
   *Rejected.* Caching the dump as a single document alongside the per-object
   files, which would give a cached dump the same guarantee as a live read, at

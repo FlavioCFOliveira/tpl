@@ -3680,3 +3680,142 @@ samply record -s -r 20000 --iteration-count 30 --reuse-threads --unstable-presym
 ./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
 ```
+
+## 2026-09-23 — Row 2 of the third register applied: an identical object file is left in place
+
+*Sprint 19, task `#244`. Target of record: `aarch64-apple-darwin`. Server of
+record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry records; it does
+not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+`store_object`, `src/cache.rs`, now serialises an object into a reused buffer
+and leaves the target in place where it is a regular file of mode `0600`, of
+the same length, holding the same bytes; any other target is written through
+the temporary file and the rename, as before. `meta.json` is still written on
+every load, through `store`. This is `FR-CACHE-030` as amended in the
+thirty-ninth edition.
+
+**Over an unchanged `WL-001`, every whole write of the store halves:** `cache
+load` 61.58 → 30.74 ms (−50.1%), a `66` with the server up 63.05 → 30.60 ms
+(−51.5%), `schema dump --direct` 64.47 → 33.17 ms (−48.6%). That is `#243`'s
+`skp243` reproduced on the shipped code, within 0.6 ms of each of its figures.
+**Over a store whose every object differs in its last byte, with the length
+unchanged, `cache load` is 2.52 ms slower (+4.0%)**: the worst case, where every
+file is read and compared and then rewritten. Where the lengths differ, the
+comparison is one `lstat` per file, and the change is inside the noise.
+
+### Candidates
+
+| arm | binary |
+|---|---|
+| `before` | `target/release/tpl` at `7c0fdaf`: 4 000 448 B, sha256 `53ed3470…ab16` — `#243`'s `now`, byte for byte (`7c0fdaf` changes only `BENCHMARKS.md`) |
+| `after` | `target/release/tpl` with this change: 4 000 448 B, sha256 `74c73ace…a6a2` |
+| `before_twin` | the `before` file, measured as a third label: the A/A arm |
+
+### Environment
+
+As `#243`'s: Apple M4, 10 cores, 32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0
+`arm64`; `rustc` 1.98.1 (48a229cea 2026-09-01), the release profile of
+`ADR-004`; `hyperfine` 1.20.0 (`-N`); `/usr/bin/time -l`. The fixture's `12.3`
+alone during timing, seeded by `scripts/mariadb/seed-bench.sh`, `tls =
+"disabled"`, account `root`; the `server` project built by
+`benches/fixture.sh` and primed with `before`. Mains power, not charging; load
+1.72 to 2.60. Taken 2026-09-23, 07:25Z to 07:27Z (UTC).
+
+### Protocol
+
+`#243`'s: 8 rounds, the labels rotated by one position per round and the three
+arms rotated inside one `hyperfine` call per label per round. The store writers
+5 runs after 1 warmup per arm per round, 40 samples; `cloadtable` 20 after 5,
+160 samples. Between rounds the store was rewritten by `before`, so every
+unchanged-catalogue label starts from the store a load writes.
+
+The two changed-store labels restore, in `--prepare`, a copy of the `WL-001`
+store whose 271 object files were altered, `meta.json` untouched:
+`cload_changed` changes each file's closing `}` to `]`, the same length;
+`cload_grown` adds one byte before the final newline. The restore writes each
+file to a temporary and renames it over the target, as `tpl` does.
+
+**The restore is load-bearing, and `cp -Rp` must not be used for it.** Over a
+store restored by `cp -Rp`, reading the files costs about 20 ms more on the
+first pass: `after` over an **identical** store took 50.8 ms after `cp -Rp`
+against 31.5 ms after the rename-based restore, and the changed store +25 to
++29 ms against +4.9 ms. The cause was not investigated; the figures below use
+the rename-based restore only.
+
+**Byte identity**, before any timing. The `WL-001` store, 272 files, was
+snapshotted by path, mode and sha256 (`meta.json` without `loaded_at`) after
+five sequences: `before` from empty; then `after` over it; `after` from empty;
+then `before` over it; then `after schema dump --direct` over it. All five
+snapshots matched, every file at mode `600`, and no temporary was left. The
+inode of `tables/accrual.json` was unchanged by `after`'s load over `before`'s
+store. The stdout of `schema dump --direct` matched between the arms.
+
+### Results
+
+Medians; the A/A column is `before` against `before_twin`.
+
+| label | command | `before` | `after` | change | A/A | p90, `before` → `after` |
+|---|---|---|---|---|---|---|
+| `cload` | `tpl -d bench_wl001 cache load` | 61.578 ms | **30.735 ms** | **−30.843 ms, −50.1%** | 0.206 ms | 64.54 → 31.34 ms |
+| `fail66` | `tpl -d bench_wl001 schema table accrualx`, server up | 63.054 ms | **30.602 ms** | **−32.452 ms, −51.5%** | 0.920 ms | 65.02 → 31.01 ms |
+| `dump_dw` | `tpl -d bench_wl001 schema dump --direct` | 64.467 ms | **33.167 ms** | **−31.300 ms, −48.6%** | 0.176 ms | 66.83 → 33.72 ms |
+| `cloadtable` | `tpl -d bench_wl001 cache load --table accrual`, two objects | 23.466 ms | 23.359 ms | −0.107 ms | 0.035 ms | 23.99 → 23.89 ms |
+| `cload_changed` | `cache load` over a store differing in every object, same lengths | 62.541 ms | 65.063 ms | **+2.522 ms, +4.0%** | 0.193 ms | 64.55 → 68.20 ms |
+| `cload_grown` | `cache load` over a store differing in every object's length | 62.676 ms | 62.403 ms | −0.273 ms | 0.269 ms | 64.61 → 64.70 ms |
+
+Peak resident memory, `/usr/bin/time -l`, median of 7: `cload` 8.22 →
+8.52 MiB (+0.30 MiB), `dump_dw` 8.42 → 8.56 MiB (+0.14 MiB). The two buffers
+grow to the largest object and are reused; they replace the 8 KiB `BufWriter`
+the object write used before.
+
+- **An unchanged object costs about 114 µs less**: 30.84 ms over the 271
+  object files, `database.json` among them. `cloadtable` writes two unchanged
+  objects, `database.json` and the table's, and its −0.107 ms is three times
+  its A/A; it is not attributed further.
+- **The worst case is +9.3 µs per object**: 2.52 ms over 271 files, the read
+  and comparison of a file that is then rewritten anyway. `#243` estimated
+  ≈ +3 ms; this is the measurement. It is reached only when every object keeps
+  its length and changes its bytes.
+- **A changed length costs one `lstat`**, and `cload_grown` is inside its A/A.
+- **The spread falls with the median.** The standard deviation of `cload` was
+  6.81 ms for `before` and 0.43 ms for `after`: the renames carried the tail.
+
+### Not measured
+
+- A store evicted from the page cache: the comparison would then read from the
+  disk, for files whose length matches.
+- The canonical loop, whose one write follows `cache clean`, so every target
+  is absent and costs one failed `lstat`.
+- The series `10.11`, `11.4` and `11.8`, raised only for the test suite.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+mkdir -p "$S/src/7c0fdaf"; git archive 7c0fdaf | tar -x -C "$S/src/7c0fdaf"
+(cd "$S/src/7c0fdaf" && cargo build --release --target-dir "$S/t-7c0fdaf"); cp "$S/t-7c0fdaf/release/tpl" "$S/tpl-before"
+cargo build --release; cp target/release/tpl "$S/tpl-after"
+
+# 1. The fixture, through its harness only; 12.3 alone for timing.
+./scripts/mariadb/up.sh 12.3; ./scripts/mariadb/status.sh --quiet 12.3
+./scripts/mariadb/seed-bench.sh 12.3
+
+# 2. The server project, with benches/fixture.sh's functions:
+#    fixture_inventory; fixture_address 12.3;
+#    fixture_server_project "$S/work" "$S/tpl-before" disabled; fixture_prime "$S/work" "$S/tpl-before"
+
+# 3. The altered stores: copies of .tpl/.cache/bench_wl001, every *.json but
+#    meta.json edited in place (`}\n` -> `]\n`, and `}\n` -> `} \n`), restored in
+#    --prepare by a script that writes each file to a temporary and renames it.
+
+# 4. For round r of 8, the six labels rotated by r, the three arms rotated by r:
+hyperfine -N -i --warmup 1 --runs 5 [--prepare "<restore>"] --export-json "$S/c/<label>.r<r>.json" \
+  -n before "$S/tpl-before <args>" -n after "$S/tpl-after <args>" -n before_twin "$S/tpl-before <args>"
+#    cloadtable: --warmup 5 --runs 20. After each round: tpl-before -d bench_wl001 cache load.
+
+# 5. The pipeline needs all five servers; then the fixture down, and nothing left.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
+```

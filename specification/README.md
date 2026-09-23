@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty-eight editions. All are in force;
+The specification has been written in thirty-nine editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3649,6 +3649,40 @@ the index of [open-questions.md](open-questions.md) stays empty.
   `FR-CACHE-035`, `FR-CDOC-006` and `FR-CDOC-013` were read against the
   decision and none conflicts with it, so none is amended. Neither root
   document paraphrases the count, so the fifth validation rule owes nothing.
+
+### Thirty-ninth edition — a write that would change nothing
+
+`FR-CACHE-030` required every cached object to be written through a temporary
+file renamed over the target, and did not say whether a file already holding
+exactly the bytes the write would produce must still be replaced. It need not
+be, as decided for rmp `#244`.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A byte-identical file may stay in place** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-030` now permits the system
+  to leave a target whose content is byte-identical to the write in place, and
+  requires the temporary file and the rename for a target that cannot be read
+  or differs in any byte. The observable result is the same either way: the
+  rename changes only an object file's modification time, which no output
+  reports, and `loaded_at` stays in `meta.json`, which the permission does not
+  reach. The reading in `BENCHMARKS.md` that raised the question is
+  informative, per `BR-PERF-008`. *Accepted cost:* an object file's
+  modification time no longer tells when the object was last read.
+- **A rule that restated the mechanism** —
+  [cache-documents.md](cache-documents.md). `BR-CDOC-004` said each file was
+  "renamed into place"; it now cites `FR-CACHE-030` instead, and its argument
+  is unchanged.
+
+`FR-CACHE-007`, `FR-CACHE-008`, `FR-CACHE-031`, `FR-CACHE-032`,
+`FR-CACHE-033`, `FR-CACHE-034`, `FR-CACHE-035`, `FR-CACHE-036`, `FR-CDOC-013`,
+`FR-CDOC-015`, `FR-CFG-041` and `UC-010` were read against the decision and
+none conflicts with it, so none is amended. No use case or glossary entry says
+every file is rewritten. Neither root document paraphrases `FR-CACHE-030`, so
+the fifth validation rule owes nothing.
 
 ### Still out of scope
 

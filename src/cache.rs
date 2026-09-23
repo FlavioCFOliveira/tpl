@@ -62,9 +62,10 @@
 //! # No lock, and one whole file or the other
 //!
 //! `FR-CACHE-031` takes no lock, and `FR-CACHE-030` writes each object through
-//! a temporary file in the same directory, renamed over the target — so a
-//! reader meets one whole version of a file or the other, never half of one,
-//! and a killed process leaves nothing locked. What a **collection** offers is
+//! a temporary file in the same directory, renamed over the target, or leaves
+//! in place a file that already holds exactly the bytes the write would
+//! produce — so a reader meets one whole version of a file or the other, never
+//! half of one, and a killed process leaves nothing locked. What a **collection** offers is
 //! weaker by the same requirement's design, and `FR-CDOC-015` states it: a
 //! document served from the cache promises neither referential integrity nor a
 //! point-in-time snapshot.
@@ -659,25 +660,36 @@ impl Cache {
             collation: document.collation.clone(),
             server: document.server.clone(),
         };
-        if !store(&layout.database(), &metadata) {
+        let mut buffers = Buffers::default();
+        if !store_object(&layout.database(), &metadata, &mut buffers) {
             return;
         }
 
+        // `meta.json` is not an object file, and `FR-CACHE-030` does not let
+        // it be left in place: it is always written through `store`.
         match covered {
             Covered::Everything => {
                 let whole = [
-                    replace(layout, Collection::Tables, &document.tables, table_file),
+                    replace(
+                        layout,
+                        Collection::Tables,
+                        &document.tables,
+                        table_file,
+                        &mut buffers,
+                    ),
                     replace(
                         layout,
                         Collection::Views,
                         document.views.as_ref(),
                         view_file,
+                        &mut buffers,
                     ),
                     replace(
                         layout,
                         Collection::Routines,
                         document.routines.as_ref(),
                         routine_file,
+                        &mut buffers,
                     ),
                 ];
 
@@ -685,13 +697,13 @@ impl Cache {
             }
             Covered::One(_) => {
                 for table in &document.tables {
-                    one(layout, table, table_file);
+                    one(layout, table, table_file, &mut buffers);
                 }
                 for view in document.views.as_ref() {
-                    one(layout, view, view_file);
+                    one(layout, view, view_file, &mut buffers);
                 }
                 for routine in document.routines.as_ref() {
-                    one(layout, routine, routine_file);
+                    one(layout, routine, routine_file, &mut buffers);
                 }
 
                 // A named read refreshes one object and settles nothing about
@@ -922,7 +934,108 @@ fn count(directory: &Path) -> Option<usize> {
 }
 
 /// Writes `value` to `file`, through a temporary file in the same directory
-/// renamed over the target (`FR-CACHE-030`).
+/// renamed over the target (`FR-CACHE-030`), whatever the target holds.
+///
+/// It is the write of `meta.json`, which is not an object file and which
+/// `FR-CACHE-030` does not let be left in place. Every object file goes through
+/// [`store_object`], which may leave an identical file where it is.
+///
+/// Answers whether the file is now stored. Every failure answers `false` and
+/// reports nothing, per `FR-CACHE-036`.
+fn store<T: Serialize>(file: &Path, value: &T) -> bool {
+    write_through(file, |handle| serialise(handle, value))
+}
+
+/// The two buffers a write of the cache reuses from one object to the next.
+///
+/// They grow to the largest object written and are then reused, so a whole
+/// write allocates for its largest object rather than once per object.
+#[derive(Debug, Default)]
+struct Buffers {
+    /// The bytes the write would produce.
+    encoded: Vec<u8>,
+    /// The bytes the target already holds, read only where the lengths match.
+    held: Vec<u8>,
+}
+
+/// Stores one cached object in `file`: leaves the file in place where it
+/// already holds exactly the bytes the write would produce, and otherwise
+/// writes it through [`write_through`] (`FR-CACHE-030`).
+///
+/// Both paths leave a whole file, so `FR-CACHE-031` holds on either: a file left
+/// in place was whole, and a file renamed over is whole. A target that cannot
+/// be read, or that differs in any byte, is written, which is also what makes a
+/// corrupted file a miss that is rewritten, per `FR-CACHE-033`.
+///
+/// Answers whether the object is now stored. Every failure answers `false` and
+/// reports nothing, per `FR-CACHE-036`.
+fn store_object<T: Serialize>(file: &Path, value: &T, buffers: &mut Buffers) -> bool {
+    buffers.encoded.clear();
+    if encode(&mut buffers.encoded, value).is_err() {
+        return false;
+    }
+
+    // PERF: rewriting an object whose file already holds the same bytes cost
+    // 114 µs per file in the open of the temporary, its write and close, and
+    // the rename, and was half of a `WL-001` `cache load` (`BENCHMARKS.md`,
+    // 2026-09-23, `#243` row 2). The comparison costs a `lstat` where the
+    // lengths differ, and a read where they match.
+    if holds(file, &buffers.encoded, &mut buffers.held) {
+        return true;
+    }
+
+    let encoded = &buffers.encoded;
+    write_through(file, |mut handle| handle.write_all(encoded))
+}
+
+/// Whether `file` is a regular file of this cache's [`MODE`] that holds exactly
+/// `encoded`, read into `held`.
+///
+/// Anything short of certainty answers `false`, and the caller then writes the
+/// file: a target that is absent, cannot be read, is not a regular file, is a
+/// symbolic link, carries another mode, or differs in length or in any byte. The
+/// mode is compared because a rename would have replaced the file with one of
+/// [`MODE`], and a file left in place must be no wider than one written. The
+/// file opened must be the one inspected, by device and inode, and one byte
+/// past the expected length is asked for, so a file replaced or grown between
+/// the inspection and the read is not taken for identical.
+fn holds(file: &Path, encoded: &[u8], held: &mut Vec<u8>) -> bool {
+    use std::io::Read as _;
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+    let Ok(inspected) = fs::symlink_metadata(file) else {
+        return false;
+    };
+    let Ok(length) = u64::try_from(encoded.len()) else {
+        return false;
+    };
+    if !inspected.file_type().is_file()
+        || inspected.permissions().mode() & 0o7777 != MODE
+        || inspected.len() != length
+    {
+        return false;
+    }
+
+    let Ok(handle) = fs::File::open(file) else {
+        return false;
+    };
+    match handle.metadata() {
+        Ok(opened) if opened.dev() == inspected.dev() && opened.ino() == inspected.ino() => {}
+        _ => return false,
+    }
+
+    held.clear();
+    held.reserve(encoded.len().saturating_add(1));
+
+    handle
+        .take(length.saturating_add(1))
+        .read_to_end(held)
+        .is_ok()
+        && held.as_slice() == encoded
+}
+
+/// Writes a file through a temporary file in the same directory renamed over
+/// `file` (`FR-CACHE-030`), with `fill` writing the bytes into the temporary.
 ///
 /// The rename is what makes a concurrent reader see one whole version of the
 /// file or the other, per `FR-CACHE-031`, and it is why no lock is taken. The
@@ -940,9 +1053,12 @@ fn count(directory: &Path) -> Option<usize> {
 /// [`Loaded::document`] and [`Cache::database`] all decode what they read, and
 /// an empty or truncated JSON text does not decode.
 ///
-/// Answers whether the object is now stored. Every failure answers `false` and
-/// reports nothing, per `FR-CACHE-036`.
-fn store<T: Serialize>(file: &Path, value: &T) -> bool {
+/// Answers whether the file is now stored. Every failure answers `false`,
+/// leaves the target untouched and reports nothing, per `FR-CACHE-036`.
+fn write_through<F>(file: &Path, fill: F) -> bool
+where
+    F: FnOnce(fs::File) -> std::io::Result<()>,
+{
     let Some(directory) = file.parent() else {
         return false;
     };
@@ -957,7 +1073,7 @@ fn store<T: Serialize>(file: &Path, value: &T) -> bool {
             .open(&temporary)?;
 
         // The handle is consumed, so the file is closed before the rename.
-        serialise(handle, value)?;
+        fill(handle)?;
 
         fs::rename(&temporary, file)
     }();
@@ -970,6 +1086,18 @@ fn store<T: Serialize>(file: &Path, value: &T) -> bool {
     }
 
     true
+}
+
+/// Appends `value` to `sink` as one line of compact JSON: the bytes
+/// [`serialise`] writes, into memory.
+///
+/// # Errors
+///
+/// Returns the error the serialisation met.
+fn encode<T: Serialize>(sink: &mut Vec<u8>, value: &T) -> serde_json::Result<()> {
+    serde_json::to_writer(&mut *sink, value)?;
+    sink.push(b'\n');
+    Ok(())
 }
 
 /// Writes `value` to `sink` as one line of compact JSON, through a buffer, and
@@ -1072,7 +1200,13 @@ fn routine_file(layout: &Layout, routine: &crate::model::routine::Routine<'_>) -
 /// `restricted`, per `FR-CACHE-037`, or one whose name is not a path component.
 /// Both leave the collection incomplete, and for the same reason: the listing
 /// the cache would serve is short one member.
-fn replace<T, F>(layout: &Layout, collection: Collection, members: &[T], file_of: F) -> bool
+fn replace<T, F>(
+    layout: &Layout,
+    collection: Collection,
+    members: &[T],
+    file_of: F,
+    buffers: &mut Buffers,
+) -> bool
 where
     T: Serialize,
     F: Fn(&Layout, &T) -> Option<PathBuf>,
@@ -1087,7 +1221,7 @@ where
 
     for member in members {
         match file_of(layout, member) {
-            Some(file) if store(&file, member) => {
+            Some(file) if store_object(&file, member, buffers) => {
                 written.insert(file);
             }
             _ => complete = false,
@@ -1098,7 +1232,7 @@ where
 }
 
 /// Writes one named member, or leaves the cache as it was.
-fn one<T, F>(layout: &Layout, member: &T, file_of: F)
+fn one<T, F>(layout: &Layout, member: &T, file_of: F, buffers: &mut Buffers)
 where
     T: Serialize,
     F: Fn(&Layout, &T) -> Option<PathBuf>,
@@ -1107,14 +1241,15 @@ where
         && let Some(parent) = file.parent()
         && fs::create_dir_all(parent).is_ok()
     {
-        let _ = store(&file, member);
+        let _ = store_object(&file, member, buffers);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Cache, Collection, Layout, Listed, Meta, Summary, TEMPORARY, count, serialise, store,
+        Buffers, Cache, Collection, Layout, Listed, MODE, Meta, Summary, TEMPORARY, count,
+        serialise, store, store_object,
     };
     use crate::project::scratch::Scratch;
     use std::io::{Error, ErrorKind, Write};
@@ -1171,6 +1306,124 @@ mod tests {
             expected
         );
         assert!(!holds_temporary(&scratch.path("store")));
+    }
+
+    /// The inode of `file`: a rename over it changes it, a file left in place
+    /// keeps it.
+    fn inode(file: &Path) -> u64 {
+        std::os::unix::fs::MetadataExt::ino(
+            &std::fs::symlink_metadata(file).expect("the file exists"),
+        )
+    }
+
+    #[test]
+    fn fr_cache_030_an_object_is_stored_as_the_bytes_the_record_is_stored_as() {
+        let scratch = Scratch::new();
+        let directory = scratch.directory("store");
+        let value = serde_json::json!({"name": "orders", "comment": "é \u{1f600}"});
+
+        assert!(store(&directory.join("streamed.json"), &value));
+        assert!(store_object(
+            &directory.join("encoded.json"),
+            &value,
+            &mut Buffers::default()
+        ));
+
+        assert_eq!(
+            std::fs::read(directory.join("encoded.json")).expect("stored"),
+            std::fs::read(directory.join("streamed.json")).expect("stored"),
+        );
+    }
+
+    #[test]
+    fn fr_cache_030_an_object_whose_file_holds_the_same_bytes_is_left_in_place() {
+        // Implementation, not contract: FR-CACHE-030 permits either path, and
+        // this pins the one taken.
+        let scratch = Scratch::new();
+        let file = scratch.directory("store").join("object.json");
+        let value = serde_json::json!({"name": "orders", "columns": [1, 2, 3]});
+        let mut buffers = Buffers::default();
+
+        assert!(store_object(&file, &value, &mut buffers));
+        let first = inode(&file);
+        let bytes = std::fs::read(&file).expect("stored");
+
+        assert!(store_object(&file, &value, &mut buffers));
+
+        assert_eq!(inode(&file), first, "an identical object was rewritten");
+        assert_eq!(std::fs::read(&file).expect("stored"), bytes);
+        assert!(!holds_temporary(&scratch.path("store")));
+    }
+
+    #[test]
+    fn fr_cache_030_an_object_whose_file_differs_or_cannot_be_trusted_is_rewritten() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let value = serde_json::json!({"name": "orders", "columns": [1, 2, 3]});
+        let mut expected = serde_json::to_vec(&value).expect("the value serialises");
+        expected.push(b'\n');
+        let mut flipped = expected.clone();
+        flipped[3] ^= 0x01;
+        let mut grown = expected.clone();
+        grown.push(b' ');
+
+        // Each case leaves the target in one state the write must not trust.
+        type Prepare = fn(&Path, &[u8], &[u8], &[u8]);
+        let cases: [(&str, Prepare); 7] = [
+            ("absent", |file, _, _, _| {
+                let _ = std::fs::remove_file(file);
+            }),
+            ("one byte differs, same length", |file, _, flipped, _| {
+                std::fs::write(file, flipped).expect("writable");
+            }),
+            ("one byte longer", |file, _, _, grown| {
+                std::fs::write(file, grown).expect("writable");
+            }),
+            ("truncated", |file, expected, _, _| {
+                std::fs::write(file, &expected[..expected.len() / 2]).expect("writable");
+            }),
+            ("the same bytes, unreadable", |file, expected, _, _| {
+                std::fs::write(file, expected).expect("writable");
+                std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o000))
+                    .expect("ours");
+            }),
+            ("the same bytes, a wider mode", |file, expected, _, _| {
+                std::fs::write(file, expected).expect("writable");
+                std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o644))
+                    .expect("ours");
+            }),
+            (
+                "the same bytes, through a symbolic link",
+                |file, expected, _, _| {
+                    let elsewhere = file.with_extension("held");
+                    std::fs::write(&elsewhere, expected).expect("writable");
+                    std::fs::set_permissions(&elsewhere, std::fs::Permissions::from_mode(MODE))
+                        .expect("ours");
+                    let _ = std::fs::remove_file(file);
+                    std::os::unix::fs::symlink(&elsewhere, file).expect("writable");
+                },
+            ),
+        ];
+
+        for (case, prepare) in cases {
+            let scratch = Scratch::new();
+            let file = scratch.directory("store").join("object.json");
+            let mut buffers = Buffers::default();
+            assert!(store_object(&file, &value, &mut buffers));
+            prepare(&file, &expected, &flipped, &grown);
+            let before = std::fs::symlink_metadata(&file)
+                .ok()
+                .map(|found| std::os::unix::fs::MetadataExt::ino(&found));
+
+            assert!(store_object(&file, &value, &mut buffers), "{case}");
+
+            let written = std::fs::symlink_metadata(&file).expect("stored");
+            assert!(written.file_type().is_file(), "{case}: not a regular file");
+            assert_eq!(written.permissions().mode() & 0o7777, MODE, "{case}");
+            assert_ne!(Some(inode(&file)), before, "{case}: not renamed over");
+            assert_eq!(std::fs::read(&file).expect("stored"), expected, "{case}");
+            assert!(!holds_temporary(&scratch.path("store")), "{case}");
+        }
     }
 
     #[test]

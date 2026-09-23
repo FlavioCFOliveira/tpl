@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md]
 ---
 
@@ -310,6 +310,40 @@ tpl -d shop cache status
 
 - **FR-CACHE-030**: The system SHALL write each cached object to its own file,
   through a temporary file in the same directory, renamed over the target.
+  WHERE the target file already exists and its content is byte-identical to
+  the bytes the write would produce, the system MAY leave that file in place
+  and skip the temporary file and the rename. A target whose content cannot be
+  read, or differs in any byte, SHALL be written through the temporary file and
+  the rename.
+
+  *Amended in the thirty-ninth edition.* The requirement did not say whether a
+  file that already holds exactly the bytes a write would produce must still be
+  replaced. It need not be, as decided for rmp `#244`.
+
+  *Rationale.* The observable result is the same either way. The file holds
+  the same bytes, every later read of it serves the same document, and
+  `tpl cache status` counts the same files, per `FR-CACHE-034`. The rename
+  changes only the file's modification time, and no output of `tpl` reports
+  it: the one load time is `loaded_at`, which lives in `meta.json` and in the
+  output of `tpl cache status` and nowhere else, per `FR-CDOC-012` and
+  `FR-CDOC-013`. This permission does not reach `meta.json`, which is not an
+  object file. The reading that raised the question is recorded in
+  `BENCHMARKS.md`; it is informative, per `BR-PERF-008`, and the permission
+  rests on the identical result, not on the figure.
+
+  *Consequence.* Both paths conform, so neither is contract. `FR-CACHE-031`
+  holds on both: a file left in place is whole, and a file renamed over is
+  whole. The modification time of an object file is not part of the contract,
+  per `BR-CACHE-001`, and no caller or test can rely on it changing, or on it
+  staying unchanged, across a write.
+
+  *Accepted cost.* An object file's modification time no longer tells when
+  that object was last read from the server. No requirement offered that
+  reading.
+
+  *Rejected: requiring the replacement in every case*, which spends a
+  temporary file and a rename to produce a state indistinguishable from the
+  one already on disk.
 
 - **FR-CACHE-031**: The system SHALL NOT take a lock over the cache. Two
   processes writing the same object yield one whole result or the other, never a
