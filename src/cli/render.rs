@@ -1655,4 +1655,183 @@ mod tests {
         qualified.expect("the qualified name binds one");
         assert_eq!(written, "FUNCTION");
     }
+
+    /// Removes the object files of the store [`cached`] wrote, but `kept`.
+    fn keep_only(tpl_dir: &Path, kept: &[&str]) {
+        for collection in ["tables", "views", "routines"] {
+            let directory = stored(tpl_dir, collection);
+            for entry in std::fs::read_dir(&directory)
+                .expect("the store is ours")
+                .flatten()
+            {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if !kept.contains(&format!("{collection}/{name}").as_str()) {
+                    std::fs::remove_file(entry.path()).expect("the store is ours");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fr_cache_038_a_lookup_by_name_opens_only_the_file_it_returns() {
+        // FR-CACHE-038 as the forty-first edition amended it, for each of the
+        // six lookups: every object file but the one returned is removed, so a
+        // lookup that opened any other would find a miss, and the miss would
+        // reach the unreachable entry as `69`. Each name sorts after members
+        // the lookup must pass over.
+        let whole = object(&[], &[], &[]);
+        let bound = object(&["consignment_leg"], &[], &[]);
+        for (template, source, object, kept, expected) in [
+            (
+                "table",
+                "{{ table('consignment_leg').name }}",
+                &whole,
+                &["tables/consignment_leg.json"][..],
+                "consignment_leg",
+            ),
+            (
+                "column",
+                "{{ column('consignment_leg', 'leg_id').name }}",
+                &whole,
+                &["tables/consignment_leg.json"][..],
+                "leg_id",
+            ),
+            (
+                "view",
+                "{{ view('v_consignment_manifest').name }}",
+                &whole,
+                &["views/v_consignment_manifest.json"][..],
+                "v_consignment_manifest",
+            ),
+            (
+                "tests",
+                "{% for c in table.columns %}{{ c.name }}={{ c is primary_key }}/{{ c is unique }} {% endfor %}",
+                &bound,
+                &["tables/consignment_leg.json"][..],
+                "leg_id=true/true consignment_id=false/false ",
+            ),
+        ] {
+            let scratch = Scratch::new();
+            let tpl_dir = cached(&scratch, &[(&format!("{template}.jinja"), source)]);
+            keep_only(&tpl_dir, kept);
+
+            let (result, written) = from_store(&tpl_dir, template, object);
+
+            result.unwrap_or_else(|condition| panic!("{template}: {condition}"));
+            assert_eq!(written, expected, "{template}");
+        }
+
+        // `routine`: the first routine of the name in the listing's order is
+        // the one returned, so the other of the two is removed.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[("routine.jinja", "{{ routine('sp_book_consignment').kind }}")],
+        );
+        let listed = crate::cache::Cache::of(&tpl_dir, ENTRY)
+            .shelved()
+            .expect("the store is whole");
+        let first =
+            crate::cache::paths::lower(listed.routines()[0].kind().expect("a routine has a kind"))
+                .expect("a recorded kind");
+        keep_only(
+            &tpl_dir,
+            &[&format!("routines/{first}.sp_book_consignment.json")],
+        );
+
+        let (result, written) = from_store(&tpl_dir, "routine", &whole);
+
+        result.expect("only the returned routine is read");
+        assert_eq!(written, first.to_uppercase());
+    }
+
+    #[test]
+    fn fr_cache_038_a_procedure_and_a_function_of_one_name_resolve_as_the_scan_did() {
+        // The tie of NFR-DET-002 is kept as it was: `routine(name)` returns the
+        // routine a scan of the up-front read's collection meets first.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[("routine.jinja", "{{ routine('sp_book_consignment').kind }}")],
+        );
+        let loaded = crate::cache::Cache::of(&tpl_dir, ENTRY)
+            .everything()
+            .expect("the store is whole");
+        let up_front = loaded.document().expect("every file decodes");
+
+        let (result, written) = from_store(&tpl_dir, "routine", &object(&[], &[], &[]));
+
+        result.expect("the routine is stored");
+        assert_eq!(written, up_front.routines[0].kind.name());
+    }
+
+    #[test]
+    fn fr_cache_033_a_damaged_file_a_lookup_passes_over_is_not_a_miss() {
+        // FR-CACHE-033 as amended: `carrier` and `consignment` sort before the
+        // table sought, and neither is consulted, so neither is a miss.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[("found.jinja", "{{ table('consignment_leg').name }}")],
+        );
+        for damaged in ["tables/carrier.json", "tables/consignment.json"] {
+            std::fs::write(stored(&tpl_dir, damaged), "{ torn").expect("ours");
+        }
+
+        let (result, written) = from_store(&tpl_dir, "found", &object(&[], &[], &[]));
+
+        result.expect("the damaged files are passed over");
+        assert_eq!(written, "consignment_leg");
+    }
+
+    #[test]
+    fn fr_cache_039_a_damaged_file_a_lookup_returns_restarts_the_render() {
+        // FR-CACHE-039: the file returned is reached, so a damaged one is a
+        // miss and the render is abandoned; the one server read is refused
+        // here, so the invocation is `69`, with nothing on stdout.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[("found.jinja", "written first {{ table('carrier').name }}")],
+        );
+        std::fs::write(stored(&tpl_dir, "tables/carrier.json"), "{ torn").expect("ours");
+
+        let (result, written) = from_store(&tpl_dir, "found", &object(&[], &[], &[]));
+        let condition = result.expect_err("the server is unreachable");
+
+        assert_eq!(condition.exit_code(), 69, "{condition}");
+        assert!(written.is_empty(), "{written:?}");
+    }
+
+    #[test]
+    fn fr_cache_038_a_lookup_that_finds_nothing_opens_no_object_file() {
+        // No object file is left, so any file a lookup opened would be a miss
+        // and a `69`. What each lookup answers is today's: `undefined`, which
+        // the guard sees as absent and whose use is the `65` of FR-SEM-012.
+        let whole = object(&[], &[], &[]);
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[
+                (
+                    "guarded.jinja",
+                    "{{ table('nosuch') is defined }} {{ view('nosuch') is defined }} \
+                     {{ routine('nosuch') is defined }} {{ column('nosuch', 'id') is defined }} \
+                     {{ column('carrier', 'nosuch') is defined }}",
+                ),
+                ("used.jinja", "{{ table('nosuch').name }}"),
+            ],
+        );
+        keep_only(&tpl_dir, &["tables/carrier.json"]);
+
+        let (result, written) = from_store(&tpl_dir, "guarded", &whole);
+        result.expect("no lookup opened a file it did not return");
+        assert_eq!(written, "false false false false false");
+
+        keep_only(&tpl_dir, &[]);
+        let (result, written) = from_store(&tpl_dir, "used", &whole);
+        let condition = result.expect_err("an undefined value is used");
+        assert_eq!(condition.exit_code(), 65, "{condition}");
+        assert!(written.is_empty(), "{written:?}");
+    }
 }

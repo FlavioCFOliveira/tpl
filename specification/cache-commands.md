@@ -125,8 +125,14 @@ read from the server on a miss.
   object file names the object that file holds, the `database` the template
   sees SHALL be the document an up-front read of the same files would produce:
   the same members, the same names, the same order under `NFR-DET-002`, and the
-  same value under every filter and test. Any other object file is a miss under
-  `FR-CACHE-033`.
+  same value under every filter, test and function. Any other object file is a
+  miss under `FR-CACHE-033`.
+
+  A lookup by name — the tests `primary_key` and `unique` of `FR-ENV-015` and
+  the functions `table`, `view`, `routine` and `column` of `FR-ENV-020` —
+  SHALL resolve the name from the collection's listing and SHALL reach only the
+  object it returns. An object the lookup passes over is not reached by it, and
+  a lookup that returns no object reaches none.
 
   *Added in the fortieth edition, as decided for rmp `#246`.* A cached render
   read and decoded every object file of its entry, whatever the template
@@ -168,6 +174,26 @@ read from the server on a miss.
   *Rejected: reverting to the up-front read.* It would restore the equivalence
   for files `tpl` never writes by reading every file of the entry on every
   render, which is the cost this requirement exists to remove.
+
+  *Amended in the forty-first edition: a lookup by name reaches only the object
+  it returns, as decided for rmp `#248`.* The requirement did not say whether a
+  lookup reaches the objects it passes over on its way to the one it returns,
+  and a lookup that scanned the collection read the file of every object listed
+  before the wanted one. The name a lookup matches is already known without
+  reading any file: under the equivalence above, the names the listing carries
+  are the names the files hold. So the lookup's answer, including the answer
+  that no object of that name exists, depends on the listing alone, and only
+  the returned object's file is read. A damaged file the lookup passes over is
+  not consulted, so it is not a miss of that invocation, per `FR-CACHE-033`. A
+  damaged file the lookup returns is a miss, answered under `FR-CACHE-039`. The
+  reading that raised the question is recorded in `BENCHMARKS.md`; it is
+  informative, per `BR-PERF-008`, and the rule rests on the identical answer,
+  not on the figure.
+
+  *Rejected: a lookup reaches every object it passes over.* It gives the same
+  answer at the cost of reading, on every lookup, the file of each object
+  listed before the wanted one, and it would make a damaged file the template
+  never uses a miss only because its name sorts earlier.
 
 - **FR-CACHE-039**: IF a file read under `FR-CACHE-038` during the render is a
   miss under `FR-CACHE-033`, including a file removed after the listing was
@@ -445,7 +471,8 @@ tpl -d shop cache status
   The condition SHALL be evaluated for the files a read consults. A file the
   read never consults is not a miss of that invocation and SHALL be left as it
   is. Two reads consult fewer object files than their entry holds: a render
-  under `FR-CACHE-038` consults only the objects its template reaches, and
+  under `FR-CACHE-038` consults only the objects its template reaches — for a
+  lookup by name, only the object the lookup returns — and
   `tpl schema info`, which presents no member of any collection per
   `FR-SCH-031`, opens no object file.
 
@@ -473,6 +500,11 @@ tpl -d shop cache status
   A file whose content names another object is found the same way when it is
   the bound object's, and otherwise during the render, where its miss is
   answered under `FR-CACHE-039`.
+
+  *Amended in the forty-first edition.* The clause on a lookup by name is new.
+  It states for this requirement what `FR-CACHE-038` now fixes: a lookup
+  consults only the object it returns, so a damaged file it passes over is not
+  a miss.
 
 - **FR-CACHE-036**: IF the system cannot write to `.tpl/.cache/`, THEN it SHALL
   answer from what it read, SHALL exit `0`, SHALL leave the cache as it found

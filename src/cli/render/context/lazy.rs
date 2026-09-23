@@ -45,10 +45,21 @@
 //! sources. A member whose file is a miss reads as an invalid value and is
 //! recorded, and the caller abandons the render, per `FR-CACHE-039`.
 //!
+//! **A lookup by name reads only the member it returns.** The tests and
+//! functions of `crate::render::lookup` put a query to the collection rather
+//! than scanning it, and a collection served from the cache resolves the name
+//! from the listing and reaches the one member found, as the forty-first
+//! edition of `FR-CACHE-038` requires. The members it passes over are not
+//! reached, so their files are neither read nor validated.
+//!
 //! *Rejected: reading a member's name from the listing and its file only when
-//! a field other than the name is read.* It would leave a member reached for
-//! its name alone — the scans of `crate::render::lookup` — unvalidated, which
-//! is a looser reading of "reaches" than `FR-CACHE-038` states.
+//! a field other than the name is read.* For an iteration it would leave a
+//! member the template reached unvalidated, which is a looser reading of
+//! "reaches" than `FR-CACHE-038` states. For a lookup the reason no longer
+//! holds — the requirement now says the members a lookup passes over are not
+//! reached at all — and the lookup query above is that design, applied to
+//! lookups alone: the name comes from the listing, and the member returned is
+//! reached in full.
 //!
 //! # Why the document is copied only where the caller carries on
 //!
@@ -92,9 +103,11 @@ use crate::cli::Ending;
 use crate::cli::source::Served;
 use crate::model::ToStatic;
 use crate::model::document::DatabaseDocument;
+use crate::model::document::order::Named as _;
 use crate::model::document::shape::TableDocument;
 use crate::model::routine::Routine;
 use crate::model::view::View;
+use crate::render::Query;
 
 /// The keys of the `database` object, in the declaration order of
 /// [`DatabaseDocument`], which is the order `FR-CTX-036` writes them in and the
@@ -534,14 +547,55 @@ impl Object for Members {
     }
 
     fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
-        let index = key.as_usize()?;
+        if let Some(query) = key.downcast_object_ref::<Query>() {
+            return self.answer(query);
+        }
+
+        self.member(key.as_usize()?)
+    }
+
+    fn enumerate(self: &Arc<Self>) -> Enumerator {
+        Enumerator::Seq(self.members.len())
+    }
+}
+
+impl Members {
+    /// The member at `index`, converted on the first call.
+    fn member(&self, index: usize) -> Option<Value> {
         let member = self.members.get(index)?;
 
         Some(member.get_or_init(|| self.convert(index)).clone())
     }
 
-    fn enumerate(self: &Arc<Self>) -> Enumerator {
-        Enumerator::Seq(self.members.len())
+    /// Answers a lookup by name over the cache files, or leaves it unanswered
+    /// over a whole document (`FR-CACHE-038`).
+    ///
+    /// The name is resolved from the listing, which holds the names the files
+    /// hold, and only the member found is reached: its file is read, validated
+    /// and decoded, and a miss there is `FR-CACHE-039`'s. A member the lookup
+    /// passes over is not reached, so its file is not consulted and is no miss
+    /// of this invocation, per `FR-CACHE-033`; a name no member carries reaches
+    /// nothing. The member found is the first of that name in the listing's
+    /// order — the one a scan of the collection meets first, a procedure and a
+    /// function of one name included.
+    fn answer(&self, query: &Query) -> Option<Value> {
+        let Contents::Shelved(store) = &self.contents else {
+            return None;
+        };
+        let shelved = store.shelved();
+        let shelves = match self.collection {
+            Collection::Tables => shelved.tables(),
+            Collection::Views => shelved.views(),
+            Collection::Routines => shelved.routines(),
+        };
+        let found = shelves
+            .iter()
+            .position(|shelf| shelf.name() == query.name())
+            .and_then(|index| self.member(index));
+
+        query.answer(found.clone());
+
+        found
     }
 }
 

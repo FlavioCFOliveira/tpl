@@ -62,6 +62,7 @@ use minijinja::Value;
 
 use crate::error::Error;
 
+pub(crate) use lookup::Query;
 pub(crate) use root::Template;
 pub(crate) use surface::{
     INHERITED_FILTERS, REGISTERED_FILTERS, REGISTERED_FUNCTIONS, REGISTERED_TESTS,

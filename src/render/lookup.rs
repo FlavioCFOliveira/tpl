@@ -30,7 +30,9 @@
 //! share it, because a lookup that finds nothing is answered in the form the
 //! engine already has for absence — see [`super::function`].
 
-use minijinja::value::ValueKind;
+use std::sync::OnceLock;
+
+use minijinja::value::{Object, ValueKind};
 use minijinja::{Error, ErrorKind, State, Value};
 
 use super::operand::Column;
@@ -60,8 +62,60 @@ const NAME: &str = "name";
 pub(super) fn member(state: &State<'_, '_>, collection: &str, name: &str) -> Option<Value> {
     let members = state.lookup(DATABASE)?.get_attr(collection).ok()?;
 
+    // FR-CACHE-038: a collection that knows its members' names without
+    // reaching them answers the query, and reaches only the member it returns.
+    let query = Value::from_object(Query {
+        name: name.to_owned(),
+        answer: OnceLock::new(),
+    });
+    let _ = members.get_item(&query);
+    if let Some(answer) = query
+        .downcast_object_ref::<Query>()
+        .and_then(|asked| asked.answer.get())
+    {
+        return answer.clone();
+    }
+
     members.try_iter().ok()?.find(|member| named(member, name))
 }
+
+/// A lookup by name, put to a collection as an item key (`FR-CACHE-038`).
+///
+/// A collection served from the cache knows the names of its members from the
+/// listing, before any of them is read, and answers the query with the first
+/// member of that name — reaching that member and no other — or with nothing.
+/// A collection that cannot answer leaves the query unanswered, and
+/// [`member`] then scans it, which over a whole document reads nothing it had
+/// not already read.
+///
+/// The key is an object no template can construct, so the query is not part of
+/// the surface `FR-ENV-001` fixes: a template indexing a collection with any
+/// value it can write reaches the collection's ordinary item lookup.
+///
+/// The answer is the scan's own: the first member in the collection's order
+/// whose name is `name`. For a procedure and a function of one name that is
+/// the one the listing orders first, which is the one the scan meets first.
+#[derive(Debug)]
+pub(crate) struct Query {
+    /// The name sought.
+    name: String,
+    /// The answer, set by the collection that could give one.
+    answer: OnceLock<Option<Value>>,
+}
+
+impl Query {
+    /// The name sought.
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Records the collection's answer: the member found, or [`None`].
+    pub(crate) fn answer(&self, found: Option<Value>) {
+        let _ = self.answer.set(found);
+    }
+}
+
+impl Object for Query {}
 
 /// The table a column belongs to, resolved against the render context.
 ///

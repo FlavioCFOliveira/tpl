@@ -3746,6 +3746,43 @@ which nothing is missing, every output is what it was. Both root documents say
 that a cache hit opens no connection, which stays true, so the fifth validation
 rule owes nothing.
 
+### Forty-first edition — a lookup that reads only what it returns
+
+Under `FR-CACHE-038` a lookup by name read the file of every object listed
+before the one it returned, because the requirement did not say whether a
+lookup reaches the objects it passes over. The user decided that it reaches
+only the object it returns, as decided for rmp `#248`.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A lookup reaches only the object it returns** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-038` now names the lookups
+  by name — the tests `primary_key` and `unique` and the functions `table`,
+  `view`, `routine` and `column` — resolves each name from the collection's
+  listing, and reads only the returned object's file. A lookup that finds
+  nothing reads no object file. Its equivalence now covers functions as well as
+  filters and tests. *Rejected:* a lookup that reaches every object it passes
+  over, which gives the same answer and reads more files.
+- **A damaged file a lookup passes over** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-033` says a lookup consults only the object it returns, so a
+  damaged file it passes over is not a miss, as the fortieth edition decided
+  for a file no read consults.
+- **What a lookup depends on** — `FR-ENV-015` and `FR-ENV-020` in
+  [template-environment.md](template-environment.md), and `FR-CTX-022` in
+  [context-document.md](context-document.md), each carry a note: the answer,
+  including absence under `FR-ENV-017` and `FR-ENV-043`, depends on the
+  listing's names alone. No lookup offers a nearest-match suggestion, so none
+  depends on anything else.
+
+`FR-CACHE-039`, `FR-ENV-016`, `FR-ENV-017`, `FR-ENV-041`, `FR-ENV-043`,
+`FR-SEM-017`, `FR-SEM-018` and `BR-CTX-003` were read against the decision and
+none conflicts with it, so none is amended. For a template and a cache in which
+nothing is missing, every output is what it was. Neither root document
+paraphrases a lookup, so the fifth validation rule owes nothing.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its

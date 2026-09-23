@@ -584,6 +584,9 @@ variable is bound to a source, which is
   `primary_key` and `unique`, which resolve `table_name` against the render
   context, per `FR-ENV-015`.
 
+  *Note added in the forty-first edition.* When a render is served from the
+  cache, that resolution reaches only the table it returns, per `FR-CACHE-038`.
+
 - **BR-CTX-003**: Calculating rather than materialising keeps one statement of
   each fact. A column that says it is not part of the primary key while the
   table says it is would be a document that contradicts itself, and nothing in

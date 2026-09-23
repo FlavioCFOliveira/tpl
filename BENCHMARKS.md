@@ -4683,3 +4683,141 @@ samply load "$S/prof/rexample_c.json.gz"                                        
 ./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
 ```
+
+## 2026-09-23 — Row 1 of the fourth register applied: a cached lookup by name reads only the object it returns
+
+*Sprint 19, task `#248`. Target of record: `aarch64-apple-darwin`. Server of
+record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry records; it does
+not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+The lookups by name — the tests `primary_key` and `unique` and the functions
+`table`, `view`, `routine` and `column` — no longer scan a collection served
+from the cache. `crate::render::lookup` puts the name to the collection as a
+query key no template can construct, and the lazy collection resolves it from
+the listing and reaches only the member it returns, per the forty-first
+edition of `FR-CACHE-038`. Over a whole document the query goes unanswered and
+the scan runs as before.
+
+**`rust/struct` bound to the last of 200 tables fell from 11.60 to 3.40 ms
+(−8.20 ms, −70.7%), its peak resident memory from 13.86 to 5.11 MiB, and the
+200-render `rust/struct` loop from 1 621.3 to 798.9 ms (−50.7%).** That is
+`#247`'s `lkp247` upper bound (−8.04 ms, −51.0%) reproduced on the shipped
+code. The canonical loop, which renders `example`, reaches no lookup and did
+not move beyond its A/A; neither did the whole-database control.
+
+### Candidates
+
+Both arms were built from `git archive 59e7680` in a scratch directory, from
+paths of the same length, each into its own target directory; `after` carries
+this change's `src/` and nothing else.
+
+| arm | binary |
+|---|---|
+| `before` | `59e7680`: 4 017 024 B, sha256 `2d5ca3c5…8e02` — `#246`'s `after`, byte for byte (`59e7680` changes only `BENCHMARKS.md` since `ba10788`) |
+| `after` | `59e7680` with this change: 4 017 040 B, sha256 `19cb1ef5…63c7` |
+| `before_twin` | the `before` file, measured as a third label: the A/A arm |
+
+The in-repository `target/release/tpl` with this change is 4 033 568 B, sha256
+`10a617e7…3bc2`, built from the same sources under a longer path; the 16 528 B
+difference was not examined.
+
+### Environment
+
+As `#243`'s: Apple M4, 10 cores, 32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0
+`arm64`; `rustc` 1.98.1 (48a229cea 2026-09-01), the release profile of
+`ADR-004`; `hyperfine` 1.20.0 (`-N`); `/usr/bin/time -l`. All five fixture
+servers were up; timing reached only `12.3`, seeded by
+`scripts/mariadb/seed-bench.sh`, `tls = "disabled"`, account `root`. The
+`server` project of `#246`'s entry, primed again with `before`. Mains power,
+not charging; load 2.08 to 2.43. Taken 2026-09-23 (UTC): the campaign 11:03Z
+to 11:04Z, the two loops 11:04Z to 11:06Z, peak memory after.
+
+### Protocol
+
+`#243`'s: 8 rounds, the 7 labels rotated by one position per round and the
+three arms rotated inside one `hyperfine` call per label per round; 40 runs
+after 5 warmups per arm per round, 320 samples per arm and label. The two
+loops: `benches/loop200.sh` with `example` (the canonical loop) and with
+`rust/struct` (`#247`'s `loop_struct`), 4 rounds of 3 runs after 1 warmup
+each, 12 samples per arm, `--prepare "tpl -d bench_wl001 cache clean"`. Peak
+resident memory: median of 7.
+
+**Byte identity**, before any timing: `#246`'s sweep, unchanged — every worked
+template of `examples/*/templates/` and the `example` of `tpl init`,
+whole-database and bound with `--table`, `--view` and `--routine` (bare and
+qualified) to every object, with `-vvv`, `-q`, `--set` and an absent table.
+4 180 invocations over `freight` on the five servers and 6 213 over `WL-001`
+and `WL-003` on `12.3`: stdout, the exit code and stderr (the `-vvv` duration
+masked) identical in all 10 393. No `meta.json` was rewritten during the sweep,
+so every render was served from the cache.
+
+### Results
+
+Medians; the A/A column is `before` against `before_twin`.
+
+| label | command | `before` | `after` | change | A/A | p90, `before` → `after` | per-round change |
+|---|---|---|---|---|---|---|---|
+| `rstruct_last_c` | `tpl -d bench_wl001 render rust/struct --table yard_position` | 11.595 ms | **3.397 ms** | **−8.198 ms, −70.7%** | 0.021 ms | 11.99 → 3.49 ms | −8.35 to −8.01 ms |
+| `rstruct_c` | the same bound to `accrual`, the first table | 2.988 ms | 3.005 ms | +0.018 ms | 0.012 ms | 3.08 → 3.12 ms | −0.02 to +0.07 ms |
+| `rexample_c` | `tpl -d bench_wl001 render example --table accrual`, no lookup | 2.335 ms | 2.343 ms | +0.009 ms | 0.005 ms | 2.41 → 2.41 ms | −0.02 to +0.03 ms |
+| `rschema_c` | `tpl -d bench_wl001 render rust/schema` | 16.910 ms | 16.903 ms | −0.007 ms | 0.099 ms | 17.30 → 17.25 ms | −0.20 to +0.22 ms |
+| `rwjson_c` | `tpl -d bench_wl001 render probe/whole_json`, the whole-database control | 26.623 ms | 26.548 ms | −0.075 ms | 0.038 ms | 26.99 → 27.17 ms | −0.53 to +0.56 ms |
+| `rexample_x` | `render example --table accrual --context <dump>`, control | 8.052 ms | 8.050 ms | −0.003 ms | 0.050 ms | 8.25 → 8.24 ms | −0.10 to +0.08 ms |
+| `table_c` | `tpl -d bench_wl001 schema table accrual`, control | 1.948 ms | 1.976 ms | +0.027 ms | 0.003 ms | 2.04 → 2.05 ms | −0.02 to +0.09 ms |
+
+The loops (12 samples per arm):
+
+| loop | `before` | `after` | change | A/A | per-round change |
+|---|---|---|---|---|---|
+| `loop_struct`, 200 × `rust/struct` | 1 621.3 ms | **798.9 ms** | **−822.4 ms, −50.7%** | 0.4 ms | −834.7 to −815.9 ms |
+| the canonical loop, 200 × `example` | 622.5 ms | 626.3 ms | +3.9 ms | 4.2 ms | −9.7 to +11.8 ms |
+
+Peak resident memory, `/usr/bin/time -l`, median of 7: `rstruct_last_c`
+13.86 → 5.11 MiB; `rstruct_c` 4.94 → 5.02 MiB; `rwjson_c` 43.09 → 43.22 MiB.
+
+- **The saving is the files listed before the one sought.** `rstruct_last_c`
+  gains 8.2 ms, about 41 µs for each of the 199 tables before `yard_position`,
+  and now costs what `rstruct_c` costs within 0.4 ms. `rstruct_c`, whose table
+  is listed first, passed over nothing before and gains nothing.
+- **The query costs nothing measurable where it is not answered.** The
+  `--context` control and the whole-database control, whose collections are a
+  whole document or are never looked up, are inside their per-round spread;
+  `table_c`, which reaches none of this code, moved +0.027 ms, which is the
+  noise of this session at that level.
+
+### Not measured
+
+- A lookup through `view()` or `routine()` on `WL-001`: no worked template
+  calls either; both are covered by the tests, not timed.
+- The series `10.11`, `11.4` and `11.8`, raised for the identity sweep and the
+  test suite, not for timing.
+
+### Reproduction
+
+```sh
+S=/path/to/scratch            # any directory outside the repository
+mkdir -p "$S/src/59e7680" "$S/src/aft0248"
+git archive 59e7680 | tar -x -C "$S/src/59e7680"
+git archive 59e7680 | tar -x -C "$S/src/aft0248"
+for f in $(git diff --name-only 59e7680 -- src); do cp "$f" "$S/src/aft0248/$f"; done
+(cd "$S/src/59e7680" && cargo build --release --target-dir "$S/t-59e7680"); cp "$S/t-59e7680/release/tpl" "$S/tpl-before"
+(cd "$S/src/aft0248" && cargo build --release --target-dir "$S/t-aft0248"); cp "$S/t-aft0248/release/tpl" "$S/tpl-after"
+
+# 1. The fixture, through its harness only.
+./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
+./scripts/mariadb/seed-bench.sh 12.3
+
+# 2. The server project and the identity sweep, as #246's entry states.
+
+# 3. For round r of 8, the 7 labels rotated by r, the three arms rotated by r:
+hyperfine -N --warmup 5 --runs 40 --export-json "$S/c/<label>.r<r>.json" \
+  -n before "$S/tpl-before <args>" -n after "$S/tpl-after <args>" -n before_twin "$S/tpl-before <args>"
+#    each loop, 4 rounds, <template> rust/struct and then example:
+hyperfine -N --warmup 1 --runs 3 --prepare "$S/tpl-before -d bench_wl001 cache clean" \
+  -n before "benches/loop200.sh $S/tpl-before bench_wl001 <template> $S/work/wl001-tables.txt" …
+
+# 4. The pipeline needs all five servers; then the fixture down, and nothing left.
+./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
+```

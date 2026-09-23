@@ -1,7 +1,7 @@
 ---
 title: The Template Environment
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-23
 related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md]
 ---
 
@@ -233,6 +233,13 @@ of the context variables, which belongs to
 - **FR-ENV-015**: `primary_key` and `unique` SHALL resolve the operand's
   `table_name` against the render context, per `FR-CTX-019` and `FR-CTX-022`,
   and SHALL answer from what the table states.
+
+  *Note added in the forty-first edition.* When a render is served from the
+  cache under `FR-CACHE-038`, the resolution is a lookup by name: it reaches
+  only the table it returns, and it reads no other object's file. Whether the
+  table is present, and so whether `FR-ENV-017` and `FR-ENV-043` fail the
+  render, is decided from the names the listing carries, which are the names
+  an up-front read would have found.
 
 - **FR-ENV-016**: The tests of `FR-ENV-015` therefore depend on the render
   context and not only on their operand. The specification and the help SHALL
@@ -584,6 +591,14 @@ row is a case the implementation SHALL satisfy.
   | `routine(name)` | Resolve a routine by name in the render context |
   | `column(table, name)` | Resolve a column of a named table |
   | `fail(message)` | End the render with `65`, carrying the author's message |
+
+  *Note added in the forty-first edition.* When a render is served from the
+  cache under `FR-CACHE-038`, each of the four lookups is a lookup by name: it
+  reaches only the object it returns, and a lookup that finds nothing reads no
+  object file. `column(table, name)` reaches the named table and no other. What
+  a lookup returns, including whether it finds anything, is decided from the
+  names the listing carries, which are the names an up-front read would have
+  found.
 
 - **FR-ENV-021**: `fail(message)` SHALL end the render with `65` and SHALL carry
   the message the template supplied, per `FR-SEM-014`.
