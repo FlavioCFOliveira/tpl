@@ -378,7 +378,7 @@ fn issue(
     let runtime = &session.runtime;
     let connection = session
         .connection
-        .as_mut()
+        .as_deref_mut()
         .ok_or_else(|| Error::InternalInvariant {
             invariant: CONNECTION_OPEN,
             location: Location::caller(),
@@ -535,6 +535,40 @@ mod tests {
         for server in series {
             body(server);
         }
+    }
+
+    #[test]
+    fn fr_rnd_040_a_closed_session_leaves_no_connection_and_no_runtime_alive() {
+        // FR-RND-040: while the session is open, its connection and its
+        // runtime are counted; once it is closed, neither is.
+        on_every_series(
+            "fr_rnd_040_a_closed_session_leaves_no_connection_and_no_runtime_alive",
+            |server| {
+                let name = server.name();
+                let scratch = Scratch::new();
+                let resolved = settings(&scratch, server.address(), ROOT);
+                let target = Target::of(&resolved).expect("the entry names a host");
+                let clock = settings::clock(None);
+
+                assert!(crate::mariadb::quiescent(), "{name}: nothing before");
+
+                let mut session = crate::mariadb::open(&target, &clock)
+                    .unwrap_or_else(|failure| panic!("{name} did not answer: {failure}"));
+                assert!(
+                    !crate::mariadb::quiescent(),
+                    "{name}: the session is counted"
+                );
+
+                read(&mut session, &target, &clock, SCHEMA, &Scope::Everything)
+                    .unwrap_or_else(|failure| panic!("{name} refused the read: {failure}"));
+                session.close();
+
+                assert!(
+                    crate::mariadb::quiescent(),
+                    "{name}: nothing after the close"
+                );
+            },
+        );
     }
 
     #[test]

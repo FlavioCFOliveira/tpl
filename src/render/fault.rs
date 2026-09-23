@@ -10,6 +10,7 @@
 //! |---|---|---|
 //! | A syntax error | [`Error::TemplateSyntax`] | `65` |
 //! | A template the loader did not supply | [`Error::TemplateNotFound`] | `66` |
+//! | Fuel exhausted, per [`out_of_fuel`] — classified by [`super::Environment::render`], which holds the budget the `cause` names | [`Error::RenderFuelExhausted`] | `65` |
 //! | Anything else | [`Error::RenderFailed`] | `65` |
 //!
 //! # Why a render maps the not-found row differently
@@ -84,6 +85,28 @@ pub(super) fn during_render(name: &str, reported: &minijinja::Error) -> Error {
         position: position(reported),
         chain: chain(reported),
     }
+}
+
+/// Whether the engine stopped because the render exhausted its fuel
+/// (`FR-RND-036`).
+///
+/// The kind is read on the error and on every error in its chain, so a render
+/// that ran out inside an `{% include %}`, a macro or a call block is
+/// recognised whatever the engine wrapped the exhaustion in.
+pub(super) fn out_of_fuel(reported: &minijinja::Error) -> bool {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(reported);
+
+    while let Some(error) = current {
+        if error
+            .downcast_ref::<minijinja::Error>()
+            .is_some_and(|engine| engine.kind() == minijinja::ErrorKind::OutOfFuel)
+        {
+            return true;
+        }
+        current = error.source();
+    }
+
+    false
 }
 
 /// The template the failure arose in, which for an `{% include %}` is the

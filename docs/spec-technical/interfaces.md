@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -61,6 +61,9 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 28 | A closed set of typed diagnostic emissions | `mariadb/`, `cache/`, `deadline.rs` | `diagnostics/` | [The diagnostic renderer](#the-diagnostic-renderer) |
 | 30 | The document built from a model, embeddings materialised and every collection ordered | `model/document/` | `output/` | [The two directions over the document](#the-two-directions-over-the-document) |
 | 31 | A supplied context document, read back as a model | `cli/`, from bytes it opened | `model/document/` | [The two directions over the document](#the-two-directions-over-the-document) |
+| 32 | The three render bounds, resolved | `project/settings.rs` | `render/`, and `cli/render.rs` for the memory limit | [The render bounds](#the-render-bounds) |
+| 33 | The heap count | `main.rs`, through the library's `install_heap_counter` | `heap.rs`, read by `cli/render.rs` | [The render bounds](#the-render-bounds) |
+| 34 | Whether anything of a catalogue read is alive | `mariadb/` | `cli/render.rs` | [The render bounds](#the-render-bounds) |
 
 ## The catalogue reader
 
@@ -206,6 +209,7 @@ and the rejected options are not restated here.
 | A deadline produces the code of the **phase in progress**, so the value the phase clock hands to `error.rs` names the phase | `FR-ERR-027`, `FR-GLOB-013`, `FR-GLOB-012` |
 | One condition reachable over **two populations** is two variants, not one, where a single `cause` would carry wording that is false on one of them. An object sought in a catalogue read names the database entry it was read through; sought in a `--context` document it has no entry to name, because `FR-RND-019` resolves none and `FR-RND-022` opens no connection, so the document's **path** stands where the entry stands. Both name the database | `FR-ERR-034`, `FR-RND-032`, `FR-SCH-010`, `FR-RND-019`, `FR-RND-022` |
 | A repetition the specification **permits** is not the repetition `FR-CLI-014` refuses: `--set` is repeatable, so a second occurrence is correct and a second occurrence of the same **key** is the fault, reported with both values | `FR-RND-008`, `FR-RND-014`, `FR-CLI-014`, `FR-ERR-034` |
+| Each render bound is a variant of its own carrying the resolved value, so the `cause` names the bound, the value and the key that raises it, and the `hint` names the `tpl cfg set` that raises it | `FR-RND-036`, `FR-RND-037`, `FR-RND-039`, `FR-ERR-034` row `65`, `FR-ERR-009` |
 
 `main.rs` reads the exit status and returns it; it performs no classification of
 its own, and the eight-step validation order that decides which code wins when
@@ -464,6 +468,7 @@ deserialisation or a constructor the model already has.
 | Every key the document contract names, with the type it fixes | Each type's derived deserialisation. An absent key is a fault, because `FR-OUT-012` emits an absent **value** as `null` rather than omitting the key |
 | `version`, `series` and `standing` present and strings, `standing` one of two values | The `server` object's three fields and its closed enumeration (`FR-CTX-031`, `FR-CTX-033`, `FR-CTX-034`) |
 | No key of a table names a column that table does not carry | The one constructor a table has (`FR-CAT-044`) |
+| Every table a foreign key names — the referenced table under `foreign_keys`, the referencing table under `referenced_by` — is a member of `tables`; a `null` referenced table names none | `references_are_carried()` in `src/model/document/read.rs`, over the tables already read back; a fault is `ContextFault::DanglingReference`, naming the carrying table, the collection, the key and the table named (`FR-CTX-042`) |
 | A `restricted` marking names at least one property | The marking's fallible conversion (`FR-PRIV-016`) |
 
 **And four things it does not check**, two of them because `FR-CTX-033` forbids
@@ -476,6 +481,11 @@ it in as many words and two because no requirement asks for them.
 | The value of `schema_version` | `FR-OUT-014` fixes what moves it and states no rule for refusing a value, so refusing one would be a check the corpus does not ask for |
 | `primary_key` against `indexes` | `FR-CAT-043` makes the index collection the authoritative source and bars a second, and `BR-CTX-003` is the ground: the document presents the key twice so that a template need not match on a name, and reading both back would give the model a second place the two could disagree from. The document's `primary_key` is therefore not read at all |
 
+A column's `table_name` is not a reference under `FR-CTX-042` and is not
+checked: an absent table fails the render when a test resolves it, which
+`FR-SEM-017` and `FR-SEM-018` make reachable on purpose. The embedded copies of
+`FR-CTX-006` and `FR-CTX-010` are not checked apart from the members they copy.
+
 **Nothing is repaired.** A document that is JSON and does not match the contract
 is `65`, carrying the rule it failed; one that is not well-formed JSON is `65`
 carrying the position the decoder stopped at. Both halves are what the `65` row
@@ -484,7 +494,9 @@ caller that opened the file (`FR-RND-020`, `FR-ERR-029`, `FR-ERR-034`).
 
 **The outward direction can fail, and for one condition.** A foreign key naming
 a table the model does not carry is a violated internal invariant, `70`, which
-`FR-CTX-023` makes unreachable for a model produced by a server read.
+`FR-CTX-023` makes unreachable for a model produced by a server read and
+`FR-CTX-042` unreachable for a supplied document, whose read-back refuses it
+with `65` first.
 Materialising the embedding is what makes it detectable at all: an emitter that
 reproduced the cut at write time would have written the document and left the
 caller to find the dangling reference
@@ -877,13 +889,16 @@ forbids an external process for reading structure.
 | The stored form is an argument array, executed **directly, without a shell**; shell metacharacters are passed through as literal arguments | `FR-CONF-023`, `FR-CONF-024`, `FR-CONF-026` |
 | A string supplied to a command is split by POSIX quoting rules on the **command** path and stored as the array; no quoting engine exists on the path that reads the file | `FR-CONF-025`, `FR-CFG-046`, [`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms) |
 | The stored command is never expanded, so the environment cannot alter what is executed | `FR-CONF-017` |
-| The password is the trimmed standard output, read to a cap of 4096 bytes; a child that writes more is terminated and the invocation is `78` | `FR-CONF-027`, `FR-CONF-031` |
+| The child is started as the leader of a process group of its own, with `process_group(0)` of `std::os::unix::process::CommandExt`, which uses the child's pid as the group id (Rust standard library documentation, stable since 1.64.0, consulted 2026-09-23) | `FR-CONF-028` |
+| The password is the trimmed standard output, read to a cap of 4096 bytes; a child that writes more has its whole process group terminated, and the invocation is `78` | `FR-CONF-027`, `FR-CONF-031` |
 | The cap is applied **at the pipe**, by a read bounded at one byte past it, so the process never holds more than that and never truncates a credential into a password it would then send | `FR-CONF-031`, `FR-SEC-024` |
 | The child's standard input is the null device, so a child cannot inherit the caller's and read from it | `FR-SEC-023`, `BR-CLI-003` |
 | The child's standard error goes to the null device: not inherited, not captured, never quoted | `FR-CONF-032`, `FR-SEC-024` |
 | A non-zero exit is `78`, with the `cause` naming the command as stored and the status the child returned | `FR-CONF-033`, `FR-ERR-034` |
 | A child that cannot be **started** is a condition of its own, also `78`: its next step is to correct the file, not to read what the command printed | `FR-CONF-033`, `FR-ERR-002` |
-| The deadline is enforced by a reader thread draining the pipe and a polling loop in the parent, which kills the child and reports the expiry; exceeding it is `78` | `FR-CONF-028`, `FR-ERR-027`, [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| The phase ends when the child has exited **and** its standard output has reached end of file. The deadline bounds the whole phase: a reader thread drains the pipe and a polling loop in the parent sends `SIGKILL` to the child's process group and reports the expiry, without waiting on the pipe; exceeding it is `78` | `FR-CONF-028`, `FR-ERR-027`, [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| The child's exit is observed with `waitid` under `EXITED`, `NOHANG` and `NOWAIT`, which leaves it waitable, and it is reaped only after the group is signalled — or, on success, after the pipe has closed — so its pid, which is the group's id, cannot be reused before the group kill | `FR-CONF-028`, `FR-CONF-031` |
+| A descendant that has left the group is not terminated; the reader thread is dropped rather than joined, so the invocation still ends at the deadline | `FR-CONF-028` |
 | A bound already spent when the child would be started stops it from being started at all | `FR-GLOB-012`, `FR-CONF-028` |
 
 **Why the parent polls rather than waits.** Three obligations meet on one child
@@ -891,7 +906,9 @@ forbids an external process for reading structure.
 blocking wait nor a blocking read can hold all three: either holds the process
 past the deadline, and a child writing more than a pipe buffers blocks on its
 own write until something drains it. The drain therefore has to run while the
-deadline is watched. The runtime of
+deadline is watched. A child that exits while a descendant holds its standard
+output is a phase still running, which is why the loop waits for both the exit
+and the end of file, and why the exit is observed without reaping. The runtime of
 [`ADR-005`](../adr/adr-005-async-runtime-scope.md) is scoped to `mariadb/` and
 is not started for an invocation that never connects, so the watcher is a thread
 and a short sleep rather than a task
@@ -943,6 +960,25 @@ than of its callers.
 The resolution of the four values from `[core]` is `project/`'s and the clock's
 composition of them with `--timeout` is this module's: `--timeout` takes no part
 in the resolution and composes with its result (`FR-CONF-004`, `FR-GLOB-012`).
+
+## The render bounds
+
+Three contracts serve the bounds of `FR-RND-038`; how they compose, and the
+10 ms poll interval, are
+[architecture.md](architecture.md#the-render-bounds)'s.
+
+| Contract | Obligation | Forced by |
+|---|---|---|
+| The resolved bounds | `project/settings.rs` hands `render/` one value carrying render fuel, the output limit and the memory limit, each the file's value or the built-in default. Each is a type that cannot hold a value outside its range. Every render made under it — an abandoned one and the one that follows — starts with the whole of each | `FR-CONF-045`, `FR-RND-038` |
+| The heap count | `tpl::install_heap_counter(fn() -> usize)` is public, beside `run` and `install_panic_hook`: the binary calls it once, before `run`, with a function reading its allocator's count, and the first installation wins. Reading the count allocates nothing. Not calling it leaves the memory limit without a count | `FR-RND-039`, [`ADR-011`](../adr/adr-011-render-memory-accounting.md) |
+| Quiescence | `mariadb::quiescent()` answers whether the calling thread holds no open connection and no driver runtime; `bounded()` in `cli/render.rs` refuses to start a render with `70` when it does not | `FR-RND-040`, `FR-ERR-030` |
+
+The first two render bounds are answered by `render/` as conditions: the
+engine's out-of-fuel error, found anywhere in the error chain, becomes
+`RenderFuelExhausted`, and a write the counting writer refused becomes
+`RenderOutputLimitExceeded`, so neither reaches the caller as a generic render
+failure (`FR-RND-036`, `FR-RND-037`). The deadline and the memory limit leave
+the process from the watchdog and return nothing.
 
 ## The library shape: five questions, open
 

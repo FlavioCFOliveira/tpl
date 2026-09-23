@@ -161,6 +161,25 @@ pub enum ContextFault {
         /// The structural rule that was not satisfied.
         rule: &'static str,
     },
+    /// A foreign key of a member of `tables` names a table that `tables` does
+    /// not carry (`FR-CTX-042`).
+    ///
+    /// `FR-CTX-042` obliges the `cause` line to name the table that carries
+    /// the key, the key, and the table it names, beside the path the enclosing
+    /// [`Error::ContextDocumentMalformed`] carries.
+    DanglingReference {
+        /// The member of `tables` that carries the key.
+        table: String,
+        /// The collection of that member the key is listed under:
+        /// `foreign_keys` or `referenced_by`.
+        collection: &'static str,
+        /// The key's name.
+        key: String,
+        /// The table the key names and `tables` does not carry — the
+        /// referenced table under `foreign_keys`, the referencing table under
+        /// `referenced_by`.
+        names: String,
+    },
 }
 
 /// Which half of the DSN grammar a value failed.
@@ -690,6 +709,29 @@ pub enum Error {
         limit: Duration,
     },
 
+    /// The render exhausted its render fuel (`FR-RND-036`, `FR-SEC-025`).
+    #[error("the render exhausted its render fuel of {fuel} evaluation steps")]
+    RenderFuelExhausted {
+        /// The resolved value of `core.render_fuel`.
+        fuel: u64,
+    },
+
+    /// The render would have produced more bytes than its render output limit
+    /// (`FR-RND-037`, `FR-SEC-025`).
+    #[error("the render exceeded its render output limit of {limit} bytes")]
+    RenderOutputLimitExceeded {
+        /// The resolved value of `core.render_output_limit`.
+        limit: u64,
+    },
+
+    /// The process was observed holding more heap than the render memory
+    /// limit while the render ran (`FR-RND-039`, `FR-SEC-025`).
+    #[error("the render exceeded its render memory limit of {limit} bytes")]
+    RenderMemoryLimitExceeded {
+        /// The resolved value of `core.render_memory_limit`.
+        limit: u64,
+    },
+
     // ---------------------------------------------------------------- 66 ---
     /// A table, view or routine that does not exist in the selected database
     /// (`FR-SCH-013`, `FR-RND-032`).
@@ -1129,8 +1171,9 @@ pub enum Error {
         file: PathBuf,
     },
 
-    /// `password_command` did not finish within its deadline
-    /// (`FR-CONF-028`, `FR-ERR-027`).
+    /// `password_command` did not finish within its deadline — it had not
+    /// both exited and reached end of file on its standard output — and its
+    /// process group was terminated (`FR-CONF-028`, `FR-ERR-027`).
     #[error("password_command exceeded {bound} of {limit:?}")]
     PasswordCommandDeadlineExceeded {
         /// The command as stored, which `FR-CONF-017` guarantees carries no
@@ -1143,7 +1186,7 @@ pub enum Error {
     },
 
     /// `password_command` wrote more than the cap of `FR-CONF-031` to standard
-    /// output, and the child was terminated.
+    /// output, and its process group was terminated.
     #[error("password_command wrote more than {cap} bytes")]
     PasswordCommandOutputCapExceeded {
         /// The command as stored (`FR-CONF-017`).
@@ -1403,7 +1446,10 @@ impl Error {
             | Self::RenderFailed { .. }
             | Self::TemplateOutsideRoot { .. }
             | Self::ContextDocumentMalformed { .. }
-            | Self::RenderDeadlineExceeded { .. } => 65,
+            | Self::RenderDeadlineExceeded { .. }
+            | Self::RenderFuelExhausted { .. }
+            | Self::RenderOutputLimitExceeded { .. }
+            | Self::RenderMemoryLimitExceeded { .. } => 65,
 
             // 66 EX_NOINPUT
             Self::CatalogueObjectNotFound { .. }
@@ -1475,7 +1521,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 66;
+    const VARIANT_COUNT: usize = 69;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -1687,6 +1733,9 @@ mod tests {
                 },
                 65,
             ),
+            (Error::RenderFuelExhausted { fuel: 100_000_000 }, 65),
+            (Error::RenderOutputLimitExceeded { limit: 67_108_864 }, 65),
+            (Error::RenderMemoryLimitExceeded { limit: 134_217_728 }, 65),
             // 66 EX_NOINPUT
             (
                 Error::CatalogueObjectNotFound {
@@ -2023,6 +2072,9 @@ mod tests {
             Error::TemplateOutsideRoot { .. } => "TemplateOutsideRoot",
             Error::ContextDocumentMalformed { .. } => "ContextDocumentMalformed",
             Error::RenderDeadlineExceeded { .. } => "RenderDeadlineExceeded",
+            Error::RenderFuelExhausted { .. } => "RenderFuelExhausted",
+            Error::RenderOutputLimitExceeded { .. } => "RenderOutputLimitExceeded",
+            Error::RenderMemoryLimitExceeded { .. } => "RenderMemoryLimitExceeded",
             Error::CatalogueObjectNotFound { .. } => "CatalogueObjectNotFound",
             Error::ContextObjectNotFound { .. } => "ContextObjectNotFound",
             Error::TemplateNotFound { .. } => "TemplateNotFound",

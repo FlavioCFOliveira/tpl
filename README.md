@@ -24,7 +24,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 > | `tpl template list`, `show`, `check`, `path` | **works** |
 > | `tpl render` | **works** |
 >
-> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no server at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout.
+> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no server at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout. When it reads the server, the connection is closed and the driver's runtime shut down before the template starts: nothing of the read is alive while a template runs.
 >
 > **And they compose.** [`examples/`](examples/README.md) holds four worked examples that build an application's data layer — in Go, Rust, Python and Node.js — out of three known schemas, through the command line alone, and each one ends by submitting what it rendered to that language's own compiler.
 
@@ -238,7 +238,7 @@ Precedence, strongest first: **command-line flag → `.tpl/.cfg` → built-in de
 
 ### The key space is closed
 
-`.tpl/.cfg` admits exactly fifteen keys — five under `[core]` and ten per `[database.<name>]` block — each with a declared type and a declared default. The table is [`FR-CONF-002`](specification/configuration-model.md) and is not copied here.
+`.tpl/.cfg` admits exactly eighteen keys — eight under `[core]` and ten per `[database.<name>]` block — each with a declared type and a declared default. The table is [`FR-CONF-002`](specification/configuration-model.md) and is not copied here.
 
 **The file is read strictly.** A key outside that space, **anywhere** in the file, exits `78` naming the key and suggesting the nearest one that exists. A value of the wrong type exits `78` naming the line and column, what was found, and what that key takes. Nothing is ignored and nothing is repaired, because a file that decides where to connect and what to run is not a file to guess at — so a `.cfg` a newer `tpl` wrote and an older one does not understand is refused whole rather than read in part.
 
@@ -352,6 +352,18 @@ Every blocking phase has a deadline, so an invocation cannot hang with no diagno
 `--timeout` is separate. It is an overall budget measured from process start, it has no default, and it does not replace a phase deadline: a phase ends at the first of the two to expire. The diagnostic names which one it was and its resolved value.
 
 **Every deadline is now reachable from a command.** The three connection phases and the catalogue query bound a read that misses the cache, `password_command` runs when the configuration is resolved for such a read, and `render_timeout` bounds the one render of `tpl render` — which exits `65` naming which of the two bounds expired and its resolved value.
+
+### Render bounds
+
+A render is bounded by three more limits besides its deadline, each set by a `[core]` key:
+
+- **`render_fuel`** — the evaluation steps one render may execute, counted by the template engine. Default `100000000`; an integer from `1` to `1000000000000`.
+- **`render_output_limit`** — the bytes one render may produce, counted as they are produced. Default `67108864` (64 MiB); an integer from `1` to `1099511627776` (1 TiB). A render stopped here writes nothing to stdout.
+- **`render_memory_limit`** — the heap the process may hold while the render runs, as its allocator counts it, observed every 10 ms. Default `134217728` (128 MiB); an integer from `8388608` (8 MiB) to `1099511627776` (1 TiB). A render stopped here writes nothing further to stdout.
+
+Fuel and output are counts, so a template that loops or writes without end stops at the same point on every run. The memory limit is observed periodically: the process may hold more than the limit between two observations, and a single allocation the operating system refuses outright still ends the process by a signal rather than with `65`. The output is held in memory until the render ends, which is why its default sits at half the memory default — endless output is reported as the output limit, not as memory.
+
+Whichever of the four is crossed first ends the render and exits `65`, naming the bound, its resolved value, and the key that raises it. No key admits `0` or any value meaning "no bound": a value outside the range in `.tpl/.cfg` exits `78`, and `tpl cfg set` refuses it with `64`. No flag and no environment variable sets any of them, and `--timeout` does not affect them. See [`FR-RND-036` … `FR-RND-039`](specification/render-command.md) and [`FR-CONF-045`](specification/configuration-model.md).
 
 ---
 

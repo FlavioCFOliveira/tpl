@@ -5,7 +5,7 @@
 //! are the same question — is this dotted name a key — and the way to ask it
 //! once is to make the answer a value: [`Key::parse`] returns [`None`] for
 //! everything the table of `FR-CONF-002` does not list, and every key that
-//! exists is one of the five variants of [`CoreKey`] or one of the ten of
+//! exists is one of the eight variants of [`CoreKey`] or one of the ten of
 //! [`EntryKey`].
 //!
 //! The type also carries the **declared type** of each key, through
@@ -38,6 +38,15 @@ pub(crate) enum ValueType {
     EntryName,
     /// A positive integer number of seconds (the four `[core]` deadlines).
     Seconds,
+    /// An integer number of evaluation steps within the range of
+    /// `core.render_fuel` (`FR-CONF-045`).
+    RenderFuel,
+    /// An integer number of bytes within the range of
+    /// `core.render_output_limit` (`FR-CONF-045`).
+    RenderOutputLimit,
+    /// An integer number of bytes within the range of
+    /// `core.render_memory_limit` (`FR-CONF-045`).
+    RenderMemoryLimit,
     /// A connection URL, per `FR-CONF-009` and `FR-CONF-010`.
     Dsn,
     /// A hostname or address, a user name, a password, or a server-side
@@ -59,6 +68,9 @@ impl ValueType {
         match self {
             Self::EntryName => "the name of a database entry",
             Self::Seconds => "a positive integer number of seconds",
+            Self::RenderFuel => "an integer number of evaluation steps from 1 to 1000000000000",
+            Self::RenderOutputLimit => "an integer number of bytes from 1 to 1099511627776",
+            Self::RenderMemoryLimit => "an integer number of bytes from 8388608 to 1099511627776",
             Self::Dsn => "a connection URL",
             Self::Text => "a string",
             Self::Port => "a TCP port between 1 and 65535",
@@ -90,18 +102,27 @@ pub(crate) enum CoreKey {
     PasswordTimeout,
     /// `core.query_timeout`.
     QueryTimeout,
+    /// `core.render_fuel`.
+    RenderFuel,
+    /// `core.render_memory_limit`.
+    RenderMemoryLimit,
+    /// `core.render_output_limit`.
+    RenderOutputLimit,
     /// `core.render_timeout`.
     RenderTimeout,
 }
 
 impl CoreKey {
-    /// The five, in the order `FR-CONF-002` states them.
-    pub(crate) const ALL: [Self; 5] = [
+    /// The eight, in the order `FR-CONF-002` states them.
+    pub(crate) const ALL: [Self; 8] = [
         Self::Database,
         Self::ConnectTimeout,
         Self::QueryTimeout,
         Self::PasswordTimeout,
         Self::RenderTimeout,
+        Self::RenderFuel,
+        Self::RenderOutputLimit,
+        Self::RenderMemoryLimit,
     ];
 
     /// The key's last segment, as the file spells it.
@@ -111,6 +132,9 @@ impl CoreKey {
             Self::Database => "database",
             Self::PasswordTimeout => "password_timeout",
             Self::QueryTimeout => "query_timeout",
+            Self::RenderFuel => "render_fuel",
+            Self::RenderMemoryLimit => "render_memory_limit",
+            Self::RenderOutputLimit => "render_output_limit",
             Self::RenderTimeout => "render_timeout",
         }
     }
@@ -128,6 +152,9 @@ impl CoreKey {
             | Self::PasswordTimeout
             | Self::QueryTimeout
             | Self::RenderTimeout => ValueType::Seconds,
+            Self::RenderFuel => ValueType::RenderFuel,
+            Self::RenderOutputLimit => ValueType::RenderOutputLimit,
+            Self::RenderMemoryLimit => ValueType::RenderMemoryLimit,
         }
     }
 }
@@ -353,7 +380,7 @@ impl fmt::Display for Target {
 /// The candidate population `FR-ERR-021` names for a configuration key: the
 /// enumerated space of `FR-CONF-002`, written out.
 ///
-/// The five `[core]` keys are the whole of the section. The ten entry keys are
+/// The eight `[core]` keys are the whole of the section. The ten entry keys are
 /// written once per entry name the file defines and once for the name the
 /// supplied key itself carries, so that `database.shop.hst` is corrected in a
 /// project whose file does not yet define `shop`.
@@ -406,10 +433,10 @@ mod tests {
     use super::{CoreKey, EntryKey, Key, Target, ValueType, candidates};
 
     #[test]
-    fn fr_conf_002_the_space_is_exactly_the_fifteen_forms_the_table_declares() {
-        // FR-CONF-002: five [core] keys and ten keys of an entry, and no
+    fn fr_conf_002_the_space_is_exactly_the_eighteen_forms_the_table_declares() {
+        // FR-CONF-002: eight [core] keys and ten keys of an entry, and no
         // others.
-        assert_eq!(CoreKey::ALL.len(), 5);
+        assert_eq!(CoreKey::ALL.len(), 8);
         assert_eq!(EntryKey::ALL.len(), 10);
 
         let core: Vec<String> = CoreKey::ALL.iter().map(ToString::to_string).collect();
@@ -421,6 +448,9 @@ mod tests {
                 "core.query_timeout",
                 "core.password_timeout",
                 "core.render_timeout",
+                "core.render_fuel",
+                "core.render_output_limit",
+                "core.render_memory_limit",
             ]
         );
 
@@ -503,6 +533,11 @@ mod tests {
         // FR-CONF-002, FR-CFG-010: the declared type is looked up from the key.
         assert_eq!(CoreKey::Database.expects(), ValueType::EntryName);
         assert_eq!(CoreKey::QueryTimeout.expects(), ValueType::Seconds);
+        assert_eq!(CoreKey::RenderFuel.expects(), ValueType::RenderFuel);
+        assert_eq!(
+            CoreKey::RenderOutputLimit.expects(),
+            ValueType::RenderOutputLimit
+        );
         assert_eq!(EntryKey::Port.expects(), ValueType::Port);
         assert_eq!(EntryKey::Tls.expects(), ValueType::Tls);
         assert_eq!(

@@ -24,6 +24,15 @@
 //! reaches this module starts no runtime, opens no socket, and has nothing for
 //! `NFR-PERF-007`'s instruments to find.
 //!
+//! **Nothing of a read outlives it.** [`Session::close`] ends the session with
+//! the protocol's quit, closes the socket, and then shuts the runtime down —
+//! explicitly, in that order, and waiting for every thread the runtime
+//! started. `FR-RND-040` requires that no connection be open and no runtime of
+//! the driver be alive while a template is evaluated, and [`quiescent`] is how
+//! the render asks: each connection and each runtime is counted from the
+//! moment it exists to the moment it is gone, and the render refuses to start
+//! while either count is above zero.
+//!
 //! **The session guarantee cannot be stepped around.** [`connect::open`] is
 //! visible to this module alone, so the only route from the crate to an open
 //! connection is [`open`], and [`open`] issues the read-only statement of
@@ -60,7 +69,11 @@ pub(crate) mod fault;
 pub(crate) mod session;
 pub(crate) mod window;
 
+use std::cell::Cell;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use std::panic::Location;
+use std::thread::LocalKey;
 
 use sqlx::Connection as _;
 use sqlx::mysql::MySqlConnection;
@@ -71,6 +84,94 @@ use crate::error::Error;
 use crate::model::server::Server;
 
 pub(crate) use connect::Target;
+
+thread_local! {
+    /// The connections to a server this thread holds open.
+    static CONNECTIONS: Cell<usize> = const { Cell::new(0) };
+
+    /// The driver runtimes this thread has built and not yet shut down.
+    static RUNTIMES: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Whether this thread holds no open connection and no driver runtime
+/// (`FR-RND-040`).
+///
+/// The counts are **per thread**, and that is exact rather than approximate:
+/// a runtime of `ADR-005` is a current-thread runtime built by [`open`] on the
+/// thread that calls it, every statement is entered through `block_on` on that
+/// thread, and the values that hold a connection or a runtime cannot leave it
+/// — [`Counted`] is not [`Send`]. A process-wide count would be the same in
+/// the binary, which runs one command on one thread, and wrong in the test
+/// suite, where another test's connection on another thread is not this
+/// invocation's.
+pub(crate) fn quiescent() -> bool {
+    CONNECTIONS.with(Cell::get) == 0 && RUNTIMES.with(Cell::get) == 0
+}
+
+/// One unit of a thread's count, held for as long as what it counts exists.
+#[derive(Debug)]
+struct Alive {
+    /// The count this unit belongs to.
+    count: &'static LocalKey<Cell<usize>>,
+    /// Keeps the unit, and whatever holds it, on the thread it was counted on.
+    here: PhantomData<*const ()>,
+}
+
+impl Alive {
+    /// Adds one to `count`.
+    fn of(count: &'static LocalKey<Cell<usize>>) -> Self {
+        count.with(|held| held.set(held.get().saturating_add(1)));
+
+        Self {
+            count,
+            here: PhantomData,
+        }
+    }
+}
+
+impl Drop for Alive {
+    fn drop(&mut self) {
+        self.count
+            .with(|held| held.set(held.get().saturating_sub(1)));
+    }
+}
+
+/// A connection or a runtime, counted for as long as it exists.
+///
+/// The value is declared before its unit of count, so it is dropped first:
+/// the count falls only once the socket is closed or the runtime's threads
+/// have stopped, never while either is still going.
+#[derive(Debug)]
+struct Counted<T> {
+    /// What is counted.
+    value: T,
+    /// Its unit of count.
+    alive: Alive,
+}
+
+impl<T> Counted<T> {
+    /// `value`, counted in `count`.
+    fn new(value: T, count: &'static LocalKey<Cell<usize>>) -> Self {
+        Self {
+            value,
+            alive: Alive::of(count),
+        }
+    }
+}
+
+impl<T> Deref for Counted<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T> DerefMut for Counted<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.value
+    }
+}
 
 /// An open connection whose session has been settled.
 ///
@@ -89,11 +190,11 @@ pub(crate) struct Session {
     ///
     /// It is an [`Option`] because [`Session::close`] takes it out, and the
     /// driver's own close consumes the connection.
-    connection: Option<MySqlConnection>,
+    connection: Option<Counted<MySqlConnection>>,
 
     /// The runtime of `ADR-005`, which every statement on this connection is
     /// entered through.
-    runtime: Runtime,
+    runtime: Counted<Runtime>,
 
     /// The `server` object of `FR-CTX-031`, as `FR-SRV-028` carries it into
     /// the model.
@@ -129,20 +230,41 @@ impl Session {
         &self.entry
     }
 
-    /// Closes the connection.
+    /// Closes the connection and shuts the runtime down.
     ///
     /// The root coordination document closes the connection as soon as the
     /// read ends, and `NFR-PERF-004` makes the count of them observable from
     /// the server, so the close is a polite one: the driver sends the
-    /// protocol's own quit and shuts the socket down.
+    /// protocol's own quit and shuts the socket down. `FR-RND-040` then
+    /// requires every runtime of the driver to be gone before a template is
+    /// evaluated, so the runtime is shut down here, **explicitly and after the
+    /// socket**, rather than whenever the value happens to go out of scope.
+    ///
+    /// The runtime is dropped rather than shut down with a timeout. Dropping
+    /// it waits for every thread its blocking pool started; a timeout would
+    /// return with such a thread possibly still running, which is a runtime
+    /// alive while the template evaluates.
     ///
     /// A close that fails is not a condition. Nothing is left to report by the
-    /// time it runs — the answer is already produced — and `FR-ERR-025` makes
-    /// a silent close a success.
-    pub(crate) fn close(mut self) {
-        if let Some(connection) = self.connection.take() {
-            let _ = self.runtime.block_on(connection.close());
+    /// time it runs — the answer is already produced — and what `FR-RND-040`
+    /// and `NFR-PERF-004` require is that the session be gone, which it is
+    /// either way: the socket is closed when the connection the failed close
+    /// was handed is dropped.
+    pub(crate) fn close(self) {
+        let Self {
+            connection,
+            runtime,
+            ..
+        } = self;
+
+        if let Some(Counted { value, alive }) = connection {
+            let _ = runtime.block_on(value.close());
+            drop(alive);
         }
+
+        let Counted { value, alive } = runtime;
+        drop(value);
+        drop(alive);
     }
 }
 
@@ -161,10 +283,11 @@ impl Session {
 /// the process could not obtain the machinery it needs to speak to a server at
 /// all, which is a defect in `tpl` or an exhausted host, and there is no
 /// second way to try.
-fn runtime() -> Result<Runtime, Error> {
+fn runtime() -> Result<Counted<Runtime>, Error> {
     Builder::new_current_thread()
         .enable_all()
         .build()
+        .map(|built| Counted::new(built, &RUNTIMES))
         .map_err(|_| Error::InternalInvariant {
             invariant: "the current-thread runtime of ADR-005 can be built",
             location: Location::caller(),
@@ -191,7 +314,7 @@ fn runtime() -> Result<Runtime, Error> {
 /// issued, because no [`Session`] is produced to issue one with.
 pub(crate) fn open(target: &Target<'_>, clock: &Clock) -> Result<Session, Error> {
     let runtime = runtime()?;
-    let mut connection = connect::open(&runtime, target, clock)?;
+    let mut connection = Counted::new(connect::open(&runtime, target, clock)?, &CONNECTIONS);
 
     // FR-SRV-011: there is no condition around this call, and no caller that
     // reaches a connection without it — `connect::open` is visible to this
@@ -208,7 +331,25 @@ pub(crate) fn open(target: &Target<'_>, clock: &Clock) -> Result<Session, Error>
 
 #[cfg(test)]
 mod tests {
-    use super::runtime;
+    use super::{quiescent, runtime};
+
+    #[test]
+    fn fr_rnd_040_a_runtime_is_counted_until_it_is_shut_down_and_on_its_own_thread() {
+        // FR-RND-040's in-process observation rests on this count.
+        assert!(quiescent(), "the test thread starts with nothing alive");
+
+        let built = runtime().expect("the host can build a runtime");
+        assert!(!quiescent(), "a built runtime is alive");
+
+        // Another thread holds nothing of this one.
+        let elsewhere = std::thread::spawn(quiescent)
+            .join()
+            .expect("the thread ran");
+        assert!(elsewhere, "the count is per thread");
+
+        drop(built);
+        assert!(quiescent(), "a dropped runtime is gone");
+    }
 
     #[test]
     fn adr_005_the_runtime_this_module_builds_is_a_current_thread_one() {

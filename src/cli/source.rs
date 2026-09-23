@@ -329,7 +329,11 @@ impl<'a> Reader<'a> {
     /// and closes it.
     ///
     /// The session is closed as soon as the read ends, which is what lets the
-    /// answer outlive it: a [`catalogue::Catalogue`] owns its rows.
+    /// answer outlive it: a [`catalogue::Catalogue`] owns its rows. The close
+    /// ends the session, closes the socket and shuts the driver's runtime
+    /// down before this returns, whether the read succeeded or not, so every
+    /// caller holds the owned answer and nothing of the read — which is what
+    /// `FR-RND-040` requires of `tpl render` before its template evaluates.
     ///
     /// # Errors
     ///
@@ -536,6 +540,10 @@ impl<'a> Reader<'a> {
     /// `tpl render` calls it directly on a miss, including the miss
     /// `FR-CACHE-039` finds during a render; that is the one connection of
     /// `NFR-PERF-004`, because nothing before it opened one.
+    ///
+    /// `present` runs only after [`Reader::fetch`] has returned, so the
+    /// connection is closed and the runtime shut down before a template is
+    /// evaluated from what it is handed (`FR-RND-040`).
     ///
     /// # Errors
     ///

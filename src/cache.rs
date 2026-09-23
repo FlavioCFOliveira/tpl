@@ -45,6 +45,21 @@
 //!   cache as it was found, and nothing said. [`Cache::write`] therefore
 //!   returns `()`.
 //!
+//! Two further files are a miss wherever they are read, and both for the same
+//! reason: the file is not one this binary wrote for the object asked for.
+//!
+//! - `FR-CACHE-033`, `FR-CDOC-008` — a read that serves one named object from
+//!   its own file ([`Cache::table`], [`Cache::view`], [`Cache::routine`]) and
+//!   finds another object in it, differing in kind or, byte for byte, in name.
+//!   On a filesystem that folds case or Unicode normalisation two objects share
+//!   one file (finding SEC-03 of `SECURITY-AUDIT.md`), and serving the other
+//!   one would answer that the requested object does not exist, naming a
+//!   server that was never asked. The file-naming arrangement is unchanged.
+//! - `FR-CACHE-033`, `FR-CACHE-030` — an object file that is a symbolic link
+//!   (hardening observation H-2). It is never read through, whatever it points
+//!   at; the rewrite that follows the miss replaces the link, which
+//!   [`write_through`]'s rename already does.
+//!
 //! The one operation that does report is [`Cache::clean`], and it reports
 //! because removing is the whole of what the caller asked for: a `tpl cache
 //! clean` that removed nothing and exited `0` would tell the caller the cache
@@ -83,6 +98,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
+use crate::model::ToStatic as _;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::{self, Named};
 use crate::model::document::shape::TableDocument;
@@ -155,6 +171,45 @@ pub(crate) struct Loaded {
     views: Vec<String>,
     /// The contents of each routine file read.
     routines: Vec<String>,
+    /// The one object a read of one named object asked for, or [`None`] for a
+    /// read of a collection or of everything.
+    requested: Option<Requested>,
+}
+
+/// The object a read of one named object asked for (`FR-CDOC-008`).
+///
+/// A file at that object's path is **present**, in the sense `FR-CDOC-008`
+/// serves, only where it holds that object: the same kind and, byte for byte,
+/// the same name (`FR-CACHE-033`). The kind of a table or a view is the
+/// collection the file sits in and the type it decodes as, so only a routine
+/// carries a kind to compare.
+#[derive(Debug)]
+struct Requested {
+    /// The collection the object belongs to.
+    collection: Collection,
+    /// The name asked for, as the command line wrote it.
+    name: String,
+    /// The routine kind asked for; [`None`] for a table or a view.
+    kind: Option<RoutineKind<'static>>,
+}
+
+impl Requested {
+    /// Whether `document`, reassembled from one object file, holds exactly the
+    /// object asked for.
+    fn held_by(&self, document: &DatabaseDocument<'_>) -> bool {
+        match self.collection {
+            Collection::Tables => {
+                matches!(document.tables.as_slice(), [table] if table.name == self.name)
+            }
+            Collection::Views => {
+                matches!(document.views.as_ref(), [view] if view.name == self.name)
+            }
+            Collection::Routines => matches!(
+                document.routines.as_ref(),
+                [routine] if routine.name == self.name && Some(&routine.kind) == self.kind.as_ref()
+            ),
+        }
+    }
 }
 
 impl Loaded {
@@ -172,10 +227,14 @@ impl Loaded {
     /// project's — so `BR-SCH-001` would fail on the one property it is about:
     /// a listing served from the store would present the same objects in
     /// another order from the same listing served live.
+    ///
+    /// **A read of one named object is a miss where its file holds another**
+    /// (`FR-CACHE-033`, `FR-CDOC-008`): the check is made here, over the
+    /// member already decoded, so it costs a comparison and no second parse.
     pub(crate) fn document(&self) -> Option<DatabaseDocument<'_>> {
         let metadata: Metadata<'_> = serde_json::from_str(&self.metadata).ok()?;
 
-        Some(DatabaseDocument {
+        let document = DatabaseDocument {
             name: metadata.name,
             charset: metadata.charset,
             collation: metadata.collation,
@@ -183,7 +242,12 @@ impl Loaded {
             tables: decode(&self.tables)?,
             views: Cow::Owned(decode(&self.views)?),
             routines: Cow::Owned(decode(&self.routines)?),
-        })
+        };
+
+        match &self.requested {
+            Some(requested) if !requested.held_by(&document) => None,
+            _ => Some(document),
+        }
     }
 }
 
@@ -295,9 +359,9 @@ impl Shelf {
 
     /// The contents of the member's file, or [`None`] on a miss
     /// (`FR-CACHE-033`): absent — removed since the listing was read, which
-    /// `FR-CACHE-039` names — unreadable, or not UTF-8.
+    /// `FR-CACHE-039` names — a symbolic link, unreadable, or not UTF-8.
     pub(crate) fn read(&self) -> Option<String> {
-        read(&self.file)
+        read_object(&self.file)
     }
 
     /// The table `bytes` hold, or [`None`] on a miss.
@@ -622,6 +686,7 @@ impl Cache {
             tables: members(&layout.collection(Collection::Tables))?,
             views: members(&layout.collection(Collection::Views))?,
             routines: members(&layout.collection(Collection::Routines))?,
+            requested: None,
         })
     }
 
@@ -729,19 +794,23 @@ impl Cache {
 
         let read = members(&layout.collection(collection))?;
 
-        Some(self.one(collection, read_metadata(layout)?, read))
+        Some(self.one(collection, read_metadata(layout)?, read, None))
     }
 
     /// One table, or [`None`] on a miss (`FR-CDOC-008`).
+    ///
+    /// The file at the table's path is a miss where it is a symbolic link, and
+    /// the hit it produces is a miss at [`Loaded::document`] where the file
+    /// holds a table of another name (`FR-CACHE-033`).
     pub(crate) fn table(&self, name: &str) -> Option<Loaded> {
         let layout = self.layout.as_ref()?;
-        self.member(Collection::Tables, layout.table(name)?)
+        self.member(Collection::Tables, layout.table(name)?, name, None)
     }
 
-    /// One view, or [`None`] on a miss.
+    /// One view, or [`None`] on a miss, on the terms of [`Cache::table`].
     pub(crate) fn view(&self, name: &str) -> Option<Loaded> {
         let layout = self.layout.as_ref()?;
-        self.member(Collection::Views, layout.view(name)?)
+        self.member(Collection::Views, layout.view(name)?, name, None)
     }
 
     /// One routine of a known kind, or [`None`] on a miss.
@@ -751,13 +820,28 @@ impl Cache {
     /// holds one of the two answers, and a cache that holds both puts the
     /// ambiguity of `FR-SCH-010` in the caller's hands exactly as a server read
     /// does.
+    ///
+    /// It is a miss on the terms of [`Cache::table`], and where the file holds
+    /// a routine of the other kind as well (`FR-CACHE-033`).
     pub(crate) fn routine(&self, kind: &RoutineKind<'_>, name: &str) -> Option<Loaded> {
         let layout = self.layout.as_ref()?;
-        self.member(Collection::Routines, layout.routine(kind, name)?)
+        self.member(
+            Collection::Routines,
+            layout.routine(kind, name)?,
+            name,
+            Some(kind.to_static()),
+        )
     }
 
-    /// One named member of `collection`, from `file`.
-    fn member(&self, collection: Collection, file: PathBuf) -> Option<Loaded> {
+    /// The member of `collection` named `name` — of `kind`, for a routine —
+    /// from `file`.
+    fn member(
+        &self,
+        collection: Collection,
+        file: PathBuf,
+        name: &str,
+        kind: Option<RoutineKind<'static>>,
+    ) -> Option<Loaded> {
         let layout = self.layout.as_ref()?;
 
         // The versions govern every file of the folder, per FR-CDOC-004, so
@@ -765,18 +849,36 @@ impl Cache {
         // collection is.
         self.meta()?;
 
-        let bytes = read(&file)?;
+        let bytes = read_object(&file)?;
+        let requested = Requested {
+            collection,
+            name: name.to_owned(),
+            kind,
+        };
 
-        Some(self.one(collection, read_metadata(layout)?, vec![bytes]))
+        Some(self.one(
+            collection,
+            read_metadata(layout)?,
+            vec![bytes],
+            Some(requested),
+        ))
     }
 
-    /// A hit carrying `read` as the members of `collection`.
-    fn one(&self, collection: Collection, metadata: String, read: Vec<String>) -> Loaded {
+    /// A hit carrying `read` as the members of `collection`, and the one
+    /// object a named read asked for, where it was one.
+    fn one(
+        &self,
+        collection: Collection,
+        metadata: String,
+        read: Vec<String>,
+        requested: Option<Requested>,
+    ) -> Loaded {
         let mut loaded = Loaded {
             metadata,
             tables: Vec::new(),
             views: Vec::new(),
             routines: Vec::new(),
+            requested,
         };
 
         match collection {
@@ -1049,13 +1151,51 @@ fn read_metadata(layout: &Layout) -> Option<String> {
     read(&layout.database())
 }
 
+/// The contents of the object file `file`, or [`None`] on a miss
+/// (`FR-CACHE-033`).
+///
+/// It is [`read`] with the guard `FR-CACHE-033` adds for an object file, which
+/// is the guard [`holds`] applies on the write: a file that is not a regular
+/// file — a symbolic link above all, whatever it points at — is a miss, and is
+/// never read through. The file opened must be the one inspected, by device
+/// and inode, so a regular file replaced by a link between the inspection and
+/// the open is not read either: the open would follow the link, and what it
+/// opened is not what was inspected.
+///
+/// *Rejected: `O_NOFOLLOW` on the open.* It is one system call rather than
+/// two, but the flag's value differs between the supported targets and the
+/// crate carries it only through a further feature of `rustix`; and an open
+/// that follows no link still opens a FIFO, which blocks, where the inspection
+/// first refuses it. The inspection costs one `lstat` per object file read.
+fn read_object(file: &Path) -> Option<String> {
+    use std::io::Read as _;
+    use std::os::unix::fs::MetadataExt as _;
+
+    let inspected = fs::symlink_metadata(file).ok()?;
+    if !inspected.file_type().is_file() {
+        return None;
+    }
+
+    let mut handle = fs::File::open(file).ok()?;
+    let opened = handle.metadata().ok()?;
+    if opened.dev() != inspected.dev() || opened.ino() != inspected.ino() {
+        return None;
+    }
+
+    let mut text = String::with_capacity(usize::try_from(opened.len()).unwrap_or(0));
+    handle.read_to_string(&mut text).ok()?;
+
+    Some(text)
+}
+
 /// The contents of every object file of `directory`, or [`None`] where the
 /// directory could not be walked.
 ///
 /// A file that is not an object — the temporary of a write in flight, anything
 /// a hand left there — is skipped, per [`paths::is_object`]. A file that is an
-/// object and cannot be read makes the whole collection a miss: serving the
-/// rest would be a listing short one member, which `BR-CDOC-002` refuses.
+/// object and cannot be read, or is a symbolic link, makes the whole collection
+/// a miss: serving the rest would be a listing short one member, which
+/// `BR-CDOC-002` refuses.
 fn members(directory: &Path) -> Option<Vec<String>> {
     let mut held = Vec::new();
 
@@ -1063,7 +1203,7 @@ fn members(directory: &Path) -> Option<Vec<String>> {
         let path = entry.ok()?.path();
 
         if paths::is_object(&path) {
-            held.push(read(&path)?);
+            held.push(read_object(&path)?);
         }
     }
 
@@ -1809,6 +1949,160 @@ mod tests {
         let cache = Cache::of(&scratch.path(".tpl"), "shop");
         cache.write(&document, super::Covered::Everything);
         cache
+    }
+
+    /// Copies the object file `from` over the path `to`, as a filesystem that
+    /// folds two names onto one file would present it.
+    fn copied(from: &Path, to: &Path) {
+        std::fs::copy(from, to).expect("the store is writable");
+    }
+
+    #[test]
+    fn fr_cache_033_a_named_table_read_whose_file_holds_another_table_is_a_miss() {
+        // FR-CACHE-033, FR-CDOC-008, finding SEC-03: the file at the path of
+        // the table asked for holds another table. It is not present, so the
+        // read misses and goes to the server rather than answering that the
+        // table does not exist.
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        let layout = layout(&scratch);
+        copied(
+            &layout.table("carrier").expect("a component"),
+            &layout.table("carrier_other").expect("a component"),
+        );
+
+        assert!(
+            cache
+                .table("carrier")
+                .is_some_and(|loaded| loaded.document().is_some()),
+            "the table the file holds is served"
+        );
+        assert!(
+            cache
+                .table("carrier_other")
+                .and_then(|loaded| loaded.document().map(|_| ()))
+                .is_none(),
+            "a file holding another table is a miss"
+        );
+        // The shape the audit found: a name differing only in case. On a
+        // filesystem that folds case it reaches the file of `carrier`; on one
+        // that does not it reaches no file. It is a miss on both.
+        assert!(
+            cache
+                .table("CARRIER")
+                .and_then(|loaded| loaded.document().map(|_| ()))
+                .is_none(),
+            "a name differing in case is a miss"
+        );
+    }
+
+    #[test]
+    fn fr_cache_033_a_named_view_read_whose_file_holds_another_view_is_a_miss() {
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        let layout = layout(&scratch);
+        copied(
+            &layout.view("v_carrier_directory").expect("a component"),
+            &layout.view("v_other").expect("a component"),
+        );
+
+        assert!(
+            cache
+                .view("v_carrier_directory")
+                .is_some_and(|loaded| loaded.document().is_some())
+        );
+        assert!(
+            cache
+                .view("v_other")
+                .and_then(|loaded| loaded.document().map(|_| ()))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn fr_cache_033_a_named_routine_read_whose_file_holds_another_name_or_kind_is_a_miss() {
+        use crate::model::routine::RoutineKind;
+
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        let layout = layout(&scratch);
+        let name = "sp_book_consignment";
+        let procedure = layout
+            .routine(&RoutineKind::Procedure, name)
+            .expect("a component");
+
+        assert!(
+            cache
+                .routine(&RoutineKind::Function, name)
+                .is_some_and(|loaded| loaded.document().is_some()),
+            "the function the file holds is served"
+        );
+
+        // Another name: `procedure:sp_other` holding `sp_book_consignment`.
+        copied(
+            &procedure,
+            &layout
+                .routine(&RoutineKind::Procedure, "sp_other")
+                .expect("a component"),
+        );
+        assert!(
+            cache
+                .routine(&RoutineKind::Procedure, "sp_other")
+                .and_then(|loaded| loaded.document().map(|_| ()))
+                .is_none(),
+            "a file holding another name is a miss"
+        );
+
+        // Another kind: `function:sp_book_consignment` holding the procedure.
+        copied(
+            &procedure,
+            &layout
+                .routine(&RoutineKind::Function, name)
+                .expect("a component"),
+        );
+        assert!(
+            cache
+                .routine(&RoutineKind::Function, name)
+                .and_then(|loaded| loaded.document().map(|_| ()))
+                .is_none(),
+            "a file holding the other kind is a miss"
+        );
+    }
+
+    #[test]
+    fn fr_cache_033_an_object_file_that_is_a_symbolic_link_is_a_miss_for_every_read() {
+        // FR-CACHE-033, H-2: whatever the link points at — here, the very
+        // bytes the file held — it is not read through, by a named read, a
+        // collection, the whole store, or a render reaching it.
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        let layout = layout(&scratch);
+        let file = layout.table("carrier").expect("a component");
+        let elsewhere = scratch.path("carrier.held");
+        std::fs::rename(&file, &elsewhere).expect("the store is writable");
+        std::os::unix::fs::symlink(&elsewhere, &file).expect("the store is writable");
+
+        assert!(cache.table("carrier").is_none(), "a named read");
+        assert!(
+            cache.collection(Collection::Tables).is_none(),
+            "a collection"
+        );
+        assert!(cache.everything().is_none(), "the whole store");
+
+        let shelved = cache.shelved().expect("the listing opens no object file");
+        let shelf = shelved
+            .tables()
+            .iter()
+            .find(|shelf| crate::model::document::order::Named::name(*shelf) == "carrier")
+            .expect("the listing names the link");
+        assert!(shelf.read().is_none(), "a render reaching it");
+
+        // The other members of the collection are untouched by the guard.
+        assert!(
+            cache
+                .table("consignment")
+                .is_some_and(|loaded| loaded.document().is_some())
+        );
     }
 
     #[test]

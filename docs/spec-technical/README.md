@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -34,6 +34,23 @@ blocks is a statement in a written document, not a document. Every other entry
 is settled. One of those is settled and **interim** — `OD-30`, which records an
 arrangement each later sprint removes one arm of — and it blocks nothing; one
 arm remains.
+
+**The whole folder was swept on 2026-09-23 against the forty-second edition of
+`/specification`, `ADR-011`, and the code of sprint 20** in the working tree
+over HEAD `d89ffc4`. Eleven documents changed; `overview.md` did not.
+`architecture.md` gains [The render bounds](architecture.md#the-render-bounds),
+which **fixes the render memory limit's poll interval at 10 ms** under
+`ADR-011`'s delegation, and states that the connection and the driver's runtime
+end before any render. `interfaces.md` gains the three contracts behind the
+bounds, the process group of the `password_command` child, and the dangling
+reference check of `FR-CTX-042`; `data-model.md` the eighteen key forms and
+two cache read guards; `security.md` the render bounds with their residuals;
+`technology-stack.md` `cap`, the engine's `fuel` feature, and two further
+`rustix` calls. `open-decisions.md` amends `OD-05`, `OD-10`, `OD-11` and
+`OD-12`; `OD-10`'s collision outcome is superseded by the user's decision for
+rmp `#254`, under `FR-CACHE-033`. `traceability.md` harvests the
+edition out of order; `verification.md`, `quality-attributes.md` and
+`operations.md` follow.
 
 **The whole folder was swept on 2026-09-22 against the thirty-sixth edition of
 `specification/performance-requirements.md`**, which withdrew the performance
@@ -190,7 +207,9 @@ ordered stages in the order `FR-SRV-042` fixes, closed when the read ends. The
 catalogue reader and the query-count invariants. The cache as a read-through layer. The model as
 the single junction of three sources and three consumers. The render component:
 engine construction, loader, undefined behaviour, the output formatter,
-auto-escape, context assembly. Deadlines on six named blocking phases. Lazy initialisation. The
+auto-escape, context assembly. Deadlines on six named blocking phases. The four
+render bounds, their composition, and the poll interval of the memory limit.
+Lazy initialisation. The
 synchronous process and the runtime boundary inside `mariadb/`. The module map
 and the layout conventions. The division inside `project/` and the four
 decisions that produce it: reading apart from resolving, reading apart from
@@ -232,8 +251,9 @@ six forms that reach one renderer, and the runtime-introspected command tree
 with the two shapes of its document. The template surface as registered.
 Context access from a filter or a test. The configuration reader and writer, the
 one predicate that decides an entry's coherence for both of them, and the two
-codes its two callers produce. The `password_command` child and why its parent
-polls. The phase clock's four obligations. The pattern matcher and the
+codes its two callers produce. The `password_command` child, its process
+group, and why its parent polls. The phase clock's four obligations. The three
+contracts behind the render bounds. The pattern matcher and the
 qualified-routine-name parser. The two directions over the document: which
 emitted types are the model's own and which four are not, the two projections,
 the one flattening, what the read-back checks, and the four things it does not. The five

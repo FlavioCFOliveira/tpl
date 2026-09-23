@@ -16,9 +16,9 @@
 //! composes them — `tpl render` assembles the context of `FR-RND-023` from a
 //! catalogue read or from a `--context` document, binds at most one object,
 //! renders one template and writes the result to stdout. [`run`] is the entry
-//! point the binary calls, [`install_panic_hook`] is the process setup it
-//! performs first, and [`Error`] is the value every module reports failure
-//! through.
+//! point the binary calls, [`install_panic_hook`] and [`install_heap_counter`]
+//! are the process setup it performs first, and [`Error`] is the value every
+//! module reports failure through.
 //!
 //! | Module | What it owns |
 //! |---|---|
@@ -32,6 +32,7 @@
 //! | `mariadb` | The one connection of `NFR-PERF-004`, the TLS mode of `FR-CONF-037` and `ADR-002`, the read-only session of `FR-SRV-008` … `FR-SRV-011`, the version probe of `FR-SRV-002` with the window of `FR-SRV-015`, and the classification `OD-06` drops the driver's error at |
 //! | `mariadb::catalogue` | The fixed repertoire of catalogue queries — one per object kind, whose count `NFR-PERF-001` and `NFR-PERF-002` fix — the common column lists of `FR-SRV-037`, the fold that turns their rows into the model, and the completeness verdict of `FR-PRIV-001` … `FR-PRIV-019` it takes as it folds |
 //! | `cache` | The store of `FR-CACHE-001` … `FR-CACHE-037`: one folder per entry, one file per object written through a rename, the two versions and the completeness record of `FR-CDOC-001` … `FR-CDOC-007`, and a failure in either direction that is a miss rather than a condition |
+//! | `heap` | The heap count the render memory limit of `FR-RND-039` bounds: the one place the library reads the counting allocator of `ADR-011`, which the binary installs and hands over through [`install_heap_counter`] |
 //! | `render` | The engine of `ADR-001`, built lazily and from disk at render time; the one template-name resolution of `FR-TMPL-023` … `FR-TMPL-027`; and the registered surface of `FR-ENV-005` … `FR-ENV-046` with the semantics of `FR-SEM-001` … `FR-SEM-021` |
 //!
 //! A read is honest about what a reader's privileges did not reach: an object
@@ -56,6 +57,8 @@ pub(crate) mod cli;
 pub(crate) mod deadline;
 
 pub(crate) mod diagnostics;
+
+pub(crate) mod heap;
 
 pub(crate) mod project;
 
@@ -85,6 +88,21 @@ pub use error::Error;
 /// payload `FR-GLOB-018` bars and exits by aborting rather than with `70`.
 pub fn install_panic_hook() {
     diagnostics::panic::install();
+}
+
+/// Installs the reading of the process's heap count that the render memory
+/// limit of `FR-RND-039` bounds (`ADR-011`).
+///
+/// `counter` returns the heap bytes the process holds allocated, as its global
+/// allocator counts them. The binary installs that allocator and calls this
+/// once, before [`run`], for the reason [`install_panic_hook`] gives: the
+/// allocator is process-wide state, and it is the binary's to choose. The
+/// first installation wins.
+///
+/// Not calling it leaves the render memory limit without a count to observe:
+/// every other bound still applies, and a render is not ended for memory.
+pub fn install_heap_counter(counter: fn() -> usize) {
+    heap::install(counter);
 }
 
 /// Runs `tpl`.

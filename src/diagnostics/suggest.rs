@@ -672,7 +672,7 @@ mod tests {
     fn fr_err_022_a_key_of_fr_conf_002_is_suggested_and_is_not_dropped_for_its_dot() {
         // FR-ERR-022 as amended in the twentieth edition: a key is a spelling
         // this specification enumerates, and no key matches the character set
-        // as a whole because all fifteen forms carry a dot.
+        // as a whole because all eighteen forms carry a dot.
         let population = [
             "core.database",
             "core.connect_timeout",

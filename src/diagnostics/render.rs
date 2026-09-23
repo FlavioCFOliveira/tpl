@@ -508,6 +508,55 @@ mod tests {
     }
 
     #[test]
+    fn fr_ctx_042_the_cause_names_the_path_the_table_the_key_and_the_table_it_names() {
+        let rendered = render(&Error::ContextDocumentMalformed {
+            path: PathBuf::from("context.json"),
+            fault: ContextFault::DanglingReference {
+                table: "address".to_owned(),
+                collection: "foreign_keys",
+                key: "fk_address_city".to_owned(),
+                names: "city".to_owned(),
+            },
+        });
+        let cause = line(&rendered, Label::Cause);
+
+        for named in [
+            "'context.json'",
+            "'address'",
+            "'fk_address_city'",
+            "foreign_keys",
+            "'city'",
+        ] {
+            assert!(cause.contains(named), "{named} is missing from {cause}");
+        }
+        assert!(rendered.ends_with("exit:  65 (EX_DATAERR)\n"), "{rendered}");
+    }
+
+    #[test]
+    fn fr_ctx_042_every_name_of_a_dangling_reference_is_escaped() {
+        // FR-ERR-024: all four names come from the untrusted document.
+        let rendered = render(&Error::ContextDocumentMalformed {
+            path: PathBuf::from(HOSTILE),
+            fault: ContextFault::DanglingReference {
+                table: HOSTILE.to_owned(),
+                collection: "referenced_by",
+                key: HOSTILE.to_owned(),
+                names: HOSTILE.to_owned(),
+            },
+        });
+
+        assert_eq!(rendered.lines().count(), 4, "{rendered:?}");
+        assert!(
+            line(&rendered, Label::Cause).contains(HOSTILE_ESCAPED),
+            "{rendered:?}"
+        );
+        assert!(
+            !rendered.bytes().any(|byte| byte < 0x20 && byte != b'\n'),
+            "{rendered:?}"
+        );
+    }
+
+    #[test]
     fn fr_err_034_code_65_names_which_deadline_expired_and_its_resolved_value() {
         let rendered = render(&Error::RenderDeadlineExceeded {
             bound: DeadlineBound::Overall,
@@ -517,6 +566,40 @@ mod tests {
 
         assert!(cause.contains("the overall budget of 10s"), "{cause}");
         assert!(cause.contains("from process start"), "{cause}");
+    }
+
+    #[test]
+    fn fr_err_034_code_65_names_the_render_bound_its_resolved_value_and_its_key() {
+        // FR-RND-036, FR-RND-037, the 65 row of FR-ERR-034.
+        for (error, bound, value, key) in [
+            (
+                Error::RenderFuelExhausted { fuel: 5000 },
+                "render fuel",
+                "5000",
+                "core.render_fuel",
+            ),
+            (
+                Error::RenderOutputLimitExceeded { limit: 64 },
+                "render output limit",
+                "64",
+                "core.render_output_limit",
+            ),
+            (
+                Error::RenderMemoryLimitExceeded { limit: 16_777_216 },
+                "render memory limit",
+                "16777216",
+                "core.render_memory_limit",
+            ),
+        ] {
+            let rendered = render(&error);
+            let cause = line(&rendered, Label::Cause);
+
+            assert!(cause.contains(bound), "{cause}");
+            assert!(cause.contains(value), "{cause}");
+            assert!(cause.contains(key), "{cause}");
+            assert!(line(&rendered, Label::Hint).contains(key), "{rendered}");
+            assert!(rendered.ends_with("exit:  65 (EX_DATAERR)\n"), "{rendered}");
+        }
     }
 
     #[test]
@@ -1094,6 +1177,9 @@ mod tests {
                 bound: DeadlineBound::Phase,
                 limit: Duration::from_secs(30),
             },
+            Error::RenderFuelExhausted { fuel: 100_000_000 },
+            Error::RenderOutputLimitExceeded { limit: 67_108_864 },
+            Error::RenderMemoryLimitExceeded { limit: 134_217_728 },
             Error::CatalogueObjectNotFound {
                 kind: CatalogueObjectKind::View,
                 name: hostile(),
@@ -1283,7 +1369,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 60, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 63, "every variant of Error is sampled");
     }
 
     #[test]

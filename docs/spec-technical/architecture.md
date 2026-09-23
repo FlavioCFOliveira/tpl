@@ -1,7 +1,7 @@
 ---
 title: Architecture
 status: draft
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md, open-decisions.md, overview.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -23,14 +23,14 @@ is [data-model.md](data-model.md).
 
 ## The module map
 
-[`OD-05`](open-decisions.md#od-05--the-module-decomposition) settles eleven
+[`OD-05`](open-decisions.md#od-05--the-module-decomposition) settles twelve
 modules under `src/`, plus the crate root, and it settles the visibility rule.
 Its rationale, the seven placements it argued and the homes it rejected are
 recorded there and are not restated.
 
 ```
 src/
-├── main.rs        parse, dispatch, map the error to an exit status, and nothing else
+├── main.rs        process setup (ADR-004, ADR-011), then parse, dispatch, map the error to an exit status
 ├── lib.rs         the crate root and its deliberate re-exports
 ├── cli/           the parser tree, one module per porcelain command, and the help renderer
 ├── project/       discovery, the trust checks, and the configuration reader and writer
@@ -41,6 +41,7 @@ src/
 ├── output/        the envelope, the JSON emitter, the text layouts, escaping, the writer
 ├── diagnostics/   the four-line renderer, the suggestion machinery, the verbosity gate
 ├── deadline.rs    the phase clock, and the threads OD-12 bounds two phases with
+├── heap.rs        the one reading of the process's heap count, installed by the binary (ADR-011)
 └── error.rs       the error type and the exit-code derivation
 ```
 
@@ -207,7 +208,7 @@ it.
 | The reader | Parse, key space, declared types, coherence, DSN grammar — in that order, over the whole file | Step 3 (`FR-CONF-001`, `FR-CONF-002`, `FR-CONF-006` … `FR-CONF-014`, `FR-CONF-034`, `FR-CONF-035`) |
 | The key space | The enumerated keys as a type, with the declared type of each, and what `unset` may be given | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CFG-011` |
 | The entry | One `[database.<name>]` block typed, and the predicate that decides `FR-CONF-007` | `FR-CONF-002`, `FR-CONF-006`, `FR-CONF-007` |
-| The resolution | Entry selection, `${VAR}` expansion, the child, the four deadlines, the settings a connection takes | Step 4 (`FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-004` … `FR-GLOB-008`) |
+| The resolution | Entry selection, `${VAR}` expansion, the child, the four deadlines, the three render bounds, the settings a connection takes | Step 4 (`FR-CONF-004`, `FR-CONF-029`, `FR-CONF-045`, `FR-GLOB-004` … `FR-GLOB-008`) |
 | The writer | The format-preserving rewrite of `.tpl/.cfg` | `FR-CFG-034`, `FR-CFG-041`, `FR-CFG-042` |
 | The creator | The five artefacts of a new project | `FR-PROJ-012` … `FR-PROJ-024` |
 
@@ -237,10 +238,12 @@ Four divisions inside it are decisions rather than arrangement.
   travels with the value rather than with the caller. What the type denies, and
   why each denial is owed, is `security.md`'s.
 
-**The four deadlines are resolved here and applied elsewhere.** `project/`
-resolves the four `[core]` values, taking the built-in default of `FR-CONF-002`
-for each key the file omits; `deadline.rs` owns the construct they are applied
-through, which is [The six phase deadlines](#the-six-phase-deadlines) below.
+**The four deadlines and the three render bounds are resolved here and applied
+elsewhere.** `project/` resolves the seven `[core]` values, taking the built-in
+default of `FR-CONF-002` for each key the file omits (`FR-CONF-004`,
+`FR-CONF-045`); `deadline.rs` owns the construct the deadlines are applied
+through, which is [The six phase deadlines](#the-six-phase-deadlines) below, and
+`render/` applies the bounds, which is [The render bounds](#the-render-bounds).
 
 ## Project discovery and the trust checks
 
@@ -297,7 +300,7 @@ declared for the key. Two components supply them and neither owns the rule.
 |---|---|---|
 | The flag | `cli/`, from the parsed invocation | `FR-CONF-029`, `FR-GLOB-001` |
 | The file | `project/config.rs`, after the trust checks | `FR-CONF-029` |
-| The built-in default | Applied in `project/settings.rs`, and in `deadline.rs` for the four deadlines | `FR-CONF-029`, `FR-CONF-002` |
+| The built-in default | Applied in `project/settings.rs`, in `deadline.rs` for the four deadlines, and in `render/bounds.rs` for the three render bounds | `FR-CONF-029`, `FR-CONF-002`, `FR-CONF-045` |
 | **No environment layer** | — | `FR-CONF-030`, `FR-CLI-021`, `BR-CLI-002` |
 
 **A default is applied where it is used, never where the file is read.** The
@@ -348,7 +351,7 @@ sends a statement.
 | 2 | Set the session read-only | Once, at connection start | `FR-SRV-008` |
 | 3 | Read the session state back | Once, immediately after stage 2, reading `@@session.tx_read_only` and nothing else — the spelling `transaction_read_only` does not exist on `10.11`; a failure of either half refuses the connection and reads no catalogue | `FR-SRV-009`, `FR-SRV-010`; `FR-SRV-038`, difference 12 |
 | 4 | Probe the product and version | Before any statement other than stages 2 and 3; the series is derived from it and decides the treatment of every known difference | `FR-SRV-002`, `FR-SRV-034`, `FR-SRV-040`, `FR-SRV-022` |
-| 5 | Read, then close | Closed as soon as the read ends | `CLAUDE.md`, *Desempenho e Eficiência*; `NFR-PERF-004` |
+| 5 | Read, then close | Closed as soon as the read ends, and before any render starts: the protocol's quit is sent, the connection released, then the runtime dropped | `CLAUDE.md`, *Desempenho e Eficiência*; `NFR-PERF-004`; `FR-RND-040` |
 
 Stages 2 and 3 are not disableable by any flag, key or environment condition
 (`FR-SRV-011`), and they detect rather than prevent: only the closed statement
@@ -357,6 +360,24 @@ list of `FR-SRV-006` prevents, which is
 property and `security.md`'s subject. The verdicts stages 4 and 5 produce — an
 unsupported product, a series below the window, a series above it — are
 [interfaces.md](interfaces.md#the-catalogue-reader)'s.
+
+**Stage 5 leaves nothing of the read alive** (`FR-RND-040`). `Session::close` in
+`src/mariadb.rs` sends the protocol's quit, releases the connection, and then
+drops the runtime, in that order. A failed quit is not a condition — the answer
+is already produced — and the socket still closes when the connection is
+dropped. The runtime is **dropped**, not shut
+down with a timeout: dropping it waits for all spawned work to stop, while a
+timeout leaks work and threads that did not stop in time (docs.rs,
+`tokio::runtime::Runtime`, tokio 1.53.1, *Shutdown*, consulted 2026-09-23).
+Each connection and each runtime is counted, per thread, from creation to drop;
+`mariadb::quiescent()` answers whether both counts are zero on the calling
+thread. The count is per thread because the runtime of
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md) is current-thread and the
+counted values cannot leave the thread that built them; a process-wide count
+would see another test's connection in the suite. The mechanism and the option
+rejected are
+[`OD-11`](open-decisions.md#od-11--the-scope-of-the-async-runtime)'s
+amendment.
 
 **The order of stages 2 to 4 is `FR-SRV-042`'s.** That requirement fixes the
 three connection-start statements in one order and in no other, states it once
@@ -416,6 +437,7 @@ subcommand reads through it, and so does a render that has no supplied context
 | Hit | Served from disk; no connection opened, no catalogue query issued | `FR-CACHE-006`, `NFR-PERF-003` |
 | Miss | The server is read, the result is written, **then** the answer is produced | `FR-CACHE-007` |
 | Unreadable file, or a version the binary does not know | A **silent** miss: read from the server, rewrite, report nothing | `FR-CACHE-033`, `FR-CDOC-004` |
+| An object file that is not a regular file, or a named read whose file holds another object | The same silent miss; a link is never read through | `FR-CACHE-033`, `FR-CDOC-008`, with [data-model.md](data-model.md#tplcache) |
 | The write fails | A **silent** success: the answer stands, the exit code and stdout are unchanged | `FR-CACHE-036` |
 
 The layer has two independently suppressible halves — consulting and populating
@@ -481,7 +503,7 @@ and is not repeated.
 | `foreign_key.rs` | One list of column **pairs**, the four reachable rules, and the incoming direction | `FR-CAT-012`, `FR-CAT-013`, `FR-CAT-033`, `FR-CAT-045` |
 | `check_constraint.rs`, `trigger.rs`, `view.rs`, `routine.rs` | One kind each, at the field list its own requirement fixes | `FR-CAT-037`, `FR-CAT-046`; `FR-CAT-050`; `FR-CAT-007`, `FR-CAT-040`, `FR-CAT-047`; `FR-CAT-008`, `FR-CAT-016` … `FR-CAT-018`, `FR-CAT-048`, `FR-CAT-049` |
 | `restricted.rs` | The marking: never empty, and present only on an incomplete object | `FR-PRIV-005` … `FR-PRIV-007`, `FR-PRIV-016` |
-| `document/` | The document in both directions, over the four shapes that differ from the model | `FR-CTX-001` … `FR-CTX-010`, `FR-CTX-023`, `FR-CTX-033`, `NFR-DET-002` |
+| `document/` | The document in both directions, over the four shapes that differ from the model | `FR-CTX-001` … `FR-CTX-010`, `FR-CTX-023`, `FR-CTX-033`, `FR-CTX-042`, `NFR-DET-002` |
 
 **Two rows rest on a recorded gap and are marked so here.** No requirement fixes
 the catalogue field list for the **table** row or for the **column** row, so the
@@ -548,7 +570,7 @@ directions over one set of types rather than two routines kept in step
 | Direction | What it does | What it may not do |
 |---|---|---|
 | Outward | Materialises both embeddings from a model whose references are names, orders every collection, and yields the value `output/` emits | Compose a byte. A foreign key naming a table the model does not carry is `70`, which `FR-CTX-023` makes unreachable on this path |
-| Inward | Reads a supplied document back as a model, undoing the embedding by taking the name out of each embedded object | Repair anything, and validate `series` against the supported window or `standing` against `series` (`FR-CTX-033`). A document that fails the contract is `65` (`FR-RND-020`) |
+| Inward | Reads a supplied document back as a model, undoing the embedding by taking the name out of each embedded object | Repair anything, and validate `series` against the supported window or `standing` against `series` (`FR-CTX-033`). A document that fails the contract is `65` (`FR-RND-020`), a foreign key naming a table `tables` does not carry included (`FR-CTX-042`) |
 
 The checks the inward direction makes, and the four it is forbidden or has no
 reason to make, are
@@ -599,6 +621,8 @@ its pin are [`ADR-001`](../adr/adr-001-template-engine-pin.md) and
 | An output formatter of `tpl`'s own is installed | A `null` writes nothing and a boolean writes `true` or `false`, whatever the engine would have written | `FR-SEM-010`, `FR-SEM-011`, `FR-SEM-021` |
 | Auto-escaping is set explicitly, to off, and is never left at the engine's default | No property of a template's name can turn escaping on; escaping happens only where a template asks for it | `FR-ENV-026`, `FR-ENV-027`, `FR-ENV-028` |
 | Each template is compiled once per process and reused | A loop in a template does not reparse it | `CLAUDE.md`, *Desempenho e Eficiência* |
+| The engine is given the resolved render fuel | Every render is held to a count of evaluation steps | `FR-RND-036`, `FR-CONF-045` |
+| A render writes into a counting writer of `tpl`'s own, never to stdout | The output limit is counted as bytes are produced, and the text is held until the render returns | `FR-RND-037`, `FR-RND-034`, `FR-CACHE-039` |
 
 **The formatter is load-bearing, and the observation
 [`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with)
@@ -657,8 +681,8 @@ not restated.
 | 2 | TCP connect | What remains of the same budget | The runtime's own timer, around the driver's connect call | `FR-CONF-005`, `FR-ERR-027` |
 | 3 | TLS handshake | What remains of the same budget | The same timer and the same call; the phase is separated in the **report**, from the driver's own discriminant | `FR-CONF-005`, `FR-ERR-027` |
 | 4 | Catalogue query | The query budget, per query | The runtime's own timer | `FR-CONF-005`, `FR-ERR-027` |
-| 5 | `password_command` | The password budget | A reader thread draining the child's pipe and a polling loop in the parent, which kills the child and reports the expiry | `FR-CONF-005`, `FR-CONF-028` |
-| 6 | Render | The render budget | A timer thread that writes the diagnostic and terminates the process | `FR-CONF-005`, `FR-RND-033` |
+| 5 | `password_command` | The password budget, until the child has exited **and** its standard output has closed | A reader thread draining the child's pipe and a polling loop in the parent, which kills the child's whole process group and reports the expiry | `FR-CONF-005`, `FR-CONF-028` |
+| 6 | Render | The render budget | A watchdog thread that writes the diagnostic and terminates the process; the same thread observes the render memory limit ([The render bounds](#the-render-bounds)) | `FR-CONF-005`, `FR-RND-033`, `FR-RND-039` |
 
 Four rules bind the table.
 
@@ -697,6 +721,58 @@ performs no work of the invocation and makes nothing faster; it is created only
 on the paths that need it, so the commands of `NFR-PERF-005` create no thread at
 all ([`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)).
 
+## The render bounds
+
+`FR-RND-038` holds every render to four bounds at once, and the first crossed
+ends it with `65` and that bound's `cause`. Three are resolved from `[core]`
+(`FR-CONF-045`); the mechanism of the memory count is
+[`ADR-011`](../adr/adr-011-render-memory-accounting.md)'s and is not restated.
+
+| Bound | Counted by | Observed | How it ends the render | Forced by |
+|---|---|---|---|---|
+| Deadline | The phase clock | By the watchdog of `bounded()` in `src/cli/render.rs`, at the deadline | The watchdog reports and terminates the process | `FR-RND-033` |
+| Render fuel | The engine, per evaluation step | By the engine | The engine returns its out-of-fuel error; `render/` maps it | `FR-RND-036` |
+| Render output limit | The writer the render writes into, per byte | At each write | The write that would pass the limit is refused whole; `render/` maps the failed render | `FR-RND-037` |
+| Render memory limit | The binary's counting allocator | By the same watchdog, every **10 ms** and at the deadline | The watchdog reports and terminates the process | `FR-RND-039` |
+
+**The poll interval is fixed here at 10 ms**, as
+[`ADR-011`](../adr/adr-011-render-memory-accounting.md) delegates and proposes;
+the grounds are that record's. It is the constant `HEAP_POLL` in
+`src/cli/render.rs`. The overshoot `FR-RND-039` admits is therefore what a
+render allocates within one interval, or the one allocation that crosses the
+limit, whichever is larger.
+
+Five properties of the built arrangement follow.
+
+- **The allocator is the binary's and the reading is the library's.**
+  `src/main.rs` declares the `#[global_allocator]` and hands the library a
+  function reading its count through `tpl::install_heap_counter`; `heap.rs`
+  holds that function and nothing else. Where no counter is installed — an
+  in-process test — the memory limit observes nothing and the other three
+  bounds apply unchanged. The placement and the option rejected are
+  [`OD-05`](open-decisions.md#od-05--the-module-decomposition)'s refinement of
+  2026-09-23.
+- **The count is process-wide**, so heap held before the render — the model,
+  the context — counts toward the limit (`FR-CONF-045`'s lower bound;
+  [`ADR-011`](../adr/adr-011-render-memory-accounting.md)).
+- **The output is held in memory until the render returns**, because
+  `FR-RND-034` with `FR-CACHE-039` forbids any byte of an abandoned render
+  reaching stdout. It is not held in order to be counted (`FR-RND-037`), and it
+  counts toward the memory limit, which is why the output default sits below the
+  memory default (`FR-CONF-045`).
+- **An abandoned render keeps all four bounds until it returns** (`FR-RND-038`,
+  `FR-CACHE-039`). The watchdog does not stand down at a miss. Fuel and the
+  output limit crossed by an abandoned render are returned as conditions and
+  end the invocation with `65` and no server read; the deadline and the memory
+  limit end it from the watchdog. A render that returned within every bound has
+  its values dropped, not leaked, before the server read, so the render that
+  follows is not charged for them under the memory limit.
+- **A render refuses to start while anything of a catalogue read is alive.**
+  `bounded()` checks `mariadb::quiescent()` first and returns the `70` of a
+  violated invariant otherwise (`FR-RND-040`, `FR-ERR-030`); every caller reaches
+  it with the read already closed, so the check is the in-process observation
+  `FR-RND-040` names rather than a reachable path.
+
 ## Lazy initialisation
 
 Nothing is initialised for a command that cannot use it. The rule is the root
@@ -732,7 +808,8 @@ restated.
 Two consequences bear on the rest of this document:
 
 - **The module that owns the runtime is the module `NFR-PERF-004` constrains**,
-  so at most one connection and exactly one runtime have one owner.
+  so at most one connection and exactly one runtime have one owner, and neither
+  outlives the read that needed it (`FR-RND-040`).
 - **The runtime's timers are available only inside the boundary**, which is what
   divides the six deadlines of
   [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) into
@@ -751,11 +828,12 @@ end the process without reaching it, and both are settled:
 
 | Path | What it does | Settled in |
 |---|---|---|
-| The render deadline | The timer thread writes the four labelled lines for the render code and terminates the process with that status | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| The render deadline, and the render memory limit | The watchdog thread writes the four labelled lines for the `65` of the bound crossed and terminates the process with that status | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), [`ADR-011`](../adr/adr-011-render-memory-accounting.md) |
 | A panic | The panic hook writes the four labelled lines, carrying the location and not the payload, and terminates the process with the internal-error status | [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md) |
 
 Both remain inside the stdout contract. `FR-RND-034` already admits that stdout
-carries at most one incomplete result when a render fails, and `FR-ERR-033`
+carries at most one incomplete result when a render fails — and the render
+writes nothing to stdout until it returns — and `FR-ERR-033`
 keeps stdout empty on the panic path; stderr is outside the contract in both
 cases (`NFR-DET-001`). Both producing conditions of the internal-error code
 exist in the distributed binary (`FR-ERR-030`, `FR-ERR-032`), and the release

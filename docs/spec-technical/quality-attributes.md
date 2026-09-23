@@ -1,7 +1,7 @@
 ---
 title: Quality Attributes
 status: draft
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md, open-decisions.md, overview.md]
 ---
 
@@ -73,7 +73,7 @@ instrument, on which targets and under what gate is
 | `NFR-PERF-001` | A query per object on a full read | The catalogue reader is organised per object **kind**: a fixed set of queries, each returning every object of its kind, so the count over `WL-001` equals the count over `WL-003` | `architecture.md`, `interfaces.md` |
 | `NFR-PERF-002` | Reading the whole catalogue to answer for one object | The reader carries a named-object path distinct from the full-read path, with the name restricting the query the server receives | `architecture.md`, `interfaces.md` |
 | `NFR-PERF-003` | A connection opened before the cache is consulted | The cache is a read-through layer **in front of** the reader: a hit is served from disk with no connection and no query (`FR-CACHE-006`, `FR-CACHE-007`) | `architecture.md` |
-| `NFR-PERF-004` | A pool, or a second connection for any purpose | One connection at most, opened late and closed when the read ends; it is also what rejected a pre-flight TCP connect for phase attribution in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), and it is verifiable from the server side (`FR-SRV-014`) | `architecture.md` |
+| `NFR-PERF-004` | A pool, or a second connection for any purpose | One connection at most, opened late and closed when the read ends — and, with its runtime, before any render starts (`FR-RND-040`); it is also what rejected a pre-flight TCP connect for phase attribution in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), and it is verifiable from the server side (`FR-SRV-014`) | `architecture.md` |
 | `NFR-PERF-005` | Startup work a command does not need | The four commands of `FR-PROJ-025` are classified **before** any filesystem access: no `stat` of an ancestor, no open of `.tpl/.cfg`, no socket — and, per [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), no timer thread | `architecture.md` |
 | `NFR-PERF-006` | A connection opened by dispatch rather than by need | Connection establishment is lazy: the reader opens it when it is about to read, so every command that needs no catalogue opens none | `architecture.md` |
 
@@ -300,12 +300,20 @@ one target on 2026-09-22 and came in well under the adopted figure, which
 other three. Nothing follows from the gap by rule (`BR-PERF-008`), and the record
 is unaffected: what it decided was the representation, not the figure.
 
+**Two readings [`ADR-011`](../adr/adr-011-render-memory-accounting.md) calls
+for are not recorded in `BENCHMARKS.md`** as of 2026-09-23: the render wall time
+of the four worked examples before and after the counting allocator, and the
+realised overshoot of the memory limit. `SECURITY-AUDIT.md`, *Remediation*, row
+H-1 carries an overshoot reading taken during the audit; it is not a record
+under `NFR-PERF-020`. Neither gates anything (`BR-PERF-008`).
+
 ## Reliability properties
 
 | Property | How the built system holds it | Forced by |
 |---|---|---|
-| No invocation blocks without bound | A deadline on every blocking phase, composed with the overall budget measured from process start, exiting with the code of the phase in progress. The three mechanisms are settled in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and described in `architecture.md` | `FR-SEC-022`, `FR-CONF-005`, `FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013` |
-| A failed render leaves at most one incomplete result on stdout | The render deadline exits `65`, and one invocation renders once, so there is at most one result to leave incomplete | `FR-RND-033`, `FR-RND-034`, `FR-RND-002` |
+| No invocation blocks without bound | A deadline on every blocking phase, composed with the overall budget measured from process start, exiting with the code of the phase in progress; the `password_command` phase runs until the child has exited and its output has closed, and a descendant holding the pipe cannot extend it. The three mechanisms are settled in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and described in `architecture.md` | `FR-SEC-022`, `FR-CONF-005`, `FR-CONF-028`, `FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013` |
+| No render runs unbounded in work, output or memory | Render fuel, the render output limit and the render memory limit beside the deadline; the first crossed ends the render with `65`. The memory limit is observed every 10 ms and can be overshot within one interval, and an allocation the OS refuses aborts without a `cause` ([architecture.md](architecture.md#the-render-bounds), [`ADR-011`](../adr/adr-011-render-memory-accounting.md)) | `FR-SEC-025`, `FR-RND-036` … `FR-RND-039` |
+| A failed render leaves at most one incomplete result on stdout | The render writes nothing to stdout until it returns; a bound that ends it from the watchdog exits without flushing, and one invocation renders once | `FR-RND-033`, `FR-RND-034`, `FR-RND-037`, `FR-RND-039`, `FR-RND-002` |
 | A cache file is never half-written, and a killed process leaves nothing locked | Each object is written through a temporary file in the same directory and renamed over the target; no lock is taken, so two writers yield one whole result or the other | `FR-CACHE-030`, `FR-CACHE-031` |
 | A cache failure is never an event in the contract | An unreadable file or an unknown format version is treated as a miss and reported neither as error nor as warning; an unwritable cache still answers from what was read, exits `0`, and changes no byte of stdout | `FR-CACHE-033`, `FR-CACHE-036` |
 | An interrupted load loses nothing already stored | An unreachable server during `tpl cache load` exits `69` and leaves stored objects unchanged | `FR-CACHE-032` |

@@ -1,7 +1,7 @@
 ---
 title: Operations
 status: draft
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, technology-stack.md, data-model.md, quality-attributes.md]
 ---
 
@@ -129,7 +129,13 @@ question this document is handed and does not answer.
   run is not described in this folder, and the choice — a feature the pipeline
   would enable, a separate profiling build, or no in-tree heap profiling at all
   — belongs to the register. What is recorded is the constraint that decides
-  it.
+  it. **Since 2026-09-23 the constraint is tighter**: the shipped binary already
+  installs a global allocator, the counting one of
+  [`ADR-011`](../adr/adr-011-render-memory-accounting.md), and a process has one.
+  An in-tree profiling allocator would displace it, and with it the count the
+  render memory limit reads; `ADR-011` leaves the choice between composing the
+  two, gating one out, or profiling out of tree untaken, and so does this
+  document.
 
 **The pipeline has a package to run against.** The manifest and the resolved
 `Cargo.lock` are both in the repository: command 5 has the lockfile it audits,

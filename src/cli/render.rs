@@ -82,7 +82,12 @@
 //! run again over the server's document, so a condition raised after that
 //! carries the code of the step that raised it. A condition the abandoned
 //! render raised before it reached the miss is the invocation's, and no
-//! connection is opened for it.
+//! connection is opened for it. So is a render bound it crosses, before the
+//! miss or after it: the abandoned render keeps all four bounds until it has
+//! returned, and crossing one ends the invocation with `65` and that bound's
+//! `cause`, with no server read (`FR-CACHE-039`, `FR-RND-038`). Only an
+//! abandoned render that returned within every bound returns the invocation to
+//! step 6.
 //!
 //! # A failed render leaves stdout empty
 //!
@@ -90,10 +95,11 @@
 //! render fails, and what this module leaves is none:
 //! [`crate::render::Environment::render`] returns the whole text or the
 //! condition, and nothing is written until it has returned the text. A render
-//! abandoned under `FR-CACHE-039` writes nothing either: its text, or its
-//! condition, is dropped once it has returned. The one
-//! path that can interrupt a render in progress is the deadline of
-//! [`bounded`], which terminates the process through
+//! abandoned under `FR-CACHE-039` writes nothing either: its text is dropped
+//! once it has returned, and so is its condition unless that is a render
+//! bound. The two paths that can interrupt a render in progress are the
+//! deadline and the memory limit of [`bounded`], which terminate the process
+//! through
 //! [`std::process::exit`] — running no destructor, so a buffered stdout is
 //! discarded rather than flushed, which is the outcome `FR-ERR-033` requires.
 
@@ -114,7 +120,7 @@ use super::source::{self, Reader, Served, leak};
 use crate::cache::Shelved;
 use context::Store;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::deadline::{Bound, Phase};
 use crate::error::{CatalogueObjectKind, ContextFault, Error, Position};
@@ -122,7 +128,7 @@ use crate::mariadb::catalogue::completeness;
 use crate::model::document::{self, DatabaseDocument};
 use crate::output;
 use crate::project::settings;
-use crate::render::Environment;
+use crate::render::{Environment, RenderMemoryLimit};
 
 /// The context variable a bound table is read through (`FR-RND-023`).
 const TABLE: &str = "table";
@@ -365,8 +371,8 @@ enum Lazily {
     /// A file read before the render started is a miss, so no render started.
     Missed,
     /// A file the render reached is a miss, so the render was abandoned under
-    /// `FR-CACHE-039`: nothing of it reached stdout. It carries the `now` the
-    /// render that follows uses.
+    /// `FR-CACHE-039`, and it returned within every render bound: nothing of
+    /// it reached stdout. It carries the `now` the render that follows uses.
     Abandoned(String),
 }
 
@@ -410,7 +416,8 @@ struct Assembly<'a> {
 /// does not describe a read; the `65` of `FR-RND-020` for a `--context`
 /// document that does not match the contract, and the `69` and `77` of a
 /// server that did not answer or did not permit the read; the `66` of
-/// `FR-RND-032`; and the `65` of `FR-RND-030`, `FR-RND-031` and `FR-RND-033`.
+/// `FR-RND-032`; and the `65` of `FR-RND-030`, `FR-RND-031`, `FR-RND-033`,
+/// `FR-RND-036` and `FR-RND-037`.
 pub(super) fn run<W: std::io::Write>(
     out: &mut W,
     globals: &Globals,
@@ -485,12 +492,12 @@ fn from_catalogue<W: std::io::Write>(
     defined: &BTreeMap<&str, &str>,
 ) -> Result<(), Error> {
     let reader = Reader::new(globals, Some(supplied.caching), supplied.ending);
-    // Steps 2 and 3, made once: the template root of FR-TMPL-023 and the
-    // render deadline of FR-CONF-004 are both properties of the project this
-    // read is made through, and a second walk could resolve a second project
-    // between the two steps.
+    // Steps 2 and 3, made once: the template root of FR-TMPL-023, the render
+    // deadline of FR-CONF-004 and the render bounds of FR-CONF-045 are all
+    // properties of the project this read is made through, and a second walk
+    // could resolve a second project between the steps.
     let (project, configuration) = source::project(reader.tpl_dir())?;
-    let environment = Environment::new(project.root());
+    let environment = Environment::bounded(project.root(), settings::render_bounds(&configuration));
 
     // Step 4, before an entry is resolved: FR-RND-029 through FR-TMPL-027. An
     // invocation refused here has spared itself the ${VAR} expansion of
@@ -570,9 +577,15 @@ fn lazily<W: std::io::Write>(
     let store = Arc::new(store);
     let ended = attempt(out, assembly, &store, entry);
 
-    // PERF: as for the context in `produce`, the store owns memory only, and
-    // an exiting process has no use for freeing it block by block.
-    assembly.ending.release(store);
+    match ended {
+        // PERF: as for the context in `produce`, the store owns memory only,
+        // and an exiting process has no use for freeing it block by block.
+        Ok(Lazily::Served) => assembly.ending.release(store),
+        // FR-RND-038: a render that did not produce the result frees what it
+        // read, so the render that follows is not charged for it under
+        // FR-RND-039.
+        _ => drop(store),
+    }
 
     ended
 }
@@ -601,20 +614,37 @@ fn attempt<W: std::io::Write>(
     // 8 — as in `produce`, with `now` read at render time and once.
     let now = context::now();
     let context = context::assemble_shelved(store, bound, assembly.defined, &now);
-    let watched = Arc::clone(store);
     let produced = bounded(
         assembly.deadline,
-        move || watched.missed(),
+        assembly.environment.bounds().memory_limit,
         || assembly.environment.render(assembly.template, &context),
     );
 
-    assembly.ending.release(context);
-
     // FR-CACHE-039 and FR-RND-034: a render that reached a miss is abandoned,
     // and nothing of it is written — its text, or its condition, is dropped.
+    // FR-RND-038: its values are **freed**, never leaked as a finished
+    // render's are, so the heap the following render is held to under
+    // FR-RND-039 does not carry them.
+    //
+    // FR-CACHE-039 and FR-RND-038: an abandoned render that crossed a render
+    // bound, before the miss or after it, ends the invocation with 65 and
+    // that bound's cause, and the server is not read. The deadline and the
+    // memory limit end it from the watchdog of `bounded`; render fuel and the
+    // output limit end it from inside, and are answered here. Any other
+    // condition of the abandoned render is its reading of the miss, and is
+    // dropped with it.
     if store.missed() {
-        return Ok(Lazily::Abandoned(now));
+        drop(context);
+        return match produced {
+            Err(
+                crossed @ (Error::RenderFuelExhausted { .. }
+                | Error::RenderOutputLimitExceeded { .. }),
+            ) => Err(crossed),
+            _ => Ok(Lazily::Abandoned(now)),
+        };
     }
+
+    assembly.ending.release(context);
 
     output::emit_verbatim(out, &produced?)?;
 
@@ -653,9 +683,9 @@ fn from_document<W: std::io::Write>(
     path: &Path,
 ) -> Result<(), Error> {
     let reader = Reader::new(globals, Some(supplied.caching), supplied.ending);
-    // Steps 2 and 3.
+    // Steps 2 and 3, and the render bounds of FR-CONF-045 from the same file.
     let (project, configuration) = source::project(reader.tpl_dir())?;
-    let environment = Environment::new(project.root());
+    let environment = Environment::bounded(project.root(), settings::render_bounds(&configuration));
 
     // Step 4, before the document is read: FR-RND-029 through FR-TMPL-027.
     environment.resolve(supplied.template)?;
@@ -716,7 +746,8 @@ fn from_document<W: std::io::Write>(
 ///
 /// Returns what [`Binding::bind`] returns for step 7, and for step 8 the `65`
 /// of `FR-RND-030` for a syntax error, of `FR-RND-031` for an evaluation
-/// failure and of `FR-RND-033` for the deadline, and
+/// failure, of `FR-RND-033` for the deadline, and of `FR-RND-036` and
+/// `FR-RND-037` for the render fuel and the render output limit, and
 /// [`Error::StdoutUnwritable`] where the stream refused the write.
 fn produce<W: std::io::Write>(
     out: &mut W,
@@ -735,7 +766,7 @@ fn produce<W: std::io::Write>(
     let context = context::assemble(document, bound, assembly.defined, &at);
     let produced = bounded(
         assembly.deadline,
-        || false,
+        assembly.environment.bounds().memory_limit,
         || assembly.environment.render(assembly.template, &context),
     );
 
@@ -813,20 +844,37 @@ fn position(read: &[u8]) -> Position {
     Position { line, column }
 }
 
-/// Runs one render under the deadline of `FR-RND-033`, per `OD-12`.
+/// How often the watchdog of [`bounded`] reads the heap count (`FR-RND-039`,
+/// `ADR-011`).
 ///
-/// The render runs on the calling thread and a timer thread waits on a channel
-/// with `recv_timeout`; the render signals the channel when it completes. If
-/// the deadline arrives first the timer writes the four labelled lines of
-/// `FR-ERR-008` for the `65` and terminates the process with that status — which
-/// is what `FR-GLOB-013` asks for, the phase in progress being the one the
-/// timer was created for.
+/// The overshoot `FR-RND-039` admits is what a render allocates within one
+/// interval; reading the count is three atomic loads and allocates nothing.
+/// `ADR-011` proposes the value, for the technical specification to fix.
+const HEAP_POLL: Duration = Duration::from_millis(10);
+
+/// Runs one render under the deadline of `FR-RND-033`, per `OD-12`, and under
+/// the render memory limit of `FR-RND-039`, per `ADR-011`.
+///
+/// The render runs on the calling thread and a watchdog thread waits on a
+/// channel with `recv_timeout`; the render signals the channel when it
+/// completes. The watchdog wakes at the deadline, and every [`HEAP_POLL`]
+/// before it, to read the heap count the process's allocator keeps. If the
+/// deadline arrives first, or the count is observed above `memory`, the
+/// watchdog writes the four labelled lines of `FR-ERR-008` for that `65` and
+/// terminates the process with that status — which is what `FR-GLOB-013` asks
+/// for the deadline, the phase in progress being the one the watchdog was
+/// created for, and what `ADR-011` fixes for the memory limit. Render fuel and
+/// the render output limit end the render from inside it, so whichever of the
+/// four bounds is crossed first is the one reported (`FR-RND-038`).
+///
+/// Where the binary installed no heap counter — an in-process test — the
+/// watchdog waits for the deadline alone, as it did before `FR-RND-039`.
 ///
 /// Three requirements make that admissible rather than merely convenient.
 /// `FR-RND-034` already admits at most one incomplete result on stdout when a
 /// render fails, so an interrupted render breaks no promise about stdout;
-/// `NFR-DET-001` puts stderr outside the contract, so the timer writing to it
-/// interleaves nothing that is contract; and [`std::process::exit`] runs no
+/// `NFR-DET-001` puts stderr outside the contract, so the watchdog writing to
+/// it interleaves nothing that is contract; and [`std::process::exit`] runs no
 /// destructor, so a buffered stdout is discarded rather than emitted.
 ///
 /// **It is not the speculative parallelism this project forbids.** The thread
@@ -838,24 +886,37 @@ fn position(read: &[u8]) -> Position {
 /// `OD-12` records for that child: a phase started in order to be abandoned at
 /// once is a thread and a process termination bought for nothing.
 ///
-/// **A render already abandoned is not stopped by the deadline.** `excused`
-/// answers whether it is — for a render served from the cache, whether it
-/// reached a miss under `FR-CACHE-039` — and where the deadline arrives with
-/// `excused` true the timer ends without a word: the render is not the
-/// invocation's, per `FR-RND-002`, and the one that follows it has a deadline
-/// of its own. Every member such a render reaches after the miss fails without
-/// reading a file, so it ends at the next of them it reaches, and at the next
-/// interpolation of a value derived from one.
+/// **Nothing of a catalogue read is alive when the render starts**
+/// (`FR-RND-040`): the render is refused, as a violated invariant, while this
+/// thread holds an open connection or a driver runtime. Every caller reaches
+/// here with the read already closed, so the check is the requirement's
+/// in-process observation rather than a path a caller can take.
+///
+/// **A render abandoned under `FR-CACHE-039` is watched like any other**,
+/// until it has returned. `FR-CACHE-039` and `FR-RND-038` keep all four bounds
+/// on it, before the miss and after it: a render that reaches the miss through
+/// a lookup function of `FR-ENV-020` can go on evaluating, and a watchdog that
+/// stood down at the miss would leave its deadline and its memory unbounded.
+/// Crossing either ends the invocation here with `65` and that bound's
+/// `cause`, before any server read — which is the outcome those requirements
+/// fix for an abandoned render.
 ///
 /// # Errors
 ///
-/// Returns [`Error::RenderDeadlineExceeded`] — `65` — where the bound was
-/// already spent, and whatever `render` returns.
+/// Returns [`Error::InternalInvariant`] — `70` — where a connection or a
+/// driver runtime is alive, [`Error::RenderDeadlineExceeded`] — `65` — where
+/// the bound was already spent, and whatever `render` returns.
 fn bounded<T>(
     deadline: Bound,
-    excused: impl FnOnce() -> bool + Send + 'static,
+    memory: RenderMemoryLimit,
     render: impl FnOnce() -> Result<T, Error>,
 ) -> Result<T, Error> {
+    crate::error::ensure_invariant(
+        crate::mariadb::quiescent(),
+        "no connection is open and no runtime of the database driver is alive while a template \
+         is evaluated",
+    )?;
+
     let expired = Error::RenderDeadlineExceeded {
         bound: deadline.bound(),
         limit: deadline.limit(),
@@ -866,38 +927,63 @@ fn bounded<T>(
     }
 
     let (finished, waiting) = mpsc::channel::<()>();
-    let remaining = deadline.remaining();
+    let ends = Instant::now() + deadline.remaining();
     let timer = std::thread::spawn(move || {
-        if matches!(
-            waiting.recv_timeout(remaining),
-            Err(RecvTimeoutError::Timeout)
-        ) && !excused()
-        {
-            let status = expired.exit_code();
-            crate::diagnostics::report(&expired);
+        loop {
+            let left = ends.saturating_duration_since(Instant::now());
+            let wait = match crate::heap::allocated() {
+                Some(_) => left.min(HEAP_POLL),
+                None => left,
+            };
 
-            std::process::exit(i32::from(status));
+            if !matches!(waiting.recv_timeout(wait), Err(RecvTimeoutError::Timeout)) {
+                // The render finished and dropped the sender.
+                return;
+            }
+
+            if Instant::now() >= ends {
+                terminate(&expired);
+            }
+
+            if let Some(held) = crate::heap::allocated()
+                && memory.crossed_by(held)
+            {
+                terminate(&Error::RenderMemoryLimitExceeded {
+                    limit: memory.get(),
+                });
+            }
         }
     });
 
     let began = Instant::now();
     let produced = render();
 
-    // The phase is over whichever way it ended, so the timer is woken and
+    // The phase is over whichever way it ended, so the watchdog is woken and
     // joined: nothing of this invocation outlives the invocation.
     drop(finished);
     let _ = timer.join();
 
     // FR-GLOB-017: the phase ran, and this is how long it took. It is written
-    // after the timer is joined so that the line cannot interleave with the
-    // four labelled lines a deadline would have written from that thread.
+    // after the watchdog is joined so that the line cannot interleave with the
+    // four labelled lines a bound would have written from that thread.
     //
-    // A render the deadline **did** interrupt reports nothing, and cannot: that
-    // path leaves the process from inside the timer, which is what FR-RND-033
-    // requires of it.
+    // A render a bound of the watchdog **did** interrupt reports nothing, and
+    // cannot: that path leaves the process from inside the watchdog, which is
+    // what FR-RND-033 and FR-RND-039 require of it.
     crate::diagnostics::emit::phase_ran(Phase::Render, began.elapsed());
 
     produced
+}
+
+/// Reports `condition` and ends the process with its code, from the watchdog
+/// of [`bounded`].
+///
+/// [`std::process::exit`] runs no destructor, so stdout, still buffered, is
+/// discarded and nothing further reaches it (`FR-RND-034`).
+fn terminate(condition: &Error) -> ! {
+    crate::diagnostics::report(condition);
+
+    std::process::exit(i32::from(condition.exit_code()));
 }
 
 #[cfg(test)]
@@ -913,6 +999,7 @@ mod tests {
     use crate::model::document;
     use crate::model::routine::{Routine, RoutineKind};
     use crate::project::scratch::Scratch;
+    use crate::render::RenderMemoryLimit;
     use std::num::NonZeroU64;
     use std::path::{Path, PathBuf};
 
@@ -1173,6 +1260,133 @@ mod tests {
     }
 
     #[test]
+    fn fr_ctx_042_a_context_document_with_a_dangling_reference_is_65_and_not_70() {
+        // FR-CTX-042, FR-RND-020, FR-ERR-029, finding SEC-02: one table kept
+        // from a whole dump, every table its keys name dropped. The render is
+        // refused as a malformed document, never as a defect of tpl.
+        let scratch = Scratch::new();
+        let tpl_dir = project(&scratch, &[("name.jinja", "{{ database.name }}")]);
+        let mut document: serde_json::Value =
+            serde_json::from_str(&dumped()).expect("the dump is JSON");
+        let tables = document["data"]["database"]["tables"]
+            .as_array_mut()
+            .expect("tables is an array");
+        let kept = tables
+            .iter()
+            .find(|table| {
+                table["foreign_keys"]
+                    .as_array()
+                    .is_some_and(|keys| keys.iter().any(|key| key["referenced_table"].is_object()))
+            })
+            .cloned()
+            .expect("the fixture carries a table with a key that names a table");
+        *tables = vec![kept];
+        let context = scratch.file("dangling.json", &document.to_string());
+
+        let (result, written) = rendered(&tpl_dir, &context, "name", &object(&[], &[], &[]), &[]);
+        let condition = result.expect_err("the document is refused");
+
+        assert_eq!(condition.exit_code(), 65);
+        assert!(
+            matches!(
+                condition,
+                Error::ContextDocumentMalformed {
+                    fault: crate::error::ContextFault::DanglingReference { .. },
+                    ..
+                }
+            ),
+            "{condition:?}"
+        );
+        assert!(written.is_empty(), "wrote {written:?}");
+    }
+
+    /// Writes `.tpl/.cfg` into the project `tpl_dir`, with the mode
+    /// `FR-SEC-004` requires.
+    fn configured(scratch: &Scratch, text: &str) {
+        let file = scratch.file("project/.tpl/.cfg", text);
+        scratch.chmod(&file, 0o600);
+    }
+
+    /// A template writing 1000 bytes.
+    const THOUSAND_BYTES: &str = "{% for i in range(100) %}0123456789{% endfor %}";
+
+    #[test]
+    fn fr_rnd_036_a_render_that_exhausts_the_fuel_the_cfg_declares_is_65_and_writes_nothing() {
+        // FR-RND-036, FR-CONF-045: `core.render_fuel` from `.tpl/.cfg`.
+        let scratch = Scratch::new();
+        let tpl_dir = project(
+            &scratch,
+            &[(
+                "loop.jinja",
+                "{% for i in range(10000) %}{% for j in range(10000) %}{% endfor %}{% endfor %}",
+            )],
+        );
+        configured(&scratch, "[core]\nrender_fuel = 5000\n");
+        let context = scratch.file("dump.json", &dumped());
+
+        let (result, written) = rendered(&tpl_dir, &context, "loop", &object(&[], &[], &[]), &[]);
+        let condition = result.expect_err("the loop outruns its fuel");
+
+        assert!(
+            matches!(condition, Error::RenderFuelExhausted { fuel: 5000 }),
+            "{condition:?}"
+        );
+        assert_eq!(condition.exit_code(), 65);
+        assert!(written.is_empty(), "wrote {} bytes", written.len());
+    }
+
+    #[test]
+    fn fr_rnd_037_a_render_past_the_limit_the_cfg_declares_is_65_and_stdout_holds_at_most_it() {
+        // FR-RND-037, FR-CONF-045: stdout receives no byte beyond the limit —
+        // here none at all, which FR-RND-034 admits.
+        let scratch = Scratch::new();
+        let tpl_dir = project(&scratch, &[("wide.jinja", THOUSAND_BYTES)]);
+        configured(&scratch, "[core]\nrender_output_limit = 64\n");
+        let context = scratch.file("dump.json", &dumped());
+
+        let (result, written) = rendered(&tpl_dir, &context, "wide", &object(&[], &[], &[]), &[]);
+        let condition = result.expect_err("a thousand bytes pass a limit of 64");
+
+        assert!(
+            matches!(condition, Error::RenderOutputLimitExceeded { limit: 64 }),
+            "{condition:?}"
+        );
+        assert_eq!(condition.exit_code(), 65);
+        assert!(written.len() <= 64, "wrote {} bytes", written.len());
+    }
+
+    #[test]
+    fn fr_conf_045_raising_the_limit_in_the_cfg_lets_the_same_render_pass() {
+        let scratch = Scratch::new();
+        let tpl_dir = project(&scratch, &[("wide.jinja", THOUSAND_BYTES)]);
+        configured(&scratch, "[core]\nrender_output_limit = 1000\n");
+        let context = scratch.file("dump.json", &dumped());
+
+        let (result, written) = rendered(&tpl_dir, &context, "wide", &object(&[], &[], &[]), &[]);
+
+        result.expect("a thousand bytes fit a limit of 1000");
+        assert_eq!(written.len(), 1000);
+    }
+
+    #[test]
+    fn fr_conf_045_a_render_bound_outside_its_range_in_the_cfg_is_78() {
+        let scratch = Scratch::new();
+        let tpl_dir = project(&scratch, &[("wide.jinja", THOUSAND_BYTES)]);
+        configured(&scratch, "[core]\nrender_fuel = 0\n");
+        let context = scratch.file("dump.json", &dumped());
+
+        let (result, written) = rendered(&tpl_dir, &context, "wide", &object(&[], &[], &[]), &[]);
+        let condition = result.expect_err("0 is outside the range");
+
+        assert!(
+            matches!(condition, Error::ConfigurationValueMalformed { .. }),
+            "{condition:?}"
+        );
+        assert_eq!(condition.exit_code(), 78);
+        assert!(written.is_empty());
+    }
+
+    #[test]
     fn fr_rnd_029_a_template_that_does_not_exist_is_66_with_a_suggestion() {
         // FR-RND-029 through FR-TMPL-027, and the order of FR-ERR-006: step 4
         // is reached because steps 2 and 3 passed, and the condition is the
@@ -1309,14 +1523,10 @@ mod tests {
         let spent = Bound::spent(Seconds::new(NonZeroU64::new(30).expect("30 is positive")));
         let mut ran = false;
 
-        let condition = bounded(
-            spent,
-            || false,
-            || {
-                ran = true;
-                Ok::<(), Error>(())
-            },
-        )
+        let condition = bounded(spent, RenderMemoryLimit::DEFAULT, || {
+            ran = true;
+            Ok::<(), Error>(())
+        })
         .expect_err("the bound is spent");
 
         assert_eq!(condition.exit_code(), 65);
@@ -1332,33 +1542,11 @@ mod tests {
         let bound = clock.bound(Seconds::new(NonZeroU64::new(30).expect("30 is positive")));
 
         assert_eq!(
-            bounded(bound, || false, || Ok::<&str, Error>("produced"))
-                .expect("it is inside the deadline"),
+            bounded(bound, RenderMemoryLimit::DEFAULT, || {
+                Ok::<&str, Error>("produced")
+            })
+            .expect("it is inside the deadline"),
             "produced"
-        );
-    }
-
-    #[test]
-    fn fr_cache_039_a_render_abandoned_on_a_miss_outlives_its_deadline() {
-        // FR-CACHE-039: the render that reached a miss is abandoned, and the
-        // one that follows has the whole deadline. The first render's deadline
-        // arriving while it finishes must therefore not end the process with
-        // the `65` of FR-RND-033: the timer is excused, and the call returns
-        // what the render returned. Were it not, this test binary would exit.
-        let bound = Bound::lasting(std::time::Duration::from_millis(20));
-
-        let produced = bounded(
-            bound,
-            || true,
-            || {
-                std::thread::sleep(std::time::Duration::from_millis(200));
-                Ok::<&str, Error>("abandoned")
-            },
-        );
-
-        assert_eq!(
-            produced.expect("the timer did not end the process"),
-            "abandoned"
         );
     }
 
@@ -1414,6 +1602,140 @@ mod tests {
             minijinja::value::ValueKind::Invalid,
             "a member reached after the miss is not read"
         );
+    }
+
+    #[test]
+    fn fr_cache_039_an_abandoned_render_keeps_evaluating_after_a_miss_a_lookup_function_reached() {
+        // What an abandoned render can still do. A member reached through the
+        // collection reads as an invalid value, and any use of it unwinds the
+        // render. A member reached through one of the four lookup functions of
+        // FR-ENV-020 does not: the function's answer is tolerated by
+        // assignment, `is defined`, `is none` and `default`, so the render
+        // carries on after the miss — here doubling a string to 1 MiB and
+        // looping — and returns what it produced. The store records the miss,
+        // so the render is still abandoned; what it does between the miss and
+        // its return is bounded only by what bounds a render while it runs.
+        let after = "{% set ns = namespace(s='x', n=0) %}\
+                     {% for i in range(20) %}{% set ns.s = ns.s ~ ns.s %}{% endfor %}\
+                     {% for i in range(1000) %}{% set ns.n = ns.n + 1 %}{% endfor %}\
+                     AFTER {{ ns.s | length }} {{ ns.n }}";
+
+        for reach in [
+            "{% set t = table('carrier') %}",
+            "{% if table('carrier') is defined %}{% endif %}",
+            "{{ table('carrier') is none }}",
+            "{{ column('carrier', 'carrier_id') is defined }}",
+        ] {
+            let scratch = Scratch::new();
+            let source = format!("{reach}{after}");
+            let tpl_dir = cached(&scratch, &[("escape.jinja", source.as_str())]);
+            std::fs::write(stored(&tpl_dir, "tables/carrier.json"), "{ torn").expect("ours");
+            let listed = crate::cache::Cache::of(&tpl_dir, ENTRY)
+                .shelved()
+                .expect("the store is whole");
+            let store = std::sync::Arc::new(
+                super::Store::open(listed, Ending::Caller).expect("database.json decodes"),
+            );
+            let value = super::context::assemble_shelved(
+                &store,
+                None,
+                &std::collections::BTreeMap::new(),
+                "1970-01-01T00:00:00Z",
+            );
+
+            let produced = crate::render::Environment::new(&tpl_dir)
+                .render("escape", &value)
+                .unwrap_or_else(|failure| panic!("{reach}: the render unwound: {failure:?}"));
+
+            assert!(
+                store.missed(),
+                "{reach}: the lookup reached the damaged file"
+            );
+            assert!(
+                produced.ends_with("AFTER 1048576 1000"),
+                "{reach}: {produced:?}"
+            );
+        }
+    }
+
+    /// A cached project whose `.tpl/.cfg` is [`UNREACHABLE`] with `core` added
+    /// to its `[core]` section, carrying `templates`, with `carrier`'s file
+    /// damaged so that reaching it is a miss under `FR-CACHE-039`.
+    ///
+    /// The entry names a port nothing listens on, so a server read the
+    /// invocation made would end with the `69` of a refused connection: a
+    /// `65` naming a render bound is therefore also the proof that no
+    /// connection was attempted.
+    fn abandoning(scratch: &Scratch, core: &str, templates: &[(&str, &str)]) -> PathBuf {
+        let tpl_dir = cached(scratch, templates);
+        let file = scratch.file(
+            "project/.tpl/.cfg",
+            &UNREACHABLE.replacen("[core]\n", &format!("[core]\n{core}"), 1),
+        );
+        scratch.chmod(&file, 0o600);
+        std::fs::write(stored(&tpl_dir, "tables/carrier.json"), "{ torn").expect("ours");
+
+        tpl_dir
+    }
+
+    /// The reach of `carrier` through a lookup function, which the render
+    /// survives, per the test above.
+    const REACH: &str = "{% set t = table('carrier') %}";
+
+    #[test]
+    fn fr_cache_039_an_abandoned_render_that_exhausts_its_fuel_ends_the_invocation_with_65() {
+        // FR-CACHE-039, second paragraph, and FR-RND-038: fuel crossed after
+        // the miss is the invocation's 65, and the server is not read.
+        let scratch = Scratch::new();
+        let source = format!(
+            "{REACH}{{% for i in range(10000) %}}{{% for j in range(10000) %}}{{% endfor %}}{{% endfor %}}"
+        );
+        let tpl_dir = abandoning(&scratch, "render_fuel = 5000\n", &[("loop.jinja", &source)]);
+
+        let (result, written) = from_store(&tpl_dir, "loop", &object(&[], &[], &[]));
+        let condition = result.expect_err("the abandoned render outruns its fuel");
+
+        assert!(
+            matches!(condition, Error::RenderFuelExhausted { fuel: 5000 }),
+            "{condition:?}"
+        );
+        assert!(written.is_empty(), "wrote {written:?}");
+    }
+
+    #[test]
+    fn fr_cache_039_an_abandoned_render_past_its_output_limit_ends_the_invocation_with_65() {
+        let scratch = Scratch::new();
+        let source = format!("{REACH}{{% for i in range(100) %}}0123456789{{% endfor %}}");
+        let tpl_dir = abandoning(
+            &scratch,
+            "render_output_limit = 64\n",
+            &[("wide.jinja", &source)],
+        );
+
+        let (result, written) = from_store(&tpl_dir, "wide", &object(&[], &[], &[]));
+        let condition = result.expect_err("the abandoned render passes its output limit");
+
+        assert!(
+            matches!(condition, Error::RenderOutputLimitExceeded { limit: 64 }),
+            "{condition:?}"
+        );
+        assert!(written.is_empty(), "wrote {written:?}");
+    }
+
+    #[test]
+    fn fr_cache_039_an_abandoned_render_within_every_bound_still_reads_the_server() {
+        // The control: the same miss, no bound crossed, and the invocation is
+        // a miss like any other — it reads the server, which here refuses the
+        // connection, so the condition is the 69 of that read and not a 65.
+        let scratch = Scratch::new();
+        let source = format!("{REACH}within");
+        let tpl_dir = abandoning(&scratch, "", &[("calm.jinja", &source)]);
+
+        let (result, written) = from_store(&tpl_dir, "calm", &object(&[], &[], &[]));
+        let condition = result.expect_err("the unreachable server refuses the read");
+
+        assert_eq!(condition.exit_code(), 69, "{condition:?}");
+        assert!(written.is_empty(), "wrote {written:?}");
     }
 
     #[test]

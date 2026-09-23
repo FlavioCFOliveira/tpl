@@ -1,4 +1,4 @@
-//! How the engine is built, and the five settings that are not its defaults.
+//! How the engine is built, and the six settings that are not its defaults.
 //!
 //! | Setting | Value | Forced by |
 //! |---|---|---|
@@ -7,6 +7,7 @@
 //! | Auto-escaping | Off, for every name | `FR-ENV-026`, `FR-ENV-027` |
 //! | The formatter | `null` writes nothing, and a boolean writes `true` or `false` | `FR-SEM-010`, `FR-SEM-011`, `FR-SEM-021` |
 //! | The loader | `tpl`'s own, over one resolution | `FR-TMPL-023` … `FR-TMPL-027`, `OD-15` |
+//! | Fuel | The render fuel resolved for the invocation | `FR-RND-036`, `FR-CONF-045` |
 //!
 //! Everything else is left at the engine's default, which is what `BR-SEM-001`
 //! asks for: a correct template produces here exactly what it produces
@@ -55,6 +56,7 @@
 use minijinja::value::ValueKind;
 use minijinja::{AutoEscape, Environment, ErrorKind, Output, State, UndefinedBehavior, Value};
 
+use super::bounds::RenderFuel;
 use super::root::Root;
 use super::surface;
 use crate::error::Error;
@@ -65,13 +67,19 @@ const TRUE: &str = "true";
 /// The spelling `FR-SEM-021` fixes for a false value.
 const FALSE: &str = "false";
 
-/// Builds the engine over `root`.
+/// Builds the engine over `root`, holding every render to `fuel`.
 ///
 /// It is called once per process and only by an invocation that compiles a
 /// template: [`super::Environment`] holds the result in a cell that stays
 /// empty otherwise, which is the lazy construction `NFR-PERF-006` requires.
-pub(super) fn build(root: Root) -> Environment<'static> {
+pub(super) fn build(root: Root, fuel: RenderFuel) -> Environment<'static> {
     let mut engine = Environment::new();
+
+    // FR-RND-036: every render is held to its render fuel. The engine consumes
+    // it per render, so each render — an abandoned one under FR-CACHE-039 and
+    // the one that follows it alike — starts with the whole budget, as
+    // FR-RND-038 requires.
+    engine.set_fuel(Some(fuel.get()));
 
     // FR-SEM-003. The engine's default strips a single trailing newline, and
     // BR-SEM-001 departs from it deliberately: most formatters require a final

@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -266,7 +266,8 @@ removes it. The wording is the functional owner's to settle.
 | Property | Decision | Forced by |
 |---|---|---|
 | Format | TOML, one file. No global configuration, no home, XDG or `/etc` fallback, so the project alone determines behaviour | `FR-CONF-001`, `FR-CONF-003`, `BR-PROJ-001` |
-| Key space | Exactly fifteen keys, each with a declared type and a declared default. One table serves two jobs: the validator's population, and the source of every built-in default a phase deadline resolves from | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-004` |
+| Key space | Exactly eighteen key forms, eight under `[core]` and ten per database entry, each with a declared type and a declared default. One table serves two jobs: the validator's population, and the source of every built-in default a phase deadline or a render bound resolves from | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-004`, `FR-CONF-045` |
+| The three render-bound keys | Integers within the range `FR-CONF-002` declares for each; none admits `0` or a value meaning "no bound". A value outside it is `78` from the file and `64` from `tpl cfg set`. Each range is a type in `render/bounds.rs`, so an out-of-range value cannot be held once read | `FR-CONF-045`, `FR-CFG-010` |
 | Mode | Created `0600`; refused at any looser mode and when not owned by the current user; retained at `0600` across every rewrite, including the temporary file | `FR-PROJ-019`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-034`, `FR-CFG-041` |
 | Rewrite | Temporary file in `.tpl/`, renamed over the target; a failure part-way leaves the previous file unchanged and removes the temporary; **no lock**, so two writers yield one whole file or the other | `FR-CFG-041`, `FR-CFG-042` |
 | Read path and write path | Separate: a span-carrying document tree to read the typed key space, a format-preserving editor to write | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) |
@@ -323,7 +324,9 @@ Credential handling, `${VAR}` expansion and the child process are
 | Creation | On the first read that populates it, never by `tpl init`; excluded from version control by the generated `.gitignore` | `FR-CACHE-003`, `FR-PROJ-020`, `FR-CACHE-004` |
 | Filenames | The object kind plus the literal object name: `tables/<name>.json`, `views/<name>.json`, `routines/<kind>.<name>.json`. No encoding layer and no hash | `FR-CDOC-014`, with [`OD-10`](open-decisions.md#od-10--cache-filenames-and-the-case-collision) |
 | Encoding | JSON, UTF-8, compact, no trailing newline, written by the serialiser of [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | The `.json` suffix of `FR-CDOC-001` and `FR-CDOC-014`; `BR-CACHE-001` keeps the form outside the contract |
-| Write | One file per object, through a temporary file in the same directory, renamed over the target; **no lock** | `FR-CACHE-030`, `FR-CACHE-031` |
+| Write | One file per object, through a temporary file in the same directory, renamed over the target; **no lock**. A symbolic link at the target is replaced by the rename, never followed and never left in place | `FR-CACHE-030`, `FR-CACHE-031` |
+| Read of an object file | `lstat` first: anything but a regular file — a symbolic link or a FIFO among them — is a miss. The file is then opened and its device and inode compared with the inspected ones, so a file swapped between the two calls is a miss too | `FR-CACHE-033` |
+| Read of one named object | A hit only where the file holds exactly that object: the same name byte for byte and, for a routine, the same kind. Checked over the member already decoded, so it costs a comparison and no second parse | `FR-CACHE-033`, `FR-CDOC-008` |
 | Never written | Any object marked `restricted`; a collection holding one is never recorded whole | `FR-CACHE-037` |
 
 Compact rather than indented, because nothing reads these files but `tpl`:
@@ -366,9 +369,18 @@ wording is the functional owner's to settle.
 
 **The case collision.** Two objects of one kind whose names differ only in case
 map to one path on a case-insensitive filesystem, which is the default on two
-of the four targets of `NFR-PERF-018`. `OD-10` settles the outcome — detect it
-and fail, naming both objects — and carries the rationale and the two options
-rejected; neither is restated here.
+of the four targets of `NFR-PERF-018`. **No collision is detected and none
+fails** (`OD-10`, superseded on 2026-09-23 by the user's decision for rmp
+`#254`, which records the rejected detect-and-fail and collision-free
+encoding). `FR-CACHE-033` governs: a named read whose file holds the other
+object is a miss, on every filesystem; two names sharing one file leave the
+directory's count short, so `replace()` in `src/cache.rs` records the collection
+as not whole; and either object can miss on every invocation, which is that
+requirement's accepted cost.
+
+*Superseded on 2026-09-23 — the paragraph below applied `OD-10`'s
+detect-and-fail to `tpl cache load`. It is kept as history and no longer
+prescribes anything.*
 
 **Recorded discrepancy — the command that detects it.** `OD-10` assigns the
 detection to *"`cache refresh`"*. `FR-CLI-010` and `FR-CACHE-021` through
@@ -402,8 +414,9 @@ Four rules govern how it is used:
   `meta.json` has been read and accepted.
 - **Completeness decides a listing, not an object.** A listing is served only
   where its collection is recorded whole (`FR-CDOC-007`); an individual object
-  is served whenever present (`FR-CDOC-008`), and `FR-CACHE-037` narrows
-  *present* by keeping a marked object out of the cache entirely.
+  is served whenever present (`FR-CDOC-008`). *Present* is narrowed twice:
+  `FR-CACHE-037` keeps a marked object out of the cache entirely, and
+  `FR-CACHE-033` makes it a regular file holding that object.
 - **The object count is not stored.** `FR-CACHE-034` requires `tpl cache status`
   to report a count per collection; it is derived by listing that collection's
   directory. Recording it in `meta.json` was rejected: it is a second statement

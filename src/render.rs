@@ -11,6 +11,7 @@
 //!
 //! | Submodule | What it owns |
 //! |---|---|
+//! | [`bounds`] | Render fuel, the render output limit and the render memory limit — `FR-RND-036` … `FR-RND-039`, `FR-CONF-045` |
 //! | [`root`] | The template root and the six-step resolution of `OD-15` — `FR-TMPL-004` … `FR-TMPL-008`, `FR-TMPL-023` … `FR-TMPL-027` |
 //! | [`engine`] | The five settings that are not the engine's defaults, and the loader — `FR-SEM-001` … `FR-SEM-004`, `FR-SEM-010`, `FR-SEM-011`, `FR-ENV-026`, `FR-ENV-027`, `OD-14` |
 //! | [`surface`] | The one declaration of group 1, and the closed list of group 2 — `FR-ENV-005` … `FR-ENV-007`, `FR-ENV-014`, `FR-ENV-018` … `FR-ENV-020` |
@@ -40,7 +41,19 @@
 //! the loader resolves it again when it reads it. `OD-15` fixes that split by
 //! who asks, and the second resolution is one `realpath` against a read and a
 //! parse.
+//!
+//! # Every render is bounded by a count as well as by its deadline
+//!
+//! `FR-SEC-025` bounds a render by render fuel and by the render output limit
+//! besides its deadline, and [`Environment::render`] applies both to every
+//! render it makes. Fuel is the engine's own, set once on the engine and
+//! consumed per render. The output is counted by the writer the render writes
+//! into, as it is produced: the writer refuses the write that would carry the
+//! count past the limit, which ends the render there, so the text held is never
+//! longer than the limit. Neither costs more than a counter per step or per
+//! write.
 
+mod bounds;
 mod code;
 mod engine;
 mod fault;
@@ -62,6 +75,7 @@ use minijinja::Value;
 
 use crate::error::Error;
 
+pub(crate) use bounds::{RenderBounds, RenderFuel, RenderMemoryLimit, RenderOutputLimit};
 pub(crate) use lookup::Query;
 pub(crate) use root::Template;
 pub(crate) use surface::{
@@ -79,6 +93,9 @@ pub(crate) struct Environment {
     /// The template root, and the resolution it bounds.
     root: root::Root,
 
+    /// The render fuel and the render output limit every render is held to.
+    bounds: RenderBounds,
+
     /// The engine, built on first use.
     engine: OnceCell<minijinja::Environment<'static>>,
 }
@@ -87,12 +104,29 @@ impl Environment {
     /// The environment of the project whose `.tpl` folder is `tpl_directory`.
     ///
     /// Nothing is read: the template root is composed and the engine is left
-    /// unbuilt.
+    /// unbuilt. A render it makes is held to the built-in defaults of the two
+    /// render bounds, which is what a project whose `.tpl/.cfg` declares
+    /// neither key resolves.
     pub(crate) fn new(tpl_directory: &Path) -> Self {
+        Self::bounded(tpl_directory, RenderBounds::default())
+    }
+
+    /// The environment of the project whose `.tpl` folder is `tpl_directory`,
+    /// every render of which is held to `bounds` (`FR-RND-036`, `FR-RND-037`).
+    ///
+    /// Nothing is read, as for [`Environment::new`].
+    pub(crate) fn bounded(tpl_directory: &Path, bounds: RenderBounds) -> Self {
         Self {
             root: root::Root::new(tpl_directory),
+            bounds,
             engine: OnceCell::new(),
         }
+    }
+
+    /// The render bounds every render of this environment is held to
+    /// (`FR-RND-036` … `FR-RND-039`).
+    pub(crate) const fn bounds(&self) -> RenderBounds {
+        self.bounds
     }
 
     /// The template root, absolute (`FR-TMPL-021`, `FR-TMPL-023`).
@@ -152,11 +186,23 @@ impl Environment {
         self.template(name).map(|_| ())
     }
 
-    /// Renders the template `name` against `context` (`FR-RND-028`).
+    /// Renders the template `name` against `context` (`FR-RND-028`), held to
+    /// the render fuel and the render output limit of this environment
+    /// (`FR-RND-036`, `FR-RND-037`).
+    ///
+    /// The text is produced into a writer that counts every byte as it is
+    /// written and refuses the write that would carry the count past the
+    /// limit, so the render ends there and what is held never exceeds the
+    /// limit. The text is returned whole, and nothing reaches stdout until it
+    /// has been, which is what `FR-RND-034` and `FR-CACHE-039` rely on; it is
+    /// held for those two and not in order to be counted.
     ///
     /// # Errors
     ///
-    /// Returns what [`Environment::compile`] returns, and
+    /// Returns what [`Environment::compile`] returns;
+    /// [`Error::RenderFuelExhausted`] where the render exhausted its render
+    /// fuel, and [`Error::RenderOutputLimitExceeded`] where it would have
+    /// produced more bytes than its render output limit, both `65`; and
     /// [`Error::RenderFailed`] for every failure
     /// `specification/render-semantics.md` defines: an undefined variable, a
     /// filter or a test handed an operand it does not accept, a template the
@@ -169,9 +215,21 @@ impl Environment {
             .get_template(&resolved.name)
             .map_err(|reported| fault::during_compile(self.root(), &resolved.name, &reported))?;
 
-        template
-            .render(context)
-            .map_err(|reported| fault::during_render(&resolved.name, &reported))
+        let mut produced = bounds::Limited::new(self.bounds.output_limit);
+        let rendered = template.render_captured_to(context, &mut produced);
+
+        match rendered {
+            Ok(_) => produced.into_text(),
+            // The writer refused the write past the limit, and the engine
+            // reports that as a write failure: the refusal is the cause.
+            Err(_) if produced.exceeded() => Err(Error::RenderOutputLimitExceeded {
+                limit: self.bounds.output_limit.get(),
+            }),
+            Err(reported) if fault::out_of_fuel(&reported) => Err(Error::RenderFuelExhausted {
+                fuel: self.bounds.fuel.get(),
+            }),
+            Err(reported) => Err(fault::during_render(&resolved.name, &reported)),
+        }
     }
 
     /// Resolves and compiles `name`, leaving the compiled template cached.
@@ -185,13 +243,14 @@ impl Environment {
 
     /// The engine, built on first use.
     fn engine(&self) -> &minijinja::Environment<'static> {
-        self.engine.get_or_init(|| engine::build(self.root.clone()))
+        self.engine
+            .get_or_init(|| engine::build(self.root.clone(), self.bounds.fuel))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Environment;
+    use super::{Environment, RenderBounds, RenderFuel, RenderMemoryLimit, RenderOutputLimit};
     use crate::error::Error;
     use crate::project::scratch::Scratch;
     use minijinja::{Value, context};
@@ -205,6 +264,139 @@ mod tests {
         }
 
         Environment::new(&scratch.canonical("project/.tpl"))
+    }
+
+    /// An environment over a project carrying `templates`, held to `fuel` and
+    /// `limit`.
+    fn bounded(
+        scratch: &Scratch,
+        templates: &[(&str, &str)],
+        fuel: u64,
+        limit: u64,
+    ) -> Environment {
+        project(scratch, templates);
+        let bounds = RenderBounds {
+            fuel: RenderFuel::new(fuel).expect("the test writes a value in range"),
+            output_limit: RenderOutputLimit::new(limit).expect("the test writes a value in range"),
+            memory_limit: RenderMemoryLimit::DEFAULT,
+        };
+
+        Environment::bounded(&scratch.canonical("project/.tpl"), bounds)
+    }
+
+    /// A template that loops without end, as far as any fuel reaches.
+    ///
+    /// The engine refuses a `range` longer than 100 000, so the loop nests
+    /// three of 10 000: 10^12 iterations.
+    const RUNAWAY: &str = "{% for i in range(10000) %}{% for j in range(10000) %}\
+                           {% for k in range(10000) %}{% endfor %}{% endfor %}{% endfor %}";
+
+    #[test]
+    fn fr_rnd_036_a_render_that_exhausts_its_fuel_is_65_naming_the_bound() {
+        // FR-RND-036, FR-SEC-025, H-1: the loop ends at a count, not at the
+        // deadline, and the condition carries the resolved budget.
+        let scratch = Scratch::new();
+        let environment = bounded(&scratch, &[("loop.jinja", RUNAWAY)], 10_000, 1_000_000);
+
+        let condition = environment
+            .render("loop", &context! {})
+            .expect_err("the loop outruns its fuel");
+
+        assert!(
+            matches!(condition, Error::RenderFuelExhausted { fuel: 10_000 }),
+            "{condition:?}"
+        );
+        assert_eq!(condition.exit_code(), 65);
+    }
+
+    #[test]
+    fn fr_rnd_036_fuel_exhausted_inside_an_include_is_still_the_fuel() {
+        let scratch = Scratch::new();
+        let environment = bounded(
+            &scratch,
+            &[
+                ("outer.jinja", "{% include \"inner.jinja\" %}"),
+                ("inner.jinja", RUNAWAY),
+            ],
+            10_000,
+            1_000_000,
+        );
+
+        let condition = environment
+            .render("outer", &context! {})
+            .expect_err("the included loop outruns its fuel");
+
+        assert!(
+            matches!(condition, Error::RenderFuelExhausted { fuel: 10_000 }),
+            "{condition:?}"
+        );
+    }
+
+    #[test]
+    fn fr_rnd_037_a_render_that_would_pass_its_output_limit_is_65_naming_the_bound() {
+        // FR-RND-037: the writer refuses the byte past the limit, and the
+        // render ends there with the resolved limit in the condition.
+        let scratch = Scratch::new();
+        let environment = bounded(
+            &scratch,
+            &[(
+                "wide.jinja",
+                "{% for i in range(100) %}0123456789{% endfor %}",
+            )],
+            1_000_000,
+            64,
+        );
+
+        let condition = environment
+            .render("wide", &context! {})
+            .expect_err("a thousand bytes pass a limit of 64");
+
+        assert!(
+            matches!(condition, Error::RenderOutputLimitExceeded { limit: 64 }),
+            "{condition:?}"
+        );
+        assert_eq!(condition.exit_code(), 65);
+    }
+
+    #[test]
+    fn fr_rnd_037_output_exactly_at_the_limit_is_produced() {
+        let scratch = Scratch::new();
+        let environment = bounded(
+            &scratch,
+            &[(
+                "wide.jinja",
+                "{% for i in range(100) %}0123456789{% endfor %}",
+            )],
+            1_000_000,
+            1_000,
+        );
+
+        let produced = environment
+            .render("wide", &context! {})
+            .expect("a thousand bytes fit a limit of 1000");
+
+        assert_eq!(produced.len(), 1_000);
+    }
+
+    #[test]
+    fn fr_conf_045_raising_the_bounds_lets_a_large_legitimate_render_pass() {
+        // The same template refused under small bounds renders under the
+        // defaults, which sit far above any legitimate render.
+        let scratch = Scratch::new();
+        let template = [(
+            "large.jinja",
+            "{% for i in range(20000) %}row {{ i }}\n{% endfor %}",
+        )];
+
+        let small = bounded(&scratch, &template, 1_000, 1_000);
+        assert!(small.render("large", &context! {}).is_err());
+
+        let raised = Environment::new(&scratch.canonical("project/.tpl"));
+        let produced = raised
+            .render("large", &context! {})
+            .expect("the defaults admit it");
+
+        assert!(produced.len() > 100_000, "{}", produced.len());
     }
 
     #[test]

@@ -392,17 +392,6 @@ impl Bound {
         self.remaining.is_zero()
     }
 
-    /// A phase bound of `remaining`, for a test that must see one expire
-    /// without waiting out a deadline measured in whole seconds.
-    #[cfg(test)]
-    pub(crate) const fn lasting(remaining: Duration) -> Self {
-        Self {
-            bound: DeadlineBound::Phase,
-            limit: remaining,
-            remaining,
-        }
-    }
-
     /// A bound of `limit` with nothing left of it.
     ///
     /// The composition of `FR-GLOB-012` produces one whenever the overall

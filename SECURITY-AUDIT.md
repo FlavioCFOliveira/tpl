@@ -344,6 +344,36 @@ than to a file accepts this.
   encode file names injectively and in a case-folded form (for example a hash,
   or percent-encoding of every non-`[a-z0-9_]` byte, including upper case).
 
+### SEC-04 — an abandoned render was released from the deadline and the memory limit (found and fixed within the sprint)
+
+- **Severity (as it stood before the fix).** Low. CVSS 3.1 **3.3** —
+  `AV:L/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:L` (a local denial of service confined
+  to the one invocation; it needs a cache-served render that reaches a miss).
+- **CWE.** CWE-400 (Uncontrolled Resource Consumption) / CWE-770.
+- **Where.** The render watchdog `bounded()` in `src/cli/render.rs`, as it
+  stood after the first remediation pass. When the deadline arrived and the
+  render was flagged as abandoned under `FR-CACHE-039` (it had reached a cache
+  miss), the watchdog returned without terminating the process. From that
+  point the deadline and the memory limit no longer applied to that render.
+- **Requirement broken.** `FR-CONF-005` / `FR-SEC-022` (every blocking phase is
+  bounded) and `FR-RND-038` (render bounds).
+- **Found.** The auditor read it in the code during the second remediation
+  pass and raised it as an open question. The auditor's own analysis of whether
+  it could be exercised was stopped by this environment's safety classifier.
+  The coordinator then reproduced it with a lookup-function miss, a 1 s
+  deadline and string doubling: **3.34 s and 8.6 GB** before the fix.
+- **Fix.** `bounded()` no longer excuses an abandoned render. It enforces the
+  deadline and polls memory until the render returns, and fuel or output
+  exhaustion in an abandoned render ends the invocation with 65
+  (`FR-CACHE-039` second paragraph, `FR-RND-038`).
+- **Re-verification.** Code: `excused` no longer appears in
+  `src/cli/render.rs`. Evidence reported by the coordinator: the same scenario
+  now ends at **1.00 s, exit 65, 4.4 MB**. The fixture test
+  `fr_cache_039_an_abandoned_render_that_crosses_any_bound_ends_with_65_and_reads_no_server`
+  (`tests/render_command.rs:1426`) covers it. The auditor did not re-run the
+  scenario, because that analysis area was the one the classifier stopped.
+- **Status.** Resolved.
+
 ## Hardening observations (not vulnerabilities)
 
 - **H-1. Render peak memory is bounded only by wall-clock, not by bytes.** A
@@ -394,6 +424,58 @@ context target exercises. No memory-unsafety, abort, or hang was found on any
 surface. (An earlier warm-up run added ~37 200 execs, also clean bar the same
 SEC-02 class.)
 
+## Remediation
+
+The fixes are in the working tree of the sprint branch, uncommitted, on top of
+`051f1a8` (tasks #252–#256 and #258). They were re-verified against release
+builds confirmed newer than every changed source file. SEC-04 was found during
+remediation and fixed within the sprint.
+
+| Item | Fix | Re-verification evidence | Status |
+|---|---|---|---|
+| SEC-01 | `password.rs`: the helper runs in its own process group (`process_group(0)`). The poll loop waits for **both** the child's exit and the reader's completion. On the deadline or the byte cap, `terminate()` sends SIGKILL to the group (`kill_process_group`; pid ≤ 1 filtered out), then reaps the child; the reader thread is dropped, not joined. | `target/security-lab/pw/`, `password_timeout=2`. `holder.sh` (a descendant holds the pipe): exit 78 at **2.37 s**, deadline cause, no survivor (previously hung until the 20 s guard). `capholder.sh` (5000 bytes plus a descendant): exit 78 at **0.30 s**, cap cause, no survivor. `evader.sh` (a descendant calls `setsid()` and leaves the group): tpl still exits 78 at **2.02 s**; the escaped descendant survives, which `FR-CONF-043` accepts. | **Resolved.** Second pass: the helper's exit is detected with rustix `waitid(Pid, EXITED | NOHANG | NOWAIT)`, which leaves it unreaped, so the group id cannot be reused before the group kill. It is reaped only after the kill. Unit tests pass: `fr_conf_028_the_child_is_still_unreaped_when_its_group_is_killed_at_the_deadline` and `fr_conf_028_an_exit_is_observed_without_reaping_and_the_group_kill_precedes_the_reap` (5/5 `fr_conf_028` tests). This closes the pid/pgid reuse residual. |
+| SEC-02 | `read.rs` `references_are_carried()`: a dangling `foreign_keys` or `referenced_by` table is `ContextFault::DanglingReference`, exit 65 (`FR-CTX-042`). | `poc_dangling_fk.json` → **65**, and the cause names the table and key (previously 70). Edge cases, all 65, none 70: a dangling `referenced_by`, a case-variant table (`City`), a trailing space, an embedded NUL, a null referenced table, duplicate tables. The validator uses the same comparator and sorted lookup (`order::compare`) as the builder's `find`, so the check and the use cannot diverge on case, Unicode or whitespace. `build.rs` holds no other invariant reachable from a document. Positive control: the full document renders, exit 0. | **Resolved** |
+| SEC-03 | `cache.rs`: a named read records a `Requested` name (and, for routines, kind). `Loaded::document` returns `None` unless the decoded population is exactly one member with that exact name and kind, so a mismatch is a miss (`FR-CACHE-033`) and the server is read. | Preserved `live/sec` cache, fixture **down**, wrong password. `schema table Acct` → **69** (the miss tried the server; previously a false 66); `schema table café` (NFD) → 69; `acct` and NFC `café` still served, exit 0. Views: `schema view V_HOSTILE` → 69 and `v_hostile` served. Routines (planted in a copy of the project, `live/seccopy`): `procedure:MYPROC` → 69, `procedure:myproc` served, and a `function.kindlie.json` whose content says `PROCEDURE` → 69 (kind check). | **Resolved.** Residual: colliding names still share one file, so the object that lost the collision is always read from the server. That is a performance cost only. |
+| SEC-04 | `bounded()` no longer excuses an abandoned render: it enforces the deadline and polls memory until the render returns; fuel or output exhaustion in an abandoned render ends the invocation with 65 (`FR-CACHE-039`, `FR-RND-038`). | `excused` removed from `src/cli/render.rs`. Coordinator's reproduction (lookup-function miss, 1 s deadline, doubling): 3.34 s / 8.6 GB before the fix, **1.00 s, exit 65, 4.4 MB** after. Fixture test `fr_cache_039_an_abandoned_render_that_crosses_any_bound_ends_with_65_and_reads_no_server`. Not re-run by the auditor. | **Resolved** |
+| H-1 | Pass 1: minijinja `fuel` (`core.render_fuel`, default 100 000 000 steps) and `core.render_output_limit`. Pass 2: `cap` 0.1.2 as `#[global_allocator]` with no hard limit (`src/main.rs`); `install_heap_counter` (`src/heap.rs`); the render watchdog in `bounded()` (`src/cli/render.rs`) reads the held heap every 10 ms and exits 65 above `core.render_memory_limit` (default 128 MiB, floor 8 MiB); the output limit default is now 64 MiB. | Release build confirmed newer than every changed source. At the defaults: string doubling through a `namespace` → 65 at **0.29 s**, memory-limit cause, **260 MB peak RSS** (previously 16 981 MB at the 30 s deadline); list doubling plus `join` → 65 at 0.01 s; nested loops → 65 at 0.99 s, fuel cause; 1 GB of output → 65 at 0.00 s, output-limit cause, **0 bytes on stdout**, 72 MB RSS. At `render_memory_limit = 16777216`: string doubling → 65 at 0.01 s, **132 MB peak RSS**. A single huge repetition (`"x" * 400000000`) is refused by the engine itself ("repeated string is too large"). A value that is not a byte count, or is below the floor, is refused at config time (78). | **Resolved, with a bounded overshoot** within the 10 ms poll: about 2× at 128 MiB and about 8× at 16 MiB, low hundreds of MB. |
+| H-2 | `cache.rs` `read_object()`: `lstat`, `open`, then compare `(dev, ino)`; a non-regular file (symlink, FIFO) or an inode swapped between the two calls is a miss. | Code review: named reads (`cache.rs:852`) and collection member reads (`cache.rs:1206`) both use `read_object`. The check fails closed: any mismatch returns `None`, and a miss reads the server. `meta.json` and `database.json` still go through plain `read()` (`cache.rs:1145`) and follow symlinks. They are JSON metadata that must decode, so this grants nothing beyond a miss or another decodable document. **The live symlink/FIFO test was not run: it was blocked by this environment's safety classifier and not reworked.** | **Resolved for object files** (code review and unit tests). The live symlink/FIFO test was blocked by the safety classifier. `meta.json` and `database.json` still follow symlinks; worst case a miss. |
+| #258 | `Session::close()` sends `Quit` and drops the connection and the driver runtime before any render; `bounded()` refuses to start a render (exit 70) unless `mariadb::quiescent()` holds (`FR-RND-040`). | Live on `11.8`: no TCP socket and 2 threads during a slow render for `--direct` and a cache miss; one `Connect`/`Quit` pair each in the general log; a cache hit opens no connection. | **Verified** (the `FR-CACHE-039` re-read path was not exercised) |
+
+**Residual risks after remediation.**
+
+- **Memory overshoot within the 10 ms poll.** The watchdog samples the held
+  heap every 10 ms, so a render can exceed `core.render_memory_limit` by what
+  it allocates between two samples: measured 260 MB at the 128 MiB default and
+  132 MB at 16 MiB.
+- **Abort on an OS-refused allocation.** `cap` is installed with no hard
+  limit, so an allocation the operating system refuses aborts the process
+  (Rust's allocation-failure behaviour) rather than ending with 65.
+- **An escaped descendant survives.** A `password_command` descendant that
+  leaves the process group (`setsid`) is not killed. `tpl` still exits at the
+  deadline, and `FR-CONF-043` accepts this.
+- **`meta.json` and `database.json` follow symlinks.** Worst case a miss or
+  another JSON document that must decode.
+- **Coverage-guided fuzzing is still infeasible** through the public API
+  (`run()` reads the process argv); tracked as #257 in the backlog.
+- **Linux not exercised.** All results are from `aarch64-apple-darwin`.
+
+### #258 — the database session closes before any render (hardening)
+
+- **Change.** `Session::close()` (`src/mariadb.rs`) sends `Quit` and drops the
+  connection and the driver runtime before any render. `bounded()` refuses to
+  start a render (exit 70) unless `mariadb::quiescent()` holds (`FR-RND-040`).
+- **Evidence.** Fixture series `11.8`, brought up and taken down through the
+  harness. A slow render took about 2 s. While it was running (process alive,
+  sampled at 1.2 s):
+  - `--direct` and a cache miss each held **no TCP socket** (`lsof -a -p <pid> -i`
+    was empty) and **2 threads** (main and watchdog, `ps -M`).
+  - The general log shows exactly one `Connect`/`Quit` pair for each of those
+    two invocations. A cache hit opened no connection at all.
+- **Not verified by the auditor.** The `FR-CACHE-039` re-read path was not
+  exercised. It belongs to the abandoned-render area covered by SEC-04, whose
+  analysis this environment's safety classifier stopped.
+- **Status.** Verified for `--direct`, cache miss and cache hit.
+
 ## `cargo audit`
 
 Clean. `cargo-audit` 0.22.2, 1266 advisories, 181 dependencies scanned, exit 0,
@@ -426,7 +508,11 @@ no vulnerabilities, no unmaintained/yanked warnings.
   classes (a)–(g) with the owner's authorisation; the auditor independently
   re-verified (g) from the source and the preserved cache. Classes (a)–(f) are
   reported as the coordinator observed them.
-- **SEC-03 was reproduced for tables only.** Views and qualified routines are
-  affected by construction (the same code path) but were not reproduced live.
+- **SEC-03 was reproduced before the fix for tables only.** After the fix, the
+  miss behaviour was confirmed for tables, views and qualified routines, the
+  routines from files planted in a copy of the project.
+- **H-2 re-verification is by code review only.** The live test with a
+  symlinked or FIFO object file was stopped by the environment's safety
+  classifier and was not reworked.
 - **`aarch64-apple-darwin` only.** Linux libc-specific paths not exercised.
 - The audit covers commit `051f1a8`; any later change re-opens the surface.

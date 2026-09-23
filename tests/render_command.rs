@@ -1142,3 +1142,391 @@ fn fr_ctx_026_and_fr_rnd_024_vars_is_this_invocations_and_a_document_supplies_no
         );
     }
 }
+
+// ------------------------------------------------- FR-RND-038 and FR-RND-039 ---
+
+/// A `--context` document carrying a database with no member, which is all the
+/// bodies below need: what they measure is the render, not the model.
+const EMPTY_CONTEXT: &str = r#"{"schema_version":1,"source":"server","data":{"database":{"name":"shop","charset":"utf8mb4","collation":"utf8mb4_general_ci","server":{"version":"11.4.13-MariaDB","series":"11.4","standing":"supported"},"tables":[],"views":[],"routines":[]}}}"#;
+
+/// A template that doubles a string through a `namespace` until it would hold
+/// 2^40 bytes — the shape of hardening observation H-1 — within a few dozen
+/// evaluation steps, far inside the fuel budget.
+const DOUBLING: &str = "{% set ns = namespace(s='x') %}\
+                        {% for i in range(40) %}{% set ns.s = ns.s ~ ns.s %}{% endfor %}\
+                        {{ ns.s | length }}";
+
+/// A template that legitimately holds a 32 MiB string and prints its length.
+const LARGE: &str = "{% set ns = namespace(s='x') %}\
+                     {% for i in range(25) %}{% set ns.s = ns.s ~ ns.s %}{% endfor %}\
+                     {{ ns.s | length }}\n";
+
+/// A sandbox holding a project whose `.tpl/.cfg` is `configuration`, the
+/// templates given, and [`EMPTY_CONTEXT`] at [`CONTEXT`].
+fn bounded_project(configuration: &str, templates: &[(&str, &str)]) -> Sandbox {
+    let sandbox = Sandbox::new();
+    sandbox.project(configuration);
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+
+    for (name, source) in templates {
+        sandbox.write(&format!(".tpl/templates/{name}.jinja"), source);
+    }
+
+    sandbox
+}
+
+#[test]
+fn fr_rnd_039_a_render_that_grows_past_its_memory_limit_is_65_naming_the_bound_and_writes_nothing()
+{
+    // FR-RND-039, FR-SEC-025, ADR-011: the counting allocator the binary
+    // installs is read by the render's watchdog, and a count above the limit
+    // ends the render with 65 and a cause naming the bound, its resolved value
+    // and the key. Nothing reaches stdout, per FR-RND-034.
+    let sandbox = bounded_project(
+        "[core]\nrender_memory_limit = 16777216\n",
+        &[("grow", DOUBLING)],
+    );
+
+    let written = refused(&sandbox, &["render", "grow", "--context", CONTEXT], 65);
+    let cause = line(&written, "cause: ");
+
+    assert!(cause.contains("render memory limit"), "{cause}");
+    assert!(cause.contains("16777216"), "{cause}");
+    assert!(cause.contains("core.render_memory_limit"), "{cause}");
+    assert!(
+        line(&written, "hint:  ").contains("tpl cfg set core.render_memory_limit"),
+        "{written}"
+    );
+}
+
+#[test]
+fn fr_rnd_039_the_default_memory_limit_stops_the_doubling_render() {
+    // FR-CONF-002: the default, 128 MiB, applies where the key is absent.
+    let sandbox = bounded_project("[core]\n", &[("grow", DOUBLING)]);
+
+    let written = refused(&sandbox, &["render", "grow", "--context", CONTEXT], 65);
+
+    assert!(line(&written, "cause: ").contains("134217728"), "{written}");
+}
+
+#[test]
+fn fr_conf_045_raising_the_memory_limit_lets_a_legitimately_large_render_pass() {
+    // The same 32 MiB render is refused under a 16 MiB limit and produced
+    // under a raised one.
+    let low = bounded_project(
+        "[core]\nrender_memory_limit = 16777216\n",
+        &[("large", LARGE)],
+    );
+    let written = refused(&low, &["render", "large", "--context", CONTEXT], 65);
+    assert!(
+        line(&written, "cause: ").contains("render memory limit"),
+        "{written}"
+    );
+
+    let raised = bounded_project(
+        "[core]\nrender_memory_limit = 536870912\n",
+        &[("large", LARGE)],
+    );
+    assert_eq!(
+        succeeds(&raised, &["render", "large", "--context", CONTEXT]),
+        "33554432\n"
+    );
+}
+
+#[test]
+fn fr_rnd_038_under_the_defaults_endless_output_reaches_the_output_limit_before_the_memory_limit() {
+    // FR-RND-038 and FR-CONF-045: the output is held until the render ends, so
+    // it counts toward the memory limit; at 64 MiB the output default sits at
+    // half the memory default, and the output limit is the one reported.
+    let sandbox = bounded_project(
+        "[core]\n",
+        &[(
+            "flood",
+            "{% set s = 'x' * 1048576 %}{% for i in range(100) %}{{ s }}{% endfor %}",
+        )],
+    );
+
+    let written = refused(&sandbox, &["render", "flood", "--context", CONTEXT], 65);
+    let cause = line(&written, "cause: ");
+
+    assert!(cause.contains("render output limit"), "{cause}");
+    assert!(cause.contains("67108864"), "{cause}");
+}
+
+#[test]
+fn fr_conf_045_a_memory_limit_below_its_floor_is_78_in_the_file_and_64_on_the_command_line() {
+    let sandbox = bounded_project(
+        "[core]\nrender_memory_limit = 8388607\n",
+        &[("large", LARGE)],
+    );
+
+    let written = refused(&sandbox, &["render", "large", "--context", CONTEXT], 78);
+    let cause = line(&written, "cause: ");
+    assert!(cause.contains("core.render_memory_limit"), "{cause}");
+    assert!(cause.contains("8388607"), "{cause}");
+    assert!(cause.contains("8388608"), "{cause}");
+
+    let valid = bounded_project("[core]\n", &[]);
+    refused(
+        &valid,
+        &["cfg", "set", "core.render_memory_limit", "8388607"],
+        64,
+    );
+}
+
+// ----------------------------------------------------------------- FR-RND-040 ---
+
+/// A template that reads the whole database and then runs for a few seconds
+/// before it produces its only byte.
+///
+/// The render holds its output until it ends, so its first byte reaches stdout
+/// only after the loop: a session that is recorded as ended while the process
+/// is still running is ended before that byte.
+const SLOW_AFTER_READ: &str = "{% for t in database.tables %}{{ t.name | length }}{% endfor %}\
+                               {% for i in range(10000) %}{% for j in range(1000) %}{% endfor %}{% endfor %}\
+                               done\n";
+
+#[test]
+fn fr_rnd_040_every_server_read_of_a_render_is_closed_before_the_template_evaluates() {
+    // FR-RND-040, in process: the render refuses to start, as the 70 of a
+    // violated invariant, while its thread holds a connection or a driver
+    // runtime. Each of the three paths that read the server must therefore
+    // exit 0 with the render's bytes: `--direct`, a miss on an empty store,
+    // and the re-read of FR-CACHE-039 after an abandoned render.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_rnd_040_every_server_read_of_a_render_is_closed_before_the_template_evaluates",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let render = ["render", WHOLE, "--table", TABLE, "--set", TITLE.0];
+
+        let direct = project(server, &[(WHOLE, WHOLE_SOURCE)]);
+        let mut unstored = render.to_vec();
+        unstored.push("--direct");
+        let expected = succeeds(&direct, &unstored);
+        assert!(
+            expected.contains(&format!("BOUND {TABLE} ")),
+            "{name}: --direct rendered no model"
+        );
+
+        let missed = project(server, &[(WHOLE, WHOLE_SOURCE)]);
+        assert_eq!(
+            succeeds(&missed, &render),
+            expected,
+            "{name}: a miss on an empty store"
+        );
+
+        let abandoned = project(server, &[(WHOLE, WHOLE_SOURCE)]);
+        succeeds(&abandoned, &["cache", "load"]);
+        let tables = abandoned.path(&format!(".tpl/.cache/{ENTRY}/tables"));
+        let bound = tables.join(format!("{TABLE}.json"));
+        let reached = std::fs::read_dir(&tables)
+            .expect("the store holds its tables")
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path != &bound)
+            .max()
+            .expect("the fixture carries a second table");
+        std::fs::write(&reached, "{ torn").expect("the store is ours");
+        assert_eq!(
+            succeeds(&abandoned, &render),
+            expected,
+            "{name}: the re-read of FR-CACHE-039"
+        );
+    }
+}
+
+#[test]
+fn fr_rnd_040_the_server_records_the_session_ended_before_the_first_byte_of_the_render() {
+    // FR-RND-040, from the server side: the general log records the Quit of
+    // the render's connection while the render is still running, which is
+    // before its first byte reaches stdout.
+    use std::io::Read as _;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_rnd_040_the_server_records_the_session_ended_before_the_first_byte_of_the_render",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let sandbox = Sandbox::new();
+        sandbox.project(
+            &fixture::configuration(server, ENTRY, SCHEMA, ROOT).replacen(
+                "[core]\n",
+                "[core]\nrender_fuel = 1000000000000\n",
+                1,
+            ),
+        );
+        sandbox.write(".tpl/templates/slow.jinja", SLOW_AFTER_READ);
+
+        fixture::statements_on(server);
+
+        let mut child = Command::new(env!("CARGO_BIN_EXE_tpl"))
+            .env_clear()
+            .current_dir(sandbox.root())
+            .args(["render", "slow", "--direct"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the binary under test runs");
+
+        let until = Instant::now() + Duration::from_secs(60);
+        let observed = loop {
+            let log = fixture::statements_text(server, &[]);
+            if log
+                .lines()
+                .any(|row| row.split('\t').nth(1) == Some("Quit"))
+            {
+                break child.try_wait().expect("the child can be polled");
+            }
+            assert!(
+                child.try_wait().expect("the child can be polled").is_none(),
+                "{name}: the render ended before the session's end was recorded: {log}"
+            );
+            assert!(
+                Instant::now() < until,
+                "{name}: no Quit was recorded: {log}"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        };
+
+        fixture::statements_off(server);
+
+        assert!(
+            observed.is_none(),
+            "{name}: the session was recorded as ended only after the render had ended"
+        );
+
+        let mut produced = String::new();
+        child
+            .stdout
+            .take()
+            .expect("stdout was piped")
+            .read_to_string(&mut produced)
+            .expect("the render writes UTF-8");
+        let status = child.wait().expect("the binary under test terminates");
+
+        assert_eq!(status.code(), Some(0), "{name}");
+        assert!(produced.ends_with("done\n"), "{name}: {produced:?}");
+    }
+}
+
+// ------------------------------------ FR-CACHE-039 with FR-RND-038: bounds kept ---
+
+#[test]
+fn fr_cache_039_an_abandoned_render_that_crosses_any_bound_ends_with_65_and_reads_no_server() {
+    // FR-CACHE-039, second paragraph, FR-RND-038 and the note on FR-ERR-006:
+    // an abandoned render keeps every render bound until it has returned. A
+    // render that reaches the miss through `table(...)` survives it and keeps
+    // evaluating; crossing the deadline, the memory limit, render fuel or the
+    // output limit after the miss ends the invocation with 65 and that bound's
+    // cause, opens no connection and writes nothing to stdout. The control —
+    // the same miss within every bound — reads the server and renders.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_039_an_abandoned_render_that_crosses_any_bound_ends_with_65_and_reads_no_server",
+    ) else {
+        return;
+    };
+
+    let reach = "{% set t = table('vessel') %}";
+    let cases = [
+        (
+            "the deadline",
+            "render_timeout = 1\nrender_fuel = 1000000000000\n",
+            "{% for i in range(100000) %}{% for j in range(10000) %}{% endfor %}{% endfor %}",
+            "deadline of 1s",
+        ),
+        (
+            "the memory limit",
+            "render_memory_limit = 16777216\n",
+            "{% set ns = namespace(s='x') %}{% for i in range(40) %}{% set ns.s = ns.s ~ ns.s %}{% endfor %}{{ ns.s | length }}",
+            "render memory limit of 16777216",
+        ),
+        (
+            "render fuel",
+            "render_fuel = 5000\n",
+            "{% for i in range(10000) %}{% for j in range(10000) %}{% endfor %}{% endfor %}",
+            "render fuel",
+        ),
+        (
+            "the output limit",
+            "render_output_limit = 64\n",
+            "{% for i in range(100) %}0123456789{% endfor %}",
+            "render output limit of 64",
+        ),
+    ];
+
+    for server in series {
+        let name = server.name();
+
+        for (bound, keys, after, named) in cases {
+            let sandbox = Sandbox::new();
+            sandbox.project(
+                &fixture::configuration(server, ENTRY, SCHEMA, ROOT).replacen(
+                    "[core]\n",
+                    &format!("[core]\n{keys}"),
+                    1,
+                ),
+            );
+            sandbox.write(".tpl/templates/abandon.jinja", &format!("{reach}{after}"));
+            sandbox.write(".tpl/templates/calm.jinja", &format!("{reach}calm\n"));
+            succeeds(&sandbox, &["cache", "load"]);
+            let vessel = sandbox.path(&format!(".tpl/.cache/{ENTRY}/tables/vessel.json"));
+            let intact = std::fs::read(&vessel).expect("the store holds vessel");
+
+            std::fs::write(&vessel, "{ torn").expect("the store is ours");
+            let mut printed = None;
+            let opened = fixture::connections_attributable_to(server, || {
+                printed = Some(sandbox.run(&["render", "abandon"]));
+            });
+            let printed = printed.expect("the body ran");
+
+            assert_eq!(
+                code(&printed),
+                Some(65),
+                "{name}, {bound}: {}",
+                stderr(&printed)
+            );
+            assert!(
+                printed.stdout.is_empty(),
+                "{name}, {bound}: wrote {} bytes",
+                printed.stdout.len()
+            );
+            assert!(
+                line(&stderr(&printed), "cause: ").contains(named),
+                "{name}, {bound}: {}",
+                stderr(&printed)
+            );
+            assert_eq!(opened, 0, "{name}, {bound}: a connection was opened");
+
+            // The control: the same miss, within every bound, reads the server.
+            std::fs::write(&vessel, "{ torn").expect("the store is ours");
+            let mut calm = None;
+            let reread = fixture::connections_attributable_to(server, || {
+                calm = Some(sandbox.run(&["render", "calm"]));
+            });
+            let calm = calm.expect("the body ran");
+            assert_eq!(code(&calm), Some(0), "{name}, {bound}: {}", stderr(&calm));
+            assert_eq!(stdout(&calm), "calm\n", "{name}, {bound}");
+            assert_eq!(
+                reread, 1,
+                "{name}, {bound}: the control reads the server once"
+            );
+            assert_eq!(
+                std::fs::read(&vessel).expect("the store holds vessel"),
+                intact,
+                "{name}, {bound}: FR-CACHE-007 rewrote the file"
+            );
+        }
+    }
+}

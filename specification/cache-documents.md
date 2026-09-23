@@ -82,6 +82,12 @@ Out of scope: when the cache is consulted or written, which is
   closes the case `OQ-048` raised — a stub served under this requirement to a
   reader who could have seen the whole object.
 
+  *Note added in the forty-second edition.* "It is present" means that the
+  file at the object's path is a regular file holding that object, the same in
+  kind and byte for byte in name. A file holding another object, and a
+  symbolic link in the file's place, are misses under `FR-CACHE-033`, as
+  decided for rmp `#254` and `#256`. This requirement is unchanged.
+
 - **BR-CDOC-002**: Without the record, `tpl schema tables` run after
   `tpl -d shop cache load --table orders` would return exactly one table and
   exit `0`. That is a wrong answer wearing the appearance of a right one, and it

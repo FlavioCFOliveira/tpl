@@ -63,6 +63,12 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
   `cfg database` adds, lists, shows, updates, removes and tests the connection
   entries, through `--dsn`, `--host`, `--port`, `--user`, `--schema`, `--tls`,
   `--ca-file`, `--ca-path` and `--password-command`.
+  `password_command` runs as the leader of a process group of its own, and its
+  phase ends only when it has exited and its standard output has ended: at
+  `core.password_timeout`, or when it writes more than 4096 bytes, the whole
+  group is ended, descendants included, and the invocation exits `78` — a helper
+  that exits `0` while a descendant holds its output open no longer hangs the
+  invocation.
 - **Testing an entry.** `cfg database test` contacts the server an entry
   describes and reports four steps in one order: the connection and its
   authentication, the read-only session and its confirmation, the server's
@@ -93,7 +99,12 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
   `schema info` reads `database.json` and counts the object files, and the
   text listing of `schema tables` decodes four members of each table file; an
   object file that fails only in what they no longer decode is not a miss for
-  them, and remains one for every other read.
+  them, and remains one for every other read. An object file that is a symbolic
+  link is a miss for every read and is never read through, and a read of one
+  named table, view or routine whose file holds another object — another kind,
+  or a name that differs in any byte, as on a filesystem that folds case — is a
+  miss, so the read goes to the server rather than answering that the object
+  does not exist.
 - **Templates.** `template list`, `template show`, `template check` and
   `template path`.
 - **The render environment.** MiniJinja, with templates loaded and compiled at
@@ -110,7 +121,17 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
 - **Rendering.** `tpl render <TEMPLATE>` renders one template, once, to stdout.
   The context comes from the selected database or from `--context`, never from
   both; `--table`, `--view` or `--routine` binds one object, and a repeatable
-  `--set KEY=VALUE` passes template variables.
+  `--set KEY=VALUE` passes template variables. A `--context` document in which
+  a foreign key names a table its `tables` does not carry exits `65` naming the
+  table, the key and the table it names. Every render is bounded, besides its
+  deadline, by render fuel (`core.render_fuel`, default 100 000 000 evaluation
+  steps), by the render output limit (`core.render_output_limit`, default
+  64 MiB) and by the render memory limit (`core.render_memory_limit`, default
+  128 MiB, the heap the process holds while the render runs, observed every
+  10 ms); the first crossed exits `65` naming the bound, its value and the key,
+  and a render stopped by either limit writes nothing to stdout. When a render
+  reads the server, the connection is closed and the driver's runtime shut down
+  before the template starts.
 - **Output.** Every JSON document shares one envelope, carrying `schema_version`,
   `source` and `data`. `--format json` and `--pretty` select it on the commands
   that emit a document.

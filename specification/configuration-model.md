@@ -22,7 +22,8 @@ which the file is read, entry shape, what an entry must describe for a
 connection and a read to be possible, DSN grammar, the five TLS modes and the
 behaviour by which they are distinguished, the trust material the two
 verifying modes read and how the directory holding it is resolved, timeouts,
-`${VAR}` expansion, and `password_command` execution and its failure modes.
+the keys that set the render bounds, `${VAR}` expansion, and `password_command`
+execution and its failure modes.
 
 Out of scope: the commands that read and write the file, which belong to
 [cfg-commands.md](cfg-commands.md); and the ownership and permission checks
@@ -67,6 +68,9 @@ tls      = "verify-identity"
   | `core.query_timeout` | seconds, positive integer | `30` |
   | `core.password_timeout` | seconds, positive integer | `5` |
   | `core.render_timeout` | seconds, positive integer | `30` |
+  | `core.render_fuel` | evaluation steps, integer from `1` to `1000000000000` | `100000000` |
+  | `core.render_output_limit` | bytes, integer from `1` to `1099511627776` | `67108864` |
+  | `core.render_memory_limit` | bytes, integer from `8388608` to `1099511627776` | `134217728` |
   | `database.<name>.dsn` | connection URL | none |
   | `database.<name>.host` | hostname or address | none |
   | `database.<name>.port` | TCP port | `3306` |
@@ -80,6 +84,13 @@ tls      = "verify-identity"
 
   *Provenance.* The default port `3306` comes from the root `README.md` and is
   contradicted by no decision.
+
+  *Amended in the forty-second edition.* The three rows `core.render_fuel`,
+  `core.render_output_limit` and `core.render_memory_limit` are new, as
+  decided for rmp `#255`. They set the render bounds of `FR-RND-036`,
+  `FR-RND-037` and `FR-RND-039`, and `FR-CONF-045` states how they are
+  resolved and why their defaults and ranges are what they are. The key space
+  grows from fifteen key forms to eighteen, eight of them under `[core]`.
 
 - **FR-CONF-003**: There SHALL be no global configuration. The system SHALL NOT
   read configuration from the home directory, from an XDG location, or from
@@ -154,6 +165,84 @@ tls      = "verify-identity"
   which code a failure produces changes, and the obligation that no phase run
   unbounded held under either reading. `FR-GLOB-012` composes the shared budget
   with `--timeout` exactly as it composes the other three.
+
+- **FR-CONF-045**: The system SHALL resolve the render fuel of `FR-RND-036`
+  from `core.render_fuel`, the render output limit of `FR-RND-037` from
+  `core.render_output_limit`, and the render memory limit of `FR-RND-039` from
+  `core.render_memory_limit`, or from the built-in default `FR-CONF-002`
+  declares for each where the key is absent. No flag and no environment
+  variable SHALL set any of them, and `--timeout` SHALL NOT participate. IF
+  `.tpl/.cfg` carries any of the three keys with a value that is not an integer within the
+  range `FR-CONF-002` declares for it, THEN the system SHALL exit `78`
+  (`EX_CONFIG`), and the `cause` SHALL name the key, the file, the value found
+  and the range expected, per the `78` row of `FR-ERR-034`. `tpl cfg set`
+  refuses the same values with `64`, per `FR-CFG-010`.
+
+  *Added in the forty-second edition, as decided for rmp `#255`.* The three
+  keys follow the pattern of the four deadline keys above: a `[core]` key, a
+  built-in default, and no layer above the file, per `FR-CONF-029` and
+  `FR-CONF-030`.
+
+  *Rationale for the fuel and output defaults.* Both are set where no
+  legitimate render reaches them. `WL-001`, the large reference workload of
+  [performance-requirements.md](performance-requirements.md), carries 2 400
+  columns across 200 tables. A whole-database render that spends a thousand
+  evaluation steps on every column — far more than generating one field of a
+  struct takes — consumes 2 400 000 steps, about one fortieth of the render fuel
+  default of 100 000 000; a database ten times that size still stays within a
+  quarter of it. The same render emitting a kilobyte per column produces about
+  2.4 MB, under a twentieth of the output default of 64 MiB (67 108 864
+  bytes). A generated source file is measured in kilobytes, so 64 MiB is far
+  beyond any file a code generator legitimately writes, and a runaway render
+  stops long before it fills a disk.
+
+  *Why the output default sits below the memory default.* The render holds its
+  output in memory until it ends, because `FR-RND-034` with `FR-CACHE-039`
+  forbids any byte of an abandoned render reaching stdout. Held output is heap
+  the process holds, so it counts toward the render memory limit of
+  `FR-RND-039`. With the output default at or above the memory default, a
+  render writing without end would cross the memory limit first and be
+  reported under the wrong cause. At 64 MiB, half the memory default of
+  128 MiB, the output limit is reached first and names the fault truly.
+
+  *Amended within the forty-second edition.* The output default was first
+  256 MiB (268 435 456 bytes). The user lowered it to 64 MiB for the reason
+  above; the range is unchanged.
+
+  *Rationale for the memory default.* The default of 128 MiB (134 217 728
+  bytes) is the user's decision. Its base is recorded in `BENCHMARKS.md`, in
+  the entry of 2026-09-23 on the peak resident memory of every render the four
+  worked examples perform: the largest is 6 094 848 bytes, `rust/schema` over
+  the whole `freight` database. The user first set the rule at four times that
+  peak, 24 379 392 bytes, and then chose 128 MiB, about twenty-two times the
+  peak, as the default. The reading is informative, per `BR-PERF-008`; the
+  default rests on the decision, not on the figure.
+
+  *Rationale for the ranges.* The lower bound of render fuel and of the
+  render output limit is `1`, so a test can set a small value and reach either
+  bound on purpose. The lower bound of the render memory limit is 8 MiB
+  (8 388 608 bytes), not `1`: the process holds heap before the template runs,
+  and a limit below that would end even a trivial render. 8 MiB is above the
+  whole resident memory of the largest render the worked examples perform, so
+  a test can still set it low enough to reach the bound on purpose with a
+  template that grows memory. No key admits `0` or any value meaning "no
+  bound": a key that can remove a bound reopens the surface the bound closes,
+  which is the argument `FR-CONF-031` makes for its cap. The upper bounds —
+  1 000 000 000 000 steps, ten thousand times the fuel default; 1 TiB, 16 384
+  times the output default; and 1 TiB, 8 192 times the memory default — leave
+  room for any legitimate need and keep every admitted value a bound rather
+  than a way of disabling one.
+
+  *Why keys, when `FR-CONF-031` fixes its cap as a constant.* A password has a
+  size that does not grow; a legitimate render grows with the database it
+  renders. A constant would one day refuse a correct render and leave the
+  caller no remedy, and a key raises the bound for the one project that needs
+  it without widening it for any other.
+
+  *Rejected: a flag.* `FR-GLOB-001` fixes seven global flags, and the four
+  deadline keys have no flag either. A render bound describes what a project's
+  templates need, which is a property of the project and belongs in its
+  `.tpl/.cfg`.
 
 ## Strictness of the file
 
@@ -884,12 +973,50 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 - **FR-CONF-027**: The system SHALL use the trimmed standard output of
   `password_command` as the password.
 
-- **FR-CONF-028**: IF `password_command` exceeds its deadline, THEN the system
-  SHALL exit `78`.
+- **FR-CONF-028**: The system SHALL start `password_command` as the leader of
+  a process group of its own. The `password_command` phase SHALL end when the
+  child has exited and its standard output has reached end of file. IF the
+  phase has not ended when its deadline expires, THEN the system SHALL
+  terminate every process of that group — the child and every descendant still
+  in the group — SHALL NOT wait on the child's standard output past the
+  deadline, and SHALL exit `78`. A descendant that has left the group is not
+  terminated, and the system does not wait for it either.
+
+  *Amended in the forty-second edition, as decided for rmp `#252`.* The
+  requirement said only that exceeding the deadline is `78`, and did not say
+  what the deadline covers or which processes it ends. The security audit
+  recorded in `SECURITY-AUDIT.md` at the repository root found, as its finding
+  SEC-01, a helper that writes its output, starts a descendant holding the
+  standard output open, and exits `0`. The child was reaped within the
+  deadline and the read of its standard output then waited for an end of file
+  that the descendant withheld, so the invocation hung past every deadline with
+  no diagnosis, against `FR-SEC-022`. The phase now ends only when the output
+  is complete, the deadline bounds all of it, and terminating the group ends
+  the descendants that would otherwise keep running.
+
+  *Consequence, stated plainly.* A helper that exits `0` and leaves a
+  descendant holding its standard output past the deadline is a failure with
+  `78`, even when it has already written a password. The password is not used,
+  because the output it came on never ended.
+
+  *Where the termination stops.* A descendant that puts itself in another
+  process group or session is outside the group and survives it. The
+  invocation still ends at the deadline with `78`, because the system does not
+  wait on the pipe past it; what it cannot do is end a process that has left
+  the group it controls.
 
 - **FR-CONF-031**: The system SHALL read at most 4096 bytes from the standard
   output of `password_command`. IF the child writes more, THEN the system SHALL
-  terminate the child and SHALL exit `78`.
+  terminate every process of the child's process group, established under
+  `FR-CONF-028` — the child and every descendant still in the group — and
+  SHALL exit `78`. A descendant that has left the group is not terminated.
+
+  *Amended in the forty-second edition, as decided with rmp `#252`.* The
+  requirement terminated the child alone. A descendant the child started could
+  then keep running after the invocation ended, and keep the pipe open, which
+  is the shape `FR-CONF-028` closes at the deadline. Both paths on which the
+  system ends the helper now end the same group, and both stop where
+  `FR-CONF-028` states.
 
   *Rationale.* An unbounded read from a child process is a denial-of-service
   surface reachable from an untrusted `.cfg`, and the bound has to be a
@@ -1075,10 +1202,10 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   configured way of obtaining a password failing to produce one.
 
   *The signal the system sends is not this condition.* `FR-CONF-028`
-  terminates the child at a deadline and `FR-CONF-031` terminates it at the
-  output cap. Both of those end the child by a signal and both own their
-  outcome, so this requirement is reached only where something outside `tpl`
-  ended the child — the terminal's process group, a supervisor, the
+  terminates the child's process group at a deadline, and `FR-CONF-031`
+  terminates it at the output cap. Both of those end the child by a
+  signal and both own their outcome, so this requirement is reached only where
+  something outside `tpl` ended the child — the terminal's process group, a supervisor, the
   out-of-memory killer, or a `kill` from elsewhere. Without this clause the
   requirement would swallow two conditions in force and report them with the
   wrong `cause`.

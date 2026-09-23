@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md]
 ---
 
@@ -45,6 +45,16 @@ distance is computed.
 this folder's alone. `OD-04` was corrected the same day: the
 `[workspace]` table now carries a second exclusion, and the entry said it
 carried one.
+
+**Four settled entries were amended on 2026-09-23**, against the forty-second
+edition of `/specification` and the code of sprint 20: `OD-05` gains `heap.rs`
+and `render/bounds.rs`; `OD-10` gains two read-side misses and its collision
+outcome is superseded by the user's decision for rmp `#254`; `OD-11` records when the runtime ends; and
+`OD-12` records the child's process group and the render's watchdog, and
+qualifies two of its rejections. No entry was added, and none was reopened. The
+poll interval [`ADR-011`](../adr/adr-011-render-memory-accounting.md)
+delegates is fixed in [architecture.md](architecture.md#the-render-bounds), not
+here.
 
 **One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
 that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
@@ -210,6 +220,7 @@ the last two rows below.
 | `specification/upstream-divergences.md` | — | 2026-09-11 | Eleven passages stale, in five files; all eleven now state the concern or the entry |
 | `CLAUDE.md` | `8f936d4` | 2026-09-21 | No ground moved. `OD-32`'s correction is confirmed still owed and still the user's |
 | `CLAUDE.md` | Working tree over HEAD `455e48d`; the edit is **not yet committed** | 2026-09-22 | No ground moved. `OD-32`'s correction is applied at both lines and the *Stack* table now cites that entry; the register carries no correction owed to this file |
+| `CLAUDE.md` | Working tree over HEAD `d89ffc4`; the edit is **not yet committed** | 2026-09-23 | No ground moved. The *Stack* table gains a heap-count row citing `ADR-011`, which this folder cites for the same crate, and the `rustix` row now names `getuid`, `kill_process_group` and `waitid` with `OD-24` and `OD-12`, as [technology-stack.md](technology-stack.md#the-calls-std-does-not-supply) does. No correction is owed |
 | [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) | Working tree over HEAD `455e48d`; the amendment is **not yet committed** | 2026-09-22 | Nothing this folder states moved. Its thirteen citations, in four files, name the five-mode mapping, the bundled anchors, the rejected platform store and the absence of a TLS version pin; what the amendment moved is the `ca_path` assembly, which no passage of this folder restates |
 | [`ADR-007`](../adr/adr-007-msrv.md) | Working tree over HEAD `455e48d`; the amendment is **not yet committed** | 2026-09-22 | Nothing this folder states moved. Its fifteen citations, in three files, name the rule and the figure it yields, and neither changed; what the amendment moved — the dependency-floor table and the graph's crate counts — this folder has never restated |
 
@@ -287,7 +298,10 @@ and **2026-09-21** for the manifest, dependency-graph and source readings
 third correction rests on, and for the engine behaviour `OD-14` now records as
 observed; and **2026-09-22** for the readings that confirm what `OD-32` decided
 has landed — the crate out of the manifest, the lock file and the resolved
-graph, and the correction applied to `CLAUDE.md`. Anything not verified says so
+graph, and the correction applied to `CLAUDE.md`; and **2026-09-23** for the
+`tokio`, `rustix` and `std` behaviour the amendments of `OD-11` and `OD-12`
+rest on, and for the readings of `src/` behind the amendments of `OD-05` and
+`OD-10`. Anything not verified says so
 in its own text. No claim rests on recollection.
 
 The engine behaviour `OD-14` records has a source of a different kind, and it is
@@ -459,7 +473,7 @@ src/
 | Output formatting, the envelope, `text` layout, escaping | `output/` | One envelope governs all seventeen documents, per `FR-OUT-032`, and `FR-OUT-018` escapes on the way out of four command groups. A single owner is what makes "the envelope is the same everywhere" a property of the code rather than of review | Under `cli/`, which would put the envelope in as many places as there are commands that emit; under `model/`, which would make the model own its own presentation and put an escaping rule inside the type `FR-SCH-022` requires to round-trip unchanged |
 | Help text and the typed examples and exit-codes table | `cli/help.rs` | `FR-HELP-021` derives the JSON command tree by introspecting the parser's tree, which lives here, and `FR-HELP-022`'s table is indexed by command path — `cli/`'s own vocabulary. It emits through `output/` for `help --format json` | A top-level `help/`, which would have to reach into `cli/` for the tree and the paths that are its only inputs, inverting the dependency for no gain |
 | The privilege cross-checks | `mariadb/privileges.rs` | The three checks read the **shape of the rows the server returned** — an empty `VIEW_DEFINITION` (`FR-PRIV-011`), a `NULL` `ROUTINE_DEFINITION` (`FR-PRIV-017`), zero rows from three catalogue tables (`FR-PRIV-019`). None is a property of the model; each is a property of a read | Under `model/`, which would make the published model type know about grants, and would put a check on a shape the model no longer carries by the time it is built |
-| The configuration reader and writer | `project/config.rs` | `FR-PROJ-010` and `FR-PROJ-011` make the ownership and mode of `.tpl/.cfg` a precondition of reading it, so the file and the folder that holds it are one subject. One module owns both paths over one key space, which is what keeps the fifteen keys of `FR-CONF-002` in one place | A top-level `config/`, which separates the file from the discovery that found it and the trust checks that gate it, and puts the key space one module away from the rule that decides whether it may be read at all |
+| The configuration reader and writer | `project/config.rs` | `FR-PROJ-010` and `FR-PROJ-011` make the ownership and mode of `.tpl/.cfg` a precondition of reading it, so the file and the folder that holds it are one subject. One module owns both paths over one key space, which is what keeps the key space of `FR-CONF-002` in one place | A top-level `config/`, which separates the file from the discovery that found it and the trust checks that gate it, and puts the key space one module away from the rule that decides whether it may be read at all |
 | The diagnostic renderer and the suggestion machinery | `diagnostics/` | It holds transformations, not a taxonomy: the escaping of `FR-ERR-024`, the character set of `FR-ERR-022` and `FR-ERR-023`, the candidate selection of `FR-ERR-019`, and the four-line layout of `FR-ERR-008`. It also owns the verbosity gate of `FR-GLOB-014` and the typed diagnostic sinks of `OD-17` | Inside `error.rs`, which would put presentation beside the taxonomy and make the error type depend on an edit-distance implementation. `OD-06` separates the two for the same reason |
 | The phase clock, and the threads two phases are bounded with | `deadline.rs` | `OD-12` gives one construct three users — the runtime inside `mariadb/`, the child process, and the render — and `FR-GLOB-012` composes every phase deadline with one budget measured from process start. A budget shared by three modules belongs to none of them | Inside `project/` beside the four `[core]` keys, which resolves the values but cannot hold the construct that applies them; and inside each of the three users, which is the same rule written three times |
 
@@ -475,7 +489,8 @@ different parsers over two opposite obligations — reading validates and refuse
 writing preserves and must not reformat — and a module holding both would import
 both parsers and hold two representations of the same document. The key space
 they share is a third module, `project/config/keys.rs`, which is what keeps the
-fifteen keys in one place as the row requires. Three further modules sit beside
+eighteen key forms in one place as the row requires — fifteen when this was
+written, eighteen since the forty-second edition added three `[core]` keys. Three further modules sit beside
 them for reasons stated in
 [architecture.md](architecture.md#inside-project): `settings.rs`, because
 `FR-CFG-014` forbids the reader to resolve; `password.rs`, because the child
@@ -496,6 +511,23 @@ inside the submodule is **not** settled by this refinement and is recorded as a
 discrepancy in
 [interfaces.md](interfaces.md#ordering-one-default-and-six-exceptions): which
 component applies the ordering of `NFR-DET-002` to the document's collections.
+
+**Refined on 2026-09-23, when the render memory limit was built: a twelfth
+module, `heap.rs`, at the crate root.** `FR-RND-039` needs a count the
+allocator keeps, and [`ADR-011`](../adr/adr-011-render-memory-accounting.md)
+supplies it through a `#[global_allocator]`. The allocator is declared in
+`main.rs`, which hands the library a function reading it through the public
+`install_heap_counter`; `heap.rs` holds that one function in a `OnceLock` and
+answers `None` where none was installed. It is at the crate root rather than
+under `render/` because the count is process-wide state, as the phase clock's
+budget is, and the reader is `cli/render.rs`. *Rejected — the library declaring
+the `#[global_allocator]`.* Every test binary of the package would then run
+under it, and the choice of the process's one allocator, which excludes an
+in-tree `dhat` profiler (`ADR-011`), would be made for every program linking
+the library rather than for the binary that ships. It follows the precedent of
+the panic hook of `ADR-004`, which the binary installs for the same reason.
+`render/` gains a submodule, `bounds.rs`, holding the three bound types and the
+counting writer of `FR-RND-037`.
 
 **The name `diagnostics` rather than `diag`.** The project's own convention
 refuses obscure abbreviations in module names. The register named `diag/` as a
@@ -863,9 +895,10 @@ literal object name**, exactly as `FR-CACHE-001` and `FR-CDOC-014` already
 shape them: `tables/<name>.json`, `views/<name>.json`,
 `routines/<kind>.<name>.json`. **No encoding layer and no hash.**
 
-On a **case collision** — two objects of one kind whose names differ only in
+~~On a **case collision** — two objects of one kind whose names differ only in
 case, mapping to one path on a case-insensitive filesystem — `cache refresh`
-**detects it and fails, naming both objects**.
+**detects it and fails, naming both objects**.~~ **Superseded on 2026-09-23**
+by the user's decision for rmp `#254`, below; kept as history.
 
 **Rationale.** `FR-CDOC-014` already fixes one of the three path forms
 literally, so the other two follow the same rule and there is one naming rule
@@ -882,6 +915,30 @@ would be exactly that.
 
 - **A disambiguating suffix** on one of the two colliding names. It creates two naming rules where `FR-CDOC-014` fixed one, and the suffix would then have to be derivable by every reader of the cache.
 - **Documenting the limitation** and carrying on. MariaDB permits such schemas on Linux, so the failure would be reachable and silent, which is the class of defect this project refuses.
+
+**Amended on 2026-09-23, against the forty-second edition.** Two read-side rules
+now sit beside the decision, both from `FR-CACHE-033`, and neither changes the
+file naming. A named read whose file holds another object — a name differing
+byte for byte, or a routine of the other kind — is a miss, which closes the
+false answer a case-folding filesystem produced. An object file that is not a
+regular file is a miss and is never read through: `read_object()` in
+`src/cache.rs` takes `lstat`, opens the file, and compares device and inode
+with what it inspected. *Rejected — `O_NOFOLLOW` on the open.* The flag's value
+differs between the supported targets, the crate would carry it only through a
+further `rustix` feature, and an open that follows no link still opens a FIFO,
+which blocks, where the inspection refuses it first.
+
+**The collision outcome is superseded, 2026-09-23, by the user's decision for
+rmp `#254`.** The fix is the stored-name check above and nothing else: no
+collision is detected and none fails. `FR-CACHE-033` governs and accepts that a
+collision leaves the collection not whole — two names sharing one file leave the
+directory's count short, so `replace()` in `src/cache.rs` records the collection
+as not whole — and that either colliding object can miss on every invocation.
+*Rejected — detect-and-fail at `tpl cache load`*, the outcome this entry first
+prescribed: it adds a failure no requirement states, where the miss already
+removes the false answer. *Rejected — a collision-free file-name encoding*: it
+would change the naming arrangement `cache_format` versions and add a second
+naming rule where `FR-CDOC-014` fixes one, which `FR-CACHE-033` declines.
 
 **Still to record in `data-model`.** Whether a cached object file carries the
 envelope of `FR-OUT-024` or a bare object. The `.json` suffixes of
@@ -904,6 +961,22 @@ composed with is [`ADR-003`](../adr/adr-003-database-driver.md), which also
 records the unexplained musl blocking cost this entry mentioned; it bears on
 `OD-12`.
 
+**Amended on 2026-09-23 — when the runtime ends.** `ADR-005` fixes where the
+runtime lives and says nothing of when it ends; `FR-RND-040` now requires it
+gone before any render starts. `Session::close` sends the protocol's quit,
+releases the connection, and **drops** the runtime, which waits for all
+spawned work to stop (docs.rs, `tokio::runtime::Runtime`, tokio 1.53.1,
+*Shutdown*, consulted 2026-09-23). Connections and runtimes are counted per
+thread from creation to drop, and `mariadb::quiescent()` reads the count.
+Nothing here conflicts with `ADR-005`: the runtime is still built lazily inside
+`mariadb/`, one per connection. *Rejected — `shutdown_timeout`.* On expiry it
+leaks the work and the threads that did not stop, which would be a runtime alive
+while the template evaluates. *Rejected — a process-wide count.* It is the same
+count in the binary, which runs one command on one thread, and wrong in the
+suite, where another test's connection on another thread is not this
+invocation's; the runtime is current-thread and the counted values are not
+`Send`, so the per-thread count is exact.
+
 ---
 
 ## OD-12 — How six phase deadlines are enforced
@@ -923,8 +996,8 @@ than in the call — on two discriminants and not on one.
 | DNS resolution | `tokio::time::timeout` around `tokio::net::lookup_host`, performed by `tpl` before the driver is called | the connection deadline |
 | TCP connect **and** TLS handshake | one `tokio::time::timeout` around the driver's `connect_with`, which receives the **configured host** and not the address the resolution produced — third correction below | the remainder of the connection deadline |
 | Catalogue query | `tokio::time::timeout` around each query | `core.query_timeout` |
-| `password_command` | a reader thread draining the child's standard output and a polling loop in the parent, which kills the child and reports the deadline | `core.password_timeout` |
-| Render | a timer thread that writes the `65` diagnostic and exits the process | `core.render_timeout` |
+| `password_command` | a reader thread draining the child's standard output and a polling loop in the parent, which kills the child's process group and reports the deadline — amended 2026-09-23, below | `core.password_timeout` |
+| Render | a watchdog thread that writes the `65` diagnostic and exits the process; since 2026-09-23 it also observes the render memory limit, below | `core.render_timeout` |
 
 The **connection deadline** is one instant, set at `core.connect_timeout` from
 the start of connection establishment and shared by the three connection
@@ -1021,8 +1094,8 @@ none either.
 
 - **A pre-flight TCP connect by `tpl`, to attribute the connect phase exactly.** It would resolve the ambiguity of point 3 outright, at the price of a second connection per invocation, which `NFR-PERF-004` forbids: "One invocation SHALL open at most one connection."
 - **Reporting TCP connect and TLS handshake as one `connect` phase.** `FR-ERR-034` row `69` enumerates four phases and obliges the `cause` to name the one that failed; a `cause` reading "connect failed" would be equally true of two different failures, which the same requirement forbids in its own words.
-- **`minijinja`'s `set_fuel`.** Fuel is an instruction budget consumed per instruction, gated behind the `fuel` crate feature (docs.rs `minijinja::Environment`, verified 2026-09-11). `FR-CONF-002` states every deadline in **seconds** and `FR-GLOB-012` composes them with a wall-clock budget measured from process start, so a fuel figure would have to be calibrated into seconds — per target, since `NFR-PERF-012` forbids carrying a figure from one target to another. A budget that has to be re-derived on four targets to mean what a requirement already states in seconds is not the mechanism. `set_recursion_limit` stays at its documented default of 500, which bounds recursion and not time.
-- **A cooperative clock check inside the output writer.** It bounds a template that emits and not one that loops without emitting, so it would bound some renders rather than the render — and which ones would depend on the template, which is caller input.
+- **`minijinja`'s `set_fuel`, as the render deadline.** *Qualified on 2026-09-23: this rejects fuel as the mechanism of a deadline stated in seconds, and still stands; fuel is now used, beside the deadline, as the separate count `FR-RND-036` requires.* Fuel is an instruction budget consumed per instruction, gated behind the `fuel` crate feature (docs.rs `minijinja::Environment`, verified 2026-09-11). `FR-CONF-002` states every deadline in **seconds** and `FR-GLOB-012` composes them with a wall-clock budget measured from process start, so a fuel figure would have to be calibrated into seconds — per target, since `NFR-PERF-012` forbids carrying a figure from one target to another. A budget that has to be re-derived on four targets to mean what a requirement already states in seconds is not the mechanism. `set_recursion_limit` stays at its documented default of 500, which bounds recursion and not time.
+- **A cooperative clock check inside the output writer.** *Qualified on 2026-09-23: rejected as the deadline, and still rejected; the writer now counts bytes for the separate output limit of `FR-RND-037`, and checks no clock.* It bounds a template that emits and not one that loops without emitting, so it would bound some renders rather than the render — and which ones would depend on the template, which is caller input.
 - **Rendering on a worker thread while the calling thread waits with `recv_timeout`.** The same construct inverted. It moves the hot path off the calling thread for no gain and puts the writer on the thread that is abandoned.
 
 **The observation owed to `specification-manager`, discharged by the ninth
@@ -1099,6 +1172,47 @@ used for **phase attribution alone**: a name that yields no address is
 `FR-ERR-001`'s `69` naming DNS, which is the whole of what point 1 needs from
 it. The cost is a second lookup inside the driver — a second resolution and not
 a second connection, so `NFR-PERF-004` is untouched.
+
+**Amended on 2026-09-23, against the forty-second edition — the child's group,
+and the render's watchdog.** The decision stands: three mechanisms, the shared
+connection budget, six phases. Two mechanisms changed under it.
+
+*The `password_command` child.* `FR-CONF-028` now ends the phase only when the
+child has exited **and** its standard output has reached end of file, and
+terminates the child's whole process group; `FR-CONF-031` terminates the same
+group at the cap. As built in `src/project/password.rs`:
+
+- The child is started with `process_group(0)`, so its pid is the group's id.
+- Its exit is observed with `waitid` under `EXITED`, `NOHANG` and `NOWAIT`,
+  which leaves it waitable; it is reaped only after `kill_process_group(pid,
+  SIGKILL)`, or on success after the pipe has closed. An unreaped child holds its
+  pid, so the group id cannot be handed to another process before the kill. A pid
+  of `1` or one that does not fit is never signalled as a group.
+- On the deadline and the cap the reader thread is **dropped rather than
+  joined**: a descendant that has left the group may still hold the pipe, and
+  the invocation must not wait for it. The thread ends at that pipe's end of
+  file or with the process.
+
+*Rejected — reaping the child as soon as it exits, as the loop did before.* A
+reaped child frees its pid, so a group kill at the deadline could reach another
+process that took the same id; and a read waiting for end of file after the
+exit waited past every deadline when a descendant held the pipe, which is
+finding SEC-01 of `SECURITY-AUDIT.md`. *Rejected — joining the reader after the
+kill.* It hangs the invocation on a descendant that left the group, which
+`FR-CONF-028` forbids.
+
+*The render.* The timer thread is now the watchdog of `bounded()` in
+`src/cli/render.rs`. Where the binary installed a heap counter it wakes every
+10 ms and at the deadline — the interval
+[architecture.md](architecture.md#the-render-bounds) fixes under the delegation
+of [`ADR-011`](../adr/adr-011-render-memory-accounting.md) — and ends the
+render with the `65` of `FR-RND-039` when the count is above the limit.
+**A render abandoned under `FR-CACHE-039` is no longer excused**: until
+2026-09-23 the watchdog stood down when the render had reached a miss, and
+`FR-RND-038` now keeps all four bounds on it until it returns. Render fuel and
+the output limit end a render from inside it, so the first bound crossed is the
+one reported. `bounded()` also refuses to start a render while a connection or
+a driver runtime is alive (`FR-RND-040`).
 
 **One consequence recorded for `architecture`.** `tokio::net::lookup_host` is
 gated behind tokio's `net` feature (docs.rs `tokio::net::lookup_host`, tokio
@@ -2375,7 +2489,6 @@ neither blocks the other.
 |---|---|---|---|
 | 1 | `OD-19`'s owed observation — `ADR-009`'s *owned copy* against a value whose members are borrowed, and the peak-memory consequence the record draws from that word | `adr-guardian` | No document of this folder may read *owned copy* as settling how an embedded value holds its members |
 | 2 | `OD-33`'s question — whether `UC-013` joins the acceptance skeleton, on the two options that entry states | user | No document of this folder may present its flow count as closed against the corpus; the twelve stand as written and `UC-013` is neither added to them nor named as excluded until this is answered |
-
 `OD-14`'s obligation, which stood first in this table, was discharged on
 2026-09-21: the observation was made, it went the other way, and the entry
 records both the answer and what in `render/` now carries the two requirements

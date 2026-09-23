@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
@@ -20,10 +20,16 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Fifty-five entries are recorded. As of 2026-09-22, four are due in full,
-forty-seven are discharged, and four are partly discharged.** Eight entries
-still owe something: five owe it to `CLAUDE.md` and three to `README.md`, and no
+**Fifty-six entries are recorded. As of 2026-09-23, five are due in full,
+forty-seven are discharged, and four are partly discharged.** Nine entries
+still owe something: five owe it to `CLAUDE.md` and four to `README.md`, and no
 entry is in both counts.
+
+*The counts moved in the forty-second edition, and one entry moved them.*
+`DIV-056` is raised against `README.md`, because `FR-CONF-002` gained three
+keys and the root file counts the key space. It joins the **due** count and the
+count owed to `README.md`. No entry was re-read and none changed status; the
+counts restated in `DIV-032` and `DIV-041` move with this paragraph.
 
 *The counts moved in the thirty-seventh edition, and two entries moved them.*
 `DIV-055` is discharged by `9562fb2` and `DIV-052` by `abbfe70`, so two entries
@@ -423,6 +429,7 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-053](#div-053) | `README.md` | Contradiction | Due | Four commands said to perform no discovery at all |
 | [DIV-054](#div-054) | `README.md` | Overstatement | Due | Two passages saying no command reaches a server |
 | [DIV-055](#div-055) | `CLAUDE.md` | Contradiction | Discharged, `9562fb2` | A regression against a recorded baseline said to fail the change |
+| [DIV-056](#div-056) | `README.md` | Contradiction | Due | The `.cfg` key space counted short of the eighteen keys of `FR-CONF-002` |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1107,7 +1114,7 @@ is the one stated above and nothing more.
 in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
 most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
-this passage. It is one of the eight entries this register still owes something
+this passage. It is one of the nine entries this register still owes something
 on, and one of the five owed to that file.
 
 *Corrected in the thirty-sixth edition, with `DIV-041`.* The sentence read
@@ -1521,7 +1528,7 @@ sentence.
 **Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The deferral stands
 verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
 `9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
-`NFR-PERF-012` carry. It is one of the eight entries this register still owes
+`NFR-PERF-012` carry. It is one of the nine entries this register still owes
 something on.
 
 *Corrected in the thirty-sixth edition, with `DIV-032`*, and for the reason
@@ -2685,6 +2692,39 @@ and is not now; the sentence is corrected there, and this entry is what
 replaces it. The discipline this entry leaves alone is the two halves of it
 that survive: no claim without numbers, and a figure recorded against a named
 target.
+
+## DIV-056
+
+**Target**: `README.md`, *Configuration*, the first paragraph of *The key
+space is closed*. **Kind**: contradiction.
+
+**Status**: **due**, raised on 2026-09-23 at `d89ffc4`, and re-read the same
+day against the working tree. At `d89ffc4` the sentence counted fifteen keys,
+five under `[core]`. An uncommitted edit to the working tree changed it to
+seventeen and seven, which matched `FR-CONF-002` before the third render key
+was added and matches it no longer. No commit has
+discharged any part of it.
+
+
+
+*Says*, in the working tree: "`.tpl/.cfg` admits exactly seventeen keys —
+seven under `[core]` and ten per `[database.<name>]` block — each with a
+declared type and a declared default."
+*Specification*: `FR-CONF-002`, as amended in the forty-second edition, which
+adds `core.render_fuel`, `core.render_output_limit` and
+`core.render_memory_limit` for the render bounds of `FR-RND-036`, `FR-RND-037`
+and `FR-RND-039`. The key space is now eighteen key forms, eight under
+`[core]` and ten per entry.
+*Correction*: change the two counts to eighteen and eight, or drop the counts
+and keep the pointer to `FR-CONF-002`, which the same sentence already gives
+and which cannot fall behind the table. The second is the one that stops this
+entry recurring. The rest of the paragraph is correct and stays.
+
+*Raised by an amendment to this corpus, and not by an edit to the target*, the
+direction `DIV-053` first recorded. The sentence was an exact summary of
+`FR-CONF-002` when it was written. Its paragraph on deadlines is unaffected:
+the four `[core]` keys it names still supply every deadline, and the three
+new keys set bounds that are not deadlines.
 
 ## A candidate read, and not recorded
 

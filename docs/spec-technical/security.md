@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -41,7 +41,7 @@ being raw.
 | 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised and both trust checks run as a **precondition** of opening the file; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
 | 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-SEC-007` |
 | 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
-| 5 | A supplied context document | `cli/` | Validated structurally and then handed to `render/`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-RND-022`, `BR-CLI-003` |
+| 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
 
 Rows 1, 4 and 5 are the populations `FR-ERR-024` and `FR-OUT-019` name as
@@ -52,7 +52,10 @@ emitting and the diagnostic paths and not of these boundaries.
 documents `tpl` itself wrote (`FR-PROJ-023`), so the corpus does not place it
 among the untrusted inputs, and neither does this document. `FR-CACHE-033` and
 `FR-CDOC-004` fix the treatment of a file that cannot be read or carries an
-unknown version — a silent miss — and no requirement subjects a cached document
+unknown version — a silent miss — and, since the forty-second edition, of an
+object file that is a symbolic link or holds an object other than the one
+asked for, both misses too
+([data-model.md](data-model.md#tplcache)). No requirement subjects a cached document
 that **does** parse to the structural validation `FR-RND-020` requires of a
 supplied one, although the assembled-model invariant of `FR-CAT-044` is checked
 on that path as on the other two
@@ -210,15 +213,45 @@ security properties it carries are these.
 | Property | How the build holds it | Forced by |
 |---|---|---|
 | No shell is involved | `project/password.rs` executes the stored argument array directly, so metacharacters are arguments and a `.cfg` inherited or cloned cannot choose code to run | `FR-SEC-011`, `FR-CONF-024`, `FR-CONF-026` |
-| The read is bounded | A fixed cap, applied **at the pipe** by a read that stops one byte past it, so the process never holds more; a child that reaches that byte is killed and the invocation fails, refusing rather than truncating | `FR-SEC-024`, `FR-CONF-031` |
+| The read is bounded | A fixed cap, applied **at the pipe** by a read that stops one byte past it, so the process never holds more; a child that reaches that byte has its whole process group killed and the invocation fails, refusing rather than truncating | `FR-SEC-024`, `FR-CONF-031` |
 | The child is silent | Its standard error goes to the null device — not inherited, not captured | `FR-SEC-024`, `FR-CONF-032` |
 | A failure is diagnosable without the child's own words | The exit status and the stored command are what the `cause` carries | `FR-CONF-033` |
-| It cannot hang the caller | A deadline, enforced by the reader thread and polling loop of [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), which kills the child | `FR-SEC-012`, `FR-CONF-028` |
+| It cannot hang the caller | A deadline over the whole phase — until the child has exited **and** its output has closed — enforced by the reader thread and polling loop of [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), which kills the child's process group and does not wait on the pipe; a helper that exits `0` while a descendant holds its output is therefore a `78` at the deadline | `FR-SEC-012`, `FR-CONF-028` |
+| Its group kill reaches its own group | The child is reaped only after the group is signalled, so its pid — the group's id — cannot be reused by another process first; `tpl` installs no `SIGCHLD` disposition that would reap it early | `FR-CONF-028`, `FR-CONF-031` |
 | It cannot read the caller's input | Its standard input is the null device, so it cannot inherit a stream `tpl` itself is forbidden to read | `FR-SEC-023`, `BR-CLI-003` |
 
 The stored form is decided on the write path and never on the read path
 (`FR-CONF-023`, `FR-CONF-025`), so no quoting engine exists where the untrusted
 file is read — the file supplies an array, and an array is executed.
+
+**Residual — a descendant that leaves the group survives.** A process the
+helper puts in another group or session is outside the group `tpl` signals and
+keeps running after the invocation; the invocation still ends at the deadline
+with `78`, and the abandoned reader thread ends with the process
+(`FR-CONF-028`).
+
+## Render bounds
+
+`FR-SEC-025` bounds a hostile template on work, output and memory as well as on
+time, which `FR-SEC-022`'s deadline alone did not. The mechanisms are
+[architecture.md](architecture.md#the-render-bounds)'s.
+
+| Threat | Closed by | Forced by |
+|---|---|---|
+| A template that loops without end | Render fuel, counted by the engine; the same template fails at the same step on every run | `FR-RND-036` |
+| A template that writes without end into a redirected stdout | The render output limit, counted by the writer; stdout receives nothing from a failed render | `FR-RND-037`, `FR-RND-034` |
+| A template that grows memory without end within its fuel | The render memory limit, polled every 10 ms by the render's watchdog over the binary's counting allocator ([`ADR-011`](../adr/adr-011-render-memory-accounting.md)) | `FR-RND-039` |
+| A long render holding a server session open | The connection is closed and the driver's runtime dropped before any render starts | `FR-RND-040` |
+| A key that disables a bound | No key admits `0` or a value meaning "no bound"; no flag or environment variable sets one | `FR-CONF-045` |
+
+**Two residuals, both stated by `FR-RND-039` and neither closed here.** The
+memory limit is observed, not enforced at allocation: a render can pass it by
+what it allocates within one 10 ms interval, or by the one allocation that
+crosses it, before it is stopped. And an allocation the operating system refuses
+aborts the process by a signal, with no `cause`, because stable Rust cannot
+intercept an allocation failure; the allocator's own hard limit is not set,
+for the reasons [`ADR-011`](../adr/adr-011-render-memory-accounting.md) records.
+The render deadline remains the backstop.
 
 ## Project discovery: the boundary and the trust checks
 
@@ -346,12 +379,14 @@ consequence for reproducibility across hosts are
 third limit of [overview.md](overview.md#the-three-limits-the-system-states-rather-than-overcomes)
 is the fourth row above, stated where a reader would otherwise assume more.
 
-**A symbolic link has three dispositions in this crate, and no component decides
+**A symbolic link has four dispositions in this crate, and no component decides
 for another.** `render/` refuses one at every component below the template root,
-`project/` canonicalises before either file check, and `mariadb/` resolves a
-`ca_path` entry and judges what it resolves to — the first two are the tables of
-*Template containment* and *Project discovery* above, the third is the fifth row
-of this one. There is no shared path-policy helper: each disposition is written
+`project/` canonicalises before either file check, `mariadb/` resolves a
+`ca_path` entry and judges what it resolves to, and `cache/` never reads through
+one at an object file — a miss — and replaces one at a write target — the first
+two are the tables of *Template containment* and *Project discovery* above, the
+third is the fifth row of this one, and the fourth is
+[data-model.md](data-model.md#tplcache)'s (`FR-CACHE-030`, `FR-CACHE-033`). There is no shared path-policy helper: each disposition is written
 where its own requirement applies, and a single helper would have to carry the
 difference as a parameter. Why each requirement disposes as it does is
 `FR-CONF-014`'s weighing; which entries of a `ca_path` contribute is
@@ -387,7 +422,7 @@ session setting as prevention overstates it, and no passage of this folder may
 | The discovery walk, the connection lifecycle, the deadline machinery, the module map | [architecture.md](architecture.md) |
 | Every contract crossing a boundary named above, and its obligations | [interfaces.md](interfaces.md) |
 | The configuration file's format, key space, mode and rewrite discipline, and everything the cache puts on disk | [data-model.md](data-model.md) |
-| The TLS crates, their features, and the one call `std` does not supply | [technology-stack.md](technology-stack.md) |
+| The TLS crates, their features, and the calls `std` does not supply | [technology-stack.md](technology-stack.md) |
 | The sentinel test, the harness, the containers, and every other mandated test | `verification.md` |
 | Observability, the release gates, and what a new project ships | `operations.md` |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

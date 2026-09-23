@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -38,8 +38,9 @@ them. **This whole document was re-audited against the tree at commit `243c4d6`
 on 2026-09-21**: every count, every per-file breakdown and every statement that
 a component is a later sprint's was re-measured rather than carried forward.
 
-**Twenty-five of the twenty-six rows of the register below carry at least one
-test; row 8 alone carries none.** Row 2 is a unit test over the seam
+**Twenty-six of the twenty-seven rows of the register below carry at least one
+test; row 8 alone carries none.** Row 27 was added on 2026-09-23, with
+`FR-RND-040`, and is whole. Row 2 is a unit test over the seam
 `FR-ERR-031` requires, and it asserts what that row asserts: the guard produces
 the condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires. Rows 3
 to 6 were written with the command surface, at commit `f8f335d` of 2026-09-15,
@@ -224,6 +225,7 @@ produce the behaviour, on the same footing as the behaviour itself.
 | 24 | Context strictness | A test resolving a column's `table_name` against a table absent from the context fails with `65`, identically for a column arriving from `--context` and one read from a server | Integration | `FR-SEM-018`, `FR-SEM-017`, `FR-ENV-017` |
 | 25 | The three detections | Each shape of a privilege-driven absence is detected as the shape the catalogue gives it | Server, reduced-privilege reader | `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019`, `FR-PRIV-012` |
 | 26 | Type non-coercion | A naming filter applied to a non-string fails the render rather than coercing; a test applied to a non-column fails rather than answering `false` | Integration | `FR-ENV-034`, `FR-SEM-008`, `FR-SEM-009`; `FR-ENV-040`, `FR-SEM-005` |
+| 27 | Nothing of the read alive during a render | Two observations, both required: the server records the session ended before the first byte of the render reaches stdout; and, in process, no connection is open and no driver runtime alive when the template begins | Server, observed on the server; and unit | `FR-RND-040` |
 
 **Recorded change — the kind of rows 4 to 6.** This document gave the three
 tests of `BR-HELP-003` as integration tests; they are written as unit tests, and
@@ -237,7 +239,7 @@ asserts is between two routes **through the process** and cannot be observed
 from inside it.
 
 **Recorded reading — the count.** [traceability.md](traceability.md) records
-*"fourteen mandated tests"*, naming `BR-HELP-003` once with *(three)* beside it
+*"fifteen mandated tests"*, naming `BR-HELP-003` once with *(three)* beside it
 and `FR-SRV-029` once with *(two)*, and counting the second expansion but not
 the first. The table above expands both, and adds the rows the corpus mandates
 outside that list — `FR-SRV-014`, `NFR-PERF-007`, `FR-ENV-045`, `FR-CTX-039`,
@@ -279,6 +281,44 @@ eleven is what `tests/schema_and_cache.rs` asserts for a full read of `freight`,
 so the count is observed across three databases differing by two orders of
 magnitude in object count. The workloads are loaded by `seed-bench.sql` through
 `seed-bench.sh`, which verifies every count they state.
+
+**What row 27 reaches.** Both observations are written. From the server side,
+`tests/render_command.rs::fr_rnd_040_the_server_records_the_session_ended_before_the_first_byte_of_the_render`
+watches the statement log for the render's `Quit` while the process is still
+running a slow render whose output is held until it ends, on every series. In
+process, `bounded()` refuses to start a render unless `mariadb::quiescent()`
+holds, so
+`tests/render_command.rs::fr_rnd_040_every_server_read_of_a_render_is_closed_before_the_template_evaluates`
+asserts success on all three paths that read the server — `--direct`, a miss,
+and the re-read after an abandoned render — and the count itself is asserted by
+`fr_rnd_040_a_closed_session_leaves_no_connection_and_no_runtime_alive` in
+`src/mariadb/catalogue.rs` and
+`fr_rnd_040_a_runtime_is_counted_until_it_is_shut_down_and_on_its_own_thread`
+in `src/mariadb.rs`.
+
+### The tests of the forty-second edition
+
+Read from the working tree over HEAD `d89ffc4` on 2026-09-23, by name. **The
+totals of [The suite as it stands](#the-suite-as-it-stands) were not
+re-measured** and remain the count at `243c4d6`.
+
+| Requirement | Tests | Where |
+|---|---|---|
+| `FR-CONF-028`, `FR-CONF-031`, `FR-SEC-012`, `FR-SEC-024` | Five: a descendant holding the output after the child exits ends at the deadline and is dead afterwards; the child is still a zombie when its group is killed; an exit is observed without reaping and the kill precedes the reap; the cap ends the whole group; a descendant that releases the output in time leaves the password usable | `src/project/password.rs` |
+| `FR-RND-036`, `FR-RND-037` | Unit tests over the engine and the counting writer — fuel exhausted, inside an include too; output past the limit, and exactly at it — and in-process runs of `tpl render` over a `.tpl/.cfg` declaring each bound | `src/render.rs`, `src/render/bounds.rs`, `src/cli/render.rs` |
+| `FR-RND-039` | Through the binary, where the counter is installed: a doubling render past a 16 MiB limit is `65` and writes nothing; the default stops it; raising the limit lets a large render pass | `tests/render_command.rs` |
+| `FR-RND-038` | Under the defaults, endless output reaches the output limit before the memory limit | `tests/render_command.rs` |
+| `FR-CACHE-039` with `FR-RND-038` | An abandoned render keeps evaluating after a miss reached through a lookup function; crossing each of the four bounds after the miss is `65`, writes nothing and opens no connection, with a control that reads the server | `src/cli/render.rs`; `tests/render_command.rs`, gated on the fixture |
+| `FR-CONF-045`, `FR-CONF-002` | The eighteen key forms; each range at its extremes and one past them, `78` from the file with key, value and range named, `64` from `tpl cfg set`; the memory floor through the binary | `src/project/config/keys.rs`, `src/project/config.rs`, `src/project/edit.rs`, `tests/render_command.rs` |
+| `FR-ERR-034` row `65` | The `cause` and `hint` of each bound name the bound, the value and the key | `src/diagnostics/render.rs` |
+| `FR-CTX-042` | A dangling `foreign_keys` and a dangling `referenced_by` are `ContextFault::DanglingReference`; a column's absent `table_name` is not; the `cause` names all four values and escapes them; the render is `65`, not `70` | `src/model/document.rs`, `src/diagnostics/render.rs`, `src/cli/render.rs` |
+| `FR-CACHE-033`, `FR-CDOC-008` | A named table, view or routine read whose file holds another name or kind is a miss; an object file that is a symbolic link is a miss for a named read, a collection, the whole store and a render | `src/cache.rs` |
+
+**One test was removed**:
+`fr_cache_039_a_render_abandoned_on_a_miss_outlives_its_deadline`, which
+asserted the behaviour `FR-RND-038` now forbids. **No test plants a FIFO** at an
+object file; `read_object()` refuses any non-regular file, and the case is
+reasoned from the `lstat` check rather than exercised.
 
 ### Owed, and discharged
 
@@ -522,7 +562,7 @@ it; `70` is the single exception, exercised in process through the seam above.
 |---|---|---|---|
 | `0` | Any successful command | Only where the command reads a catalogue | yes |
 | `64` | An unknown command or flag, a mutually exclusive pair, a malformed value | no | yes |
-| `65` | A template syntax error, a malformed `--context`, a path escaping the root | no | yes |
+| `65` | A template syntax error, a malformed `--context`, a path escaping the root, a render bound crossed | no | yes |
 | `66` | A named object that does not exist | Only for a catalogue object | yes |
 | `69` | An unreachable server | no | yes |
 | `70` | **Excepted.** The seam above | no | excepted by `BR-ERR-001` |

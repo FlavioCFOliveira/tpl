@@ -133,7 +133,10 @@ pub(crate) fn context<'a>(database: &'a Database<'a>) -> Result<DatabaseDocument
 /// Returns [`Error::ContextDocumentMalformed`] for a document that is not
 /// well-formed JSON, carrying the position the decoder stopped at, or for one
 /// that is JSON and does not match the contract, carrying the rule it failed
-/// (`FR-RND-020`, `FR-ERR-029`).
+/// (`FR-RND-020`, `FR-ERR-029`) — including a foreign key naming a table the
+/// document's `tables` does not carry, which `FR-CTX-042` makes such a rule
+/// and which would otherwise reach [`context`] as the `70` of a violated
+/// invariant.
 pub(crate) fn read<'a>(bytes: &'a str, path: &Path) -> Result<Database<'a>, Error> {
     let malformed = |fault| Error::ContextDocumentMalformed {
         path: path.to_owned(),
@@ -413,6 +416,109 @@ mod tests {
         };
 
         assert!(rule.contains("names a column that table carries"), "{rule}");
+    }
+
+    /// The fixture's dump as a JSON value, for a test that edits it.
+    fn editable() -> serde_json::Value {
+        serde_json::from_str(&compact(&fixture::database())).expect("the dump is JSON")
+    }
+
+    /// The `tables` collection of an editable dump.
+    fn tables_of(document: &mut serde_json::Value) -> &mut Vec<serde_json::Value> {
+        document["data"]["database"]["tables"]
+            .as_array_mut()
+            .expect("tables is an array")
+    }
+
+    #[test]
+    fn fr_ctx_042_a_foreign_key_naming_a_table_the_document_does_not_carry_is_65() {
+        // FR-CTX-042, finding SEC-02, in the shape the audit's document had:
+        // one table kept, and every table its keys name dropped. The builder
+        // would report the 70 of an invariant; the document is the caller's
+        // to correct, so it is FR-RND-020's 65 naming the key.
+        let mut document = editable();
+        let tables = tables_of(&mut document);
+        let kept = tables
+            .iter()
+            .find(|table| {
+                table["foreign_keys"]
+                    .as_array()
+                    .is_some_and(|keys| keys.iter().any(|key| key["referenced_table"].is_object()))
+            })
+            .cloned()
+            .expect("the fixture carries a table with a key that names a table");
+        let first = kept["foreign_keys"]
+            .as_array()
+            .and_then(|keys| keys.iter().find(|key| key["referenced_table"].is_object()))
+            .cloned()
+            .expect("found above");
+        *tables = vec![kept.clone()];
+
+        let fault = refused(&document.to_string());
+
+        let ContextFault::DanglingReference {
+            table,
+            collection,
+            key,
+            names,
+        } = fault
+        else {
+            panic!("a dangling key is FR-CTX-042's fault, not {fault:?}");
+        };
+        assert_eq!(table, kept["name"].as_str().expect("a name"));
+        assert_eq!(collection, "foreign_keys");
+        assert_eq!(key, first["name"].as_str().expect("a name"));
+        assert_eq!(
+            names,
+            first["referenced_table"]["name"].as_str().expect("a name")
+        );
+    }
+
+    #[test]
+    fn fr_ctx_042_a_referenced_by_entry_naming_a_table_the_document_does_not_carry_is_65() {
+        // FR-CTX-042's second direction: the referencing table of an entry
+        // under `referenced_by`.
+        let mut document = editable();
+        let tables = tables_of(&mut document);
+        let at = tables
+            .iter()
+            .position(|table| {
+                table["referenced_by"]
+                    .as_array()
+                    .is_some_and(|entries| !entries.is_empty())
+            })
+            .expect("the fixture carries a referenced table");
+        let carrier = tables[at]["name"].as_str().expect("a name").to_owned();
+        let entry = &mut tables[at]["referenced_by"][0];
+        let key = entry["key"]["name"].as_str().expect("a name").to_owned();
+        entry["table"]["name"] = serde_json::Value::from("ghost_table");
+
+        let fault = refused(&document.to_string());
+
+        assert_eq!(
+            fault,
+            ContextFault::DanglingReference {
+                table: carrier,
+                collection: "referenced_by",
+                key,
+                names: "ghost_table".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn fr_ctx_042_a_column_whose_table_name_is_absent_is_not_a_reference() {
+        // FR-CTX-042, what it does not reach: FR-SEM-017, FR-SEM-018 and
+        // FR-ENV-017 make this case reachable on purpose, and the test that
+        // resolves it fails the render when it is applied.
+        let mut document = editable();
+        tables_of(&mut document)[0]["columns"][0]["table_name"] =
+            serde_json::Value::from("elsewhere");
+
+        let text = document.to_string();
+        let read_back = read(&text, &path());
+
+        assert!(read_back.is_ok(), "{read_back:?}");
     }
 
     #[test]

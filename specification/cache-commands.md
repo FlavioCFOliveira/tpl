@@ -204,6 +204,16 @@ read from the server on a miss.
   produces the result SHALL have the whole deadline of `FR-CONF-005`, and SHALL
   use the value of `now` evaluated for the abandoned render.
 
+  The abandoned render SHALL keep every render bound of `FR-RND-038` — the
+  deadline, render fuel, the render output limit and the render memory limit —
+  until it has returned, whether or not it evaluates further after the miss.
+  IF the abandoned render crosses any of them, before the miss or after it,
+  THEN the system SHALL end the invocation with `65` (`EX_DATAERR`) and the
+  `cause` of the first bound crossed, per `FR-RND-038`, SHALL NOT read the
+  server, and SHALL let no byte of the abandoned render reach stdout, per
+  `FR-RND-034`. The server read and the second render follow only an abandoned
+  render that returned within every bound.
+
   *Added in the fortieth edition.* The miss is answered exactly as a miss found
   before the render is answered: one whole read of the server, the write of
   `FR-CACHE-007`, and a render from what the server returned. The output is
@@ -214,11 +224,29 @@ read from the server on a miss.
   miss is reported as the first failure, per `FR-ERR-006`, and no connection is
   opened. A condition of the cache-or-connection step or of catalogue object
   resolution raised after the render is abandoned is reported with that step's
-  code.
+  code. A render bound the abandoned render crosses is a render condition too,
+  before the miss or after it: the invocation ends with `65` and that bound's
+  `cause`, with no connection opened, per the second paragraph of this
+  requirement.
+
+  *Amended in the forty-second edition.* The second paragraph of the
+  requirement, and the last sentence of the consequence above, are new. A render
+  that reaches the miss through a lookup function of `FR-ENV-020` — `table`,
+  `view`, `routine` or `column` — can go on evaluating after the miss, and no
+  requirement said what happened if it then crossed a bound. Left unwatched,
+  such a render was observed to reach 8.6 GB past a one-second deadline.
+  *Rejected: discarding the abandoned render and reading the server at once.*
+  A running render cannot be stopped short of ending the process, so it would
+  keep consuming, unbounded, beside the read and the second render.
+  *Also rejected: making a lookup-function miss unwind the evaluation at
+  once.* It would change the contract of the lookup functions, whose answer
+  `FR-CACHE-038` and `FR-ENV-017` fix.
 
   *Rejected: fetching only the missing object and continuing.* The document
   would mix sources within one render, and `NFR-PERF-004` would hold only if
-  the connection stayed open for the rest of the render. *Also rejected:
+  the connection stayed open for the rest of the render, which `FR-RND-040`
+  now forbids: the connection the read opens is closed, and the driver's
+  runtime shut down, before the render that follows starts. *Also rejected:
   failing the invocation.* It fails a read that can succeed, which is what
   `FR-CACHE-033` forbids.
 
@@ -425,7 +453,16 @@ tpl -d shop cache status
   the bytes the write would produce, the system MAY leave that file in place
   and skip the temporary file and the rename. A target whose content cannot be
   read, or differs in any byte, SHALL be written through the temporary file and
-  the rename.
+  the rename. A target that is a symbolic link SHALL NOT be left in place and
+  SHALL NOT be followed, whatever it points at: the rename SHALL replace the
+  link itself with a regular file.
+
+  *Amended in the forty-second edition, as decided for rmp `#256`.* The last
+  sentence is new. The permission above read a byte-identical target through a
+  symbolic link as a target to leave in place, which kept a link in the cache
+  and left the file it reached outside the cache's control. The sentence
+  states the guard on the write, and `FR-CACHE-033` states the same guard on
+  the read.
 
   *Amended in the thirty-ninth edition.* The requirement did not say whether a
   file that already holds exactly the bytes a write would produce must still be
@@ -486,6 +523,17 @@ tpl -d shop cache status
   reaches the object. The second is found when the listing is read, before the
   render starts, because the listing consults every name in the folder.
 
+  IF a read that serves one named object from its own file under
+  `FR-CDOC-008` finds that the object the file holds differs from the object
+  requested in its kind or in its name, the names compared byte for byte, THEN
+  the file SHALL be a miss. The arrangement of file names versioned by
+  `cache_format` is unchanged.
+
+  IF an object file is a symbolic link, THEN it SHALL be a miss for every
+  read, whatever the link points at, and the system SHALL NOT read through
+  it. The rewrite that follows the miss replaces the link, per
+  `FR-CACHE-030`.
+
   *Amended in the fortieth edition.* The requirement did not say whether a
   file the invocation never consults is covered. Before `FR-CACHE-038` a render
   consulted every file, so the question arose only for `tpl schema info`, whose
@@ -505,6 +553,32 @@ tpl -d shop cache status
   It states for this requirement what `FR-CACHE-038` now fixes: a lookup
   consults only the object it returns, so a damaged file it passes over is not
   a miss.
+
+  *Amended in the forty-second edition: the paragraph on a read of one named
+  object is new, as decided for rmp `#254`.* The paragraph before it made a
+  file holding another object a miss for a render and said nothing of a read
+  that serves one named object,
+  and `FR-CDOC-008` serves an object "whenever it is present" without saying
+  what present is. The security audit recorded in `SECURITY-AUDIT.md` at the
+  repository root found, as its finding SEC-03, that on a filesystem that
+  folds case or Unicode normalisation, two objects whose names differ only in
+  case or in normalisation share one file, and that a read of the one the file does not hold was served
+  from it as a hit and answered that the object does not exist, with a `cause`
+  naming a server that was never asked. The object requested was not present,
+  so the read was a miss that `FR-CACHE-007` obliges to reach the server. The
+  paragraph says so. It closes the false answer on every filesystem, and it
+  does not stop the two objects from sharing a file, which the file-naming
+  arrangement would have to change to prevent.
+
+  *Accepted cost.* On such a filesystem, a read of either of two colliding
+  objects can miss on every invocation, because each rewrite serves one of
+  them and replaces the other.
+
+  *Amended in the forty-second edition: the paragraph on a symbolic link is
+  new, as decided for rmp `#256`.* A symbolic link where an object file belongs is not
+  a file `tpl` writes, per `FR-CACHE-030`, and reading through it would serve
+  whatever the link reaches as though the cache held it. The read now applies
+  the guard the write applies.
 
 - **FR-CACHE-036**: IF the system cannot write to `.tpl/.cache/`, THEN it SHALL
   answer from what it read, SHALL exit `0`, SHALL leave the cache as it found

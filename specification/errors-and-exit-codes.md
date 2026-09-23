@@ -44,7 +44,7 @@ Out of scope: the wording of any individual message.
   |---|---|---|---|
   | `0` | `EX_OK` | Success | Continue |
   | `64` | `EX_USAGE` | Unknown command or flag, missing required argument, mutually exclusive flags, malformed flag value, unknown configuration key, per `FR-ERR-035` | Fix the invocation; consult `--help` |
-  | `65` | `EX_DATAERR` | Template syntax error, render failure, malformed `--context` document, render deadline exceeded, template path escaping the root | Fix the template or the context |
+  | `65` | `EX_DATAERR` | Template syntax error, render failure, malformed `--context` document, render deadline or render bound exceeded, template path escaping the root | Fix the template or the context |
   | `66` | `EX_NOINPUT` | A named object does not exist: table, view, routine, template, database entry, configuration key, per `FR-ERR-035` | List what exists and choose another name |
   | `69` | `EX_UNAVAILABLE` | Server unreachable: DNS, connection refused, network deadline exceeded, TLS failure | Check host and network; the operation is read-only and therefore repeatable |
   | `70` | `EX_SOFTWARE` | Internal error — a defect in `tpl` | Report it; not fixable by the caller |
@@ -118,6 +118,14 @@ Out of scope: the wording of any individual message.
   failed: `FR-CONF-014` takes `74` where the reading of a file failed, and
   `FR-CONF-044` takes `78` where the directory named nothing to read, which is
   a fault in the configuration and not in the filesystem.
+
+  *Amended in the forty-second edition: the `65` cell names the render bounds
+  beside the deadline.* `FR-RND-036`, `FR-RND-037` and `FR-RND-039` end a
+  render that exhausts its render fuel, reaches its render output limit or
+  crosses its render memory limit, all with `65`.
+  The cell named the deadline and would otherwise have characterised the class
+  as bounded in time alone. The code set is unchanged and the column still
+  characterises rather than enumerates.
 
   *Amended in the fifth edition.* The `78` row gains five conditions, all of
   them from decisions written into
@@ -590,6 +598,13 @@ Out of scope: the wording of any individual message.
   This is one order still: the render that was abandoned produced no result,
   and the steps run again in their order for the render that does.
 
+  *Amended in the forty-second edition.* A render bound the abandoned render
+  crosses, before the miss or after it, is a render condition of step 8 and is
+  reported as the first failure with `65`: the invocation does not return to
+  the cache-or-connection step, and no connection is opened. The steps run
+  again only for an abandoned render that returned within every bound, per
+  `FR-CACHE-039` and `FR-RND-038`.
+
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
 
@@ -652,7 +667,7 @@ Out of scope: the wording of any individual message.
   | Code | The `cause` line SHALL name |
   |---|---|
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
-  | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or the structural rule of [context-document.md](context-document.md) it failed. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012` |
+  | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or the structural rule of [context-document.md](context-document.md) it failed. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012`. For a render bound, which bound was exceeded, its resolved value, and the key of `FR-CONF-002` that raises it, per `FR-RND-036`, `FR-RND-037` and `FR-RND-039` |
   | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, the key space of `FR-CONF-002`, or the `--context` document and the collection of it the name was sought in |
   | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
@@ -699,6 +714,14 @@ Out of scope: the wording of any individual message.
   touched no server is a wording false of the failure it reports, which the
   paragraph above bans. No code changes and the other three populations are as
   the first edition left them.
+
+  *Amended in the forty-second edition: the `65` row names the render bounds.*
+  A render that ends on render fuel, the render output limit or the render
+  memory limit is not a
+  template error at a line and not a deadline, so no clause of the row could be
+  met by its `cause`. The clause added obliges the bound, its resolved value and
+  the key that raises it, so the caller learns both what stopped the render and
+  where to change it. The other clauses are unchanged.
 
   *Amended in the twenty-fifth edition: the `69` row names a fifth phase.* It
   named four, and one statement this system issues belonged to none of them.
@@ -909,7 +932,8 @@ Out of scope: the wording of any individual message.
   *Amended in the twentieth edition: the requirement says what the character
   set governs, because as written it governed everything and admitted two of
   the eight populations of `FR-ERR-021` nowhere.* No key of `FR-CONF-002`
-  matches `[A-Za-z0-9_]{1,64}`, because all fifteen key forms contain a dot;
+  matches `[A-Za-z0-9_]{1,64}`, because every key form contains a dot — fifteen
+  when this note was written, eighteen since the forty-second edition;
   five flags of this corpus carry a hyphen inside the name — `--tpl-dir`,
   `--no-cache`, `--ca-file`, `--ca-path` and `--password-command`; and
   `FR-ERR-023` drops a candidate outside the set in every form, prose included.

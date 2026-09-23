@@ -5527,3 +5527,156 @@ samply load "$S/prof/rstruct_last_c.json.gz"                                    
 ./scripts/mariadb/up.sh; ./scripts/mariadb/status.sh --quiet
 ./scripts/mariadb/down.sh; ./scripts/mariadb/status.sh --quiet    # non-zero
 ```
+
+## 2026-09-23 — Peak resident memory of every render the four worked examples perform
+
+*Sprint 20, task `#255`. Target of record: `aarch64-apple-darwin`. Server of
+record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`). This entry records; it does
+not judge, per `BR-PERF-008`.*
+
+### Outcome
+
+**The largest peak resident set size of any `tpl render` process the four
+worked examples run is 6 094 848 B (5.81 MiB)**: `rust/schema`, the whole
+`freight` database in context, entry `freight`. Four times that is
+24 379 392 B (23.25 MiB). This is the base the render memory limit of `#255` is
+derived from; the choice of the rounding and of the limit itself is not this
+entry's.
+
+| quantity | bytes | MiB |
+|---|---|---|
+| base: the maximum over 3 150 render processes | 6 094 848 | 5.81 |
+| 4 × base | 24 379 392 | 23.25 |
+| 4 × base, rounded up to the next MiB | 25 165 824 | 24 |
+| 4 × base, rounded up to the next power-of-two MiB | 33 554 432 | 32 |
+
+### Workload
+
+The five-command workflow of `FR-EX-004`, as `examples/_driver` performs it,
+for each of the four examples (`go`, `rust`, `python`, `node`): `init`, then
+per schema (`sakila`, `world`, `freight`) `cfg database add`, `cfg set …password`,
+`cfg database test` and `schema tables`, then every render the example's
+`plan` returns — 111 renders for `go` and `rust`, 114 for `python` and `node`,
+450 in all per round. No example passes `--direct` or `--no-cache`: every
+render reads through the cache the preceding `schema tables` filled, and a
+`-vvv` run of the heaviest render shows no connection phase. The compile gates
+were not run; the rendered trees were compared with the tracked ones instead
+and were byte-identical.
+
+### Environment
+
+Apple M4, 10 cores, 32 GiB; macOS 26.6.2 (25G83), Darwin 25.6.0 `arm64`;
+`rustc` 1.98.1 (48a229cea 2026-09-01), the release profile of `ADR-004`;
+`/usr/bin/time -l`. Tree: `d89ffc4` with the uncommitted working tree of
+sprint 20 (33 modified files and the untracked `src/render/bounds.rs`);
+`target/release/tpl` 4 033 680 B, sha256 `4096ec45…ed09`. Only the `12.3`
+server was up, seeded by `scripts/mariadb/seed-datasets.sh 12.3`, reached over
+TLS at `verify-identity` as the driver configures it. Load 1.82 before and
+2.68 after. Taken 2026-09-23, 18:54Z to 18:55Z.
+
+### Protocol
+
+Copies of `examples/` under `target/security-lab/mem/examples/`, so that no
+tracked rendered file was rewritten; each copy's `plan` and `reset_output` run
+through `examples/_driver.run`, with `TPL_BIN` naming a wrapper that runs
+`target/release/tpl` under `/usr/bin/time -l -o` and appends the argv, exit
+code, `maximum resident set size` and `peak memory footprint` of every process.
+One pilot round, discarded; then 7 measured rounds, the order of the four
+examples rotated by one position per round. 3 514 processes, every one exit
+`0`; 3 150 of them renders, each distinct render sampled 7 times.
+
+### Results — per template
+
+Peak resident set size. *Median* is the median over the template's renders of
+each render's median of 7; *max* is the largest single sample.
+
+| example | template | form | processes | median | max | max at |
+|---|---|---|---|---|---|---|
+| go | `go/schema` | whole database | 21 | 5.09 MiB | 5.59 MiB | `freight` |
+| go | `go/struct` | per table | 252 | 4.78 MiB | 5.38 MiB | `freight --table consignment` |
+| go | `go/repository` | per table | 252 | 4.66 MiB | 5.17 MiB | `freight --table consignment` |
+| go | `go/sql` | per table | 252 | 4.88 MiB | 5.39 MiB | `freight --table consignment` |
+| rust | **`rust/schema`** | whole database | 21 | 5.22 MiB | **5.81 MiB** | **`freight`** |
+| rust | `rust/struct` | per table | 252 | 4.92 MiB | 5.62 MiB | `freight --table consignment` |
+| rust | `rust/repository` | per table | 252 | 4.73 MiB | 5.22 MiB | `freight --table consignment` |
+| rust | `rust/sqlx` | per table | 252 | 4.95 MiB | 5.55 MiB | `freight --table consignment` |
+| python | `python/core` | whole database | 21 | 4.39 MiB | 4.41 MiB | `sakila` |
+| python | `python/package` | whole database | 21 | 5.19 MiB | 5.69 MiB | `freight` |
+| python | `python/dataclass` | per table | 252 | 4.91 MiB | 5.58 MiB | `freight --table consignment` |
+| python | `python/repository` | per table | 252 | 4.73 MiB | 5.22 MiB | `freight --table consignment` |
+| python | `python/pymysql` | per table | 252 | 4.94 MiB | 5.55 MiB | `freight --table consignment` |
+| node | `node/core` | whole database | 21 | 4.41 MiB | 4.44 MiB | `freight` |
+| node | `node/index` | whole database | 21 | 5.20 MiB | 5.64 MiB | `freight` |
+| node | `node/model` | per table | 252 | 4.88 MiB | 5.56 MiB | `freight --table consignment` |
+| node | `node/repository` | per table | 252 | 4.75 MiB | 5.22 MiB | `freight --table consignment` |
+| node | `node/mysql2` | per table | 252 | 4.95 MiB | 5.59 MiB | `freight --table consignment` |
+
+The heaviest render, `rust/schema` over `freight`, 7 samples: 5 996 544 to
+6 094 848 B, median 6 012 928 B (5.73 MiB). Every render's median lies between
+4.39 and 5.73 MiB; the median over all 3 150 is 4.83 MiB. Between samples of the
+same render the figure moves by whole 16 KiB pages, up to 98 304 B.
+
+The non-render steps, for comparison: `init` 2.81 MiB, `cfg database add`
+3.44 MiB, `cfg database test` 4.34 MiB, `schema tables` on `freight` 5.64 MiB
+(maxima).
+
+### Results — the heaviest render off the examples' path
+
+The examples never render on a cold cache. The same render, 7 interleaved
+rounds of three arms in the rust example's project:
+
+| arm | how | RSS median | RSS max | footprint median |
+|---|---|---|---|---|
+| `warm` | the examples' path: a cache hit | 5.75 MiB | 5.83 MiB (6 111 232 B) | 3.39 MiB |
+| `cold` | `cache clean` before each render: a miss | 6.25 MiB | 6.33 MiB (6 635 520 B) | 3.30 MiB |
+| `direct` | `--direct --no-cache` | 6.12 MiB | 6.23 MiB (6 537 216 B) | 3.19 MiB |
+
+A render that reads the server peaks about 0.5 MiB higher in resident memory
+and about 0.1 to 0.2 MiB lower in footprint. Four times the `cold` maximum is
+26 542 080 B (25.31 MiB): above the next-MiB rounding of the base, below the
+power-of-two one.
+
+### Confounders — read this before the tables
+
+- **Resident set size is not heap.** It counts the binary's touched text, the
+  shared libraries' resident pages and every stack, and moves in 16 KiB pages.
+  `peak memory footprint`, the same `/usr/bin/time -l` report's figure for the
+  process's dirty and compressed memory, is 3.3 to 3.5 MiB for the heaviest
+  render: the heap is at most that. A limit counted by the allocator and set to
+  four times the resident base is therefore more than four times the heap the
+  heaviest example render uses.
+- **Heap at exit is not peak heap.** `leaks --atExit` over the heaviest render
+  reports 3 668 live blocks, 1 130 KB, when the process ends; it is a lower
+  bound, and a peak heap figure needs an allocator instrument this build does
+  not carry.
+- **One target.** On any other target the figures differ and are not compared
+  with these.
+
+### Not measured
+
+- The series `10.11`, `11.4` and `11.8`: the examples read only `12.3`,
+  per `FR-EX-007`.
+- The peak heap: `dhat` is not wired and `xctrace` is not installed on this
+  host.
+- The compile gates, which do not run `tpl`.
+
+### Reproduction
+
+```sh
+cargo build --release
+./scripts/mariadb/up.sh 12.3; ./scripts/mariadb/status.sh 12.3
+./scripts/mariadb/seed-datasets.sh 12.3
+export FIXTURE_PW=tpl-root
+M=target/security-lab/mem          # git-ignored scratch
+rsync -a --exclude node_modules --exclude target --exclude .tpl examples/ "$M/examples/"
+# $M/tpl-wrap.sh: /usr/bin/time -l -o "$tmp" target/release/tpl "$@", then append
+#   the argv, the exit code and the two peak figures to $TPL_MEM_LOG.
+# $M/harness.py <example dir>: load its run.py, call reset_output() and
+#   run(WORKSPACE, plan, templates=TEMPLATES) — no compile gate.
+export TPL_BIN="$PWD/$M/tpl-wrap.sh" TPL_MEM_LOG="$PWD/$M/logs/rounds.tsv"
+for r in 1 2 3 4 5 6 7; do      # the four examples, rotated by one per round
+  for e in <go rust python node, rotated by r>; do
+    TPL_MEM_TAG="$e:$r" python3 "$M/harness.py" "$M/examples/$e-data-layer"; done; done
+python3 "$M/analyse.py" "$M/logs/rounds.tsv"
+./scripts/mariadb/down.sh 12.3; ./scripts/mariadb/status.sh    # 12.3 down
+```
