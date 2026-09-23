@@ -12,6 +12,7 @@
 //! | `version`, `series` and `standing` present, strings, and `standing` one of the two values of `FR-CTX-034` | [`Server`](crate::model::server::Server)'s three fields and closed enumeration |
 //! | No key of a table names a column the table does not carry (`FR-CAT-044`) | [`Table::assemble`], the model's only constructor for a table |
 //! | A `restricted` marking names at least one property (`FR-PRIV-016`) | [`Restricted`](crate::model::restricted::Restricted)'s `TryFrom` |
+//! | Every table a foreign key names, under `foreign_keys` or `referenced_by`, is a member of `tables` (`FR-CTX-042`) | [`references_are_carried`] |
 //!
 //! | **Not** checked | Why |
 //! |---|---|
@@ -19,12 +20,15 @@
 //! | `standing` against `series` | `FR-CTX-033` forbids it in as many words |
 //! | The value of `schema_version` | `FR-OUT-014` fixes what moves it and names no rule for refusing one, and refusing a number this binary has not seen would be a check the corpus does not ask for |
 //! | `primary_key` against `indexes` | `FR-CAT-043` makes the index collection the authoritative source, so the model takes the primary key from there and this key is not read back at all |
+//! | A column's `table_name` against `tables` | `FR-CTX-042` excludes it by name: `FR-SEM-017`, `FR-SEM-018` and `FR-ENV-017` make a column naming an absent table reachable on purpose, and the test that resolves it fails the render when it is applied |
+//! | The embedded tables of `FR-CTX-006` and `FR-CTX-010` against the members they copy | `FR-CTX-042` does not check them apart; only the name each carries is read back, and that name is what the rule above checks |
 //!
 //! **Nothing is repaired.** A document that does not match the contract is an
 //! [`Error`](crate::Error) at `65`, per `FR-RND-020`; the two conditions this
 //! module detects itself each name the rule they failed, which is what the `65`
 //! row of `FR-ERR-034` obliges the `cause` line to carry.
 
+use super::order;
 use super::shape::{DatabaseDocument, TableDocument, TableShape};
 use crate::error::ContextFault;
 use crate::model::database::Database;
@@ -46,6 +50,8 @@ pub(super) fn database(document: DatabaseDocument<'_>) -> Result<Database<'_>, C
     for table in document.tables {
         tables.push(self::table(table)?);
     }
+
+    references_are_carried(&tables)?;
 
     Ok(Database {
         name: document.name,
@@ -128,4 +134,68 @@ fn table(document: TableDocument<'_>) -> Result<Table<'_>, ContextFault> {
     .map_err(|_| ContextFault::Structure {
         rule: KEYS_NAME_CARRIED_COLUMNS,
     })
+}
+
+/// The collection of a table that lists the keys it references others by.
+const FOREIGN_KEYS: &str = "foreign_keys";
+
+/// The collection of a table that lists the keys others reference it by.
+const REFERENCED_BY: &str = "referenced_by";
+
+/// Applies `FR-CTX-042`: every table a foreign key of a member of `tables`
+/// names is itself a member of `tables`.
+///
+/// It is checked here, on the inward path, because the outward builder needs
+/// the same condition to materialise the embedding of `ADR-009` and holds it as
+/// an invariant: `FR-CTX-023` guarantees it for a document a server read
+/// produced, and nothing guarantees it for a document a caller supplied. A
+/// document that breaks it is the caller's fault to correct — `65` — and never
+/// the `70` the invariant would report.
+///
+/// The names are resolved exactly as the builder resolves them: byte for byte,
+/// by binary search over the members ordered by the one comparator of
+/// [`order`]. A name that passes here is therefore a name the builder finds.
+/// A key whose referenced table is `null` names no table, per `FR-CTX-006`,
+/// and is passed over.
+///
+/// # Errors
+///
+/// Returns [`ContextFault::DanglingReference`] for the first key, in document
+/// order — each member in turn, its `foreign_keys` before its
+/// `referenced_by` — that names a table `tables` does not carry.
+fn references_are_carried(tables: &[Table<'_>]) -> Result<(), ContextFault> {
+    let carried = order::pointers_by_name(tables);
+    let present = |name: &str| {
+        carried
+            .binary_search_by(|table| order::compare(table.name(), name))
+            .is_ok()
+    };
+
+    for table in tables {
+        for outgoing in table.foreign_keys() {
+            if let Some(named) = outgoing.referenced_table.as_deref()
+                && !present(named)
+            {
+                return Err(ContextFault::DanglingReference {
+                    table: table.name().to_owned(),
+                    collection: FOREIGN_KEYS,
+                    key: outgoing.name.as_ref().to_owned(),
+                    names: named.to_owned(),
+                });
+            }
+        }
+
+        for incoming in table.referenced_by() {
+            if !present(&incoming.table) {
+                return Err(ContextFault::DanglingReference {
+                    table: table.name().to_owned(),
+                    collection: REFERENCED_BY,
+                    key: incoming.key.name.as_ref().to_owned(),
+                    names: incoming.table.as_ref().to_owned(),
+                });
+            }
+        }
+    }
+
+    Ok(())
 }

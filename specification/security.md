@@ -1,8 +1,8 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-09-21
-related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md]
+last-reviewed: 2026-09-23
+related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md]
 ---
 
 # Security Rules Across the Surface
@@ -112,13 +112,26 @@ module, `BR-SEC-003` excepted.
   it.
 
 - **FR-SEC-012**: `password_command` SHALL be subject to a deadline, exceeding
-  which is `78`. See `FR-CONF-028`.
+  which is `78`. The deadline SHALL bound the whole phase, until the child has
+  exited and its standard output has ended, and SHALL end the child's whole
+  process group, descendants included. See `FR-CONF-028`.
+
+  *Amended in the forty-second edition, with `FR-CONF-028`.* A helper that
+  exits and leaves a descendant holding its standard output open made the
+  deadline unenforceable: the invocation waited on the pipe with no bound.
+  *Threat closed.* A `.cfg` naming such a helper can no longer hang the caller
+  past `core.password_timeout`, and the descendants it started do not outlive
+  the deadline inside the group `tpl` controls.
 
 - **FR-SEC-024**: The child process SHALL be bounded and silent. Its standard
-  output SHALL be read to a cap of 4096 bytes, beyond which the child is
-  terminated and the invocation is `78`; its standard error SHALL go to the
-  null device, neither inherited nor captured; and a non-zero exit SHALL be
-  `78`. See `FR-CONF-031` through `FR-CONF-033`.
+  output SHALL be read to a cap of 4096 bytes, beyond which the child's whole
+  process group is terminated and the invocation is `78`; its standard error
+  SHALL go to the null device, neither inherited nor captured; and a non-zero
+  exit SHALL be `78`. See `FR-CONF-031` through `FR-CONF-033`.
+
+  *Amended in the forty-second edition, with `FR-CONF-031`.* The cap
+  terminated the child alone; it now terminates the group `FR-CONF-028`
+  establishes, as the deadline of `FR-SEC-012` does.
 
   *Threat closed.* Two, of different kinds. An unbounded read from a child
   named in an untrusted `.cfg` is a denial-of-service surface reachable by
@@ -272,6 +285,26 @@ module, `BR-SEC-003` excepted.
   on a FIFO, and a runaway loop in a template all hang the caller with no
   diagnosis, which is exactly what the "never interactive" invariant exists to
   prevent.
+
+  *Note added in the forty-second edition.* A deadline bounds a render in time
+  only. `FR-SEC-025` adds the three bounds that end a hostile render on work,
+  output and memory.
+
+- **FR-SEC-025**: Every render SHALL be bounded by render fuel, by the render
+  output limit and by the render memory limit as well as by its deadline, and
+  exceeding any of the three is `65`. Each bound is set by a key of
+  `.tpl/.cfg` with a default no legitimate render reaches. See `FR-RND-036`,
+  `FR-RND-037`, `FR-RND-039`, `FR-RND-038` and `FR-CONF-045`.
+
+  *Threat closed.* A template arriving in a clone that loops without end,
+  writes without end into a redirected stdout, or grows memory without end is
+  stopped with a diagnosis, and not only when the wall clock or the operating
+  system stops it.
+
+  *Where the guarantee stops.* The memory limit is observed periodically, so a
+  render can pass it briefly before it is stopped, and a single allocation the
+  operating system refuses outright aborts the process by a signal; the render
+  deadline remains the backstop. `FR-RND-039` states the limit.
 
 - **FR-SEC-023**: `tpl` SHALL never prompt, never page, and never read stdin
   except for an explicitly requested `--context -`. See `BR-CLI-003`.

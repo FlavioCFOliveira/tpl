@@ -472,7 +472,8 @@ Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tab
 | Configuração | `toml` + `serde` na leitura; `toml_edit` na escrita | A escrita preserva comentários e ordem; `OD-09`, em `docs/spec-technical/open-decisions.md` |
 | Erros | `thiserror` na biblioteca; o binário não carrega tipo de erro próprio | O `main.rs` lê o `exit_code` da biblioteca e devolve-o; `OD-32`, em `docs/spec-technical/open-decisions.md` |
 | Logging | Diagnósticos próprios, sem subscriber instalado | Sem `tracing` nem `tracing-subscriber`; controlado pela flag de verbosidade; `OD-17`, em `docs/spec-technical/open-decisions.md` |
-| uid do processo | `rustix`, `default-features = false`, `features = ["process"]` | `getuid` seguro; via `libc` exigiria `unsafe`; `OD-24`, em `docs/spec-technical/open-decisions.md` |
+| uid do processo e grupo do helper | `rustix`, `default-features = false`, `features = ["process"]` | `getuid`, `kill_process_group` e `waitid` seguros; via `libc` exigiriam `unsafe`; `OD-24` e `OD-12`, em `docs/spec-technical/open-decisions.md` |
+| Contagem de heap | `cap` sobre `std::alloc::System`, como `#[global_allocator]` | Limite de memória do render (`FR-RND-039`), lido pelo thread do prazo; versão, política de limite rígido e alternativas rejeitadas: `ADR-011`, em `docs/adr/` |
 
 > **Decisão fechada — driver MariaDB.** A escolha, a regra que a decidiu, o candidato rejeitado e a medição que confirmou a escolha — desmentindo a suspeita que aqui estava escrita — estão em `ADR-003`, em `docs/adr/`. O âmbito do runtime está em `ADR-005`.
 

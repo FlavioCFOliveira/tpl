@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty-nine editions. All are in force;
+The specification has been written in forty-two editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -38,6 +38,10 @@ the thirty-third at thirty-two, each corrected by the edition after it rather
 than by the one that moved past it. Whoever opens an edition changes this
 number in the same pass, and the check is the cheapest in this file — the
 number here equals the number of edition sections below it.
+
+*Corrected again in the forty-second edition.* The line read *thirty-nine*
+while the fortieth and forty-first editions were written, recorded below, and
+in force.
 
 ### First edition — the command-line surface
 
@@ -3782,6 +3786,89 @@ the index of [open-questions.md](open-questions.md) stays empty.
 none conflicts with it, so none is amended. For a template and a cache in which
 nothing is missing, every output is what it was. Neither root document
 paraphrases a lookup, so the fifth validation rule owes nothing.
+
+### Forty-second edition — the bounds a hostile input found missing
+
+The security audit of sprint 20, recorded in `SECURITY-AUDIT.md` at the
+repository root, reported three findings and two hardening observations. The
+user selected five fixes, as decided for rmp `#252` through `#256`, and this
+edition writes the behaviour each fix needs. A re-verification of the first
+of them added a render memory limit to `#255`, and `#258` separates the render
+from the catalogue read; both are folded into this edition.
+
+**Eight identifiers are assigned — `FR-RND-036` through `FR-RND-040`,
+`FR-CONF-045`, `FR-SEC-025` and `FR-CTX-042`; none is retired and none is
+renumbered.** One term enters [glossary.md](glossary.md), *render bound /
+render fuel / render output limit / render memory limit*, and the entry *cache hit / cache miss* is amended. One entry of
+[upstream-divergences.md](upstream-divergences.md) is raised, `DIV-056`, and
+none is discharged. The index of [open-questions.md](open-questions.md) stays
+empty.
+
+- **A render is bounded by work, output and memory, not only by time**
+  (`#255`) — [render-command.md](render-command.md) and
+  [configuration-model.md](configuration-model.md). `FR-RND-036` bounds a
+  render by render fuel, counted by the template engine; `FR-RND-037` by the
+  render output limit, counted as bytes are produced; and `FR-RND-039` by the render memory limit, the heap the process
+  holds as its allocator counts it, observed periodically. Exceeding any of
+  the three is `65`, and the `cause` names the bound, its resolved value and
+  the key that raises it. `FR-RND-038` composes the three with the deadline
+  and gives each render of `FR-CACHE-039` whole bounds; an abandoned render
+  keeps all four until it returns, and one it crosses, before or after the
+  miss, ends the invocation with `65` and no server read, per `FR-CACHE-039`
+  and the note on `FR-ERR-006`. `FR-CONF-045` resolves
+  them from three new keys of `FR-CONF-002`: `core.render_fuel` (default
+  100 000 000, range 1 to 10^12), `core.render_output_limit`
+  (default 64 MiB, below the memory default because the output a render holds
+  counts toward it, range 1 byte to 1 TiB) and `core.render_memory_limit` (default 128 MiB, the
+  user's decision over the base recorded in `BENCHMARKS.md`, range 8 MiB to
+  1 TiB), with no flag and no environment layer, as for the deadline keys.
+  *Stated limit,* in `FR-RND-039`: the memory limit can be passed briefly
+  between two observations, and a single allocation the operating system
+  refuses aborts the process by a signal; the deadline is the backstop.
+  `FR-RND-036` first stated that memory was bounded only by the deadline and
+  rejected a hard cap; that text is superseded within this edition.
+  `FR-ERR-001`'s `65` cell and `FR-ERR-034`'s `65` row name the bounds;
+  `FR-SEC-025` records the threat closed, and `FR-SEC-022` carries a note.
+- **No connection outlives the catalogue read** (`#258`) —
+  [render-command.md](render-command.md). `FR-RND-040` closes the connection
+  and shuts down the driver's runtime before any render starts, on every path
+  of `tpl render` that reads the server, and names how it is verified: the
+  server records the session ended before the first byte of output, and the
+  suite asserts no connection or runtime is alive when the template begins.
+  `NFR-PERF-004` and `FR-CACHE-039` carry notes.
+- **The `password_command` deadline ends the whole process group** (`#252`) —
+  `FR-CONF-028` now starts the child in a process group of its own, ends the
+  phase only when the child has exited and its output has ended, and at the
+  deadline terminates the group and stops waiting on the pipe, with `78`. It
+  states where the termination stops: a descendant that leaves the group.
+  `FR-CONF-031` terminates the same group at the 4096-byte output cap, still
+  with `78`. `FR-SEC-012`, `FR-SEC-024` and `FR-CONF-043` follow both.
+- **A `--context` document must not dangle** (`#253`) —
+  [context-document.md](context-document.md). `FR-CTX-042` makes every table a
+  foreign key names, in either direction, a member of `tables` for a supplied
+  document, so a document that breaks it is `65` under `FR-RND-020` and
+  `FR-ERR-029` and never `70`. A column's `table_name` stays with
+  `FR-SEM-018`, which accepts that case on purpose. `FR-RND-020` carries a
+  note.
+- **A cached file holding another object is a miss** (`#254`) —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-033` extends to every read
+  of one named object the rule it gave a render: a file whose object differs
+  in kind or in name is a miss that reads the server, per `FR-CACHE-007`. File
+  naming is unchanged. `FR-CDOC-008` in
+  [cache-documents.md](cache-documents.md) says what "present" means.
+- **A symbolic link in the cache is never followed** (`#256`) —
+  `FR-CACHE-030` states the write guard, that a link at the target is replaced
+  and never left in place, and `FR-CACHE-033` the read guard, that an object
+  file that is a link is a miss.
+
+`FR-CONF-005`, `FR-CACHE-007`, `FR-CACHE-038`, `FR-CACHE-039`, `FR-CTX-023`,
+`FR-ENV-017`, `FR-SEM-017`, `FR-SEM-018`, `FR-ERR-006`, `FR-ERR-027`,
+`FR-ERR-028`, `FR-ERR-029`, `FR-ERR-030`, `FR-CFG-009`, `FR-CFG-010` and
+`FR-CFG-037` were read against the decisions and none conflicts with them, so
+none is amended. `tpl cfg` validates and lists keys by reference to
+`FR-CONF-002` and needs no change. By the fifth validation rule the root
+`README.md` owes one correction, `DIV-056`, because it counts the key space;
+`CLAUDE.md` paraphrases none of the requirements amended.
 
 ### Still out of scope
 

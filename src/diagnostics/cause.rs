@@ -260,7 +260,34 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                  {rule}",
                 path.display()
             )),
+            // FR-CTX-042: the path, the table carrying the key, the key, and
+            // the table it names that `tables` does not carry.
+            ContextFault::DanglingReference {
+                table,
+                collection,
+                key,
+                names,
+            } => Cow::Owned(format!(
+                "'{}' is well-formed JSON and does not satisfy the context-document contract: \
+                 table '{table}' lists key '{key}' under {collection}, and that key names table \
+                 '{names}', which tables does not carry",
+                path.display()
+            )),
         },
+        // The row obliges, for a render bound, which bound was exceeded, its
+        // resolved value, and the key that raises it (FR-RND-036, FR-RND-037).
+        Error::RenderFuelExhausted { fuel } => Cow::Owned(format!(
+            "the render exhausted its render fuel: it reached the limit of {fuel} evaluation \
+             steps before it finished; the bound is set by core.render_fuel"
+        )),
+        Error::RenderMemoryLimitExceeded { limit } => Cow::Owned(format!(
+            "the process was observed holding more heap than the render memory limit of {limit} \
+             bytes while the render ran; the bound is set by core.render_memory_limit"
+        )),
+        Error::RenderOutputLimitExceeded { limit } => Cow::Owned(format!(
+            "the render would have produced more than its render output limit of {limit} bytes, \
+             and stdout received none of it; the bound is set by core.render_output_limit"
+        )),
         // The row obliges which deadline expired and its resolved value.
         Error::RenderDeadlineExceeded { bound, limit } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
@@ -500,23 +527,27 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              name is defined in the environment tpl was invoked with",
             file.display()
         )),
+        // FR-CONF-028: the phase ends at the exit **and** the end of the
+        // standard output, so a child that exited while a descendant held its
+        // output is still "not finished", and the whole group is ended.
         Error::PasswordCommandDeadlineExceeded {
             command,
             bound,
             limit,
         } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
-                "password_command {command:?} had not exited when its own deadline of {limit:?} \
-                 expired, and the child was terminated"
+                "password_command {command:?} had not both exited and closed its standard output \
+                 when its own deadline of {limit:?} expired, and its process group was terminated"
             )),
             DeadlineBound::Overall => Cow::Owned(format!(
-                "password_command {command:?} had not exited when the overall budget of {limit:?}, \
-                 measured from process start, expired, and the child was terminated"
+                "password_command {command:?} had not both exited and closed its standard output \
+                 when the overall budget of {limit:?}, measured from process start, expired, and \
+                 its process group was terminated"
             )),
         },
         Error::PasswordCommandOutputCapExceeded { command, cap } => Cow::Owned(format!(
-            "password_command {command:?} was terminated after writing more than {cap} bytes to \
-             its standard output"
+            "password_command {command:?} wrote more than {cap} bytes to its standard output, and \
+             its process group was terminated"
         )),
         // FR-CONF-042: the line names the command as stored, says which of the
         // two conditions occurred, and names what the operating system

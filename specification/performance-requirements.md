@@ -267,6 +267,10 @@ a summary.
 
 - **NFR-PERF-004**: One invocation SHALL open at most one connection.
 
+  *Note added in the forty-second edition.* `FR-RND-040` closes that
+  connection, and shuts down the driver's runtime, before a render starts, so
+  no connection is open while a template is evaluated.
+
 - **NFR-PERF-005**: Every command named by `FR-PROJ-025` SHALL perform no
   project discovery, SHALL read no configuration file, and SHALL open no
   connection. Those commands are `tpl init`, every form of `help`, and every

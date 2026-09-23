@@ -285,10 +285,19 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             ContextFault::NotJson(_) => {
                 Cow::Borrowed("produce a well-formed context document with: tpl schema dump")
             }
-            ContextFault::Structure { .. } => {
+            ContextFault::Structure { .. } | ContextFault::DanglingReference { .. } => {
                 Cow::Borrowed("produce a document that matches the contract with: tpl schema dump")
             }
         },
+        Error::RenderFuelExhausted { .. } => Cow::Borrowed(
+            "raise the render fuel with: tpl cfg set core.render_fuel <evaluation steps>",
+        ),
+        Error::RenderMemoryLimitExceeded { .. } => Cow::Borrowed(
+            "raise the render memory limit with: tpl cfg set core.render_memory_limit <bytes>",
+        ),
+        Error::RenderOutputLimitExceeded { .. } => Cow::Borrowed(
+            "raise the render output limit with: tpl cfg set core.render_output_limit <bytes>",
+        ),
         Error::RenderDeadlineExceeded { bound, .. } => match bound {
             DeadlineBound::Phase => Cow::Borrowed(
                 "raise the render deadline with: tpl cfg set core.render_timeout <seconds>",
@@ -747,7 +756,7 @@ pub(super) fn admits_path(path: &str) -> bool {
 /// The `.` between key segments is a literal, per `FR-ERR-022`, so a key is
 /// tested segment by segment rather than refused for carrying a dot — which is
 /// what dropped every key of `FR-CONF-002` before the twentieth edition, none
-/// of the fifteen forms matching the character set as a whole.
+/// of the eighteen forms matching the character set as a whole.
 ///
 /// It is the second of the four spelling tests and lives beside the other
 /// three for the reason [`admits_flag`] states.

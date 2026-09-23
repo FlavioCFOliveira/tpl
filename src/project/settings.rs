@@ -38,6 +38,7 @@ use super::password;
 use super::secret::Secret;
 use crate::deadline::{Clock, Deadlines, Phase, Seconds};
 use crate::error::Error;
+use crate::render::RenderBounds;
 
 /// The default of `database.<name>.port` (`FR-CONF-002`).
 const DEFAULT_PORT: u16 = 3306;
@@ -220,6 +221,21 @@ pub(crate) fn deadlines(configuration: &Configuration) -> Deadlines {
         core.query_timeout,
         core.password_timeout,
         core.render_timeout,
+    )
+}
+
+/// The three render bounds of `FR-CONF-045`, resolved from `[core]`.
+///
+/// Each takes the value the file declares for its key, or the built-in default
+/// of `FR-CONF-002` where the file declares none. No flag and no environment
+/// variable participates, and `--timeout` does not either.
+pub(crate) fn render_bounds(configuration: &Configuration) -> RenderBounds {
+    let core = configuration.core();
+
+    RenderBounds::resolve(
+        core.render_fuel,
+        core.render_output_limit,
+        core.render_memory_limit,
     )
 }
 

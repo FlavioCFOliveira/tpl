@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [README.md, open-decisions.md]
 ---
 
@@ -62,9 +62,9 @@ surface alone, so closing the gap below leaves a second and later one of ten
 editions. The last two of them were written in the sprint that closed the first
 gap: eleven identifiers were added across the two, thirty entries of the
 divergence register were discharged and two were opened, and none of it is
-reflected in the rows below. **The mapping is current with the twenty-second
-edition and behind by ten.** That count is the one the last harvest recorded,
-not a fresh one.
+reflected in the rows below. **The mapping was current with the twenty-second
+edition and behind by ten** when the last harvest recorded it; the count as of
+2026-09-23 is below.
 
 **Two rows of section 11 are harvested ahead of that gap**, on 2026-09-22:
 `FR-CONF-014` as the thirty-second edition amended it, and `FR-CONF-044`, which
@@ -73,6 +73,16 @@ had **no technical answer anywhere in this folder** — no row here, and no
 passage in [security.md](security.md), where the trust material's assembly is
 answered. Nothing else of that edition, or of any other unharvested one, is
 reflected below.
+
+**The forty-second edition is harvested ahead of the gap**, on 2026-09-23, whole
+and out of order, because the code built against it had no technical answer in
+this folder. Its eight identifiers — `FR-RND-036` … `FR-RND-040`,
+`FR-CONF-045`, `FR-SEC-025`, `FR-CTX-042` — and its amendments to
+`FR-CONF-002`, `FR-CONF-028`, `FR-CONF-031`, `FR-CACHE-030`, `FR-CACHE-033`,
+`FR-CACHE-039`, `FR-CDOC-008`, `FR-SEC-012`, `FR-SEC-024`, `FR-ERR-001`,
+`FR-ERR-006` and `FR-ERR-034` move rows in sections 7, 8, 9, 11, 14, 15, 18, 23
+and 24. Counting it, **the mapping is behind by eighteen editions**: the
+twenty-third to the forty-first, less the two rows of the thirty-second above.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -237,6 +247,10 @@ that honours it.
 | With `--context`, no connection is opened and the cache is neither read nor written | `FR-RND-022`, `NFR-PERF-006` | `architecture` |
 | A render failure carries template, line, column and the **chain of underlying engine errors**; stdout carries at most one incomplete result | `FR-RND-030`, `FR-RND-031`, `FR-RND-034` | `interfaces` (`OD-06`) |
 | The render deadline is a hard requirement on a synchronous engine call | `FR-RND-033`, `FR-CONF-005` | `architecture` (`OD-12`) |
+| Three further bounds on every render: fuel counted by the engine, output counted by the writer as it is produced, and heap counted by an allocator and **observed periodically**, so the overshoot is bounded by the poll interval and an allocation the OS refuses still aborts | `FR-RND-036`, `FR-RND-037`, `FR-RND-039` (forty-second edition) | `architecture`, `technology-stack`, `security` ([`ADR-011`](../adr/adr-011-render-memory-accounting.md)) |
+| The four bounds compose, the first crossed is reported, and an abandoned render keeps all four until it returns, so the watchdog cannot stand down at a miss | `FR-RND-038`, `FR-CACHE-039` | `architecture` (`OD-12`) |
+| The output is held in memory until the render returns, and so counts toward the memory limit | `FR-RND-037`, `FR-RND-034`, `FR-CONF-045` | `architecture` |
+| No connection and no driver runtime is alive while a template evaluates, verified from the server side and in process — a runtime lifetime and a quiescence check the render can ask | `FR-RND-040` | `architecture`, `verification` (`OD-11`) |
 | Two findings must survive if file writing ever returns: filename expressions are a path-injection sink, and two objects can collapse onto one filename after a casing filter | `BR-RND-003` | `decisions` |
 
 ---
@@ -251,6 +265,7 @@ that honours it.
 | `--direct` and `--no-cache` are orthogonal and compose into four behaviours; `--no-cache` on `cache load` is `64` | `FR-CACHE-015`, `FR-CACHE-019` | `interfaces` |
 | One file per object, written through a temporary file in the same directory and renamed over the target; **no lock** | `FR-CACHE-030`, `FR-CACHE-031` | `data-model`, `architecture` |
 | An unreadable file or unknown version is a **silent miss**; a failed write is a **silent success** at exit `0` with stdout unchanged | `FR-CACHE-033`, `FR-CACHE-036` | `architecture`, `interfaces` |
+| A named read whose file holds another object is a miss; an object file that is a symbolic link is a miss and never read through, and a link at a write target is replaced — the file inspected must be the file opened | `FR-CACHE-033`, `FR-CACHE-030` (forty-second edition) | `data-model`, `security` (`OD-10`) |
 | An object marked `restricted` is never written, and a collection containing one is never recorded whole | `FR-CACHE-037` | `data-model` |
 | `cache status` is the supported way to learn the cache's state; the on-disk layout is **not** plumbing contract | `BR-CACHE-001`, `FR-CACHE-034` | `data-model` (`OD-10`) |
 
@@ -262,7 +277,7 @@ that honours it.
 |---|---|---|
 | `meta.json` carries **two independent versions**: `cache_format` for the arrangement, `schema_version` for the content; neither is bumped for the other | `FR-CDOC-001` … `FR-CDOC-005` | `data-model` (`OD-03`) |
 | Either version unknown to the binary is a miss: the reader must parse `meta.json` before trusting anything under it | `FR-CDOC-004` | `data-model` |
-| Per-collection completeness decides whether a **listing** may be served; an individual object is served whenever present | `FR-CDOC-006` … `FR-CDOC-008` | `data-model` |
+| Per-collection completeness decides whether a **listing** may be served; an individual object is served whenever present, and *present* means a regular file holding that object | `FR-CDOC-006` … `FR-CDOC-008` | `data-model` |
 | `source` is an enumerated string on the envelope, never a boolean, never on an object | `FR-CDOC-009`, `FR-CDOC-010`, `FR-OUT-029` | `interfaces` |
 | `loaded_at` appears in `meta.json` and in `cache status` and **nowhere else** | `FR-CDOC-012`, `FR-CDOC-013` | `data-model` |
 | A cached routine's path carries its kind: `routines/<kind>.<name>.json` — the only on-disk name the functional spec fixes, and it implies a JSON encoding | `FR-CDOC-014` | `data-model` (`OD-10`) |
@@ -298,7 +313,8 @@ that honours it.
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | TOML, one file, no global configuration, no home/XDG/`/etc` fallback | `FR-CONF-001`, `FR-CONF-003` | `data-model` |
-| Fifteen keys with declared types and defaults; the key space is the validator's population and `cfg list`'s shape | `FR-CONF-002` | `data-model` |
+| Eighteen key forms, eight under `[core]`, with declared types and defaults; the key space is the validator's population and `cfg list`'s shape | `FR-CONF-002` (forty-second edition) | `data-model` |
+| Three render-bound keys with closed ranges and no value meaning "no bound", resolved from the file or the default alone: `78` from the file, `64` from `tpl cfg set` | `FR-CONF-045` | `data-model`, `interfaces` |
 | **Strict in both directions**: an unrecognised key anywhere is `78` with a suggestion; `password_command` not an array is `78` with the array form in the hint | `FR-CONF-034`, `FR-CONF-035`, `BR-CONF-004` | `data-model`, `security` |
 | An error must name the **line** of `.cfg` that carries the fault | `FR-CONF-035` example; `FR-ERR-034` row `78` | `data-model` (`OD-09`) |
 | Naming the offending key, its position and the file printed literally with passwords spliced in place are three facts a field-mapped read cannot produce, so the read path is a **spanned document tree** | `FR-CONF-034`, `FR-CONF-035`, `FR-CFG-013`, `FR-CFG-021` | `data-model`, `technology-stack` (`OD-09`) |
@@ -306,6 +322,7 @@ that honours it.
 | The environment is a **parameter** of expansion and not a call inside it: the input is untrusted, and in edition 2024 setting a variable is an `unsafe` operation the crate forbids itself | `FR-SEC-007`, `FR-CONF-015`, `BR-CONF-003` | `architecture`, `security` |
 | A credential is carried in a type with no display and no serialisation, whose debug writes a placeholder — the prohibition is held by denying the value a way to be printed | `FR-ERR-013`, `FR-GLOB-018`, `BR-SEC-003` | `security` |
 | The 4096-byte cap is applied **at the pipe**, and the child is bounded by a reader thread and a polling loop rather than by a runtime timer, because the runtime is scoped to the database module and is not built for an invocation that connects to nothing | `FR-CONF-031`, `FR-CONF-028` | `interfaces`, `architecture` (`OD-12`, `ADR-005`) |
+| The child leads a process group of its own; the phase ends at exit **and** end of file; the deadline and the cap kill the whole group, the child is reaped only after the kill so its pid is not reused, and the pipe is not waited on past the deadline | `FR-CONF-028`, `FR-CONF-031` (forty-second edition) | `interfaces`, `security`, `technology-stack` (`OD-12`) |
 | Five admitted/refused combinations of connection and password keys, decided before any connection | `FR-CONF-007` | `interfaces` |
 | A DSN carries **no** query parameters; a `?` is `78` whatever follows it | `FR-CONF-011`, `FR-CONF-012` | `interfaces`, `security` |
 | Five TLS modes, set **explicitly on every connection**, never inherited from the driver's default — including `disabled` | `FR-CONF-013`, `FR-CONF-037` | `security` (`OD-16`) |
@@ -381,6 +398,7 @@ that honours it.
 | Every interpolated value in a message escapes `\n`, `\r`, `\t` and C0 — a different rule from the `text` read output, which is the one path that excepts tab | `FR-ERR-024`, `FR-OUT-018` | `security`, `interfaces` |
 | `EPIPE` is `0` normally and `74` if a JSON document was mid-flight: the writer must know whether it is inside a document | `FR-ERR-025`, `FR-ERR-026` | `architecture`, `interfaces` |
 | Nine codes carry at least one integration test, part of the definition of done; `70` is the single exception and is exercised in process | `BR-ERR-001` | `verification` |
+| A render bound's `cause` names the bound, its resolved value and the key that raises it, so each bound is its own variant; a bound an abandoned render crosses is step 8's `65`, with no return to the cache-or-connection step | `FR-ERR-034` row `65`, `FR-ERR-001`, `FR-ERR-006` (forty-second edition) | `interfaces`, `architecture` |
 
 **Two contradictions recorded, both from the harvest of editions ten to
 twenty.**
@@ -388,7 +406,7 @@ twenty.**
 | Row as it stood | What contradicted it |
 |---|---|
 | *each distinct condition has its own code and is not collapsed* | The **twentieth edition** amended `FR-ERR-002` and stated that the sentence was refuted three times over: by `FR-ERR-006`, which routes every parsing fault to `64` by design; by the hundred and twelve requirements outside that file that name a code; and by `FR-ERR-035`, which routes one key to three codes *because* three next steps differ. The obligation that survives is one code per condition, named by the owning requirement |
-| *built only from literals and `[A-Za-z0-9_]{1,64}`* | The **twentieth edition** found `FR-ERR-021` and `FR-ERR-022` in outright contradiction: no key of `FR-CONF-002` matches the set, because all fifteen key forms carry a dot, so two of the eight populations `FR-ERR-021` names could never be suggested. Widening the set was rejected; the distinction between a literal and a value is what replaced it |
+| *built only from literals and `[A-Za-z0-9_]{1,64}`* | The **twentieth edition** found `FR-ERR-021` and `FR-ERR-022` in outright contradiction: no key of `FR-CONF-002` matches the set, because all fifteen key forms carry a dot — eighteen since the forty-second edition, all dotted — so two of the eight populations `FR-ERR-021` names could never be suggested. Widening the set was rejected; the distinction between a literal and a value is what replaced it |
 
 Neither row is overwritten silently: what each asserted is recorded here beside
 what replaced it.
@@ -405,6 +423,8 @@ what replaced it.
 | A known **sentinel password must never appear in any byte** `tpl` writes: every command of the tree, at maximum verbosity, on both streams. This is a whole-surface test, not a per-path one | `BR-SEC-003` | `verification`, `security` |
 | The read-only promise has two parts, and only the closed statement list prevents; the session setting detects | `BR-SEC-002`, `BR-SRV-001`, `BR-SRV-002` | `security`, `architecture` |
 | Every blocking phase has a deadline, because a hung process is the failure "never interactive" exists to prevent | `FR-SEC-022` | `architecture` (`OD-12`) |
+| The `password_command` deadline and cap end the child's whole process group; a descendant that left the group survives, and the invocation still ends at the deadline | `FR-SEC-012`, `FR-SEC-024` (forty-second edition) | `security` (`OD-12`) |
+| A render is bounded on work, output and memory as well as time; the memory limit's two residuals are stated, not closed | `FR-SEC-025` | `security` ([`ADR-011`](../adr/adr-011-render-memory-accounting.md)) |
 | This file is a cross-reference, not a second source: the technical `security.md` must likewise cite its owning requirement and not restate it | `BR-SEC-001` | `security` |
 
 ---
@@ -457,6 +477,7 @@ what replaced it.
 | The `database` object carries three metadata fields, a three-key `server` object, and three collections — `server` derived from the version probe, not the catalogue | `FR-CTX-031`, `FR-CTX-035`, `FR-CTX-036` | `data-model` |
 | `standing` is enumerated and **unconditionally present**; a conditional marker would fail the guard that looks for it | `FR-CTX-034`, `BR-SRV-008`, `FR-SEM-012` | `interfaces` |
 | A `--context` document is validated **structurally only**: three keys present, strings, `standing` in range; never against the current window | `FR-CTX-033` | `security`, `interfaces` |
+| A supplied document whose foreign key names a table `tables` does not carry is `65`, never `70`; a column's `table_name` is not such a reference | `FR-CTX-042` | `interfaces`, `security` |
 | `now` is one RFC 3339 UTC second-precision string, evaluated **once per invocation** | `FR-CTX-028`, `FR-CTX-029` | `architecture` (`OD-25`) |
 | A server read promises referential integrity and **not** a point-in-time snapshot; a cache-served document promises neither | `FR-CTX-023` … `FR-CTX-025` | `data-model` |
 
@@ -547,6 +568,7 @@ what replaced it.
 | Technical concern | Drawn from | Doc |
 |---|---|---|
 | Six **requirements of form** constrain the design from the first commit: query count independent of object count for a full read and for a single object, no connection on a cache hit, at most one connection, nothing at all for four commands, no connection for any command needing no catalogue | `NFR-PERF-001` … `NFR-PERF-006` | `quality-attributes`, `architecture` |
+| The one connection of `NFR-PERF-004` is closed, and its runtime gone, before a render starts | `NFR-PERF-004` note, `FR-RND-040` (forty-second edition) | `architecture` (`OD-11`) |
 | Each is verified from **outside the process**, never by reading the source, by **four** named instruments — the statements a server receives, the connections it accepts, a syscall trace, and a differential run — each usable only on the targets its row names: the trace on the two Linux targets, the other three on all four | `NFR-PERF-007`, `NFR-PERF-018`, `BR-SRV-003` | `verification` |
 | The query count must be observable from the diagnostic stream, which makes one diagnostic line structurally load-bearing although stderr is not contract | `NFR-PERF-008`, `FR-GLOB-017` | `operations`, `verification` (`OD-17`) |
 | Exactly four targets; Linux is `musl`, statically linked; no target is second class. The parity is of **results**, not of instruments: one instrument of `NFR-PERF-007` exists on two targets only | `NFR-PERF-018` | `operations`, `verification` |
@@ -566,7 +588,7 @@ what replaced it.
 
 | Technical concern | Drawn from | Doc |
 |---|---|---|
-| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
+| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series, and — since the forty-second edition — render bound, render fuel, render output limit, render memory limit. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
 | `plumbing` / `porcelain` name the two output audiences; the technical spec's naming of modules and types should not invent a third vocabulary | *plumbing*, *porcelain* | `interfaces` |
 | One term already carries two meanings by decision — `schema` (the arm, and the `--schema` flag) — and code naming must disambiguate rather than pick one | *schema (the word, two meanings)*; `FR-CFG-028` | `interfaces` |
 | `target` is defined as one of four build targets: the word is reserved and must not be reused for a render target | *target*; `NFR-PERF-018` | `operations`, `quality-attributes` |
@@ -657,7 +679,7 @@ and each is the reason a document of this folder exists.
 | **One model, three sources.** A live read, a cached read and a `--context` document must present the same objects and fields, so the model is the single junction of three producers and three consumers — `text`, `json`, and the render | `catalogue-coverage.md` *Overview*; `BR-SCH-001`, `FR-SCH-022` | `architecture`, `interfaces` |
 | **Silent wrongness is the failure mode the corpus is written against.** Every fail-loud rule — no coercion, strict field access, `77` for a named short read, refusal of a marked context, exclusion of volatile fields — is one design stance applied repeatedly | `BR-SEM-004`, `BR-PRIV-001`, `BR-CAT-002`, `FR-SRV-003` | `overview`, `architecture` |
 | **The seventeen JSON documents share one envelope and one emitter.** Seventeen payload shapes, one outer shape, one ordering rule, one escaping rule, one encoding rule | `FR-OUT-024`, `BR-OUT-002` | `interfaces` |
-| **Fourteen mandated tests are part of the contract, not of the plan.** `BR-ERR-001`, `BR-HELP-001`, `BR-HELP-003` (three), `BR-SCH-004`, `BR-SEC-003`, `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-029` (two), `FR-SRV-035`, and the published test vectors of `FR-ENV-032`, `FR-ENV-033`, `FR-ENV-041` and `FR-ENV-046` | as cited | `verification` |
+| **Fifteen mandated tests are part of the contract, not of the plan.** `BR-ERR-001`, `BR-HELP-001`, `BR-HELP-003` (three), `BR-SCH-004`, `BR-SEC-003`, `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-029` (two), `FR-SRV-035`, `FR-RND-040` (forty-second edition), and the published test vectors of `FR-ENV-032`, `FR-ENV-033`, `FR-ENV-041` and `FR-ENV-046` | as cited | `verification` |
 
 ## Editorial defects found while harvesting
 

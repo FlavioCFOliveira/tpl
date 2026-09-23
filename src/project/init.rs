@@ -82,12 +82,15 @@ const CONFIGURATION_TEMPLATE: &str = "\
 #
 # The keys of [core]:
 #
-#   database         = \"shop\"   the entry every invocation uses when
-#                                -d/--database is absent; no default
-#   connect_timeout  = 10        seconds, shared by DNS, TCP and TLS
-#   query_timeout    = 30        seconds, per catalogue query
-#   password_timeout = 5         seconds, for password_command
-#   render_timeout   = 30        seconds, for one render
+#   database            = \"shop\"     the entry every invocation uses when
+#                                    -d/--database is absent; no default
+#   connect_timeout     = 10         seconds, shared by DNS, TCP and TLS
+#   query_timeout       = 30         seconds, per catalogue query
+#   password_timeout    = 5          seconds, for password_command
+#   render_timeout      = 30         seconds, for one render
+#   render_fuel         = 100000000  evaluation steps, for one render
+#   render_output_limit = 67108864   bytes, for one render
+#   render_memory_limit = 134217728  bytes of heap, while one render runs
 #
 # A database entry, in the two shapes it may take. Copy one, name it, and
 # uncomment it — or let `tpl cfg database add` write it for you.

@@ -884,6 +884,36 @@ emits — `FR-SCH-018` keeps them out of it.
   reference can point into is the document's own `tables` collection and
   nothing deeper. Nothing this requirement promises changes.
 
+- **FR-CTX-042**: WHEN the document is supplied to `--context`, every table
+  that a foreign key of a member of `tables` names — the referenced table of a
+  key under its `foreign_keys`, and the referencing table of an entry under its
+  `referenced_by` — SHALL itself be a member of `tables`. A key whose
+  referenced table is `null`, per `FR-CTX-006`, names no table. A document that
+  breaks this rule does not match the document contract and is `65`
+  (`EX_DATAERR`) under `FR-RND-020` and `FR-ERR-029`, and the `cause` SHALL
+  name the path, the table that carries the key, the key, and the table it
+  names that `tables` does not carry.
+
+  *Added in the forty-second edition, as decided for rmp `#253`.*
+  `FR-CTX-023` promises this of a document a server read produces, and said
+  nothing of a document a caller supplies, so a document that broke it matched
+  every structural rule written and reached the render as a defect of `tpl`.
+  The security audit recorded in `SECURITY-AUDIT.md` at the repository root
+  found, as its finding SEC-02, that such a document exits `70` and asks the
+  caller to report a defect. A `--context` document is untrusted input, per
+  the trust boundaries of [security.md](security.md), and a fault in it is the
+  caller's to correct, which is what `65` means. `FR-ERR-030` keeps `70` for
+  defects of `tpl` alone.
+
+  *What this rule does not reach.* A column's `table_name` is not a reference
+  under this requirement. A `--context` document whose column names a table
+  absent from the context is accepted, and the test that must resolve it fails
+  the render with `65` when it is applied, per `FR-SEM-017`, `FR-SEM-018` and
+  `FR-ENV-017`, which make that case reachable on purpose. The embedded tables
+  of `FR-CTX-006` and `FR-CTX-010`, and the names `FR-CTX-008` carries inside
+  them, are copies of what the members of `tables` hold, and this rule does
+  not check them apart.
+
 - **FR-CTX-024**: The document SHALL NOT promise to be a point-in-time snapshot,
   and the specification SHALL state that it is not one.
 

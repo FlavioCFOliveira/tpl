@@ -2,7 +2,7 @@
 title: Render Command (Third Arm)
 status: approved
 last-reviewed: 2026-09-23
-related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md]
+related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md, configuration-model.md, context-document.md]
 ---
 
 # Render Command (Third Arm)
@@ -16,7 +16,8 @@ and one invocation produces exactly one rendered result on stdout.
 ## Scope
 
 In scope: the positional argument, the object flags, `--set`, `--context`, how
-the context is assembled from its sources, and what the command does not have.
+the context is assembled from its sources, the bounds on a render, and what the
+command does not have.
 
 Out of scope: the template language, the content of the context variables, the
 filters and tests available to a template, and how the catalogue is read.
@@ -184,6 +185,11 @@ tpl render <template> --routine <name>      binds routine
   document, which is what `65` means and where `FR-RND-035` draws the line
   between the two.
 
+  *Note added in the forty-second edition.* The structural rules this
+  requirement names include `FR-CTX-042`: a document in which a foreign key
+  names a table its `tables` collection does not carry does not match the
+  contract and is `65` here, never `70`.
+
 - **FR-RND-035**: IF the file or the stream supplied to `--context` cannot be
   read — it does not exist, the filesystem refused the read, or the stream
   failed part-way — THEN the system SHALL exit `74` (`EX_IOERR`), and the
@@ -263,6 +269,29 @@ tpl render <template> --routine <name>      binds routine
   let a stale catalogue produce wrong code that then gets committed; caching
   both keeps the two consistent.
 
+- **FR-RND-040**: WHEN `tpl render` reads the server — a read under `--direct`
+  or `--no-cache`, a cache miss under `FR-CACHE-007`, or the read of
+  `FR-CACHE-039` after an abandoned render — the system SHALL close the
+  connection that read the catalogue, ending the session with the server and
+  closing the socket, and SHALL shut down every runtime the database driver
+  started, before the render starts. No connection SHALL be open, and no
+  runtime of the driver SHALL be alive, while a template is evaluated.
+
+  *Verification.* Two observations, both required. From the server side,
+  through the fixture harness, the fixture's server SHALL record the session
+  as ended before the first byte of the render reaches stdout. In process, the
+  suite SHALL assert, at the moment the template begins to evaluate, that no
+  connection is open and no runtime of the driver is alive.
+
+  *Added in the forty-second edition, as decided for rmp `#258`.* The render
+  is separated completely from the catalogue read: nothing of the read is
+  alive while a template runs, so a render bound of `FR-RND-038` measures the
+  render and nothing else, and a render that runs long holds no session open
+  on the server. `NFR-PERF-004` and `FR-CACHE-039` were read against the rule
+  and neither conflicts: the one connection an invocation may open is closed
+  before the render, and the read of `FR-CACHE-039` opens it only after the
+  abandoned render has ended. Each carries a note citing this requirement.
+
 - **FR-RND-027**: `tpl render` SHALL NOT declare `--format` or `--pretty`. Its
   result is the rendered text, which has no alternative representation.
   `tpl render x --format json` is therefore `64`, per `FR-CLI-019`, and the
@@ -317,6 +346,150 @@ tpl render <template> --routine <name>      binds routine
 - **FR-RND-033**: IF the render deadline is exceeded, THEN the system SHALL exit
   `65`.
 
+  *Note added in the forty-second edition.* The deadline is no longer the only
+  bound on a render. `FR-RND-036` bounds the work a render does,
+  `FR-RND-037` the bytes it produces and `FR-RND-039` the memory the process
+  holds while it runs, and `FR-RND-038` states how the four compose.
+
+- **FR-RND-036**: The system SHALL bound each render by its render fuel, as
+  [glossary.md](glossary.md#render-bound--render-fuel--render-output-limit--render-memory-limit)
+  defines it, with a budget equal to the value `FR-CONF-045` resolves for
+  `core.render_fuel`. IF a render exhausts its render fuel, THEN the system
+  SHALL end the render and SHALL exit `65` (`EX_DATAERR`), and the `cause`
+  SHALL name render fuel as the bound exceeded, its resolved value, and the key
+  `core.render_fuel` that raises it, per the `65` row of `FR-ERR-034`. Render
+  fuel counts evaluation steps and not bytes held: memory a render grows within
+  its budget is bounded by the render memory limit of `FR-RND-039`.
+
+  *Added in the forty-second edition, as decided for rmp `#255`.* The security
+  audit recorded in `SECURITY-AUDIT.md` at the repository root found, as its
+  hardening observation H-1, a template that grows memory through a
+  `namespace` and is stopped only by the render deadline, or first by the
+  operating system under memory pressure, in which case the process dies by a
+  signal and not with `65`. Render fuel ends a runaway loop at a count rather
+  than at a time: the same template over the same context fails at the same
+  step on every run, which a wall-clock deadline cannot promise. Growth that
+  needs only a few steps, which is the shape H-1 recorded, is bounded by
+  `FR-RND-039` instead.
+
+  *Accepted cost.* The template engine counts the steps, so a change to the
+  pinned engine of `FR-ENV-003` can change how many steps one template
+  consumes. The default of `FR-CONF-002` sits far enough above any legitimate
+  render, per the rationale of `FR-CONF-045`, that such a change does not bring
+  one near it.
+
+  *Consequence.* Render fuel does not bound memory. Doubling a string costs a
+  handful of steps, and a string doubled a few dozen times holds gigabytes;
+  `FR-RND-037` does not bound it either, because the string need never be
+  written. `FR-RND-039` is the bound that stops it.
+
+  *Amended within the forty-second edition.* This requirement first stated
+  that memory grown within the budget was bounded only by the render deadline,
+  and rejected a hard memory cap on the ground that a counting allocator needs
+  `unsafe`. A re-verification then measured a render reaching 16 981 MB of
+  resident memory inside the fuel budget, and the user required a memory limit.
+  A counting allocator provided by a crate needs no `unsafe` in `tpl`, so the
+  ground of the rejection does not hold; which allocator counts is a matter for
+  the technical specification and the architecture decision records, not for
+  this corpus. The limit and its own stopping point are `FR-RND-039`.
+
+- **FR-RND-037**: The system SHALL bound the bytes each render produces by its
+  render output limit, as
+  [glossary.md](glossary.md#render-bound--render-fuel--render-output-limit--render-memory-limit)
+  defines it, equal to the value `FR-CONF-045` resolves for
+  `core.render_output_limit`. The system SHALL count the bytes as the render
+  produces them, and SHALL NOT hold the result whole in order to count it. IF a
+  render would produce more bytes than the limit, THEN the system SHALL end the
+  render so that stdout receives no byte beyond the limit, and SHALL exit `65`,
+  and the `cause` SHALL name the render output limit as the bound exceeded, its
+  resolved value, and the key `core.render_output_limit` that raises it, per
+  the `65` row of `FR-ERR-034`.
+
+  *Added in the forty-second edition, as decided for rmp `#255`.* A template
+  that writes without end fills whatever stdout is redirected to, and before
+  this requirement nothing but the render deadline stopped it. Counting the
+  bytes as they are produced costs a counter and no buffer of its own.
+
+  *Amended within the forty-second edition.* The note said the memory a render
+  holds does not grow with its output. It does: the render holds its output
+  until it ends, because `FR-RND-034` with `FR-CACHE-039` forbids any byte of
+  an abandoned render reaching stdout, and that output counts toward the
+  render memory limit of `FR-RND-039`. The default of this limit is therefore
+  set below the default of that one, per the rationale of `FR-CONF-045`, so
+  that output without end is reported as reaching this limit and not as
+  crossing the memory limit.
+
+  *Consequence.* The incomplete result `FR-RND-034` admits on stdout is at most
+  the limit's length.
+
+- **FR-RND-039**: The system SHALL bound the memory each render may hold by
+  its render memory limit, as
+  [glossary.md](glossary.md#render-bound--render-fuel--render-output-limit--render-memory-limit)
+  defines it, equal to the value `FR-CONF-045` resolves for
+  `core.render_memory_limit`. The quantity bounded SHALL be the heap bytes the
+  process holds allocated, as counted by its allocator, while the render phase
+  runs. IF the observed count crosses the limit, THEN the system SHALL end the
+  render, SHALL write nothing further to stdout, so that stdout carries at most
+  the one incomplete result `FR-RND-034` admits, and SHALL exit `65`
+  (`EX_DATAERR`), and the `cause` SHALL name the render memory limit as the
+  bound exceeded, its resolved value, and the key `core.render_memory_limit`
+  that raises it, per the `65` row of `FR-ERR-034`. The count is observed
+  periodically, so the process MAY hold more than the limit between one
+  observation and the next; the overshoot is bounded by what the render can
+  allocate within one observation interval, and no exact byte guarantee is
+  made. A single allocation the operating system refuses outright ends the
+  process by a signal before the limit is observed, and not with `65`.
+
+  *Added in the forty-second edition, as decided for rmp `#255`.* A
+  re-verification of `FR-RND-036` measured a render growing to 16 981 MB of
+  resident memory through string doubling in a `namespace`, inside the fuel
+  budget, which is the shape of hardening observation H-1 of
+  `SECURITY-AUDIT.md`. Neither render fuel nor the render output limit can see
+  it, and the deadline sees it only after the machine has paid for it. The
+  limit ends such a render with `65` and a diagnosis, where the operating
+  system would end it with a signal and none.
+
+  *Where the guarantee stops.* Two ways out remain, and both end by a signal
+  rather than with `65`. The first is the overshoot above: a render that
+  allocates faster than it is observed can pass the limit before it is
+  stopped, and the machine must hold that much. The second is a single
+  allocation the operating system refuses outright: stable Rust cannot
+  intercept an allocation failure, so the process aborts — typically with exit
+  `134`, `SIGABRT` — and no `cause` is written. The render deadline of
+  `FR-RND-033` remains the backstop for a render that neither bound stops.
+
+  *Consequence, stated plainly.* The limit bounds the memory a render is
+  observed to hold, not the peak the process reaches. A caller who needs a
+  hard ceiling on the machine's memory must impose it outside `tpl`.
+
+  *What would change this.* An allocator that refuses an allocation beyond the
+  limit and lets the render end with `65`, on every target of `NFR-PERF-018`.
+  It would narrow this requirement's stopping point to the refused allocation
+  alone.
+
+  *This limit joins neither family of the
+  [README](README.md#writing-conventions).* It limits what a render bound
+  guarantees, which is neither a guarantee about a server, a table or a trust
+  store nor the evidence for one. It takes the note shapes both families use
+  without joining either, as `FR-CONF-033` does, and both families keep their
+  counts.
+
+- **FR-RND-038**: The render deadline of `FR-RND-033`, render fuel under
+  `FR-RND-036`, the render output limit under `FR-RND-037` and the render
+  memory limit under `FR-RND-039` SHALL apply to every render together. The
+  first of the four to be exceeded SHALL end the render, and the `cause` SHALL
+  name that one. A render abandoned under `FR-CACHE-039` and the render that
+  follows it SHALL each have the whole budget of render fuel, the whole render
+  output limit and the whole render memory limit, as each has the whole
+  deadline. The abandoned render SHALL keep all four until it has returned,
+  before the miss and after it; `FR-CACHE-039` states the outcome when it
+  crosses one.
+
+  *Added in the forty-second edition.* The last sentence gives the three
+  bounds the rule `FR-CACHE-039` already gives the deadline, for the same
+  reason: the render that produces the result must not be charged for the one
+  that was abandoned.
+
 - **FR-RND-034**: WHEN a render fails, stdout SHALL carry at most one incomplete
   result, and SHALL carry nothing from a render abandoned under `FR-CACHE-039`.
 
@@ -334,6 +507,11 @@ tpl render <template> --routine <name>      binds routine
   cache flags, and the lazy read of `FR-CACHE-038` and `FR-CACHE-039`.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `64`, `65`, `66`, and
   the `74` of `FR-RND-035`.
+- [configuration-model.md](configuration-model.md) — `FR-CONF-005`, the render
+  deadline, and `FR-CONF-045`, the three keys that set the render bounds of
+  `FR-RND-036`, `FR-RND-037` and `FR-RND-039`.
+- [context-document.md](context-document.md) — `FR-CTX-042`, the referential
+  rule a `--context` document must meet under `FR-RND-020`.
 
 ## Open questions
 

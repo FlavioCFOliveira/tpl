@@ -52,6 +52,7 @@ use crate::deadline::Seconds;
 use crate::diagnostics::suggest::{self, Population};
 use crate::error::{Error, Position};
 use crate::project::secret::Redacted;
+use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
 
 use entry::{Combination, Entry, Located, PasswordCommand, PortSetting, TlsMode};
 use keys::{CoreKey, EntryKey, Key, ValueType};
@@ -84,6 +85,12 @@ pub(crate) struct Core {
     pub(crate) password_timeout: Option<Seconds>,
     /// `core.render_timeout`.
     pub(crate) render_timeout: Option<Seconds>,
+    /// `core.render_fuel` (`FR-CONF-045`).
+    pub(crate) render_fuel: Option<RenderFuel>,
+    /// `core.render_output_limit` (`FR-CONF-045`).
+    pub(crate) render_output_limit: Option<RenderOutputLimit>,
+    /// `core.render_memory_limit` (`FR-CONF-045`).
+    pub(crate) render_memory_limit: Option<RenderMemoryLimit>,
 }
 
 impl Core {
@@ -98,6 +105,15 @@ impl Core {
             CoreKey::PasswordTimeout => seconds(self.password_timeout),
             CoreKey::QueryTimeout => seconds(self.query_timeout),
             CoreKey::RenderTimeout => seconds(self.render_timeout),
+            CoreKey::RenderFuel => self
+                .render_fuel
+                .map(|value| entry::Written::Number(value.get())),
+            CoreKey::RenderOutputLimit => self
+                .render_output_limit
+                .map(|value| entry::Written::Number(value.get())),
+            CoreKey::RenderMemoryLimit => self
+                .render_memory_limit
+                .map(|value| entry::Written::Number(value.get())),
         }
     }
 }
@@ -462,6 +478,36 @@ fn read_core(root: &DeTable<'_>, text: &str, file: &Path) -> Result<Core, Error>
             CoreKey::RenderTimeout => {
                 core.render_timeout = Some(seconds(value, text, &qualified, file)?);
             }
+            CoreKey::RenderFuel => {
+                core.render_fuel = Some(bounded(
+                    value,
+                    text,
+                    &qualified,
+                    ValueType::RenderFuel,
+                    RenderFuel::new,
+                    file,
+                )?);
+            }
+            CoreKey::RenderOutputLimit => {
+                core.render_output_limit = Some(bounded(
+                    value,
+                    text,
+                    &qualified,
+                    ValueType::RenderOutputLimit,
+                    RenderOutputLimit::new,
+                    file,
+                )?);
+            }
+            CoreKey::RenderMemoryLimit => {
+                core.render_memory_limit = Some(bounded(
+                    value,
+                    text,
+                    &qualified,
+                    ValueType::RenderMemoryLimit,
+                    RenderMemoryLimit::new,
+                    file,
+                )?);
+            }
         }
     }
 
@@ -612,6 +658,32 @@ fn seconds(
         .ok_or_else(|| malformed(text, value, key, expected, file))
 }
 
+/// The render bound `value` holds, where it is an integer within the range
+/// `FR-CONF-002` declares for `key` (`FR-CONF-045`).
+///
+/// `admit` is the bound's own constructor, which is where the range lives, so
+/// the file and `tpl cfg set` refuse exactly the same values. A value outside
+/// the range — `0`, a negative integer, one past the maximum — and a value
+/// that is not an integer at all are the same `78`, naming the key, the file,
+/// the value found and the range expected.
+fn bounded<T>(
+    value: &Spanned<DeValue<'_>>,
+    text: &str,
+    key: &str,
+    expects: ValueType,
+    admit: fn(u64) -> Option<T>,
+    file: &Path,
+) -> Result<T, Error> {
+    let DeValue::Integer(integer) = value.get_ref() else {
+        return Err(malformed(text, value, key, expects.expected(), file));
+    };
+
+    u64::from_str_radix(integer.as_str(), integer.radix())
+        .ok()
+        .and_then(admit)
+        .ok_or_else(|| malformed(text, value, key, expects.expected(), file))
+}
+
 /// The port `value` holds, as the file wrote it (`FR-CONF-002`,
 /// `FR-CONF-015`).
 fn port(
@@ -753,6 +825,7 @@ mod tests {
     use super::keys::{CoreKey, EntryKey, Key};
     use super::{Configuration, Core, Document, read};
     use crate::error::{DsnFault, Error};
+    use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
     use std::path::{Path, PathBuf};
 
     fn file() -> PathBuf {
@@ -922,6 +995,107 @@ render_timeout = 90
             refused("[core]\nquery_timeout = -5\n"),
             Error::ConfigurationValueMalformed { .. }
         ));
+    }
+
+    #[test]
+    fn fr_conf_045_the_three_render_bounds_are_read_at_their_extremes() {
+        let scratch = crate::project::scratch::Scratch::new();
+        let core = loaded(
+            &scratch,
+            "[core]\nrender_fuel = 1000000000000\nrender_output_limit = 1\nrender_memory_limit = 8388608\n",
+        )
+        .core;
+
+        assert_eq!(
+            core.render_fuel.map(RenderFuel::get),
+            Some(1_000_000_000_000)
+        );
+        assert_eq!(
+            core.render_output_limit.map(RenderOutputLimit::get),
+            Some(1)
+        );
+        assert_eq!(
+            core.render_memory_limit.map(RenderMemoryLimit::get),
+            Some(8_388_608)
+        );
+        assert_eq!(
+            core.written(CoreKey::RenderFuel),
+            Some(Written::Number(1_000_000_000_000))
+        );
+    }
+
+    #[test]
+    fn fr_conf_045_a_render_bound_outside_its_range_is_78_naming_the_key_the_value_and_the_range() {
+        // FR-CONF-045: neither key admits 0, a value past its maximum, or
+        // anything that is not an integer; the cause names the key, the file,
+        // the value found and the range expected, per the 78 row of FR-ERR-034.
+        for (text, key, found, expected) in [
+            (
+                "[core]\nrender_fuel = 0\n",
+                "core.render_fuel",
+                "0",
+                "an integer number of evaluation steps from 1 to 1000000000000",
+            ),
+            (
+                "[core]\nrender_fuel = 1000000000001\n",
+                "core.render_fuel",
+                "1000000000001",
+                "an integer number of evaluation steps from 1 to 1000000000000",
+            ),
+            (
+                "[core]\nrender_fuel = -1\n",
+                "core.render_fuel",
+                "-1",
+                "an integer number of evaluation steps from 1 to 1000000000000",
+            ),
+            (
+                "[core]\nrender_output_limit = 0\n",
+                "core.render_output_limit",
+                "0",
+                "an integer number of bytes from 1 to 1099511627776",
+            ),
+            (
+                "[core]\nrender_output_limit = 1099511627777\n",
+                "core.render_output_limit",
+                "1099511627777",
+                "an integer number of bytes from 1 to 1099511627776",
+            ),
+            (
+                "[core]\nrender_memory_limit = 8388607\n",
+                "core.render_memory_limit",
+                "8388607",
+                "an integer number of bytes from 8388608 to 1099511627776",
+            ),
+            (
+                "[core]\nrender_memory_limit = 1099511627777\n",
+                "core.render_memory_limit",
+                "1099511627777",
+                "an integer number of bytes from 8388608 to 1099511627776",
+            ),
+            (
+                "[core]\nrender_output_limit = \"lots\"\n",
+                "core.render_output_limit",
+                "\"lots\"",
+                "an integer number of bytes from 1 to 1099511627776",
+            ),
+        ] {
+            let condition = refused(text);
+
+            match &condition {
+                Error::ConfigurationValueMalformed {
+                    key: named,
+                    found: shown,
+                    expected: range,
+                    ..
+                } => {
+                    assert_eq!(named, key, "{text}");
+                    assert_eq!(shown, found, "{text}");
+                    assert_eq!(*range, expected, "{text}");
+                }
+                other => panic!("{text}: expected a malformed value, got {other:?}"),
+            }
+            assert_eq!(condition.exit_code(), 78, "{text}");
+        }
     }
 
     #[test]

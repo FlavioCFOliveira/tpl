@@ -134,8 +134,10 @@ The catalogue data `tpl` has previously read from a server and stored under
 ## cache hit / cache miss
 
 A hit is a read served entirely from `.tpl/.cache/` with no connection opened. A
-miss is a read for which the required data is absent, unreadable, or of an
-unknown format version, and which therefore reaches the server. Only the files a
+miss is a read for which the required data is absent, unreadable, of an unknown
+format version, or held in a file `FR-CACHE-033` otherwise treats as a miss —
+among them a file holding an object other than the one requested, and a symbolic
+link — and which therefore reaches the server. Only the files a
 read consults decide it, per `FR-CACHE-033`. A render served lazily under
 `FR-CACHE-038` is a hit only if no file it reads is a miss; one that abandons its
 render under `FR-CACHE-039` is a miss.
@@ -389,6 +391,20 @@ One of the three databases against which a measurement point is measured:
 One execution of one template against one context, producing one result on
 stdout. Exactly one render happens per `tpl render` invocation. See
 `FR-RND-002`.
+
+## render bound / render fuel / render output limit / render memory limit
+
+A **render bound** is one of the three limits on a render other than its
+deadline. **Render fuel** is the budget of evaluation steps a render may
+execute, counted by the template engine as the render runs; a render that
+exhausts it ends with `65`, per `FR-RND-036`. The **render output limit** is
+the number of bytes a render may produce, counted as they are produced; a
+render that would exceed it ends with `65`, per `FR-RND-037`. The **render
+memory limit** is the number of heap bytes the process may hold allocated, as
+counted by its allocator, while the render runs; it is observed periodically,
+and a render observed above it ends with `65`, per `FR-RND-039`. Each is set by
+a key of `.tpl/.cfg`, per `FR-CONF-045`. Neither is the output cap of
+`FR-CONF-031`, which bounds what `password_command` writes.
 
 ## requirement of form
 

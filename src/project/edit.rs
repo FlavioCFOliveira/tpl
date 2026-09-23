@@ -35,6 +35,7 @@ use toml_edit::{Array, DocumentMut, Item, Table, Value, value};
 use super::config::entry::{PasswordCommand, TlsMode};
 use super::config::keys::{Key, Target, ValueType};
 use crate::error::{Error, Position};
+use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
 
 /// The mode `FR-PROJ-019` creates `.tpl/.cfg` with and `FR-CFG-034` keeps.
 pub(crate) const MODE: u32 = 0o600;
@@ -304,6 +305,32 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
             }
             value(i64::from(seconds))
         }
+        // FR-CONF-045, FR-CFG-010: the range the file is held to, refused
+        // here with `64` rather than the `78` the same value in the file is.
+        ValueType::RenderFuel => {
+            let fuel = supplied
+                .parse()
+                .ok()
+                .and_then(RenderFuel::new)
+                .ok_or_else(refused)?;
+            value(i64::try_from(fuel.get()).map_err(|_| refused())?)
+        }
+        ValueType::RenderOutputLimit => {
+            let limit = supplied
+                .parse()
+                .ok()
+                .and_then(RenderOutputLimit::new)
+                .ok_or_else(refused)?;
+            value(i64::try_from(limit.get()).map_err(|_| refused())?)
+        }
+        ValueType::RenderMemoryLimit => {
+            let limit = supplied
+                .parse()
+                .ok()
+                .and_then(RenderMemoryLimit::new)
+                .ok_or_else(refused)?;
+            value(i64::try_from(limit.get()).map_err(|_| refused())?)
+        }
         ValueType::Port => {
             let port: u16 = supplied.parse().map_err(|_| refused())?;
             if port == 0 {
@@ -572,6 +599,16 @@ mod tests {
             ("database.shop.dsn", "mysql://db/shop?tls=false"),
             ("database.shop.password_command", "   "),
             ("database.shop.ca_file", ""),
+            ("core.render_fuel", "0"),
+            ("core.render_fuel", "1000000000001"),
+            ("core.render_fuel", "-1"),
+            ("core.render_fuel", "many"),
+            ("core.render_output_limit", "0"),
+            ("core.render_output_limit", "1099511627777"),
+            ("core.render_output_limit", "1.5"),
+            ("core.render_memory_limit", "8388607"),
+            ("core.render_memory_limit", "0"),
+            ("core.render_memory_limit", "1099511627777"),
         ] {
             let condition = assign(&key(spelling), supplied)
                 .expect_err("the value does not conform to the declared type");
@@ -581,6 +618,24 @@ mod tests {
                 "{spelling} = {supplied:?}: {condition:?}"
             );
             assert_eq!(condition.exit_code(), 64);
+        }
+    }
+
+    #[test]
+    fn fr_conf_045_tpl_cfg_set_writes_a_render_bound_within_its_range_as_an_integer() {
+        for (spelling, supplied, written) in [
+            ("core.render_fuel", "1", 1),
+            ("core.render_fuel", "1000000000000", 1_000_000_000_000),
+            (
+                "core.render_output_limit",
+                "1099511627776",
+                1_099_511_627_776,
+            ),
+            ("core.render_memory_limit", "8388608", 8_388_608),
+        ] {
+            let item = assign(&key(spelling), supplied).expect("the value is in range");
+
+            assert_eq!(item.as_integer(), Some(written), "{spelling} = {supplied}");
         }
     }
 

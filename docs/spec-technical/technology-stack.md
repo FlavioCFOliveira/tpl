@@ -1,7 +1,7 @@
 ---
 title: Technology Stack
 status: draft
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-23
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -22,7 +22,7 @@ repeated in each.
 
 | Rule | Consequence |
 |---|---|
-| **A fact a decision record holds is cited, never restated** (rule R3, [`docs/adr/`](../adr/README.md)) | Four crates carry their version in a record. Their version column is a citation, and the record is the one place the number lives. The same holds for the rationale and the rejected candidate wherever a record carries them |
+| **A fact a decision record holds is cited, never restated** (rule R3, [`docs/adr/`](../adr/README.md)) | Five crates carry their version in a record. Their version column is a citation, and the record is the one place the number lives. The same holds for the rationale and the rejected candidate wherever a record carries them |
 | **Every claim about a technology names its source and the date consulted, or is marked unverified** | The rule is the register's, recorded in [`docs/adr/README.md`](../adr/README.md), and it governs this folder unchanged |
 | **No measured figure appears here** | Startup, binary size and resident memory decided nothing in this document and are recorded in `BENCHMARKS.md` alone, per `BR-PERF-006` and the extension [`ADR-003`](../adr/adr-003-database-driver.md) makes of it |
 
@@ -36,7 +36,8 @@ itself remains the record's.
 beside it, never the requirement the package declares.** Where the column cites
 a record instead, the pin is that record's
 ([`ADR-001`](../adr/adr-001-template-engine-pin.md),
-[`ADR-003`](../adr/adr-003-database-driver.md)). In both forms the requirement
+[`ADR-003`](../adr/adr-003-database-driver.md),
+[`ADR-011`](../adr/adr-011-render-memory-accounting.md)). In both forms the requirement
 the package resolves against is the manifest's, and it is read there and not
 here.
 
@@ -65,6 +66,7 @@ excludes dev-dependencies. Every crate below is a direct dependency of it.
 
 | Crate | Exact version | Source | Consulted |
 |---|---|---|---|
+| `cap` | The pin of [`ADR-011`](../adr/adr-011-render-memory-accounting.md) | That record | 2026-09-23 |
 | `clap` | 4.6.6 | crates.io crate index, `clap`, `max_stable_version` | 2026-09-11 |
 | `minijinja` | The pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) | That record | 2026-09-11 |
 | `minijinja-contrib` | The pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) | That record | 2026-09-11 |
@@ -86,7 +88,8 @@ rejected option and cites the argument rather than reproducing it.
 | Crate | What it does here | Chosen because | Rejected |
 |---|---|---|---|
 | `clap` | Parses the invocation and supplies the runtime tree introspection `FR-HELP-021` requires | It is the parser `CLAUDE.md` *Stack* fixes, and its typed error context is the only source of the token `FR-ERR-034` row `64` obliges | Recovering the token by a second parse of `argv`; letting the parser render its own diagnostics and its own help ([`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own), [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)) |
-| `minijinja` | Compiles and renders a template at run time, per `FR-TMPL-004` and `CLAUDE.md` *Invariantes de Implementação* | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md); every compile-time engine is excluded by `CLAUDE.md` *Invariantes de Implementação* |
+| `cap` | The process's `#[global_allocator]`, wrapping `std::alloc::System`, whose count of live heap bytes the render memory limit of `FR-RND-039` reads; installed by the binary, no features, hard limit unset | [`ADR-011`](../adr/adr-011-render-memory-accounting.md) | [`ADR-011`](../adr/adr-011-render-memory-accounting.md): an allocator of this crate's own, `setrlimit`, resident-set polling, the crate's hard limit, and six other crates |
+| `minijinja` | Compiles and renders a template at run time, per `FR-TMPL-004` and `CLAUDE.md` *Invariantes de Implementação*; with its `fuel` feature, counts the render fuel of `FR-RND-036` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md); every compile-time engine is excluded by `CLAUDE.md` *Invariantes de Implementação* |
 | `minijinja-contrib` | Adds utility filters and globals, all of them group 3 of `FR-ENV-019` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md) |
 | `sqlx` | Connects to MariaDB and issues the closed statement list of `FR-SRV-006` | [`ADR-003`](../adr/adr-003-database-driver.md) — settled by `FR-CONF-036`, not by the measurement | [`ADR-003`](../adr/adr-003-database-driver.md) |
 | `tokio` | The current-thread runtime the asynchronous driver requires, and the timers four of the six deadlines use | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
@@ -95,15 +98,18 @@ rejected option and cites the argument rather than reproducing it.
 | `toml` | The read path over `.tpl/.cfg`, through its document tree — spanned keys and spanned values — rather than through a `serde` derive | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which would put an editing document on the path that reads untrusted input; and a `serde` derive, which cannot name the offending key or its position |
 | `toml_edit` | The write path over `.tpl/.cfg`, preserving comments, spacing and the relative order of items | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml` alone, which would delete the commented example `FR-PROJ-018` requires on the first write |
 | `thiserror` | Derives the one public error enum and its `Display` | [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) | `anyhow` in the library; per-module enums composed by `From`; an exit code stored as a field ([`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)) |
-| `rustix` | Supplies the process's own user identifier, the one value `std` does not give, for the ownership check of `FR-PROJ-010` | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) | `libc` with a local `unsafe` block; `nix`; a crate that resolves the user account; inferring ownership by attempting a write ([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid)) |
+| `rustix` | Supplies three calls `std` does not give: the process's own user identifier, for the ownership check of `FR-PROJ-010`; and, for the `password_command` child of `FR-CONF-028` and `FR-CONF-031`, a signal to a whole process group and an exit observed without reaping | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid); the two child calls, [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) | `libc` with a local `unsafe` block; `nix`; a crate that resolves the user account; inferring ownership by attempting a write ([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid)) |
 
 **One crate left the graph, and both tables above lost its row.** `anyhow` was
 removed by [`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph),
 which holds the ground, the alternative it refused and the correction it
 prepared for `CLAUDE.md`; none of that is restated here. The removal landed at
 commit `455e48d`: `grep -n anyhow Cargo.toml` and `cargo tree -i anyhow` both
-return nothing, and the direct dependencies of the shipped graph are the eleven
-the tables name (`cargo tree -e normal,build --depth 1`, read 2026-09-22). The
+return nothing. **One crate joined the graph on 2026-09-23**, `cap`, under
+[`ADR-011`](../adr/adr-011-render-memory-accounting.md), and the direct
+dependencies of the shipped graph are the twelve the tables name
+(`cargo tree -e normal,build --depth 1`, read 2026-09-23; `cargo tree -i cap`
+shows `tpl` as its one parent). The
 observation this section used to carry — that a binary reduced to calling the
 library, reading the exit code and returning carries no dynamic error — is that
 entry's ground and no longer this document's open question. Where the removal
@@ -120,6 +126,27 @@ engine's construction — the loader, the undefined behaviour, auto-escaping —
 [`OD-14`](open-decisions.md#od-14--which-undefined-behaviour-the-engine-is-configured-with)
 and [`OD-15`](open-decisions.md#od-15--the-template-loader); the registered
 surface is [interfaces.md](interfaces.md#the-template-surface).
+
+### Render fuel
+
+The manifest enables the engine's `fuel` feature for `FR-RND-036`, and
+`render/engine.rs` sets the resolved value once on the engine. What the
+documentation states, at the pinned line (docs.rs, `minijinja` 2.24.0, consulted
+2026-09-23):
+
+| Fact | Source |
+|---|---|
+| `Environment::set_fuel(Option<u64>)` and `Environment::fuel()` exist only under the `fuel` feature; "every instruction consumes a certain amount of fuel. Usually `1`, some will consume no fuel"; the default is `None` | `minijinja::Environment` |
+| Exhaustion is reported as `ErrorKind::OutOfFuel`, "Engine ran out of fuel", also gated on `fuel` | `minijinja::ErrorKind` |
+| `State::fuel_levels` reports consumed and remaining fuel "during evaluation" | `minijinja::State` |
+
+**That each render starts with the whole budget is not confirmed in the official
+documentation.** `FR-RND-038` requires it of a render abandoned under
+`FR-CACHE-039` and of the one that follows it; `render/engine.rs` relies on it,
+and `tests/render_command.rs` exercises the abandoned case against the fixture.
+Which evaluation steps consume fuel is the engine's, so a move of the pin of
+[`ADR-001`](../adr/adr-001-template-engine-pin.md) can change what one template
+consumes, which is `FR-RND-036`'s accepted cost.
 
 ### The three classes of engine built-in
 
@@ -331,14 +358,21 @@ dependency emits into stays a **transitive** crate in the graph and is never a
 facility `tpl` uses. And the dependency budget is charged nothing at all for
 observability.
 
-## The one call `std` does not supply
+## The calls `std` does not supply
 
 `rustix`, with `default-features = false` and the `process` feature alone,
-supplies the process's own user identifier as a safe function; `std` supplies
-the file's identifier and its mode on the same metadata, so the ownership check
-of `FR-PROJ-010` needs exactly one call and the mode check of `FR-PROJ-011`
-needs none. The decision, the sourcing and the four rejected options are
-[`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid).
+supplies three safe functions `std` does not.
+
+| Call | Used for | Source | Decided in |
+|---|---|---|---|
+| `getuid` | The process's own user identifier. `std` supplies the file's identifier and mode on the same metadata, so the ownership check of `FR-PROJ-010` needs exactly this one call and the mode check of `FR-PROJ-011` none | — | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
+| `kill_process_group(pid, sig)` | `SIGKILL` to the `password_command` child's group at the deadline and at the cap: "`kill(-pid, sig)`—Sends a signal to all processes in a process group"; a pid of `1` is never passed | docs.rs, `rustix` 1.1.4, `rustix::process::kill_process_group`, feature `process`, consulted 2026-09-23 | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| `waitid` with `WaitIdOptions::EXITED`, `NOHANG` and `NOWAIT` | Observing the child's exit while keeping it waitable, so its pid is not freed before the group kill. `NOWAIT`: "Keep processed in a waitable state"; `NOHANG`: "Return immediately if no child has exited" | docs.rs, `rustix` 1.1.4, `rustix::process::waitid` and `WaitIdOptions`, feature `process`, consulted 2026-09-23 | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+
+The group itself is created by `std`: `CommandExt::process_group(0)` "will use
+the process ID as the PGID" (Rust standard library documentation,
+`std::os::unix::process::CommandExt`, stable since 1.64.0, consulted
+2026-09-23).
 
 ## The dependency budget
 
@@ -391,7 +425,10 @@ answer possible: the system call is made inside a crate that wraps it in a safe
 function, rather than in an `unsafe` block here. A crate is therefore admitted
 for the safe surface it presents, never rejected for using `unsafe` inside
 itself — and a facility that has no safe wrapper anywhere is one `tpl` does
-without.
+without. The counting allocator is the second case of the same rule:
+implementing `GlobalAlloc` requires `unsafe`, so the wrapper comes from a
+crate, while declaring a `#[global_allocator]` static of it is safe code
+([`ADR-011`](../adr/adr-011-render-memory-accounting.md)).
 
 ## What this document defers, and to what
 

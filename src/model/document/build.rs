@@ -38,7 +38,10 @@ use crate::model::table::Table;
 ///
 /// `FR-CTX-023` promises that every object referenced from another object in a
 /// document produced by a server read is present in it, which is exactly the
-/// condition the embedding needs in order to be materialisable.
+/// condition the embedding needs in order to be materialisable. A document
+/// supplied to `--context` never reaches this invariant broken: `FR-CTX-042`
+/// makes the same condition a structural rule of that document, refused with
+/// `65` by [`super::read`] before a model is handed to this builder.
 const REFERENCE_IS_CARRIED: &str =
     "every table a foreign key names is carried by the model the document is built from";
 

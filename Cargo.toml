@@ -30,6 +30,10 @@ print_stdout = "deny"
 print_stderr = "deny"
 
 [dependencies]
+# The counting global allocator of `ADR-011`, installed by the binary; its
+# count is what the render memory limit of `FR-RND-039` bounds. No features:
+# `stats` is refused there, and `nightly` needs a nightly toolchain.
+cap = { version = "=0.1.2", default-features = false }
 clap = { version = "4.6.6", default-features = false, features = [
     "std",
     "help",
@@ -37,7 +41,8 @@ clap = { version = "4.6.6", default-features = false, features = [
     "error-context",
     "derive",
 ] }
-minijinja = "~2.24.0"
+# `fuel` bounds every render by a count of evaluation steps (`FR-RND-036`).
+minijinja = { version = "~2.24.0", features = ["fuel"] }
 minijinja-contrib = "~2.24.0"
 rustix = { version = "1.1.4", default-features = false, features = ["process"] }
 serde = { version = "1.0.229", features = ["derive"] }
