@@ -536,7 +536,7 @@ fn fr_err_006_a_file_the_reader_refuses_is_refused_before_the_command_is_reached
         (
             "an unknown key",
             "[core]\ndatabse = \"shop\"\n",
-            "outside the key space",
+            "not a configuration key",
         ),
         (
             "a malformed DSN",
@@ -1588,4 +1588,257 @@ fn fr_cfg_046_a_password_command_is_stored_as_the_array_the_quoting_rule_splits_
             "\"tpl shop; rm -rf .\", \"-w\"]\n",
         )
     );
+}
+
+// ------------------------------------------------ the forty-third edition ---
+
+/// A project whose `.cfg` defines the entry `shop`.
+const SHOP: &str = "[core]\n\n[database.shop]\nhost = \"db.example.com\"\n";
+
+#[test]
+fn fr_cfg_031_a_port_the_reader_refuses_is_refused_at_the_flag_and_writes_nothing() {
+    // Finding E-02: `--port 0` was accepted and wrote a file every later
+    // command, the repair included, refused with 78. The flag now admits
+    // exactly what the reader admits.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    let before = sandbox.configuration();
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "add", "s6", "--host", "h", "--port", "0"]),
+        64,
+        "--port 0",
+    );
+
+    assert!(
+        line(&written, "cause: ").contains("a whole number from 1 to 65535"),
+        "{written}"
+    );
+    assert_eq!(sandbox.configuration(), before, "the file was written");
+}
+
+#[test]
+fn fr_cfg_020_an_update_that_names_no_field_is_64_and_lists_every_field_flag() {
+    let sandbox = Sandbox::new();
+    sandbox.project(SHOP);
+    let before = sandbox.configuration();
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "update", "shop"]),
+        64,
+        "update with no flag",
+    );
+
+    assert_eq!(
+        line(&written, "error: "),
+        "nothing to change: tpl cfg database update needs at least one field flag"
+    );
+    assert_eq!(
+        line(&written, "cause: "),
+        "no field flag was given for entry 'shop'"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give at least one of --dsn, --host, --port, --user, --schema, --tls, \
+         --password-command, --ca-file, --ca-path"
+    );
+    assert_eq!(sandbox.configuration(), before, "the file was written");
+
+    // Decided at argument parsing, before the entry is resolved: an entry the
+    // file does not define is refused for the same reason.
+    assert_refused(
+        &sandbox.run(&["cfg", "database", "update", "absent"]),
+        64,
+        "update of an absent entry with no flag",
+    );
+}
+
+#[test]
+fn fr_cfg_016_an_add_that_says_nowhere_to_connect_names_the_flags_that_do() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "add", "shop", "--tls", "disabled"]),
+        64,
+        "add with no connection flag",
+    );
+
+    assert!(line(&written, "cause: ").contains("--host"), "{written}");
+    assert!(
+        line(&written, "hint:  ")
+            .starts_with("say where to connect, e.g.: tpl cfg database add shop"),
+        "{written}"
+    );
+}
+
+#[test]
+fn fr_cfg_007_a_block_given_to_get_is_64_and_points_at_the_command_that_shows_it() {
+    let sandbox = Sandbox::new();
+    sandbox.project(SHOP);
+
+    let entry = assert_refused(
+        &sandbox.run(&["cfg", "get", "database.shop"]),
+        64,
+        "an entry",
+    );
+    assert_eq!(
+        line(&entry, "error: "),
+        "'database.shop' names a whole entry, not one value"
+    );
+    assert_eq!(
+        line(&entry, "cause: "),
+        "tpl cfg get reads one key; database.shop is the block of entry 'shop'"
+    );
+    assert_eq!(
+        line(&entry, "hint:  "),
+        "show the entry with: tpl cfg database show shop"
+    );
+
+    // Whether or not the file carries the block, the form decides: 64, and
+    // the listing where no entry of that name exists.
+    for block in ["core", "database", "database.absent"] {
+        let written = assert_refused(&sandbox.run(&["cfg", "get", block]), 64, block);
+        assert_eq!(
+            line(&written, "hint:  "),
+            "show every key and its value with: tpl cfg list",
+            "{block}"
+        );
+    }
+}
+
+#[test]
+fn fr_proj_008_a_tpl_dir_that_names_nothing_is_78_and_describes_no_walk() {
+    let sandbox = Sandbox::new();
+    let named = sandbox.path("absent/.tpl");
+    let spelled = named.to_string_lossy().into_owned();
+
+    let written = assert_refused(
+        &sandbox.run(&["--tpl-dir", &spelled, "template", "list"]),
+        78,
+        "--tpl-dir naming nothing",
+    );
+
+    assert_eq!(
+        line(&written, "error: "),
+        format!("the folder named by --tpl-dir does not exist: {spelled}")
+    );
+    assert_eq!(
+        line(&written, "cause: "),
+        format!("--tpl-dir disabled the upward search; nothing exists at {spelled}")
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        format!(
+            "correct --tpl-dir, or create the project with: tpl init {}",
+            sandbox.path("absent").display()
+        )
+    );
+    assert!(!written.contains("walk"), "{written}");
+}
+
+#[test]
+fn fr_out_009_pretty_without_json_names_the_flag_it_needs_and_not_a_flag_never_written() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let written = assert_refused(
+        &sandbox.run(&["template", "list", "--pretty"]),
+        64,
+        "--pretty alone",
+    );
+
+    assert_eq!(
+        line(&written, "error: "),
+        "'--pretty' needs '--format json'"
+    );
+    assert!(!written.contains("--format text"), "{written}");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "add --format json, e.g.: tpl template list --format json --pretty; or drop --pretty"
+    );
+}
+
+#[test]
+fn br_err_004_a_fault_in_the_file_is_repaired_by_an_edit_and_never_by_tpl_cfg() {
+    // Finding E-01: every `tpl cfg` command refuses a file that fails step 3
+    // of FR-ERR-006, so a hint naming one could never succeed. The hint names
+    // the file, by its absolute path, the position and the edit.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n\n[database.s6]\nhost = \"h\"\nport = 0\n");
+    let file = sandbox.path(".tpl/.cfg");
+    let file = std::fs::canonicalize(&file).expect("the file is there");
+
+    let written = assert_refused(&sandbox.run(&["cfg", "list"]), 78, "port 0 in the file");
+    let hint = line(&written, "hint:  ");
+
+    assert!(
+        hint.starts_with(&format!("edit {} at line 5", file.display())),
+        "{hint}"
+    );
+    assert!(hint.contains("no tpl cfg command runs"), "{hint}");
+    assert!(!hint.contains("tpl cfg set"), "{hint}");
+
+    // Two keys that cannot stand together: the edit names both.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n\n[database.x]\ndsn = \"mysql://h/d\"\nhost = \"h\"\n");
+    let written = assert_refused(&sandbox.run(&["cfg", "list"]), 78, "dsn beside host");
+
+    assert!(
+        line(&written, "hint:  ").contains("under [database.x], delete either dsn or host"),
+        "{written}"
+    );
+}
+
+#[test]
+fn fr_err_019_a_known_key_in_the_wrong_table_is_suggested_under_its_own() {
+    // Finding E-17: `password_timeout` written above `[core]`.
+    let sandbox = Sandbox::new();
+    sandbox.project("password_timeout = 1\n[core]\n");
+
+    let written = assert_refused(&sandbox.run(&["cfg", "list"]), 78, "a key above [core]");
+
+    assert!(
+        line(&written, "hint:  ").starts_with("did you mean 'core.password_timeout'?"),
+        "{written}"
+    );
+}
+
+#[test]
+fn fr_err_034_a_toml_fault_states_what_the_parser_expected() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core\n");
+
+    let written = assert_refused(&sandbox.run(&["cfg", "list"]), 78, "an unclosed header");
+    let cause = line(&written, "cause: ");
+
+    assert!(
+        cause.contains("the TOML parser stopped at line 1"),
+        "{cause}"
+    );
+    assert!(
+        cause
+            .rsplit_once(": ")
+            .is_some_and(|(_, reason)| !reason.is_empty()),
+        "{cause}"
+    );
+}
+
+#[test]
+fn fr_cli_017_a_value_beginning_with_a_dash_is_told_to_follow_the_terminator() {
+    // Finding E-11: a one-letter token is not matched against every
+    // one-letter flag, and a command that takes a value says how to give it.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "set", "core.query_timeout", "-5"]),
+        64,
+        "a negative value",
+    );
+    let hint = line(&written, "hint:  ");
+
+    assert!(!hint.contains("did you mean"), "{hint}");
+    assert!(hint.contains("tpl help cfg set"), "{hint}");
+    assert!(hint.contains("write -- before it"), "{hint}");
 }

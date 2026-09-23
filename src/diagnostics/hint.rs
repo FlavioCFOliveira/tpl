@@ -32,15 +32,22 @@
 //! stands alone when no candidate qualifies.
 
 use std::borrow::Cow;
+use std::path::Path;
 
 use super::suggest;
 use crate::error::{
     CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, NetworkPhase,
-    ReadOnlyFault,
+    ReadOnlyFault, TlsFault,
 };
 
 /// The longest a name the character set of `FR-ERR-022` governs may be.
 const MAX_NAME: usize = 64;
+
+/// The longest a value the character set of `FR-ERR-041` governs may be.
+///
+/// It is `PATH_MAX` on macOS, the smaller of the two limits of the supported
+/// systems, and the number is taken rather than chosen, as `FR-ERR-041` says.
+const MAX_PATH: usize = 1024;
 
 /// The `hint` line of a `70`, whose content `FR-ERR-032` fixes.
 ///
@@ -65,34 +72,40 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // `cli`'s, because FR-ERR-021's populations belong to the components
         // that own them; the line is composed here, from what the variant
         // carries, and falls back to the generic hint alone where nothing
-        // qualified, per FR-ERR-020.
-        Error::UnknownCommand { nearest, .. } => {
-            let admitted = admitted(nearest, admits_path);
-            suggest::hint_line(admitted.iter().copied(), "list the commands with: tpl help")
-        }
-        // FR-HELP-028 draws the candidates from the children of the node the
-        // path reached, which `cli/help.rs` selects over; the generic half
-        // names that node, so the runnable command lists exactly the children
-        // the segment was measured against rather than the whole tree.
-        Error::UnknownCommandPathSegment { node, nearest, .. } => {
+        // qualified, per FR-ERR-020. The generic half lists the children of
+        // the node the token was written under, which is the population the
+        // suggestion was drawn from.
+        Error::UnknownCommand { node, nearest, .. }
+        | Error::UnknownCommandPathSegment { node, nearest, .. } => {
             let admitted = admitted(nearest, admits_path);
             let generic = children_of(node);
 
             Cow::Owned(suggest::hint_line(admitted.iter().copied(), &generic).into_owned())
         }
-        Error::UnknownFlag { nearest, .. } => {
+        // BR-ERR-004: the command whose flags are listed is the one the token
+        // was given to, which the variant carries. FR-CLI-017 accepts a value
+        // beginning with `-` after `--`, and a node that takes a positional
+        // argument is where a caller can have meant one.
+        Error::UnknownFlag {
+            token,
+            command,
+            positional,
+            nearest,
+        } => {
             let admitted = admitted(nearest, admits_flag);
-            suggest::hint_line(
-                admitted.iter().copied(),
-                "list the flags a command declares with: tpl help <command>",
-            )
+            let generic = format!("list the flags of this command with: {}", help_of(command));
+            let line = suggest::hint_line(admitted.iter().copied(), &generic).into_owned();
+
+            if *positional && admits_flag(token) {
+                Cow::Owned(format!(
+                    "{line}; if '{token}' is a value and not a flag, write -- before it"
+                ))
+            } else {
+                Cow::Owned(line)
+            }
         }
         Error::UnexpectedArgument { command, .. } => {
-            if admits_path(command) {
-                Cow::Owned(format!("show what it takes with: tpl help {command}"))
-            } else {
-                Cow::Borrowed("show what the command takes with: tpl help <command>")
-            }
+            Cow::Owned(format!("show what it takes with: {}", help_of(command)))
         }
         // The flag is a spelling this corpus enumerates and is therefore a
         // literal, per FR-ERR-022; the test beside it is the defensive
@@ -138,18 +151,29 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 }
             }
         }
-        Error::ValueOutsideEnumeration { .. } => {
-            Cow::Borrowed("show the values the command accepts with: tpl help <command>")
-        }
-        Error::InvocationRejected { .. } => {
-            Cow::Borrowed("show what the command accepts with: tpl help <command>")
+        // The permitted values are spellings the tree enumerates, so each is a
+        // literal; the first one is written after the flag as the worked
+        // correction, and the help of the node states them all.
+        Error::ValueOutsideEnumeration {
+            flag,
+            command,
+            permitted,
+            ..
+        } => match permitted.first() {
+            Some(first) if admits_flag(flag) && admits_flag(first) => Cow::Owned(format!(
+                "give one of the values named above, e.g. {flag} {first}; they are listed by: {}",
+                help_of(command)
+            )),
+            _ => Cow::Owned(format!(
+                "show the values it accepts with: {}",
+                help_of(command)
+            )),
+        },
+        Error::InvocationRejected { command, .. } => {
+            Cow::Owned(format!("show what it accepts with: {}", help_of(command)))
         }
         Error::MissingArgument { command, .. } => {
-            if admits_path(command) {
-                Cow::Owned(format!("show the usage with: tpl help {command}"))
-            } else {
-                Cow::Borrowed("show the usage with: tpl help <command>")
-            }
+            Cow::Owned(format!("show the usage with: {}", help_of(command)))
         }
         // Neither flag enters a runnable command, so FR-ERR-022 is not engaged
         // and both are named as prose, escaped on the way out. The pair is
@@ -163,6 +187,41 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 Cow::Borrowed("give one of the two flags named above, and not both")
             }
         }
+        // FR-OUT-009: the correction is to add the format, or to drop the
+        // flag. The command is written out only where it needs nothing else
+        // to run: a node that requires an operand would be written without it,
+        // and BR-ERR-004 bars a hint that cannot succeed.
+        Error::PrettyWithoutJson { command, complete } => {
+            if *complete && admits_path(command) {
+                Cow::Owned(format!(
+                    "add --format json, e.g.: tpl {command} --format json --pretty; or drop \
+                     --pretty"
+                ))
+            } else {
+                Cow::Borrowed("add --format json to the same command, or drop --pretty")
+            }
+        }
+        // FR-CFG-016: the four flags that say where to connect, and the one
+        // that says it all at once. The host, the user and the database are
+        // values only the caller knows, so they stay placeholders.
+        Error::ConnectionDetailsMissing { entry } => Cow::Owned(format!(
+            "say where to connect, e.g.: tpl cfg database add {} --host <host> --user <user> \
+             --schema <database>",
+            entry_or_placeholder(entry)
+        )),
+        // FR-CFG-020 fixes this line: every flag of FR-CFG-027.
+        Error::NothingToUpdate { .. } => Cow::Borrowed(
+            "give at least one of --dsn, --host, --port, --user, --schema, --tls, \
+             --password-command, --ca-file, --ca-path",
+        ),
+        // FR-CFG-007 fixes both halves: the entry's own `show` where the key
+        // names an entry the file defines, and the listing otherwise.
+        Error::BlockKeyGiven { entry, .. } => match entry {
+            Some(entry) if admits(entry) => Cow::Owned(format!(
+                "show the entry with: tpl cfg database show {entry}"
+            )),
+            _ => Cow::Borrowed("show every key and its value with: tpl cfg list"),
+        },
         // FR-SCH-008 fixes this line: the same invocation, with the prefix in
         // lower case. The invocation below `tpl` is a spelling this corpus
         // enumerates and the routine name is not, so the name is tested under
@@ -184,25 +243,18 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         }
         // FR-SCH-010 refuses the bare name and names both candidates in the
         // `cause`; the hint is the runnable command FR-ERR-009 asks for, which
-        // is the same invocation qualified.
+        // is the same invocation qualified. The second arm is the same
+        // correction over the other context source.
         Error::AmbiguousRoutineName {
             name, invocation, ..
-        } => {
-            if admits(name) {
-                Cow::Owned(format!(
-                    "name the kind you mean: tpl {invocation} procedure:{name}"
-                ))
-            } else {
-                Cow::Borrowed("name the kind you mean, with the prefix 'procedure:' or 'function:'")
-            }
         }
-        // The same correction as the arm above, over the other context source.
-        Error::AmbiguousRoutineInContext {
+        | Error::AmbiguousRoutineInContext {
             name, invocation, ..
         } => {
             if admits(name) {
                 Cow::Owned(format!(
-                    "name the kind you mean: tpl {invocation} procedure:{name}"
+                    "name the kind you mean: tpl {invocation} procedure:{name}, or tpl \
+                     {invocation} function:{name}"
                 ))
             } else {
                 Cow::Borrowed("name the kind you mean, with the prefix 'procedure:' or 'function:'")
@@ -223,11 +275,25 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // FR-CACHE-018 accepts `--direct` on this command and ignores it, so
         // the line names the invocation that does what the caller asked for.
         Error::LoadWithoutStoring => Cow::Borrowed(
-            "load the cache with: tpl cache load, or read without storing with: tpl schema dump --no-cache",
+            "remove --no-cache from the command; to read without storing, use tpl schema dump \
+             --no-cache instead",
         ),
-        Error::MalformedValue { .. } => {
-            Cow::Borrowed("show what the command accepts with: tpl help <command>")
-        }
+        // FR-CFG-031: the `cause` carries the form expected, and the hint the
+        // worked value. The example carries no user, so that no `@` reaches a
+        // hint line: the assertion over every hint looks for that character
+        // to prove no value reached one ungated.
+        Error::MalformedValue {
+            parameter, command, ..
+        } => match (parameter.as_str(), command.as_str()) {
+            ("--dsn", _) => Cow::Borrowed(
+                "write the URL as scheme://host/database, e.g.: --dsn \
+                 mysql://db.example.com:3306/shop",
+            ),
+            (_, "cfg set") => {
+                Cow::Borrowed("show every key and the value it takes with: tpl help cfg set")
+            }
+            _ => Cow::Owned(format!("show what it takes with: {}", help_of(command))),
+        },
         // FR-CFG-009 obliges the nearest-match half over the enumerated key
         // space of FR-CONF-002. Every key of that space is a spelling this
         // corpus fixes, so FR-ERR-022 makes it a literal and the test beside it
@@ -236,7 +302,7 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             let admitted = admitted(nearest, admits_key);
             suggest::hint_line(
                 admitted.iter().copied(),
-                "show what tpl cfg set accepts with: tpl help cfg set",
+                "list every key, its type and its default with: tpl help cfg set",
             )
         }
         // FR-CFG-017 obliges this hint to point at `tpl cfg database update`.
@@ -269,28 +335,68 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         },
 
         // ------------------------------------------------------------ 65 ---
-        Error::TemplateSyntax { .. } => {
-            Cow::Borrowed("parse the project's templates with: tpl template check")
+        // The template is the one the parser stopped in, and `tpl template
+        // check` is syntax analysis alone, so it is the command that confirms
+        // the correction — named for this template rather than for all of
+        // them, which is the invocation the caller may have just run.
+        Error::TemplateSyntax {
+            template, position, ..
+        } => {
+            if admits_template(template) {
+                Cow::Owned(format!(
+                    "correct line {} of template '{template}', then check it with: tpl template \
+                     check {template}",
+                    position.line
+                ))
+            } else {
+                Cow::Borrowed(
+                    "correct the line named above, then check the templates with: tpl template \
+                     check",
+                )
+            }
         }
-        // `tpl template check` performs syntax analysis alone, per FR-TMPL-017,
-        // so it would not reproduce an evaluation failure; the source is what
-        // locates the line and column named above.
-        Error::RenderFailed { .. } => {
-            Cow::Borrowed("print the template's source with: tpl template show <template>")
+        // The most common failure a template author meets: a variable that
+        // exists only when a flag binds it. The first segment of the
+        // undefined expression says which flag, and BR-ERR-004 asks for that
+        // flag rather than for the source. `tpl template check` performs
+        // syntax analysis alone, per FR-TMPL-017, so it would not reproduce an
+        // evaluation failure; the source is what locates anything else.
+        Error::RenderFailed {
+            template,
+            undefined,
+            ..
+        } => {
+            if let Some(line) = undefined.as_deref().and_then(defining_flag) {
+                return line;
+            }
+
+            if admits_template(template) {
+                Cow::Owned(format!(
+                    "print the template's source with: tpl template show {template}"
+                ))
+            } else {
+                Cow::Borrowed("print the template's source with: tpl template show <template>")
+            }
         }
         Error::TemplateOutsideRoot { .. } => {
             Cow::Borrowed("print the template root with: tpl template path")
         }
+        // The document came from the caller, and `--context` excludes `-d`, so
+        // the entry that would produce a valid one is a value only the caller
+        // knows; the placeholders stand for it and for the file.
         Error::ContextDocumentMalformed { fault, .. } => match fault {
-            ContextFault::NotJson(_) => {
-                Cow::Borrowed("produce a well-formed context document with: tpl schema dump")
-            }
+            ContextFault::NotJson(_) => Cow::Borrowed(
+                "write a well-formed document with: tpl -d <entry> schema dump > <file>",
+            ),
             ContextFault::Structure { .. } | ContextFault::DanglingReference { .. } => {
-                Cow::Borrowed("produce a document that matches the contract with: tpl schema dump")
+                Cow::Borrowed(
+                    "write a document that matches, with: tpl -d <entry> schema dump > <file>",
+                )
             }
         },
         Error::RenderFuelExhausted { .. } => Cow::Borrowed(
-            "raise the render fuel with: tpl cfg set core.render_fuel <evaluation steps>",
+            "look for a loop that never ends, or raise the limit with: tpl cfg set \
+             core.render_fuel <evaluation steps>",
         ),
         Error::RenderMemoryLimitExceeded { .. } => Cow::Borrowed(
             "raise the render memory limit with: tpl cfg set core.render_memory_limit <bytes>",
@@ -302,9 +408,7 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             DeadlineBound::Phase => Cow::Borrowed(
                 "raise the render deadline with: tpl cfg set core.render_timeout <seconds>",
             ),
-            DeadlineBound::Overall => Cow::Borrowed(
-                "raise the overall budget with: tpl --timeout <seconds> render <template>",
-            ),
+            DeadlineBound::Overall => Cow::Borrowed(OVERALL_BUDGET),
         },
 
         // ------------------------------------------------------------ 66 ---
@@ -339,25 +443,32 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             Cow::Owned(suggest::hint_line(admitted.iter().copied(), &generic).into_owned())
         }
         // FR-RND-032 obliges the nearest-match half over the objects the
-        // document does carry. The generic half names no runnable command:
-        // the population is a file the caller supplied, and `tpl` has no
-        // subcommand that lists it — FR-ERR-012 asks the hint to name a next
-        // step and this is the one there is.
-        Error::ContextObjectNotFound { nearest, .. } => suggested(
-            nearest,
-            admits,
-            "name an object the --context document carries, then run the command again",
-        ),
+        // document does carry. `tpl` has no subcommand that lists a file the
+        // caller supplied, so the generic half names the member of the
+        // document that holds the names.
+        Error::ContextObjectNotFound { kind, nearest, .. } => {
+            let generic = match listing(*kind) {
+                Some(listing) => Cow::Owned(format!(
+                    "name one the --context document lists under data.database.{listing}, then \
+                     run the command again"
+                )),
+                None => Cow::Borrowed(
+                    "name an object the --context document carries, then run the command again",
+                ),
+            };
+
+            Cow::Owned(
+                suggest::hint_line(admitted(nearest, admits).iter().copied(), &generic)
+                    .into_owned(),
+            )
+        }
         // FR-TMPL-027 obliges the nearest-match half over the template names
-        // that do exist. The population is `render/`'s, for the reason this
-        // module's own documentation gives; a template name is a value this
-        // corpus does not fix, so FR-ERR-022 governs it by the character set
-        // and FR-ERR-023 drops a candidate outside it — which drops every
-        // nested name, because the separator a nested name carries is not in
-        // the set and is a literal of no enumerated spelling.
+        // that do exist. A template name is a path below the template root,
+        // so FR-ERR-041 governs it rather than the set of FR-ERR-022, and a
+        // nested name is suggested like any other.
         Error::TemplateNotFound { nearest, .. } => suggested(
             nearest,
-            admits,
+            admits_template,
             "list the project's templates with: tpl template list",
         ),
         // FR-GLOB-007 obliges the nearest-match half over the entry names the
@@ -380,26 +491,45 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         }
 
         // ------------------------------------------------------------ 69 ---
-        Error::NameNotResolved { .. } => Cow::Borrowed(
-            "check the name, or repoint the entry with: tpl cfg database update <entry> \
-             --host <host>",
-        ),
-        Error::ConnectionRefused { .. } => Cow::Borrowed(
-            "check that the server is listening, or repoint the entry with: tpl cfg database \
-             update <entry> --port <port>",
-        ),
-        Error::TlsHandshakeFailed { .. } => Cow::Borrowed(
-            "check the server's TLS, or state the mode with: tpl cfg set database.<entry>.tls \
-             <mode>",
-        ),
+        // BR-ERR-004: the entry is the one the connection was opened for, and
+        // it is written into the command rather than left as a placeholder.
+        // The new host and port are values only the caller knows.
+        Error::NameNotResolved { entry, .. } => Cow::Owned(format!(
+            "check the host name, or change it with: tpl cfg database update {} --host <host>",
+            entry_or_placeholder(entry)
+        )),
+        Error::ConnectionRefused { entry, port, .. } => Cow::Owned(format!(
+            "check that the server is running and listening on port {port}, or change the \
+             address with: tpl cfg database update {} --host <host> --port <port>",
+            entry_or_placeholder(entry)
+        )),
+        // The two remedies follow what the handshake returned. A server that
+        // offers no TLS is reached in the clear only by lowering the mode, and
+        // a certificate that is not trusted is either vouched for or not
+        // checked; `tpl cfg set` reaches the key because the file is valid by
+        // the time a connection is attempted.
+        Error::TlsHandshakeFailed { entry, fault, .. } => {
+            let entry = entry_or_placeholder(entry);
+
+            match fault {
+                TlsFault::Refused => Cow::Owned(format!(
+                    "check that the server offers TLS; for a server without it, on a network you \
+                     trust, allow a plain connection with: tpl cfg set database.{entry}.tls \
+                     preferred"
+                )),
+                TlsFault::CertificateRejected => Cow::Owned(format!(
+                    "trust the server's certificate authority with: tpl cfg set \
+                     database.{entry}.ca_file <pem-file>, or encrypt without checking the \
+                     certificate with: tpl cfg set database.{entry}.tls required"
+                )),
+            }
+        }
         Error::NetworkDeadlineExceeded { phase, bound, .. } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
                 "raise the deadline with: tpl cfg set {} <seconds>",
                 deadline_key(*phase)
             )),
-            DeadlineBound::Overall => {
-                Cow::Borrowed("raise the overall budget with: tpl --timeout <seconds> <command>")
-            }
+            DeadlineBound::Overall => Cow::Borrowed(OVERALL_BUDGET),
         },
 
         // ------------------------------------------------------------ 70 ---
@@ -418,8 +548,17 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
 
         // ------------------------------------------------------------ 74 ---
         Error::ProjectFileUnreadable { .. } => Cow::Borrowed(
-            "make .tpl and its contents readable by the invoking user, then run the command again",
+            "make the path named above readable by the invoking user, then run the command again",
         ),
+        Error::ContextDocumentUnreadable { .. } => Cow::Borrowed(
+            "check the path given to --context, or give --context - to read the document from \
+             standard input",
+        ),
+        Error::TrustMaterialUnreadable { entry, key, .. } => Cow::Owned(format!(
+            "make the path readable by the invoking user, or point the setting elsewhere with: \
+             tpl cfg set database.{}.{key} <path>",
+            entry_or_placeholder(entry)
+        )),
         Error::ProjectFileUnwritable { .. } => Cow::Borrowed(
             "free space on the filesystem, or make .tpl writable by the invoking user, then run \
              the command again",
@@ -434,33 +573,93 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         ),
 
         // ------------------------------------------------------------ 77 ---
-        Error::AuthenticationRefused { .. } => Cow::Borrowed(
-            "correct the credentials with: tpl cfg database update <entry> --user <user>",
-        ),
-        Error::PropertyNotReadable { .. } => Cow::Borrowed(
-            "request read access to the catalogue for this user, then run the command again",
-        ),
+        // The usual cause is the password, and the entry states it in one of
+        // three places; `tpl cfg database test` is the command that confirms a
+        // correction without reading the catalogue.
+        Error::AuthenticationRefused { entry, .. } => Cow::Owned(format!(
+            "check the user and the password of the entry (password, password_command, or the \
+             password inside dsn), then test it with: tpl cfg database test {}",
+            entry_or_placeholder(entry)
+        )),
+        Error::PropertyNotReadable { kind, property, .. } => match (kind, *property) {
+            (CatalogueObjectKind::Database, _) => Cow::Borrowed(
+                "check the database the entry names, or grant the connecting user access to it, \
+                 then run the command again",
+            ),
+            (CatalogueObjectKind::View, "definition") => Cow::Borrowed(
+                "grant the connecting user SHOW VIEW on the view, then run the command again",
+            ),
+            _ => Cow::Owned(format!(
+                "grant the connecting user the privilege to read the {property} of the {kind}, \
+                 then run the command again"
+            )),
+        },
 
         // ------------------------------------------------------------ 78 ---
         // FR-PROJ-006 obliges this hint to suggest `tpl init`.
-        Error::ProjectNotFound { .. } => Cow::Borrowed("create a project here with: tpl init"),
-        Error::ConfigurationNotOwned { .. } => Cow::Borrowed("chown \"$(id -un)\" .tpl/.cfg"),
-        // FR-PROJ-011 states this hint itself.
-        Error::ConfigurationUnsafeMode { .. } => Cow::Borrowed("chmod 600 .tpl/.cfg"),
-        Error::ConfigurationMalformed { .. } => Cow::Borrowed(
-            "correct the TOML at the line and column named above, then run the command again",
+        Error::ProjectNotFound { .. } => Cow::Borrowed(
+            "create a project here with: tpl init, or name an existing one with: tpl --tpl-dir \
+             <path>/.tpl <command>",
         ),
+        // FR-PROJ-008 fixes this hint: correct the flag, and create a project
+        // only at the path named — its parent, where the last segment is
+        // `.tpl`, built under FR-ERR-041.
+        Error::ProjectDirUnusable { path, .. } => {
+            let named = path.file_name() == Some(std::ffi::OsStr::new(".tpl"));
+
+            match path.parent() {
+                Some(parent) if named && admits_file(parent) => Cow::Owned(format!(
+                    "correct --tpl-dir, or create the project with: tpl init {}",
+                    parent_or_here(parent)
+                )),
+                _ if named => Cow::Borrowed(
+                    "correct --tpl-dir, or create the project with: tpl init <parent>",
+                ),
+                _ => Cow::Borrowed("correct --tpl-dir so that it names an existing .tpl folder"),
+            }
+        }
+        // FR-PROJ-010 and FR-PROJ-011 fix these two: the absolute path, built
+        // under FR-ERR-041, so that the command succeeds from any directory.
+        Error::ConfigurationNotOwned { path, .. } => {
+            Cow::Owned(format!("chown \"$(id -un)\" {}", configuration_file(path)))
+        }
+        Error::ConfigurationUnsafeMode { path, .. } => {
+            Cow::Owned(format!("chmod 600 {}", configuration_file(path)))
+        }
+        // BR-ERR-004: no `tpl cfg` command runs while `.tpl/.cfg` fails step 3
+        // of FR-ERR-006, so every hint of a fault in the file names the file,
+        // the position where the variant carries one, and the edit.
+        Error::ConfigurationMalformed { path, position, .. } => Cow::Owned(format!(
+            "edit {} at line {}, column {} so that it is valid TOML; {NO_CFG_COMMAND}",
+            configuration_file(path),
+            position.line,
+            position.column
+        )),
         // FR-CONF-034 obliges the nearest-match half over the known keys.
-        Error::ConfigurationKeyOutsideSpace { nearest, .. } => {
+        Error::ConfigurationKeyOutsideSpace {
+            key, file, nearest, ..
+        } => {
             let admitted = admitted(nearest, admits_key);
-            suggest::hint_line(
-                admitted.iter().copied(),
-                "remove the key from .tpl/.cfg, or show what tpl cfg set accepts with: \
-                 tpl help cfg set",
-            )
+            let named = if admits_key(key) {
+                Cow::Owned(format!("'{key}'"))
+            } else {
+                Cow::Borrowed("the key named above")
+            };
+            let generic = format!(
+                "or delete {named} from {}; tpl help cfg set lists every key the file may hold",
+                configuration_file(file)
+            );
+
+            if admitted.is_empty() {
+                Cow::Owned(generic.trim_start_matches("or ").to_owned())
+            } else {
+                Cow::Owned(suggest::hint_line(admitted.iter().copied(), &generic).into_owned())
+            }
         }
         // FR-CONF-044: the remedy FR-ERR-001 gives a `78` is to fix
-        // `.tpl/.cfg`, and the key to fix is this entry's own `ca_path`.
+        // `.tpl/.cfg`, and the key to fix is this entry's own `ca_path`. The
+        // file is valid by the time trust material is assembled, so `tpl cfg`
+        // reaches the key.
         Error::TrustDirectoryEmpty { entry, .. } => {
             let key = format!("database.{entry}.ca_path");
 
@@ -476,54 +675,85 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 )
             }
         }
-        Error::ConfigurationValueMalformed { key, .. } => {
-            if admits_key(key) {
-                Cow::Owned(format!(
-                    "write a conforming value with: tpl cfg set {key} <value>"
-                ))
-            } else {
-                Cow::Borrowed(
-                    "correct the value at the line and column named above, then run the command \
-                     again",
-                )
+        Error::ConfigurationValueMalformed {
+            key,
+            file,
+            position,
+            expected,
+            ..
+        } => Cow::Owned(format!(
+            "edit {} at line {}: give {} {expected}; {NO_CFG_COMMAND}",
+            configuration_file(file),
+            position.line,
+            key_or_placeholder(key)
+        )),
+        // Neither line carries a user in its example URL. FR-ERR-022 admits
+        // only `[A-Za-z0-9_]` in a value, and FR-SEC-019 builds a runnable hint
+        // from literals alone; a worked DSN with a user would put an `@` on the
+        // line, which is the character the assertion over every hint looks for
+        // to prove that no value reached one ungated.
+        Error::DsnMalformed { key, file, fault } => {
+            let named = key_or_placeholder(key);
+
+            match fault {
+                DsnFault::Scheme => Cow::Owned(format!(
+                    "edit {}: begin {named} with mysql:// or mariadb://; {NO_CFG_COMMAND}",
+                    configuration_file(file)
+                )),
+                DsnFault::Form => Cow::Owned(format!(
+                    "edit {}: write {named} as scheme://host/database, e.g. \
+                     mysql://db.example.com:3306/shop; {NO_CFG_COMMAND}",
+                    configuration_file(file)
+                )),
             }
         }
-        // Neither line carries an example URL. FR-ERR-022 admits only
-        // `[A-Za-z0-9_]` in a value, and FR-SEC-019 builds a runnable hint from
-        // literals alone; a worked DSN would put an `@` on the line, which is
-        // the character the assertion over every hint looks for to prove that
-        // no value reached one ungated. The `cause` carries the grammar, per
-        // FR-ERR-034, and the help carries the example.
-        Error::DsnMalformed { fault, .. } => match fault {
-            DsnFault::Scheme => Cow::Borrowed(
-                "write the URL with one of the two schemes tpl accepts, mysql or mariadb",
-            ),
-            DsnFault::Form => Cow::Borrowed(
-                "write the URL with a scheme, a host and a database, and show the form with: \
-                 tpl help cfg database add",
-            ),
-        },
         // FR-CONF-020 makes `$$` the literal dollar, so a value that meant one
         // is corrected by doubling it rather than by closing a brace.
-        Error::UnclosedExpansion { .. } => {
-            Cow::Borrowed("close the expansion as ${VAR}, or write $$ for a literal dollar sign")
-        }
+        Error::UnclosedExpansion { key, file } => Cow::Owned(format!(
+            "edit {}: close the expansion in {} as ${{VAR}}, or write $$ for a literal dollar \
+             sign; {NO_CFG_COMMAND}",
+            configuration_file(file),
+            key_or_placeholder(key)
+        )),
         // FR-CONF-035 obliges the hint to show the array form, and states this
         // example itself.
-        Error::PasswordCommandNotAnArray { .. } => Cow::Borrowed(
-            "write it as an array: password_command = [\"security\", \"find-generic-password\", \
-             \"-s\", \"tpl-shop\", \"-w\"]",
-        ),
-        Error::ConflictingEntryKeys { .. } => {
-            Cow::Borrowed("keep one of the two and remove the other with: tpl cfg unset <key>")
+        Error::PasswordCommandNotAnArray { file, position, .. } => Cow::Owned(format!(
+            "edit {} at line {} and write it as an array: password_command = [\"security\", \
+             \"find-generic-password\", \"-s\", \"tpl-shop\", \"-w\"]",
+            configuration_file(file),
+            position.line
+        )),
+        Error::ConflictingEntryKeys {
+            entry,
+            file,
+            first,
+            second,
+        } => {
+            let (first, second) = (leaf(first), leaf(second));
+
+            if admits(entry) && admits(first) && admits(second) {
+                Cow::Owned(format!(
+                    "edit {}: under [database.{entry}], delete either {first} or {second}; \
+                     {NO_CFG_COMMAND}",
+                    configuration_file(file)
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "edit {}: keep one of the two keys named above and delete the other; \
+                     {NO_CFG_COMMAND}",
+                    configuration_file(file)
+                ))
+            }
         }
-        // FR-CONF-011 points the hint at `tpl cfg database add` with the
-        // discrete flags. The DSN itself is barred by BR-ERR-003 and is not
-        // carried by the error value at all.
-        Error::DsnQueryParameter { .. } => Cow::Borrowed(
-            "state each option as its own key: tpl cfg database add <entry> --host <host> \
-             --port <port> --user <user>",
-        ),
+        // FR-CONF-011 fixes this hint: the file, the entry's dsn key, and the
+        // edit that removes the query. The character is named in words, so
+        // that no `?` reaches a hint line, for the reason given above.
+        Error::DsnQueryParameter { key, file } => Cow::Owned(format!(
+            "edit {}: in {}, delete the question mark and everything after it, and state each \
+             option as a key of its own; {NO_CFG_COMMAND}",
+            configuration_file(file),
+            key_or_placeholder(key)
+        )),
         Error::UndefinedVariable { name, .. } => {
             if admits(name) {
                 Cow::Owned(format!("define it with: export {name}=<value>"))
@@ -537,9 +767,7 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             DeadlineBound::Phase => Cow::Borrowed(
                 "raise the deadline with: tpl cfg set core.password_timeout <seconds>",
             ),
-            DeadlineBound::Overall => {
-                Cow::Borrowed("raise the overall budget with: tpl --timeout <seconds> <command>")
-            }
+            DeadlineBound::Overall => Cow::Borrowed(OVERALL_BUDGET),
         },
         Error::PasswordCommandOutputCapExceeded { .. } => {
             Cow::Borrowed("make password_command write the password and nothing else")
@@ -574,19 +802,13 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             flag,
             placeholder,
             ..
-        } => {
-            if admits(entry) {
-                Cow::Owned(format!(
-                    "tpl cfg database update {entry} {flag} {placeholder}"
-                ))
-            } else {
-                Cow::Owned(format!(
-                    "tpl cfg database update <entry> {flag} {placeholder}"
-                ))
-            }
-        }
+        } => Cow::Owned(format!(
+            "set it with: tpl cfg database update {} {flag} {placeholder}",
+            entry_or_placeholder(entry)
+        )),
         Error::NoDatabaseEntrySelected { .. } => Cow::Borrowed(
-            "select an entry with -d, or set a default with: tpl cfg set core.database <entry>",
+            "select an entry with -d <entry>, or set a default with: tpl cfg set core.database \
+             <entry>; list the entries with: tpl cfg database list",
         ),
         Error::ServerNotMariaDb { entry, .. } => Cow::Owned(format!(
             "repoint the entry at a MariaDB server: {}",
@@ -599,6 +821,133 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             update_entry(entry)
         )),
     }
+}
+
+/// The clause every hint of a fault in `.tpl/.cfg` ends with.
+///
+/// `BR-ERR-004` names the case: no `tpl cfg` subcommand is excused from
+/// validating the file, per `FR-ERR-035`, so a caller told to "run tpl cfg set"
+/// meets the same `78` again. The clause says so, so that the edit is not
+/// mistaken for one route among several.
+const NO_CFG_COMMAND: &str = "no tpl cfg command runs until the file is valid";
+
+/// The hint of every condition the overall budget of `FR-GLOB-011` ended.
+///
+/// The command is the caller's own, so it is not rewritten here: the flag is
+/// global and goes anywhere on the line, per `FR-GLOB-002`.
+const OVERALL_BUDGET: &str =
+    "raise the overall budget: run the same command again with a larger --timeout <seconds>";
+
+/// The `tpl help` command that shows one node, which at the root is `tpl help`
+/// alone.
+///
+/// `command` is the command path below `tpl`, a spelling this corpus
+/// enumerates; the test beside it is the defensive assertion this module
+/// applies to every such value.
+fn help_of(command: &str) -> Cow<'static, str> {
+    if command.is_empty() {
+        Cow::Borrowed("tpl help")
+    } else if admits_path(command) {
+        Cow::Owned(format!("tpl help {command}"))
+    } else {
+        Cow::Borrowed("tpl help <command>")
+    }
+}
+
+/// The entry name, where `FR-ERR-022` admits it into a runnable command, and
+/// the placeholder otherwise, per `FR-ERR-023`.
+fn entry_or_placeholder(entry: &str) -> &str {
+    if admits(entry) { entry } else { "<entry>" }
+}
+
+/// A configuration key, where every segment is admitted, and a phrase that
+/// points at the `error:` line otherwise.
+fn key_or_placeholder(key: &str) -> &str {
+    if admits_key(key) {
+        key
+    } else {
+        "the key named above"
+    }
+}
+
+/// The last segment of a dotted key: `dsn` of `database.shop.dsn`.
+fn leaf(key: &str) -> &str {
+    key.rsplit('.').next().unwrap_or(key)
+}
+
+/// The path of `.tpl/.cfg` as a hint writes it: absolute where `FR-ERR-041`
+/// admits it, and the placeholder `FR-ERR-041` puts in its position otherwise.
+fn configuration_file(path: &Path) -> Cow<'static, str> {
+    if path.is_absolute() && admits_file(path) {
+        Cow::Owned(path.display().to_string())
+    } else {
+        Cow::Borrowed("<project>/.tpl/.cfg")
+    }
+}
+
+/// A parent directory as `tpl init` takes it: `.` where the path had no parent
+/// segment of its own.
+fn parent_or_here(parent: &Path) -> Cow<'_, str> {
+    if parent.as_os_str().is_empty() {
+        Cow::Borrowed(".")
+    } else {
+        parent.to_string_lossy()
+    }
+}
+
+/// The hint for an undefined expression whose first segment is a variable a
+/// flag binds, or [`None`] where it is not one.
+///
+/// `table`, `view` and `routine` exist only when the object flag of the same
+/// name is given, per `FR-RND-023`, and a key of `vars` exists only when a
+/// `--set` defines it, per `FR-CTX-026`. The key is a `--set` key, which
+/// `FR-RND-012` confines to the set of `FR-ERR-022`; one outside it leaves the
+/// placeholder.
+fn defining_flag(expression: &str) -> Option<Cow<'static, str>> {
+    let mut segments = expression.split(['.', '[']);
+    let root = segments.next()?.trim();
+
+    match root {
+        "table" | "view" | "routine" => Some(Cow::Owned(format!(
+            "'{root}' exists only when the render names one: add --{root} <name> to the tpl \
+             render command"
+        ))),
+        "vars" => {
+            let key = segments.next().map(str::trim).filter(|key| admits(key));
+
+            Some(Cow::Owned(match key {
+                Some(key) => format!(
+                    "'vars.{key}' is set with --set: add --set {key}=<value> to the tpl render \
+                     command"
+                ),
+                None => "a key of 'vars' is set with --set: add --set <key>=<value> to the tpl \
+                         render command"
+                    .to_owned(),
+            }))
+        }
+        _ => None,
+    }
+}
+
+/// Whether a template name may be written into a hint (`FR-ERR-041`).
+///
+/// `[A-Za-z0-9_./-]`, measured over the whole value, at most [`MAX_PATH`]
+/// characters, and not beginning with `-`. A nested template name carries a
+/// `/`, which the set of `FR-ERR-022` refused, so none could be suggested.
+pub(super) fn admits_template(name: &str) -> bool {
+    // Every admitted byte is ASCII, so the byte length is the character count.
+    !name.is_empty()
+        && name.len() <= MAX_PATH
+        && !name.starts_with('-')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'/' | b'-'))
+}
+
+/// Whether a filesystem path of the project may be written into a hint
+/// (`FR-ERR-041`): the same set as a template name, over the whole path.
+pub(super) fn admits_file(path: &Path) -> bool {
+    path.to_str().is_some_and(admits_template)
 }
 
 /// The candidates of a nearest-match hint that `admits` lets through.

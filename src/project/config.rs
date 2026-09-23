@@ -350,6 +350,7 @@ fn read(text: &str, file: &Path) -> Result<Document, Error> {
     let parsed = DeTable::parse(text).map_err(|refused| Error::ConfigurationMalformed {
         path: file.to_owned(),
         position: position(text, refused.span().map_or(0, |span| span.start)),
+        reason: parser_reason(refused.message()),
     })?;
     let root = parsed.get_ref();
 
@@ -424,11 +425,25 @@ fn check_key_space(
 /// The refusal of `FR-CONF-034`, with the nearest-match suggestion it obliges.
 fn outside_space(key: &str, known: &[&str], file: &Path) -> Error {
     let population = keys::candidates(known.iter().copied(), key);
+    let mut suggested = nearest(key, &population, Population::ConfigurationKeys);
+
+    // A known key written in the wrong table — `password_timeout` above
+    // `[core]` — is a whole segment away from its own spelling, so the
+    // distance of FR-ERR-019 never reaches it. The key is offered under every
+    // table that does hold a key of that name.
+    if suggested.is_empty() && !key.contains('.') {
+        suggested = population
+            .iter()
+            .filter(|candidate| candidate.rsplit('.').next() == Some(key))
+            .take(3)
+            .cloned()
+            .collect();
+    }
 
     Error::ConfigurationKeyOutsideSpace {
         key: key.to_owned(),
         file: file.to_owned(),
-        nearest: nearest(key, &population, Population::ConfigurationKeys),
+        nearest: suggested,
     }
 }
 
@@ -806,6 +821,28 @@ pub(crate) fn at(text: &str, value: &Spanned<DeValue<'_>>) -> Position {
 }
 
 /// The line and column, counted from one, of a byte offset into `text`.
+/// What the TOML parser said it expected, on one line.
+///
+/// The parser's message is its own diagnosis — "invalid table header",
+/// "expected `.`, `]`" — and carries no excerpt of the file; the excerpt is
+/// what its `Display` adds, and `BR-ERR-003` bars the contents of `.tpl/.cfg`
+/// from every message, so the message is taken alone. Its lines are joined,
+/// because `FR-ERR-008` gives the `cause` one line.
+pub(crate) fn parser_reason(message: &str) -> String {
+    let joined = message
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("; ");
+
+    if joined.is_empty() {
+        "the parser gave no reason".to_owned()
+    } else {
+        joined
+    }
+}
+
 fn position(text: &str, offset: usize) -> Position {
     let upto = text.get(..offset).unwrap_or(text);
     let line = upto.bytes().filter(|byte| *byte == b'\n').count() + 1;

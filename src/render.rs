@@ -525,6 +525,7 @@ mod tests {
             template,
             position,
             chain,
+            ..
         } = &condition
         else {
             panic!("fail is a render failure");

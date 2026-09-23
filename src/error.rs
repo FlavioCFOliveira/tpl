@@ -156,10 +156,21 @@ pub enum ContextFault {
     /// The bytes are not well-formed JSON, at this position.
     NotJson(Position),
     /// The document is JSON and does not match the contract of
-    /// `context-document.md`; the field names the rule it failed.
+    /// `context-document.md`.
+    ///
+    /// The forty-third edition of the `65` row of `FR-ERR-034` obliges the
+    /// `cause` line to name the key path of the first member, in document
+    /// order, that fails the contract, and what the contract expects there —
+    /// and to cite no file of the specification. The two fields are those two
+    /// facts.
     Structure {
-        /// The structural rule that was not satisfied.
-        rule: &'static str,
+        /// The key path of the member that fails, written as a caller reads it
+        /// in the document — `data.database.tables[0].name` — or the empty
+        /// string where the failure is the document as a whole.
+        at: String,
+        /// What the contract expects there: the type, that the key is
+        /// required, or the rule the member breaks.
+        expected: String,
     },
     /// A foreign key of a member of `tables` names a table that `tables` does
     /// not carry (`FR-CTX-042`).
@@ -277,6 +288,33 @@ pub enum ChildEnd {
     Unreported,
 }
 
+/// What the TLS handshake of `FR-CONF-013` returned, as the driver's
+/// discriminants classify it.
+///
+/// The `69` row of `FR-ERR-034` obliges the `cause` line to name what the
+/// phase returned, and `FR-GLOB-018` bars the driver's own message from every
+/// stream, so what it returned is stated as this classification and the
+/// message is dropped where it is made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TlsFault {
+    /// The TLS layer refused the connection before any certificate was judged:
+    /// the server offers no TLS, or the negotiation itself failed.
+    Refused,
+    /// The server presented a certificate and it was not accepted: its chain
+    /// is not trusted by the trust material, or it does not name the host.
+    CertificateRejected,
+}
+
+/// Why the path `--tpl-dir` named cannot be used as the project
+/// (`FR-PROJ-008`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TplDirFault {
+    /// Nothing exists at the path.
+    Missing,
+    /// Something exists at the path, and it is not a directory.
+    NotDirectory,
+}
+
 /// Every condition `tpl` reports as a failure.
 ///
 /// One variant per distinct condition the specification names, each carrying
@@ -308,10 +346,18 @@ pub enum ChildEnd {
 pub enum Error {
     // ---------------------------------------------------------------- 64 ---
     /// A command the tree of `FR-CLI-002` does not declare (`FR-CLI-003`).
-    #[error("unknown command '{token}'")]
+    #[error("{}", unknown_command(.token, .node))]
     UnknownCommand {
         /// The token as written, never normalised (`FR-CLI-020`).
         token: String,
+        /// The command path of the node the token was written under, without
+        /// the program name, and empty at the root.
+        ///
+        /// It is carried so that both lines name the group a mistyped
+        /// subcommand was sought in, and so that the hint lists that group's
+        /// children rather than the root's, as `FR-HELP-028` already does for
+        /// the same mistake made inside `tpl help`.
+        node: String,
         /// The nearest matches among the children of the node the token was
         /// written at, selected by `FR-ERR-019` and ordered as it fixes.
         ///
@@ -362,6 +408,14 @@ pub enum Error {
     UnknownFlag {
         /// The token as written.
         token: String,
+        /// The command path of the node the token was written at, without the
+        /// program name, and empty at the root — the node whose help lists the
+        /// flags it does declare.
+        command: String,
+        /// Whether that node takes a positional argument, so that a value
+        /// beginning with `-` can have been meant for it; `FR-CLI-017` accepts
+        /// such a value after `--`, and the hint says so.
+        positional: bool,
         /// The nearest matches among the flags the invoked node declares,
         /// selected by `FR-ERR-019` and ordered as it fixes. Empty where
         /// nothing qualified, per `FR-ERR-020`.
@@ -444,6 +498,10 @@ pub enum Error {
     ValueOutsideEnumeration {
         /// The flag, in the long form the tree declares it under.
         flag: String,
+        /// The command path of the node the flag was given to, without the
+        /// program name, and empty for a global flag — the node whose help
+        /// states the values.
+        command: String,
         /// The value as written.
         value: String,
         /// The values the flag enumerates, in the order it declares them.
@@ -458,8 +516,15 @@ pub enum Error {
     /// the language. That arm produces this variant, and this variant produces
     /// `64` — never another code, so no unclassified refusal can move a caller
     /// onto a different branch.
-    #[error("the invocation was rejected")]
+    #[error("the invocation was rejected: {reason}")]
     InvocationRejected {
+        /// What the parser refused, in plain words, as the kind it reported
+        /// classifies it. It is a literal: the parser's own message is not
+        /// carried.
+        reason: &'static str,
+        /// The command path of the node the invocation reached, without the
+        /// program name, and empty at the root.
+        command: String,
         /// The token the parser named, where it named one. A refusal that
         /// carries no token — a value that is not valid UTF-8 is the one this
         /// tree can reach — leaves it [`None`], which is the one case
@@ -468,7 +533,7 @@ pub enum Error {
     },
 
     /// A required argument was not supplied (`FR-ERR-001`, the `64` row).
-    #[error("the command '{command}' requires the argument '{argument}'")]
+    #[error("'{}' needs the argument {argument}", crate::diagnostics::invoked(.command))]
     MissingArgument {
         /// The command path, as written.
         command: String,
@@ -484,6 +549,49 @@ pub enum Error {
         first: String,
         /// The second member of the pair, as written.
         second: String,
+    },
+
+    /// `--pretty` given where the format in force is not JSON (`FR-OUT-009`).
+    ///
+    /// It was reported as the pair `--pretty` and `--format text`, which named
+    /// a flag the caller had usually not written — `text` is the default — and
+    /// sent the caller to remove it. `FR-OUT-009` states the rule as a
+    /// requirement of one flag on another, and the message states it so.
+    #[error("'--pretty' needs '--format json'")]
+    PrettyWithoutJson {
+        /// The command path the flag was given to, without the program name.
+        command: String,
+        /// Whether that command runs with no operand, so that the hint can
+        /// write it out whole and it succeeds as written (`BR-ERR-004`).
+        complete: bool,
+    },
+
+    /// `tpl cfg database add` given neither `--dsn` nor a discrete connection
+    /// flag (`FR-CFG-016`).
+    #[error("'tpl cfg database add' needs connection details for entry '{entry}'")]
+    ConnectionDetailsMissing {
+        /// The entry the invocation asked to create.
+        entry: String,
+    },
+
+    /// `tpl cfg database update` given none of the flags of `FR-CFG-027`
+    /// (`FR-CFG-020`).
+    #[error("nothing to change: tpl cfg database update needs at least one field flag")]
+    NothingToUpdate {
+        /// The entry the invocation named.
+        entry: String,
+    },
+
+    /// A block — `core`, `database` or `database.<name>` — given to
+    /// `tpl cfg get`, which reads one value (`FR-CFG-007`).
+    #[error("{}", block_key(.key, .entry.is_some()))]
+    BlockKeyGiven {
+        /// The key as written.
+        key: String,
+        /// The entry the key names, WHERE it has the form `database.<name>`
+        /// and `.tpl/.cfg` defines that entry — the case in which the hint is
+        /// `tpl cfg database show <name>`.
+        entry: Option<String>,
     },
 
     /// A token naming one routine whose qualifying prefix is spelled in a case
@@ -590,6 +698,10 @@ pub enum Error {
     MalformedValue {
         /// The flag or the configuration key the value was given for.
         parameter: String,
+        /// The command path whose help states what the parameter takes,
+        /// without the program name: the node that declares the flag, empty
+        /// for a global flag, and `cfg set` for a configuration key.
+        command: String,
         /// The value as written.
         value: String,
         /// The type that was expected, per `FR-CONF-002` where the parameter
@@ -669,8 +781,20 @@ pub enum Error {
     /// failing filter, an escape from the template root (`FR-RND-031`).
     #[error("rendering template '{template}' failed at {position}")]
     RenderFailed {
-        /// The template being rendered when the failure arose.
+        /// The template being rendered when the failure arose — the included
+        /// one, for a failure inside an `{% include %}`.
         template: String,
+        /// The template the render was asked for, as the caller named it. It
+        /// differs from `template` only for a failure inside an include, and
+        /// it is the one the hint's command renders.
+        invoked: String,
+        /// The source text of the expression the engine found undefined,
+        /// WHERE the failure is an undefined value and the engine located it.
+        ///
+        /// It is what lets the `cause` name `table` or `vars.title` rather
+        /// than "undefined value", and the `hint` name the flag that defines
+        /// it — the most common failure a template author meets.
+        undefined: Option<String>,
         /// Where evaluation stopped.
         position: Position,
         /// The chain of underlying template-engine errors, outermost first
@@ -834,8 +958,10 @@ pub enum Error {
 
     // ---------------------------------------------------------------- 69 ---
     /// The host name could not be resolved.
-    #[error("host '{host}' could not be resolved")]
+    #[error("host '{host}' could not be resolved, for database entry '{entry}'")]
     NameNotResolved {
+        /// The database entry the connection was opened for.
+        entry: String,
         /// The host attempted.
         host: String,
         /// The port attempted.
@@ -843,8 +969,10 @@ pub enum Error {
     },
 
     /// The server refused the TCP connection.
-    #[error("the server at {host}:{port} refused the connection")]
+    #[error("the server at {host}:{port} refused the connection, for database entry '{entry}'")]
     ConnectionRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
         /// The host attempted.
         host: String,
         /// The port attempted.
@@ -856,18 +984,26 @@ pub enum Error {
     /// The right-hand column of `FR-CONF-038` is the ordinary case: a server
     /// offering no TLS cannot satisfy `required`, `verify-ca` or
     /// `verify-identity`.
-    #[error("the TLS handshake with {host}:{port} failed")]
+    #[error("the TLS handshake with {host}:{port} failed, for database entry '{entry}'")]
     TlsHandshakeFailed {
+        /// The database entry the connection was opened for.
+        entry: String,
         /// The host attempted.
         host: String,
         /// The port attempted.
         port: u16,
+        /// What the handshake returned, as classified.
+        fault: TlsFault,
     },
 
     /// A network phase did not finish within its deadline (`FR-ERR-027`,
     /// `FR-GLOB-013`).
-    #[error("{phase} for {host}:{port} exceeded {bound} of {limit:?}")]
+    #[error(
+        "{phase} for {host}:{port} exceeded {bound} of {limit:?}, for database entry '{entry}'"
+    )]
     NetworkDeadlineExceeded {
+        /// The database entry the connection was opened for.
+        entry: String,
         /// The phase that was in progress.
         phase: NetworkPhase,
         /// The host attempted.
@@ -932,6 +1068,42 @@ pub enum Error {
         returned: io::Error,
     },
 
+    /// The document `--context` named could not be read (`FR-RND-016`, the
+    /// `74` row of `FR-ERR-001`).
+    ///
+    /// It is not [`ProjectFileUnreadable`](Error::ProjectFileUnreadable): the
+    /// path is the caller's and may sit anywhere, so the hint points at the
+    /// flag rather than at the project's permissions.
+    #[error("the --context file {} could not be read", .path.display())]
+    ContextDocumentUnreadable {
+        /// The path `--context` named, or `-` for standard input.
+        path: PathBuf,
+        /// What the filesystem or the stream returned.
+        #[source]
+        returned: io::Error,
+    },
+
+    /// A file or directory of trust material that `ca_file` or `ca_path`
+    /// declares could not be read (`FR-CONF-014`, the `74` row of
+    /// `FR-ERR-001`).
+    ///
+    /// It is not [`ProjectFileUnreadable`](Error::ProjectFileUnreadable): the
+    /// path is outside `.tpl`, and the setting that named it is what the caller
+    /// corrects, so the message names the setting.
+    #[error("the {key} of database entry '{entry}' could not be read: {}", .path.display())]
+    TrustMaterialUnreadable {
+        /// The entry whose setting it is.
+        entry: String,
+        /// The setting that named the path: `ca_file` or `ca_path`.
+        key: &'static str,
+        /// The path that failed — the one declared, or an entry of the
+        /// directory `ca_path` declares.
+        path: PathBuf,
+        /// What the filesystem returned.
+        #[source]
+        returned: io::Error,
+    },
+
     /// A file of the project could not be written (`FR-ERR-001`, the `74`
     /// row).
     ///
@@ -973,8 +1145,12 @@ pub enum Error {
     ///
     /// The credential itself never enters the value: `FR-ERR-013` and
     /// `BR-ERR-003` bar it from every message at every verbosity.
-    #[error("the server at '{host}' refused authentication for user '{user}'")]
+    #[error(
+        "the server at '{host}' refused authentication for user '{user}', for database entry '{entry}'"
+    )]
     AuthenticationRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
         /// The user the server refused.
         user: String,
         /// The host that refused it.
@@ -1019,6 +1195,20 @@ pub enum Error {
         walk_ended_at: PathBuf,
     },
 
+    /// `--tpl-dir` named a path that does not exist or is not a directory
+    /// (`FR-PROJ-008`).
+    ///
+    /// No walk was made — the flag suppresses it — so the condition is not
+    /// [`ProjectNotFound`](Error::ProjectNotFound), whose `cause` describes a
+    /// walk and whose hint creates a project in the working directory.
+    #[error("{}", tpl_dir_unusable(.path, *.fault))]
+    ProjectDirUnusable {
+        /// The path `--tpl-dir` named, as the caller wrote it.
+        path: PathBuf,
+        /// Why it is not usable.
+        fault: TplDirFault,
+    },
+
     /// `.tpl/.cfg` is not owned by the current user (`FR-PROJ-010`).
     #[error("{} is not owned by the current user", .path.display())]
     ConfigurationNotOwned {
@@ -1046,6 +1236,10 @@ pub enum Error {
         path: PathBuf,
         /// Where the parser stopped.
         position: Position,
+        /// What the parser expected there, in its own words, with the source
+        /// excerpt it would quote removed so that no byte of the file is
+        /// written back (`BR-ERR-003`).
+        reason: String,
     },
 
     /// `.tpl/.cfg` carries a key outside the enumerated space of
@@ -1210,7 +1404,7 @@ pub enum Error {
     /// which, because `FR-CONF-042` obliges the `cause` line to: one wording
     /// for both is what that requirement was written over, and `FR-ERR-002`
     /// forbids it.
-    #[error("password_command yielded no exit status")]
+    #[error("{}", password_command_unusable(*.fault))]
     PasswordCommandNotExecutable {
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
@@ -1274,7 +1468,7 @@ pub enum Error {
     /// invocation reads the catalogue. `FR-CONF-040` rejects composing either
     /// refusal further down, where neither the file nor the position that
     /// declared the entry is in hand.
-    #[error("database entry '{entry}' does not carry '{key}'")]
+    #[error("{}", entry_key_missing(.entry, .key))]
     EntryKeyMissing {
         /// The entry that carries neither the key nor the alternative.
         entry: String,
@@ -1330,6 +1524,75 @@ pub enum Error {
         /// table compiled into the binary, and the type admits no other.
         supported: &'static [&'static str],
     },
+}
+
+/// The `error:` line of [`Error::UnknownCommand`]: the token, and the group it
+/// was sought under where that is not the root.
+fn unknown_command(token: &str, node: &str) -> String {
+    if node.is_empty() {
+        format!("unknown command '{token}'")
+    } else {
+        format!(
+            "unknown command '{token}' under '{}'",
+            crate::diagnostics::invoked(node)
+        )
+    }
+}
+
+/// The `error:` line of [`Error::BlockKeyGiven`], in the words `FR-CFG-007`
+/// shows: a `database.<name>` form that names an existing entry is a whole
+/// entry, and every other block form is a section.
+fn block_key(key: &str, entry: bool) -> String {
+    if entry {
+        format!("'{key}' names a whole entry, not one value")
+    } else {
+        format!("'{key}' names a whole section, not one value")
+    }
+}
+
+/// The `error:` line of [`Error::ProjectDirUnusable`], in the words
+/// `FR-PROJ-008` shows.
+fn tpl_dir_unusable(path: &std::path::Path, fault: TplDirFault) -> String {
+    match fault {
+        TplDirFault::Missing => format!(
+            "the folder named by --tpl-dir does not exist: {}",
+            path.display()
+        ),
+        TplDirFault::NotDirectory => format!(
+            "the path named by --tpl-dir is not a folder: {}",
+            path.display()
+        ),
+    }
+}
+
+/// The `error:` line of [`Error::PasswordCommandNotExecutable`], which states
+/// which of the two conditions of `FR-CONF-042` arose: "yielded no exit
+/// status" is true of both and was the only thing the line said, while the
+/// `cause` beneath it said the command had never started.
+const fn password_command_unusable(fault: PasswordCommandFault) -> &'static str {
+    match fault {
+        PasswordCommandFault::NotStarted => "password_command could not be started",
+        PasswordCommandFault::StatusUnreadable => {
+            "password_command ended with a status tpl could not read"
+        }
+    }
+}
+
+/// The `error:` line of [`Error::EntryKeyMissing`].
+///
+/// `database.<name>.database` names the word three times over, which is how the
+/// entry, the key and the server-side database came to read as one thing; the
+/// line says which of the two keys it is in words, and gives the key after.
+fn entry_key_missing(entry: &str, key: &str) -> String {
+    let what = if key.ends_with(".database") {
+        "no server database name"
+    } else if key.ends_with(".host") {
+        "no host"
+    } else {
+        "a required key missing"
+    };
+
+    format!("database entry '{entry}' has {what} (key {key})")
 }
 
 /// Checks an internal invariant, and reports `FR-ERR-030` where it does not
@@ -1410,6 +1673,7 @@ impl Error {
     ///
     /// let error = Error::UnknownCommand {
     ///     token: "sch".to_owned(),
+    ///     node: String::new(),
     ///     nearest: Vec::new(),
     /// };
     /// assert_eq!(error.exit_code(), 64);
@@ -1431,6 +1695,10 @@ impl Error {
             | Self::InvocationRejected { .. }
             | Self::MissingArgument { .. }
             | Self::MutuallyExclusiveFlags { .. }
+            | Self::PrettyWithoutJson { .. }
+            | Self::ConnectionDetailsMissing { .. }
+            | Self::NothingToUpdate { .. }
+            | Self::BlockKeyGiven { .. }
             | Self::RoutinePrefixNotLowerCase { .. }
             | Self::AmbiguousRoutineName { .. }
             | Self::AmbiguousRoutineInContext { .. }
@@ -1472,6 +1740,8 @@ impl Error {
 
             // 74 EX_IOERR
             Self::ProjectFileUnreadable { .. }
+            | Self::ContextDocumentUnreadable { .. }
+            | Self::TrustMaterialUnreadable { .. }
             | Self::ProjectFileUnwritable { .. }
             | Self::StdoutUnwritable { .. }
             | Self::StdoutClosedMidDocument => 74,
@@ -1481,6 +1751,7 @@ impl Error {
 
             // 78 EX_CONFIG
             Self::ProjectNotFound { .. }
+            | Self::ProjectDirUnusable { .. }
             | Self::ConfigurationNotOwned { .. }
             | Self::ConfigurationUnsafeMode { .. }
             | Self::ConfigurationMalformed { .. }
@@ -1521,7 +1792,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 69;
+    const VARIANT_COUNT: usize = 76;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -1546,6 +1817,7 @@ mod tests {
             // 64 EX_USAGE
             (
                 Error::UnknownCommand {
+                    node: String::new(),
                     token: "sch".to_owned(),
                     nearest: vec!["schema".to_owned()],
                 },
@@ -1561,6 +1833,8 @@ mod tests {
             ),
             (
                 Error::UnknownFlag {
+                    positional: false,
+                    command: String::new(),
                     token: "--data".to_owned(),
                     nearest: vec!["--database".to_owned()],
                 },
@@ -1602,6 +1876,7 @@ mod tests {
             ),
             (
                 Error::ValueOutsideEnumeration {
+                    command: String::new(),
                     flag: "--format".to_owned(),
                     value: "xml".to_owned(),
                     permitted: vec!["text".to_owned(), "json".to_owned()],
@@ -1610,6 +1885,8 @@ mod tests {
             ),
             (
                 Error::InvocationRejected {
+                    reason: "the value is not one the argument accepts",
+                    command: String::new(),
                     token: Some("-x".to_owned()),
                 },
                 64,
@@ -1665,7 +1942,57 @@ mod tests {
             ),
             (Error::LoadWithoutStoring, 64),
             (
+                Error::PrettyWithoutJson {
+                    command: "template list".to_owned(),
+                    complete: true,
+                },
+                64,
+            ),
+            (
+                Error::ConnectionDetailsMissing {
+                    entry: "shop".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::NothingToUpdate {
+                    entry: "shop".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::BlockKeyGiven {
+                    key: "database.shop".to_owned(),
+                    entry: Some("shop".to_owned()),
+                },
+                64,
+            ),
+            (
+                Error::ContextDocumentUnreadable {
+                    path: PathBuf::from("context.json"),
+                    returned: io::Error::from(io::ErrorKind::NotFound),
+                },
+                74,
+            ),
+            (
+                Error::TrustMaterialUnreadable {
+                    entry: "shop".to_owned(),
+                    key: "ca_file",
+                    path: PathBuf::from("/etc/ssl/ca.pem"),
+                    returned: io::Error::from(io::ErrorKind::NotFound),
+                },
+                74,
+            ),
+            (
+                Error::ProjectDirUnusable {
+                    path: PathBuf::from("/srv/shop/.tpl"),
+                    fault: super::TplDirFault::Missing,
+                },
+                78,
+            ),
+            (
                 Error::MalformedValue {
+                    command: String::new(),
                     parameter: "--timeout".to_owned(),
                     value: "soon".to_owned(),
                     expected: "integer",
@@ -1706,6 +2033,8 @@ mod tests {
             ),
             (
                 Error::RenderFailed {
+                    undefined: None,
+                    invoked: String::from("example"),
                     template: "example.jinja".to_owned(),
                     position: position(),
                     chain: vec!["undefined value".to_owned()],
@@ -1784,6 +2113,7 @@ mod tests {
             // 69 EX_UNAVAILABLE
             (
                 Error::NameNotResolved {
+                    entry: String::from("shop"),
                     host: "db.example.com".to_owned(),
                     port: 3306,
                 },
@@ -1791,6 +2121,7 @@ mod tests {
             ),
             (
                 Error::ConnectionRefused {
+                    entry: String::from("shop"),
                     host: "127.0.0.1".to_owned(),
                     port: 3306,
                 },
@@ -1798,6 +2129,8 @@ mod tests {
             ),
             (
                 Error::TlsHandshakeFailed {
+                    fault: crate::error::TlsFault::Refused,
+                    entry: String::from("shop"),
                     host: "db.example.com".to_owned(),
                     port: 3306,
                 },
@@ -1805,6 +2138,7 @@ mod tests {
             ),
             (
                 Error::NetworkDeadlineExceeded {
+                    entry: String::from("shop"),
                     phase: NetworkPhase::CatalogueQuery,
                     host: "db.example.com".to_owned(),
                     port: 3306,
@@ -1860,6 +2194,7 @@ mod tests {
             // 77 EX_NOPERM
             (
                 Error::AuthenticationRefused {
+                    entry: String::from("shop"),
                     user: "reader".to_owned(),
                     host: "db.example.com".to_owned(),
                 },
@@ -1897,6 +2232,7 @@ mod tests {
             ),
             (
                 Error::ConfigurationMalformed {
+                    reason: "expected `]`".to_owned(),
                     path: path(),
                     position: position(),
                 },
@@ -2113,6 +2449,13 @@ mod tests {
             Error::ReadOnlySessionNotEnforced { .. } => "ReadOnlySessionNotEnforced",
             Error::EntryKeyMissing { .. } => "EntryKeyMissing",
             Error::NoDatabaseEntrySelected { .. } => "NoDatabaseEntrySelected",
+            Error::PrettyWithoutJson { .. } => "PrettyWithoutJson",
+            Error::ConnectionDetailsMissing { .. } => "ConnectionDetailsMissing",
+            Error::NothingToUpdate { .. } => "NothingToUpdate",
+            Error::BlockKeyGiven { .. } => "BlockKeyGiven",
+            Error::ContextDocumentUnreadable { .. } => "ContextDocumentUnreadable",
+            Error::TrustMaterialUnreadable { .. } => "TrustMaterialUnreadable",
+            Error::ProjectDirUnusable { .. } => "ProjectDirUnusable",
             Error::ServerNotMariaDb { .. } => "ServerNotMariaDb",
             Error::SeriesNotSupported { .. } => "SeriesNotSupported",
         }

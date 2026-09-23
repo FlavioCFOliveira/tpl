@@ -104,6 +104,7 @@ impl Editor {
                         }),
                         column: 1,
                     },
+                    reason: crate::project::config::parser_reason(refused.message()),
                 })?;
 
         Ok(Self {
@@ -287,6 +288,7 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
     let expects = key.expects();
     let refused = || Error::MalformedValue {
         parameter: key.to_string(),
+        command: "cfg set".to_owned(),
         value: supplied.to_owned(),
         expected: expects.expected(),
     };

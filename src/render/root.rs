@@ -459,7 +459,7 @@ impl Root {
         let nearest = suggest::suggestions(
             named,
             population.iter().map(Template::displayed),
-            Population::Names,
+            Population::Templates,
         );
 
         nearest.names().map(str::to_owned).collect()

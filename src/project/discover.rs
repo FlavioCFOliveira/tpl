@@ -30,7 +30,7 @@
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 
-use crate::error::Error;
+use crate::error::{Error, TplDirFault};
 
 /// The name of the folder that marks a project (`FR-PROJ-001`).
 pub(crate) const MARKER: &str = ".tpl";
@@ -51,8 +51,15 @@ pub(crate) const MARKER: &str = ".tpl";
 /// directory the walk starts from cannot be resolved.
 pub(crate) fn locate(explicit: Option<&Path>, start: &Path) -> Result<PathBuf, Error> {
     match explicit {
-        Some(named) => canonical(named).ok_or_else(|| Error::ProjectNotFound {
-            walk_ended_at: named.to_owned(),
+        // FR-PROJ-008: no walk is made, so the refusal names the path and why
+        // it is not usable rather than a walk that never happened.
+        Some(named) => canonical(named).ok_or_else(|| Error::ProjectDirUnusable {
+            path: named.to_owned(),
+            fault: if std::fs::symlink_metadata(named).is_ok() {
+                TplDirFault::NotDirectory
+            } else {
+                TplDirFault::Missing
+            },
         }),
         None => walk(start),
     }
@@ -205,7 +212,8 @@ mod tests {
         for named in [missing, file] {
             let condition =
                 locate(Some(&named), &scratch.root()).expect_err("the path is not a folder");
-            assert!(matches!(condition, Error::ProjectNotFound { .. }));
+            assert!(matches!(condition, Error::ProjectDirUnusable { .. }));
+            assert_eq!(condition.exit_code(), 78);
         }
     }
 

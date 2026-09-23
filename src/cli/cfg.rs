@@ -274,7 +274,15 @@ pub(crate) struct Entry {
     ///
     /// Absent, the entry carries no port and the default of `FR-CONF-002`,
     /// `3306`, applies when the entry is read.
-    #[arg(long = "port", value_name = "PORT", action = ArgAction::Append)]
+    // FR-CONF-002 types the key as a TCP port and the reader refuses `0`, so
+    // the flag refuses it too: a value the flag admitted and the file then
+    // refused would leave every later command, the repair included, a `78`.
+    #[arg(
+        long = "port",
+        value_name = "PORT",
+        action = ArgAction::Append,
+        value_parser = clap::value_parser!(u16).range(1..)
+    )]
     pub(crate) port: Vec<u16>,
 
     /// The user to authenticate as, written to `database.<name>.user`.

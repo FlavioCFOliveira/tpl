@@ -69,14 +69,6 @@ use crate::output::{Document, Source};
 
 pub(crate) use shape::{ContextData, DatabaseDocument};
 
-/// The rule a document that is JSON and not this contract has failed.
-///
-/// `ContextFault::Structure` carries a literal, so this is one rule for every
-/// shape fault the decoder reports. It names the contract rather than the key,
-/// which is the most the fault type can carry.
-const DOCUMENT_CONTRACT: &str =
-    "the document carries every key context-document.md fixes, each with the type it fixes";
-
 /// Builds the document that carries `database`, ready to be emitted.
 ///
 /// `source` is the value of `FR-OUT-026` the read was served by — `server` or
@@ -147,7 +139,7 @@ pub(crate) fn read<'a>(bytes: &'a str, path: &Path) -> Result<Database<'a>, Erro
     // place. A document that omits `schema_version` is refused here, by the
     // three fields of `Document` having no defaults.
     let document: Document<ContextData<'a>> =
-        serde_json::from_str(bytes).map_err(|reported| malformed(fault(&reported)))?;
+        serde_json::from_str(bytes).map_err(|reported| malformed(fault(bytes, &reported)))?;
 
     read::database(document.into_data().database).map_err(malformed)
 }
@@ -157,11 +149,14 @@ pub(crate) fn read<'a>(bytes: &'a str, path: &Path) -> Result<Database<'a>, Erro
 /// The row obliges the `cause` line to name the path and *either* the position
 /// of the malformed JSON *or* the structural rule the document failed, and the
 /// decoder's own classification is what separates the two.
-fn fault(reported: &serde_json::Error) -> ContextFault {
+///
+/// The forty-third edition asks the second half for the key path of the member
+/// that fails and what the contract expects there, and forbids citing a file
+/// of the specification. The decoder states what it expected and where it
+/// stopped, and [`path_at`] turns where it stopped into the key path.
+fn fault(bytes: &str, reported: &serde_json::Error) -> ContextFault {
     match reported.classify() {
-        Category::Data => ContextFault::Structure {
-            rule: DOCUMENT_CONTRACT,
-        },
+        Category::Data => structure(bytes, reported),
         // Syntax and Eof are both a document that is not well-formed JSON. Io
         // is unreachable: the bytes are already in memory, and a decode from a
         // string performs no read.
@@ -170,6 +165,158 @@ fn fault(reported: &serde_json::Error) -> ContextFault {
             column: reported.column(),
         }),
     }
+}
+
+/// The structural fault the decoder reported, as a key path and what was
+/// expected there.
+fn structure(bytes: &str, reported: &serde_json::Error) -> ContextFault {
+    let offset = offset(bytes, reported.line(), reported.column());
+    let (mut at, closed) = path_at(bytes, offset);
+    let message = reported.to_string();
+    let message = message
+        .rsplit_once(" at line ")
+        .map_or(message.as_str(), |(head, _)| head);
+
+    // "missing field `name`" is reported where the object that lacks it
+    // closes, so the path is that object's, and the key is appended to it.
+    let expected = match message.strip_prefix("missing field `") {
+        Some(rest) if closed => {
+            let field = rest.trim_end_matches('`');
+            at = if at.is_empty() {
+                field.to_owned()
+            } else {
+                format!("{at}.{field}")
+            };
+            "a required key is absent".to_owned()
+        }
+        _ => match message.strip_prefix("invalid type: ") {
+            Some(rest) => match rest.split_once(", expected ") {
+                Some((found, wanted)) => format!("{wanted} was expected, and {found} was found"),
+                None => rest.to_owned(),
+            },
+            None => message.to_owned(),
+        },
+    };
+
+    ContextFault::Structure { at, expected }
+}
+
+/// The byte offset of a one-based line and column the decoder reported.
+fn offset(bytes: &str, line: usize, column: usize) -> usize {
+    let start: usize = bytes
+        .split_inclusive('\n')
+        .take(line.saturating_sub(1))
+        .map(str::len)
+        .sum();
+
+    (start + column).min(bytes.len())
+}
+
+/// One level of the path [`path_at`] tracks.
+enum Level {
+    /// Inside an object, with the key most recently read.
+    Object(Option<String>),
+    /// Inside an array, with the index of the element being read.
+    Array(usize),
+}
+
+/// The key path of the value that ends at or just before `offset`, in a
+/// document known to be well-formed JSON, and whether that value is an object
+/// or an array that closed there.
+///
+/// The decoder reports a fault where it stops, which is just after the value it
+/// refused, or just after the object that lacks a required key; the path of
+/// that value is the path of the member at fault.
+fn path_at(bytes: &str, offset: usize) -> (String, bool) {
+    let mut stack: Vec<Level> = Vec::new();
+    let mut last = (String::new(), false);
+    let text = bytes.as_bytes();
+    let mut index = 0;
+
+    while index < text.len() && index < offset {
+        match text[index] {
+            b'{' => stack.push(Level::Object(None)),
+            b'[' => stack.push(Level::Array(0)),
+            b'}' | b']' => {
+                stack.pop();
+                last = (render(&stack), true);
+            }
+            b',' => {
+                if let Some(Level::Array(position)) = stack.last_mut() {
+                    *position += 1;
+                }
+            }
+            b'"' => {
+                let end = string_end(text, index);
+                let read = bytes.get(index + 1..end).unwrap_or_default();
+
+                let is_key = text[end + 1..]
+                    .iter()
+                    .find(|byte| !byte.is_ascii_whitespace())
+                    == Some(&b':');
+
+                match stack.last_mut() {
+                    Some(Level::Object(key)) if is_key => *key = Some(read.to_owned()),
+                    _ => last = (render(&stack), false),
+                }
+                index = end;
+            }
+            b':' => {}
+            byte if !byte.is_ascii_whitespace() => {
+                // A number or a literal: read to its end.
+                while index + 1 < text.len()
+                    && !matches!(text[index + 1], b',' | b'}' | b']')
+                    && !text[index + 1].is_ascii_whitespace()
+                {
+                    index += 1;
+                }
+                last = (render(&stack), false);
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+
+    last
+}
+
+/// The index of the quotation mark that closes the string opening at `start`.
+fn string_end(text: &[u8], start: usize) -> usize {
+    let mut index = start + 1;
+
+    while index < text.len() {
+        match text[index] {
+            b'\\' => index += 2,
+            b'"' => return index,
+            _ => index += 1,
+        }
+    }
+
+    text.len().saturating_sub(1)
+}
+
+/// The path the stack describes, as a caller reads it in the document.
+fn render(stack: &[Level]) -> String {
+    let mut path = String::new();
+
+    for level in stack {
+        match level {
+            Level::Object(Some(key)) => {
+                if !path.is_empty() {
+                    path.push('.');
+                }
+                path.push_str(key);
+            }
+            Level::Object(None) => {}
+            Level::Array(position) => {
+                path.push('[');
+                path.push_str(&position.to_string());
+                path.push(']');
+            }
+        }
+    }
+
+    path
 }
 
 #[cfg(test)]
@@ -411,11 +558,15 @@ mod tests {
             r#"{"name":"row_end","direction":"A","prefix_length":null}"#,
         );
 
-        let ContextFault::Structure { rule } = refused(&document) else {
+        let ContextFault::Structure { at, expected } = refused(&document) else {
             panic!("a key naming an absent column is a structural fault");
         };
 
-        assert!(rule.contains("names a column that table carries"), "{rule}");
+        assert!(at.starts_with("data.database.tables["), "{at}");
+        assert!(
+            expected.contains("must be one of its own columns"),
+            "{expected}"
+        );
     }
 
     /// The fixture's dump as a JSON value, for a test that edits it.
@@ -683,5 +834,23 @@ mod tests {
             "{reported}"
         );
         assert_eq!(reported.exit_code(), 65);
+    }
+
+    #[test]
+    fn fr_err_034_a_missing_key_is_named_by_its_path_and_a_wrong_type_by_what_was_expected() {
+        let absent = refused(r#"{"schema_version":1,"source":"server","data":{}}"#);
+        let ContextFault::Structure { at, expected } = absent else {
+            panic!("an absent key is a structural fault");
+        };
+        assert_eq!(at, "data.database");
+        assert_eq!(expected, "a required key is absent");
+
+        let mut document = editable();
+        document["data"]["database"]["name"] = serde_json::json!(7);
+        let ContextFault::Structure { at, expected } = refused(&document.to_string()) else {
+            panic!("a wrong type is a structural fault");
+        };
+        assert_eq!(at, "data.database.name");
+        assert!(expected.contains("was expected"), "{expected}");
     }
 }

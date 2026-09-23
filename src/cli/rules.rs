@@ -51,19 +51,6 @@ const PRETTY: &str = "pretty";
 /// `--format`, by the identifier `ArgMatches` is keyed by.
 const FORMAT: &str = "format";
 
-/// `--pretty`, in the long form the tree declares it under.
-const PRETTY_FLAG: &str = "--pretty";
-
-/// `--format text`, which is the member `--pretty` excludes.
-///
-/// It is a literal rather than a value interpolated from the invocation.
-/// `--format` takes a closed set of two, per `FR-OUT-001`, and this refusal is
-/// reached only where the value in force is the one that is not `json` — so
-/// there is exactly one spelling the second member can have, and composing it
-/// from the matched value would put a caller-supplied byte on a line
-/// `FR-ERR-024` would then have to escape.
-const FORMAT_TEXT: &str = "--format text";
-
 /// The one flag of the tree that is repeatable by requirement.
 ///
 /// `FR-RND-008` makes `--set` repeatable with distinct keys, so it is outside
@@ -261,13 +248,24 @@ pub(super) fn refuse_both_verbosities(globals: &Globals) -> Result<(), Error> {
 ///
 /// # Errors
 ///
-/// Returns [`Error::MutuallyExclusiveFlags`] naming both members of the pair,
-/// which is what the `64` row of `FR-ERR-034` obliges the `cause` line to name,
-/// and [`Error::InternalInvariant`] where the matched tree and the matches
-/// disagree about which nodes exist.
+/// Returns [`Error::PrettyWithoutJson`] naming the command the flag was given
+/// to — the pair `--pretty` and `--format text` named a flag the caller had
+/// usually not written, `text` being the default — and
+/// [`Error::InternalInvariant`] where the matched tree and the matches disagree
+/// about which nodes exist.
 pub(super) fn refuse_pretty_without_json(
     command: &clap::Command,
     matches: &ArgMatches,
+) -> Result<(), Error> {
+    pretty_below(command, matches, &mut String::new())
+}
+
+/// [`refuse_pretty_without_json`] at one node, with the command path that
+/// reached it.
+fn pretty_below(
+    command: &clap::Command,
+    matches: &ArgMatches,
+    path: &mut String,
 ) -> Result<(), Error> {
     if declares(command, PRETTY) && declares(command, FORMAT) {
         // `get_flag` and `get_many` are keyed by identifier and panic on an
@@ -282,9 +280,11 @@ pub(super) fn refuse_pretty_without_json(
             .unwrap_or(Format::Text);
 
         if pretty && format != Format::Json {
-            return Err(Error::MutuallyExclusiveFlags {
-                first: PRETTY_FLAG.to_owned(),
-                second: FORMAT_TEXT.to_owned(),
+            return Err(Error::PrettyWithoutJson {
+                command: path.clone(),
+                complete: !command
+                    .get_arguments()
+                    .any(|argument| argument.is_positional() && argument.is_required_set()),
             });
         }
     }
@@ -299,7 +299,12 @@ pub(super) fn refuse_pretty_without_json(
         );
     };
 
-    refuse_pretty_without_json(child, inner)
+    if !path.is_empty() {
+        path.push(' ');
+    }
+    path.push_str(child.get_name());
+
+    pretty_below(child, inner, path)
 }
 
 /// Whether `command` declares the argument `identifier` names.
@@ -614,8 +619,15 @@ mod tests {
                     refused(&argv).unwrap_or_else(|| panic!("{argv:?} is refused by FR-OUT-009"));
 
                 assert_eq!(condition.exit_code(), 64, "{argv:?}");
-                assert!(condition.to_string().contains("--pretty"), "{argv:?}");
-                assert!(condition.to_string().contains("--format text"), "{argv:?}");
+                assert!(
+                    matches!(condition, crate::error::Error::PrettyWithoutJson { .. }),
+                    "{argv:?}"
+                );
+                assert_eq!(
+                    condition.to_string(),
+                    "'--pretty' needs '--format json'",
+                    "{argv:?}"
+                );
             }
         }
     }

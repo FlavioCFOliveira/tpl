@@ -82,9 +82,31 @@ pub(super) fn during_render(name: &str, reported: &minijinja::Error) -> Error {
 
     Error::RenderFailed {
         template: template(name, reported),
+        invoked: name.to_owned(),
+        undefined: undefined(reported),
         position: position(reported),
         chain: chain(reported),
     }
+}
+
+/// The source text of the expression the engine found undefined, where the
+/// failure is an undefined value and the engine located it.
+///
+/// The engine reports the byte range of the expression it evaluated, which for
+/// `{{ table.name }}` is `table.name`; the text is taken from the template's
+/// own source, so it is what the author wrote. A range that does not fall on
+/// the source, or that spans more than one line, yields nothing rather than a
+/// fragment.
+fn undefined(reported: &minijinja::Error) -> Option<String> {
+    if reported.kind() != minijinja::ErrorKind::UndefinedError {
+        return None;
+    }
+
+    let range = reported.range()?;
+    let expression = reported.template_source()?.get(range)?.trim();
+
+    (!expression.is_empty() && !expression.contains('\n') && expression.len() <= 128)
+        .then(|| expression.to_owned())
 }
 
 /// Whether the engine stopped because the render exhausted its fuel
@@ -211,6 +233,7 @@ mod tests {
             template,
             position,
             chain,
+            ..
         } = condition
         else {
             panic!("an evaluation failure is a render failure");
@@ -247,5 +270,29 @@ mod tests {
 
         assert!(matches!(condition, Error::RenderFailed { .. }));
         assert_eq!(condition.exit_code(), 65);
+    }
+
+    #[test]
+    fn fr_err_034_an_undefined_value_names_the_expression_the_author_wrote() {
+        // Finding E-06: the most common failure a template author meets named
+        // no variable. The expression is taken from the template's source.
+        let engine = engine();
+        let template = engine
+            .template_from_named_str("t/needtable.jinja", "{{ table.name }}\n")
+            .expect("it compiles");
+
+        let reported = template
+            .render(minijinja::context! {})
+            .expect_err("table is not defined");
+
+        let Error::RenderFailed {
+            undefined, invoked, ..
+        } = during_render("t/needtable", &reported)
+        else {
+            panic!("an undefined value is a render failure");
+        };
+
+        assert_eq!(undefined.as_deref(), Some("table.name"));
+        assert_eq!(invoked, "t/needtable");
     }
 }

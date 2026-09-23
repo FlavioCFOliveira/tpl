@@ -121,7 +121,7 @@ use super::catalogue::fixture;
 use sqlx::mysql::MySqlDatabaseError;
 
 use crate::deadline::Bound;
-use crate::error::{CatalogueObjectKind, Error, NetworkPhase};
+use crate::error::{CatalogueObjectKind, Error, NetworkPhase, TlsFault};
 
 /// The server's error number for a database the reader holds no grant on.
 ///
@@ -153,6 +153,7 @@ pub(crate) const METADATA: &str = "metadata";
 /// The two `77`s this produces are separated by the server's error number, for
 /// the reason and on the evidence this module's own documentation records.
 pub(crate) fn connecting(
+    entry: &str,
     error: &sqlx::Error,
     host: &str,
     port: u16,
@@ -174,12 +175,13 @@ pub(crate) fn connecting(
         }
 
         return Error::AuthenticationRefused {
+            entry: entry.to_owned(),
             user: user.to_owned(),
             host: host.to_owned(),
         };
     }
 
-    speaking(error, host, port)
+    speaking(entry, error, host, port)
 }
 
 /// Whether an error packet refuses the **database** rather than the
@@ -204,15 +206,18 @@ fn about_the_database(returned: &dyn sqlx::error::DatabaseError) -> bool {
 /// connection, and the caller that knows which statement it issued classifies
 /// that outcome itself — the read-only pair of `FR-SRV-008` and `FR-SRV-009`
 /// is `78`, not `69`, whatever the server said.
-pub(crate) fn speaking(error: &sqlx::Error, host: &str, port: u16) -> Error {
-    if tls(error) {
+pub(crate) fn speaking(entry: &str, error: &sqlx::Error, host: &str, port: u16) -> Error {
+    if let Some(fault) = tls(error) {
         return Error::TlsHandshakeFailed {
+            entry: entry.to_owned(),
             host: host.to_owned(),
             port,
+            fault,
         };
     }
 
     Error::ConnectionRefused {
+        entry: entry.to_owned(),
         host: host.to_owned(),
         port,
     }
@@ -229,11 +234,19 @@ pub(crate) fn speaking(error: &sqlx::Error, host: &str, port: u16) -> Error {
 /// socket is `InvalidData`, and the driver reports a malformed protocol packet
 /// on a variant of its own, so the kind separates the two phases without
 /// reading a message.
-fn tls(error: &sqlx::Error) -> bool {
+///
+/// The same two discriminants say what the handshake returned, which the `69`
+/// row of `FR-ERR-034` obliges the `cause` to name: the driver's own variant is
+/// the TLS layer refusing before a certificate was judged — a server offering
+/// none among them — and `InvalidData` is the TLS implementation's verdict on
+/// the certificate the server presented.
+fn tls(error: &sqlx::Error) -> Option<TlsFault> {
     match error {
-        sqlx::Error::Tls(_) => true,
-        sqlx::Error::Io(returned) => returned.kind() == std::io::ErrorKind::InvalidData,
-        _ => false,
+        sqlx::Error::Tls(_) => Some(TlsFault::Refused),
+        sqlx::Error::Io(returned) if returned.kind() == std::io::ErrorKind::InvalidData => {
+            Some(TlsFault::CertificateRejected)
+        }
+        _ => None,
     }
 }
 
@@ -242,8 +255,15 @@ fn tls(error: &sqlx::Error) -> bool {
 /// `FR-ERR-034` obliges the `cause` line to name which of the two bounds of
 /// `FR-GLOB-012` expired and its resolved value, and [`Bound`] carries both
 /// because the composition was made where the two were known.
-pub(crate) fn expired(phase: NetworkPhase, host: &str, port: u16, bound: Bound) -> Error {
+pub(crate) fn expired(
+    entry: &str,
+    phase: NetworkPhase,
+    host: &str,
+    port: u16,
+    bound: Bound,
+) -> Error {
     Error::NetworkDeadlineExceeded {
+        entry: entry.to_owned(),
         phase,
         host: host.to_owned(),
         port,
@@ -292,7 +312,7 @@ mod tests {
     fn fr_err_034_a_tls_failure_is_reported_as_the_tls_handshake_phase() {
         // FR-ERR-034, the 69 row: the cause names the phase that failed, and
         // OD-12 point 3 derives it from the driver's discriminant.
-        let condition = connecting(&refused_tls(), HOST, PORT, "alice", Some(DATABASE));
+        let condition = connecting("shop", &refused_tls(), HOST, PORT, "alice", Some(DATABASE));
 
         assert!(matches!(condition, Error::TlsHandshakeFailed { .. }));
         assert_eq!(condition.exit_code(), 69);
@@ -306,6 +326,7 @@ mod tests {
         // TLS variant. Reported as the TCP connect it would send a caller to
         // check a server that is listening.
         let condition = connecting(
+            "shop",
             &untrusted_certificate(),
             HOST,
             PORT,
@@ -332,7 +353,7 @@ mod tests {
 
             assert!(
                 matches!(
-                    connecting(&driver, HOST, PORT, "alice", Some(DATABASE)),
+                    connecting("shop", &driver, HOST, PORT, "alice", Some(DATABASE)),
                     Error::ConnectionRefused { .. }
                 ),
                 "{kind:?}"
@@ -342,7 +363,7 @@ mod tests {
 
     #[test]
     fn fr_err_001_a_server_that_does_not_answer_is_unavailable_rather_than_misconfigured() {
-        let condition = connecting(&unreachable(), HOST, PORT, "alice", Some(DATABASE));
+        let condition = connecting("shop", &unreachable(), HOST, PORT, "alice", Some(DATABASE));
 
         assert!(matches!(condition, Error::ConnectionRefused { .. }));
         assert_eq!(condition.exit_code(), 69);
@@ -353,7 +374,7 @@ mod tests {
         // FR-GLOB-018 and OD-06: the driver's own text reaches no stream,
         // because the value it lived on is dropped at this boundary.
         let driver = sqlx::Error::Tls("a message the driver composed".into());
-        let condition = connecting(&driver, HOST, PORT, "alice", Some(DATABASE));
+        let condition = connecting("shop", &driver, HOST, PORT, "alice", Some(DATABASE));
 
         assert!(!format!("{condition}").contains("a message the driver composed"));
         assert!(!format!("{condition:?}").contains("a message the driver composed"));
@@ -363,7 +384,7 @@ mod tests {
     fn fr_err_034_a_statement_that_fails_is_not_read_as_a_refused_credential() {
         // On an open session the handshake is behind us, so nothing here is a
         // 77: the session did not hold, which is 69.
-        let condition = speaking(&unreachable(), HOST, PORT);
+        let condition = speaking("shop", &unreachable(), HOST, PORT);
 
         assert_eq!(condition.exit_code(), 69);
     }
@@ -373,7 +394,7 @@ mod tests {
         // FR-ERR-034, the 69 row, with FR-GLOB-012: which of the two bounds
         // applies and its resolved value.
         let spent = Bound::spent(Seconds::new(NonZeroU64::new(7).expect("7 is positive")));
-        let condition = expired(NetworkPhase::TcpConnect, HOST, PORT, spent);
+        let condition = expired("shop", NetworkPhase::TcpConnect, HOST, PORT, spent);
 
         match condition {
             Error::NetworkDeadlineExceeded {

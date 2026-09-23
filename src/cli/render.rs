@@ -800,11 +800,11 @@ fn produce<W: std::io::Write>(
 ///
 /// # Errors
 ///
-/// Returns [`Error::ProjectFileUnreadable`] — `74` — where the file or the
+/// Returns [`Error::ContextDocumentUnreadable`] — `74` — where the file or the
 /// stream refused the read, and [`Error::ContextDocumentMalformed`] — `65` —
 /// where the bytes are not UTF-8.
 fn read_document(path: &Path) -> Result<String, Error> {
-    let unreadable = |returned| Error::ProjectFileUnreadable {
+    let unreadable = |returned| Error::ContextDocumentUnreadable {
         path: path.to_owned(),
         returned,
     };

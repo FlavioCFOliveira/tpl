@@ -1282,7 +1282,7 @@ fn fr_conf_040_and_fr_conf_041_an_entry_that_describes_no_read_is_refused_with_s
     );
     assert_eq!(
         line(&no_host.err, "hint:"),
-        format!("tpl cfg database update {ENTRY} --host <host>")
+        format!("set it with: tpl cfg database update {ENTRY} --host <host>")
     );
 
     // With a host and no database, the second of the two.
@@ -1305,7 +1305,7 @@ fn fr_conf_040_and_fr_conf_041_an_entry_that_describes_no_read_is_refused_with_s
     );
     assert_eq!(
         line(&no_database.err, "hint:"),
-        format!("tpl cfg database update {ENTRY} --schema <database>")
+        format!("set it with: tpl cfg database update {ENTRY} --schema <database>")
     );
 }
 
@@ -1370,7 +1370,10 @@ fn fr_cache_024_the_cache_arm_names_a_routine_by_the_same_rules_the_schema_arm_d
     assert!(cause.contains(&format!("'function:{FUNCTION}'")), "{cause}");
     assert_eq!(
         line(&ambiguous.err, "hint:"),
-        format!("name the kind you mean: tpl cache clean --routine procedure:{FUNCTION}")
+        format!(
+            "name the kind you mean: tpl cache clean --routine procedure:{FUNCTION}, or tpl \
+             cache clean --routine function:{FUNCTION}"
+        )
     );
 
     // Qualified, it removes the one it names and leaves the other.

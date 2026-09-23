@@ -432,6 +432,7 @@ mod tests {
     fn fr_err_034_code_64_names_the_token_and_why_it_was_rejected() {
         // FR-ERR-034, the 64 row.
         let rendered = render(&Error::UnknownCommand {
+            node: String::new(),
             token: "sch".to_owned(),
             nearest: Vec::new(),
         });
@@ -439,8 +440,8 @@ mod tests {
         assert_eq!(
             rendered,
             "error: unknown command 'sch'\n\
-             cause: 'sch' is not a name in the command tree, which is closed; tpl matches a \
-             command exactly and never by a prefix of one\n\
+             cause: 'sch' is not a subcommand of 'tpl' (commands are matched in full, never by a \
+             prefix)\n\
              hint:  list the commands with: tpl help\n\
              exit:  64 (EX_USAGE)\n"
         );
@@ -461,6 +462,7 @@ mod tests {
     #[test]
     fn fr_err_034_code_64_names_the_value_and_the_type_expected() {
         let rendered = render(&Error::MalformedValue {
+            command: String::new(),
             parameter: "--timeout".to_owned(),
             value: "soon".to_owned(),
             expected: "a positive integer number of seconds",
@@ -488,9 +490,10 @@ mod tests {
         assert_eq!(
             rendered,
             "error: template 'example.jinja' has a syntax error at line 7, column 3\n\
-             cause: 'example.jinja' could not be compiled; the parser stopped at line 7, column 3 \
-             reporting unexpected end of input: caused by block 'columns' was never closed\n\
-             hint:  parse the project's templates with: tpl template check\n\
+             cause: 'example.jinja' is not valid template syntax at line 7, column 3: unexpected \
+             end of input: caused by block 'columns' was never closed\n\
+             hint:  correct line 7 of template 'example.jinja', then check it with: tpl template \
+             check example.jinja\n\
              exit:  65 (EX_DATAERR)\n"
         );
     }
@@ -629,17 +632,19 @@ mod tests {
         // FR-ERR-034, the 69 row. What the phase returned is the
         // classification `mariadb/` made of it: OD-06 drops the driver value.
         let rendered = render(&Error::ConnectionRefused {
+            entry: String::from("shop"),
             host: "db.example.com".to_owned(),
             port: 3306,
         });
 
         assert_eq!(
             rendered,
-            "error: the server at db.example.com:3306 refused the connection\n\
-             cause: the TCP connect to db.example.com:3306 returned a refusal from the host, so no \
-             session was opened\n\
-             hint:  check that the server is listening, or repoint the entry with: tpl cfg \
-             database update <entry> --port <port>\n\
+            "error: the server at db.example.com:3306 refused the connection, for database entry \
+             'shop'\n\
+             cause: the TCP connect to db.example.com:3306 did not open a session: the host \
+             refused it, or nothing is listening on that port\n\
+             hint:  check that the server is running and listening on port 3306, or change the \
+             address with: tpl cfg database update shop --host <host> --port <port>\n\
              exit:  69 (EX_UNAVAILABLE)\n"
         );
     }
@@ -647,6 +652,7 @@ mod tests {
     #[test]
     fn fr_err_034_code_69_names_the_phase_when_a_deadline_expires() {
         let rendered = render(&Error::NetworkDeadlineExceeded {
+            entry: String::from("shop"),
             phase: NetworkPhase::CatalogueQuery,
             host: "db.example.com".to_owned(),
             port: 3306,
@@ -870,16 +876,19 @@ mod tests {
     fn fr_err_034_code_77_names_the_user_the_host_and_that_the_server_refused() {
         // FR-ERR-034, the 77 row.
         let rendered = render(&Error::AuthenticationRefused {
+            entry: String::from("shop"),
             user: "reader".to_owned(),
             host: "db.example.com".to_owned(),
         });
 
         assert_eq!(
             rendered,
-            "error: the server at 'db.example.com' refused authentication for user 'reader'\n\
-             cause: the server at 'db.example.com' rejected the credentials presented for user \
-             'reader'; the refusal came from the server and not from tpl\n\
-             hint:  correct the credentials with: tpl cfg database update <entry> --user <user>\n\
+            "error: the server at 'db.example.com' refused authentication for user 'reader', \
+             for database entry 'shop'\n\
+             cause: the server at 'db.example.com' rejected the user 'reader' or its password; \
+             the refusal came from the server\n\
+             hint:  check the user and the password of the entry (password, password_command, \
+             or the password inside dsn), then test it with: tpl cfg database test shop\n\
              exit:  77 (EX_NOPERM)\n"
         );
     }
@@ -918,7 +927,8 @@ mod tests {
             "error: database.shop.password_command is not an array\n\
              cause: .tpl/.cfg at line 7, column 3 declares database.shop.password_command as a \
              string; this key takes an array of strings\n\
-             hint:  write it as an array: password_command = [\"security\", \
+             hint:  edit <project>/.tpl/.cfg at line 7 and write it as an array: \
+             password_command = [\"security\", \
              \"find-generic-password\", \"-s\", \"tpl-shop\", \"-w\"]\n\
              exit:  78 (EX_CONFIG)\n"
         );
@@ -933,12 +943,13 @@ mod tests {
         });
         assert_eq!(
             line(&walk, Label::Cause),
-            "the walk upward ended at / without meeting a .tpl folder"
+            "no .tpl folder in the working directory or in any parent of it, up to /"
         );
         // FR-PROJ-006 obliges this hint.
         assert_eq!(
             line(&walk, Label::Hint),
-            "create a project here with: tpl init"
+            "create a project here with: tpl init, or name an existing one with: tpl --tpl-dir \
+             <path>/.tpl <command>"
         );
 
         let variable = render(&Error::UndefinedVariable {
@@ -975,19 +986,30 @@ mod tests {
 
     #[test]
     fn fr_proj_011_the_unsafe_mode_diagnostic_is_the_one_the_requirement_shows() {
+        // FR-PROJ-011, as the forty-third edition amends it: the hint carries
+        // the absolute path, built under FR-ERR-041, so that it succeeds from
+        // any directory; a relative path stands in for none.
         let rendered = render(&Error::ConfigurationUnsafeMode {
-            path: path(),
+            path: PathBuf::from("/home/ana/shop/.tpl/.cfg"),
             mode: 0o644,
         });
 
         assert_eq!(
             rendered,
-            "error: .tpl/.cfg has unsafe permissions\n\
-             cause: mode 0644 grants access to group or other; tpl reads .tpl/.cfg only at mode \
-             0600\n\
-             hint:  chmod 600 .tpl/.cfg\n\
+            "error: /home/ana/shop/.tpl/.cfg has unsafe permissions\n\
+             cause: mode 0644 grants access to group or other; tpl reads \
+             /home/ana/shop/.tpl/.cfg only at mode 0600\n\
+             hint:  chmod 600 /home/ana/shop/.tpl/.cfg\n\
              exit:  78 (EX_CONFIG)\n"
         );
+
+        // A path FR-ERR-041 refuses leaves the placeholder in its position.
+        let spaced = render(&Error::ConfigurationUnsafeMode {
+            path: PathBuf::from("/home/ana/my shop/.tpl/.cfg"),
+            mode: 0o644,
+        });
+
+        assert_eq!(line(&spaced, Label::Hint), "chmod 600 <project>/.tpl/.cfg");
     }
 
     // ------------------------------------------------------- the escaping ---
@@ -998,6 +1020,7 @@ mod tests {
         // whole `exit:  0 (EX_OK)` line. Unescaped it would be read as a
         // success by a caller parsing the stream line by line.
         let rendered = render(&Error::UnknownCommand {
+            node: String::new(),
             token: HOSTILE.to_owned(),
             nearest: Vec::new(),
         });
@@ -1024,6 +1047,7 @@ mod tests {
         let hostile_entry = format!("shop{HOSTILE}");
         let samples = [
             Error::UnknownCommand {
+                node: String::new(),
                 token: HOSTILE.to_owned(),
                 nearest: Vec::new(),
             },
@@ -1096,10 +1120,13 @@ mod tests {
 
         vec![
             Error::UnknownCommand {
+                node: String::new(),
                 token: hostile(),
                 nearest: vec![hostile()],
             },
             Error::UnknownFlag {
+                positional: false,
+                command: String::new(),
                 token: hostile(),
                 nearest: vec![hostile()],
             },
@@ -1119,11 +1146,14 @@ mod tests {
                 value: hostile(),
             },
             Error::ValueOutsideEnumeration {
+                command: String::new(),
                 flag: hostile(),
                 value: hostile(),
                 permitted: vec![hostile()],
             },
             Error::InvocationRejected {
+                reason: "the value is not one the argument accepts",
+                command: String::new(),
                 token: Some(hostile()),
             },
             Error::MissingArgument {
@@ -1135,6 +1165,7 @@ mod tests {
                 second: hostile(),
             },
             Error::MalformedValue {
+                command: String::new(),
                 parameter: hostile(),
                 value: hostile(),
                 expected: "an integer",
@@ -1159,6 +1190,8 @@ mod tests {
                 chain: vec![hostile()],
             },
             Error::RenderFailed {
+                undefined: None,
+                invoked: String::from("example"),
                 template: hostile(),
                 position: position(),
                 chain: vec![],
@@ -1170,7 +1203,8 @@ mod tests {
             Error::ContextDocumentMalformed {
                 path: hostile_path(),
                 fault: ContextFault::Structure {
-                    rule: "the root value is an object",
+                    at: hostile(),
+                    expected: hostile(),
                 },
             },
             Error::RenderDeadlineExceeded {
@@ -1203,18 +1237,23 @@ mod tests {
                 nearest: vec![hostile()],
             },
             Error::NameNotResolved {
+                entry: String::from("shop"),
                 host: hostile(),
                 port: 3306,
             },
             Error::ConnectionRefused {
+                entry: String::from("shop"),
                 host: hostile(),
                 port: 3306,
             },
             Error::TlsHandshakeFailed {
+                fault: crate::error::TlsFault::Refused,
+                entry: String::from("shop"),
                 host: hostile(),
                 port: 3306,
             },
             Error::NetworkDeadlineExceeded {
+                entry: String::from("shop"),
                 phase: NetworkPhase::DnsResolution,
                 host: hostile(),
                 port: 3306,
@@ -1244,7 +1283,32 @@ mod tests {
                 returned: io::Error::from(io::ErrorKind::StorageFull),
             },
             Error::StdoutClosedMidDocument,
+            Error::ContextDocumentUnreadable {
+                path: hostile_path(),
+                returned: io::Error::from(io::ErrorKind::NotFound),
+            },
+            Error::TrustMaterialUnreadable {
+                entry: hostile(),
+                key: "ca_file",
+                path: hostile_path(),
+                returned: io::Error::from(io::ErrorKind::NotFound),
+            },
+            Error::ProjectDirUnusable {
+                path: hostile_path(),
+                fault: crate::error::TplDirFault::NotDirectory,
+            },
+            Error::PrettyWithoutJson {
+                command: hostile(),
+                complete: true,
+            },
+            Error::ConnectionDetailsMissing { entry: hostile() },
+            Error::NothingToUpdate { entry: hostile() },
+            Error::BlockKeyGiven {
+                key: hostile(),
+                entry: Some(hostile()),
+            },
             Error::AuthenticationRefused {
+                entry: String::from("shop"),
                 user: hostile(),
                 host: hostile(),
             },
@@ -1266,6 +1330,7 @@ mod tests {
                 mode: 0o644,
             },
             Error::ConfigurationMalformed {
+                reason: hostile(),
                 path: hostile_path(),
                 position: position(),
             },
@@ -1369,7 +1434,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 63, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 70, "every variant of Error is sampled");
     }
 
     #[test]
@@ -1512,6 +1577,114 @@ mod tests {
         assert_eq!(
             line(&named, Label::Hint),
             "give '--dsn' or '--ca-file', and not both"
+        );
+    }
+
+    // ------------------------------------------------ the forty-third edition ---
+
+    fn hint_of(error: &Error) -> String {
+        line(&render(error), Label::Hint)
+    }
+
+    #[test]
+    fn br_err_004_an_undefined_object_or_var_names_the_flag_that_defines_it() {
+        let failed = |undefined: &str| Error::RenderFailed {
+            template: "t/needtable.jinja".to_owned(),
+            invoked: "t/needtable".to_owned(),
+            undefined: Some(undefined.to_owned()),
+            position: position(),
+            chain: vec!["undefined value".to_owned()],
+        };
+
+        assert_eq!(
+            hint_of(&failed("table.name")),
+            "'table' exists only when the render names one: add --table <name> to the tpl render \
+             command"
+        );
+        assert_eq!(
+            hint_of(&failed("vars.title")),
+            "'vars.title' is set with --set: add --set title=<value> to the tpl render command"
+        );
+        assert!(
+            line(&render(&failed("vars.title")), Label::Cause).contains("reads 'vars.title'"),
+            "the cause names the expression"
+        );
+
+        // Anything else falls back to the source, named for the template.
+        assert_eq!(
+            hint_of(&failed("x.y")),
+            "print the template's source with: tpl template show t/needtable.jinja"
+        );
+    }
+
+    #[test]
+    fn br_err_004_a_network_hint_names_the_entry_and_the_remedy_for_what_failed() {
+        let tls = |fault| Error::TlsHandshakeFailed {
+            entry: "shop".to_owned(),
+            host: "db.example.com".to_owned(),
+            port: 3306,
+            fault,
+        };
+
+        assert!(
+            hint_of(&tls(crate::error::TlsFault::Refused))
+                .ends_with("tpl cfg set database.shop.tls preferred")
+        );
+        assert!(
+            hint_of(&tls(crate::error::TlsFault::CertificateRejected))
+                .contains("tpl cfg set database.shop.ca_file <pem-file>")
+        );
+        assert_eq!(
+            hint_of(&Error::NameNotResolved {
+                entry: "shop".to_owned(),
+                host: "db".to_owned(),
+                port: 3306,
+            }),
+            "check the host name, or change it with: tpl cfg database update shop --host <host>"
+        );
+    }
+
+    #[test]
+    fn fr_err_041_a_nested_template_candidate_is_admitted_and_a_hostile_one_is_not() {
+        assert_eq!(
+            hint_of(&Error::TemplateNotFound {
+                name: "rust/_type".to_owned(),
+                root: PathBuf::from("/p/.tpl/templates"),
+                nearest: vec!["rust/_types".to_owned(), "-rf".to_owned(), "a b".to_owned()],
+            }),
+            "did you mean 'rust/_types'? list the project's templates with: tpl template list"
+        );
+    }
+
+    #[test]
+    fn fr_proj_008_the_hint_creates_a_project_only_where_the_flag_pointed() {
+        assert_eq!(
+            hint_of(&Error::ProjectDirUnusable {
+                path: PathBuf::from("/srv/shop/.tpl"),
+                fault: crate::error::TplDirFault::Missing,
+            }),
+            "correct --tpl-dir, or create the project with: tpl init /srv/shop"
+        );
+        assert_eq!(
+            hint_of(&Error::ProjectDirUnusable {
+                path: PathBuf::from("/srv/shop/other"),
+                fault: crate::error::TplDirFault::NotDirectory,
+            }),
+            "correct --tpl-dir so that it names an existing .tpl folder"
+        );
+    }
+
+    #[test]
+    fn e_18_a_password_command_that_never_started_says_so_on_the_error_line() {
+        let rendered = render(&Error::PasswordCommandNotExecutable {
+            command: vec!["absent".to_owned()],
+            fault: PasswordCommandFault::NotStarted,
+            returned: io::Error::from(io::ErrorKind::NotFound),
+        });
+
+        assert_eq!(
+            line(&rendered, Label::Error),
+            "password_command could not be started"
         );
     }
 }

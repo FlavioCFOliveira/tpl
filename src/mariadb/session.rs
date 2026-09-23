@@ -121,6 +121,7 @@ fn run<T>(
 ) -> Result<T, Attempt> {
     let expired = || {
         Attempt::Expired(fault::expired(
+            target.entry(),
             NetworkPhase::CatalogueQuery,
             target.host(),
             target.port(),
@@ -165,7 +166,9 @@ fn unenforced(attempt: Attempt, entry: &str, fault: ReadOnlyFault) -> Error {
 fn unprobed(attempt: Attempt, target: &Target<'_>) -> Error {
     match attempt {
         Attempt::Expired(expired) => expired,
-        Attempt::Driver(driver) => fault::speaking(&driver, target.host(), target.port()),
+        Attempt::Driver(driver) => {
+            fault::speaking(target.entry(), &driver, target.host(), target.port())
+        }
     }
 }
 

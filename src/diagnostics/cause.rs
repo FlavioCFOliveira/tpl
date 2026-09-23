@@ -22,7 +22,7 @@ use std::borrow::Cow;
 
 use crate::error::{
     ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, PasswordCommandFault,
-    ReadOnlyFault,
+    ReadOnlyFault, TlsFault, TplDirFault,
 };
 
 /// The separator between two links of a template-engine error chain.
@@ -59,9 +59,10 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
     match error {
         // ------------------------------------------------------------ 64 ---
         // The row obliges the token as written, and why it was rejected.
-        Error::UnknownCommand { token, .. } => Cow::Owned(format!(
-            "'{token}' is not a name in the command tree, which is closed; tpl matches a command \
-             exactly and never by a prefix of one"
+        Error::UnknownCommand { token, node, .. } => Cow::Owned(format!(
+            "'{token}' is not a subcommand of '{}' (commands are matched in full, never by a \
+             prefix)",
+            invoked(node)
         )),
         // FR-HELP-028 raises the row's floor for this one condition: the
         // `cause` names the segment that failed **and** the node it was looked
@@ -70,18 +71,39 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // line naming only the segment would read identically for a segment
         // mistyped at any depth.
         Error::UnknownCommandPathSegment { segment, node, .. } => Cow::Owned(format!(
-            "'{segment}' names no child of '{}', whose children are the whole of what the path may \
-             continue with; tpl matches a segment exactly and never by a prefix of one",
+            "'{segment}' is not a child of '{}' (segments are matched in full, never by a prefix)",
             invoked(node)
         )),
-        Error::UnknownFlag { token, .. } => Cow::Owned(format!(
-            "'{token}' is not a flag the invoked command declares; tpl matches a long flag exactly \
-             and never by a prefix of one"
+        Error::UnknownFlag { token, command, .. } => Cow::Owned(format!(
+            "'{token}' is not a flag of '{}' or a global flag (flags are matched in full, never \
+             by a prefix)",
+            invoked(command)
         )),
         Error::MissingArgument { command, argument } => Cow::Owned(format!(
-            "'{command}' takes the argument '{argument}', and the invocation supplied no value for \
-             it"
+            "the invocation of '{}' gave no value for {argument}, which is required",
+            invoked(command)
         )),
+        Error::PrettyWithoutJson { command, .. } => Cow::Owned(format!(
+            "--pretty indents a JSON document, and '{}' is writing text, which is the default \
+             format",
+            invoked(command)
+        )),
+        Error::ConnectionDetailsMissing { entry } => Cow::Owned(format!(
+            "no --dsn, and none of --host, --port, --user or --schema, was given for entry \
+             '{entry}'; --tls, --password-command, --ca-file and --ca-path do not say where to \
+             connect"
+        )),
+        Error::NothingToUpdate { entry } => {
+            Cow::Owned(format!("no field flag was given for entry '{entry}'"))
+        }
+        Error::BlockKeyGiven { key, entry } => match entry {
+            Some(entry) => Cow::Owned(format!(
+                "tpl cfg get reads one key; {key} is the block of entry '{entry}'"
+            )),
+            None => Cow::Owned(format!(
+                "tpl cfg get reads one key; {key} is a block of keys, not a key"
+            )),
+        },
         Error::MutuallyExclusiveFlags { first, second } => Cow::Owned(format!(
             "the invocation supplies both '{first}' and '{second}'; exactly one of the two may be \
              given"
@@ -101,9 +123,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             database,
             ..
         } => Cow::Owned(format!(
-            "database '{database}', read through database entry '{entry}', holds both \
-             'procedure:{name}' and 'function:{name}', and tpl resolves a bare name in favour of \
-             neither"
+            "database '{database}', read through database entry '{entry}', holds both a \
+             procedure and a function named '{name}': 'procedure:{name}' and 'function:{name}'"
         )),
         // FR-RND-032, over the other context source of FR-RND-023. The line
         // names the document rather than a database entry, because
@@ -115,9 +136,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             database,
             ..
         } => Cow::Owned(format!(
-            "the --context document {} describes database '{database}', which carries both \
-             'procedure:{name}' and 'function:{name}', and tpl resolves a bare name in favour of \
-             neither",
+            "the --context document {} describes database '{database}', which holds both a \
+             procedure and a function named '{name}': 'procedure:{name}' and 'function:{name}'",
             path.display()
         )),
         // FR-RND-014: the key is what was given twice, and both values are
@@ -126,7 +146,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // naming the flag would report the wrong fault.
         Error::RepeatedSetKey { key, first, second } => Cow::Owned(format!(
             "'--set' defines each key once and '{key}' was defined twice, as '{first}' and then \
-             '{second}'; tpl refuses the repetition rather than letting one of them silently win"
+             '{second}'"
         )),
         // FR-CACHE-019: the flag is declared by the command and contradicts
         // what the command does.
@@ -138,12 +158,12 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             parameter,
             value,
             expected,
+            ..
         } => Cow::Owned(format!(
             "'{value}' was supplied for '{parameter}', which takes {expected}"
         )),
         Error::UnknownConfigurationKey { key, .. } => Cow::Owned(format!(
-            "'{key}' is outside the key space tpl cfg set writes into; the space is closed and a \
-             key is never created"
+            "'{key}' is not a configuration key; tpl cfg set writes only the keys tpl knows"
         )),
         Error::DatabaseEntryAlreadyExists { name, file } => Cow::Owned(format!(
             "{} already defines the database entry '{name}'; add creates an entry and never \
@@ -163,13 +183,13 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         } => Cow::Owned(match repair {
             EntryRepair::Restate(_) => format!(
                 "the invocation writes both {written} and {conflicting} to database entry \
-                 '{entry}', which may state its connection and its password one way or the other \
-                 and never both; nothing was written"
+                 '{entry}'; an entry gives its connection either as dsn or as \
+                 host/port/user/database, and its password in one place only; nothing was written"
             ),
             EntryRepair::Unset | EntryRepair::Rewrite => format!(
                 "the invocation writes {written} and database entry '{entry}' already declares \
-                 {conflicting}, which may state its connection and its password one way or the \
-                 other and never both; nothing was written"
+                 {conflicting}; an entry gives its connection either as dsn or as \
+                 host/port/user/database, and its password in one place only; nothing was written"
             ),
         }),
         Error::UnexpectedArgument { command, token } => Cow::Owned(format!(
@@ -184,8 +204,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             first,
             second,
         } => Cow::Owned(format!(
-            "'{flag}' carries one value and was given two, '{first}' and then '{second}'; tpl \
-             refuses the repetition rather than letting one of them silently win"
+            "'{flag}' takes one value and was given two, '{first}' and then '{second}'"
         )),
         Error::RepeatedFlag { flag } => Cow::Owned(format!(
             "'{flag}' carries no value, so a second occurrence of it states nothing the first did \
@@ -204,6 +223,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             flag,
             value,
             permitted,
+            ..
         } => Cow::Owned(format!(
             "'{value}' was supplied for '{flag}', which takes {}",
             alternatives(permitted)
@@ -212,15 +232,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // and says what happened where it did not — the one wording
         // FR-ERR-034's ban on naming a category cannot reach, because no
         // instance existed to name.
-        Error::InvocationRejected { token } => match token {
+        Error::InvocationRejected {
+            reason,
+            command,
+            token,
+        } => match token {
             Some(token) => Cow::Owned(format!(
-                "'{token}' was rejected while the invocation was being parsed, and tpl does not \
-                 classify the refusal further"
+                "'{token}', given to '{}', was refused: {reason}",
+                invoked(command)
             )),
-            None => Cow::Borrowed(
-                "the invocation was rejected while it was being parsed, and the parser named no \
-                 token of it",
-            ),
+            None => Cow::Owned(format!(
+                "the invocation of '{}' was refused before any token could be named: {reason}",
+                invoked(command)
+            )),
         },
 
         // ------------------------------------------------------------ 65 ---
@@ -231,18 +255,26 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             position,
             chain,
         } => Cow::Owned(format!(
-            "'{template}' could not be compiled; the parser stopped at {position} reporting {}",
+            "'{template}' is not valid template syntax at {position}: {}",
             joined(chain)
         )),
         Error::RenderFailed {
             template,
             position,
             chain,
-        } => Cow::Owned(format!(
-            "'{template}' compiled and then failed while being evaluated; evaluation stopped at \
-             {position} reporting {}",
-            joined(chain)
-        )),
+            undefined,
+            ..
+        } => match undefined {
+            Some(expression) => Cow::Owned(format!(
+                "'{template}' at {position} reads '{expression}', which is not defined in this \
+                 render: {}",
+                joined(chain)
+            )),
+            None => Cow::Owned(format!(
+                "'{template}' failed while being evaluated, at {position}: {}",
+                joined(chain)
+            )),
+        },
         Error::TemplateOutsideRoot { name, root } => Cow::Owned(format!(
             "'{name}' resolves to a path outside the template root {}, and tpl reads no template \
              from outside it",
@@ -255,9 +287,12 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 "'{}' is not well-formed JSON; the parser stopped at {position}",
                 path.display()
             )),
-            ContextFault::Structure { rule } => Cow::Owned(format!(
-                "'{}' is well-formed JSON and does not satisfy the context-document contract: \
-                 {rule}",
+            ContextFault::Structure { at, expected } if at.is_empty() => Cow::Owned(format!(
+                "'{}' is well-formed JSON and is not a context document: {expected}",
+                path.display()
+            )),
+            ContextFault::Structure { at, expected } => Cow::Owned(format!(
+                "'{}' is well-formed JSON, and at {at} {expected}",
                 path.display()
             )),
             // FR-CTX-042: the path, the table carrying the key, the key, and
@@ -268,17 +303,16 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 key,
                 names,
             } => Cow::Owned(format!(
-                "'{}' is well-formed JSON and does not satisfy the context-document contract: \
-                 table '{table}' lists key '{key}' under {collection}, and that key names table \
-                 '{names}', which tables does not carry",
+                "'{}' is well-formed JSON, and table '{table}' lists key '{key}' under \
+                 {collection}, naming table '{names}', which data.database.tables does not carry",
                 path.display()
             )),
         },
         // The row obliges, for a render bound, which bound was exceeded, its
         // resolved value, and the key that raises it (FR-RND-036, FR-RND-037).
         Error::RenderFuelExhausted { fuel } => Cow::Owned(format!(
-            "the render exhausted its render fuel: it reached the limit of {fuel} evaluation \
-             steps before it finished; the bound is set by core.render_fuel"
+            "the render used its whole render fuel of {fuel} evaluation steps without finishing, \
+             which usually means a loop that never ends; the limit is set by core.render_fuel"
         )),
         Error::RenderMemoryLimitExceeded { limit } => Cow::Owned(format!(
             "the process was observed holding more heap than the render memory limit of {limit} \
@@ -349,24 +383,33 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // that phase returned. What the phase returned is the classification
         // `mariadb/` made of it: OD-06 drops the driver's own value at that
         // boundary, so the variant is the classification.
-        Error::NameNotResolved { host, port } => Cow::Owned(format!(
+        Error::NameNotResolved { host, port, .. } => Cow::Owned(format!(
             "DNS resolution returned no address for '{host}', so the connection to port {port} was \
              never attempted"
         )),
-        Error::ConnectionRefused { host, port } => Cow::Owned(format!(
-            "the TCP connect to {host}:{port} returned a refusal from the host, so no session was \
-             opened"
+        Error::ConnectionRefused { host, port, .. } => Cow::Owned(format!(
+            "the TCP connect to {host}:{port} did not open a session: the host refused it, or \
+             nothing is listening on that port"
         )),
-        Error::TlsHandshakeFailed { host, port } => Cow::Owned(format!(
-            "the TLS handshake with {host}:{port} did not complete, so no session was opened and \
-             no catalogue statement was issued"
-        )),
+        Error::TlsHandshakeFailed {
+            host, port, fault, ..
+        } => match fault {
+            TlsFault::Refused => Cow::Owned(format!(
+                "the TLS handshake with {host}:{port} was refused before any certificate was \
+                 checked: the server offers no TLS, or the negotiation failed"
+            )),
+            TlsFault::CertificateRejected => Cow::Owned(format!(
+                "the TLS handshake with {host}:{port} returned a certificate that was not \
+                 accepted: its chain is not trusted, or it does not name the host"
+            )),
+        },
         Error::NetworkDeadlineExceeded {
             phase,
             host,
             port,
             bound,
             limit,
+            ..
         } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
                 "{phase} for {host}:{port} had not finished when its own deadline of {limit:?} \
@@ -412,6 +455,14 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "the read of {} returned: {returned}",
             path.display()
         )),
+        Error::ContextDocumentUnreadable { path, returned } => Cow::Owned(format!(
+            "the read of the file --context named, {}, returned: {returned}",
+            path.display()
+        )),
+        Error::TrustMaterialUnreadable { path, returned, .. } => Cow::Owned(format!(
+            "the read of {} returned: {returned}; the connection was not attempted",
+            path.display()
+        )),
         Error::ProjectFileUnwritable { path, returned } => Cow::Owned(format!(
             "the write of {} returned: {returned}; the previous file is still in place, unchanged",
             path.display()
@@ -428,9 +479,9 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // The row obliges, for authentication, the user and the host the
         // server refused and that the refusal came from the server; and for
         // privileges, which property of which object, per FR-PRIV-013.
-        Error::AuthenticationRefused { user, host } => Cow::Owned(format!(
-            "the server at '{host}' rejected the credentials presented for user '{user}'; the \
-             refusal came from the server and not from tpl"
+        Error::AuthenticationRefused { user, host, .. } => Cow::Owned(format!(
+            "the server at '{host}' rejected the user '{user}' or its password; the refusal came \
+             from the server"
         )),
         Error::PropertyNotReadable {
             kind,
@@ -446,9 +497,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // value expected; or, where the fault is not a key, the specific
         // condition.
         Error::ProjectNotFound { walk_ended_at } => Cow::Owned(format!(
-            "the walk upward ended at {} without meeting a .tpl folder",
+            "no .tpl folder in the working directory or in any parent of it, up to {}",
             walk_ended_at.display()
         )),
+        Error::ProjectDirUnusable { path, fault } => match fault {
+            TplDirFault::Missing => Cow::Owned(format!(
+                "--tpl-dir disabled the upward search; nothing exists at {}",
+                path.display()
+            )),
+            TplDirFault::NotDirectory => Cow::Owned(format!(
+                "--tpl-dir disabled the upward search; {} exists and is not a folder",
+                path.display()
+            )),
+        },
         Error::ConfigurationNotOwned {
             path,
             owner,
@@ -462,13 +523,17 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "mode {mode:04o} grants access to group or other; tpl reads {} only at mode 0600",
             path.display()
         )),
-        Error::ConfigurationMalformed { path, position } => Cow::Owned(format!(
-            "the TOML parser stopped at {position} of {}",
+        Error::ConfigurationMalformed {
+            path,
+            position,
+            reason,
+        } => Cow::Owned(format!(
+            "the TOML parser stopped at {position} of {}: {reason}",
             path.display()
         )),
         Error::ConfigurationKeyOutsideSpace { key, file, .. } => Cow::Owned(format!(
-            "{} declares '{key}', which is outside the key space tpl recognises; an unrecognised \
-             key is refused and never ignored",
+            "{} declares '{key}', which is not a configuration key; tpl refuses a key it does \
+             not know rather than ignore it",
             file.display()
         )),
         Error::PasswordCommandNotAnArray {
@@ -486,8 +551,9 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             first,
             second,
         } => Cow::Owned(format!(
-            "{} declares both {first} and {second} for database entry '{entry}'; an entry states \
-             its connection one way or the other and never both",
+            "{} declares both {first} and {second} for database entry '{entry}'; an entry gives \
+             its connection either as dsn or as host/port/user/database, and its password in one \
+             place only",
             file.display()
         )),
         Error::ConfigurationValueMalformed {
@@ -617,8 +683,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             file.display()
         )),
         Error::NoDatabaseEntrySelected { file } => Cow::Owned(format!(
-            "neither -d/--database nor core.database in {} names an entry, and this command reads \
-             the catalogue through one",
+            "neither -d/--database nor core.database in {} names an entry, and this command needs \
+             one to know which database to use",
             file.display()
         )),
         Error::ServerNotMariaDb { entry, product } => Cow::Owned(format!(

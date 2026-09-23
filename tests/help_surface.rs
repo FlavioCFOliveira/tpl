@@ -281,7 +281,7 @@ fn fr_glob_019_a_leaf_that_requires_an_operand_still_answers_both_flag_forms() {
             written(&path)
         );
         assert!(
-            String::from_utf8_lossy(&refused.stderr).contains("requires the argument"),
+            String::from_utf8_lossy(&refused.stderr).contains("needs the argument"),
             "{} did not report the missing operand: {}",
             written(&path),
             String::from_utf8_lossy(&refused.stderr)

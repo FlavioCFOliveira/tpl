@@ -104,7 +104,19 @@ pub(crate) fn get<W: Write>(out: &mut W, supplied: &Supplied<'_>, key: &str) -> 
     let configuration = project(supplied)?.configuration()?;
 
     let Some(parsed) = Key::parse(key) else {
-        return Err(configuration.key_not_found(key));
+        // FR-CFG-007: a block is refused for its form, before the question of
+        // presence, whether or not the file carries it.
+        return Err(match Target::parse(key) {
+            Some(Target::Core | Target::Databases) => Error::BlockKeyGiven {
+                key: key.to_owned(),
+                entry: None,
+            },
+            Some(Target::Entry(name)) => Error::BlockKeyGiven {
+                key: key.to_owned(),
+                entry: configuration.entry(&name).is_some().then_some(name),
+            },
+            Some(Target::Key(_)) | None => configuration.key_not_found(key),
+        });
     };
     let Some(value) = configuration.written(&parsed) else {
         return Err(configuration.key_not_found(key));

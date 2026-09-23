@@ -320,6 +320,7 @@ fn identifier(key: &str) -> bool {
 fn malformed(written: &str, expected: &'static str) -> Error {
     Error::MalformedValue {
         parameter: SET.to_owned(),
+        command: "render".to_owned(),
         value: written.to_owned(),
         expected,
     }

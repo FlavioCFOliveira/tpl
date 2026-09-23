@@ -79,7 +79,7 @@ struct Shown<'a> {
 ///
 /// # Errors
 ///
-/// Returns what opening the project returns, [`Error::MissingArgument`] where
+/// Returns what opening the project returns, [`Error::ConnectionDetailsMissing`] where
 /// neither `--dsn` nor a discrete connection flag was supplied
 /// (`FR-CFG-016`), [`Error::MutuallyExclusiveFlags`] where both groups were
 /// (`FR-CFG-029`), [`Error::DatabaseEntryAlreadyExists`] where the name is
@@ -90,9 +90,8 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
     flags.exclusive()?;
 
     if !flags.connects() {
-        return Err(Error::MissingArgument {
-            command: ADD.to_owned(),
-            argument: "--dsn, or one of --host, --port, --user and --schema".to_owned(),
+        return Err(Error::ConnectionDetailsMissing {
+            entry: name.to_owned(),
         });
     }
 
@@ -110,7 +109,7 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
     // Every value is validated, and the entry the flags would leave behind is
     // then measured against `FR-CONF-007` — both before the editor is asked to
     // hold anything, so a refusal of either leaves the file as it was.
-    let written = flags.items()?;
+    let written = flags.items().map_err(|refused| at(refused, ADD))?;
     coherence::refuse(&configuration, ADD, name, &named(&written), flags.dsn)?;
 
     apply(&mut editor, name, written);
@@ -121,18 +120,26 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
 /// `tpl cfg database update <name>` (`FR-CFG-020`).
 ///
 /// Only the fields the flags name are changed; the rest of the entry is left
-/// untouched. An invocation that names no flag changes nothing and writes
-/// nothing.
+/// untouched.
 ///
 /// # Errors
 ///
-/// Returns what opening the project returns,
+/// Returns [`Error::NothingToUpdate`] where no field flag was given, before
+/// the project is opened (`FR-CFG-020`); what opening the project returns;
 /// [`Error::MutuallyExclusiveFlags`] where both flag groups were supplied
 /// (`FR-CFG-029`), [`Error::DatabaseEntryNotFound`] where the entry does not
 /// exist, [`Error::IncoherentEntryWrite`] where the fields the flags name
 /// cannot stand beside the fields they leave alone (`FR-CFG-048`), and
 /// [`Error::ProjectFileUnwritable`] where the rewrite failed.
 pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Result<(), Error> {
+    // FR-CFG-020: an invocation with no field flag is refused at argument
+    // parsing, before the entry is resolved, and leaves the file unchanged.
+    if flags.is_empty() {
+        return Err(Error::NothingToUpdate {
+            entry: name.to_owned(),
+        });
+    }
+
     flags.exclusive()?;
 
     let project = project(supplied)?;
@@ -142,10 +149,7 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
         return Err(configuration.entry_not_found(name));
     }
 
-    let written = flags.items()?;
-    if written.is_empty() {
-        return Ok(());
-    }
+    let written = flags.items().map_err(|refused| at(refused, UPDATE))?;
 
     // `FR-CFG-020` leaves the rest of the entry untouched, so the combination
     // measured is the entry as it stands with these fields changed — and
@@ -287,6 +291,25 @@ fn apply(editor: &mut Editor, name: &str, written: Vec<(EntryKey, Item)>) {
     }
 }
 
+/// `refused` with the command whose help states what its flag takes, where it
+/// is a value the flag did not accept.
+fn at(refused: Error, command: &str) -> Error {
+    match refused {
+        Error::MalformedValue {
+            parameter,
+            value,
+            expected,
+            ..
+        } => Error::MalformedValue {
+            parameter,
+            command: command.to_owned(),
+            value,
+            expected,
+        },
+        other => other,
+    }
+}
+
 /// The keys of what one invocation writes, for the rule of `FR-CFG-048`.
 fn named(written: &[(EntryKey, Item)]) -> Vec<EntryKey> {
     written.iter().map(|(field, _)| *field).collect()
@@ -334,6 +357,15 @@ impl Flags<'_> {
             || self.port.is_some()
             || self.user.is_some()
             || self.schema.is_some()
+    }
+
+    /// Whether the invocation supplied none of the nine flags (`FR-CFG-020`).
+    const fn is_empty(&self) -> bool {
+        !self.connects()
+            && self.tls.is_none()
+            && self.password_command.is_none()
+            && self.ca_file.is_none()
+            && self.ca_path.is_none()
     }
 
     /// Refuses `--dsn` beside a discrete connection flag (`FR-CFG-029`).
@@ -429,13 +461,25 @@ impl Flags<'_> {
 /// value the file cannot be read with would make every later invocation — the
 /// `tpl cfg database remove` that would undo it included — a `78`.
 fn dsn_item(written: &str) -> Result<Item, Error> {
-    crate::project::config::dsn::parse(written, DSN, std::path::Path::new("")).map_err(|_| {
-        Error::MalformedValue {
+    // FR-CFG-031: the flag admits what the file admits, so the fault the file
+    // would report is the one the flag states, in the same terms.
+    crate::project::config::dsn::parse(written, DSN, std::path::Path::new("")).map_err(
+        |refused| Error::MalformedValue {
             parameter: DSN.to_owned(),
+            command: String::new(),
             value: written.to_owned(),
-            expected: "a connection URL",
-        }
-    })?;
+            expected: match refused {
+                Error::DsnQueryParameter { .. } => {
+                    "a connection URL with no '?' query parameters; each option is a flag of its own"
+                }
+                Error::DsnMalformed {
+                    fault: crate::error::DsnFault::Scheme,
+                    ..
+                } => "a connection URL beginning with mysql:// or mariadb://",
+                _ => "a connection URL of the form scheme://[user[:password]@]host[:port]/database",
+            },
+        },
+    )?;
 
     Ok(value(written))
 }
@@ -444,6 +488,7 @@ fn dsn_item(written: &str) -> Result<Item, Error> {
 fn command_item(written: &str) -> Result<Item, Error> {
     let command = PasswordCommand::split(written).ok_or_else(|| Error::MalformedValue {
         parameter: "--password-command".to_owned(),
+        command: String::new(),
         value: written.to_owned(),
         expected: "a command to run",
     })?;
@@ -457,6 +502,7 @@ fn path_item(field: EntryKey, path: &std::path::Path) -> Result<Item, Error> {
         .map(value)
         .ok_or_else(|| Error::MalformedValue {
             parameter: format!("--{}", field.leaf().replace('_', "-")),
+            command: String::new(),
             value: path.to_string_lossy().into_owned(),
             expected: "a filesystem path",
         })
@@ -543,7 +589,7 @@ mod tests {
                 .add("shop", flags)
                 .expect_err("no connection was described");
 
-            assert!(matches!(condition, Error::MissingArgument { .. }));
+            assert!(matches!(condition, Error::ConnectionDetailsMissing { .. }));
             assert_eq!(condition.exit_code(), 64);
         }
     }

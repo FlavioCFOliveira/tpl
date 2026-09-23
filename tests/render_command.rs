@@ -1530,3 +1530,49 @@ fn fr_cache_039_an_abandoned_render_that_crosses_any_bound_ends_with_65_and_read
         }
     }
 }
+
+#[test]
+fn fr_err_034_a_context_file_that_cannot_be_read_names_the_flag_and_not_the_project() {
+    // Finding E-04: the path is the caller's, outside `.tpl`, so the hint
+    // points at `--context` rather than at the project's permissions.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(&format!(".tpl/templates/{RESOLVES}.jinja"), "{{ 1 }}\n");
+
+    let written = refused(
+        &sandbox,
+        &["render", RESOLVES, "--context", "nofile.json"],
+        74,
+    );
+
+    assert_eq!(
+        line(&written, LABELS[0]),
+        "the --context file nofile.json could not be read"
+    );
+    assert!(line(&written, LABELS[2]).contains("--context"), "{written}");
+    assert!(!line(&written, LABELS[2]).contains(".tpl"), "{written}");
+}
+
+#[test]
+fn fr_err_034_a_context_document_that_breaks_the_contract_names_the_key_path() {
+    // The `65` row as the forty-third edition amends it: the key path and
+    // what the contract expects there, and no file of the specification.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(&format!(".tpl/templates/{RESOLVES}.jinja"), "{{ 1 }}\n");
+    sandbox.write(
+        "shape.json",
+        r#"{"schema_version":1,"source":"server","data":{}}"#,
+    );
+
+    let written = refused(
+        &sandbox,
+        &["render", RESOLVES, "--context", "shape.json"],
+        65,
+    );
+    let cause = line(&written, LABELS[1]);
+
+    assert!(cause.contains("at data.database"), "{cause}");
+    assert!(cause.contains("required key is absent"), "{cause}");
+    assert!(!cause.contains(".md"), "{cause}");
+}

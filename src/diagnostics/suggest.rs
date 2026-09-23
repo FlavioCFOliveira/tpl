@@ -74,6 +74,9 @@ pub(crate) enum Population {
     /// routine, a template, a database entry — together with the name of an
     /// environment variable, which `FR-ERR-022` governs alike.
     Names,
+    /// The template names of a project, which `FR-ERR-041` governs: a nested
+    /// name carries a `/`, and the set of `FR-ERR-022` would refuse every one.
+    Templates,
 }
 
 impl Population {
@@ -97,6 +100,7 @@ impl Population {
             Self::Flags => hint::admits_flag(candidate),
             Self::ConfigurationKeys => hint::admits_key(candidate),
             Self::Names => hint::admits(candidate),
+            Self::Templates => hint::admits_template(candidate),
         }
     }
 }
@@ -433,6 +437,7 @@ mod tests {
                 Population::Flags => "--patern",
                 Population::ConfigurationKeys => "core.render_timeut",
                 Population::Names => "order",
+                Population::Templates => "rust/struct",
             };
 
             assert_eq!(

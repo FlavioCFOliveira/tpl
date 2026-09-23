@@ -650,3 +650,33 @@ fn fr_tmpl_021_path_answers_with_the_root_and_with_where_one_name_resolves() {
         serde_json::Value::from(root.to_str().expect("the sandbox path is UTF-8"))
     );
 }
+
+#[test]
+fn fr_err_041_a_nested_template_name_is_suggested_like_any_other() {
+    // Finding H-07: the set of FR-ERR-022 refused the `/` every nested name
+    // carries, so `rust/_type` was offered nothing although `rust/_types` is
+    // one edit away. FR-ERR-041 governs a template name.
+    let sandbox = Sandbox::new();
+    project(&sandbox, NO_ENTRY, &[("rust/_types.jinja", "{{ 1 }}\n")]);
+
+    let written = refused(&sandbox, &["template", "show", "rust/_type"], 66);
+
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 'rust/_types'? list the project's templates with: tpl template list"
+    );
+}
+
+#[test]
+fn fr_err_021_a_syntax_error_names_the_template_to_check_again() {
+    let sandbox = Sandbox::new();
+    project(&sandbox, NO_ENTRY, &[("t/syntax.jinja", "{% if %}\n")]);
+
+    let written = refused(&sandbox, &["template", "check"], 65);
+
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "correct line 1 of template 't/syntax.jinja', then check it with: tpl template check \
+         t/syntax.jinja"
+    );
+}

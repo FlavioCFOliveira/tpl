@@ -97,14 +97,18 @@ pub(super) fn intercepted(refused: &clap::Error, tree: &clap::Command, argv: &[O
         ErrorKind::InvalidSubcommand => match one(refused, ContextKind::InvalidSubcommand) {
             Some(token) => {
                 let nearest = nearest_command(reached.node, &token);
-                Error::UnknownCommand { token, nearest }
+                Error::UnknownCommand {
+                    token,
+                    node: reached.path.clone(),
+                    nearest,
+                }
             }
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
         ErrorKind::UnknownArgument => match one(refused, ContextKind::InvalidArg) {
             Some(token) => unknown_argument(tree, &reached, &written, token),
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
         ErrorKind::MissingRequiredArgument => match one(refused, ContextKind::InvalidArg) {
@@ -112,12 +116,12 @@ pub(super) fn intercepted(refused: &clap::Error, tree: &clap::Command, argv: &[O
                 command: reached.path,
                 argument,
             },
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
         ErrorKind::InvalidValue => match one(refused, ContextKind::InvalidArg) {
             Some(argument) => invalid_value(tree, &reached, &written, refused, &argument),
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
         ErrorKind::ValueValidation => match one(refused, ContextKind::InvalidArg) {
@@ -126,17 +130,18 @@ pub(super) fn intercepted(refused: &clap::Error, tree: &clap::Command, argv: &[O
                 Error::MalformedValue {
                     value: one(refused, ContextKind::InvalidValue).unwrap_or_default(),
                     expected: expected(&flag),
+                    command: declaring(tree, &reached, &flag),
                     parameter: flag,
                 }
             }
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
-        ErrorKind::ArgumentConflict => conflict(refused),
+        ErrorKind::ArgumentConflict => conflict(refused, &reached),
 
         // OD-08's wildcard arm, which `ErrorKind` being `#[non_exhaustive]`
         // obliges. It produces `64` and never another code.
-        _ => rejected(refused),
+        _ => rejected(refused, &reached),
     }
 }
 
@@ -163,7 +168,12 @@ fn unknown_argument(
         Some((flag, value)) => Error::SeparateTokenValue { flag, value },
         None => {
             let nearest = nearest_flag(tree, reached.node, &token);
-            Error::UnknownFlag { token, nearest }
+            Error::UnknownFlag {
+                token,
+                command: reached.path.clone(),
+                positional: reached.node.get_arguments().any(clap::Arg::is_positional),
+                nearest,
+            }
         }
     }
 }
@@ -190,15 +200,18 @@ fn invalid_value(
     }
 
     let permitted = many(refused, ContextKind::ValidValue);
+    let command = declaring(tree, reached, &flag);
     if permitted.is_empty() {
         Error::MalformedValue {
             value,
             expected: expected(&flag),
+            command,
             parameter: flag,
         }
     } else {
         Error::ValueOutsideEnumeration {
             flag,
+            command,
             value,
             permitted,
         }
@@ -212,7 +225,7 @@ fn invalid_value(
 /// parser — so the pair the parser names is one argument twice: a flag that
 /// carries no value, given more than once. The two-argument reading is kept
 /// because the kind admits it and costs a line.
-fn conflict(refused: &clap::Error) -> Error {
+fn conflict(refused: &clap::Error, reached: &Reached<'_>) -> Error {
     match (
         one(refused, ContextKind::InvalidArg),
         one(refused, ContextKind::PriorArg),
@@ -224,17 +237,60 @@ fn conflict(refused: &clap::Error) -> Error {
             first: named(&first),
             second: named(&second),
         },
-        _ => rejected(refused),
+        _ => rejected(refused, reached),
     }
 }
 
 /// The wildcard outcome of `OD-08`: a `64` naming the token, where the parser
-/// named one.
-fn rejected(refused: &clap::Error) -> Error {
+/// named one, and what the parser refused, in plain words.
+///
+/// `FR-ERR-034` bars a `cause` that would fit any failure, so the kind the
+/// parser reported is translated into the fact it stands for rather than
+/// reported as "rejected". The parser's own message is not carried: it is
+/// composed for its own renderer, which `OD-07` never invokes.
+fn rejected(refused: &clap::Error, reached: &Reached<'_>) -> Error {
     Error::InvocationRejected {
+        reason: reason(refused.kind()),
+        command: reached.path.clone(),
         token: one(refused, ContextKind::InvalidArg)
             .or_else(|| one(refused, ContextKind::InvalidSubcommand))
             .or_else(|| one(refused, ContextKind::InvalidValue)),
+    }
+}
+
+/// What a kind of refusal means, in the words a `cause` line uses.
+fn reason(kind: ErrorKind) -> &'static str {
+    match kind {
+        ErrorKind::InvalidUtf8 => "a token is not valid UTF-8, and tpl reads text arguments only",
+        ErrorKind::TooManyValues => "more values were given than the argument takes",
+        ErrorKind::TooFewValues | ErrorKind::WrongNumberOfValues => {
+            "the argument was given the wrong number of values"
+        }
+        ErrorKind::NoEquals => "the flag takes its value joined by '='",
+        ErrorKind::MissingSubcommand => "a subcommand is required here",
+        ErrorKind::InvalidSubcommand => "no such command at this position",
+        ErrorKind::UnknownArgument => "the token is not an argument this command takes",
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
+            "the value is not one the argument accepts"
+        }
+        ErrorKind::MissingRequiredArgument => "a required argument is missing",
+        ErrorKind::ArgumentConflict => "two arguments cannot be given together",
+        _ => "the parser refused it for a reason tpl does not name",
+    }
+}
+
+/// The command path whose help states what `flag` takes: empty for a global
+/// flag, and the node the invocation reached for any other.
+fn declaring(tree: &clap::Command, reached: &Reached<'_>, flag: &str) -> String {
+    let long = flag.strip_prefix(TERMINATOR).unwrap_or(flag);
+    let global = tree
+        .get_arguments()
+        .any(|argument| argument.get_long() == Some(long));
+
+    if global {
+        String::new()
+    } else {
+        reached.path.clone()
     }
 }
 
@@ -288,7 +344,7 @@ fn expected(flag: &str) -> &'static str {
         // FR-GLOB-011: a positive integer number of seconds.
         "--timeout" => "a whole number of seconds, greater than zero",
         // FR-CONF-002: the port of a `[database.<name>]` entry.
-        "--port" => "a whole number from 0 to 65535",
+        "--port" => "a whole number from 1 to 65535",
         _ => UNNAMED_TYPE,
     }
 }
@@ -570,11 +626,16 @@ fn nearest_command(node: &clap::Command, token: &str) -> Vec<String> {
 fn nearest_flag(tree: &clap::Command, node: &clap::Command, token: &str) -> Vec<String> {
     let mut population: BTreeSet<String> = BTreeSet::new();
 
+    // A one-letter token is one edit from every other one-letter flag, so
+    // offering them is noise: `-5` would suggest `-V`, `-d` and `-h`. Only
+    // the long forms are offered for it.
+    let offer_short = !short(token);
+
     for argument in node.get_arguments().chain(tree.get_arguments()) {
         if let Some(long) = argument.get_long() {
             population.insert(format!("--{long}"));
         }
-        if let Some(short) = argument.get_short() {
+        if let Some(short) = argument.get_short().filter(|_| offer_short) {
             population.insert(format!("-{short}"));
         }
     }
@@ -677,11 +738,14 @@ mod tests {
         let lines = four_lines(&error);
 
         assert_eq!(error.exit_code(), 64);
-        assert_eq!(line(&lines, "error: "), "unknown command 'tbles'");
+        assert_eq!(
+            line(&lines, "error: "),
+            "unknown command 'tbles' under 'tpl schema'"
+        );
         assert!(line(&lines, "cause: ").contains("'tbles'"));
         assert_eq!(
             line(&lines, "hint:  "),
-            "did you mean 'tables', 'tbls' or 'table'? list the commands with: tpl help"
+            "did you mean 'tables', 'tbls' or 'table'? list what it takes with: tpl help schema"
         );
         assert_eq!(line(&lines, "exit:  "), "64 (EX_USAGE)");
     }
@@ -701,7 +765,7 @@ mod tests {
         assert!(line(&lines, "cause: ").contains("'--pattrn'"));
         assert_eq!(
             line(&lines, "hint:  "),
-            "did you mean '--pattern'? list the flags a command declares with: tpl help <command>"
+            "did you mean '--pattern'? list the flags of this command with: tpl help schema tables"
         );
         assert_eq!(line(&lines, "exit:  "), "64 (EX_USAGE)");
     }
@@ -1004,7 +1068,7 @@ mod tests {
                 &["tpl", "cfg", "database", "add", "shop", "--port", "abc"][..],
                 "--port",
                 "abc",
-                "a whole number from 0 to 65535",
+                "a whole number from 1 to 65535",
             ),
         ] {
             let error = refused(vector, ErrorKind::ValueValidation);
@@ -1033,7 +1097,7 @@ mod tests {
         assert_eq!(error.exit_code(), 64);
         assert_eq!(
             line(&lines, "error: "),
-            "the command 'cfg set' requires the argument '<VALUE>'"
+            "'tpl cfg set' needs the argument <VALUE>"
         );
         assert_eq!(
             line(&lines, "hint:  "),
@@ -1080,13 +1144,24 @@ mod tests {
         let lines = four_lines(&error);
 
         assert_eq!(error.exit_code(), 64, "the wildcard arm produces 64");
-        assert_eq!(line(&lines, "error: "), "the invocation was rejected");
+        assert_eq!(
+            line(&lines, "error: "),
+            "the invocation was rejected: a token is not valid UTF-8, and tpl reads text \
+             arguments only"
+        );
         assert_eq!(line(&lines, "exit:  "), "64 (EX_USAGE)");
 
         // And the arm names the token wherever the refusal carries one.
-        let named = super::rejected(&clap::Error::raw(ErrorKind::Io, "unreachable"));
+        let reached = super::Reached {
+            node: &crate::cli::tree(),
+            path: String::new(),
+        };
+        let named = super::rejected(&clap::Error::raw(ErrorKind::Io, "unreachable"), &reached);
         assert_eq!(named.exit_code(), 64);
-        assert!(matches!(named, Error::InvocationRejected { token: None }));
+        assert!(matches!(
+            named,
+            Error::InvocationRejected { token: None, .. }
+        ));
     }
 
     #[test]
