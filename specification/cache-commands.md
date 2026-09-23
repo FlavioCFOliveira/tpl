@@ -424,8 +424,23 @@ tpl -d shop cache status
 
 ## Invalidation
 
-- **FR-CACHE-028**: Nothing SHALL invalidate the cache automatically. Only
-  `tpl cache clean` and `tpl cache load` change what is stored.
+- **FR-CACHE-028**: Nothing SHALL invalidate the cache automatically: no
+  clock, no configuration change and no comparison with the server SHALL
+  remove or replace a cached object. What is stored SHALL change only through
+  an invocation that stores what it reads or removes what is stored:
+  `tpl cache load`, `tpl cache clean`, and a read command of `FR-CACHE-009`
+  that writes the cache under `FR-CACHE-015`.
+
+  *Amended in the forty-fourth edition,* for rmp `#261`. The second sentence
+  named `tpl cache clean` and `tpl cache load` as the only commands that change
+  what is stored, while `FR-CACHE-015` makes a read command write the cache on
+  a miss and under `--direct`, unless `--no-cache` is given. The two could not
+  both hold. `FR-CACHE-015` governs, as the implementation reads it, and this
+  requirement now names every invocation that writes. Its point is unchanged:
+  the cache changes only because an invocation changed it, per `BR-CACHE-004`.
+  *Rejected: narrowing `FR-CACHE-015` so that only `tpl cache load` writes.*
+  Every read would then stay live until an explicit load, which is the opt-in
+  cache the rationale of `FR-CACHE-008` rejects.
 
 - **FR-CACHE-029**: Changing where an entry points — `--host`, `--port`,
   `--user`, `--schema`, `--tls`, or `--dsn` — SHALL NOT invalidate anything.

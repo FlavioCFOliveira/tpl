@@ -10,7 +10,7 @@
 //! | Section | Read from | Omitted when empty |
 //! |---|---|---|
 //! | `USAGE` | the node, its children and its positional arguments | never (`FR-HELP-007`) |
-//! | `DESCRIPTION` | [`Entry::description`] | never (`FR-HELP-007`) |
+//! | `DESCRIPTION` | [`Entry::description`], [`Entry::blocks`], [`Entry::touches`] | never (`FR-HELP-007`) |
 //! | `ARGUMENTS` | the node's children (`FR-HELP-008`), then its positional arguments | yes |
 //! | `OPTIONS` | the node's own flags | yes |
 //! | `EXAMPLES` | [`Entry::examples`] | never (`FR-HELP-007`) |
@@ -122,7 +122,8 @@ use std::num::NonZeroU64;
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, Command, value_parser};
 
-use super::{Entry, Example, Line, Outcome, entry};
+use super::surface::{self, Family, Item};
+use super::{Block, Entry, Example, Line, Outcome, Row, entry};
 use crate::cli::rules;
 
 /// The fixed width every help text is laid out to (`FR-HELP-009`).
@@ -189,7 +190,7 @@ fn walk<'a>(tree: &'a Command, path: &[&str]) -> Option<(&'a Command, Vec<&'a st
 fn compose(node: &Command, path: &[&str], found: &Entry) -> String {
     let sections = [
         ("USAGE", usage(node, path)),
-        ("DESCRIPTION", wrapped(found.description, BODY)),
+        ("DESCRIPTION", description(found)),
         ("ARGUMENTS", arguments(node, path)),
         ("OPTIONS", options(node, path)),
         ("EXAMPLES", examples(found.examples)),
@@ -218,6 +219,151 @@ fn compose(node: &Command, path: &[&str], found: &Entry) -> String {
     }
 
     rendered
+}
+
+/// The widest label a table of rows keeps its text beside; a wider label takes
+/// a line of its own, with its text beneath it at this column.
+const LABEL: usize = 26;
+
+/// The `DESCRIPTION` section: the first paragraph, every block after it, and
+/// the four statements of `FR-HELP-031` last, each separated from the one
+/// before by a blank line.
+fn description(found: &Entry) -> Vec<String> {
+    let mut paragraphs: Vec<Vec<String>> = vec![wrapped(found.description, BODY)];
+
+    for block in found.blocks {
+        match block {
+            Block::Prose(text) => paragraphs.push(wrapped(text, BODY)),
+            Block::Rows { heading, rows } => paragraphs.push(table(heading, rows)),
+            Block::Surface => paragraphs.extend(template_surface()),
+        }
+    }
+
+    if let Some(touches) = &found.touches {
+        paragraphs.push(wrapped(&touches.sentence(), BODY));
+    }
+
+    let mut lines = Vec::new();
+
+    for paragraph in paragraphs {
+        if !lines.is_empty() {
+            lines.push(String::new());
+        }
+
+        lines.extend(paragraph);
+    }
+
+    lines
+}
+
+/// A heading and its rows, the labels in a column of their own.
+fn table(heading: &str, rows: &[Row]) -> Vec<String> {
+    let listed: Vec<(&str, &str)> = rows.iter().map(|row| (row.label, row.text)).collect();
+
+    labelled(heading, &listed)
+}
+
+/// A heading and its rows, from `(label, text)` pairs.
+///
+/// The labels share one column, as wide as the widest label up to [`LABEL`];
+/// a label wider than that is written on a line of its own and its text starts
+/// on the next line, at the column.
+fn labelled(heading: &str, rows: &[(&str, &str)]) -> Vec<String> {
+    labelled_at(heading, rows, column(rows.iter().map(|(label, _)| *label)))
+}
+
+/// The column the text of rows labelled by `labels` starts at: the widest
+/// label up to [`LABEL`], and the gutter.
+fn column<'a>(labels: impl Iterator<Item = &'a str>) -> usize {
+    widest(labels.filter(|label| count(label) <= LABEL)) + GUTTER
+}
+
+/// A heading and its rows, their text starting at `column`.
+fn labelled_at(heading: &str, rows: &[(&str, &str)], column: usize) -> Vec<String> {
+    let mut lines = wrapped(heading, BODY);
+
+    for (label, text) in rows {
+        if count(label) + GUTTER > column {
+            lines.push(indented(label, NESTED));
+            lines.extend(wrapped(text, NESTED + column));
+        } else {
+            lines.extend(tabulated(label, text, NESTED, column));
+        }
+    }
+
+    lines
+}
+
+/// The template surface of `FR-HELP-033`, as paragraphs: the context
+/// variables, each family of groups 1 and 2 with its signatures and purposes,
+/// and the statement about group 3 that `FR-ENV-004` requires.
+///
+/// Every line is read from [`surface`], which the JSON document reads too, and
+/// every name from the registrations `render/` performs.
+fn template_surface() -> Vec<Vec<String>> {
+    let variables: Vec<(&str, &str)> = surface::VARIABLES
+        .iter()
+        .map(|variable| (variable.name, variable.purpose))
+        .collect();
+
+    let groups: [(&str, Family, &[&str]); 4] = [
+        (
+            "Filters of tpl (contract):",
+            Family::Filter,
+            crate::render::REGISTERED_FILTERS,
+        ),
+        (
+            "Filters of the template engine (pinned):",
+            Family::Filter,
+            crate::render::INHERITED_FILTERS,
+        ),
+        (
+            "Tests of tpl (contract). Each takes a column; anything else fails the render:",
+            Family::Test,
+            crate::render::REGISTERED_TESTS,
+        ),
+        (
+            "Functions of tpl (contract):",
+            Family::Function,
+            crate::render::REGISTERED_FUNCTIONS,
+        ),
+    ];
+
+    let mut paragraphs = vec![labelled("A template sees these variables:", &variables)];
+
+    // One column for the four families, so that every signature starts its
+    // purpose at the same place whichever family it belongs to.
+    let families: Vec<(&str, Vec<(&str, &str)>)> = groups
+        .iter()
+        .map(|(heading, family, names)| {
+            let rows = names
+                .iter()
+                .filter_map(|name| surface::item(*family, name))
+                .map(|item: &Item| (item.signature, item.purpose))
+                .collect();
+
+            (*heading, rows)
+        })
+        .collect();
+    let shared = column(
+        families
+            .iter()
+            .flat_map(|(_, rows)| rows.iter().map(|(label, _)| *label)),
+    );
+
+    for (heading, rows) in &families {
+        paragraphs.push(labelled_at(heading, rows, shared));
+    }
+
+    paragraphs.push(wrapped(
+        "Contract: guaranteed by tpl. Pinned: guaranteed to behave as in the template engine \
+         version tpl is built with. Everything else the template engine offers also works, but \
+         carries no guarantee: it can change or disappear when tpl moves to a new engine \
+         version.",
+        BODY,
+    ));
+
+    paragraphs
 }
 
 /// The one line of `USAGE`: the path, the subcommand where the node has
@@ -562,7 +708,7 @@ fn facts(argument: &Arg, path: &[&str], name: &str) -> String {
     let mut stated = format!(
         "{kind} {default} {required} {repetition}",
         kind = kind(argument),
-        default = default(argument),
+        default = default(argument, path, name),
         required = if argument.is_required_set() {
             "Required."
         } else {
@@ -570,8 +716,7 @@ fn facts(argument: &Arg, path: &[&str], name: &str) -> String {
         },
         repetition = match rules::repetition(argument) {
             rules::Repetition::Refused => "Not repeatable.",
-            rules::Repetition::Idempotent =>
-                "Repeatable, and further occurrences have the effect of the first.",
+            rules::Repetition::Idempotent => "Repeating it changes nothing.",
             rules::Repetition::Accumulated => "Repeatable.",
         }
     );
@@ -655,7 +800,15 @@ pub(super) fn type_name(argument: &Arg) -> &'static str {
 }
 
 /// What an argument is worth when it is not given.
-fn default(argument: &Arg) -> String {
+///
+/// A default the parser supplies is read from the declaration; a default the
+/// configuration applies to a key the command leaves unwritten is read from
+/// [`super::implied`], because the declaration cannot carry it.
+fn default(argument: &Arg, path: &[&str], name: &str) -> String {
+    if let Some(implied) = super::implied(path, name) {
+        return format!("Default: \"{implied}\".");
+    }
+
     let declared: Vec<String> = argument
         .get_default_values()
         .iter()
@@ -1080,9 +1233,7 @@ mod tests {
                 assert!(
                     stated.contains("Not repeatable.")
                         || stated.contains("Repeatable.")
-                        || stated.contains(
-                            "Repeatable, and further occurrences have the effect of the first."
-                        ),
+                        || stated.contains("Repeating it changes nothing."),
                     "{path:?} states no repeatability for {named}"
                 );
                 assert!(
@@ -1302,12 +1453,15 @@ mod tests {
         // FR-HELP-015 and NFR-DET-004: no colour, no emoji, no ANSI escape
         // sequence, no decorative character. The alphabet is pinned rather
         // than the absence of an escape alone, because it is also what makes
-        // counting columns in Unicode scalar values exact: U+2014 is the one
-        // non-ASCII character the table uses, and it occupies one column.
+        // counting columns in Unicode scalar values exact: U+2014 and U+2026
+        // are the two non-ASCII characters the table uses, and each occupies
+        // one column. U+2026 is not decoration: FR-ENV-047 writes a keyword
+        // argument with no default as `name=…` in a signature.
         for (path, help) in every_help() {
             for character in help.chars() {
                 let admitted = character == '\n'
                     || character == '\u{2014}'
+                    || character == '\u{2026}'
                     || ('\u{20}'..='\u{7e}').contains(&character);
 
                 assert!(
@@ -1331,18 +1485,20 @@ USAGE
   tpl version [options]
 
 DESCRIPTION
-  Writes the version, as tpl followed by the version and a newline, and nothing
-  else. It declares no argument and no flag of its own.
+  Prints tpl, a space and the version, such as tpl 0.1.0, and nothing else.
+
+  Does not contact the server. Needs no database entry and no project. Writes no
+  file. Prints the version line.
 
 EXAMPLES
   Print the version.
     tpl version
 
 EXIT CODES
-  0   EX_OK     The version was written to stdout.
-  64  EX_USAGE  The invocation is not valid: this command declares no argument
-                and no flag of its own.
-  74  EX_IOERR  The version could not be written to stdout.
+  0   EX_OK     The version line was written to stdout.
+  64  EX_USAGE  An argument, or a flag other than the global ones: this command
+                takes none.
+  74  EX_IOERR  stdout could not be written.
 
 SEE ALSO
   tpl help

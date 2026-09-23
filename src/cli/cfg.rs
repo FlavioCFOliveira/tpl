@@ -208,14 +208,14 @@ pub(crate) enum Command {
         key: String,
     },
 
-    /// Lists the configuration keys the project carries.
+    /// Prints the whole configuration file.
     List {
         /// `--format` and `--pretty`, per `FR-GLOB-021`.
         #[command(flatten)]
         output: local::Output,
     },
 
-    /// The database entries of `.tpl/.cfg`.
+    /// Manages the database entries of `.tpl/.cfg`.
     #[command(visible_alias = "db")]
     Database(Database),
 }

@@ -444,10 +444,11 @@ fn fr_help_025_a_group_node_with_no_child_prints_what_its_help_form_prints() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn fr_help_017_the_document_is_the_envelope_of_the_contract_carrying_the_four_keys_of_data() {
+fn fr_help_017_the_document_is_the_envelope_of_the_contract_carrying_the_five_keys_of_data() {
     // FR-HELP-017 with FR-OUT-024 and FR-OUT-026: the three envelope keys in
     // order, `source` set to `binary`, and a `data` carrying `tpl_version`,
-    // `global_flags`, `commands` and `template_surface` in that order. The
+    // `global_flags`, `commands`, `template_surface` and `context_variables`
+    // in that order. The
     // bytes are compared rather than the parsed value, because the order is
     // the property under test and parsing discards it.
     let printed = String::from_utf8(succeeds(&["help", "--format", "json"])).expect("UTF-8");
@@ -466,6 +467,7 @@ fn fr_help_017_the_document_is_the_envelope_of_the_contract_carrying_the_four_ke
         (r#""tpl_version""#, r#""global_flags""#),
         (r#""global_flags""#, r#""commands""#),
         (r#""commands""#, r#""template_surface""#),
+        (r#""template_surface""#, r#""context_variables""#),
     ] {
         assert!(
             printed.find(first) < printed.find(second),
@@ -905,4 +907,226 @@ fn excluded_in(collapsed: &str) -> Vec<String> {
     }
 
     named
+}
+
+// ---------------------------------------------------------------------------
+// What a leaf touches, and what a template sees
+// ---------------------------------------------------------------------------
+
+/// The `DESCRIPTION` section of `help`, its lines joined by one space.
+fn description(help: &str) -> String {
+    help.split_once("DESCRIPTION\n")
+        .and_then(|(_, rest)| rest.split("\nARGUMENTS\n").next())
+        .and_then(|rest| rest.split("\nOPTIONS\n").next())
+        .and_then(|rest| rest.split("\nEXAMPLES\n").next())
+        .map(|section| section.split_whitespace().collect::<Vec<&str>>().join(" "))
+        .unwrap_or_default()
+}
+
+#[test]
+fn fr_help_031_every_leaf_ends_its_description_with_the_four_statements() {
+    // FR-HELP-031: the first statement answers the server question, the
+    // second the entry question, and both channels end with the same four.
+    // Each of the four is recognised by the words the first two open with;
+    // the text and the JSON are compared against each other rather than
+    // against a copy of the sentences.
+    let document = document();
+    let commands = document["data"]["commands"]
+        .as_array()
+        .expect("commands is an array");
+
+    for path in node_paths() {
+        let is_leaf = !commands.iter().any(|other| {
+            let segments = other["path"].as_array().expect("path is an array");
+            segments.len() == path.len() + 1
+                && segments
+                    .iter()
+                    .zip(&path)
+                    .all(|(segment, own)| segment.as_str() == Some(own.as_str()))
+        });
+
+        if !is_leaf {
+            continue;
+        }
+
+        let text = description(
+            &String::from_utf8(succeeds(&borrowed(&with(&path, &["--help"])))).expect("UTF-8"),
+        );
+        let entry = commands
+            .iter()
+            .find(|entry| {
+                entry["path"].as_array().is_some_and(|segments| {
+                    segments
+                        .iter()
+                        .map(|s| s.as_str())
+                        .eq(path.iter().map(|s| Some(s.as_str())))
+                })
+            })
+            .expect("the node has an entry");
+        let json = entry["description"].as_str().expect("a description");
+        let closing = json.rsplit("\n\n").next().expect("a last paragraph");
+
+        assert!(
+            closing.starts_with("Connects")
+                || closing.starts_with("Always connects")
+                || closing.starts_with("Does not contact the server."),
+            "{} does not open its last paragraph with the server statement: {closing}",
+            written(&path)
+        );
+        assert!(
+            closing.contains(" Needs "),
+            "{} states no entry requirement: {closing}",
+            written(&path)
+        );
+        assert!(
+            closing.contains(" Writes ")
+                || closing.contains(" Stores ")
+                || closing.contains(" Deletes "),
+            "{} states no file statement: {closing}",
+            written(&path)
+        );
+        assert!(
+            closing.contains(" Prints "),
+            "{} states nothing about stdout: {closing}",
+            written(&path)
+        );
+        assert!(
+            text.ends_with(closing),
+            "{} ends its text DESCRIPTION differently from its JSON description",
+            written(&path)
+        );
+    }
+}
+
+#[test]
+fn fr_help_033_the_help_of_render_lists_every_variable_and_every_guaranteed_name() {
+    // FR-HELP-033: every context variable, and every filter, test and
+    // function of groups 1 and 2 with its signature and purpose, read from
+    // the JSON document so that both channels are held to one statement.
+    let document = document();
+    let render = description(&String::from_utf8(succeeds(&["render", "--help"])).expect("UTF-8"));
+
+    for variable in document["data"]["context_variables"]
+        .as_array()
+        .expect("an array")
+    {
+        let line = format!(
+            "{} {}",
+            variable["name"].as_str().expect("a name"),
+            variable["purpose"].as_str().expect("a purpose")
+        );
+        assert!(render.contains(&line), "render help omits: {line}");
+    }
+
+    let surface = &document["data"]["template_surface"];
+    let mut listed = 0;
+
+    for group in ["registered", "inherited"] {
+        for family in ["filters", "tests", "functions"] {
+            for item in surface[group][family].as_array().expect("an array") {
+                let line = format!(
+                    "{} {}",
+                    item["signature"].as_str().expect("a signature"),
+                    item["purpose"].as_str().expect("a purpose")
+                );
+                assert!(render.contains(&line), "render help omits: {line}");
+                listed += 1;
+            }
+        }
+    }
+
+    assert_eq!(
+        listed, 37,
+        "groups 1 and 2 hold 23 registered and 14 inherited names"
+    );
+    assert!(
+        render.contains(
+            "Everything else the template engine offers also works, but carries no guarantee"
+        ),
+        "render help does not state that group 3 is unguaranteed"
+    );
+
+    // The list appears in no other node's help, per BR-HELP-002.
+    for path in node_paths() {
+        if path == ["render"] {
+            continue;
+        }
+
+        let help =
+            String::from_utf8(succeeds(&borrowed(&with(&path, &["--help"])))).expect("UTF-8");
+        assert!(
+            !help.contains("A template sees these variables"),
+            "{} repeats the template surface",
+            written(&path)
+        );
+    }
+}
+
+#[test]
+fn fr_help_022_an_example_invocation_is_the_vector_the_shell_would_pass() {
+    // BR-HELP-003 asks that an example parse; a vector that carries the
+    // shell's own quotes parses and still is not what the shell passes. A
+    // line whose token the shell would expand has no vector to publish.
+    let document = document();
+
+    for entry in document["data"]["commands"].as_array().expect("an array") {
+        for example in entry["examples"].as_array().expect("an array") {
+            for line in example["lines"].as_array().expect("an array") {
+                let text = line["text"].as_str().expect("a text");
+                let Some(invocation) = line["invocation"].as_array() else {
+                    continue;
+                };
+
+                assert!(
+                    !text.contains("\"$"),
+                    "{text} expands a variable and still publishes a vector"
+                );
+
+                for token in invocation {
+                    let token = token.as_str().expect("a token");
+                    assert!(
+                        !token.starts_with(['"', '\'']) && !token.ends_with(['"', '\'']),
+                        "{text} carries the shell's quotes: {token:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn fr_help_013_a_default_the_configuration_applies_is_stated_where_the_flag_is() {
+    // `tpl cfg database add` writes no key for a flag it is not given, and the
+    // configuration then gives `port` 3306 and `tls` verify-identity. Help says
+    // so on the flag, in both channels; `update` leaves an absent field as it
+    // was, so it states no default.
+    let add = String::from_utf8(succeeds(&["cfg", "database", "add", "--help"])).expect("UTF-8");
+    let collapsed = add.split_whitespace().collect::<Vec<&str>>().join(" ");
+
+    assert!(
+        collapsed.contains("Type: integer. Default: \"3306\"."),
+        "{add}"
+    );
+    assert!(collapsed.contains("Default: \"verify-identity\"."), "{add}");
+
+    let update =
+        String::from_utf8(succeeds(&["cfg", "database", "update", "--help"])).expect("UTF-8");
+    assert!(!update.contains("Default: \"3306\""), "{update}");
+
+    let document = document();
+    let options = document["data"]["commands"]
+        .as_array()
+        .expect("an array")
+        .iter()
+        .find(|entry| entry["path"] == serde_json::json!(["cfg", "database", "add"]))
+        .expect("the entry")["options"]
+        .clone();
+    let port = options
+        .as_array()
+        .expect("an array")
+        .iter()
+        .find(|flag| flag["long"] == "--port")
+        .expect("--port");
+
+    assert_eq!(port["default"], serde_json::json!(["3306"]));
 }

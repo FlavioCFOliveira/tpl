@@ -215,7 +215,7 @@ pub(crate) enum Command {
         caching: local::Caching,
     },
 
-    /// Writes the whole catalogue model of the selected database.
+    /// Writes the whole selected database as one JSON document.
     Dump {
         /// `--pretty`, standing alone because the result is JSON and nothing
         /// else, per `FR-SCH-020` and `FR-OUT-010`.

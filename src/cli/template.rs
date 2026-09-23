@@ -88,7 +88,7 @@ pub(crate) struct Template {
 /// The four children of `tpl template`.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub(crate) enum Command {
-    /// Lists the templates the project carries.
+    /// Lists the templates of the project.
     List {
         /// `--format` and `--pretty`, per `FR-GLOB-021`.
         #[command(flatten)]
@@ -107,7 +107,7 @@ pub(crate) enum Command {
         name: String,
     },
 
-    /// Checks that one template compiles.
+    /// Checks the syntax of templates without running them.
     Check {
         /// The templates to check, with or without their `.jinja` extension.
         ///
@@ -119,7 +119,7 @@ pub(crate) enum Command {
         names: Vec<String>,
     },
 
-    /// Reports where a template name resolves to.
+    /// Prints the path of a template, or of the template folder.
     Path {
         /// The template whose path to print, with or without its `.jinja`
         /// extension (`FR-TMPL-022`).

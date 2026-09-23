@@ -27,8 +27,13 @@
 //!
 //! # What an entry carries, and what it does not
 //!
-//! An entry carries the node's `DESCRIPTION`, its `EXAMPLES`, its `EXIT CODES`
-//! and its `SEE ALSO` references, and nothing else. Four things are
+//! An entry carries the node's `DESCRIPTION` — a first paragraph, the
+//! [`Block`]s after it, and on a leaf the four statements of `FR-HELP-031` —
+//! its `EXAMPLES`, its `EXIT CODES` and its `SEE ALSO` references, and nothing
+//! else. The template surface `FR-HELP-033` places in the `DESCRIPTION` of
+//! `tpl render` is a block that names its source rather than a copy of it: the
+//! item values of `FR-ENV-047` and the variables of `FR-HELP-032` live in
+//! [`surface`], the part of this table indexed by name. Four things are
 //! deliberately absent:
 //!
 //! - **The layout.** Prose is stored unwrapped and examples are stored as
@@ -121,6 +126,7 @@
 
 mod document;
 mod render;
+mod surface;
 
 use std::io::Write;
 
@@ -137,10 +143,21 @@ pub(crate) struct Entry {
     /// The command path, as the segments below `tpl`. Empty for the root.
     pub(crate) path: &'static [&'static str],
 
-    /// The `DESCRIPTION` section: what the command is and what it does.
+    /// The first paragraph of the `DESCRIPTION` section: what the command is
+    /// and what it does.
     ///
     /// One unwrapped paragraph. The renderer wraps it.
     pub(crate) description: &'static str,
+
+    /// What the `DESCRIPTION` section states after its first paragraph, in
+    /// order: further paragraphs, tables of rows, and, on `tpl render` alone,
+    /// the template surface of `FR-HELP-033`. Empty where the first paragraph
+    /// is the whole of it.
+    pub(crate) blocks: &'static [Block],
+
+    /// The four statements of `FR-HELP-031` that end the `DESCRIPTION` of a
+    /// leaf, or [`None`] on a node that has children.
+    pub(crate) touches: Option<Touches>,
 
     /// The `EXAMPLES` section. Never empty, per `FR-HELP-012`.
     pub(crate) examples: &'static [Example],
@@ -152,6 +169,105 @@ pub(crate) struct Entry {
     /// The `SEE ALSO` section: the path of another node of this tree, per
     /// `FR-HELP-014`.
     pub(crate) see_also: &'static [&'static [&'static str]],
+}
+
+impl Entry {
+    /// The `DESCRIPTION` as the JSON document carries it: the paragraphs of
+    /// the text help, unwrapped, separated by a blank line.
+    ///
+    /// A table of rows is one paragraph, its heading and each row on a line of
+    /// its own. The template surface of `FR-HELP-033` is left out: the
+    /// document carries it as data, in `data.template_surface` and
+    /// `data.context_variables`, which every form of the document holds
+    /// whatever path reduces it, per `FR-HELP-017`. The four statements of
+    /// `FR-HELP-031` end it, as they end the text.
+    pub(crate) fn written_description(&self) -> String {
+        let mut paragraphs: Vec<String> = Vec::with_capacity(self.blocks.len() + 2);
+        paragraphs.push(self.description.to_owned());
+
+        for block in self.blocks {
+            match block {
+                Block::Prose(text) => paragraphs.push((*text).to_owned()),
+                Block::Rows { heading, rows } => {
+                    let mut written = (*heading).to_owned();
+
+                    for row in *rows {
+                        written.push('\n');
+                        written.push_str(row.label);
+                        written.push_str(": ");
+                        written.push_str(row.text);
+                    }
+
+                    paragraphs.push(written);
+                }
+                Block::Surface => {}
+            }
+        }
+
+        if let Some(touches) = &self.touches {
+            paragraphs.push(touches.sentence());
+        }
+
+        paragraphs.join("\n\n")
+    }
+}
+
+/// One part of a `DESCRIPTION` after its first paragraph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Block {
+    /// A paragraph, unwrapped.
+    Prose(&'static str),
+
+    /// A heading line followed by rows of two columns: a label, and what it
+    /// means.
+    Rows {
+        /// The line above the rows.
+        heading: &'static str,
+
+        /// The rows, in the order they are printed.
+        rows: &'static [Row],
+    },
+
+    /// The context variables and the filters, tests and functions of
+    /// `FR-HELP-033`, rendered from [`surface`].
+    Surface,
+}
+
+/// One row of a [`Block::Rows`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Row {
+    /// The left column.
+    pub(crate) label: &'static str,
+
+    /// The right column, in one unwrapped line.
+    pub(crate) text: &'static str,
+}
+
+/// The four statements of `FR-HELP-031`, each one sentence, in its order.
+///
+/// Four fields rather than one paragraph so that none can be left out: a
+/// statement whose answer is no is still a statement, and the type makes an
+/// entry that omits one fail to build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Touches {
+    /// Whether the command connects to a database server.
+    pub(crate) server: &'static str,
+
+    /// Whether it needs a `[database.<name>]` entry of `.tpl/.cfg`.
+    pub(crate) entry: &'static str,
+
+    /// Which files it writes, if any.
+    pub(crate) files: &'static str,
+
+    /// What it writes to stdout.
+    pub(crate) stdout: &'static str,
+}
+
+impl Touches {
+    /// The four statements, in their order, as one paragraph.
+    pub(crate) fn sentence(&self) -> String {
+        [self.server, self.entry, self.files, self.stdout].join(" ")
+    }
 }
 
 /// One worked invocation, with the line saying what it does.
@@ -338,113 +454,133 @@ pub(crate) struct Documented {
 /// `--pattern`, as every node that declares it states it.
 const PATTERN: Documented = Documented {
     name: "--pattern",
-    purpose: "Keeps only the objects whose name matches the LIKE pattern given, \
-              in which % stands for any run of characters and _ for exactly \
-              one.",
+    purpose: "Keeps only the objects whose name matches this LIKE pattern, in which % matches any \
+              run of characters and _ matches exactly one.",
     excludes: &[],
 };
 /// `--format`, as every node that declares it states it.
 const FORMAT: Documented = Documented {
     name: "--format",
-    purpose: "Chooses the representation of the result: aligned columns laid \
-              out for a person, or the JSON document anything parsing the \
-              output must read.",
+    purpose: "Chooses the output: text is aligned columns for people and its layout may change; \
+              json is a stable document, so use it whenever a program reads the output.",
     excludes: &[],
 };
 /// `--pretty`, as every node that declares it states it.
 const PRETTY: Documented = Documented {
     name: "--pretty",
-    purpose: "Indents the JSON document by two spaces with one key per line, \
-              instead of writing it on a single line.",
+    purpose: "Indents the JSON output by two spaces, one key per line, instead of writing it on \
+              one line.",
     excludes: &[],
 };
 /// `--direct`, as every node that declares it states it.
 const DIRECT: Documented = Documented {
     name: "--direct",
-    purpose: "Reads the server for this invocation and ignores whatever the \
-              project's cache already holds.",
+    purpose: "Reads from the server even when the cache holds the data, and replaces the cached \
+              copy with what it read; add --no-cache to leave the cache untouched.",
     excludes: &[],
 };
 /// `--no-cache`, as every node that declares it states it.
 const NO_CACHE: Documented = Documented {
     name: "--no-cache",
-    purpose: "Leaves the project's cache as it was, storing nothing this \
-              invocation read.",
+    purpose: "Stores nothing in the cache from this invocation; data the cache already holds is \
+              still used.",
     excludes: &[],
 };
 /// `--set`, as every node that declares it states it.
 const SET: Documented = Documented {
     name: "--set",
-    purpose: "Defines one extra variable for the template, written as \
-              key=value, and may be given once per key.",
+    purpose: "Adds a template variable: --set title=Orders makes vars.title the string \"Orders\"; \
+              a key is letters, digits and _, not starting with a digit, and each key may be given \
+              once.",
     excludes: &[],
 };
 /// `--context`, as every node that declares it states it.
 const CONTEXT: Documented = Documented {
     name: "--context",
-    purpose: "Takes the render context from the JSON document named, or from \
-              standard input when the name is -, so that no server is \
-              contacted.",
+    purpose: "Reads the data from this JSON file, written by tpl schema dump, or from stdin when \
+              the path is -, so that no server is contacted and no database entry is used.",
     excludes: &["--database"],
 };
 /// `--dsn`, as every node that declares it states it.
 const DSN: Documented = Documented {
     name: "--dsn",
-    purpose: "Supplies the whole connection as one URL, in place of the flags \
-              that set its parts one at a time.",
+    purpose: "Sets the whole connection as one URL, mysql://user:password@host:port/database, \
+              instead of --host, --port, --user and --schema.",
     excludes: &["--host", "--port", "--user", "--schema"],
 };
 /// `--host`, as every node that declares it states it.
 const HOST: Documented = Documented {
     name: "--host",
-    purpose: "Sets the host name or address the entry connects to.",
+    purpose: "Sets the host name or IP address of the MariaDB server.",
     excludes: &["--dsn"],
 };
 /// `--port`, as every node that declares it states it.
 const PORT: Documented = Documented {
     name: "--port",
-    purpose: "Sets the TCP port the entry connects to.",
+    purpose: "Sets the TCP port of the MariaDB server, from 1 to 65535.",
     excludes: &["--dsn"],
 };
 /// `--user`, as every node that declares it states it.
 const USER: Documented = Documented {
     name: "--user",
-    purpose: "Sets the user the entry authenticates to the server as.",
+    purpose: "Sets the user name tpl logs in to the server with.",
     excludes: &["--dsn"],
 };
 /// `--schema`, as every node that declares it states it.
 const SCHEMA: Documented = Documented {
     name: "--schema",
-    purpose: "Sets the server-side database the entry reads the catalogue of.",
+    purpose: "Sets the name of the database on the MariaDB server, stored as \
+              database.<entry>.database; this is not the entry name that -d selects.",
     excludes: &["--dsn"],
 };
 /// `--tls`, as every node that declares it states it.
 const TLS: Documented = Documented {
     name: "--tls",
-    purpose: "Sets how much the entry's connection encrypts and validates, from \
-              no transport security to a validated chain and a matching host \
-              name.",
+    purpose: "Sets how the connection is secured: disabled (no TLS), preferred (TLS when the \
+              server offers it), required (TLS, certificate not checked), verify-ca (certificate \
+              chain checked) or verify-identity (chain and host name checked); a local server \
+              without a trusted certificate needs disabled or preferred.",
     excludes: &[],
 };
 /// `--password-command`, as every node that declares it states it.
 const PASSWORD_COMMAND: Documented = Documented {
     name: "--password-command",
-    purpose: "Sets the command whose standard output supplies the entry's \
-              password, so that no password is written into the file.",
+    purpose: "Sets a command, written as one string such as \"pass db/shop\", whose standard \
+              output is the password; it runs without a shell, and no password is stored in the \
+              file.",
     excludes: &[],
 };
 /// `--ca-file`, as every node that declares it states it.
 const CA_FILE: Documented = Documented {
     name: "--ca-file",
-    purpose: "Names one file of certificates the entry validates the server's \
-              chain against.",
+    purpose: "Names a file of CA certificates that verify-ca and verify-identity trust in addition \
+              to the certificates the system already trusts.",
     excludes: &[],
 };
 /// `--ca-path`, as every node that declares it states it.
 const CA_PATH: Documented = Documented {
     name: "--ca-path",
-    purpose: "Names a directory of certificate files the entry validates the \
-              server's chain against.",
+    purpose: "Names a directory of CA certificate files that verify-ca and verify-identity trust \
+              in addition to the certificates the system already trusts.",
+    excludes: &[],
+};
+
+// `tpl cache load` declares `--direct` and `--no-cache` because
+// `FR-CACHE-017` requires it, and gives both a meaning of its own: it accepts
+// and ignores the first, per `FR-CACHE-018`, and refuses the second, per
+// `FR-CACHE-019`. The shared sentences would be false of it, so it carries two
+// rows of its own.
+
+/// `--direct`, as `tpl cache load` states it.
+const CACHE_LOAD_DIRECT: Documented = Documented {
+    name: "--direct",
+    purpose: "Accepted and has no effect: this command always reads from the server.",
+    excludes: &[],
+};
+/// `--no-cache`, as `tpl cache load` states it.
+const CACHE_LOAD_NO_CACHE: Documented = Documented {
+    name: "--no-cache",
+    purpose: "Refused with exit 64: this command exists to store what it reads.",
     excludes: &[],
 };
 
@@ -455,23 +591,22 @@ const CA_PATH: Documented = Documented {
 /// `--table`, the object flag.
 const OBJECT_TABLE: Documented = Documented {
     name: "--table",
-    purpose: "Narrows the invocation to the one table named, in place of the \
-              whole catalogue.",
+    purpose: "Acts on this one table only; in tpl render, the template then sees it as the \
+              variable table.",
     excludes: &["--view", "--routine"],
 };
 /// `--view`, the object flag.
 const OBJECT_VIEW: Documented = Documented {
     name: "--view",
-    purpose: "Narrows the invocation to the one view named, in place of the \
-              whole catalogue.",
+    purpose: "Acts on this one view only; in tpl render, the template then sees it as the variable \
+              view.",
     excludes: &["--table", "--routine"],
 };
 /// `--routine`, the object flag.
 const OBJECT_ROUTINE: Documented = Documented {
     name: "--routine",
-    purpose: "Narrows the invocation to the one routine named, in place of the \
-              whole catalogue, taking a bare name or one qualified as \
-              procedure:<name> or function:<name>.",
+    purpose: "Acts on this one routine only, named bare or as procedure:<name> or function:<name>; \
+              in tpl render, the template then sees it as the variable routine.",
     excludes: &["--table", "--view"],
 };
 
@@ -494,69 +629,67 @@ const SCHEMA_VIEW_NAME: Documented = Documented {
 /// `NAME`, as the node that declares it states it.
 const SCHEMA_ROUTINE_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names the routine to describe, bare or qualified as \
-              procedure:<name> or function:<name>.",
+    purpose: "Names the routine to describe, bare or as procedure:<name> or function:<name>.",
     excludes: &[],
 };
 /// `NAME`, as the node that declares it states it.
 const TEMPLATE_SHOW_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names the template whose source to write.",
+    purpose: "Names the template to print, with or without its .jinja extension.",
     excludes: &[],
 };
 /// `NAME`, as the node that declares it states it.
 const TEMPLATE_CHECK_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names a template to compile; every template the project holds is \
-              compiled when none is named.",
+    purpose: "Names a template to check; with none, every template of the project is checked.",
     excludes: &[],
 };
 /// `NAME`, as the node that declares it states it.
 const TEMPLATE_PATH_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names the template whose location on disk to write.",
+    purpose: "Names the template to locate; with none, the path of .tpl/templates/ is printed.",
     excludes: &[],
 };
 /// `TEMPLATE`, as the node that declares it states it.
 const RENDER_TEMPLATE: Documented = Documented {
     name: "TEMPLATE",
-    purpose: "Names the template to render.",
+    purpose: "Names the template to render, as tpl template list prints it, such as rust/struct.",
     excludes: &[],
 };
 /// `KEY`, as the node that declares it states it.
 const CFG_GET_KEY: Documented = Documented {
     name: "KEY",
-    purpose: "Names the configuration key whose value to write.",
+    purpose: "Names the key to print, such as core.database or database.shop.host.",
     excludes: &[],
 };
 /// `KEY`, as the node that declares it states it.
 const CFG_SET_KEY: Documented = Documented {
     name: "KEY",
-    purpose: "Names the configuration key to write into.",
+    purpose: "Names the key to write, one of the keys listed under DESCRIPTION.",
     excludes: &[],
 };
 /// `VALUE`, as the node that declares it states it.
 const CFG_SET_VALUE: Documented = Documented {
     name: "VALUE",
-    purpose: "Supplies the value written into that key.",
+    purpose: "Supplies the value to write, of the type its key takes.",
     excludes: &[],
 };
 /// `KEY`, as the node that declares it states it.
 const CFG_UNSET_KEY: Documented = Documented {
     name: "KEY",
-    purpose: "Names the configuration key to remove from the file.",
+    purpose: "Names the key or the block to remove, such as database.shop.port or database.shop.",
     excludes: &[],
 };
 /// `NAME`, as the node that declares it states it.
 const ENTRY_ADD_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names the database entry to create.",
+    purpose: "Names the new database entry; -d NAME selects it afterwards.",
     excludes: &[],
 };
 /// `NAME`, as the node that declares it states it.
 const ENTRY_SHOW_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names the database entry whose settings to write.",
+    purpose: "Names the database entry to print.",
     excludes: &[],
 };
 /// `NAME`, as the node that declares it states it.
@@ -574,21 +707,20 @@ const ENTRY_REMOVE_NAME: Documented = Documented {
 /// `NAME`, as the node that declares it states it.
 const ENTRY_TEST_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names the database entry whose connection to try.",
+    purpose: "Names the database entry to connect with.",
     excludes: &[],
 };
 /// `PATH`, as the node that declares it states it.
 const INIT_PATH: Documented = Documented {
     name: "PATH",
-    purpose: "Names the directory to create the project in; the working \
-              directory is used when none is named.",
+    purpose: "Names the directory to create the project in; with none, the current directory is \
+              used.",
     excludes: &[],
 };
 /// `COMMAND_PATH`, as the node that declares it states it.
 const HELP_COMMAND_PATH: Documented = Documented {
     name: "COMMAND_PATH",
-    purpose: "Names the node whose help to write, one segment of its path per \
-              token, at any depth.",
+    purpose: "Names the command to describe, one word per token, such as cfg database add.",
     excludes: &[],
 };
 
@@ -601,45 +733,41 @@ const HELP_COMMAND_PATH: Documented = Documented {
 const GLOBAL_ARGUMENTS: [Documented; 7] = [
     Documented {
         name: "--database",
-        purpose: "Selects the [database.<name>] entry of .tpl/.cfg this \
-                  invocation reads through, in place of the one core.database \
-                  names.",
+        purpose: "Selects the database entry to use, a named connection in .tpl/.cfg that tpl cfg \
+                  database list lists; it overrides core.database.",
         excludes: &[],
     },
     Documented {
         name: "--tpl-dir",
-        purpose: "Names the .tpl folder to work in and suppresses the upward \
-                  search for one.",
+        purpose: "Uses this .tpl folder as the project, instead of searching the current directory \
+                  and its parents for one.",
         excludes: &[],
     },
     Documented {
         name: "--timeout",
-        purpose: "Bounds the whole invocation in seconds, measured from process \
-                  start, beside the per-phase deadlines the project sets.",
+        purpose: "Fails the command if it runs longer than this many seconds in total; the \
+                  per-step limits of .tpl/.cfg still apply.",
         excludes: &[],
     },
     Documented {
         name: "--verbose",
-        purpose: "Raises the diagnostic detail written to standard error by one \
-                  level per occurrence, up to three.",
+        purpose: "Writes more diagnostic detail to stderr, one level per occurrence up to three: \
+                  -v, -vv or -vvv.",
         excludes: &["--quiet"],
     },
     Documented {
         name: "--quiet",
-        purpose: "Lowers the diagnostic detail written to standard error to \
-                  errors alone.",
+        purpose: "Writes only errors to stderr, suppressing warnings.",
         excludes: &["--verbose"],
     },
     Documented {
         name: "--help",
-        purpose: "Writes the help of the node it is written at, instead of doing \
-                  that node's work.",
+        purpose: "Prints the help of the command it is given to, and does nothing else.",
         excludes: &[],
     },
     Documented {
         name: "--version",
-        purpose: "Writes the program name and its version, instead of doing any \
-                  command's work.",
+        purpose: "Prints tpl and its version, and does nothing else.",
         excludes: &[],
     },
 ];
@@ -699,7 +827,13 @@ const ARGUMENTS: [(&[&str], &[Documented]); 28] = [
     ),
     (
         &["cache", "load"],
-        &[OBJECT_TABLE, OBJECT_VIEW, OBJECT_ROUTINE, DIRECT, NO_CACHE],
+        &[
+            OBJECT_TABLE,
+            OBJECT_VIEW,
+            OBJECT_ROUTINE,
+            CACHE_LOAD_DIRECT,
+            CACHE_LOAD_NO_CACHE,
+        ],
     ),
     (
         &["cache", "clean"],
@@ -773,6 +907,29 @@ pub(crate) fn documented(path: &[&str], name: &str) -> Option<&'static Documente
         .iter()
         .find(|(declared, _)| *declared == path)
         .and_then(|(_, stated)| stated.iter().find(|stated| stated.name == name))
+}
+
+/// The defaults the configuration applies to a key that a flag leaves
+/// unwritten, by command path and flag.
+///
+/// `tpl cfg database add` writes no key for a flag that is not given, and the
+/// configuration then gives the absent key its default: `port` is `3306` and
+/// `tls` is `verify-identity`. The parser declares no default for either flag,
+/// because it supplies none, so the fact is stated here, for the text help and
+/// the JSON document alike. `tpl cfg database update` is absent on purpose:
+/// a flag it is not given leaves the field as it was.
+const IMPLIED: [(&[&str], &str, &str); 2] = [
+    (&["cfg", "database", "add"], "--port", "3306"),
+    (&["cfg", "database", "add"], "--tls", "verify-identity"),
+];
+
+/// The default the configuration gives the key the flag `name` of the node
+/// `path` writes, where the command leaves it unwritten, or [`None`].
+pub(crate) fn implied(path: &[&str], name: &str) -> Option<&'static str> {
+    IMPLIED
+        .iter()
+        .find(|(declared, flag, _)| *declared == path && *flag == name)
+        .map(|(_, _, value)| *value)
 }
 
 /// Runs `tpl help`, in whichever of its two representations was asked for.
@@ -951,12 +1108,12 @@ const fn outcome(code: Code, meaning: &'static str) -> Outcome {
 /// The five group nodes below the root. The root carries [`ROOT`] instead, for
 /// the one code that is `tpl`'s rather than any command's.
 const GROUP: &[Outcome] = &[
-    outcome(Code::Ok, "The help of this node was written to stdout."),
+    outcome(Code::Ok, "This help was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown command or flag, or a repeated flag value.",
+        "An unknown command or flag, or a flag given twice.",
     ),
-    outcome(Code::IoError, "The help could not be written to stdout."),
+    outcome(Code::IoError, "stdout could not be written."),
 ];
 
 /// The outcomes of a bare `tpl`, which are [`GROUP`]'s and one more.
@@ -964,112 +1121,115 @@ const GROUP: &[Outcome] = &[
 /// `70` is stated here and nowhere else, on the precedent `FR-GLOB-003` sets
 /// for a fact that belongs to the tool rather than to each command under it.
 const ROOT: &[Outcome] = &[
-    outcome(Code::Ok, "The help of this node was written to stdout."),
+    outcome(Code::Ok, "This help was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown command or flag, or a repeated flag value.",
+        "An unknown command or flag, or a flag given twice.",
     ),
     outcome(
         Code::Software,
-        "A defect in tpl. It is reachable from any invocation, is not caused by the command line, \
-         and cannot be corrected by the caller: report it. It is listed here, once, and under no \
-         command of the tree.",
+        "A bug in tpl, which any command can hit. Report it with the command and the output of tpl \
+         version.",
     ),
-    outcome(Code::IoError, "The help could not be written to stdout."),
+    outcome(Code::IoError, "stdout could not be written."),
 ];
 
 /// The outcomes of a `schema` subcommand that names no object.
 const SCHEMA_LISTING: &[Outcome] = &[
-    outcome(Code::Ok, "The read succeeded."),
+    outcome(Code::Ok, "The result was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag, or --pretty without \
-         --format json.",
+        "An unknown flag, a flag given twice, or --pretty without --format json.",
     ),
     outcome(
         Code::NoInput,
-        "The entry named by -d/--database is absent from .tpl/.cfg.",
+        "The entry that -d/--database names is not in .tpl/.cfg.",
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a network phase exceeded its deadline.",
+        "The server could not be reached, or a connection step took longer than its time limit.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the result could not be written to stdout.",
+        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written, or \
+         stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
-        "The server refused the credentials, or this reader cannot read the catalogue.",
+        "The server refused the login, or the database user is not allowed to read the database \
+         structure.",
     ),
     outcome(
         Code::Configuration,
-        "No project was found, .tpl/.cfg cannot be used, no database entry is selected, or the \
-         server is not a supported MariaDB series.",
+        "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
+         set core.database), or the server is not a supported MariaDB version.",
     ),
 ];
 
 /// The outcomes of `schema table` and `schema view`, which name one object.
 const SCHEMA_OBJECT: &[Outcome] = &[
-    outcome(Code::Ok, "The read succeeded."),
+    outcome(Code::Ok, "The description was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag, a missing NAME, or --pretty \
-         without --format json.",
+        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json.",
     ),
     outcome(
         Code::NoInput,
-        "NAME does not exist in the selected database, or the entry named by -d/--database is \
-         absent from .tpl/.cfg.",
+        "NAME does not exist in the selected database, or the entry that -d/--database names is \
+         not in .tpl/.cfg.",
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a network phase exceeded its deadline.",
+        "The server could not be reached, or a connection step took longer than its time limit.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the result could not be written to stdout.",
+        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written, or \
+         stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
-        "The server refused the credentials, or this reader cannot read the catalogue.",
+        "The server refused the login, or the database user is not allowed to read the database \
+         structure.",
     ),
     outcome(
         Code::Configuration,
-        "No project was found, .tpl/.cfg cannot be used, no database entry is selected, or the \
-         server is not a supported MariaDB series.",
+        "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
+         set core.database), or the server is not a supported MariaDB version.",
     ),
 ];
 
 /// The outcomes of `schema routine`, which adds the ambiguity of `FR-SCH-010`.
 const SCHEMA_ROUTINE: &[Outcome] = &[
-    outcome(Code::Ok, "The read succeeded."),
+    outcome(Code::Ok, "The description was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid, or NAME is a bare name matching both a procedure and a \
-         function.",
+        "An unknown flag, a flag given twice, a missing NAME, --pretty without --format json, or a \
+         bare NAME that matches both a procedure and a function.",
     ),
     outcome(
         Code::NoInput,
-        "NAME names no routine of the selected database, or the entry named by -d/--database is \
-         absent from .tpl/.cfg.",
+        "NAME names no routine of the selected database, or the entry that -d/--database names is \
+         not in .tpl/.cfg.",
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a network phase exceeded its deadline.",
+        "The server could not be reached, or a connection step took longer than its time limit.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the result could not be written to stdout.",
+        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written, or \
+         stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
-        "The server refused the credentials, or this reader cannot read the catalogue.",
+        "The server refused the login, or the database user is not allowed to read the database \
+         structure.",
     ),
     outcome(
         Code::Configuration,
-        "No project was found, .tpl/.cfg cannot be used, no database entry is selected, or the \
-         server is not a supported MariaDB series.",
+        "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
+         set core.database), or the server is not a supported MariaDB version.",
     ),
 ];
 
@@ -1078,69 +1238,73 @@ const SCHEMA_DUMP: &[Outcome] = &[
     outcome(Code::Ok, "The document was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: --format and --pattern are refused here, as is any other \
-         undeclared flag.",
+        "An unknown flag or a flag given twice; --format and --pattern are not flags of this \
+         command.",
     ),
     outcome(
         Code::NoInput,
-        "The entry named by -d/--database is absent from .tpl/.cfg.",
+        "The entry that -d/--database names is not in .tpl/.cfg.",
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a network phase exceeded its deadline.",
+        "The server could not be reached, or a connection step took longer than its time limit.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the document could not be written to stdout.",
+        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written, or \
+         stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
-        "The server refused the credentials, or this reader cannot read the catalogue.",
+        "The server refused the login, or the database user is not allowed to read the database \
+         structure.",
     ),
     outcome(
         Code::Configuration,
-        "No project was found, .tpl/.cfg cannot be used, no database entry is selected, or the \
-         server is not a supported MariaDB series.",
+        "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
+         set core.database), or the server is not a supported MariaDB version.",
     ),
 ];
 
 /// The outcomes of `tpl render`.
 const RENDER: &[Outcome] = &[
-    outcome(
-        Code::Ok,
-        "The render succeeded and its result was written to stdout.",
-    ),
+    outcome(Code::Ok, "The rendered text was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: more than one object flag, a --set without =, an invalid or \
-         repeated --set key, or --context together with -d/--database.",
+        "More than one of --table, --view and --routine; a --set without =, with an invalid key, \
+         or with a key given twice; or --context together with -d/--database.",
     ),
     outcome(
         Code::DataError,
-        "The template has a syntax error, the render failed, the --context document is malformed, \
-         or the render deadline expired.",
+        "The template has a syntax error; the render failed, for example on an undefined variable, \
+         a filter given the wrong type, or fail(); the --context document is malformed; or a \
+         render limit was reached: core.render_timeout, core.render_fuel, core.render_output_limit \
+         or core.render_memory_limit.",
     ),
     outcome(
         Code::NoInput,
-        "TEMPLATE does not exist, the named object is absent from the context source, or the \
-         entry named by -d/--database is absent from .tpl/.cfg.",
+        "TEMPLATE does not exist, the object that --table, --view or --routine names is not in the \
+         database or the --context document, or the entry that -d/--database names is not in \
+         .tpl/.cfg.",
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a network phase exceeded its deadline.",
+        "The server could not be reached, or a connection step took longer than its time limit.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the result could not be written to stdout.",
+        "A file under .tpl, the --context file, or the entry's ca_file or ca_path could not be \
+         read or written, or stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
-        "The server refused the credentials, or this reader cannot read the catalogue.",
+        "The server refused the login, or the database user is not allowed to read the database \
+         structure.",
     ),
     outcome(
         Code::Configuration,
-        "No project was found, .tpl/.cfg cannot be used, no database entry is selected, or the \
-         server is not a supported MariaDB series.",
+        "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
+         set core.database), or the server is not a supported MariaDB version.",
     ),
 ];
 
@@ -1148,17 +1312,16 @@ const RENDER: &[Outcome] = &[
 const TEMPLATE_LISTING: &[Outcome] = &[
     outcome(
         Code::Ok,
-        "The listing was written to stdout. A project with no template lists nothing and still \
+        "The list was written to stdout. A project with no template lists nothing and still \
          succeeds.",
     ),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag, or --pretty without \
-         --format json.",
+        "An unknown flag, a flag given twice, or --pretty without --format json.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the listing could not be written to stdout.",
+        "Reading .tpl failed, or stdout could not be written.",
     ),
     outcome(
         Code::Configuration,
@@ -1166,12 +1329,12 @@ const TEMPLATE_LISTING: &[Outcome] = &[
     ),
 ];
 
-/// The outcomes of `template show` and `template path`, which resolve a name.
+/// The outcomes of `template show`, which resolves a name.
 const TEMPLATE_NAMED: &[Outcome] = &[
-    outcome(Code::Ok, "The result was written to stdout."),
+    outcome(Code::Ok, "The source was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag, or a missing NAME.",
+        "An unknown flag, a flag given twice, a missing NAME, or more than one NAME.",
     ),
     outcome(
         Code::DataError,
@@ -1179,11 +1342,39 @@ const TEMPLATE_NAMED: &[Outcome] = &[
     ),
     outcome(
         Code::NoInput,
-        "NAME names no template of the project; the nearest matches are suggested.",
+        "NAME names no template of the project; the closest template name is suggested when one is \
+         close.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the result could not be written to stdout.",
+        "Reading .tpl failed, or stdout could not be written.",
+    ),
+    outcome(
+        Code::Configuration,
+        "No project was found, or .tpl/.cfg cannot be used.",
+    ),
+];
+
+/// The outcomes of `template path`, whose NAME is optional.
+const TEMPLATE_PATH: &[Outcome] = &[
+    outcome(Code::Ok, "The path was written to stdout."),
+    outcome(
+        Code::Usage,
+        "An unknown flag, a flag given twice, more than one NAME, or --pretty without --format \
+         json.",
+    ),
+    outcome(
+        Code::DataError,
+        "NAME resolves to a path outside .tpl/templates/.",
+    ),
+    outcome(
+        Code::NoInput,
+        "NAME names no template of the project; the closest template name is suggested when one is \
+         close.",
+    ),
+    outcome(
+        Code::IoError,
+        "Reading .tpl failed, or stdout could not be written.",
     ),
     outcome(
         Code::Configuration,
@@ -1195,21 +1386,19 @@ const TEMPLATE_NAMED: &[Outcome] = &[
 const TEMPLATE_CHECK: &[Outcome] = &[
     outcome(
         Code::Ok,
-        "Every template checked compiles. A project with no template checks nothing and still \
+        "Every checked template parses. A project with no template checks nothing and still \
          succeeds.",
     ),
-    outcome(
-        Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag.",
-    ),
+    outcome(Code::Usage, "An unknown flag or a flag given twice."),
     outcome(
         Code::DataError,
-        "A checked template has a syntax error, named with its line and column, or resolves to a \
-         path outside .tpl/templates/.",
+        "A checked template has a syntax error, reported with its line and column, or a NAME \
+         resolves to a path outside .tpl/templates/.",
     ),
     outcome(
         Code::NoInput,
-        "A NAME given names no template of the project; the nearest matches are suggested.",
+        "A NAME names no template of the project; the closest template name is suggested when one \
+         is close.",
     ),
     outcome(Code::IoError, "Reading .tpl failed."),
     outcome(
@@ -1220,50 +1409,61 @@ const TEMPLATE_CHECK: &[Outcome] = &[
 
 /// The outcomes of `cache load`, the one cache subcommand that reads a server.
 const CACHE_LOAD: &[Outcome] = &[
-    outcome(Code::Ok, "The catalogue was read and stored."),
+    outcome(
+        Code::Ok,
+        "The data was read from the server and stored in .tpl/.cache/.",
+    ),
     outcome(
         Code::Usage,
-        "The invocation is not valid: --no-cache, more than one object flag, or a bare --routine \
-         name matching both a procedure and a function.",
+        "--no-cache; more than one of --table, --view and --routine; or a bare --routine name that \
+         matches both a procedure and a function.",
     ),
     outcome(
         Code::NoInput,
-        "The named object does not exist in the selected database, or the entry named by \
-         -d/--database is absent from .tpl/.cfg.",
+        "The object named does not exist in the selected database, or the entry that -d/--database \
+         names is not in .tpl/.cfg.",
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a network phase exceeded its deadline. Whatever was \
-         already stored is left unchanged.",
+        "The server could not be reached, or a connection step took longer than its time limit. \
+         What was already stored is left unchanged.",
     ),
-    outcome(Code::IoError, "Reading .tpl failed."),
+    outcome(
+        Code::IoError,
+        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written.",
+    ),
     outcome(
         Code::NoPermission,
-        "The server refused the credentials, or this reader cannot read the catalogue.",
+        "The server refused the login, or the database user is not allowed to read the database \
+         structure.",
     ),
     outcome(
         Code::Configuration,
-        "No project was found, .tpl/.cfg cannot be used, no database entry is selected, or the \
-         server is not a supported MariaDB series.",
+        "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
+         set core.database), or the server is not a supported MariaDB version.",
     ),
 ];
 
 /// The outcomes of `cache clean`, which reads no server.
 const CACHE_CLEAN: &[Outcome] = &[
-    outcome(Code::Ok, "The cached data named was removed."),
+    outcome(Code::Ok, "The cached data was deleted from .tpl/.cache/."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: --direct and --no-cache are refused here, as is more than \
-         one object flag.",
+        "An unknown flag (--direct and --no-cache included), a flag given twice, or more than one \
+         of --table, --view and --routine.",
     ),
     outcome(
         Code::NoInput,
-        "The entry named by -d/--database is absent from .tpl/.cfg.",
+        "The entry that -d/--database names is not in .tpl/.cfg.",
     ),
-    outcome(Code::IoError, "Reading .tpl failed."),
+    outcome(
+        Code::IoError,
+        "Reading .tpl failed, or a file under .tpl/.cache/ could not be deleted.",
+    ),
     outcome(
         Code::Configuration,
-        "No project was found, .tpl/.cfg cannot be used, or no database entry is selected.",
+        "No project was found, .tpl/.cfg cannot be used, or no database entry is selected (give -d \
+         or set core.database).",
     ),
 ];
 
@@ -1271,24 +1471,25 @@ const CACHE_CLEAN: &[Outcome] = &[
 const CACHE_STATUS: &[Outcome] = &[
     outcome(
         Code::Ok,
-        "The report was written to stdout. An empty cache is a state, not a failure.",
+        "The report was written to stdout. An empty cache is reported, not refused.",
     ),
     outcome(
         Code::Usage,
-        "The invocation is not valid: --direct and --no-cache are refused here, as is --pretty \
+        "An unknown flag (--direct and --no-cache included), a flag given twice, or --pretty \
          without --format json.",
     ),
     outcome(
         Code::NoInput,
-        "The entry named by -d/--database is absent from .tpl/.cfg.",
+        "The entry that -d/--database names is not in .tpl/.cfg.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the report could not be written to stdout.",
+        "Reading .tpl failed, or stdout could not be written.",
     ),
     outcome(
         Code::Configuration,
-        "No project was found, .tpl/.cfg cannot be used, or no database entry is selected.",
+        "No project was found, .tpl/.cfg cannot be used, or no database entry is selected (give -d \
+         or set core.database).",
     ),
 ];
 
@@ -1297,16 +1498,16 @@ const CFG_GET: &[Outcome] = &[
     outcome(Code::Ok, "The value was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag, a missing KEY, or --pretty \
-         without --format json.",
+        "An unknown flag, a flag given twice, a missing KEY, --pretty without --format json, or a \
+         KEY that names a whole block (core, database or database.<entry>) rather than one value.",
     ),
     outcome(
         Code::NoInput,
-        "KEY is absent from .tpl/.cfg; the nearest matches are suggested.",
+        "KEY is not set in .tpl/.cfg; close key names are suggested when there are any.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the value could not be written to stdout.",
+        "Reading .tpl failed, or stdout could not be written.",
     ),
     outcome(
         Code::Configuration,
@@ -1316,11 +1517,12 @@ const CFG_GET: &[Outcome] = &[
 
 /// The outcomes of `cfg set`.
 const CFG_SET: &[Outcome] = &[
-    outcome(Code::Ok, "The key was written to .tpl/.cfg."),
+    outcome(Code::Ok, "The value was written to .tpl/.cfg."),
     outcome(
         Code::Usage,
-        "KEY is outside the configuration key space, or VALUE does not conform to the type that \
-         key declares.",
+        "An unknown flag, a missing KEY or VALUE, a KEY that is not one of the keys listed under \
+         DESCRIPTION, a VALUE of the wrong type for its key, or a VALUE that cannot stand beside a \
+         key the entry already holds, such as a dsn beside a host.",
     ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
@@ -1331,12 +1533,12 @@ const CFG_SET: &[Outcome] = &[
 
 /// The outcomes of `cfg unset`.
 const CFG_UNSET: &[Outcome] = &[
-    outcome(Code::Ok, "The key or block was removed from .tpl/.cfg."),
+    outcome(Code::Ok, "The key or the block was removed from .tpl/.cfg."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag, or a missing KEY.",
+        "An unknown flag, a flag given twice, or a missing KEY.",
     ),
-    outcome(Code::NoInput, "KEY is absent from .tpl/.cfg."),
+    outcome(Code::NoInput, "KEY is not set in .tpl/.cfg."),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
         Code::Configuration,
@@ -1348,16 +1550,15 @@ const CFG_UNSET: &[Outcome] = &[
 const CFG_LISTING: &[Outcome] = &[
     outcome(
         Code::Ok,
-        "The listing was written to stdout. An empty listing is a state, not a failure.",
+        "The list was written to stdout. An empty list is a result, not a failure.",
     ),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag, or --pretty without \
-         --format json.",
+        "An unknown flag, a flag given twice, or --pretty without --format json.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the listing could not be written to stdout.",
+        "Reading .tpl failed, or stdout could not be written.",
     ),
     outcome(
         Code::Configuration,
@@ -1370,8 +1571,9 @@ const CFG_DATABASE_ADD: &[Outcome] = &[
     outcome(Code::Ok, "The entry was written to .tpl/.cfg."),
     outcome(
         Code::Usage,
-        "Neither --dsn nor a discrete connection flag was supplied, both groups were, or NAME is \
-         already taken.",
+        "No connection flag was given; --dsn was given with --host, --port, --user or --schema; a \
+         --dsn, --port or --tls value is malformed; a password in --dsn was given with \
+         --password-command; or NAME is already taken.",
     ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
@@ -1380,20 +1582,57 @@ const CFG_DATABASE_ADD: &[Outcome] = &[
     ),
 ];
 
-/// The outcomes of `cfg database show`, `update` and `remove`.
-const CFG_DATABASE_ENTRY: &[Outcome] = &[
-    outcome(Code::Ok, "The command succeeded."),
+/// The outcomes of `cfg database show`.
+const CFG_DATABASE_SHOW: &[Outcome] = &[
+    outcome(
+        Code::Ok,
+        "The entry was written to stdout, passwords redacted.",
+    ),
     outcome(
         Code::Usage,
-        "The invocation is not valid: a missing NAME, an unknown or repeated flag, or --dsn \
-         together with a discrete connection flag.",
+        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json.",
     ),
     outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
     outcome(
         Code::IoError,
-        "Reading .tpl/.cfg failed, rewriting it failed, or the result could not be written to \
-         stdout.",
+        "Reading .tpl/.cfg failed, or stdout could not be written.",
     ),
+    outcome(
+        Code::Configuration,
+        "No project was found, or .tpl/.cfg cannot be used.",
+    ),
+];
+
+/// The outcomes of `cfg database update`.
+const CFG_DATABASE_UPDATE: &[Outcome] = &[
+    outcome(Code::Ok, "The entry was changed in .tpl/.cfg."),
+    outcome(
+        Code::Usage,
+        "A missing NAME; no field flag; --dsn given with --host, --port, --user or --schema; a \
+         malformed flag value; or a change that would leave the entry holding two keys that cannot \
+         stand together, such as a dsn beside a host.",
+    ),
+    outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
+    outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
+    outcome(
+        Code::Configuration,
+        "No project was found, or .tpl/.cfg cannot be used.",
+    ),
+];
+
+/// The outcomes of `cfg database remove`.
+const CFG_DATABASE_REMOVE: &[Outcome] = &[
+    outcome(
+        Code::Ok,
+        "The entry was removed from .tpl/.cfg, and core.database was cleared if it named the \
+         entry.",
+    ),
+    outcome(
+        Code::Usage,
+        "An unknown flag, a flag given twice, or a missing NAME.",
+    ),
+    outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
+    outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
         Code::Configuration,
         "No project was found, or .tpl/.cfg cannot be used.",
@@ -1404,29 +1643,27 @@ const CFG_DATABASE_ENTRY: &[Outcome] = &[
 const CFG_DATABASE_TEST: &[Outcome] = &[
     outcome(
         Code::Ok,
-        "The four steps ran. This does not promise the entry is fully usable: read \
-         can_read_catalogue for the fourth answer.",
+        "The four checks ran and the report was written to stdout. This does not mean the entry is \
+         fully usable: read can_read_catalogue.",
     ),
     outcome(
         Code::Usage,
-        "The invocation is not valid: a missing NAME, an unknown or repeated flag, or --pretty \
-         without --format json.",
+        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json.",
     ),
     outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a network phase exceeded its deadline.",
+        "The server could not be reached, or a connection step took longer than its time limit.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl failed, or the report could not be written to stdout.",
+        "Reading .tpl, or the entry's ca_file or ca_path, failed, or stdout could not be written.",
     ),
-    outcome(Code::NoPermission, "The server refused the credentials."),
+    outcome(Code::NoPermission, "The server refused the login."),
     outcome(
         Code::Configuration,
-        "The connection and the authentication succeeded and the server is not a supported \
-         MariaDB series, the read-only session could not be enforced, no project was found, or \
-         .tpl/.cfg cannot be used.",
+        "The login succeeded but the server is not a supported MariaDB version or the session \
+         could not be made read-only; or no project was found, or .tpl/.cfg cannot be used.",
     ),
 ];
 
@@ -1434,12 +1671,12 @@ const CFG_DATABASE_TEST: &[Outcome] = &[
 const INIT: &[Outcome] = &[
     outcome(
         Code::Ok,
-        "The project was created and nothing was written to stdout. A project created under \
-         another one succeeds and warns on stderr that it shadows the one above.",
+        "The project was created; nothing was written to stdout. Creating a project below another \
+         one succeeds, with a warning on stderr that the new one hides the one above.",
     ),
     outcome(
         Code::Usage,
-        "The invocation is not valid: an unknown or repeated flag, or more than one PATH.",
+        "An unknown flag, a flag given twice, or more than one PATH.",
     ),
     outcome(
         Code::CantCreate,
@@ -1452,29 +1689,78 @@ const INIT: &[Outcome] = &[
 const HELP: &[Outcome] = &[
     outcome(
         Code::Ok,
-        "The help or the command tree was written to stdout.",
+        "The help or the JSON document was written to stdout.",
     ),
     outcome(
         Code::Usage,
-        "A segment of COMMAND_PATH names no child of the node the preceding segments reached, or \
-         --pretty was given without --format json.",
+        "A word of COMMAND_PATH names no command under the words before it, or --pretty without \
+         --format json.",
     ),
     outcome(
         Code::IoError,
-        "The help could not be written to stdout, or stdout closed part-way through the JSON \
-         document.",
+        "stdout could not be written, or it closed part-way through the JSON document.",
     ),
 ];
 
 /// The outcomes of `tpl version`.
 const VERSION: &[Outcome] = &[
-    outcome(Code::Ok, "The version was written to stdout."),
+    outcome(Code::Ok, "The version line was written to stdout."),
     outcome(
         Code::Usage,
-        "The invocation is not valid: this command declares no argument and no flag of its own.",
+        "An argument, or a flag other than the global ones: this command takes none.",
     ),
-    outcome(Code::IoError, "The version could not be written to stdout."),
+    outcome(Code::IoError, "stdout could not be written."),
 ];
+
+/// A row of a [`Block::Rows`].
+const fn row(label: &'static str, text: &'static str) -> Row {
+    Row { label, text }
+}
+
+// The sentences of `FR-HELP-031` that more than one leaf states. A sentence is
+// written once where it is true of every leaf that uses it, so that two leaves
+// cannot drift apart on one fact.
+
+/// A command that never opens a connection.
+const NO_SERVER: &str = "Does not contact the server.";
+
+/// A command that works without a `[database.<name>]` entry.
+const NO_ENTRY: &str = "Needs no database entry.";
+
+/// A command that needs the entry `-d` or `core.database` selects.
+const NEEDS_ENTRY: &str = "Needs a database entry (-d or core.database).";
+
+/// A command that writes nothing to disk.
+const NO_FILE: &str = "Writes no file.";
+
+/// A command that writes `.tpl/.cfg` and nothing else.
+const WRITES_CFG: &str = "Writes .tpl/.cfg.";
+
+/// A command that prints nothing on success.
+const PRINTS_NOTHING: &str = "Prints nothing.";
+
+/// The four statements of a `schema` leaf, which reads through the cache per
+/// `FR-CACHE-015`: only its output differs from one leaf to the next.
+const fn reads_catalogue(stdout: &'static str) -> Touches {
+    Touches {
+        server: "Connects to the server only when .tpl/.cache/ does not already hold the data, \
+                 and always with --direct.",
+        entry: NEEDS_ENTRY,
+        files: "Stores what it read in the entry's folder under .tpl/.cache/, unless --no-cache \
+                is given.",
+        stdout,
+    }
+}
+
+/// The four statements of a command that reads only the project.
+const fn local_only(entry: &'static str, files: &'static str, stdout: &'static str) -> Touches {
+    Touches {
+        server: NO_SERVER,
+        entry,
+        files,
+        stdout,
+    }
+}
 
 /// One entry per node of the tree of `FR-CLI-002`, in the order `FR-HELP-019`
 /// requires: each node followed by its own children before the next node at
@@ -1482,11 +1768,39 @@ const VERSION: &[Outcome] = &[
 const ENTRIES: [Entry; 35] = [
     Entry {
         path: &[],
-        description: "tpl reads the structure of a MariaDB database and renders MiniJinja \
-                      templates against it. It never writes to the database. It works inside a \
-                      project — a .tpl folder holding the configuration and the templates — \
-                      which tpl init creates. Every command accepts the seven global flags \
-                      listed below, in any position.",
+        description: "tpl reads the structure of a MariaDB database (its tables, views and \
+                      routines) and renders MiniJinja templates with it. It never writes to the \
+                      database. It works inside a project: a .tpl folder, created by tpl init, \
+                      that holds the configuration file .tpl/.cfg and the templates under \
+                      .tpl/templates/.",
+        blocks: &[
+            Block::Rows {
+                heading: "Words this help uses:",
+                rows: &[
+                    row(
+                        "database entry",
+                        "A named connection to a MariaDB server, stored in .tpl/.cfg. Select \
+                         one with -d NAME, or make one the default with tpl cfg set \
+                         core.database NAME.",
+                    ),
+                    row(
+                        "cache",
+                        "Copies of what tpl read from the server, kept under .tpl/.cache/ so \
+                         that later commands need no connection.",
+                    ),
+                    row(
+                        "template",
+                        "A MiniJinja file under .tpl/templates/, named without its .jinja \
+                         extension, such as rust/struct.",
+                    ),
+                ],
+            },
+            Block::Prose(
+                "Every command accepts the seven global flags listed below, before or after \
+                 the command name.",
+            ),
+        ],
+        touches: None,
         examples: &[
             Example {
                 caption: "Print this help.",
@@ -1497,8 +1811,28 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "help", "--format", "json"])],
             },
             Example {
-                caption: "Create a project in the current directory.",
-                lines: &[run(&["tpl", "init"])],
+                caption: "Set up a project, connect it to a database and render one table.",
+                lines: &[
+                    run(&["tpl", "init"]),
+                    run(&[
+                        "tpl",
+                        "cfg",
+                        "database",
+                        "add",
+                        "shop",
+                        "--host",
+                        "db.example.com",
+                        "--user",
+                        "reader",
+                        "--schema",
+                        "shop",
+                        "--password-command",
+                        "\"pass db/shop\"",
+                    ]),
+                    run(&["tpl", "cfg", "set", "core.database", "shop"]),
+                    run(&["tpl", "schema", "tables"]),
+                    run(&["tpl", "render", "example", "--table", "orders"]),
+                ],
             },
         ],
         exit_codes: ROOT,
@@ -1506,9 +1840,13 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["schema"],
-        description: "Reads the structure of the selected database and presents it. Every \
-                      subcommand reads through the catalogue cache and issues no statement but a \
-                      SELECT against INFORMATION_SCHEMA.",
+        description: "Reads the structure of the selected database: its tables, views, routines \
+                      and server. It only reads: the session is made read-only first, and every \
+                      query is a SELECT, against INFORMATION_SCHEMA for the structure. What it \
+                      reads is kept in .tpl/.cache/, so a second read of the same data needs no \
+                      connection.",
+        blocks: &[],
+        touches: None,
         examples: &[
             Example {
                 caption: "Print this help.",
@@ -1524,8 +1862,10 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["schema", "info"],
-        description: "Reports the metadata of the selected database — its name, character set \
-                      and collation — the server it lives on, and the collections it holds.",
+        description: "Reports the selected database: its name, character set and collation, the \
+                      server it runs on, and how many tables, views and routines it holds.",
+        blocks: &[],
+        touches: Some(reads_catalogue("Prints that report.")),
         examples: &[
             Example {
                 caption: "Report the selected database.",
@@ -1548,9 +1888,10 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["schema", "tables"],
-        description: "Lists the tables of the selected database, one row each. Use --format json \
-                      to iterate: a table is named by the name column, and tpl render binds one \
-                      table per invocation.",
+        description: "Lists the tables of the selected database, one row each. To act on every \
+                      table, read the names from the JSON output, as the last example does.",
+        blocks: &[],
+        touches: Some(reads_catalogue("Prints the tables, one row each.")),
         examples: &[
             Example {
                 caption: "List every table.",
@@ -1602,6 +1943,8 @@ const ENTRIES: [Entry; 35] = [
         path: &["schema", "table"],
         description: "Describes one table: its columns, primary key, indexes, foreign keys, \
                       triggers, CHECK constraints, engine, collation and comment.",
+        blocks: &[],
+        touches: Some(reads_catalogue("Prints that description.")),
         examples: &[
             Example {
                 caption: "Describe the orders table.",
@@ -1621,6 +1964,8 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["schema", "views"],
         description: "Lists the views of the selected database, one row each.",
+        blocks: &[],
+        touches: Some(reads_catalogue("Prints the views, one row each.")),
         examples: &[
             Example {
                 caption: "List every view.",
@@ -1645,6 +1990,8 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["schema", "view"],
         description: "Describes one view, including its SQL definition.",
+        blocks: &[],
+        touches: Some(reads_catalogue("Prints that description.")),
         examples: &[
             Example {
                 caption: "Describe the v_sales view.",
@@ -1669,9 +2016,11 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["schema", "routines"],
-        description: "Lists the stored procedures and the stored functions of the selected \
-                      database together, each row stating its kind. There is no flag to select \
-                      one kind: filter the JSON document instead.",
+        description: "Lists the stored procedures and stored functions of the selected database \
+                      together, each row stating its kind. To keep one kind, filter the JSON \
+                      output, as the last example does.",
+        blocks: &[],
+        touches: Some(reads_catalogue("Prints the routines, one row each.")),
         examples: &[
             Example {
                 caption: "List every routine.",
@@ -1696,9 +2045,11 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["schema", "routine"],
-        description: "Describes one stored procedure or stored function. Procedures and \
-                      functions occupy distinct namespaces, so a bare name that matches both is \
-                      refused: qualify it as procedure:NAME or function:NAME.",
+        description: "Describes one stored procedure or stored function. A procedure and a \
+                      function may share a name; a bare NAME that matches both is refused, so \
+                      write procedure:NAME or function:NAME.",
+        blocks: &[],
+        touches: Some(reads_catalogue("Prints that description.")),
         examples: &[
             Example {
                 caption: "Describe the routine named calc_vat.",
@@ -1721,10 +2072,12 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["schema", "dump"],
-        description: "Writes the whole selected database as one JSON document. The output is \
-                      JSON and nothing else, so this command declares no --format. The document \
-                      carries the server-derived context alone — no vars, no tpl, no now — and \
-                      is what tpl render --context reads back.",
+        description: "Writes the whole selected database as one JSON document; the output is \
+                      always JSON, and --format is refused. tpl render --context reads this \
+                      document back and renders without a server. The document holds what a \
+                      template sees as database; tpl render adds vars, tpl and now itself.",
+        blocks: &[],
+        touches: Some(reads_catalogue("Prints the JSON document.")),
         examples: &[
             Example {
                 caption: "Write the database to a file.",
@@ -1759,9 +2112,11 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["template"],
-        description: "Reads the templates the project carries, under .tpl/templates/. No \
-                      subcommand opens a database connection, evaluates a template, or leaves \
-                      the template root.",
+        description: "Reads the templates of the project, under .tpl/templates/. No subcommand \
+                      connects to a server, runs a template, or reads a template outside \
+                      .tpl/templates/.",
+        blocks: &[],
+        touches: None,
         examples: &[
             Example {
                 caption: "Print this help.",
@@ -1777,10 +2132,17 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["template", "list"],
-        description: "Lists every template of the project, ordered by name. A listed name omits \
-                      the .jinja extension, and so does the positional argument of render, show, \
-                      check and path. An {% include %} inside a template does not: it needs the \
-                      extension written out.",
+        description: "Lists every template of the project by name, in name order. A name has no \
+                      .jinja extension, and the NAME given to render, template show, template \
+                      check and template path needs none. An {% include %} inside a template is \
+                      different: it needs the extension, as in {% include \"rust/_types.jinja\" \
+                      %}.",
+        blocks: &[],
+        touches: Some(local_only(
+            NO_ENTRY,
+            NO_FILE,
+            "Prints the template names, one per line.",
+        )),
         examples: &[
             Example {
                 caption: "List the project's templates.",
@@ -1796,8 +2158,14 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["template", "show"],
-        description: "Writes the source of one template to stdout, byte for byte, with nothing \
-                      escaped and nothing evaluated.",
+        description: "Prints the source of one template exactly as it is stored: nothing is run \
+                      and nothing is escaped.",
+        blocks: &[],
+        touches: Some(local_only(
+            NO_ENTRY,
+            NO_FILE,
+            "Prints the template's source.",
+        )),
         examples: &[
             Example {
                 caption: "Print a template's source.",
@@ -1813,10 +2181,16 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["template", "check"],
-        description: "Parses templates without rendering them. It is syntax analysis only: no \
-                      expression is evaluated, no filter is called, no database is contacted. It \
-                      is therefore safe to run against a template you have not read. Given no \
-                      name, it checks every template of the project.",
+        description: "Checks the syntax of templates without running them: no expression is \
+                      evaluated, no filter is called and no server is contacted, so it is safe on \
+                      a template you have not read. With no NAME, it checks every template of the \
+                      project.",
+        blocks: &[],
+        touches: Some(local_only(
+            NO_ENTRY,
+            NO_FILE,
+            "Prints nothing; a syntax error is reported on stderr, with its line and column.",
+        )),
         examples: &[
             Example {
                 caption: "Check every template of the project.",
@@ -1838,8 +2212,10 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["template", "path"],
-        description: "Writes the absolute path a template name resolves to. Given no name, it \
-                      writes the absolute path of the template root.",
+        description: "Prints the absolute path a template name resolves to. With no NAME, it \
+                      prints the absolute path of .tpl/templates/.",
+        blocks: &[],
+        touches: Some(local_only(NO_ENTRY, NO_FILE, "Prints the path.")),
         examples: &[
             Example {
                 caption: "Print the template root.",
@@ -1850,19 +2226,35 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "template", "path", "rust/struct"])],
             },
         ],
-        exit_codes: TEMPLATE_NAMED,
+        exit_codes: TEMPLATE_PATH,
         see_also: &[&["template", "list"], &["template", "show"]],
     },
     Entry {
         path: &["render"],
-        description: "Renders one template, once, and writes the result to stdout. The context \
-                      comes either from the selected database or from a --context document, \
-                      never from both. One object at most is bound, named by --table, --view or \
-                      --routine; with none, the whole database is in context. Redirect stdout to \
-                      write a file: this command has no --output.",
+        description: "Renders one template once and prints the result to stdout. To write a file, \
+                      redirect stdout: there is no --output flag. The data comes from the selected \
+                      database entry, or from a --context file written by tpl schema dump, never \
+                      from both. With --table, --view or --routine the template also sees that one \
+                      object; without one, it sees the whole database.",
+        blocks: &[
+            Block::Surface,
+            Block::Prose(
+                "tpl init writes a worked example template; print it with tpl template show \
+                 example.",
+            ),
+        ],
+        touches: Some(Touches {
+            server: "Connects to the server only when .tpl/.cache/ does not already hold what \
+                     the template reads, always with --direct, and never with --context.",
+            entry: "Needs a database entry (-d or core.database), except with --context, which \
+                     takes none.",
+            files: "Stores what it read under .tpl/.cache/, unless --no-cache or --context is \
+                     given; the rendered text is never written to a file by tpl.",
+            stdout: "Prints the rendered text and nothing else.",
+        }),
         examples: &[
             Example {
-                caption: "Render a template with one table bound.",
+                caption: "Render rust/struct for the orders table.",
                 lines: &[run(&[
                     "tpl",
                     "-d",
@@ -1961,10 +2353,13 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cache"],
-        description: "Manages the catalogue cache under .tpl/.cache/, one folder per database \
-                      entry. The cache is read through on every catalogue read, written on a \
-                      miss, and never expires on its own: only load and clean change what it \
-                      holds.",
+        description: "Manages the cache under .tpl/.cache/: copies of what tpl read from the \
+                      server, one folder per database entry. The schema commands and render read \
+                      the cache first and connect only for what it lacks, storing what they read. \
+                      Nothing in the cache expires; only cache load, cache clean and --direct \
+                      replace or remove what it holds.",
+        blocks: &[],
+        touches: None,
         examples: &[
             Example {
                 caption: "Print this help.",
@@ -1980,10 +2375,16 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cache", "load"],
-        description: "Reads the catalogue from the server and stores it. With no object flag it \
-                      loads the whole catalogue of the selected entry. --direct is accepted and \
-                      ignored, because reading the server is what this command does; --no-cache \
-                      is refused, because loading without storing is a contradiction.",
+        description: "Reads from the server and stores the result in .tpl/.cache/, replacing what \
+                      was stored before. With no --table, --view or --routine, it loads the whole \
+                      database of the selected entry.",
+        blocks: &[],
+        touches: Some(Touches {
+            server: "Always connects to the server.",
+            entry: NEEDS_ENTRY,
+            files: "Writes what it read to the entry's folder under .tpl/.cache/.",
+            stdout: PRINTS_NOTHING,
+        }),
         examples: &[
             Example {
                 caption: "Load the whole catalogue of the entry named shop.",
@@ -2001,9 +2402,16 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cache", "clean"],
-        description: "Removes cached data for the selected entry. With no object flag it removes \
-                      all of it. Nothing else invalidates the cache: repointing an entry at \
-                      another server leaves what was stored in place, so clean after repointing.",
+        description: "Deletes the cached data of the selected entry. With no --table, --view or \
+                      --routine, it deletes all of it. Nothing else removes cached data: after \
+                      pointing an entry at another server with tpl cfg database update, run tpl \
+                      cache clean.",
+        blocks: &[],
+        touches: Some(local_only(
+            NEEDS_ENTRY,
+            "Deletes files from the entry's folder under .tpl/.cache/ and writes none.",
+            PRINTS_NOTHING,
+        )),
         examples: &[
             Example {
                 caption: "Remove everything cached for the entry named shop.",
@@ -2025,9 +2433,11 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cache", "status"],
-        description: "Reports the database entry, when its cache was loaded, and the object \
-                      counts it holds. This is the supported way to learn the state of the \
-                      cache: the on-disk layout is not a contract.",
+        description: "Reports what the cache holds for the selected entry: when it was loaded, and \
+                      how many tables, views and routines it holds. Use it instead of reading \
+                      .tpl/.cache/, whose layout can change.",
+        blocks: &[],
+        touches: Some(local_only(NEEDS_ENTRY, NO_FILE, "Prints that report.")),
         examples: &[
             Example {
                 caption: "Report the cache of the entry named shop.",
@@ -2050,10 +2460,11 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg"],
-        description: "Manages .tpl/.cfg, the only file these commands write. It has two arms: \
-                      dotted keys, for any single value, and the database subgroup, so that \
-                      registering a connection is one invocation rather than five. No subcommand \
-                      contacts a server except cfg database test.",
+        description: "Reads and writes .tpl/.cfg, the configuration file of the project. Use get, \
+                      set, unset and list for single keys, and cfg database for whole database \
+                      entries. Only cfg database test connects to a server.",
+        blocks: &[],
+        touches: None,
         examples: &[
             Example {
                 caption: "Print this help.",
@@ -2069,9 +2480,12 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "get"],
-        description: "Writes the value stored under one key, exactly as the file holds it: \
-                      ${VAR} is not expanded and nothing is redacted. This is the one deliberate \
-                      exception to redaction, so that a password can be fed to another command.",
+        description: "Prints the value stored under one key exactly as the file holds it: ${VAR} \
+                      is not expanded and a password is not redacted, so the value can be passed \
+                      to another command. KEY must name one value, such as core.database or \
+                      database.shop.host; for a whole entry, use tpl cfg database show.",
+        blocks: &[],
+        touches: Some(local_only(NO_ENTRY, NO_FILE, "Prints the value.")),
         examples: &[
             Example {
                 caption: "Read the entry the project uses by default.",
@@ -2094,11 +2508,92 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "set"],
-        description: "Writes one value under one key. The key must be in the configuration key \
-                      space and the value must conform to the type that key declares. A value \
-                      given here is visible in the process table for the life of the invocation; \
-                      where the key admits it, write ${VAR} instead and keep the secret in the \
-                      environment.",
+        description: "Writes VALUE under KEY in .tpl/.cfg. KEY must be one of the keys below, and \
+                      VALUE must be of the type that key takes.",
+        blocks: &[
+            Block::Rows {
+                heading: "The keys (a time is a whole number of seconds, 1 or more):",
+                rows: &[
+                    row(
+                        "core.database",
+                        "The entry used when -d is not given. No default.",
+                    ),
+                    row(
+                        "core.connect_timeout",
+                        "Time to reach the server: DNS, TCP and TLS. Default 10.",
+                    ),
+                    row("core.query_timeout", "Time for each query. Default 30."),
+                    row(
+                        "core.password_timeout",
+                        "Time for password_command to answer. Default 5.",
+                    ),
+                    row("core.render_timeout", "Time for one render. Default 30."),
+                    row(
+                        "core.render_fuel",
+                        "Evaluation steps one render may take, from 1 to 1000000000000. \
+                         Default 100000000.",
+                    ),
+                    row(
+                        "core.render_output_limit",
+                        "Bytes one render may print, from 1 to 1099511627776. Default \
+                         67108864.",
+                    ),
+                    row(
+                        "core.render_memory_limit",
+                        "Bytes of memory one render may use, from 8388608 to 1099511627776. \
+                         Default 134217728.",
+                    ),
+                    row(
+                        "database.<name>.dsn",
+                        "The whole connection as one URL, \
+                         mysql://user:password@host:port/database. Not together with host, \
+                         port, user, password or database.",
+                    ),
+                    row(
+                        "database.<name>.host",
+                        "The host name or IP address of the server.",
+                    ),
+                    row(
+                        "database.<name>.port",
+                        "The TCP port of the server, from 1 to 65535. Default 3306.",
+                    ),
+                    row("database.<name>.user", "The user name to log in with."),
+                    row(
+                        "database.<name>.password",
+                        "The password. Not together with password_command.",
+                    ),
+                    row(
+                        "database.<name>.password_command",
+                        "A command that prints the password, as one string such as \
+                         \"pass db/shop\".",
+                    ),
+                    row(
+                        "database.<name>.database",
+                        "The name of the database on the server.",
+                    ),
+                    row(
+                        "database.<name>.tls",
+                        "disabled, preferred, required, verify-ca or verify-identity. \
+                         Default verify-identity.",
+                    ),
+                    row(
+                        "database.<name>.ca_file",
+                        "A file of extra CA certificates to trust.",
+                    ),
+                    row(
+                        "database.<name>.ca_path",
+                        "A directory of extra CA certificate files to trust.",
+                    ),
+                ],
+            },
+            Block::Prose(
+                "A value given here is visible to other users in the process list while tpl \
+                 runs. For a secret, write a reference such as '${SHOP_PASSWORD}', in single \
+                 quotes, and tpl reads that environment variable when it connects; a \
+                 reference is expanded in dsn, host, port, user, password and database only.",
+            ),
+        ],
+        touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
         examples: &[
             Example {
                 caption: "Make shop the entry used when -d is absent.",
@@ -2124,8 +2619,11 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "unset"],
-        description: "Removes one key, or a whole block. database.shop.host removes that field; \
-                      database.shop removes the entry it belongs to.",
+        description: "Removes one key, or a whole block, from .tpl/.cfg. database.shop.host \
+                      removes that field; database.shop removes the whole entry, and also clears \
+                      core.database when it names that entry.",
+        blocks: &[],
+        touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
         examples: &[
             Example {
                 caption: "Remove one field of an entry.",
@@ -2141,9 +2639,11 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "list"],
-        description: "Writes the contents of .tpl/.cfg, with passwords redacted and ${VAR} left \
-                      exactly as written. It does not resolve the configuration: no expansion, \
-                      no password_command, no defaults.",
+        description: "Prints the whole of .tpl/.cfg, with passwords redacted and ${VAR} left as \
+                      written. Nothing is resolved: no ${VAR} is expanded, no password_command is \
+                      run and no default is filled in.",
+        blocks: &[],
+        touches: Some(local_only(NO_ENTRY, NO_FILE, "Prints the configuration.")),
         examples: &[
             Example {
                 caption: "Print the configuration.",
@@ -2159,8 +2659,11 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database"],
-        description: "Manages the database entries of .tpl/.cfg — the named connections that \
-                      -d/--database selects. The alias db is accepted wherever database is.",
+        description: "Manages the database entries of .tpl/.cfg: the named connections that \
+                      -d/--database selects. db is an alias of database: tpl cfg db list is tpl \
+                      cfg database list.",
+        blocks: &[],
+        touches: None,
         examples: &[
             Example {
                 caption: "Print this help.",
@@ -2176,11 +2679,27 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database", "add"],
-        description: "Creates a database entry from the flags supplied. Either --dsn or at least \
-                      one discrete connection flag is required, and the two groups are mutually \
-                      exclusive. A name that is already taken is refused: use update to change \
-                      an entry. A value given on the command line is visible in the process \
-                      table for the life of the invocation.",
+        description: "Creates a database entry named NAME. Give --dsn, or at least one of --host, \
+                      --port, --user and --schema, but not both kinds; --tls, --password-command, \
+                      --ca-file and --ca-path may be added to either. A NAME already in use is \
+                      refused; change an entry with tpl cfg database update.",
+        blocks: &[
+            Block::Prose(
+                "Without --tls, the entry uses verify-identity, which needs a server \
+                 certificate the system trusts; for a local server without one, give --tls \
+                 disabled or --tls preferred.",
+            ),
+            Block::Prose(
+                "A value given here is visible to other users in the process list while tpl \
+                 runs, so give a password through --password-command, or as a reference such \
+                 as '${SHOP_PASSWORD}' inside --dsn.",
+            ),
+        ],
+        touches: Some(local_only(
+            "Needs no database entry: it creates one.",
+            WRITES_CFG,
+            PRINTS_NOTHING,
+        )),
         examples: &[
             Example {
                 caption: "Register a connection from discrete fields.",
@@ -2240,8 +2759,14 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database", "list"],
-        description: "Writes the names of the database entries the file defines. A fresh project \
-                      defines none.",
+        description: "Prints the names of the database entries in .tpl/.cfg. A new project has \
+                      none.",
+        blocks: &[],
+        touches: Some(local_only(
+            NO_ENTRY,
+            NO_FILE,
+            "Prints the entry names, one per line.",
+        )),
         examples: &[
             Example {
                 caption: "List the entries.",
@@ -2257,8 +2782,14 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database", "show"],
-        description: "Writes one database entry, with passwords redacted and ${VAR} left exactly \
-                      as written.",
+        description: "Prints one database entry, with passwords redacted and ${VAR} left as \
+                      written.",
+        blocks: &[],
+        touches: Some(local_only(
+            "Needs the entry that NAME names; -d and core.database are not used.",
+            NO_FILE,
+            "Prints the entry's keys and values.",
+        )),
         examples: &[
             Example {
                 caption: "Show one entry.",
@@ -2271,14 +2802,21 @@ const ENTRIES: [Entry; 35] = [
                 ])],
             },
         ],
-        exit_codes: CFG_DATABASE_ENTRY,
+        exit_codes: CFG_DATABASE_SHOW,
         see_also: &[&["cfg", "database", "list"], &["cfg", "get"]],
     },
     Entry {
         path: &["cfg", "database", "update"],
-        description: "Changes the fields of one database entry named by the flags supplied, \
-                      leaving the rest of the entry untouched. Repointing an entry does not \
-                      invalidate its cache: run cache clean afterwards.",
+        description: "Changes the fields of one database entry that the flags given name; every \
+                      other field keeps its value, and at least one flag is required. The cache is \
+                      not cleared: after pointing an entry at another server, run tpl -d NAME \
+                      cache clean.",
+        blocks: &[],
+        touches: Some(local_only(
+            "Needs the entry that NAME names; -d and core.database are not used.",
+            "Writes .tpl/.cfg; the cache is left as it was.",
+            PRINTS_NOTHING,
+        )),
         examples: &[
             Example {
                 caption: "Point an entry at another host.",
@@ -2310,7 +2848,7 @@ const ENTRIES: [Entry; 35] = [
                 ])],
             },
         ],
-        exit_codes: CFG_DATABASE_ENTRY,
+        exit_codes: CFG_DATABASE_UPDATE,
         see_also: &[
             &["cfg", "database", "add"],
             &["cfg", "database", "show"],
@@ -2319,22 +2857,35 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database", "remove"],
-        description: "Deletes one database entry. Removing the entry named by core.database also \
-                      clears core.database, leaving the file coherent.",
+        description: "Deletes one database entry from .tpl/.cfg. When core.database names it, \
+                      core.database is cleared too.",
+        blocks: &[],
+        touches: Some(local_only(
+            "Needs the entry that NAME names; -d and core.database are not used.",
+            WRITES_CFG,
+            PRINTS_NOTHING,
+        )),
         examples: &[Example {
             caption: "Delete an entry.",
             lines: &[run(&["tpl", "cfg", "database", "remove", "staging"])],
         }],
-        exit_codes: CFG_DATABASE_ENTRY,
+        exit_codes: CFG_DATABASE_REMOVE,
         see_also: &[&["cfg", "database", "list"], &["cfg", "unset"]],
     },
     Entry {
         path: &["cfg", "database", "test"],
-        description: "Opens a connection with one database entry and reports four things: that \
-                      it connected and authenticated, that the read-only session was enforced, \
-                      which MariaDB server answered, and whether this reader can read the \
-                      catalogue. Exit 0 means the four steps ran, not that the entry is fully \
-                      usable: read can_read_catalogue for the fourth answer.",
+        description: "Connects with one database entry and reports four answers: whether it \
+                      connected and logged in, whether the session was made read-only, which \
+                      MariaDB server answered, and whether the database user may read the database \
+                      structure (can_read_catalogue). Exit 0 means the four checks ran, not that \
+                      all of them passed: read can_read_catalogue.",
+        blocks: &[],
+        touches: Some(Touches {
+            server: "Always connects to the server the entry describes.",
+            entry: "Needs the entry that NAME names; -d and core.database are not used.",
+            files: "Writes no file, and neither reads nor writes the cache.",
+            stdout: "Prints the four answers.",
+        }),
         examples: &[
             Example {
                 caption: "Test an entry.",
@@ -2361,11 +2912,18 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["init"],
-        description: "Creates a .tpl project at the destination, and any missing parent \
-                      directory with it. It writes five artefacts: .cfg at mode 0600, a \
-                      .gitignore, the templates folder, a worked example template, and a macro \
-                      file mapping a column to a Rust type. The generated .cfg carries no active \
-                      database entry, only a commented example showing the shape one takes.",
+        description: "Creates a .tpl project in PATH, or in the current directory, creating \
+                      missing parent directories. It writes .tpl/.cfg at mode 0600, with commented \
+                      examples and no database entry; .tpl/.gitignore; and .tpl/templates/, \
+                      holding example.jinja and the Rust type macros rust/_types.jinja. Next, add \
+                      a database entry with tpl cfg database add.",
+        blocks: &[],
+        touches: Some(local_only(
+            NO_ENTRY,
+            "Writes the new .tpl folder and what it holds.",
+            "Prints nothing; a warning goes to stderr when the new project hides one in a parent \
+             directory.",
+        )),
         examples: &[
             Example {
                 caption: "Create a project in the current directory.",
@@ -2381,11 +2939,16 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["help"],
-        description: "Writes the help of one node of the command tree, or of tpl itself. \
-                      COMMAND_PATH is the full path of the node, at any depth, and an alias in \
-                      it resolves to its canonical node. With --format json the whole command \
-                      tree is written as one document instead, reduced to the subtree the path \
-                      names.",
+        description: "Prints the help of any command, given as its path, such as tpl help cfg \
+                      database add; an alias works in the path. With --format json it prints the \
+                      whole command tree as one JSON document instead, or only the part under the \
+                      path given.",
+        blocks: &[],
+        touches: Some(local_only(
+            "Needs no database entry and no project.",
+            NO_FILE,
+            "Prints the help text, or the JSON document with --format json.",
+        )),
         examples: &[
             Example {
                 caption: "Print the top-level help.",
@@ -2409,8 +2972,13 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["version"],
-        description: "Writes the version, as tpl followed by the version and a newline, and \
-                      nothing else. It declares no argument and no flag of its own.",
+        description: "Prints tpl, a space and the version, such as tpl 0.1.0, and nothing else.",
+        blocks: &[],
+        touches: Some(local_only(
+            "Needs no database entry and no project.",
+            NO_FILE,
+            "Prints the version line.",
+        )),
         examples: &[Example {
             caption: "Print the version.",
             lines: &[run(&["tpl", "version"])],
@@ -2938,6 +3506,77 @@ mod tests {
                 "{} carries no description",
                 written(declared.path)
             );
+        }
+    }
+
+    #[test]
+    fn fr_help_031_every_leaf_and_only_a_leaf_carries_the_four_statements() {
+        // FR-HELP-031 obliges the four statements of every leaf; a group node
+        // does nothing but print its help, and states none.
+        let tree = tree();
+
+        for entry in &ENTRIES {
+            let node = entry.path.iter().fold(&tree, |node, segment| {
+                node.find_subcommand(segment)
+                    .expect("every entry's path names a node")
+            });
+            let leaf = node.get_subcommands().next().is_none();
+
+            assert_eq!(
+                entry.touches.is_some(),
+                leaf,
+                "{} disagrees with the tree about being a leaf",
+                written(entry.path)
+            );
+
+            if let Some(touches) = entry.touches {
+                for statement in [touches.server, touches.entry, touches.files, touches.stdout] {
+                    assert!(
+                        statement.ends_with('.') && !statement.contains("  "),
+                        "{} states {statement:?}",
+                        written(entry.path)
+                    );
+                }
+
+                assert!(
+                    entry.written_description().ends_with(&touches.sentence()),
+                    "{} does not end its JSON description with the statements",
+                    written(entry.path)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fr_help_014_no_description_or_exit_code_cites_a_requirement() {
+        // FR-HELP-014 over the prose of every entry: its description, every
+        // block, the four statements, the captions and the exit-code meanings.
+        const PREFIXES: [&str; 8] = ["FR-", "NFR-", "BR-", "UC-", "OD-", "ADR-", "OQ-", "DIV-"];
+
+        for entry in &ENTRIES {
+            let mut prose = vec![entry.written_description()];
+            prose.extend(
+                entry
+                    .examples
+                    .iter()
+                    .map(|example| example.caption.to_owned()),
+            );
+            prose.extend(
+                entry
+                    .exit_codes
+                    .iter()
+                    .map(|outcome| outcome.meaning.to_owned()),
+            );
+
+            for text in prose {
+                for prefix in PREFIXES {
+                    assert!(
+                        !text.contains(prefix),
+                        "{} cites {prefix}: {text}",
+                        written(entry.path)
+                    );
+                }
+            }
         }
     }
 

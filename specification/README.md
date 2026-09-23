@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-three editions. All are in force;
+The specification has been written in forty-four editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3940,6 +3940,43 @@ and the index of [open-questions.md](open-questions.md) stays empty.
 were read against the changes and none conflicts with them, so none is
 amended. Neither root document paraphrases a requirement this edition
 amends, so the fifth validation rule owes nothing.
+
+### Forty-fourth edition — a default with two readings, and a cache written by two rules
+
+The implementation of the forty-third edition, for rmp `#261`, found one
+requirement of that edition open to two readings, silent on arguments passed
+only by name, and two requirements of the cache that could not both hold. The
+first and the last are settled by the reading the implementation took; the
+second by a signature a template can write, which the implementation must
+follow.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A default is carried as source text** —
+  [template-environment.md](template-environment.md). `FR-ENV-047` now makes
+  `default` a JSON string holding the default as a template's source writes it
+  — `"2"`, `"\"\""`, `"false"` — or `null` where there is none, and never the
+  JSON value that source denotes.
+- **An argument passed only by name is written by name** —
+  [template-environment.md](template-environment.md). `FR-ENV-047` now writes
+  such an argument `name=…` in `signature`, orders `arguments` as the
+  signature writes them, and lets an item describe one form of call. No field
+  is added to the argument object.
+- **A read command writes the cache** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-028` named `tpl cache load` and `tpl cache clean` as the only
+  commands that change what is stored, against the table of `FR-CACHE-015`. It
+  now names a read command of `FR-CACHE-009` writing under `FR-CACHE-015` as the
+  third, and keeps its point: nothing invalidates the cache automatically.
+
+`FR-ENV-005`, `FR-ENV-018`, `FR-HELP-022`, `FR-HELP-033`, `FR-CACHE-008`,
+`FR-CACHE-009`, `FR-CACHE-014`, `FR-CACHE-016`, `FR-CACHE-029`,
+`FR-CACHE-033`, `BR-CACHE-002`, `BR-CACHE-004`, `BR-CDOC-004` and `UC-011` were read against
+the changes and none conflicts with them, so none is amended. Neither root
+document paraphrases either requirement, so the fifth validation rule owes
+nothing.
 
 ### Still out of scope
 

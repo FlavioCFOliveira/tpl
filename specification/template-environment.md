@@ -192,13 +192,22 @@ of the context variables, which belongs to
   | `name` | The name a template writes, as `FR-ENV-005` places it |
   | `signature` | The form a template writes to use it: `value \| name(arguments)` for a filter, `value is name` for a test, `name(arguments)` for a function; a filter that takes no argument is written `value \| name` |
   | `operand` | The type of value the filter or the test accepts on its left, or `null` for a function, which has none |
-  | `arguments` | An array of the arguments the template passes, in positional order, each an object carrying exactly `name`, `type`, `required`, and `default`, in that order; `[]` WHERE there are none |
+  | `arguments` | An array of the arguments the template passes, in the order the signature writes them, each an object carrying exactly `name`, `type`, `required`, and `default`, in that order; `[]` WHERE there are none |
   | `purpose` | One sentence stating what the item returns or does |
 
-  In an argument object, `required` SHALL be a boolean, and `default` SHALL be
-  the default value as a template would write it — `2`, `""`, `false` — or
-  `null` WHERE the argument is required or has no default. Every `type`, and
-  every `operand` that is not `null`, SHALL be one of `any`, `string`,
+  In `signature`, an argument that the template can pass only by name SHALL be
+  written `name=…` — `value | sort(attribute=…, reverse=false,
+  case_sensitive=false)` — and an argument that it can pass by position SHALL
+  be written by its name alone. WHERE a name admits more than one form of call,
+  the item SHALL describe one of them, and that form SHALL be one the template
+  can write.
+
+  In an argument object, `required` SHALL be a boolean. `default` SHALL be
+  `null` WHERE the argument is required or has no default; otherwise it SHALL
+  be a JSON string holding the default exactly as a template's source writes
+  it — `"2"`, `"\"\""`, `"false"` — and SHALL NOT be the JSON value that source
+  denotes. Every `type`, and every `operand` that is not `null`, SHALL be one
+  of `any`, `string`,
   `integer`, `boolean`, `list`, `object`, `column`, `table`, `view`, and
   `routine`.
 
@@ -231,6 +240,28 @@ of the context variables, which belongs to
   and `sql_type` and the seven tests refuse every operand but a column, per
   `FR-ENV-039` and `FR-ENV-040`. That refusal is the misuse the fields exist to
   prevent.
+
+  *Amended in the forty-fourth edition,* for rmp `#261`. "As a template would
+  write it" admitted two readings of `default`: the JSON value the source
+  denotes — `2`, `""`, `false` — or the source text itself, carried as a
+  string — `"2"`, `"\"\""`, `"false"`. The requirement now fixes the second,
+  which is the reading the implementation took. *Rejected: the JSON value.* A
+  default with no JSON counterpart could not be stated, and a default of
+  `none` carried as JSON `null` could not be told apart from an argument with
+  no default. *Accepted cost.* A caller that needs the value reads the string
+  as template source rather than as a typed JSON value.
+
+  The same edition settles arguments passed only by name, such as those of the
+  inherited `map` and `sort`. "Positional order" gave them no place, and a
+  signature that wrote them by position was not a form a template can write.
+  They are now written `name=…` in `signature`, and `arguments` follows the
+  order of the signature. An item describes one form of call, so the second
+  form of `map`, which takes a filter name as its first argument, may be left
+  out. *Rejected: a field `by_name` in the argument object.* The signature
+  already states the call form an agent copies; a boolean beside it would
+  state the same fact twice and change the item's shape. *Rejected: saying
+  "by name" in `purpose` alone.* The wording of `purpose` is not fixed, so an
+  agent could not rely on it, and the signature would stay false.
 
   *Added in the forty-third edition,* for rmp `#260`.
 

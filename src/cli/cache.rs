@@ -65,7 +65,7 @@ pub(crate) struct Cache {
 /// The three children of `tpl cache`, and `FR-CACHE-021` admits no fourth.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub(crate) enum Command {
-    /// Reads the catalogue and writes it to the cache.
+    /// Reads from the server and stores the result in the cache.
     Load {
         /// `--table`, `--view` and `--routine`, per `FR-CACHE-024`.
         #[command(flatten)]
@@ -76,7 +76,7 @@ pub(crate) enum Command {
         caching: local::Caching,
     },
 
-    /// Removes the cached catalogue.
+    /// Deletes cached data.
     Clean {
         /// `--table`, `--view` and `--routine`, per `FR-CACHE-024`.
         #[command(flatten)]
@@ -400,6 +400,9 @@ fn status<W: Write>(
     }
 }
 
+/// What the text report writes for `loaded_at` when the cache is empty.
+const NEVER_LOADED: &str = "never (the cache is empty; fill it with tpl cache load)";
+
 /// Writes the `text` form of `tpl cache status`.
 ///
 /// Two parts: the entry and the load time, which are properties of the store,
@@ -415,7 +418,10 @@ fn text<W: Write>(out: &mut W, entry: &str, held: &Status) -> Result<(), Error> 
         [layout::text("entry"), layout::text(entry)],
         [
             layout::text("loaded_at"),
-            layout::optional(held.loaded_at.as_deref()),
+            // An empty cell here read as a value nobody printed; the text says
+            // what the absence means and what fills it. The JSON path keeps
+            // the `null` of FR-CACHE-035.
+            layout::text(held.loaded_at.as_deref().unwrap_or(NEVER_LOADED)),
         ],
     ];
     let collections: Vec<[layout::Cell<'_>; 3]> = held

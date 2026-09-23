@@ -1062,6 +1062,12 @@ fn fr_cache_025_status_reports_the_entry_the_load_time_and_the_counts() {
         printed.contains("COLLECTIONS\nNAME  COUNT  WHOLE\n"),
         "{printed}"
     );
+    // The text says what an absent load time means and what fills it, where
+    // the JSON carries `null`.
+    assert!(
+        printed.contains("loaded_at  never (the cache is empty; fill it with tpl cache load)\n"),
+        "{printed}"
+    );
 
     succeeds(&sandbox, &["cache", "load"]);
 
