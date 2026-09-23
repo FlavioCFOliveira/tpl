@@ -11,17 +11,21 @@
 //!
 //! | Source | What runs | Requirement |
 //! |---|---|---|
-//! | The selected database | [`super::source::Reader`], cache first | `FR-RND-026`, `FR-CACHE-006` |
+//! | The selected database | [`super::source::Reader`], cache first, each object file read when the template first reaches it | `FR-RND-026`, `FR-CACHE-006`, `FR-CACHE-038` |
 //! | A `--context` document | The file, or stdin for `-`, read back through `crate::model::document` | `FR-RND-016`, `FR-RND-017`, `FR-RND-022` |
 //!
 //! **The result must not betray which.** That is not a rule this module has to
 //! remember: both paths produce a
 //! [`DatabaseDocument`] and hand it
 //! to the same [`produce`], so the context a template sees is assembled once,
-//! from one type, by [`context::assemble`]. What differs between the two is
-//! carried where it is true and nowhere else — the population an object was
-//! sought in, which `FR-ERR-034` obliges a `66` and a `64` to name, and which
-//! [`named::Sought`] makes a parameter.
+//! from one type, by [`context::assemble`]. The one exception is a render
+//! served from the cache, whose members are read from their files as the
+//! template reaches them: [`lazily`] binds the object and renders over
+//! [`context::assemble_shelved`], which writes the same five variables and
+//! answers every read of `database` as the whole document would. What differs
+//! between the sources is carried where it is true and nowhere else — the
+//! population an object was sought in, which `FR-ERR-034` obliges a `66` and a
+//! `64` to name, and which [`named::Sought`] makes a parameter.
 //!
 //! # The order the steps run in
 //!
@@ -32,7 +36,7 @@
 //! | 1 | `--set`, the object flags, and `--context` beside `-d/--database` | `FR-RND-005`, `FR-RND-011` … `FR-RND-014`, `FR-RND-018` |
 //! | 2, 3 | Project discovery, the trust checks, and `.tpl/.cfg` | `FR-PROJ-004` … `FR-PROJ-011`, `FR-CONF-001` … `FR-CONF-022` |
 //! | 4 | The template name | `FR-RND-029`, `FR-TMPL-027` |
-//! | 5, 6 | The entry, the cache, and the server on a miss — **skipped** on the `--context` path | `FR-RND-019`, `FR-RND-022`, `FR-RND-026` |
+//! | 5, 6 | The entry, the cache, and the server on a miss — **skipped** on the `--context` path | `FR-RND-019`, `FR-RND-022`, `FR-RND-026`, `FR-CACHE-038` |
 //! | 7 | The object the invocation bound | `FR-RND-032` |
 //! | 8 | The render | `FR-RND-030`, `FR-RND-031`, `FR-RND-033` |
 //!
@@ -71,12 +75,23 @@
 //! each is the ordinary unknown-flag `64` of `FR-CLI-019` rather than a case of
 //! its own.
 //!
+//! **A miss found during the render returns the invocation to step 6.** A
+//! render served from the cache reads an object file when the template first
+//! reaches it, and a file that is then a miss abandons the render, per
+//! `FR-CACHE-039`: the server is read, the cache written, and steps 7 and 8
+//! run again over the server's document, so a condition raised after that
+//! carries the code of the step that raised it. A condition the abandoned
+//! render raised before it reached the miss is the invocation's, and no
+//! connection is opened for it.
+//!
 //! # A failed render leaves stdout empty
 //!
 //! `FR-RND-034` admits **at most one** incomplete result on stdout when a
 //! render fails, and what this module leaves is none:
 //! [`crate::render::Environment::render`] returns the whole text or the
-//! condition, and nothing is written until it has returned the text. The one
+//! condition, and nothing is written until it has returned the text. A render
+//! abandoned under `FR-CACHE-039` writes nothing either: its text, or its
+//! condition, is dropped once it has returned. The one
 //! path that can interrupt a render in progress is the deadline of
 //! [`bounded`], which terminates the process through
 //! [`std::process::exit`] — running no destructor, so a buffered stdout is
@@ -91,15 +106,19 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 
 use minijinja::Value;
 
+use super::Ending;
 use super::globals::Globals;
 use super::local::{Caching, Object};
 use super::schema::named::{self, Sought};
-use super::source::{self, Reader};
-use crate::cache::Look;
+use super::source::{self, Reader, Served, leak};
+use crate::cache::Shelved;
+use context::Store;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::deadline::{Bound, Phase};
-use crate::error::{ContextFault, Error, Position};
+use crate::error::{CatalogueObjectKind, ContextFault, Error, Position};
+use crate::mariadb::catalogue::completeness;
 use crate::model::document::{self, DatabaseDocument};
 use crate::output;
 use crate::project::settings;
@@ -164,6 +183,11 @@ pub(super) struct Supplied<'a> {
 
     /// `--direct` and `--no-cache` (`FR-RND-025`).
     pub(super) caching: &'a Caching,
+
+    /// Whether the process exits when the render returns, which decides
+    /// whether the context source's buffers and the render context are freed
+    /// (see [`Served`] and [`produce`]).
+    pub(super) ending: Ending,
 }
 
 /// Which object the invocation bound, or the whole database (`FR-RND-003`
@@ -268,6 +292,84 @@ impl<'a> Binding<'a> {
     }
 }
 
+impl Binding<'_> {
+    /// Step 7 of `FR-ERR-006` over a render served from the cache under
+    /// `FR-CACHE-038`: the object is sought among the members the listing
+    /// names, and its file is the one object file read before the render
+    /// starts.
+    ///
+    /// The lookup is [`named::member`]'s and [`named::routine_member`]'s,
+    /// which [`Binding::bind`] reaches through [`named::table`],
+    /// [`named::view`] and [`named::routine`], over the same names in the same
+    /// order — so the `66` and the `64` are the conditions an up-front read of
+    /// the same files would have raised. Completeness is checked on the member
+    /// read, as those three check it.
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`Binding::bind`] returns.
+    fn bind_shelved(&self, store: &Store, at: Sought<'_>) -> Result<Chosen, Error> {
+        let shelved = store.shelved();
+
+        Ok(match self {
+            Self::Whole => Chosen::Bound(None),
+            Self::Table(name) => {
+                let (index, _) =
+                    named::member(shelved.tables(), CatalogueObjectKind::Table, name, at)?;
+                let Some(table) = store.table(index) else {
+                    return Ok(Chosen::Missed);
+                };
+                completeness::of_table(&table)?;
+
+                Chosen::Bound(Some((TABLE, Value::from_serialize(&*table))))
+            }
+            Self::View(name) => {
+                let (index, _) =
+                    named::member(shelved.views(), CatalogueObjectKind::View, name, at)?;
+                let Some(view) = store.view(index) else {
+                    return Ok(Chosen::Missed);
+                };
+                completeness::of_view(&view)?;
+
+                Chosen::Bound(Some((VIEW, Value::from_serialize(&*view))))
+            }
+            Self::Routine(wanted) => {
+                let (index, _) =
+                    named::routine_member(shelved.routines(), wanted, at, ROUTINE_INVOCATION)?;
+                let Some(routine) = store.routine(index) else {
+                    return Ok(Chosen::Missed);
+                };
+                completeness::of_routine(&routine)?;
+
+                Chosen::Bound(Some((ROUTINE, Value::from_serialize(&*routine))))
+            }
+        })
+    }
+}
+
+/// What [`Binding::bind_shelved`] found.
+#[derive(Debug)]
+enum Chosen {
+    /// The object variable, or [`None`] for the whole-database form.
+    Bound(Option<(&'static str, Value)>),
+    /// The bound object's file is a miss (`FR-CACHE-033`), decided before the
+    /// render starts.
+    Missed,
+}
+
+/// How a render served from the cache under `FR-CACHE-038` ended.
+#[derive(Debug)]
+enum Lazily {
+    /// It rendered, and its result is on stdout.
+    Served,
+    /// A file read before the render started is a miss, so no render started.
+    Missed,
+    /// A file the render reached is a miss, so the render was abandoned under
+    /// `FR-CACHE-039`: nothing of it reached stdout. It carries the `now` the
+    /// render that follows uses.
+    Abandoned(String),
+}
+
 /// Everything one render needs once its context source has answered.
 ///
 /// It is a value rather than five parameters because [`produce`] is reached
@@ -290,9 +392,13 @@ struct Assembly<'a> {
 
     /// What bounds the render (`FR-RND-033`, `FR-GLOB-012`).
     deadline: Bound,
+
+    /// What follows the render once it returns.
+    ending: Ending,
 }
 
-/// Runs `tpl render` (`FR-RND-001` … `FR-RND-034`).
+/// Runs `tpl render` (`FR-RND-001` … `FR-RND-034`, `FR-CACHE-038`,
+/// `FR-CACHE-039`).
 ///
 /// # Errors
 ///
@@ -349,17 +455,28 @@ fn document_flag<'a>(globals: &Globals, context: &'a [PathBuf]) -> Result<Option
 
 /// Renders from the selected database, through the cache (`FR-RND-026`).
 ///
-/// The read is [`Look::Everything`], for the reason [`super::source`] gives and
-/// one of this command's own: `FR-RND-023` binds `database` whatever object the
-/// invocation named, so a template may walk every collection even when one
-/// object is bound, and `FR-CTX-023` requires every object a carried reference
-/// names to be present.
+/// `FR-RND-023` binds `database` whatever object the invocation named, so a
+/// template may walk every collection even when one object is bound, and
+/// `FR-CTX-023` requires every object a carried reference names to be present.
+/// The whole `database` is therefore always bound, and what differs between
+/// the two sources is **when** its members are read:
+///
+/// | Source | Read before the render | Read during it | Requirement |
+/// |---|---|---|---|
+/// | The cache | `meta.json`, `database.json`, each collection's listing, the bound object's file | every other object file, when the template first reaches it | `FR-CACHE-038` |
+/// | The server, on a miss | the whole catalogue, then written to the cache | nothing | `FR-CACHE-007` |
+///
+/// A miss among the files read before the render is answered as any miss is.
+/// A miss among the files read during it abandons the render, which has then
+/// written nothing, and the invocation is a miss: the server is read once, the
+/// cache written, and the render made again from the server's document, with
+/// the first render's `now` and a render deadline of its own (`FR-CACHE-039`).
 ///
 /// # Errors
 ///
 /// Returns what [`source::project`], [`Environment::resolve`],
-/// [`Reader::open_from`] and [`Reader::serve_from`] return, and what
-/// [`produce`] returns.
+/// [`Reader::open_from`] and [`Reader::read_through`] return, and what
+/// [`produce`] and [`lazily`] return.
 fn from_catalogue<W: std::io::Write>(
     out: &mut W,
     globals: &Globals,
@@ -367,7 +484,7 @@ fn from_catalogue<W: std::io::Write>(
     binding: &Binding<'_>,
     defined: &BTreeMap<&str, &str>,
 ) -> Result<(), Error> {
-    let reader = Reader::new(globals, Some(supplied.caching));
+    let reader = Reader::new(globals, Some(supplied.caching), supplied.ending);
     // Steps 2 and 3, made once: the template root of FR-TMPL-023 and the
     // render deadline of FR-CONF-004 are both properties of the project this
     // read is made through, and a second walk could resolve a second project
@@ -383,25 +500,125 @@ fn from_catalogue<W: std::io::Write>(
 
     // Steps 5 and 6.
     let opened = reader.open_from(&project, configuration)?;
-    let assembly = Assembly {
+    let render_timeout = opened.deadlines().of(Phase::Render);
+    let mut assembly = Assembly {
         environment: &environment,
         template: supplied.template,
         binding,
         defined,
-        deadline: reader.clock().bound(opened.deadlines().of(Phase::Render)),
+        deadline: reader.clock().bound(render_timeout),
+        ending: supplied.ending,
     };
+    let mut now = None;
 
-    reader.serve_from(&opened, &Look::Everything, |document, _, entry| {
+    // FR-CACHE-013: `--direct` skips the lookup outright.
+    if !supplied.caching.direct
+        && let Some(shelved) = opened.cache.shelved()
+    {
+        match lazily(out, &assembly, shelved, opened.entry())? {
+            Lazily::Served => return Ok(()),
+            Lazily::Missed => {}
+            Lazily::Abandoned(at) => {
+                // FR-CACHE-039 and FR-CONF-005: the render that produces the
+                // result has the whole render deadline, still composed with
+                // the overall budget of FR-GLOB-011, and the abandoned
+                // render's `now`.
+                assembly.deadline = reader.clock().bound(render_timeout);
+                now = Some(at);
+            }
+        }
+    }
+
+    reader.read_through(&opened, |served, _, entry| {
         produce(
             out,
             &assembly,
-            document,
+            served,
             Sought::Catalogue {
                 entry,
-                database: &document.name,
+                database: &served.name,
             },
+            now,
         )
     })
+}
+
+/// Serves one render from the cache files `shelved` names, reading each
+/// object file when the template first reaches it (`FR-CACHE-038`,
+/// `FR-CACHE-039`).
+///
+/// It is steps 7 and 8 of `FR-ERR-006`, as [`produce`] makes them, over a
+/// `database` whose members are read on demand. A condition either step raises
+/// is answered as [`produce`] answers it, and no connection is opened for it,
+/// **unless** the render reached a miss first: once a member is a miss, the
+/// render is abandoned whatever it then did, because what it rendered is not
+/// the document the cache could serve.
+///
+/// # Errors
+///
+/// Returns what [`Binding::bind_shelved`] returns for step 7, and for step 8
+/// what [`produce`] returns, where no member the render reached was a miss.
+fn lazily<W: std::io::Write>(
+    out: &mut W,
+    assembly: &Assembly<'_>,
+    shelved: Shelved,
+    entry: &str,
+) -> Result<Lazily, Error> {
+    let Some(store) = Store::open(shelved, assembly.ending) else {
+        return Ok(Lazily::Missed);
+    };
+    let store = Arc::new(store);
+    let ended = attempt(out, assembly, &store, entry);
+
+    // PERF: as for the context in `produce`, the store owns memory only, and
+    // an exiting process has no use for freeing it block by block.
+    assembly.ending.release(store);
+
+    ended
+}
+
+/// The render [`lazily`] makes, once its store is open.
+///
+/// # Errors
+///
+/// Returns what [`lazily`] returns.
+fn attempt<W: std::io::Write>(
+    out: &mut W,
+    assembly: &Assembly<'_>,
+    store: &Arc<Store>,
+    entry: &str,
+) -> Result<Lazily, Error> {
+    // 7 — FR-RND-032, over the members the listing names.
+    let at = Sought::Catalogue {
+        entry,
+        database: store.name(),
+    };
+    let bound = match assembly.binding.bind_shelved(store, at)? {
+        Chosen::Bound(bound) => bound,
+        Chosen::Missed => return Ok(Lazily::Missed),
+    };
+
+    // 8 — as in `produce`, with `now` read at render time and once.
+    let now = context::now();
+    let context = context::assemble_shelved(store, bound, assembly.defined, &now);
+    let watched = Arc::clone(store);
+    let produced = bounded(
+        assembly.deadline,
+        move || watched.missed(),
+        || assembly.environment.render(assembly.template, &context),
+    );
+
+    assembly.ending.release(context);
+
+    // FR-CACHE-039 and FR-RND-034: a render that reached a miss is abandoned,
+    // and nothing of it is written — its text, or its condition, is dropped.
+    if store.missed() {
+        return Ok(Lazily::Abandoned(now));
+    }
+
+    output::emit_verbatim(out, &produced?)?;
+
+    Ok(Lazily::Served)
 }
 
 /// Renders from a `--context` document (`FR-RND-016`, `FR-RND-022`).
@@ -435,7 +652,7 @@ fn from_document<W: std::io::Write>(
     defined: &BTreeMap<&str, &str>,
     path: &Path,
 ) -> Result<(), Error> {
-    let reader = Reader::new(globals, Some(supplied.caching));
+    let reader = Reader::new(globals, Some(supplied.caching), supplied.ending);
     // Steps 2 and 3.
     let (project, configuration) = source::project(reader.tpl_dir())?;
     let environment = Environment::new(project.root());
@@ -451,21 +668,38 @@ fn from_document<W: std::io::Write>(
         deadline: reader
             .clock()
             .bound(settings::deadlines(&configuration).of(Phase::Render)),
+        ending: supplied.ending,
     };
 
     let bytes = read_document(path)?;
-    let model = document::read(&bytes, path)?;
-    let built = document::context(&model)?;
+    let mut hand = |served: Served<'_, '_>| {
+        produce(
+            out,
+            &assembly,
+            served,
+            Sought::Document {
+                path,
+                database: &served.name,
+            },
+            None,
+        )
+    };
 
-    produce(
-        out,
-        &assembly,
-        &built,
-        Sought::Document {
-            path,
-            database: &built.name,
-        },
-    )
+    // PERF: under Ending::Process the bytes and the model are leaked, so the
+    // document borrows them for the rest of the process and the render keeps
+    // it without a copy (`super::source`'s documentation).
+    match assembly.ending {
+        Ending::Process => {
+            let model = leak(document::read(bytes.leak(), path)?);
+
+            hand(Served::leaked(leak(document::context(model)?)))
+        }
+        Ending::Caller => {
+            let model = document::read(&bytes, path)?;
+
+            hand(Served::borrowed(&document::context(&model)?))
+        }
+    }
 }
 
 /// Steps 7 and 8 of `FR-ERR-006`, over whichever source produced `document`.
@@ -487,19 +721,35 @@ fn from_document<W: std::io::Write>(
 fn produce<W: std::io::Write>(
     out: &mut W,
     assembly: &Assembly<'_>,
-    document: &DatabaseDocument<'_>,
+    document: Served<'_, '_>,
     at: Sought<'_>,
+    now: Option<String>,
 ) -> Result<(), Error> {
     // 7 — FR-RND-032.
-    let bound = assembly.binding.bind(document, at)?;
+    let bound = assembly.binding.bind(&document, at)?;
 
     // 8 — FR-RND-030, FR-RND-031, FR-RND-033. `now` is read here, which is
-    // render time, and once, which is FR-CTX-029.
-    let at = context::now();
+    // render time, and once, which is FR-CTX-029 — unless a render abandoned
+    // under FR-CACHE-039 already read it, whose value this render keeps.
+    let at = now.unwrap_or_else(context::now);
     let context = context::assemble(document, bound, assembly.defined, &at);
-    let produced = bounded(assembly.deadline, || {
-        assembly.environment.render(assembly.template, &context)
-    })?;
+    let produced = bounded(
+        assembly.deadline,
+        || false,
+        || assembly.environment.render(assembly.template, &context),
+    );
+
+    // PERF: the context holds every member the template read, and under
+    // Ending::Caller a copy of the catalogue; when it held the whole catalogue
+    // converted, freeing it block by block cost 2.35 ms of a 21.8 ms render of
+    // `WL-001` (`BENCHMARKS.md`, 2026-09-22). Where the process exits as soon
+    // as this command returns, the operating system reclaims that memory
+    // anyway, so the value is leaked instead; a caller that carries on — a
+    // test — still frees it. It is released on the failure path as well, and
+    // it owns memory only, so stdout, its flush and the exit code are
+    // untouched either way.
+    assembly.ending.release(context);
+    let produced = produced?;
 
     // FR-RND-028, and FR-OUT-019, which exempts a render's result from the
     // escaping of FR-OUT-018: the bytes the template produced, and no others.
@@ -588,11 +838,24 @@ fn position(read: &[u8]) -> Position {
 /// `OD-12` records for that child: a phase started in order to be abandoned at
 /// once is a thread and a process termination bought for nothing.
 ///
+/// **A render already abandoned is not stopped by the deadline.** `excused`
+/// answers whether it is — for a render served from the cache, whether it
+/// reached a miss under `FR-CACHE-039` — and where the deadline arrives with
+/// `excused` true the timer ends without a word: the render is not the
+/// invocation's, per `FR-RND-002`, and the one that follows it has a deadline
+/// of its own. Every member such a render reaches after the miss fails without
+/// reading a file, so it ends at the next of them it reaches, and at the next
+/// interpolation of a value derived from one.
+///
 /// # Errors
 ///
 /// Returns [`Error::RenderDeadlineExceeded`] — `65` — where the bound was
 /// already spent, and whatever `render` returns.
-fn bounded<T>(deadline: Bound, render: impl FnOnce() -> Result<T, Error>) -> Result<T, Error> {
+fn bounded<T>(
+    deadline: Bound,
+    excused: impl FnOnce() -> bool + Send + 'static,
+    render: impl FnOnce() -> Result<T, Error>,
+) -> Result<T, Error> {
     let expired = Error::RenderDeadlineExceeded {
         bound: deadline.bound(),
         limit: deadline.limit(),
@@ -608,7 +871,8 @@ fn bounded<T>(deadline: Bound, render: impl FnOnce() -> Result<T, Error>) -> Res
         if matches!(
             waiting.recv_timeout(remaining),
             Err(RecvTimeoutError::Timeout)
-        ) {
+        ) && !excused()
+        {
             let status = expired.exit_code();
             crate::diagnostics::report(&expired);
 
@@ -639,8 +903,11 @@ fn bounded<T>(deadline: Bound, render: impl FnOnce() -> Result<T, Error>) -> Res
 #[cfg(test)]
 mod tests {
     use super::{Binding, Supplied, bounded, document_flag, position, run};
+    use crate::cli::Ending;
     use crate::cli::globals::Globals;
     use crate::cli::local::{Caching, Object};
+    use crate::cli::schema::named::Sought;
+    use crate::cli::source::Served;
     use crate::deadline::{Bound, Seconds};
     use crate::error::Error;
     use crate::model::document;
@@ -722,6 +989,7 @@ mod tests {
             set: &set,
             context: &context,
             caching: &caching,
+            ending: Ending::Caller,
         };
         let mut written = Vec::new();
         let result = run(&mut written, &globals(Some(tpl_dir), None), &supplied);
@@ -1041,10 +1309,14 @@ mod tests {
         let spent = Bound::spent(Seconds::new(NonZeroU64::new(30).expect("30 is positive")));
         let mut ran = false;
 
-        let condition = bounded(spent, || {
-            ran = true;
-            Ok::<(), Error>(())
-        })
+        let condition = bounded(
+            spent,
+            || false,
+            || {
+                ran = true;
+                Ok::<(), Error>(())
+            },
+        )
         .expect_err("the bound is spent");
 
         assert_eq!(condition.exit_code(), 65);
@@ -1060,8 +1332,87 @@ mod tests {
         let bound = clock.bound(Seconds::new(NonZeroU64::new(30).expect("30 is positive")));
 
         assert_eq!(
-            bounded(bound, || Ok::<&str, Error>("produced")).expect("it is inside the deadline"),
+            bounded(bound, || false, || Ok::<&str, Error>("produced"))
+                .expect("it is inside the deadline"),
             "produced"
+        );
+    }
+
+    #[test]
+    fn fr_cache_039_a_render_abandoned_on_a_miss_outlives_its_deadline() {
+        // FR-CACHE-039: the render that reached a miss is abandoned, and the
+        // one that follows has the whole deadline. The first render's deadline
+        // arriving while it finishes must therefore not end the process with
+        // the `65` of FR-RND-033: the timer is excused, and the call returns
+        // what the render returned. Were it not, this test binary would exit.
+        let bound = Bound::lasting(std::time::Duration::from_millis(20));
+
+        let produced = bounded(
+            bound,
+            || true,
+            || {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                Ok::<&str, Error>("abandoned")
+            },
+        );
+
+        assert_eq!(
+            produced.expect("the timer did not end the process"),
+            "abandoned"
+        );
+    }
+
+    #[test]
+    fn fr_cache_039_a_render_abandoned_on_a_miss_reads_no_further_file() {
+        // Once a member is a miss, every member reached after it fails without
+        // its file being read, so the abandoned render ends at the next one.
+        // `carrier` is damaged and `consignment_leg` intact, so the second
+        // member reads as a table unless the miss stops its read.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[(
+                "after.jinja",
+                "{{ database.tables[0].name }}{{ database.tables[2].name }}",
+            )],
+        );
+        std::fs::write(stored(&tpl_dir, "tables/carrier.json"), "{ torn").expect("ours");
+        let listed = crate::cache::Cache::of(&tpl_dir, ENTRY)
+            .shelved()
+            .expect("the store is whole");
+        let store = super::Store::open(listed, Ending::Caller).expect("database.json decodes");
+
+        assert!(store.table(0).is_none(), "the damaged file is a miss");
+        assert!(
+            !store.missed(),
+            "the flag is the value's, set where it is read"
+        );
+
+        let value = super::context::assemble_shelved(
+            &std::sync::Arc::new(store),
+            None,
+            &std::collections::BTreeMap::new(),
+            "1970-01-01T00:00:00Z",
+        );
+        let tables = value
+            .get_attr("database")
+            .and_then(|database| database.get_attr("tables"))
+            .expect("the collection is readable");
+
+        assert_eq!(
+            tables
+                .get_item_by_index(0)
+                .expect("an index answers")
+                .kind(),
+            minijinja::value::ValueKind::Invalid
+        );
+        assert_eq!(
+            tables
+                .get_item_by_index(2)
+                .expect("an index answers")
+                .kind(),
+            minijinja::value::ValueKind::Invalid,
+            "a member reached after the miss is not read"
         );
     }
 
@@ -1073,5 +1424,414 @@ mod tests {
         assert_eq!(position(b"").column, 1);
         assert_eq!(position(b"{\n  \"a\"").line, 2);
         assert_eq!(position(b"{\n  \"a\"").column, 6);
+    }
+
+    /// The entry every catalogue render below reads through.
+    const ENTRY: &str = "shop";
+
+    /// A `.tpl/.cfg` whose one entry reaches a port nothing listens on, so a
+    /// render that opened a connection would be the `69` of `FR-ERR-034` and
+    /// never a render.
+    const UNREACHABLE: &str = "[core]\ndatabase = \"shop\"\n\n[database.shop]\n\
+         host = \"127.0.0.1\"\nport = 1\nuser = \"reader\"\npassword = \"secret\"\n\
+         database = \"freight\"\ntls = \"disabled\"\n";
+
+    /// The template the equivalence below renders over both sources: the whole
+    /// `database` as `json`, every collection in order with its length, and
+    /// the two tests that resolve a column's table against the context.
+    const WIDE: &str = "{{ database | json }}\n{{ database.tables | length }} {{ database.views | length }} \
+         {{ database.routines | length }}\n{% for t in database.tables %}{{ t.name }}:\
+         {% for c in t.columns %}{{ c.name }}={{ c is primary_key }}/{{ c is unique }} {% endfor %}\
+         {% endfor %}\n{% for r in database.routines %}{{ r.kind }}.{{ r.name }} {% endfor %}\n\
+         {{ table.name }} {{ table | json }}";
+
+    /// A project reaching [`UNREACHABLE`], carrying `templates`, with the store
+    /// of its entry written from [`document::fixture::whole`] — every
+    /// collection recorded whole.
+    fn cached(scratch: &Scratch, templates: &[(&str, &str)]) -> PathBuf {
+        let tpl_dir = project(scratch, templates);
+        let file = scratch.file("project/.tpl/.cfg", UNREACHABLE);
+        scratch.chmod(&file, 0o600);
+
+        let model = document::fixture::whole();
+        let built = document::context(&model).expect("the fixture is coherent");
+        crate::cache::Cache::of(&tpl_dir, ENTRY).write(&built, crate::cache::Covered::Everything);
+
+        tpl_dir
+    }
+
+    /// The object file of one member of the store [`cached`] wrote.
+    fn stored(tpl_dir: &Path, relative: &str) -> PathBuf {
+        tpl_dir.join(".cache").join(ENTRY).join(relative)
+    }
+
+    /// What `tpl render` does over the selected database, and what it wrote.
+    fn from_store(tpl_dir: &Path, template: &str, object: &Object) -> (Result<(), Error>, String) {
+        let caching = Caching {
+            direct: false,
+            no_cache: false,
+        };
+        let supplied = Supplied {
+            template,
+            object,
+            set: &[],
+            context: &[],
+            caching: &caching,
+            ending: Ending::Caller,
+        };
+        let mut written = Vec::new();
+        let result = run(&mut written, &globals(Some(tpl_dir), None), &supplied);
+
+        (
+            result,
+            String::from_utf8(written).expect("a template of these tests writes UTF-8"),
+        )
+    }
+
+    #[test]
+    fn fr_cache_038_a_render_from_the_store_is_the_render_of_an_up_front_read() {
+        // FR-CACHE-038 end to end: the lazily served `database` renders the
+        // bytes the pipeline before the fortieth edition rendered — every file
+        // decoded up front by `Cache::everything`, bound and assembled whole —
+        // for the whole of it as `json`, each collection's order and length,
+        // and the tests that reach back into the context. No connection is
+        // made, which the unreachable entry would have refused.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(&scratch, &[("wide.jinja", WIDE)]);
+        let loaded = crate::cache::Cache::of(&tpl_dir, ENTRY)
+            .everything()
+            .expect("the store is whole");
+        let up_front = loaded.document().expect("every file decodes");
+        let environment = crate::render::Environment::new(&tpl_dir);
+        let defined = std::collections::BTreeMap::new();
+
+        for table in ["carrier", "consignment", "consignment_leg"] {
+            let bound = object(&[table], &[], &[]);
+            let binding = Binding::of(&bound).expect("one kind");
+            let sought = Sought::Catalogue {
+                entry: ENTRY,
+                database: &up_front.name,
+            };
+            let context = super::context::assemble(
+                Served::borrowed(&up_front),
+                binding
+                    .bind(&up_front, sought)
+                    .expect("the table is stored"),
+                &defined,
+                "1970-01-01T00:00:00Z",
+            );
+            let expected = environment
+                .render("wide", &context)
+                .expect("the up-front read renders");
+
+            let (lazily, served) = from_store(&tpl_dir, "wide", &bound);
+
+            lazily.expect("the store serves the render");
+            assert_eq!(served, expected, "{table}");
+        }
+    }
+
+    #[test]
+    fn fr_cache_033_a_damaged_file_the_render_never_reaches_is_not_a_miss() {
+        // FR-CACHE-033 as the fortieth edition amended it: the render reads
+        // the bound table and never reaches `carrier`, so its damaged file is
+        // not a miss — no connection is attempted, which would be `69` — and
+        // it is left as it was.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(&scratch, &[("bound.jinja", "{{ table.name }}")]);
+        let damaged = stored(&tpl_dir, "tables/carrier.json");
+        std::fs::write(&damaged, "{ torn").expect("the store is ours");
+
+        let (result, written) = from_store(&tpl_dir, "bound", &object(&["consignment"], &[], &[]));
+
+        result.expect("the damaged file is never reached");
+        assert_eq!(written, "consignment");
+        assert_eq!(
+            std::fs::read_to_string(&damaged).expect("the store is ours"),
+            "{ torn"
+        );
+    }
+
+    #[test]
+    fn fr_cache_039_a_miss_reached_during_the_render_is_answered_as_one_found_before_it() {
+        // FR-CACHE-039: a render that reaches a damaged file is abandoned and
+        // the invocation is a miss, answered as today's up-front miss is — one
+        // server read, which here is refused, so both invocations are the same
+        // `69` and neither wrote a byte of the abandoned render. The template
+        // writes before it reaches the member, so a byte that escaped would be
+        // seen.
+        let template = "written first {{ database.tables[0].name }}";
+        let bound = object(&["consignment"], &[], &[]);
+
+        let scratch = Scratch::new();
+        let tpl_dir = cached(&scratch, &[("reach.jinja", template)]);
+        std::fs::write(stored(&tpl_dir, "tables/carrier.json"), "{ torn").expect("ours");
+        let (during, during_written) = from_store(&tpl_dir, "reach", &bound);
+
+        let scratch = Scratch::new();
+        let tpl_dir = cached(&scratch, &[("reach.jinja", template)]);
+        std::fs::write(stored(&tpl_dir, "tables/consignment.json"), "{ torn").expect("ours");
+        let (before, before_written) = from_store(&tpl_dir, "reach", &bound);
+
+        let during = during.expect_err("the server is unreachable");
+        let before = before.expect_err("the server is unreachable");
+
+        assert_eq!(during.exit_code(), 69, "{during}");
+        assert_eq!(during.exit_code(), before.exit_code());
+        assert_eq!(during.to_string(), before.to_string());
+        assert!(during_written.is_empty(), "{during_written:?}");
+        assert!(before_written.is_empty(), "{before_written:?}");
+    }
+
+    #[test]
+    fn fr_cache_039_a_condition_raised_before_the_miss_is_reached_is_the_invocations() {
+        // FR-CACHE-039's consequence and FR-ERR-006: a render that fails
+        // before it reaches the damaged file reports its own `65` and opens no
+        // connection; the same failure after the miss is not reached, because
+        // the render was abandoned at the miss.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[
+                (
+                    "first.jinja",
+                    "{{ fail('the template stops') }}{{ database.tables[0].name }}",
+                ),
+                (
+                    "second.jinja",
+                    "{{ database.tables[0].name }}{{ fail('the template stops') }}",
+                ),
+            ],
+        );
+        std::fs::write(stored(&tpl_dir, "tables/carrier.json"), "{ torn").expect("ours");
+        let bound = object(&["consignment"], &[], &[]);
+
+        let (first, written) = from_store(&tpl_dir, "first", &bound);
+        let first = first.expect_err("the template stops");
+        assert_eq!(first.exit_code(), 65, "{first}");
+        assert!(written.is_empty(), "{written:?}");
+
+        let (second, written) = from_store(&tpl_dir, "second", &bound);
+        let second = second.expect_err("the server is unreachable");
+        assert_eq!(second.exit_code(), 69, "{second}");
+        assert!(written.is_empty(), "{written:?}");
+    }
+
+    #[test]
+    fn fr_cache_038_an_object_is_bound_from_the_listing_as_from_the_whole_store() {
+        // Step 7 over the listing: an absent name is the `66` with the
+        // nearest match, a bare routine name reaching both kinds is the `64`,
+        // and the qualified form binds one — with no connection, and the same
+        // condition the whole store would raise.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(&scratch, &[("kind.jinja", "{{ routine.kind }}")]);
+
+        let (absent, _) = from_store(&tpl_dir, "kind", &object(&["consignmen"], &[], &[]));
+        let absent = absent.expect_err("no such table");
+        assert_eq!(absent.exit_code(), 66);
+        assert!(
+            matches!(
+                &absent,
+                Error::CatalogueObjectNotFound { nearest, .. }
+                    if nearest.contains(&"consignment".to_owned())
+            ),
+            "{absent}"
+        );
+
+        let (bare, _) = from_store(
+            &tpl_dir,
+            "kind",
+            &object(&[], &[], &["sp_book_consignment"]),
+        );
+        let bare = bare.expect_err("the bare name reaches both kinds");
+        assert_eq!(bare.exit_code(), 64);
+        assert!(matches!(bare, Error::AmbiguousRoutineName { .. }), "{bare}");
+
+        let (qualified, written) = from_store(
+            &tpl_dir,
+            "kind",
+            &object(&[], &[], &["function:sp_book_consignment"]),
+        );
+        qualified.expect("the qualified name binds one");
+        assert_eq!(written, "FUNCTION");
+    }
+
+    /// Removes the object files of the store [`cached`] wrote, but `kept`.
+    fn keep_only(tpl_dir: &Path, kept: &[&str]) {
+        for collection in ["tables", "views", "routines"] {
+            let directory = stored(tpl_dir, collection);
+            for entry in std::fs::read_dir(&directory)
+                .expect("the store is ours")
+                .flatten()
+            {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if !kept.contains(&format!("{collection}/{name}").as_str()) {
+                    std::fs::remove_file(entry.path()).expect("the store is ours");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fr_cache_038_a_lookup_by_name_opens_only_the_file_it_returns() {
+        // FR-CACHE-038 as the forty-first edition amended it, for each of the
+        // six lookups: every object file but the one returned is removed, so a
+        // lookup that opened any other would find a miss, and the miss would
+        // reach the unreachable entry as `69`. Each name sorts after members
+        // the lookup must pass over.
+        let whole = object(&[], &[], &[]);
+        let bound = object(&["consignment_leg"], &[], &[]);
+        for (template, source, object, kept, expected) in [
+            (
+                "table",
+                "{{ table('consignment_leg').name }}",
+                &whole,
+                &["tables/consignment_leg.json"][..],
+                "consignment_leg",
+            ),
+            (
+                "column",
+                "{{ column('consignment_leg', 'leg_id').name }}",
+                &whole,
+                &["tables/consignment_leg.json"][..],
+                "leg_id",
+            ),
+            (
+                "view",
+                "{{ view('v_consignment_manifest').name }}",
+                &whole,
+                &["views/v_consignment_manifest.json"][..],
+                "v_consignment_manifest",
+            ),
+            (
+                "tests",
+                "{% for c in table.columns %}{{ c.name }}={{ c is primary_key }}/{{ c is unique }} {% endfor %}",
+                &bound,
+                &["tables/consignment_leg.json"][..],
+                "leg_id=true/true consignment_id=false/false ",
+            ),
+        ] {
+            let scratch = Scratch::new();
+            let tpl_dir = cached(&scratch, &[(&format!("{template}.jinja"), source)]);
+            keep_only(&tpl_dir, kept);
+
+            let (result, written) = from_store(&tpl_dir, template, object);
+
+            result.unwrap_or_else(|condition| panic!("{template}: {condition}"));
+            assert_eq!(written, expected, "{template}");
+        }
+
+        // `routine`: the first routine of the name in the listing's order is
+        // the one returned, so the other of the two is removed.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[("routine.jinja", "{{ routine('sp_book_consignment').kind }}")],
+        );
+        let listed = crate::cache::Cache::of(&tpl_dir, ENTRY)
+            .shelved()
+            .expect("the store is whole");
+        let first =
+            crate::cache::paths::lower(listed.routines()[0].kind().expect("a routine has a kind"))
+                .expect("a recorded kind");
+        keep_only(
+            &tpl_dir,
+            &[&format!("routines/{first}.sp_book_consignment.json")],
+        );
+
+        let (result, written) = from_store(&tpl_dir, "routine", &whole);
+
+        result.expect("only the returned routine is read");
+        assert_eq!(written, first.to_uppercase());
+    }
+
+    #[test]
+    fn fr_cache_038_a_procedure_and_a_function_of_one_name_resolve_as_the_scan_did() {
+        // The tie of NFR-DET-002 is kept as it was: `routine(name)` returns the
+        // routine a scan of the up-front read's collection meets first.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[("routine.jinja", "{{ routine('sp_book_consignment').kind }}")],
+        );
+        let loaded = crate::cache::Cache::of(&tpl_dir, ENTRY)
+            .everything()
+            .expect("the store is whole");
+        let up_front = loaded.document().expect("every file decodes");
+
+        let (result, written) = from_store(&tpl_dir, "routine", &object(&[], &[], &[]));
+
+        result.expect("the routine is stored");
+        assert_eq!(written, up_front.routines[0].kind.name());
+    }
+
+    #[test]
+    fn fr_cache_033_a_damaged_file_a_lookup_passes_over_is_not_a_miss() {
+        // FR-CACHE-033 as amended: `carrier` and `consignment` sort before the
+        // table sought, and neither is consulted, so neither is a miss.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[("found.jinja", "{{ table('consignment_leg').name }}")],
+        );
+        for damaged in ["tables/carrier.json", "tables/consignment.json"] {
+            std::fs::write(stored(&tpl_dir, damaged), "{ torn").expect("ours");
+        }
+
+        let (result, written) = from_store(&tpl_dir, "found", &object(&[], &[], &[]));
+
+        result.expect("the damaged files are passed over");
+        assert_eq!(written, "consignment_leg");
+    }
+
+    #[test]
+    fn fr_cache_039_a_damaged_file_a_lookup_returns_restarts_the_render() {
+        // FR-CACHE-039: the file returned is reached, so a damaged one is a
+        // miss and the render is abandoned; the one server read is refused
+        // here, so the invocation is `69`, with nothing on stdout.
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[("found.jinja", "written first {{ table('carrier').name }}")],
+        );
+        std::fs::write(stored(&tpl_dir, "tables/carrier.json"), "{ torn").expect("ours");
+
+        let (result, written) = from_store(&tpl_dir, "found", &object(&[], &[], &[]));
+        let condition = result.expect_err("the server is unreachable");
+
+        assert_eq!(condition.exit_code(), 69, "{condition}");
+        assert!(written.is_empty(), "{written:?}");
+    }
+
+    #[test]
+    fn fr_cache_038_a_lookup_that_finds_nothing_opens_no_object_file() {
+        // No object file is left, so any file a lookup opened would be a miss
+        // and a `69`. What each lookup answers is today's: `undefined`, which
+        // the guard sees as absent and whose use is the `65` of FR-SEM-012.
+        let whole = object(&[], &[], &[]);
+        let scratch = Scratch::new();
+        let tpl_dir = cached(
+            &scratch,
+            &[
+                (
+                    "guarded.jinja",
+                    "{{ table('nosuch') is defined }} {{ view('nosuch') is defined }} \
+                     {{ routine('nosuch') is defined }} {{ column('nosuch', 'id') is defined }} \
+                     {{ column('carrier', 'nosuch') is defined }}",
+                ),
+                ("used.jinja", "{{ table('nosuch').name }}"),
+            ],
+        );
+        keep_only(&tpl_dir, &["tables/carrier.json"]);
+
+        let (result, written) = from_store(&tpl_dir, "guarded", &whole);
+        result.expect("no lookup opened a file it did not return");
+        assert_eq!(written, "false false false false false");
+
+        keep_only(&tpl_dir, &[]);
+        let (result, written) = from_store(&tpl_dir, "used", &whole);
+        let condition = result.expect_err("an undefined value is used");
+        assert_eq!(condition.exit_code(), 65, "{condition}");
+        assert!(written.is_empty(), "{written:?}");
     }
 }

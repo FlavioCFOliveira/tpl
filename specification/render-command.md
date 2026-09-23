@@ -1,7 +1,7 @@
 ---
 title: Render Command (Third Arm)
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-23
 related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md]
 ---
 
@@ -48,6 +48,10 @@ tpl render <template> --routine <name>      binds routine
   the separator question between concatenated renders, partial-output-on-failure
   semantics, canonical ordering across many objects, and the
   memory-versus-streaming trade-off of a multi-object render.
+
+  *Note added in the fortieth edition.* A render abandoned under `FR-CACHE-039`
+  is not the render of the invocation. The invocation still produces exactly
+  one render: the one that `FR-CACHE-039` starts from the server's document.
 
 - **FR-RND-003**: The system SHALL name the render target with a flag, never
   positionally. The flags are `--table <name>`, `--view <name>`, and
@@ -314,7 +318,11 @@ tpl render <template> --routine <name>      binds routine
   `65`.
 
 - **FR-RND-034**: WHEN a render fails, stdout SHALL carry at most one incomplete
-  result.
+  result, and SHALL carry nothing from a render abandoned under `FR-CACHE-039`.
+
+  *Amended in the fortieth edition.* The last clause is new. A render abandoned
+  on a miss is followed by a second render, and bytes of the first reaching
+  stdout would leave two results there.
 
 ## Dependencies
 
@@ -322,8 +330,8 @@ tpl render <template> --routine <name>      binds routine
   and containment.
 - [schema-commands.md](schema-commands.md) — the dump document that
   `--context` consumes.
-- [cache-commands.md](cache-commands.md) — read-through behaviour and the two
-  cache flags.
+- [cache-commands.md](cache-commands.md) — read-through behaviour, the two
+  cache flags, and the lazy read of `FR-CACHE-038` and `FR-CACHE-039`.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `64`, `65`, `66`, and
   the `74` of `FR-RND-035`.
 

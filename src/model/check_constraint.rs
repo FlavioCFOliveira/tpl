@@ -19,6 +19,8 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use super::ToStatic;
+
 catalogued! {
     /// The level a `CHECK` constraint is declared at (`FR-CAT-046`).
     ///
@@ -57,6 +59,19 @@ pub struct CheckConstraint<'a> {
     /// and operators lower-cased.
     #[serde(borrow)]
     pub clause: Cow<'a, str>,
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for CheckConstraint<'_> {
+    type Static = CheckConstraint<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        CheckConstraint {
+            name: self.name.to_static(),
+            level: self.level.to_static(),
+            clause: self.clause.to_static(),
+        }
+    }
 }
 
 #[cfg(test)]

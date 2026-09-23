@@ -87,6 +87,13 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
   cached document carries `schema_version` and `cache_format`, both at `1`; a
   document that cannot be decoded is a miss, and the read goes to the server.
   `--no-cache` and `--direct` bypass the cache on the commands that consult it.
+  A cache write does not force its files to disk, so a file a crash leaves torn
+  is that same miss; `cache status` counts the object files held without
+  reading them, so a file that cannot be read is still counted. A cached
+  `schema info` reads `database.json` and counts the object files, and the
+  text listing of `schema tables` decodes four members of each table file; an
+  object file that fails only in what they no longer decode is not a miss for
+  them, and remains one for every other read.
 - **Templates.** `template list`, `template show`, `template check` and
   `template path`.
 - **The render environment.** MiniJinja, with templates loaded and compiled at

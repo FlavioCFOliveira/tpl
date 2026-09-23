@@ -164,13 +164,28 @@ impl<W: Write> Write for Tracked<W> {
     }
 }
 
+/// The capacity of the one buffer, in bytes.
+///
+/// PERF: the standard library's 8 KiB split the 7.2 MB pretty dump of
+/// `WL-001` into about 900 writes. Of 16, 32, 64 and 128 KiB and a buffer as
+/// large as the whole output, 64 KiB was the smallest to take the whole gain on
+/// the two pretty whole reads; 128 KiB took no more, and the whole output took
+/// less (`BENCHMARKS.md`, 2026-09-23, `#249`). The buffer is reserved and not
+/// filled, so a command that prints little touches only the pages its bytes
+/// reach.
+///
+/// Where a close is observed is unchanged by the size: [`Tracked`] records what
+/// the stream accepted, under the buffer, so the line between `FR-ERR-025` and
+/// `FR-ERR-026` is drawn at the first byte the stream accepted, whatever the
+/// size of the writes that carried it.
+const CAPACITY: usize = 64 * 1024;
+
 /// The writer every result is emitted through, in either format.
 ///
 /// It owns one buffer, so a result reaches the stream in as few writes as the
 /// buffer allows rather than one per line — the aggregation `FR-OUT-021` and
-/// the project's own I/O rule require. The capacity is the standard library's
-/// default: no measurement supports another number, and this project does not
-/// tune without one.
+/// the project's own I/O rule require. The capacity is [`CAPACITY`], chosen by
+/// measurement.
 ///
 /// [`Writer::document`] and [`Writer::table`] flush before they return, so the
 /// writer holds nothing between results and there is no pending byte for a drop
@@ -188,7 +203,7 @@ impl<W: Write> Writer<W> {
     /// Wraps `stream` in the buffer every result is written through.
     pub(super) fn new(stream: W) -> Self {
         Self {
-            inner: BufWriter::new(Tracked::new(stream)),
+            inner: BufWriter::with_capacity(CAPACITY, Tracked::new(stream)),
             finished: false,
         }
     }
@@ -389,7 +404,7 @@ impl<W: Write> Writer<W> {
 
 #[cfg(test)]
 mod tests {
-    use super::Writer;
+    use super::{CAPACITY, Writer};
     use crate::error::Error;
     use crate::output::envelope::{Collection, Document, Source};
     use crate::output::json::Form;
@@ -501,8 +516,21 @@ mod tests {
         // wrapped in the encoder's own error type. Both requirements have to
         // survive that unwrapping: a close before the first byte is still the
         // silent 0 of FR-ERR-025 and not the 74 of FR-ERR-026.
-        let members: Vec<String> = (0..2_000).map(|at| format!("table_{at:06}")).collect();
+        //
+        // The size is derived from the capacity, so that no change to the
+        // capacity can let the document fit the buffer again: each member is
+        // at least 15 bytes (`"table_000000",`), and there are enough of them
+        // to fill the buffer twice.
+        let count = 2 * CAPACITY / 15 + 1;
+        let members: Vec<String> = (0..count).map(|at| format!("table_{at:06}")).collect();
         let large = Document::new(Source::Server, Collection::new("tables", &members));
+        let size = serde_json::to_vec(&large)
+            .expect("the document serialises")
+            .len();
+        assert!(
+            size > 2 * CAPACITY,
+            "the document is {size} bytes and must exceed twice the buffer of {CAPACITY}"
+        );
 
         let mut closed = Refusing::new(0, io::ErrorKind::BrokenPipe);
         assert!(

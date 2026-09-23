@@ -1,5 +1,5 @@
 //! The catalogue cache: `.tpl/.cache/`, read through on every cached read and
-//! written on every miss (`FR-CACHE-001` … `FR-CACHE-037`, `FR-CDOC-001` …
+//! written on every miss (`FR-CACHE-001` … `FR-CACHE-039`, `FR-CDOC-001` …
 //! `FR-CDOC-016`).
 //!
 //! | Submodule | Subject | Forced by |
@@ -62,9 +62,10 @@
 //! # No lock, and one whole file or the other
 //!
 //! `FR-CACHE-031` takes no lock, and `FR-CACHE-030` writes each object through
-//! a temporary file in the same directory, renamed over the target — so a
-//! reader meets one whole version of a file or the other, never half of one,
-//! and a killed process leaves nothing locked. What a **collection** offers is
+//! a temporary file in the same directory, renamed over the target, or leaves
+//! in place a file that already holds exactly the bytes the write would
+//! produce — so a reader meets one whole version of a file or the other, never
+//! half of one, and a killed process leaves nothing locked. What a **collection** offers is
 //! weaker by the same requirement's design, and `FR-CDOC-015` states it: a
 //! document served from the cache promises neither referential integrity nor a
 //! point-in-time snapshot.
@@ -84,8 +85,10 @@ use serde::{Deserialize, Serialize};
 use crate::error::Error;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::{self, Named};
-use crate::model::routine::RoutineKind;
+use crate::model::document::shape::TableDocument;
+use crate::model::routine::{Routine, RoutineKind};
 use crate::model::server::Server;
+use crate::model::view::View;
 use meta::Meta;
 use paths::{Collection, Layout};
 
@@ -201,6 +204,310 @@ fn decode<'a, T: Deserialize<'a> + Named>(members: &'a [String]) -> Option<Vec<T
     Some(decoded)
 }
 
+/// What a render served from the cache reads before it starts (`FR-CACHE-038`):
+/// the bytes of `database.json`, and the members of each collection as the
+/// directory listing names them.
+///
+/// It is [`Loaded`]'s counterpart for `tpl render`, which binds the whole
+/// `database` but reaches, as a rule, a small part of it. No object file is
+/// opened here: each [`Shelf`] names one, and the file is read and decoded only
+/// when the template first reaches that member, through [`Shelf::read`] and one
+/// of [`Shelf::table`], [`Shelf::view`] and [`Shelf::routine`].
+///
+/// **The members are ordered here**, by the one comparator
+/// [`Loaded::document`] orders by, over the names the paths hold. For every
+/// file this binary writes, the name a path holds is the name the file holds,
+/// so the order, the length and the members of each collection are those an
+/// up-front read of the same files produces. A file whose contents name
+/// another object is refused when it is reached, which is the only point at
+/// which the difference can be seen.
+///
+/// *Rejected: reading each file's name up front to order the collection.* The
+/// open is most of the cost of a file (`BENCHMARKS.md`, 2026-09-23, `#243`),
+/// and `FR-CACHE-038` forbids reading a member's file before it is reached.
+#[derive(Debug)]
+pub(crate) struct Shelved {
+    /// The contents of `database.json`.
+    metadata: String,
+    /// The tables, ordered by name.
+    tables: Vec<Shelf>,
+    /// The views, ordered by name.
+    views: Vec<Shelf>,
+    /// The routines, ordered by name.
+    routines: Vec<Shelf>,
+}
+
+impl Shelved {
+    /// The database's own members — the three metadata fields and the `server`
+    /// object — with its three collections empty, or [`None`] where
+    /// `database.json` fails to decode, which is a miss per `FR-CACHE-033`.
+    ///
+    /// The collections are the shelves: [`Shelved::tables`],
+    /// [`Shelved::views`] and [`Shelved::routines`].
+    pub(crate) fn head(&self) -> Option<DatabaseDocument<'_>> {
+        let metadata: Metadata<'_> = serde_json::from_str(&self.metadata).ok()?;
+
+        Some(DatabaseDocument {
+            name: metadata.name,
+            charset: metadata.charset,
+            collation: metadata.collation,
+            server: metadata.server,
+            tables: Vec::new(),
+            views: Cow::Owned(Vec::new()),
+            routines: Cow::Owned(Vec::new()),
+        })
+    }
+
+    /// The tables, ordered by name.
+    pub(crate) fn tables(&self) -> &[Shelf] {
+        &self.tables
+    }
+
+    /// The views, ordered by name.
+    pub(crate) fn views(&self) -> &[Shelf] {
+        &self.views
+    }
+
+    /// The routines, ordered by name.
+    pub(crate) fn routines(&self) -> &[Shelf] {
+        &self.routines
+    }
+}
+
+/// One member of a collection, known by its file and not yet read
+/// (`FR-CACHE-038`).
+#[derive(Debug)]
+pub(crate) struct Shelf {
+    /// The name the path holds.
+    name: String,
+    /// The kind the path holds, for a routine; [`None`] for a table or a view.
+    kind: Option<RoutineKind<'static>>,
+    /// The object file.
+    file: PathBuf,
+}
+
+impl Shelf {
+    /// The routine's kind, as its path holds it; [`None`] for a table or a
+    /// view.
+    pub(crate) const fn kind(&self) -> Option<&RoutineKind<'static>> {
+        self.kind.as_ref()
+    }
+
+    /// The contents of the member's file, or [`None`] on a miss
+    /// (`FR-CACHE-033`): absent — removed since the listing was read, which
+    /// `FR-CACHE-039` names — unreadable, or not UTF-8.
+    pub(crate) fn read(&self) -> Option<String> {
+        read(&self.file)
+    }
+
+    /// The table `bytes` hold, or [`None`] on a miss.
+    ///
+    /// The decode is [`Loaded::document`]'s, so a file is refused here exactly
+    /// where an up-front read would have refused it. A file that decodes and
+    /// names another table than its path is refused as well: the collection was
+    /// ordered and counted by the path, so serving it would present a member
+    /// out of the order and under a name the rest of the render has already
+    /// seen. No write of this binary produces one.
+    pub(crate) fn table<'a>(&self, bytes: &'a str) -> Option<TableDocument<'a>> {
+        self.decoded(bytes)
+    }
+
+    /// The view `bytes` hold, or [`None`] on a miss, on the terms of
+    /// [`Shelf::table`].
+    pub(crate) fn view<'a>(&self, bytes: &'a str) -> Option<View<'a>> {
+        self.decoded(bytes)
+    }
+
+    /// The routine `bytes` hold, or [`None`] on a miss, on the terms of
+    /// [`Shelf::table`]; the kind must be the one the path holds as well.
+    pub(crate) fn routine<'a>(&self, bytes: &'a str) -> Option<Routine<'a>> {
+        let routine: Routine<'a> = self.decoded(bytes)?;
+
+        (self.kind.as_ref() == Some(&routine.kind)).then_some(routine)
+    }
+
+    /// The member `bytes` hold, where it names this shelf's member.
+    fn decoded<'a, T: Deserialize<'a> + Named>(&self, bytes: &'a str) -> Option<T> {
+        let member: T = serde_json::from_str(bytes).ok()?;
+
+        (member.name() == self.name).then_some(member)
+    }
+}
+
+impl Named for Shelf {
+    /// The member's name, as its path holds it.
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Loaded {
+    /// The rows of the `text` listing of `tpl schema tables`, ordered by name,
+    /// or [`None`] where any table file fails to decode.
+    ///
+    /// Each file is decoded into [`Listed`], which reads the four members the
+    /// listing prints and parses the rest without building it; the order and
+    /// the miss are [`Loaded::document`]'s.
+    ///
+    /// *Rejected: decoding every [`TableDocument`] in full and dropping all but
+    /// four fields.* It was 62.0% of the samples of a cached text listing of
+    /// `WL-001` and allocated 23 709 970 B (`BENCHMARKS.md`, 2026-09-22).
+    pub(crate) fn listing(&self) -> Option<Vec<Listed<'_>>> {
+        decode(&self.tables)
+    }
+}
+
+/// One row of the `text` listing of `tpl schema tables` (`FR-SCH-026`): the
+/// four members of a table that listing prints.
+///
+/// It is a reduced view of [`TableDocument`], decoded from the same file: the
+/// four members are read as that type reads them, the columns are counted
+/// rather than built, and every other member is parsed and dropped, as serde
+/// drops a member no field names. The count is the length of the `columns`
+/// array, which is what the full decode's collection holds.
+///
+/// A file this view decodes and the full decode would refuse — JSON of the
+/// document's shape whose unprinted members break the contract — is served
+/// here where [`Loaded::document`] would have missed. No file this binary
+/// writes is one, and a torn or truncated file is not JSON and is a miss here
+/// too.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct Listed<'a> {
+    /// The table's name.
+    #[serde(borrow)]
+    pub(crate) name: Cow<'a, str>,
+
+    /// The storage engine.
+    #[serde(borrow)]
+    pub(crate) engine: Option<Cow<'a, str>>,
+
+    /// How many columns the table has.
+    #[serde(rename = "columns", deserialize_with = "counted")]
+    pub(crate) column_count: usize,
+
+    /// The comment, the empty string where none was given.
+    #[serde(borrow)]
+    pub(crate) comment: Cow<'a, str>,
+}
+
+impl<'a> Listed<'a> {
+    /// The row of `table`, for a listing the server served.
+    pub(crate) fn of(table: &'a TableDocument<'_>) -> Self {
+        Self {
+            name: Cow::Borrowed(&table.name),
+            engine: table.engine.as_deref().map(Cow::Borrowed),
+            column_count: table.columns.len(),
+            comment: Cow::Borrowed(&table.comment),
+        }
+    }
+}
+
+impl Named for Listed<'_> {
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+/// The length of an array, each member parsed and dropped.
+fn counted<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<usize, D::Error> {
+    /// The visitor that counts.
+    struct Counting;
+
+    impl<'de> serde::de::Visitor<'de> for Counting {
+        type Value = usize;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a sequence")
+        }
+
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<usize, A::Error> {
+            let mut counted = 0;
+            while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {
+                counted += 1;
+            }
+            Ok(counted)
+        }
+    }
+
+    deserializer.deserialize_seq(Counting)
+}
+
+/// What a cache hit for `tpl schema info` holds: the bytes of `database.json`
+/// and the number of object files of each collection.
+///
+/// It is [`Loaded`]'s counterpart for the one command that presents the
+/// database's own metadata and the size of each collection, and nothing of any
+/// member.
+#[derive(Debug)]
+pub(crate) struct Summarised {
+    /// The contents of `database.json`.
+    metadata: String,
+    /// The object files of each collection, in [`Collection::ALL`]'s order.
+    counts: [usize; 3],
+}
+
+impl Summarised {
+    /// What these bytes describe, or [`None`] where `database.json` fails to
+    /// decode, which is a miss per `FR-CACHE-033`.
+    pub(crate) fn summary(&self) -> Option<Summary<'_>> {
+        let metadata: Metadata<'_> = serde_json::from_str(&self.metadata).ok()?;
+        let [tables, views, routines] = self.counts;
+
+        Some(Summary {
+            name: metadata.name,
+            charset: metadata.charset,
+            collation: metadata.collation,
+            server: metadata.server,
+            tables,
+            views,
+            routines,
+        })
+    }
+}
+
+/// What `tpl schema info` presents (`FR-SCH-003`, `FR-SCH-031`): the three
+/// metadata fields of `FR-CTX-036`, the `server` object of `FR-CTX-031`, and
+/// the size of each of the three collections of `FR-CTX-035`.
+///
+/// Both sources produce it: [`Summarised::summary`] from the cache, and
+/// [`Summary::of`] from a document the server served. The members are the
+/// same members, under the same names and with the same values, that the
+/// `database` object of the context document carries, which is what
+/// `FR-SCH-031` promises a caller that reads `data.database.name` from either
+/// command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Summary<'a> {
+    /// The schema's name.
+    pub(crate) name: Cow<'a, str>,
+    /// The schema's default character set.
+    pub(crate) charset: Cow<'a, str>,
+    /// The schema's default collation.
+    pub(crate) collation: Cow<'a, str>,
+    /// The server the read was made against.
+    pub(crate) server: Server<'a>,
+    /// How many tables the database holds.
+    pub(crate) tables: usize,
+    /// How many views it holds.
+    pub(crate) views: usize,
+    /// How many routines it holds.
+    pub(crate) routines: usize,
+}
+
+impl<'a> Summary<'a> {
+    /// The summary of `document`, for a read the server served.
+    pub(crate) fn of(document: &'a DatabaseDocument<'_>) -> Self {
+        Self {
+            name: Cow::Borrowed(&document.name),
+            charset: Cow::Borrowed(&document.charset),
+            collation: Cow::Borrowed(&document.collation),
+            server: document.server.clone(),
+            tables: document.tables.len(),
+            views: document.views.len(),
+            routines: document.routines.len(),
+        }
+    }
+}
+
 /// What `tpl cache status` reports (`FR-CACHE-025`, `FR-CACHE-034`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Status {
@@ -245,9 +552,10 @@ pub(crate) struct Held {
 pub(crate) enum Look<'a> {
     /// The whole catalogue, all three collections recorded whole.
     ///
-    /// It is what `tpl schema info` and `tpl schema dump` ask for: the answer
-    /// is the whole database, so a collection that was never loaded whole makes
-    /// it a listing served short.
+    /// It is what `tpl schema dump` asks for: the answer is the whole
+    /// database, so a collection that was never loaded whole makes it a
+    /// listing served short. `tpl schema info` asks [`Cache::summary`]
+    /// instead, under the same rule.
     Everything,
 
     /// One whole collection (`FR-CDOC-007`).
@@ -314,6 +622,85 @@ impl Cache {
             tables: members(&layout.collection(Collection::Tables))?,
             views: members(&layout.collection(Collection::Views))?,
             routines: members(&layout.collection(Collection::Routines))?,
+        })
+    }
+
+    /// What a render reads before it starts, or [`None`] on a miss
+    /// (`FR-CACHE-038`).
+    ///
+    /// It is a hit exactly where [`Cache::everything`] would reach its object
+    /// files: the record is read and checked first, all three collections must
+    /// be recorded whole, `database.json` must be readable, and each
+    /// collection's directory must be walkable. The object files are listed
+    /// and not opened. A listed file whose path no write of this binary
+    /// composes — see [`paths::member_of`] — is a miss here, because its member
+    /// cannot be named or ordered without opening it.
+    pub(crate) fn shelved(&self) -> Option<Shelved> {
+        let layout = self.layout.as_ref()?;
+        let meta = self.meta()?;
+
+        if !Collection::ALL
+            .iter()
+            .all(|collection| meta.whole(*collection))
+        {
+            return None;
+        }
+
+        Some(Shelved {
+            metadata: read(&layout.database())?,
+            tables: shelve(layout, Collection::Tables)?,
+            views: shelve(layout, Collection::Views)?,
+            routines: shelve(layout, Collection::Routines)?,
+        })
+    }
+
+    /// What `tpl schema info` presents, or [`None`] on a miss (`FR-SCH-031`).
+    ///
+    /// It is a hit exactly where [`Cache::everything`] is one for a store this
+    /// binary wrote: the record is read and checked first, all three
+    /// collections must be recorded whole, `database.json` must be readable,
+    /// and each collection's directory must be walkable. The collections are
+    /// **counted** rather than read, as `tpl cache status` counts them — the
+    /// same walk, admitted by the same [`paths::is_object`] — because the
+    /// command presents their sizes and nothing of their members. For a file
+    /// every write of this binary produces, the count is the number of members
+    /// [`Loaded::document`] decodes.
+    ///
+    /// **One difference from reading everything.** An object file that cannot
+    /// be read or decoded no longer makes this command a miss, because the
+    /// command no longer reads it: the file is counted, and it remains the
+    /// miss of `FR-CACHE-033` for every command that does read it.
+    /// `FR-SCH-031` puts the `text` form outside that requirement, and the
+    /// `json` form carries no count.
+    ///
+    /// *Rejected: decoding all 272 files of `WL-001` to present four members
+    /// and three counts.* It took 12.2 ms and allocated 23 945 725 B, where
+    /// `tpl schema table` from the same cache took 2.0 ms (`BENCHMARKS.md`,
+    /// 2026-09-22), which is what `FR-SCH-031` rejects as making this "the most
+    /// expensive command of this arm while presenting the least".
+    ///
+    /// *Rejected: skipping the three walks for the `json` form.* A store whose
+    /// collection directory is gone would then be a hit for one form and a
+    /// miss for the other, and the `source` of `FR-SCH-035` would depend on
+    /// `--format`. Three directory walks are the whole of the difference.
+    pub(crate) fn summary(&self) -> Option<Summarised> {
+        let layout = self.layout.as_ref()?;
+        let meta = self.meta()?;
+
+        if !Collection::ALL
+            .iter()
+            .all(|collection| meta.whole(*collection))
+        {
+            return None;
+        }
+
+        Some(Summarised {
+            metadata: read(&layout.database())?,
+            counts: [
+                count(&layout.collection(Collection::Tables))?,
+                count(&layout.collection(Collection::Views))?,
+                count(&layout.collection(Collection::Routines))?,
+            ],
         })
     }
 
@@ -440,25 +827,36 @@ impl Cache {
             collation: document.collation.clone(),
             server: document.server.clone(),
         };
-        if !store(&layout.database(), &metadata) {
+        let mut buffers = Buffers::default();
+        if !store_object(&layout.database(), &metadata, &mut buffers) {
             return;
         }
 
+        // `meta.json` is not an object file, and `FR-CACHE-030` does not let
+        // it be left in place: it is always written through `store`.
         match covered {
             Covered::Everything => {
                 let whole = [
-                    replace(layout, Collection::Tables, &document.tables, table_file),
+                    replace(
+                        layout,
+                        Collection::Tables,
+                        &document.tables,
+                        table_file,
+                        &mut buffers,
+                    ),
                     replace(
                         layout,
                         Collection::Views,
                         document.views.as_ref(),
                         view_file,
+                        &mut buffers,
                     ),
                     replace(
                         layout,
                         Collection::Routines,
                         document.routines.as_ref(),
                         routine_file,
+                        &mut buffers,
                     ),
                 ];
 
@@ -466,13 +864,13 @@ impl Cache {
             }
             Covered::One(_) => {
                 for table in &document.tables {
-                    one(layout, table, table_file);
+                    one(layout, table, table_file, &mut buffers);
                 }
                 for view in document.views.as_ref() {
-                    one(layout, view, view_file);
+                    one(layout, view, view_file, &mut buffers);
                 }
                 for routine in document.routines.as_ref() {
-                    one(layout, routine, routine_file);
+                    one(layout, routine, routine_file, &mut buffers);
                 }
 
                 // A named read refreshes one object and settles nothing about
@@ -629,7 +1027,7 @@ impl Cache {
                 .iter()
                 .map(|collection| Held {
                     name: collection.name(),
-                    count: members(&layout.collection(*collection)).map_or(0, |held| held.len()),
+                    count: count(&layout.collection(*collection)).unwrap_or(0),
                     whole: meta.whole(*collection),
                 })
                 .collect(),
@@ -672,8 +1070,166 @@ fn members(directory: &Path) -> Option<Vec<String>> {
     Some(held)
 }
 
+/// The members of one collection, named and ordered by their paths, or
+/// [`None`] where the directory could not be walked or a listed object file
+/// holds no member this layout can name.
+///
+/// The walk is [`members`]'s, admitted by the same [`paths::is_object`], and
+/// the order is [`decode`]'s: a stable sort by the one comparator, over the
+/// walk's own order, so two members of one name keep the order an up-front
+/// read would have kept them in.
+fn shelve(layout: &Layout, collection: Collection) -> Option<Vec<Shelf>> {
+    let mut held = Vec::new();
+
+    for entry in fs::read_dir(layout.collection(collection)).ok()? {
+        let file = entry.ok()?.path();
+
+        if paths::is_object(&file) {
+            let (kind, name) = paths::member_of(collection, &file)?;
+            let name = name.to_owned();
+
+            held.push(Shelf { name, kind, file });
+        }
+    }
+
+    order::sort_by_name(&mut held);
+
+    Some(held)
+}
+
+/// How many object files `directory` holds, or [`None`] where the directory
+/// could not be walked.
+///
+/// [`Cache::summary`] takes the size of each collection from it as well.
+///
+/// It is what `tpl cache status` reports (`FR-CACHE-025`, `FR-CACHE-034`):
+/// the count of objects **held**, which the directory listing answers without
+/// opening a file. The files it counts are the ones [`members`] reads — the
+/// same walk, admitted by the same [`paths::is_object`]. No requirement makes
+/// the count a validation, so a file is counted whatever its contents: one
+/// whose JSON would not decode was counted when the contents were read, and
+/// still is. The one file counted now and not before is one that cannot be
+/// opened or is not UTF-8, which used to turn the whole collection's count to
+/// `0` — a count of nothing beside a collection recorded whole.
+///
+/// *Rejected: reading every file to count it.* It read 3.2 MB for `WL-001` and
+/// was 93.3% of the command's samples (`BENCHMARKS.md`, 2026-09-22), for bytes
+/// that were dropped unread.
+fn count(directory: &Path) -> Option<usize> {
+    let mut held = 0;
+
+    for entry in fs::read_dir(directory).ok()? {
+        if paths::is_object(&entry.ok()?.path()) {
+            held += 1;
+        }
+    }
+
+    Some(held)
+}
+
 /// Writes `value` to `file`, through a temporary file in the same directory
-/// renamed over the target (`FR-CACHE-030`).
+/// renamed over the target (`FR-CACHE-030`), whatever the target holds.
+///
+/// It is the write of `meta.json`, which is not an object file and which
+/// `FR-CACHE-030` does not let be left in place. Every object file goes through
+/// [`store_object`], which may leave an identical file where it is.
+///
+/// Answers whether the file is now stored. Every failure answers `false` and
+/// reports nothing, per `FR-CACHE-036`.
+fn store<T: Serialize>(file: &Path, value: &T) -> bool {
+    write_through(file, |handle| serialise(handle, value))
+}
+
+/// The two buffers a write of the cache reuses from one object to the next.
+///
+/// They grow to the largest object written and are then reused, so a whole
+/// write allocates for its largest object rather than once per object.
+#[derive(Debug, Default)]
+struct Buffers {
+    /// The bytes the write would produce.
+    encoded: Vec<u8>,
+    /// The bytes the target already holds, read only where the lengths match.
+    held: Vec<u8>,
+}
+
+/// Stores one cached object in `file`: leaves the file in place where it
+/// already holds exactly the bytes the write would produce, and otherwise
+/// writes it through [`write_through`] (`FR-CACHE-030`).
+///
+/// Both paths leave a whole file, so `FR-CACHE-031` holds on either: a file left
+/// in place was whole, and a file renamed over is whole. A target that cannot
+/// be read, or that differs in any byte, is written, which is also what makes a
+/// corrupted file a miss that is rewritten, per `FR-CACHE-033`.
+///
+/// Answers whether the object is now stored. Every failure answers `false` and
+/// reports nothing, per `FR-CACHE-036`.
+fn store_object<T: Serialize>(file: &Path, value: &T, buffers: &mut Buffers) -> bool {
+    buffers.encoded.clear();
+    if encode(&mut buffers.encoded, value).is_err() {
+        return false;
+    }
+
+    // PERF: rewriting an object whose file already holds the same bytes cost
+    // 114 µs per file in the open of the temporary, its write and close, and
+    // the rename, and was half of a `WL-001` `cache load` (`BENCHMARKS.md`,
+    // 2026-09-23, `#243` row 2). The comparison costs a `lstat` where the
+    // lengths differ, and a read where they match.
+    if holds(file, &buffers.encoded, &mut buffers.held) {
+        return true;
+    }
+
+    let encoded = &buffers.encoded;
+    write_through(file, |mut handle| handle.write_all(encoded))
+}
+
+/// Whether `file` is a regular file of this cache's [`MODE`] that holds exactly
+/// `encoded`, read into `held`.
+///
+/// Anything short of certainty answers `false`, and the caller then writes the
+/// file: a target that is absent, cannot be read, is not a regular file, is a
+/// symbolic link, carries another mode, or differs in length or in any byte. The
+/// mode is compared because a rename would have replaced the file with one of
+/// [`MODE`], and a file left in place must be no wider than one written. The
+/// file opened must be the one inspected, by device and inode, and one byte
+/// past the expected length is asked for, so a file replaced or grown between
+/// the inspection and the read is not taken for identical.
+fn holds(file: &Path, encoded: &[u8], held: &mut Vec<u8>) -> bool {
+    use std::io::Read as _;
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+    let Ok(inspected) = fs::symlink_metadata(file) else {
+        return false;
+    };
+    let Ok(length) = u64::try_from(encoded.len()) else {
+        return false;
+    };
+    if !inspected.file_type().is_file()
+        || inspected.permissions().mode() & 0o7777 != MODE
+        || inspected.len() != length
+    {
+        return false;
+    }
+
+    let Ok(handle) = fs::File::open(file) else {
+        return false;
+    };
+    match handle.metadata() {
+        Ok(opened) if opened.dev() == inspected.dev() && opened.ino() == inspected.ino() => {}
+        _ => return false,
+    }
+
+    held.clear();
+    held.reserve(encoded.len().saturating_add(1));
+
+    handle
+        .take(length.saturating_add(1))
+        .read_to_end(held)
+        .is_ok()
+        && held.as_slice() == encoded
+}
+
+/// Writes a file through a temporary file in the same directory renamed over
+/// `file` (`FR-CACHE-030`), with `fill` writing the bytes into the temporary.
 ///
 /// The rename is what makes a concurrent reader see one whole version of the
 /// file or the other, per `FR-CACHE-031`, and it is why no lock is taken. The
@@ -681,26 +1237,37 @@ fn members(directory: &Path) -> Option<Vec<String>> {
 /// same object write two temporaries and race only on the rename — which the
 /// operating system makes atomic.
 ///
-/// Answers whether the object is now stored. Every failure answers `false` and
-/// reports nothing, per `FR-CACHE-036`.
-fn store<T: Serialize>(file: &Path, value: &T) -> bool {
+/// **The file is not synced to disk before the rename, and nothing requires
+/// it.** No requirement asks the cache for durability across a crash or a
+/// power loss: `FR-CACHE-030` and `FR-CACHE-031` ask for atomicity against
+/// concurrent writers, which the rename gives, and a file that a crash leaves
+/// empty or torn does not decode — which `FR-CACHE-033` already makes a miss,
+/// read from the server and rewritten, with nothing reported. Every read of
+/// the store answers [`None`] for such a file: [`Cache::meta`],
+/// [`Loaded::document`] and [`Cache::database`] all decode what they read, and
+/// an empty or truncated JSON text does not decode.
+///
+/// Answers whether the file is now stored. Every failure answers `false`,
+/// leaves the target untouched and reports nothing, per `FR-CACHE-036`.
+fn write_through<F>(file: &Path, fill: F) -> bool
+where
+    F: FnOnce(fs::File) -> std::io::Result<()>,
+{
     let Some(directory) = file.parent() else {
         return false;
     };
     let temporary = directory.join(format!("{TEMPORARY}.{}.tmp", std::process::id()));
 
     let written = || -> std::io::Result<()> {
-        let mut handle = fs::OpenOptions::new()
+        let handle = fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .mode(MODE)
             .open(&temporary)?;
 
-        serde_json::to_writer(&mut handle, value).map_err(std::io::Error::from)?;
-        handle.write_all(b"\n")?;
-        handle.sync_all()?;
-        drop(handle);
+        // The handle is consumed, so the file is closed before the rename.
+        fill(handle)?;
 
         fs::rename(&temporary, file)
     }();
@@ -713,6 +1280,43 @@ fn store<T: Serialize>(file: &Path, value: &T) -> bool {
     }
 
     true
+}
+
+/// Appends `value` to `sink` as one line of compact JSON: the bytes
+/// [`serialise`] writes, into memory.
+///
+/// # Errors
+///
+/// Returns the error the serialisation met.
+fn encode<T: Serialize>(sink: &mut Vec<u8>, value: &T) -> serde_json::Result<()> {
+    serde_json::to_writer(&mut *sink, value)?;
+    sink.push(b'\n');
+    Ok(())
+}
+
+/// Writes `value` to `sink` as one line of compact JSON, through a buffer, and
+/// flushes it.
+///
+/// It is separate from [`store`] so that a sink refusing the bytes is
+/// observable from a test without a filesystem that refuses them.
+///
+/// # Errors
+///
+/// Returns the first error the serialisation, the write or the flush met.
+fn serialise<W: std::io::Write, T: Serialize>(sink: W, value: &T) -> std::io::Result<()> {
+    // PERF: `serde_json` writes one token at a time, so an unbuffered `File`
+    // costs one `write` syscall per token. Those syscalls and the per-file
+    // sync `store` no longer makes were 97.4% of a `WL-001` cache write
+    // (`BENCHMARKS.md`, 2026-09-22). The buffer turns a file into a handful of
+    // writes; the bytes are identical.
+    let mut buffered = std::io::BufWriter::new(sink);
+    serde_json::to_writer(&mut buffered, value).map_err(std::io::Error::from)?;
+    buffered.write_all(b"\n")?;
+
+    // Explicit, so that a failure is reported here: the drop of a `BufWriter`
+    // swallows it, and the rename that follows would then store an object
+    // whose last bytes were never written.
+    buffered.flush()
 }
 
 /// Removes every object file of `directory` that `written` does not name, and
@@ -790,7 +1394,13 @@ fn routine_file(layout: &Layout, routine: &crate::model::routine::Routine<'_>) -
 /// `restricted`, per `FR-CACHE-037`, or one whose name is not a path component.
 /// Both leave the collection incomplete, and for the same reason: the listing
 /// the cache would serve is short one member.
-fn replace<T, F>(layout: &Layout, collection: Collection, members: &[T], file_of: F) -> bool
+fn replace<T, F>(
+    layout: &Layout,
+    collection: Collection,
+    members: &[T],
+    file_of: F,
+    buffers: &mut Buffers,
+) -> bool
 where
     T: Serialize,
     F: Fn(&Layout, &T) -> Option<PathBuf>,
@@ -805,7 +1415,7 @@ where
 
     for member in members {
         match file_of(layout, member) {
-            Some(file) if store(&file, member) => {
+            Some(file) if store_object(&file, member, buffers) => {
                 written.insert(file);
             }
             _ => complete = false,
@@ -816,7 +1426,7 @@ where
 }
 
 /// Writes one named member, or leaves the cache as it was.
-fn one<T, F>(layout: &Layout, member: &T, file_of: F)
+fn one<T, F>(layout: &Layout, member: &T, file_of: F, buffers: &mut Buffers)
 where
     T: Serialize,
     F: Fn(&Layout, &T) -> Option<PathBuf>,
@@ -825,6 +1435,488 @@ where
         && let Some(parent) = file.parent()
         && fs::create_dir_all(parent).is_ok()
     {
-        let _ = store(&file, member);
+        let _ = store_object(&file, member, buffers);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        Buffers, Cache, Collection, Layout, Listed, MODE, Meta, Summary, TEMPORARY, count,
+        serialise, store, store_object,
+    };
+    use crate::project::scratch::Scratch;
+    use std::io::{Error, ErrorKind, Write};
+    use std::path::Path;
+
+    /// A sink that refuses every byte it is handed.
+    struct Refusing;
+
+    impl Write for Refusing {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(Error::new(ErrorKind::StorageFull, "refused"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The layout of the entry `shop`, under a `.tpl` folder in `scratch`.
+    fn layout(scratch: &Scratch) -> Layout {
+        Layout::of(&scratch.path(".tpl"), "shop").expect("shop is a path component")
+    }
+
+    /// Whether `directory` holds a temporary file of `FR-CACHE-030`.
+    fn holds_temporary(directory: &Path) -> bool {
+        std::fs::read_dir(directory)
+            .expect("the directory exists")
+            .flatten()
+            .any(|entry| entry.file_name().to_string_lossy().starts_with(TEMPORARY))
+    }
+
+    #[test]
+    fn a_failure_the_buffer_meets_only_at_the_flush_is_reported() {
+        // The value is far smaller than the buffer, so no byte reaches the
+        // sink before the flush: the refusal surfaces there or nowhere, and a
+        // flush left to the drop of the buffer would swallow it.
+        let returned = serialise(Refusing, &"a value").expect_err("the sink refused the bytes");
+
+        assert_eq!(returned.kind(), ErrorKind::StorageFull);
+    }
+
+    #[test]
+    fn fr_cache_030_a_stored_object_is_one_line_of_compact_json() {
+        let scratch = Scratch::new();
+        let file = scratch.directory("store").join("object.json");
+        let value = serde_json::json!({"name": "orders", "columns": [1, 2, 3]});
+
+        assert!(store(&file, &value));
+
+        let mut expected = serde_json::to_vec(&value).expect("the value serialises");
+        expected.push(b'\n');
+        assert_eq!(
+            std::fs::read(&file).expect("the object was stored"),
+            expected
+        );
+        assert!(!holds_temporary(&scratch.path("store")));
+    }
+
+    /// The inode of `file`: a rename over it changes it, a file left in place
+    /// keeps it.
+    fn inode(file: &Path) -> u64 {
+        std::os::unix::fs::MetadataExt::ino(
+            &std::fs::symlink_metadata(file).expect("the file exists"),
+        )
+    }
+
+    #[test]
+    fn fr_cache_030_an_object_is_stored_as_the_bytes_the_record_is_stored_as() {
+        let scratch = Scratch::new();
+        let directory = scratch.directory("store");
+        let value = serde_json::json!({"name": "orders", "comment": "é \u{1f600}"});
+
+        assert!(store(&directory.join("streamed.json"), &value));
+        assert!(store_object(
+            &directory.join("encoded.json"),
+            &value,
+            &mut Buffers::default()
+        ));
+
+        assert_eq!(
+            std::fs::read(directory.join("encoded.json")).expect("stored"),
+            std::fs::read(directory.join("streamed.json")).expect("stored"),
+        );
+    }
+
+    #[test]
+    fn fr_cache_030_an_object_whose_file_holds_the_same_bytes_is_left_in_place() {
+        // Implementation, not contract: FR-CACHE-030 permits either path, and
+        // this pins the one taken.
+        let scratch = Scratch::new();
+        let file = scratch.directory("store").join("object.json");
+        let value = serde_json::json!({"name": "orders", "columns": [1, 2, 3]});
+        let mut buffers = Buffers::default();
+
+        assert!(store_object(&file, &value, &mut buffers));
+        let first = inode(&file);
+        let bytes = std::fs::read(&file).expect("stored");
+
+        assert!(store_object(&file, &value, &mut buffers));
+
+        assert_eq!(inode(&file), first, "an identical object was rewritten");
+        assert_eq!(std::fs::read(&file).expect("stored"), bytes);
+        assert!(!holds_temporary(&scratch.path("store")));
+    }
+
+    #[test]
+    fn fr_cache_030_an_object_whose_file_differs_or_cannot_be_trusted_is_rewritten() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let value = serde_json::json!({"name": "orders", "columns": [1, 2, 3]});
+        let mut expected = serde_json::to_vec(&value).expect("the value serialises");
+        expected.push(b'\n');
+        let mut flipped = expected.clone();
+        flipped[3] ^= 0x01;
+        let mut grown = expected.clone();
+        grown.push(b' ');
+
+        // Each case leaves the target in one state the write must not trust.
+        type Prepare = fn(&Path, &[u8], &[u8], &[u8]);
+        let cases: [(&str, Prepare); 7] = [
+            ("absent", |file, _, _, _| {
+                let _ = std::fs::remove_file(file);
+            }),
+            ("one byte differs, same length", |file, _, flipped, _| {
+                std::fs::write(file, flipped).expect("writable");
+            }),
+            ("one byte longer", |file, _, _, grown| {
+                std::fs::write(file, grown).expect("writable");
+            }),
+            ("truncated", |file, expected, _, _| {
+                std::fs::write(file, &expected[..expected.len() / 2]).expect("writable");
+            }),
+            ("the same bytes, unreadable", |file, expected, _, _| {
+                std::fs::write(file, expected).expect("writable");
+                std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o000))
+                    .expect("ours");
+            }),
+            ("the same bytes, a wider mode", |file, expected, _, _| {
+                std::fs::write(file, expected).expect("writable");
+                std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o644))
+                    .expect("ours");
+            }),
+            (
+                "the same bytes, through a symbolic link",
+                |file, expected, _, _| {
+                    let elsewhere = file.with_extension("held");
+                    std::fs::write(&elsewhere, expected).expect("writable");
+                    std::fs::set_permissions(&elsewhere, std::fs::Permissions::from_mode(MODE))
+                        .expect("ours");
+                    let _ = std::fs::remove_file(file);
+                    std::os::unix::fs::symlink(&elsewhere, file).expect("writable");
+                },
+            ),
+        ];
+
+        for (case, prepare) in cases {
+            let scratch = Scratch::new();
+            let file = scratch.directory("store").join("object.json");
+            let mut buffers = Buffers::default();
+            assert!(store_object(&file, &value, &mut buffers));
+            prepare(&file, &expected, &flipped, &grown);
+            let before = std::fs::symlink_metadata(&file)
+                .ok()
+                .map(|found| std::os::unix::fs::MetadataExt::ino(&found));
+
+            assert!(store_object(&file, &value, &mut buffers), "{case}");
+
+            let written = std::fs::symlink_metadata(&file).expect("stored");
+            assert!(written.file_type().is_file(), "{case}: not a regular file");
+            assert_eq!(written.permissions().mode() & 0o7777, MODE, "{case}");
+            assert_ne!(Some(inode(&file)), before, "{case}: not renamed over");
+            assert_eq!(std::fs::read(&file).expect("stored"), expected, "{case}");
+            assert!(!holds_temporary(&scratch.path("store")), "{case}");
+        }
+    }
+
+    #[test]
+    fn fr_cache_036_a_failed_rename_stores_nothing_and_leaves_no_temporary() {
+        // A non-empty directory at the target makes the rename fail after the
+        // temporary was written and flushed.
+        let scratch = Scratch::new();
+        let target = scratch.directory("store/object.json");
+        scratch.file("store/object.json/held", "untouched");
+
+        assert!(!store(&target, &"a value"));
+
+        assert!(target.is_dir());
+        assert_eq!(
+            std::fs::read_to_string(target.join("held")).expect("the target is untouched"),
+            "untouched"
+        );
+        assert!(!holds_temporary(&scratch.path("store")));
+    }
+
+    #[test]
+    fn fr_cache_034_a_count_is_of_the_object_files_held_whatever_they_contain() {
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        let tables = layout.collection(Collection::Tables);
+        std::fs::create_dir_all(&tables).expect("the scratch directory is writable");
+
+        std::fs::write(tables.join("orders.json"), "{\"name\":\"orders\"}\n")
+            .expect("the scratch directory is writable");
+        // A corrupted object, one that is not even UTF-8, the in-flight
+        // temporary of a write, and a file that is not an object at all.
+        std::fs::write(tables.join("lines.json"), "{\"name\":\"li").expect("writable");
+        std::fs::write(tables.join("rates.json"), [0xff, 0xfe]).expect("writable");
+        std::fs::write(tables.join(format!("{TEMPORARY}.1.tmp")), "{").expect("writable");
+        std::fs::write(tables.join("notes.txt"), "by hand").expect("writable");
+
+        assert_eq!(count(&tables), Some(3));
+        assert_eq!(count(&layout.collection(Collection::Views)), None);
+    }
+
+    #[test]
+    fn fr_cache_034_status_counts_a_corrupted_object_beside_the_record() {
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        let tables = layout.collection(Collection::Tables);
+        std::fs::create_dir_all(&tables).expect("the scratch directory is writable");
+        assert!(store(&layout.meta(), &Meta::new([true, false, false])));
+        std::fs::write(tables.join("orders.json"), "{}\n").expect("writable");
+        std::fs::write(tables.join("lines.json"), "").expect("writable");
+
+        let status = Cache::of(&scratch.path(".tpl"), "shop").status();
+
+        assert!(status.loaded_at.is_some());
+        let counted: Vec<(&str, usize, bool)> = status
+            .collections
+            .iter()
+            .map(|held| (held.name, held.count, held.whole))
+            .collect();
+        assert_eq!(
+            counted,
+            [
+                ("tables", 2, true),
+                ("views", 0, false),
+                ("routines", 0, false)
+            ]
+        );
+    }
+
+    /// A store holding the whole fixture, as a server read writes it.
+    fn stored(scratch: &Scratch) -> Cache {
+        let model = crate::model::document::fixture::database();
+        let document = crate::model::document::context(&model).expect("the fixture builds");
+        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+        cache.write(&document, super::Covered::Everything);
+        cache
+    }
+
+    #[test]
+    fn fr_sch_026_a_listed_row_is_the_four_members_of_the_table_decoded_in_full() {
+        let scratch = Scratch::new();
+        let cache = stored(&scratch);
+        let loaded = cache
+            .collection(Collection::Tables)
+            .expect("the tables are recorded whole");
+
+        let listed = loaded.listing().expect("every table file decodes");
+        let document = loaded.document().expect("every table file decodes");
+        let full: Vec<Listed<'_>> = document.tables.iter().map(Listed::of).collect();
+
+        assert!(!listed.is_empty());
+        assert_eq!(listed, full);
+    }
+
+    #[test]
+    fn fr_sch_026_a_table_file_that_is_not_json_is_a_miss_for_the_listing_too() {
+        let scratch = Scratch::new();
+        let cache = stored(&scratch);
+        let tables = layout(&scratch).collection(Collection::Tables);
+        let file = std::fs::read_dir(&tables)
+            .expect("the tables are stored")
+            .flatten()
+            .map(|entry| entry.path())
+            .find(|path| super::paths::is_object(path))
+            .expect("one table is stored");
+        let whole = std::fs::read(&file).expect("the table was stored");
+        std::fs::write(&file, &whole[..whole.len() / 2]).expect("writable");
+
+        let loaded = cache
+            .collection(Collection::Tables)
+            .expect("the files are readable");
+        assert!(loaded.listing().is_none());
+        assert!(loaded.document().is_none());
+    }
+
+    #[test]
+    fn fr_sch_031_a_summary_is_the_metadata_and_the_sizes_of_the_whole_document() {
+        // The fixture's restricted view and routine are not stored, so their
+        // collections are not recorded whole; the record is marked whole so
+        // that both lookups compared here are hits over the same files.
+        let scratch = Scratch::new();
+        let cache = stored(&scratch);
+        assert!(store(
+            &layout(&scratch).meta(),
+            &Meta::new([true, true, true])
+        ));
+
+        let held = cache.summary().expect("every collection is recorded whole");
+        let summary = held.summary().expect("the metadata decodes");
+        let loaded = cache
+            .everything()
+            .expect("every collection is recorded whole");
+        let document = loaded.document().expect("every file decodes");
+
+        assert_eq!(summary, Summary::of(&document));
+    }
+
+    #[test]
+    fn fr_sch_031_a_summary_is_a_miss_where_reading_everything_is_one_for_want_of_a_record() {
+        let scratch = Scratch::new();
+        let cache = stored(&scratch);
+        assert!(store(
+            &layout(&scratch).meta(),
+            &Meta::new([true, false, true])
+        ));
+
+        assert!(cache.summary().is_none());
+        assert!(cache.everything().is_none());
+
+        std::fs::remove_file(layout(&scratch).database()).expect("the metadata was stored");
+        assert!(store(
+            &layout(&scratch).meta(),
+            &Meta::new([true, true, true])
+        ));
+        assert!(cache.summary().is_none());
+        assert!(cache.everything().is_none());
+    }
+
+    #[test]
+    fn fr_cache_033_an_empty_or_truncated_record_is_an_empty_cache() {
+        // A crash after the rename and before the data reached the disk can
+        // leave `meta.json` empty or torn, and no sync guards against it: the
+        // record must then read as absent, which is the miss of FR-CACHE-033.
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
+        assert!(store(&layout.meta(), &Meta::new([true, true, true])));
+        let whole = std::fs::read(layout.meta()).expect("the record was stored");
+
+        for torn in [
+            &whole[..0],
+            &whole[..whole.len() / 2],
+            &whole[..whole.len() - 2],
+        ] {
+            std::fs::write(layout.meta(), torn).expect("writable");
+
+            let cache = Cache::of(&scratch.path(".tpl"), "shop");
+            let status = cache.status();
+
+            assert_eq!(status.loaded_at, None);
+            assert!(status.collections.is_empty());
+            assert!(cache.everything().is_none());
+        }
+    }
+
+    /// A store of the entry `shop` whose three collections are recorded whole.
+    fn whole(scratch: &Scratch) -> Cache {
+        let model = crate::model::document::fixture::whole();
+        let document = crate::model::document::context(&model).expect("the fixture builds");
+        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+        cache.write(&document, super::Covered::Everything);
+        cache
+    }
+
+    #[test]
+    fn fr_cache_038_the_listing_names_and_orders_what_an_up_front_read_decodes() {
+        // The names, their order and the count of each collection, from the
+        // paths alone, against the document the same files decode into.
+        use crate::model::document::order::Named as _;
+
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        let loaded = cache.everything().expect("the store is whole");
+        let expected = loaded.document().expect("every file decodes");
+        let listed = cache.shelved().expect("the store is whole");
+        let names = |shelves: &[super::Shelf]| -> Vec<String> {
+            shelves
+                .iter()
+                .map(|shelf| shelf.name().to_owned())
+                .collect()
+        };
+
+        assert_eq!(
+            names(listed.tables()),
+            expected
+                .tables
+                .iter()
+                .map(|table| table.name.to_string())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            names(listed.views()),
+            expected
+                .views
+                .iter()
+                .map(|view| view.name.to_string())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            names(listed.routines()),
+            expected
+                .routines
+                .iter()
+                .map(|routine| routine.name.to_string())
+                .collect::<Vec<_>>()
+        );
+        for (shelf, routine) in listed.routines().iter().zip(expected.routines.iter()) {
+            assert_eq!(shelf.kind(), Some(&routine.kind));
+        }
+        assert_eq!(
+            listed.head().expect("database.json decodes").name,
+            expected.name
+        );
+    }
+
+    #[test]
+    fn fr_cache_038_a_damaged_object_file_leaves_the_listing_a_hit() {
+        // FR-CACHE-033 as amended: the listing opens no object file, so a
+        // damaged one is not a miss of it. The same store read up front is.
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        std::fs::write(
+            layout(&scratch)
+                .collection(Collection::Views)
+                .join("v_carrier_directory.json"),
+            "{ torn",
+        )
+        .expect("writable");
+
+        assert!(cache.shelved().is_some());
+        assert!(cache.everything().expect("readable").document().is_none());
+    }
+
+    #[test]
+    fn fr_cache_038_the_listing_is_a_miss_where_the_record_or_a_path_is() {
+        // Before the render: the record of FR-CDOC-006, `database.json`, a
+        // collection directory, and a path no write composes are each a miss.
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        let layout = layout(&scratch);
+
+        std::fs::write(
+            layout.collection(Collection::Routines).join("stray.json"),
+            "{}",
+        )
+        .expect("writable");
+        assert!(cache.shelved().is_none(), "a path no write composes");
+
+        std::fs::remove_file(layout.collection(Collection::Routines).join("stray.json"))
+            .expect("removable");
+        assert!(cache.shelved().is_some(), "the control");
+
+        std::fs::remove_dir_all(layout.collection(Collection::Views)).expect("removable");
+        assert!(cache.shelved().is_none(), "a collection directory");
+
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        std::fs::remove_file(
+            super::paths::Layout::of(&scratch.path(".tpl"), "shop")
+                .expect("a component")
+                .database(),
+        )
+        .expect("removable");
+        assert!(cache.shelved().is_none(), "database.json");
+
+        let scratch = Scratch::new();
+        let cache = whole(&scratch);
+        cache
+            .clean_one(Collection::Tables, cache.table_file("carrier"))
+            .expect("removable");
+        assert!(cache.shelved().is_none(), "a collection not recorded whole");
     }
 }

@@ -25,6 +25,8 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use super::ToStatic;
+
 catalogued! {
     /// The statement a trigger fires on (`FR-CAT-050`).
     ///
@@ -124,6 +126,29 @@ pub struct Trigger<'a> {
 
     /// The schema's collation, passed through verbatim per `FR-SRV-039`.
     pub database_collation: Cow<'a, str>,
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for Trigger<'_> {
+    type Static = Trigger<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        Trigger {
+            name: self.name.to_static(),
+            event: self.event.to_static(),
+            timing: self.timing.to_static(),
+            action_order: self.action_order,
+            statement: self.statement.to_static(),
+            orientation: self.orientation.to_static(),
+            old_row_alias: self.old_row_alias.to_static(),
+            new_row_alias: self.new_row_alias.to_static(),
+            sql_mode: self.sql_mode.to_static(),
+            definer: self.definer.to_static(),
+            character_set_client: self.character_set_client.to_static(),
+            collation_connection: self.collation_connection.to_static(),
+            database_collation: self.database_collation.to_static(),
+        }
+    }
 }
 
 #[cfg(test)]

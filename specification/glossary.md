@@ -1,7 +1,7 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md]
 ---
 
@@ -135,7 +135,10 @@ The catalogue data `tpl` has previously read from a server and stored under
 
 A hit is a read served entirely from `.tpl/.cache/` with no connection opened. A
 miss is a read for which the required data is absent, unreadable, or of an
-unknown format version, and which therefore reaches the server.
+unknown format version, and which therefore reaches the server. Only the files a
+read consults decide it, per `FR-CACHE-033`. A render served lazily under
+`FR-CACHE-038` is a hit only if no file it reads is a miss; one that abandons its
+render under `FR-CACHE-039` is a miss.
 
 ## calling agent
 

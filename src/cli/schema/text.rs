@@ -35,8 +35,8 @@
 use std::borrow::Cow;
 
 use super::super::layout::{Cell, PROPERTY, Sections, count, emit, flag, optional, text};
+use crate::cache::{Listed, Summary};
 use crate::error::Error;
-use crate::model::document::DatabaseDocument;
 use crate::model::document::shape::TableDocument;
 use crate::model::routine::Routine;
 use crate::model::view::View;
@@ -83,17 +83,14 @@ const NULL: &str = "NULL";
 /// # Errors
 ///
 /// Returns [`Error::StdoutUnwritable`] where the stream refused the write.
-pub(super) fn tables<W: std::io::Write>(
-    out: W,
-    selected: &[&TableDocument<'_>],
-) -> Result<(), Error> {
+pub(super) fn tables<W: std::io::Write>(out: W, selected: &[&Listed<'_>]) -> Result<(), Error> {
     let rows: Vec<[Cell<'_>; 4]> = selected
         .iter()
         .map(|table| {
             [
                 text(&table.name),
                 optional(table.engine.as_deref()),
-                count(table.columns.len()),
+                count(table.column_count),
                 text(&table.comment),
             ]
         })
@@ -152,26 +149,23 @@ pub(super) fn routines<W: std::io::Write>(out: W, selected: &[&Routine<'_>]) -> 
 /// It is the three metadata fields of `FR-CTX-036`, the `server` object of
 /// `FR-CTX-031`, and the size of each of the three collections of
 /// `FR-CTX-035`. The collections themselves are not listed: `tpl schema tables`
-/// and its two siblings list them, and the `json` form of this command carries
-/// the whole object, per `FR-SCH-031`.
+/// and its two siblings list them. The `json` form carries the four members
+/// and no count, per `FR-SCH-031`.
 ///
 /// # Errors
 ///
 /// Returns [`Error::StdoutUnwritable`] where the stream refused the write.
-pub(super) fn info<W: std::io::Write>(
-    out: W,
-    database: &DatabaseDocument<'_>,
-) -> Result<(), Error> {
+pub(super) fn info<W: std::io::Write>(out: W, summary: &Summary<'_>) -> Result<(), Error> {
     let rows: Vec<[Cell<'_>; 2]> = vec![
-        [text("name"), text(&database.name)],
-        [text("charset"), text(&database.charset)],
-        [text("collation"), text(&database.collation)],
-        [text("server"), text(database.server.version())],
-        [text("series"), text(database.server.series())],
-        [text("standing"), text(database.server.standing().name())],
-        [text("tables"), count(database.tables.len())],
-        [text("views"), count(database.views.len())],
-        [text("routines"), count(database.routines.len())],
+        [text("name"), text(&summary.name)],
+        [text("charset"), text(&summary.charset)],
+        [text("collation"), text(&summary.collation)],
+        [text("server"), text(summary.server.version())],
+        [text("series"), text(summary.server.series())],
+        [text("standing"), text(summary.server.standing().name())],
+        [text("tables"), count(summary.tables)],
+        [text("views"), count(summary.views)],
+        [text("routines"), count(summary.routines)],
     ];
 
     output::emit_table_to(out, &Table::new(PROPERTY, &rows, Order::AsGiven))

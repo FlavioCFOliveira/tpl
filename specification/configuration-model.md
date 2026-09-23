@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -122,6 +122,13 @@ tls      = "verify-identity"
   budget of their own. IF the shared budget expires, THEN the system SHALL
   report the failure against the phase that was in progress when it expired,
   per `FR-ERR-034`.
+
+  *Note added in the fortieth edition.* Under `FR-CACHE-038` the files a render
+  reads lazily are read within the render phase and under its deadline. A
+  render abandoned under `FR-CACHE-039` and the render that follows it each
+  have the whole budget of `core.render_timeout`. The server read between them
+  runs under the connection and catalogue-query deadlines above. The overall
+  budget of `FR-GLOB-011` still bounds the whole invocation.
 
   *Note added in the fifth edition.* The DNS phase is the one phase whose
   behaviour depends on how the binary was linked. The Linux targets of

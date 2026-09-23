@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-23
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md]
 ---
 
@@ -74,6 +74,12 @@ read from the server on a miss.
   the cache first. On a hit it SHALL serve the result from disk and SHALL NOT
   open a connection.
 
+  *Note added in the fortieth edition.* Under `FR-CACHE-038` a render no longer
+  settles whether it is a hit before it starts. An invocation is a hit only if
+  no file it reads is a miss. An invocation that abandons a render under
+  `FR-CACHE-039` is a miss, and the connection it then opens is the first and
+  only one of the invocation.
+
 - **FR-CACHE-007**: WHEN a cached read misses, the system SHALL read the server,
   SHALL write the result to the cache except for the objects `FR-CACHE-037`
   excludes, and SHALL then answer. The write happens before the answer.
@@ -110,6 +116,111 @@ read from the server on a miss.
   read correctly, and `tpl schema dump | head -1` would leave the store empty
   every time. The one case that raised the question would be answered by
   making every case worse.
+
+- **FR-CACHE-038**: WHEN `tpl render` reads through the cache and every
+  collection is recorded as whole under `FR-CDOC-006`, the system SHALL read
+  `database.json`, the listing of each collection, and the bound object's file
+  before the render starts. It SHALL read every other object file no earlier
+  than the first time the template reaches that object. WHERE the path of every
+  object file names the object that file holds, the `database` the template
+  sees SHALL be the document an up-front read of the same files would produce:
+  the same members, the same names, the same order under `NFR-DET-002`, and the
+  same value under every filter, test and function. Any other object file is a
+  miss under `FR-CACHE-033`.
+
+  A lookup by name — the tests `primary_key` and `unique` of `FR-ENV-015` and
+  the functions `table`, `view`, `routine` and `column` of `FR-ENV-020` —
+  SHALL resolve the name from the collection's listing and SHALL reach only the
+  object it returns. An object the lookup passes over is not reached by it, and
+  a lookup that returns no object reaches none.
+
+  *Added in the fortieth edition, as decided for rmp `#246`.* A cached render
+  read and decoded every object file of its entry, whatever the template
+  reached. The user chose lazy loading: the `database` a template sees stays
+  whole, and an object's file is read only when the template reaches that
+  object. The reading that raised the question is recorded in `BENCHMARKS.md`;
+  it is informative, per `BR-PERF-008`, and the requirement rests on the
+  identical document, not on the figure.
+
+  *Why the bound object's file is read up front.* Every render that binds an
+  object reaches it, so reading it first costs nothing, and a miss on it is then
+  decided before the render starts, at the cache-or-connection step of
+  `FR-ERR-006`, exactly as before this edition.
+
+  *Rejected: narrowing the context to the bound object.* It removes the rest of
+  `database`, which `FR-RND-023` binds whatever object the invocation names.
+  *Also rejected: validating every file up front and serving lazily.* It keeps
+  the cost this requirement removes.
+
+  *Amended within the fortieth edition: the equivalence is limited to files
+  whose path names what they hold.* An up-front read orders the members of a
+  collection by the names inside their files. This requirement forbids reading
+  any file but the bound object's before the template reaches it, so a lazy
+  read names and orders the members by their paths. The two agree for every file `tpl` writes, because
+  each object is written under the path its own name composes, per
+  `FR-CACHE-030` and `FR-CDOC-014`. They disagree for two inputs `tpl` never
+  writes: an object file whose content names an object other than the one its
+  path names, and
+  a file in a collection's folder whose name no object's path could take.
+  `FR-CACHE-033` makes both a miss, so neither is served, and the equivalence
+  holds over everything that is.
+
+  *`BR-CACHE-001` is not contradicted.* That the path of an object file names
+  what the file holds is a property of the arrangement versioned by
+  `cache_format`, per `FR-CDOC-002`, which the binary checks before it serves,
+  as it checks the versions under `FR-CDOC-004`. No caller relies on it, and
+  the layout stays outside the plumbing contract.
+
+  *Rejected: reverting to the up-front read.* It would restore the equivalence
+  for files `tpl` never writes by reading every file of the entry on every
+  render, which is the cost this requirement exists to remove.
+
+  *Amended in the forty-first edition: a lookup by name reaches only the object
+  it returns, as decided for rmp `#248`.* The requirement did not say whether a
+  lookup reaches the objects it passes over on its way to the one it returns,
+  and a lookup that scanned the collection read the file of every object listed
+  before the wanted one. The name a lookup matches is already known without
+  reading any file: under the equivalence above, the names the listing carries
+  are the names the files hold. So the lookup's answer, including the answer
+  that no object of that name exists, depends on the listing alone, and only
+  the returned object's file is read. A damaged file the lookup passes over is
+  not consulted, so it is not a miss of that invocation, per `FR-CACHE-033`. A
+  damaged file the lookup returns is a miss, answered under `FR-CACHE-039`. The
+  reading that raised the question is recorded in `BENCHMARKS.md`; it is
+  informative, per `BR-PERF-008`, and the rule rests on the identical answer,
+  not on the figure.
+
+  *Rejected: a lookup reaches every object it passes over.* It gives the same
+  answer at the cost of reading, on every lookup, the file of each object
+  listed before the wanted one, and it would make a damaged file the template
+  never uses a miss only because its name sorts earlier.
+
+- **FR-CACHE-039**: IF a file read under `FR-CACHE-038` during the render is a
+  miss under `FR-CACHE-033`, including a file removed after the listing was
+  read, THEN the system SHALL abandon the render, SHALL treat the invocation as
+  a miss under `FR-CACHE-007`, and SHALL render again from the server's
+  document. No byte of the abandoned render SHALL reach stdout. The invocation
+  SHALL open at most one connection, per `NFR-PERF-004`. The render that
+  produces the result SHALL have the whole deadline of `FR-CONF-005`, and SHALL
+  use the value of `now` evaluated for the abandoned render.
+
+  *Added in the fortieth edition.* The miss is answered exactly as a miss found
+  before the render is answered: one whole read of the server, the write of
+  `FR-CACHE-007`, and a render from what the server returned. The output is
+  therefore the output the invocation would have produced had the miss been
+  found up front. `--no-cache` still suppresses the write, per `FR-CACHE-014`.
+
+  *Consequence.* A condition the abandoned render raised before it reached the
+  miss is reported as the first failure, per `FR-ERR-006`, and no connection is
+  opened. A condition of the cache-or-connection step or of catalogue object
+  resolution raised after the render is abandoned is reported with that step's
+  code.
+
+  *Rejected: fetching only the missing object and continuing.* The document
+  would mix sources within one render, and `NFR-PERF-004` would hold only if
+  the connection stayed open for the rest of the render. *Also rejected:
+  failing the invocation.* It fails a read that can succeed, which is what
+  `FR-CACHE-033` forbids.
 
 - **FR-CACHE-008**: The system SHALL NOT apply a time-to-live and SHALL NOT
   expire an entry automatically. A cached object stays until `tpl cache clean`
@@ -241,7 +352,7 @@ tpl -d shop cache status
   |---|---|
   | `entry` | The name of the selected database entry |
   | `loaded_at` | The load time from `meta.json`, per `FR-CDOC-013`, or `null` when the cache is empty |
-  | `collections` | An array of objects, one per collection, each carrying `name`, the count of objects held, and whether the collection was loaded whole, per `FR-CDOC-006` |
+  | `collections` | An array of objects, one per collection, each carrying `name`, `count` — the number of object files the collection holds, as defined below — and whether the collection was loaded whole, per `FR-CDOC-006` |
 
   ```json
   {"schema_version":1,"source":"project","data":{"entry":"shop","loaded_at":"2026-09-10T08:14:22Z","collections":[{"name":"tables","count":14,"whole":true}]}}
@@ -258,6 +369,26 @@ tpl -d shop cache status
   Monday beside another read on Friday. Carrying a load time per object would
   answer more precisely and is not carried, because `FR-CDOC-013` fixes the
   field at the entry level.
+
+  The `count` of a collection SHALL be the number of object files present in
+  that collection's folder: every file that the on-disk arrangement versioned
+  by `cache_format`, per `FR-CDOC-002`, names as an object of that collection,
+  whether or not its content is readable, is valid UTF-8, or decodes as a
+  document. `tpl cache status` SHALL NOT open an object file to count it. A
+  temporary file of a write in flight, per `FR-CACHE-030`, and any other file
+  that is not an object file SHALL NOT be counted.
+
+  *Amended in the thirty-eighth edition.* The requirement said "the count of
+  objects held" and left open whether an object file whose content cannot be
+  read is held. The user decided that it is.
+
+  *Rationale.* The count reports what the cache holds, not what it can serve.
+  Whether a file can serve is decided at read time, where `FR-CACHE-033` makes
+  an unreadable file a miss and rewrites it. Counting by content would make a
+  status report read every cached byte to produce a number.
+
+  *Accepted cost.* A count can include a file that the next read treats as a
+  miss, per `FR-CACHE-033`, until that read rewrites it.
 
 - **FR-CACHE-035**: WHEN the cache for the selected entry is empty, the `data`
   of `tpl cache status` SHALL carry `loaded_at` `null` and `collections` an
@@ -290,6 +421,40 @@ tpl -d shop cache status
 
 - **FR-CACHE-030**: The system SHALL write each cached object to its own file,
   through a temporary file in the same directory, renamed over the target.
+  WHERE the target file already exists and its content is byte-identical to
+  the bytes the write would produce, the system MAY leave that file in place
+  and skip the temporary file and the rename. A target whose content cannot be
+  read, or differs in any byte, SHALL be written through the temporary file and
+  the rename.
+
+  *Amended in the thirty-ninth edition.* The requirement did not say whether a
+  file that already holds exactly the bytes a write would produce must still be
+  replaced. It need not be, as decided for rmp `#244`.
+
+  *Rationale.* The observable result is the same either way. The file holds
+  the same bytes, every later read of it serves the same document, and
+  `tpl cache status` counts the same files, per `FR-CACHE-034`. The rename
+  changes only the file's modification time, and no output of `tpl` reports
+  it: the one load time is `loaded_at`, which lives in `meta.json` and in the
+  output of `tpl cache status` and nowhere else, per `FR-CDOC-012` and
+  `FR-CDOC-013`. This permission does not reach `meta.json`, which is not an
+  object file. The reading that raised the question is recorded in
+  `BENCHMARKS.md`; it is informative, per `BR-PERF-008`, and the permission
+  rests on the identical result, not on the figure.
+
+  *Consequence.* Both paths conform, so neither is contract. `FR-CACHE-031`
+  holds on both: a file left in place is whole, and a file renamed over is
+  whole. The modification time of an object file is not part of the contract,
+  per `BR-CACHE-001`, and no caller or test can rely on it changing, or on it
+  staying unchanged, across a write.
+
+  *Accepted cost.* An object file's modification time no longer tells when
+  that object was last read from the server. No requirement offered that
+  reading.
+
+  *Rejected: requiring the replacement in every case*, which spends a
+  temporary file and a rename to produce a state indistinguishable from the
+  one already on disk.
 
 - **FR-CACHE-031**: The system SHALL NOT take a lock over the cache. Two
   processes writing the same object yield one whole result or the other, never a
@@ -302,6 +467,44 @@ tpl -d shop cache status
 - **FR-CACHE-033**: IF a cache file is unreadable, or carries an unknown format
   version, THEN the system SHALL treat it as a miss: read from the server,
   rewrite the file, and report neither an error nor a warning.
+
+  The condition SHALL be evaluated for the files a read consults. A file the
+  read never consults is not a miss of that invocation and SHALL be left as it
+  is. Two reads consult fewer object files than their entry holds: a render
+  under `FR-CACHE-038` consults only the objects its template reaches — for a
+  lookup by name, only the object the lookup returns — and
+  `tpl schema info`, which presents no member of any collection per
+  `FR-SCH-031`, opens no object file.
+
+  WHEN a render reads through the cache under `FR-CACHE-038`, two further
+  object files SHALL be a miss: a file whose content names an object other than
+  the one its path names, and a file in a collection's folder that carries the
+  extension of an object file, is not the temporary file of a write in flight
+  under `FR-CACHE-030`, and has a name the arrangement versioned by
+  `cache_format` gives to no object. The first is found when the file is read:
+  before the render starts for the bound object, and otherwise when the template
+  reaches the object. The second is found when the listing is read, before the
+  render starts, because the listing consults every name in the folder.
+
+  *Amended in the fortieth edition.* The requirement did not say whether a
+  file the invocation never consults is covered. Before `FR-CACHE-038` a render
+  consulted every file, so the question arose only for `tpl schema info`, whose
+  behaviour this clause states without changing it. *Accepted cost:* a damaged
+  file that no read consults stays damaged until a read consults it, and a
+  render that never reaches it is served from the cache.
+
+  *Amended within the fortieth edition: the second paragraph is new.* It is
+  what keeps the equivalence of `FR-CACHE-038` true, and it reaches only files
+  `tpl` never writes. A file whose name no object's path could take is found
+  before the render starts, so its miss is answered as any miss found then is.
+  A file whose content names another object is found the same way when it is
+  the bound object's, and otherwise during the render, where its miss is
+  answered under `FR-CACHE-039`.
+
+  *Amended in the forty-first edition.* The clause on a lookup by name is new.
+  It states for this requirement what `FR-CACHE-038` now fixes: a lookup
+  consults only the object it returns, so a damaged file it passes over is not
+  a miss.
 
 - **FR-CACHE-036**: IF the system cannot write to `.tpl/.cache/`, THEN it SHALL
   answer from what it read, SHALL exit `0`, SHALL leave the cache as it found

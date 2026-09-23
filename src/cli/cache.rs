@@ -38,6 +38,7 @@ use std::io::Write;
 use clap::{Args, Subcommand};
 use serde::Serialize;
 
+use super::Ending;
 use super::globals::Globals;
 use super::layout;
 use super::local;
@@ -195,11 +196,12 @@ pub(crate) fn run<W: Write>(
     out: &mut W,
     globals: &Globals,
     command: &Command,
+    ending: Ending,
 ) -> Result<(), Error> {
     match command {
-        Command::Load { object, caching } => load(globals, object, caching),
-        Command::Clean { object } => clean(globals, object),
-        Command::Status { output } => status(out, globals, output),
+        Command::Load { object, caching } => load(globals, object, caching, ending),
+        Command::Clean { object } => clean(globals, object, ending),
+        Command::Status { output } => status(out, globals, output, ending),
     }
 }
 
@@ -234,7 +236,12 @@ pub(crate) fn run<W: Write>(
 /// read returns, including the `69` of `FR-CACHE-032` where the server could
 /// not be reached; and the `66` of `FR-SCH-010` where the named object does not
 /// exist.
-fn load(globals: &Globals, object: &local::Object, caching: &local::Caching) -> Result<(), Error> {
+fn load(
+    globals: &Globals,
+    object: &local::Object,
+    caching: &local::Caching,
+    ending: Ending,
+) -> Result<(), Error> {
     // FR-CACHE-019, and FR-ERR-006 step 1: a contradiction between a flag the
     // command declares and what the command does is decided from the
     // invocation alone, before anything is discovered or opened.
@@ -246,7 +253,7 @@ fn load(globals: &Globals, object: &local::Object, caching: &local::Caching) -> 
     // FR-CACHE-018: `--direct` is accepted and ignored, because reading the
     // server is what the command does — so the lookup is suppressed whatever
     // the invocation said.
-    let reader = Reader::new(globals, None);
+    let reader = Reader::new(globals, None, ending);
     let opened = reader.open()?;
     let catalogue = reader.fetch(&opened)?;
     let model = catalogue.model()?;
@@ -297,9 +304,9 @@ fn load(globals: &Globals, object: &local::Object, caching: &local::Caching) -> 
 /// — `64` — where a bare routine name reaches two stored objects, per
 /// `FR-CACHE-024`; and [`Error::ProjectFileUnwritable`] where the removal
 /// failed.
-fn clean(globals: &Globals, object: &local::Object) -> Result<(), Error> {
+fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<(), Error> {
     let wanted = Wanted::of(object, CLEAN)?;
-    let reader = Reader::new(globals, None);
+    let reader = Reader::new(globals, None, ending);
     let (project, configuration) = source::project(reader.tpl_dir())?;
     let entry = source::entry_of(&configuration, reader.requested())?;
     let cache = Store::of(project.root(), entry);
@@ -354,8 +361,13 @@ fn clean(globals: &Globals, object: &local::Object) -> Result<(), Error> {
 ///
 /// Returns what the project, the configuration and the selection return, and
 /// [`Error::StdoutUnwritable`] where the stream refused the write.
-fn status<W: Write>(out: &mut W, globals: &Globals, output: &local::Output) -> Result<(), Error> {
-    let reader = Reader::new(globals, None);
+fn status<W: Write>(
+    out: &mut W,
+    globals: &Globals,
+    output: &local::Output,
+    ending: Ending,
+) -> Result<(), Error> {
+    let reader = Reader::new(globals, None, ending);
     let (project, configuration) = source::project(reader.tpl_dir())?;
     let entry = source::entry_of(&configuration, reader.requested())?;
     let held = Store::of(project.root(), entry).status();

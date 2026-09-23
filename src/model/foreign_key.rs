@@ -44,6 +44,8 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use super::ToStatic;
+
 catalogued! {
     /// The referential action of `ON UPDATE` and `ON DELETE` (`FR-CAT-045`).
     ///
@@ -169,6 +171,18 @@ pub struct IncomingForeignKey<'a> {
 
     /// The key itself, exactly as the referencing table carries it.
     pub key: ForeignKey<'a>,
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for ForeignKeyColumn<'_> {
+    type Static = ForeignKeyColumn<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        ForeignKeyColumn {
+            column: self.column.to_static(),
+            referenced_column: self.referenced_column.to_static(),
+        }
+    }
 }
 
 #[cfg(test)]

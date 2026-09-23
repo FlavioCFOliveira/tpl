@@ -28,9 +28,11 @@
 
 use std::path::Path;
 
+use crate::cache::Shelf;
 use crate::diagnostics::suggest::{self, Population};
 use crate::error::{CatalogueObjectKind, Error};
 use crate::model::document::DatabaseDocument;
+use crate::model::document::order::Named;
 use crate::model::document::shape::TableDocument;
 use crate::model::routine::{Routine, RoutineKind};
 use crate::model::view::View;
@@ -184,18 +186,7 @@ pub(crate) fn table<'a, 'd>(
     name: &str,
     at: Sought<'_>,
 ) -> Result<&'a TableDocument<'d>, Error> {
-    let found = document
-        .tables
-        .iter()
-        .find(|table| table.name == name)
-        .ok_or_else(|| {
-            absent(
-                CatalogueObjectKind::Table,
-                name,
-                at,
-                document.tables.iter().map(|table| table.name.as_ref()),
-            )
-        })?;
+    let (_, found) = member(&document.tables, CatalogueObjectKind::Table, name, at)?;
 
     crate::mariadb::catalogue::completeness::of_table(found)?;
 
@@ -212,18 +203,7 @@ pub(crate) fn view<'a, 'd>(
     name: &str,
     at: Sought<'_>,
 ) -> Result<&'a View<'d>, Error> {
-    let found = document
-        .views
-        .iter()
-        .find(|view| view.name == name)
-        .ok_or_else(|| {
-            absent(
-                CatalogueObjectKind::View,
-                name,
-                at,
-                document.views.iter().map(|view| view.name.as_ref()),
-            )
-        })?;
+    let (_, found) = member(&document.views, CatalogueObjectKind::View, name, at)?;
 
     crate::mariadb::catalogue::completeness::of_view(found)?;
 
@@ -231,6 +211,73 @@ pub(crate) fn view<'a, 'd>(
 }
 
 /// The routine `wanted` names (`FR-SCH-008`, `FR-SCH-010`, `FR-PRIV-003`).
+///
+/// # Errors
+///
+/// Returns what [`routine_member`] returns, and [`Error::PropertyNotReadable`]
+/// — `77` — where the routine came back short.
+pub(crate) fn routine<'a, 'd>(
+    document: &'a DatabaseDocument<'d>,
+    wanted: &Wanted<'_>,
+    at: Sought<'_>,
+    invocation: &'static str,
+) -> Result<&'a Routine<'d>, Error> {
+    let (_, found) = routine_member(&document.routines, wanted, at, invocation)?;
+
+    crate::mariadb::catalogue::completeness::of_routine(found)?;
+
+    Ok(found)
+}
+
+/// A member of a routine population, as a lookup reads it: its name, through
+/// [`Named`], and its kind.
+///
+/// It is implemented by the routine of a document and by the
+/// [`Shelf`] a render served under `FR-CACHE-038` names a routine by, so one
+/// lookup — and one ambiguity rule — serves both.
+pub(crate) trait RoutineMember: Named {
+    /// The routine's kind, or [`None`] where the member carries none.
+    fn routine_kind(&self) -> Option<&RoutineKind<'_>>;
+}
+
+impl RoutineMember for Routine<'_> {
+    fn routine_kind(&self) -> Option<&RoutineKind<'_>> {
+        Some(&self.kind)
+    }
+}
+
+impl RoutineMember for Shelf {
+    fn routine_kind(&self) -> Option<&RoutineKind<'_>> {
+        self.kind()
+    }
+}
+
+/// The member of `members` named `name`, and its position (`FR-SCH-010`).
+///
+/// The first member of that name answers, in the order `members` is in, which
+/// is `NFR-DET-002`'s. It is the lookup of [`table`] and [`view`], and of a
+/// render served under `FR-CACHE-038`, whose members are known by name before
+/// any of them is read.
+///
+/// # Errors
+///
+/// Returns the `66` [`Sought`] names where no member carries the name,
+/// carrying the nearest matches among those that do exist.
+pub(crate) fn member<'m, M: Named>(
+    members: &'m [M],
+    kind: CatalogueObjectKind,
+    name: &str,
+    at: Sought<'_>,
+) -> Result<(usize, &'m M), Error> {
+    members
+        .iter()
+        .enumerate()
+        .find(|(_, member)| member.name() == name)
+        .ok_or_else(|| absent(kind, name, at, members.iter().map(Named::name)))
+}
+
+/// The routine `wanted` names among `members`, and its position
+/// (`FR-SCH-008`, `FR-SCH-010`).
 ///
 /// A bare name is matched against both namespaces, because procedures and
 /// functions occupy distinct ones on the server: two matches are the ambiguity
@@ -240,19 +287,18 @@ pub(crate) fn view<'a, 'd>(
 /// # Errors
 ///
 /// Returns the `64` [`Sought`] names — [`Error::AmbiguousRoutineName`] or
-/// [`Error::AmbiguousRoutineInContext`] — where a bare name matches both kinds;
-/// the `66` it names — [`Error::CatalogueObjectNotFound`] or
-/// [`Error::ContextObjectNotFound`] — where it matches neither; and
-/// [`Error::PropertyNotReadable`] — `77` — where the routine came back short.
-pub(crate) fn routine<'a, 'd>(
-    document: &'a DatabaseDocument<'d>,
+/// [`Error::AmbiguousRoutineInContext`] — where a bare name matches both kinds,
+/// and the `66` it names — [`Error::CatalogueObjectNotFound`] or
+/// [`Error::ContextObjectNotFound`] — where it matches neither.
+pub(crate) fn routine_member<'m, M: RoutineMember>(
+    members: &'m [M],
     wanted: &Wanted<'_>,
     at: Sought<'_>,
     invocation: &'static str,
-) -> Result<&'a Routine<'d>, Error> {
+) -> Result<(usize, &'m M), Error> {
     let name = wanted.name();
-    let mut matched = document.routines.iter().filter(|routine| {
-        routine.name == name
+    let mut matched = members.iter().enumerate().filter(|(_, routine)| {
+        routine.name() == name
             && match wanted {
                 Wanted::Bare(_) => true,
                 // The comparison is over the whole value, so a kind outside
@@ -260,7 +306,7 @@ pub(crate) fn routine<'a, 'd>(
                 // token can be built. That is `FR-CAT-055`'s consequence
                 // reaching the lookup, and the bare form above is what still
                 // reaches such a routine.
-                Wanted::Qualified(kind, _) => &routine.kind == kind,
+                Wanted::Qualified(kind, _) => routine.routine_kind() == Some(kind),
             }
     });
 
@@ -272,10 +318,7 @@ pub(crate) fn routine<'a, 'd>(
             // The population is every routine of the database, whichever kind
             // the token asked for: a caller that wrote `procedure:calc_vat`
             // for a function is best served by being shown `calc_vat`.
-            document
-                .routines
-                .iter()
-                .map(|routine| routine.name.as_ref()),
+            members.iter().map(Named::name),
         )
     })?;
 
@@ -295,8 +338,6 @@ pub(crate) fn routine<'a, 'd>(
             },
         });
     }
-
-    crate::mariadb::catalogue::completeness::of_routine(found)?;
 
     Ok(found)
 }

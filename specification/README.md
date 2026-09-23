@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in thirty-seven editions. All are in force;
+The specification has been written in thirty-nine editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3624,6 +3624,164 @@ not judge, and raising an entry is not what this edition was authorised to do.
 It is named here so that the next reading of
 [upstream-divergences.md](upstream-divergences.md) has it, it blocks nothing,
 and no requirement of this corpus waits on it.
+
+### Thirty-eighth edition — a count that did not say what it counted
+
+`FR-CACHE-034` required `tpl cache status` to report, per collection, "the
+count of objects held", and left open whether an object file whose content
+cannot be read, is not valid UTF-8, or does not decode is held.
+`FR-CACHE-033` answers that question for a read and not for a report. The user
+decided that it is held.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The count is of object files present, not of objects readable** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-034` now defines `count` as
+  the number of files in the collection's folder that the arrangement versioned
+  by `cache_format` names as objects, whatever their content, and forbids
+  opening an object file to count it. A temporary file of a write in flight and
+  any other file that is not an object file are not counted. Whether a file can
+  serve stays with `FR-CACHE-033`, at read time. *Accepted cost:* a count can
+  include a file the next read treats as a miss. `FR-CACHE-025`,
+  `FR-CACHE-035`, `FR-CDOC-006` and `FR-CDOC-013` were read against the
+  decision and none conflicts with it, so none is amended. Neither root
+  document paraphrases the count, so the fifth validation rule owes nothing.
+
+### Thirty-ninth edition — a write that would change nothing
+
+`FR-CACHE-030` required every cached object to be written through a temporary
+file renamed over the target, and did not say whether a file already holding
+exactly the bytes the write would produce must still be replaced. It need not
+be, as decided for rmp `#244`.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A byte-identical file may stay in place** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-030` now permits the system
+  to leave a target whose content is byte-identical to the write in place, and
+  requires the temporary file and the rename for a target that cannot be read
+  or differs in any byte. The observable result is the same either way: the
+  rename changes only an object file's modification time, which no output
+  reports, and `loaded_at` stays in `meta.json`, which the permission does not
+  reach. The reading in `BENCHMARKS.md` that raised the question is
+  informative, per `BR-PERF-008`. *Accepted cost:* an object file's
+  modification time no longer tells when the object was last read.
+- **A rule that restated the mechanism** —
+  [cache-documents.md](cache-documents.md). `BR-CDOC-004` said each file was
+  "renamed into place"; it now cites `FR-CACHE-030` instead, and its argument
+  is unchanged.
+
+`FR-CACHE-007`, `FR-CACHE-008`, `FR-CACHE-031`, `FR-CACHE-032`,
+`FR-CACHE-033`, `FR-CACHE-034`, `FR-CACHE-035`, `FR-CACHE-036`, `FR-CDOC-013`,
+`FR-CDOC-015`, `FR-CFG-041` and `UC-010` were read against the decision and
+none conflicts with it, so none is amended. No use case or glossary entry says
+every file is rewritten. Neither root document paraphrases `FR-CACHE-030`, so
+the fifth validation rule owes nothing.
+
+### Fortieth edition — a render that reads only what its template reaches
+
+A cached render read and decoded every object file of its entry, even when it
+was bound to one table. The user chose lazy loading, as decided for rmp `#246`:
+the `database` a template sees stays whole, and an object's file is read only
+when the template reaches that object. Narrowing the context to the bound
+object was rejected.
+
+**Two identifiers are assigned, `FR-CACHE-038` and `FR-CACHE-039`; none is
+retired and none is renumbered.** No term enters or leaves
+[glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **What is read, and when** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-038` reads `database.json`, each collection's listing and the bound
+  object's file before the render, and every other object file no earlier than
+  the template's first reach of it. Where the path of every object file names
+  the object that file holds, the `database` a template sees is the document an
+  up-front read of the same files would produce. Reverting to the up-front read
+  to keep that equivalence for files `tpl` never writes was rejected.
+- **A miss found during the render** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-039` abandons the render, reads the server once as any miss does,
+  and renders again from the server's document. No byte of the abandoned render
+  reaches stdout. The second render has its own full deadline and keeps the
+  first render's `now`.
+- **A file no read consults** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-033` now applies to the files a read consults. A damaged file the
+  template never reaches is not a miss of that invocation and is left as it is.
+  The same clause states, without changing it, what `tpl schema info` already
+  did: it opens no object file. A second clause makes two files `tpl` never
+  writes a miss for a render under `FR-CACHE-038`: an object file whose content
+  names an object other than the one its path names, found when the file is
+  read, and a file whose name no object's path could take, found when the listing is
+  read. `BR-CACHE-001` was read against both clauses and is not contradicted:
+  the check is one the binary makes before serving, and the layout stays
+  outside the plumbing contract. *Accepted cost:* a damaged file stays damaged
+  until a read consults it.
+- **Hit and miss** — `FR-CACHE-006`, the glossary entry *cache hit / cache
+  miss* and `NFR-PERF-003` in
+  [performance-requirements.md](performance-requirements.md) say that an
+  invocation is a hit only if no file it reads is a miss.
+- **The render and its order** — `FR-RND-002` and `FR-RND-034` in
+  [render-command.md](render-command.md), and `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). An abandoned render is
+  not the invocation's render, leaves nothing on stdout, and returns the
+  invocation to the cache-or-connection step.
+- **Deadline, `now`, coherence and diagnostics** — `FR-CONF-005` in
+  [configuration-model.md](configuration-model.md), `FR-CTX-029` in
+  [context-document.md](context-document.md), `BR-CDOC-004` in
+  [cache-documents.md](cache-documents.md), and `FR-GLOB-017` in
+  [global-flags.md](global-flags.md) each carry a note citing the two new
+  requirements.
+
+`FR-CACHE-007`, `FR-CACHE-014`, `FR-CACHE-031`, `FR-CDOC-007`, `FR-CDOC-015`,
+`FR-RND-022`, `FR-RND-023`, `FR-RND-032`, `FR-ENV-015`, `FR-ENV-017`,
+`NFR-PERF-004`, `NFR-DET-001` and `BR-SCH-004` were read against the decision
+and none conflicts with it, so none is amended. For a template and a cache in
+which nothing is missing, every output is what it was. Both root documents say
+that a cache hit opens no connection, which stays true, so the fifth validation
+rule owes nothing.
+
+### Forty-first edition — a lookup that reads only what it returns
+
+Under `FR-CACHE-038` a lookup by name read the file of every object listed
+before the one it returned, because the requirement did not say whether a
+lookup reaches the objects it passes over. The user decided that it reaches
+only the object it returns, as decided for rmp `#248`.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A lookup reaches only the object it returns** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-038` now names the lookups
+  by name — the tests `primary_key` and `unique` and the functions `table`,
+  `view`, `routine` and `column` — resolves each name from the collection's
+  listing, and reads only the returned object's file. A lookup that finds
+  nothing reads no object file. Its equivalence now covers functions as well as
+  filters and tests. *Rejected:* a lookup that reaches every object it passes
+  over, which gives the same answer and reads more files.
+- **A damaged file a lookup passes over** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-033` says a lookup consults only the object it returns, so a
+  damaged file it passes over is not a miss, as the fortieth edition decided
+  for a file no read consults.
+- **What a lookup depends on** — `FR-ENV-015` and `FR-ENV-020` in
+  [template-environment.md](template-environment.md), and `FR-CTX-022` in
+  [context-document.md](context-document.md), each carry a note: the answer,
+  including absence under `FR-ENV-017` and `FR-ENV-043`, depends on the
+  listing's names alone. No lookup offers a nearest-match suggestion, so none
+  depends on anything else.
+
+`FR-CACHE-039`, `FR-ENV-016`, `FR-ENV-017`, `FR-ENV-041`, `FR-ENV-043`,
+`FR-SEM-017`, `FR-SEM-018` and `BR-CTX-003` were read against the decision and
+none conflicts with it, so none is amended. For a template and a cache in which
+nothing is missing, every output is what it was. Neither root document
+paraphrases a lookup, so the fifth validation rule owes nothing.
 
 ### Still out of scope
 

@@ -41,13 +41,18 @@
 //! format besides is a crate this project's dependency budget refuses for one
 //! call site.
 
+mod lazy;
+
+pub(super) use lazy::Store;
+
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use minijinja::Value;
 
+use crate::cli::source::Served;
 use crate::error::Error;
-use crate::model::document::DatabaseDocument;
 
 /// The context variable the model is bound to (`FR-RND-023`).
 const DATABASE: &str = "database";
@@ -162,15 +167,52 @@ pub(super) fn vars(set: &[String]) -> Result<BTreeMap<&str, &str>, Error> {
 /// whole-database form of `FR-RND-006`, which binds no object variable at all.
 /// The other four are written here and cannot be supplied from anywhere else,
 /// which is `FR-RND-024` held by construction.
+///
+/// `database` is reachable whole and converted only where the template reads
+/// it: [`lazy::database`] keeps the document — copying it only where it is
+/// borrowed ([`Served::borrowed`]) — and answers every read exactly as the whole
+/// conversion would have.
 pub(super) fn assemble(
-    database: &DatabaseDocument<'_>,
+    database: Served<'_, '_>,
+    bound: Option<(&'static str, Value)>,
+    defined: &BTreeMap<&str, &str>,
+    at: &str,
+) -> Value {
+    // PERF: converting the whole document before the template ran was 41.4%
+    // of a render of `example` over `WL-001` (`BENCHMARKS.md`, 2026-09-22, row
+    // 6 of the waste register); a member is now converted when first read.
+    assembled(lazy::database(database), bound, defined, at)
+}
+
+/// The render context of `FR-RND-023`, with `database` served from the cache
+/// files `store` names (`FR-CACHE-038`).
+///
+/// It is [`assemble`] with one source changed: each member of a collection is
+/// read from its file the first time the template reaches it, and the four
+/// other variables are written exactly as [`assemble`] writes them.
+pub(super) fn assemble_shelved(
+    store: &Arc<Store>,
+    bound: Option<(&'static str, Value)>,
+    defined: &BTreeMap<&str, &str>,
+    at: &str,
+) -> Value {
+    // PERF: reading and decoding every cache file before a render bound to one
+    // table was 9.1 ms of 11.3 ms (`BENCHMARKS.md`, 2026-09-23, `#243` row 1);
+    // a member's file is now read when the template first reaches it.
+    assembled(lazy::shelved(store), bound, defined, at)
+}
+
+/// The context of `FR-RND-023`, from its `database` value and the other four
+/// sources.
+fn assembled(
+    database: Value,
     bound: Option<(&'static str, Value)>,
     defined: &BTreeMap<&str, &str>,
     at: &str,
 ) -> Value {
     let mut entries: Vec<(&'static str, Value)> = Vec::with_capacity(5);
 
-    entries.push((DATABASE, Value::from_serialize(database)));
+    entries.push((DATABASE, database));
 
     // FR-RND-006: absent, no object variable is bound, so a template written
     // for the whole database never has to defend itself against one.
@@ -286,6 +328,7 @@ fn malformed(written: &str, expected: &'static str) -> Error {
 #[cfg(test)]
 mod tests {
     use super::{TPL_VERSION, assemble, civil, identifier, now, stamp, vars};
+    use crate::cli::source::Served;
     use crate::error::Error;
     use crate::model::document;
     use minijinja::Value;
@@ -398,7 +441,12 @@ mod tests {
         let built = document::context(&model).expect("the fixture model is coherent");
         let supplied = set(&["version=1.0", "name=true", "count=7"]);
         let defined = vars(&supplied).expect("all three are pairs");
-        let context = assemble(&built, None, &defined, "1970-01-01T00:00:00Z");
+        let context = assemble(
+            Served::borrowed(&built),
+            None,
+            &defined,
+            "1970-01-01T00:00:00Z",
+        );
         let carried = context
             .get_attr("vars")
             .expect("FR-RND-024 always injects vars");
@@ -418,7 +466,12 @@ mod tests {
         let model = document::fixture::database();
         let built = document::context(&model).expect("the fixture model is coherent");
         let defined = vars(&[]).expect("no argument is no condition");
-        let context = assemble(&built, None, &defined, "1970-01-01T00:00:00Z");
+        let context = assemble(
+            Served::borrowed(&built),
+            None,
+            &defined,
+            "1970-01-01T00:00:00Z",
+        );
         let carried = context.get_attr("vars").expect("vars is always injected");
 
         assert_eq!(carried.kind(), minijinja::value::ValueKind::Map);
@@ -432,7 +485,12 @@ mod tests {
         let model = document::fixture::database();
         let built = document::context(&model).expect("the fixture model is coherent");
         let defined = vars(&[]).expect("no argument is no condition");
-        let whole = assemble(&built, None, &defined, "1970-01-01T00:00:00Z");
+        let whole = assemble(
+            Served::borrowed(&built),
+            None,
+            &defined,
+            "1970-01-01T00:00:00Z",
+        );
 
         for variable in ["database", "vars", "tpl", "now"] {
             assert!(
@@ -454,7 +512,7 @@ mod tests {
         }
 
         let bound = assemble(
-            &built,
+            Served::borrowed(&built),
             Some(("table", Value::from("bound"))),
             &defined,
             "1970-01-01T00:00:00Z",
@@ -476,7 +534,12 @@ mod tests {
         let model = document::fixture::database();
         let built = document::context(&model).expect("the fixture model is coherent");
         let defined = vars(&[]).expect("no argument is no condition");
-        let context = assemble(&built, None, &defined, "1970-01-01T00:00:00Z");
+        let context = assemble(
+            Served::borrowed(&built),
+            None,
+            &defined,
+            "1970-01-01T00:00:00Z",
+        );
         let carried = context.get_attr("tpl").expect("tpl is always injected");
 
         assert_eq!(carried.len(), Some(1));
@@ -527,7 +590,7 @@ mod tests {
         let built = document::context(&model).expect("the fixture model is coherent");
         let defined = vars(&[]).expect("no argument is no condition");
         let at = now();
-        let context = assemble(&built, None, &defined, &at);
+        let context = assemble(Served::borrowed(&built), None, &defined, &at);
         let carried = context.get_attr("now").expect("now is always injected");
 
         assert_eq!(carried.as_str(), Some(at.as_str()));

@@ -1,7 +1,7 @@
 ---
 title: Global Flags
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-23
 related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md]
 ---
 
@@ -277,6 +277,9 @@ which belongs to that command's module.
   number of objects — could not be checked at all. The rule constrains the
   existence and the distinguishability of the line, not its wording; the
   diagnostic stream remains outside the contract, per `NFR-DET-001`.
+
+  *Note added in the fortieth edition.* Under `FR-CACHE-038` a render's miss
+  can be found during the render. It is reported when it is discovered.
 
 - **FR-GLOB-018**: The system SHALL NOT write any of the following to any
   diagnostic stream, at any verbosity level: the argument vector, the resolved

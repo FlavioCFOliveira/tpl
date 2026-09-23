@@ -2561,6 +2561,8 @@ fn fr_cache_030_each_object_is_its_own_file_renamed_over_the_target() {
     // observable consequences, and the second is the one that distinguishes a
     // rename from a truncating write: the file the caller ends with is a
     // **different** file, so its inode changes while its content stays whole.
+    // A target already holding the bytes the write would produce may be left
+    // in place, so the rename is observed over a target that differs.
     use std::os::unix::fs::MetadataExt as _;
 
     let _guard = fixture::exclusive();
@@ -2630,8 +2632,11 @@ fn fr_cache_030_each_object_is_its_own_file_renamed_over_the_target() {
     );
 
     // The rename: the object file the second write produces is a different file
-    // from the one the first produced, and it is whole.
+    // from the one the first produced, and it is whole. The first is made to
+    // differ in its bytes, which FR-CACHE-030 requires to be written through
+    // the temporary file and the rename.
     let file = store(&sandbox).join("tables").join(format!("{TABLE}.json"));
+    std::fs::write(&file, "{}\n").expect("the store is ours");
     let first = std::fs::metadata(&file).expect("the store is ours").ino();
 
     succeeds(&sandbox, &["cache", "load", "--table", TABLE]);

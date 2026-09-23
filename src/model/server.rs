@@ -35,6 +35,8 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use super::ToStatic;
+
 /// The separator between the components of a version string.
 const COMPONENT: char = '.';
 
@@ -195,6 +197,19 @@ impl<'a> Server<'a> {
     #[must_use]
     pub const fn standing(&self) -> Standing {
         self.standing
+    }
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for Server<'_> {
+    type Static = Server<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        Server {
+            version: self.version.to_static(),
+            series: self.series.to_static(),
+            standing: self.standing,
+        }
     }
 }
 
