@@ -498,6 +498,13 @@ const NEVER_LOADED: &str = "never (the cache is empty; fill it with tpl cache lo
 ///
 /// Returns [`Error::StdoutUnwritable`] where the stream refused the write.
 fn text<W: Write>(out: &mut W, entry: &str, held: &Status) -> Result<(), Error> {
+    // AB-01 of the eleventh re-audit of rmp `#263`: the command the row names
+    // carries the caller's -d and --tpl-dir, as a hint's does, so that copied
+    // it fills this entry's cache and not the default entry's.
+    let loaded_at = held
+        .loaded_at
+        .as_deref()
+        .map_or_else(|| crate::diagnostics::carried(NEVER_LOADED), Cow::Borrowed);
     let own: Vec<[layout::Cell<'_>; 2]> = vec![
         [layout::text("entry"), layout::text(entry)],
         [
@@ -505,7 +512,7 @@ fn text<W: Write>(out: &mut W, entry: &str, held: &Status) -> Result<(), Error> 
             // An empty cell here read as a value nobody printed; the text says
             // what the absence means and what fills it. The JSON path keeps
             // the `null` of FR-CACHE-035.
-            layout::text(held.loaded_at.as_deref().unwrap_or(NEVER_LOADED)),
+            layout::text(&loaded_at),
         ],
     ];
     let collections: Vec<[layout::Cell<'_>; 3]> = held

@@ -127,30 +127,53 @@ pub(crate) fn tpl_dir_has_no_effect_on_init() {
 const TPL_DIR_ON_INIT: &str = "warning: --tpl-dir has no effect on tpl init; it takes its \
                                destination as an operand: tpl init <path>";
 
+/// Where the database on the server of the entry an invocation writes comes
+/// from, which decides the last clause of the line of `FR-CFG-051`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ServerDatabase<'a> {
+    /// The invocation gives `--dsn`, or `update` names an entry `.tpl/.cfg`
+    /// defines by `dsn`: the database is the path part of the dsn, and
+    /// `--schema` is refused (`FR-CFG-048`).
+    Dsn,
+    /// The invocation gives `--schema`, so nothing is left to advise.
+    SchemaGiven,
+    /// Neither: the database is set with `--schema`, and the value given to
+    /// `-d/--database` is the likely one.
+    Schema(&'a str),
+}
+
 /// Warns that `tpl cfg database add` or `update` was given `-d/--database`,
 /// which has no effect on it (`FR-CFG-051`).
 ///
 /// `command` is the canonical command path below `tpl`, whatever alias the
-/// invocation used. `given` is the value of the flag, reproduced as the value
-/// of `--schema` only where the set of `FR-ERR-022` admits it.
-pub(crate) fn database_has_no_effect(command: &str, given: &str) {
+/// invocation used. `server` chooses the last clause; the value it may carry
+/// is reproduced as the value of `--schema` only where the set of
+/// `FR-ERR-022` admits it.
+pub(crate) fn database_has_no_effect(command: &str, server: ServerDatabase<'_>) {
     if !emits(Level::Warnings) {
         return;
     }
 
-    write_line(&database_line(command, given));
+    write_line(&database_line(command, server));
 }
 
 /// Composes the line of [`database_has_no_effect`], unescaped.
-fn database_line(command: &str, given: &str) -> String {
-    let schema = if super::hint::admits(given) {
-        given
-    } else {
-        "<database>"
+fn database_line(command: &str, server: ServerDatabase<'_>) -> String {
+    let last = match server {
+        ServerDatabase::Dsn => "; the database on the server is the path part of --dsn".to_owned(),
+        ServerDatabase::SchemaGiven => String::new(),
+        ServerDatabase::Schema(given) => {
+            let schema = if super::hint::admits(given) {
+                given
+            } else {
+                "<database>"
+            };
+            format!("; the database on the server is set with --schema {schema}")
+        }
     };
     format!(
         "{WARNING_TOKEN} -d/--database has no effect on tpl {command}; it selects the entry for \
-         commands that connect; the database on the server is set with --schema {schema}"
+         commands that connect{last}"
     )
 }
 

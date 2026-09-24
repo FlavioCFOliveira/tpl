@@ -241,6 +241,7 @@ impl Environment {
                         .or_else(|| {
                             fault::template_bound(self.engine(), context, expression, &reported)
                                 .or_else(|| fault::missing(context, expression))
+                                .or_else(|| fault::other_object(context, expression))
                                 .or_else(|| {
                                     fault::unbound(context, expression, &reported, &resolved.name)
                                 })

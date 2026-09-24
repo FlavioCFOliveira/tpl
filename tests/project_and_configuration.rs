@@ -1804,8 +1804,8 @@ fn fr_cfg_051_database_on_add_and_update_is_accepted_warned_about_and_never_writ
         );
     }
 
-    // Written before step 2, so it precedes the error the invocation raises,
-    // and the exit code is the one without the flag.
+    // Written after step 3, so it precedes the error the invocation raises at
+    // any later step, and the exit code is the one without the flag.
     let printed = sandbox.run(&["cfg", "database", "add", "q1", "--host", "h", "-d", "shop"]);
     let written = stderr(&printed);
     assert_eq!(code(&printed), 64, "{written}");
@@ -1831,12 +1831,138 @@ fn fr_cfg_051_database_on_add_and_update_is_accepted_warned_about_and_never_writ
 }
 
 #[test]
+fn fr_cfg_051_the_warning_names_only_the_flag_that_can_set_the_server_database() {
+    // Finding AB-02 of the eleventh re-audit of rmp #263, and the three forms
+    // of the fifty-second edition.
+    const BY_DSN: &str = "; the database on the server is the path part of --dsn";
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n\n[database.ds]\n\
+         dsn = \"mariadb://u@h/shop\"\n",
+    );
+
+    for (arguments, command, last, exit) in [
+        (
+            &[
+                "cfg", "database", "add", "hs7", "--host", "h", "--schema", "s", "-d", "shop",
+            ][..],
+            "add",
+            "",
+            0,
+        ),
+        (
+            &[
+                "cfg",
+                "database",
+                "add",
+                "d1",
+                "--dsn",
+                "mariadb://h/shop",
+                "-d",
+                "shop",
+            ][..],
+            "add",
+            BY_DSN,
+            0,
+        ),
+        (
+            &[
+                "-d", "ds", "cfg", "database", "update", "ds", "--host", "h2",
+            ][..],
+            "update",
+            BY_DSN,
+            64,
+        ),
+        (
+            &[
+                "-d", "ds", "cfg", "database", "update", "ds", "--tls", "disabled",
+            ][..],
+            "update",
+            BY_DSN,
+            0,
+        ),
+        (
+            &[
+                "cfg", "database", "update", "shop", "--schema", "s2", "-d", "shop",
+            ][..],
+            "update",
+            "",
+            0,
+        ),
+    ] {
+        let printed = sandbox.run(arguments);
+        let written = stderr(&printed);
+        assert_eq!(code(&printed), exit, "{arguments:?}: {written}");
+        assert_eq!(
+            written.lines().next(),
+            Some(
+                format!(
+                    "warning: -d/--database has no effect on tpl cfg database {command}; it \
+                     selects the entry for commands that connect{last}"
+                )
+                .as_str()
+            ),
+            "{arguments:?}: {written}"
+        );
+        assert_eq!(written.matches("warning: ").count(), 1, "{written}");
+        if exit == 64 {
+            // FR-CFG-048: the dsn entry refuses a discrete field.
+            assert!(
+                line(&written, "hint:  ").contains("--dsn <url>"),
+                "{arguments:?}: {written}"
+            );
+        }
+    }
+}
+
+#[test]
+fn ab_01_cache_status_names_a_load_that_fills_the_entry_it_reports() {
+    // Finding AB-01 of the eleventh re-audit of rmp #263: `tpl -d ds cache
+    // status` said to fill the cache with `tpl cache load`, which loads the
+    // default entry.
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n\n[database.ds]\n\
+         host = \"h\"\n",
+    );
+
+    for (arguments, command) in [
+        (&["cache", "status"][..], "tpl cache load"),
+        (&["-d", "ds", "cache", "status"][..], "tpl -d ds cache load"),
+        (
+            &["--database", "ds", "cache", "status"][..],
+            "tpl -d ds cache load",
+        ),
+        (&["cache", "status", "-d", "ds"][..], "tpl -d ds cache load"),
+        (
+            &["--tpl-dir", ".tpl", "-d", "ds", "cache", "status"][..],
+            "tpl --tpl-dir .tpl -d ds cache load",
+        ),
+    ] {
+        let printed = sandbox.run_from(sandbox.root(), &[], arguments);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        let text = stdout(&printed);
+        assert!(
+            text.contains(&format!(
+                "loaded_at  never (the cache is empty; fill it with {command})\n"
+            )),
+            "{arguments:?}: {text}"
+        );
+    }
+}
+
+#[test]
 fn fr_cfg_051_a_refusal_at_step_one_writes_no_warning_and_its_cause_names_the_flag() {
     // FR-CFG-051 item 3, the FR-CFG-020 amendment of the fifty-first edition,
     // and the FR-CFG-016 refusal, which carries the same fact.
+    // The fifty-second edition adds the dsn form to the cause of `update`.
     const CLAUSE: &str = "; -d/--database was given, and it selects the entry for commands \
                           that connect, not a field; the database on the server is set with \
                           --schema";
+    const UPDATE_CLAUSE: &str = "; -d/--database was given, and it selects the entry for \
+                                 commands that connect, not a field; the database on the server \
+                                 is set with --schema, or is the path part of --dsn for an entry \
+                                 defined by dsn";
     let sandbox = Sandbox::new();
     sandbox.project(SHOP);
     let before = sandbox.configuration();
@@ -1848,7 +1974,7 @@ fn fr_cfg_051_a_refusal_at_step_one_writes_no_warning_and_its_cause_names_the_fl
     );
     assert_eq!(
         line(&written, "cause: "),
-        format!("no field flag was given for entry 'shop'{CLAUSE}")
+        format!("no field flag was given for entry 'shop'{UPDATE_CLAUSE}")
     );
     assert!(!written.contains("shop2"), "{written}");
     assert_eq!(
@@ -1894,21 +2020,42 @@ fn fr_cfg_051_a_refusal_at_step_one_writes_no_warning_and_its_cause_names_the_fl
 #[test]
 fn fr_cfg_051_the_help_of_add_and_update_says_database_has_no_effect_there() {
     let sandbox = Sandbox::new();
-    for command in ["add", "update"] {
-        let printed = sandbox.run(&["cfg", "database", command, "--help"]);
-        assert_eq!(code(&printed), 0);
-        let help = stdout(&printed)
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        assert!(
-            help.contains(
-                "-d/--database has no effect here: the database on the server is set with \
-                 --schema."
-            ),
-            "{command}: {help}"
-        );
-    }
+    // AB-05 of the eleventh re-audit of rmp #263: in `update` the sentence
+    // followed a `tpl -d NAME cache clean` example and repeated the third
+    // paragraph, so it now is part of that paragraph.
+    let printed = sandbox.run(&["cfg", "database", "update", "--help"]);
+    assert_eq!(code(&printed), 0);
+    let help = stdout(&printed)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        help.contains(
+            "Needs the entry that NAME names; -d/--database and core.database are not used, and \
+             the database on the server is set with --schema, or is the path part of --dsn for an \
+             entry defined by dsn."
+        ),
+        "{help}"
+    );
+    assert!(!help.contains("has no effect here"), "{help}");
+    assert!(
+        !help.contains("-d and core.database are not used"),
+        "{help}"
+    );
+
+    let printed = sandbox.run(&["cfg", "database", "add", "--help"]);
+    assert_eq!(code(&printed), 0);
+    let help = stdout(&printed)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        help.contains(
+            "-d/--database has no effect here: the database on the server is set with --schema, \
+             or is the path part of --dsn for an entry defined by dsn."
+        ),
+        "{help}"
+    );
 }
 
 #[test]

@@ -31,6 +31,7 @@ use toml_edit::{Item, value};
 
 use super::super::local::Format;
 use super::{Supplied, coherence, form, project};
+use crate::diagnostics::emit::ServerDatabase;
 use crate::error::{EntryNameGiven, Error};
 use crate::output::{self, Collection, Document, Order, Source, Table};
 use crate::project::config::entry::{Entry as Block, PasswordCommand};
@@ -107,13 +108,15 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
         });
     }
 
-    // FR-CFG-051: step 1 of FR-ERR-006 has passed, and step 2 is next.
-    if let Some(given) = supplied.database {
-        crate::diagnostics::emit::database_has_no_effect(ADD, given);
-    }
-
     let project = project(supplied)?;
     let configuration = project.configuration()?;
+
+    // FR-CFG-051: steps 1 to 3 of FR-ERR-006 have passed, and every later
+    // check is still to come.
+    if let Some(given) = supplied.database {
+        crate::diagnostics::emit::database_has_no_effect(ADD, flags.server_database(false, given));
+    }
+
     let mut editor = project.editor()?;
 
     if editor.defines(name) {
@@ -160,13 +163,20 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
 
     flags.exclusive()?;
 
-    // FR-CFG-051: step 1 of FR-ERR-006 has passed, and step 2 is next.
-    if let Some(given) = supplied.database {
-        crate::diagnostics::emit::database_has_no_effect(UPDATE, given);
-    }
-
     let project = project(supplied)?;
     let configuration = project.configuration()?;
+
+    // FR-CFG-051: steps 1 to 3 of FR-ERR-006 have passed, and step 3 is where
+    // `.tpl/.cfg` says whether the entry is defined by `dsn`.
+    if let Some(given) = supplied.database {
+        let by_dsn = configuration
+            .entry(name)
+            .is_some_and(|block| block.declares(EntryKey::Dsn));
+        crate::diagnostics::emit::database_has_no_effect(
+            UPDATE,
+            flags.server_database(by_dsn, given),
+        );
+    }
 
     if configuration.entry(name).is_none() {
         return Err(configuration.entry_not_found(name, false));
@@ -417,6 +427,20 @@ impl Flags<'_> {
             && self.password_command.is_none()
             && self.ca_file.is_none()
             && self.ca_path.is_none()
+    }
+
+    /// Where the database on the server of the entry written comes from, for
+    /// the last clause of the warning of `FR-CFG-051`: `by_dsn` is whether
+    /// `.tpl/.cfg` already defines the entry by `dsn`, and `given` the value
+    /// of `-d/--database`.
+    const fn server_database<'g>(&self, by_dsn: bool, given: &'g str) -> ServerDatabase<'g> {
+        if by_dsn || self.dsn.is_some() {
+            ServerDatabase::Dsn
+        } else if self.schema.is_some() {
+            ServerDatabase::SchemaGiven
+        } else {
+            ServerDatabase::Schema(given)
+        }
     }
 
     /// Refuses `--dsn` beside a discrete connection flag (`FR-CFG-029`).

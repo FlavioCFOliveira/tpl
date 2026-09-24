@@ -2919,7 +2919,8 @@ const ENTRIES: [Entry; 35] = [
                       entry needs --host and --schema, or a --dsn that names both; --port defaults \
                       to 3306 and --user is optional. An entry without them is stored, but every \
                       later command that connects with it exits 78. -d/--database has no effect \
-                      here: the database on the server is set with --schema.",
+                      here: the database on the server is set with --schema, or is the path part \
+                      of --dsn for an entry defined by dsn.",
         blocks: &[
             Block::Prose(
                 "Without --tls, the entry uses verify-identity, which needs a server \
@@ -3048,8 +3049,7 @@ const ENTRIES: [Entry; 35] = [
         description: "Changes the fields of one database entry that the flags given name; every \
                       other field keeps its value, and at least one flag is required. The cache is \
                       not cleared: after pointing an entry at another server, run tpl -d NAME \
-                      cache clean. -d/--database has no effect here: the database on the server \
-                      is set with --schema.",
+                      cache clean.",
         blocks: &[Block::Prose(
             "A value given here is visible to other users in the process list while tpl runs, \
              so give a password through --password-command, as a reference such as \
@@ -3057,7 +3057,9 @@ const ENTRIES: [Entry; 35] = [
              '${SHOP_PASSWORD}'.",
         )],
         touches: Some(local_only(
-            "Needs the entry that NAME names; -d and core.database are not used.",
+            "Needs the entry that NAME names; -d/--database and core.database are not used, \
+             and the database on the server is set with --schema, or is the path part of --dsn \
+             for an entry defined by dsn.",
             "Writes .tpl/.cfg; the cache is left as it was.",
             PRINTS_NOTHING,
         )),

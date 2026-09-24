@@ -58,11 +58,20 @@ const VARIABLE_NAME_RULE: &str = "a variable name starts with a letter or an und
 /// What the `cause` line says when the supported window arrives empty.
 const EMPTY_WINDOW: &str = "no series";
 
-/// The clause a refusal of `tpl cfg database add` or `update` for want of a
-/// field flag appends where `-d/--database` was given (`FR-CFG-020`).
+/// The clause a refusal of `tpl cfg database add` for want of a connection
+/// flag appends where `-d/--database` was given.
 const DATABASE_IS_NOT_A_FIELD: &str = "; -d/--database was given, and it selects the entry for \
                                        commands that connect, not a field; the database on the \
                                        server is set with --schema";
+
+/// The clause a refusal of `tpl cfg database update` for want of a field flag
+/// appends where `-d/--database` was given (`FR-CFG-020`). The refusal comes
+/// before `.tpl/.cfg` is read, so it names both forms of the entry.
+const DATABASE_IS_NOT_A_FIELD_OF_ANY_FORM: &str = "; -d/--database was given, and it selects the \
+                                                   entry for commands that connect, not a \
+                                                   field; the database on the server is set \
+                                                   with --schema, or is the path part of --dsn \
+                                                   for an entry defined by dsn";
 
 /// The content of the `cause` line for `error`, without its label.
 ///
@@ -160,7 +169,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         } => Cow::Owned(format!(
             "no field flag was given for entry '{entry}'{}",
             if *database_given {
-                DATABASE_IS_NOT_A_FIELD
+                DATABASE_IS_NOT_A_FIELD_OF_ANY_FORM
             } else {
                 ""
             }
@@ -1380,6 +1389,9 @@ fn missing_step(missing: &Missing) -> String {
         ),
         Missing::Variable { name, .. } => {
             format!("'{name}' is no variable tpl binds in this render")
+        }
+        Missing::OtherObject { root, bound } => {
+            format!("'{root}' is not bound, because this render names a {bound} with --{bound}")
         }
         Missing::Bound {
             name,

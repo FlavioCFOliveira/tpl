@@ -286,6 +286,17 @@ pub enum Missing {
         /// tenth re-audit of rmp `#263`).
         unbound: Vec<&'static str>,
     },
+    /// The expression begins with `table`, `view` or `routine`, which the
+    /// render did not bind, and the render bound another of the three: its
+    /// object flag was given in place of the one the template reads, and the
+    /// two exclude each other (finding AB-04 of the eleventh re-audit of rmp
+    /// `#263`).
+    OtherObject {
+        /// The object variable the expression begins with.
+        root: &'static str,
+        /// The object variable the render bound, whose flag was given.
+        bound: &'static str,
+    },
     /// The expression begins with the name of a context variable that the
     /// template binds itself — a loop variable, a `set`, a `with`, a macro's
     /// parameter — so what it reads is the template's value, not the

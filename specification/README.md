@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-one editions. All are in force;
+The specification has been written in fifty-two editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4414,6 +4414,39 @@ and the index of [open-questions.md](open-questions.md) stays empty.
 the changes. None conflicts with them, so none is amended. `FR-OUT-023` keeps
 stdout empty; the line goes to stderr. The root `README.md` makes no statement
 about `-d/--database` on the `cfg` commands that this edition makes false, so
+the fifth validation rule owes nothing.
+
+### Fifty-second edition — a warning that advised the wrong flag
+
+The eleventh re-audit of rmp `#263`, recorded for rmp `#286`, found that the
+warning of `FR-CFG-051` always advised `--schema <value>` with the
+`-d/--database` value, also where `--schema` was given and where the entry is
+defined by `dsn`, in which case `--schema` is refused (finding AB-02).
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The warning names only the flag that can act** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-051` is amended: its last clause
+  names the path part of `--dsn` where the invocation uses or targets a dsn,
+  is left out where `--schema` was given, and names `--schema <value>`
+  otherwise. The line stays one line, and its value rules are unchanged. It is
+  written after step 3 of `FR-ERR-006` instead of after step 1, because the
+  dsn condition of an `update` is known only once `.tpl/.cfg` is read.
+- **The empty `update` names both ways the server database is written** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-020` is amended: where the
+  refused invocation was given `-d/--database`, the `cause` says the database
+  on the server is set with `--schema`, or is the path part of `--dsn` for an
+  entry defined by `dsn`. The refusal is decided at step 1, before `.tpl/.cfg`
+  is read, so the `cause` names both forms.
+
+`FR-GLOB-007`, `FR-GLOB-015`, `FR-CLI-014`, `FR-CFG-016`,
+`FR-CFG-028`, `FR-CFG-029`, `FR-CFG-048`, `FR-CONF-007`, `FR-CONF-009`,
+`FR-ERR-006`, `FR-ERR-022` and `FR-OUT-020` were read against the changes.
+None conflicts with them, so none is amended. The root `README.md` makes no
+statement about the warning or the `cause` that this edition makes false, so
 the fifth validation rule owes nothing.
 
 ### Still out of scope

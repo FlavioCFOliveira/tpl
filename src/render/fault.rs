@@ -210,6 +210,22 @@ fn walk(
             consumed += 1 + name.len();
             rest = tail;
         } else if let Some(after) = rest.strip_prefix('[') {
+            // A string subscript, `table["nme"]`, reads the key as `.nme`
+            // would, so it is answered with the same attributes (an item the
+            // eleventh re-audit of rmp `#263` recorded, fixed under `#286`).
+            if let Some((name, length)) = subscript(after) {
+                let found = current
+                    .get_item(&minijinja::Value::from(name))
+                    .ok()
+                    .filter(|value| !value.is_undefined());
+                let Some(found) = found else {
+                    return Some(attribute(owner, name, &current));
+                };
+                current = found;
+                consumed += 1 + length;
+                rest = &after[length..];
+                continue;
+            }
             let Some((index, length)) = decimal(after) else {
                 break;
             };
@@ -398,6 +414,27 @@ fn bound(context: &minijinja::Value, variable: &str) -> Option<minijinja::Value>
         .filter(|value| !value.is_undefined())
 }
 
+/// The object variable an undefined expression begins with, where the render
+/// bound another of `table`, `view` and `routine` in its place (finding AB-04
+/// of the eleventh re-audit of rmp `#263`); [`None`] otherwise.
+///
+/// `FR-RND-023` binds each only when its own flag is given, and the three
+/// flags exclude one another, so the fix is never to add the missing flag.
+pub(super) fn other_object(context: &minijinja::Value, expression: &str) -> Option<Missing> {
+    const OBJECTS: [&str; 3] = ["table", "view", "routine"];
+
+    let (root, _) = identifier(expression)?;
+    let root: &'static str = OBJECTS.into_iter().find(|&object| object == root)?;
+    if bound(context, root).is_some() {
+        return None;
+    }
+    let bound = OBJECTS
+        .into_iter()
+        .find(|&object| object != root && bound(context, object).is_some())?;
+
+    Some(Missing::OtherObject { root, bound })
+}
+
 /// The root of an undefined expression that is no context variable, with the
 /// bound context variables nearest to it (finding Z-04 of the ninth re-audit
 /// of rmp `#263`); [`None`] where none is near, or where the name may be one
@@ -488,6 +525,19 @@ fn identifier(fragment: &str) -> Option<(&str, &str)> {
         .next()
         .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
         .then(|| (name, &fragment[end..]))
+}
+
+/// The string key an expression fragment begins with, read from just after
+/// its `[`, and the length up to and including the `]`; [`None`] where the
+/// subscript is not one quoted literal without an escape.
+fn subscript(fragment: &str) -> Option<(&str, usize)> {
+    let quote = fragment
+        .chars()
+        .next()
+        .filter(|c| matches!(c, '"' | '\''))?;
+    let end = 1 + fragment[1..].find(quote)?;
+    let name = &fragment[1..end];
+    (!name.contains('\\') && fragment[end + 1..].starts_with(']')).then_some((name, end + 2))
 }
 
 /// The decimal index an expression fragment begins with, read from just after

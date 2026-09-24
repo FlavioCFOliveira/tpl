@@ -275,13 +275,14 @@ tpl cfg database test   <name>
   WHERE the refused invocation was given `-d/--database`, the `cause` SHALL
   also state that `-d/--database` was given, that it selects the entry for
   commands that connect and is not a field flag, and that the database on the
-  server is set with `--schema`. The `cause` SHALL NOT reproduce the value
-  given to `-d/--database`. The `hint` is unchanged.
+  server is set with `--schema`, or is the path part of `--dsn`, per
+  `FR-CONF-009`, for an entry defined by `dsn`. The `cause` SHALL NOT
+  reproduce the value given to `-d/--database`. The `hint` is unchanged.
 
   ```
   tpl cfg database update shop --database shop2
   error: nothing to change: tpl cfg database update needs at least one field flag
-  cause: no field flag was given for entry 'shop'; -d/--database was given, and it selects the entry for commands that connect, not a field; the database on the server is set with --schema
+  cause: no field flag was given for entry 'shop'; -d/--database was given, and it selects the entry for commands that connect, not a field; the database on the server is set with --schema, or is the path part of --dsn for an entry defined by dsn
   hint:  give at least one of --dsn, --host, --port, --user, --schema, --tls, --password-command, --ca-file, --ca-path
   exit:  64 (EX_USAGE)
   ```
@@ -296,34 +297,56 @@ tpl cfg database test   <name>
   understood, and a value written back would have to pass the set of
   `FR-ERR-022`.
 
+  *Amended in the fifty-second edition.* The `cause` said only that the
+  database on the server is set with `--schema`. For an entry defined by
+  `dsn`, `--schema` is refused, per `FR-CFG-048`, and the server database is
+  the path part of the dsn, per finding AB-02 of the eleventh re-audit of rmp
+  `#263`, recorded for rmp `#286`. The refusal is decided at step 1, before
+  `.tpl/.cfg` is read, so the `cause` cannot know the form of the entry and
+  names both, which is true of either form.
+
 - **FR-CFG-051**: WHEN `tpl cfg database add` or `tpl cfg database update` is
   given `-d/--database`, in either spelling and at any position `FR-GLOB-002`
   accepts, the system SHALL accept the flag, SHALL give it no effect, per
   `FR-GLOB-007`, and SHALL write exactly one warning line to stderr, per
-  `FR-OUT-020`:
+  `FR-OUT-020`. The line takes one of three forms:
 
   ```
   warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect; the database on the server is set with --schema <value>
+  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect
+  warning: -d/--database has no effect on tpl cfg database update; it selects the entry for commands that connect; the database on the server is the path part of --dsn
   ```
 
   1. **No effect.** The system SHALL NOT resolve the name `-d/--database`
      gives, and SHALL NOT write it to any field of the entry.
   2. **The line.** It SHALL name `-d/--database`, SHALL name the command given
      — `tpl cfg database add` or `tpl cfg database update`, in full whatever
-     alias the invocation used — SHALL state that
-     the flag selects the entry for commands that connect and has no effect
-     here, and SHALL state that the database on the server is set with
-     `--schema`. It SHALL reproduce the value given to `-d/--database` in
-     place of `<value>` only where that value matches the set of `FR-ERR-022`
-     for a database entry; otherwise it SHALL write the placeholder
-     `<database>` and SHALL NOT reproduce the value in any form.
-  3. **When.** The line SHALL be written once, after step 1 of `FR-ERR-006`
-     passes and before step 2, so it is the first line on stderr and precedes
-     any error the invocation then raises. An invocation refused at step 1 —
-     `-d` given twice, per `FR-CLI-014`, `tpl cfg database add` with no
-     connection flag, per `FR-CFG-016`, or `tpl cfg database update` with no
-     field flag, per `FR-CFG-020` — writes the error of that step and no
-     warning.
+     alias the invocation used — and SHALL state that the flag selects the
+     entry for commands that connect and has no effect here. Its last clause
+     SHALL be chosen by the first of these conditions that holds:
+     1. **The invocation uses or targets a dsn.** `tpl cfg database add` is
+        given `--dsn`, or `tpl cfg database update` is given `--dsn` or names
+        an entry that `.tpl/.cfg` defines by `dsn`. The line SHALL state that
+        the database on the server is the path part of `--dsn`, per
+        `FR-CONF-009`, and SHALL name neither `--schema` nor any value.
+     2. **`--schema` was given.** The line SHALL end after the statement that
+        the flag has no effect here, and SHALL name neither `--schema` nor any
+        value.
+     3. **Otherwise.** The line SHALL state that the database on the server is
+        set with `--schema`, and SHALL reproduce the value given to
+        `-d/--database` in place of `<value>` only where that value matches
+        the set of `FR-ERR-022` for a database entry; otherwise it SHALL write
+        the placeholder `<database>` and SHALL NOT reproduce the value in any
+        form.
+  3. **When.** The line SHALL be written once, after step 3 of `FR-ERR-006`
+     passes and before any later check, so it is the first line on stderr and
+     precedes any error the invocation then raises. Step 3 is the earliest
+     point at which `.tpl/.cfg` states whether the entry `update` names is
+     defined by `dsn`. An invocation refused at steps 1 to 3 writes the error
+     of that step and no warning: at step 1, among others, `-d` given twice,
+     per `FR-CLI-014`, `tpl cfg database add` with no connection flag, per
+     `FR-CFG-016`, or `tpl cfg database update` with no field flag, per
+     `FR-CFG-020`.
   4. **Exit code.** The exit code SHALL be the one the same invocation without
      `-d/--database` returns.
   5. **Verbosity.** The line is a warning, so `-q/--quiet` suppresses it, per
@@ -332,12 +355,31 @@ tpl cfg database test   <name>
      only. `core.database` in `.tpl/.cfg` writes no line.
 
   ```
-  tpl cfg database add hs4 --host h --database shop     warning (--schema shop), then 0
-  tpl -d nope cfg database add nope --host h            warning (--schema nope), then 0
-  tpl cfg database update shop --host h -d 'a b'        warning (--schema <database>), then 0
-  tpl -q cfg database add hs4 --host h -d shop          no line; 0
-  tpl cfg database update shop --database shop2        no line; 64 per FR-CFG-020
+  tpl cfg database add hs4 --host h --database shop            warning (--schema shop), then 0
+  tpl -d nope cfg database add nope --host h                   warning (--schema nope), then 0
+  tpl cfg database update shop --host h -d 'a b'               warning (--schema <database>), then 0
+  tpl cfg database add hs7 --host h --schema s -d shop         warning (no --schema clause), then 0
+  tpl cfg database add d1 --dsn mariadb://h/shop -d shop       warning (path part of --dsn), then 0
+  tpl -d ds cfg database update ds --host h2                   warning (path part of --dsn), then 64 per FR-CFG-048, where ds is defined by dsn
+  tpl -q cfg database add hs4 --host h -d shop                 no line; 0
+  tpl cfg database update shop --database shop2                no line; 64 per FR-CFG-020
   ```
+
+  *Amended in the fifty-second edition.* The line always
+  ended "the database on the server is set with --schema <value>", with the
+  `-d/--database` value in place of `<value>`. Where `--schema` was also
+  given, the `-d/--database` value is most likely the entry name, and the
+  advice would overwrite the stored server database with it. Where the entry
+  is defined by `dsn`, `--schema` is refused, per `FR-CFG-048`, and the server
+  database is the path part of the dsn. This is finding AB-02 of the eleventh
+  re-audit of rmp `#263`, recorded for rmp `#286`. The line was written after step 1 of `FR-ERR-006`;
+  it moves after step 3, because the dsn condition of an `update` is known
+  only once `.tpl/.cfg` is read. *Rejected: deciding the dsn condition from
+  the command line alone.* `tpl -d ds cfg database update ds --host h2` names
+  no `--dsn`, and the line would still advise `--schema ds`, which
+  `FR-CFG-048` refuses. *Accepted cost.* An invocation refused at step 2 or
+  step 3 no longer carries the line; its error concerns the project, not the
+  flag.
 
   *Rationale.* `cfg database show` prints the server database under the key
   `database`, so `--database` is the natural guess for the flag that writes it.

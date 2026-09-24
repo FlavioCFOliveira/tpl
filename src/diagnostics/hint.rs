@@ -728,6 +728,17 @@ fn bare(error: &Error) -> Cow<'static, str> {
             reason,
             ..
         } => {
+            // AB-03: an attribute read under a key of `vars` that no `--set`
+            // gave; a `--set` value is a string, so no `--set` can supply it.
+            let from_set = match reason.as_deref() {
+                None => true,
+                Some(RenderReason::Missing(Missing::Attribute { owner, .. })) => owner == "vars",
+                Some(_) => false,
+            };
+            if from_set && let Some(key) = undefined.as_deref().and_then(past_a_vars_key) {
+                return beyond_set(key, template);
+            }
+
             match reason.as_deref() {
                 Some(RenderReason::Unresolved(unresolved)) => return listing_of(unresolved),
                 Some(RenderReason::IncludeNotFound { name, nearest, .. }) => {
@@ -2059,6 +2070,14 @@ fn missing_step(missing: &Missing, template: &str) -> Cow<'static, str> {
             };
             suggest::hint_line(nearest.iter().copied(), &generic).into_owned()
         }
+        // AB-04: the three object flags exclude one another, so the fix is
+        // to read the bound one or to give the other flag in its place, never
+        // to add a second. Both names are literals of the tree.
+        Missing::OtherObject { root, bound } => format!(
+            "this render names a {bound} with --{bound}, so '{root}' is not bound: read \
+             '{bound}' in the template, or replace --{bound} with --{root} <name> in the tpl \
+             render command"
+        ),
         Missing::Variable { name, nearest, .. } => {
             let generic = if admits(name) {
                 format!(
@@ -2160,6 +2179,42 @@ fn set_key(name: &str, given: &[String], nearest: &[String]) -> Cow<'static, str
             format!("--set gave {listed}, and none is near the key the template reads: {add}")
         }
     })
+}
+
+/// The key of `vars` an expression reads an attribute of, as in `vars.a.b`,
+/// or [`None`] where the expression reads no attribute past a key of `vars`.
+///
+/// The inner [`Option`] is [`None`] where the set of `FR-ERR-022` refuses the
+/// key, which is then not written. An index past the key, as in `vars.a[0]`,
+/// is not matched: a string has items, and a `--set` value may supply one.
+fn past_a_vars_key(expression: &str) -> Option<Option<&str>> {
+    let rest = expression.trim().strip_prefix("vars.")?;
+    let (key, after) = rest.split_once('.')?;
+    let key = key.trim();
+    (!key.contains(['[', ']', '(', ' ']) && !after.trim().is_empty())
+        .then(|| admits(key).then_some(key))
+}
+
+/// The hint for an attribute read under a key of `vars` (finding AB-03 of the
+/// eleventh re-audit of rmp `#263`).
+///
+/// `FR-RND-013` gives `--set` top-level keys only and `FR-RND-015` makes each
+/// value a string, which has no attributes, so the line never asks for a
+/// `--set`: the correction is in the template.
+fn beyond_set(key: Option<&str>, template: &str) -> Cow<'static, str> {
+    let show = if admits_template(template) {
+        format!("print the template's source with: tpl template show {template}")
+    } else {
+        "print the template's source with: tpl template show <template>".to_owned()
+    };
+    let read = key.map_or_else(
+        || "the template reads an attribute of a key of 'vars'".to_owned(),
+        |key| format!("the template reads an attribute of 'vars.{key}'"),
+    );
+    Cow::Owned(format!(
+        "{read}, and --set gives only top-level keys of vars, each a string with no attributes, \
+         so no --set can supply it; correct the template, then {show}"
+    ))
 }
 
 /// The hint for an undefined expression whose first segment is a variable a
