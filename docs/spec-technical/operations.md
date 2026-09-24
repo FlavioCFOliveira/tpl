@@ -325,13 +325,14 @@ and the record fields are `benches/README.md`'s and are not restated here.
 
 ## The release gates
 
-A gate is a check whose failure stops the release. Three are standing; the
-fourth fires only when a pin moves.
+A gate is a check whose failure stops the release. Four are standing; the
+fifth fires only when a pin moves.
 
 | Gate | What is checked | Trigger | Forced by |
 |---|---|---|---|
 | The validation pipeline | All five commands pass, in order | Every change, not only a release | `CLAUDE.md`, *Desenvolvimento* |
 | Every target | The pipeline passes on all four of `NFR-PERF-018`; a failure on one is a failure | Every release | `NFR-PERF-018`; enforced by the workflows of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
+| Provenance | The four gates of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 3, pass before any validation or publishing. Gate 3 checks that the tag is `v` and a valid Semantic Versioning 2.0.0 version equal to the manifest's; gate 4, that exactly one release-notes file matches the anchored pattern carrying the full tag. The expression and the pattern are that record's. A tag with a pre-release identifier publishes a GitHub pre-release, which `install.sh` never installs | Every release | [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | The supported-series table | The table of `FR-SRV-015` is re-verified against its source, and its verification date moved | **Every release**, without exception | `FR-SRV-019`, `BR-SRV-004` |
 | The engine pin | Every name of `FR-ENV-018` still exists and still behaves as before | Only when the pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) moves | `FR-ENV-003` |
 
@@ -353,10 +354,11 @@ criterion so that the old table stays true. A re-derivation that changes the
 set changes what `FR-SRV-029` must be run against, and therefore what the
 fixture must contain.
 
-**Two gates are enforced by a workflow, and two are carried by a person.**
+**Three gates are enforced by a workflow, and two are carried by a person.**
 Under [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), `release.yml`
-publishes nothing unless the tagged commit passes the validation pipeline on all
-four targets, which enforces the first two rows. The supported-series table is
+publishes nothing unless the tag passes the provenance gates and the tagged
+commit passes the validation pipeline on all four targets, which enforces the
+first three rows. The supported-series table is
 re-verified by hand before the `v*` tag is pushed, as that record requires,
 because the push is what publishes. The engine pin is checked by hand when the
 pin moves; no workflow checks it.
@@ -370,7 +372,7 @@ This section adds only where the bump is written and what a gate checks.
 
 | Number | Where the bump is enacted | What a release gate checks |
 |---|---|---|
-| Binary version | The `version` field of the one manifest, and nowhere else | That it moved, and that the changelog carries the matching entry |
+| Binary version | The `version` field of the one manifest, and nowhere else | That it moved, and that the changelog carries the matching entry; `release.yml` checks that it is a valid Semantic Versioning 2.0.0 version and equals the tag without its `v`, under gate 3 of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 3 |
 | `schema_version` | One constant, read by `output/` when it writes the envelope | That the release contains no change on a breaking row of `FR-OUT-014` without a bump, and no bump without one |
 | `cache_format` | One constant, read by `cache/` | The same test against the on-disk arrangement, independently of `schema_version` (`FR-CDOC-005`) |
 | Changelog | An entry in `CHANGELOG.md` | That every change `FR-ENV-029` requires to be recorded there is |
@@ -539,7 +541,7 @@ restated here; the build path each uses per target is
 | Workflow | What it enforces in this document |
 |---|---|
 | `ci.yml` | The [validation pipeline](#the-mandatory-validation-pipeline), on all four targets of `NFR-PERF-018`, on every push and pull request |
-| `release.yml` | The first two [release gates](#the-release-gates), before it publishes |
+| `release.yml` | The first three [release gates](#the-release-gates) — the provenance gates first, then the validation on all four targets — before it publishes. A pre-release tag publishes a GitHub pre-release |
 
 **What each workflow installs is
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md)'s, not the

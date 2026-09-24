@@ -211,8 +211,10 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
   verifying the archive against the release's `SHA256SUMS`.
 - **Release archives.** Pushing a `v*` tag publishes a GitHub Release carrying
   one `tpl-<tag>-<triple>.tar.gz` per supported target and a `SHA256SUMS` file
-  covering them, only if the tagged commit passes validation. The archives are
-  not signed.
+  covering them, only if the tag is annotated, on `main`, equal to the
+  `Cargo.toml` version, and has its release notes, and the tagged commit passes
+  validation. A pre-release tag publishes a GitHub pre-release, which
+  `install.sh` never installs. The archives are not signed.
 
 ## The record before this file
 

@@ -15,7 +15,8 @@ superseded-by: null
 
 Accepted, 2026-09-24. Decided by the user for rmp `#292`, as relayed by the
 session coordinator, including the release gate, the version pins and the
-archive contents.
+archive contents. The provenance gates of Decision point 3 were decided by the
+user for rmp `#293`, on the same day.
 
 This record takes over two parts of `ADR-008`: its refusal to prescribe a
 pipeline, with the rejection that argued it, and its open question on the form
@@ -71,11 +72,32 @@ and both run correctness validations only.
    database skip themselves when the fixture is absent, through the gate
    described in Context. **No benchmark or performance step runs.**
 
-3. **`release.yml` runs when a tag matching `v*` is pushed, and publishes only
-   if the tagged commit passes the five-command validation.** The workflow
-   either runs that validation itself or makes the publish job depend on it. A
-   tag on a commit that fails the validation publishes nothing. On success it
-   builds the four targets and creates a GitHub Release.
+3. **A release is published only from a tag of a commit on `main`, pushed to
+   GitHub, and only if that commit passes the five-command validation.**
+   `release.yml` runs when a tag matching `v*` is pushed. The tag is produced by
+   the `gitflow` procedure, over the version bump, changelog and release notes
+   the `release-manager` procedure writes; neither procedure is restated here.
+   Before any validation or publishing, the workflow enforces four gates:
+   1. the tagged commit is an ancestor of `origin/main`;
+   2. the tag is annotated;
+   3. the tag is `v` followed by a valid Semantic Versioning 2.0.0 version,
+      checked with the numbered-capture-group regular expression semver.org
+      publishes, and that version equals `version` in `Cargo.toml`;
+   4. exactly one file's path matches `release-notes/<tag>-<YYYYMMDD>.md`,
+      anchored, where `<tag>` is the full tag including any pre-release
+      identifier and `<YYYYMMDD>` is exactly eight digits; that file becomes
+      the body of the GitHub Release. For `v0.2.0`,
+      `v0.2.0-rc.1-20260924.md` does not match; for `v0.2.0-rc.1`, it does.
+      This extends the `release-manager` naming from `v<MAJOR.MINOR.PATCH>` to
+      the full tag.
+
+   The workflow then runs the five-command validation itself, or makes the
+   publish job depend on it. If any gate or the validation fails, the workflow
+   fails and publishes nothing. On success it builds the four targets and
+   creates the GitHub Release. A version that carries a pre-release identifier,
+   such as `v0.2.0-rc.1`, creates a release marked as a pre-release. The rule
+   for the version number itself is `OD-03`'s, in
+   `docs/spec-technical/open-decisions.md`, and is not restated here.
 
 4. **The release carries one archive per target and one `SHA256SUMS` file.**
    Each archive is named `tpl-<tag>-<triple>.tar.gz`, for example
@@ -146,6 +168,30 @@ and both run correctness validations only.
 
 - **An archive holding only the binary.** Rejected: the archive also carries
   the readme, the licence and the changelog.
+
+- **Publishing from any `v*` tag on any commit.** Rejected: a tag on a branch
+  other than `main`, a lightweight tag, or a tag that disagrees with the
+  manifest would each publish.
+
+- **Matching release notes with the glob `<tag>-*.md`.** Rejected: it
+  collides across tags, since `v0.2.0-*.md` also matches the notes of
+  `v0.2.0-rc.1`.
+
+- **Exempting pre-releases from gate 4.** Rejected: a gate does not vary with
+  the kind of tag.
+
+- **Accepting any `v*` string as a version.** Rejected: the tag would not be
+  guaranteed to be a version at all.
+
+- **Publishing a pre-release as a stable release.** Rejected: it would become
+  the latest release, and `install.sh` would install it.
+
+- **Triggering on a push to `main` and reading the tag from `HEAD`.** Rejected
+  as fragile: under `gitflow` the tag is pushed after `main`, so the `main` push
+  runs before the tag exists on GitHub.
+
+- **Reopening rmp `#292` for the provenance gates.** Rejected: they are
+  recorded under rmp `#293`.
 
 - **No release gate, with a person checking `ci.yml` before tagging.**
   Rejected: a tag push publishes, so a check a person can forget would let a
@@ -219,6 +265,27 @@ as well as commits (Sources), so a tag push triggers `ci.yml` as well as the
 gated validation of `release.yml`. Only the latter decides whether a release is
 published.
 
+**The tag push must follow the `main` push.** If the tag reaches GitHub first,
+gate 1 fails and nothing is published. The remedy is to re-run the workflow
+after `main` is pushed: a re-run keeps the original event's commit and ref
+(Sources), and gate 1 reads `origin/main` as it stands when the gate runs.
+
+**`install.sh` never installs a pre-release.** GitHub's latest release is the
+most recent release that is neither a draft nor a pre-release, and a
+pre-release cannot be set as latest (Sources). `/releases/latest`, which
+`install.sh` follows, therefore never resolves to one. A pre-release is
+installed only by hand.
+
+**Gate 4 matches the tag literally.** A tag carries `.` and may carry `+`,
+which are metacharacters in a regular expression, so the tag is compared as a
+literal string and only the date part as eight digits.
+
+**Gates 1 and 2 need more than the default checkout.** `actions/checkout`
+fetches a single commit by default, so the ancestry check needs `main`'s
+history. An open `actions/checkout` issue reports that tag annotations are not
+preserved, so gate 2 cannot trust the tag object the checkout leaves locally
+(Sources). How the workflow meets both is an implementation detail.
+
 **The checksum file proves integrity, not origin.** `SHA256SUMS` lets a reader
 check an archive against the release page it came from. Because nothing is
 signed, nothing in the release proves who produced it. GitHub also attaches the repository's source archives to every release
@@ -258,6 +325,14 @@ the build path.
 | The decision, its rejected alternatives, and the build-path constraint; the release gate, the version pins, the archive name and contents, and the absence of signing | The user's decisions of 2026-09-24, relayed for rmp `#292` | 2026-09-24 |
 | On bsdtar 3.5.3 (libarchive 3.7.4), macOS 26 development host: `tar -czf` with `--no-mac-metadata` still writes a test attribute and `com.apple.provenance` as `LIBARCHIVE.xattr` and `SCHILY.xattr` pax headers, and extraction restores `com.apple.provenance`; adding `--no-xattrs` leaves no attribute in the archive | Probe archive of one file carrying a test attribute, inspected with `strings` | 2026-09-24 |
 | The tar on the macOS runners behaves the same | unverified; untested | — |
+| The four provenance gates, their order, the release-notes body, and the three rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#293` | 2026-09-24 |
+| Gate 4's anchored `release-notes/<tag>-<YYYYMMDD>.md` pattern and its two rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#293` | 2026-09-24 |
+| SemVer as the default versioning rule; gate 3's SemVer check; pre-release tags published as pre-releases; the two rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#293` | 2026-09-24 |
+| The numbered-capture-group regular expression for a Semantic Versioning 2.0.0 version, compatible with ECMAScript, PCRE, Python and Go | semver.org, *Semantic Versioning 2.0.0*, FAQ "Is there a suggested regular expression (RegEx) to check a SemVer string?"; the same text in GitHub `semver/semver`, `semver.md` | 2026-09-24 |
+| The latest release is "the most recent non-prerelease, non-draft release"; "Drafts and prereleases cannot be set as latest"; `releases/latest` links to the latest release | docs.github.com, REST API *Releases*, "Get the latest release" and "Create a release" (`make_latest`); *Linking to releases* | 2026-09-24 |
+| A re-run uses the same `GITHUB_SHA` and `GITHUB_REF` as the original event | docs.github.com, *Re-running workflows and jobs* | 2026-09-24 |
+| `actions/checkout` fetches a single commit by default; `fetch-depth: 0` fetches all history | GitHub `actions/checkout`, `README.md` | 2026-09-24 |
+| Tag annotations are not preserved by `actions/checkout`; the issue is open | GitHub `actions/checkout`, issue `#290`, *Preserve tag annotations* | 2026-09-24 |
 | `README.md`, `LICENSE` and `CHANGELOG.md` exist at the repository root | Repository listing | 2026-09-24 |
 | The CI toolchain, the `cargo-audit` pin, the download hash checks and their origins, and `install.sh` with its rejected alternatives | The user's decisions of 2026-09-24, relayed for rmp `#292` | 2026-09-24 |
 | `rust-version` is `1.94.0` in `Cargo.toml` | `Cargo.toml` | 2026-09-24 |

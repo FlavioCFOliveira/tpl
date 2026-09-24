@@ -95,7 +95,7 @@ Releases are published on [GitHub Releases](https://github.com/FlavioCFOliveira/
 curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.sh | sh
 ```
 
-The same command installs and updates. It resolves the latest release and compares its tag with the output of `tpl --version` for the `tpl` in the install directory; when they match it downloads nothing and exits `0`. It checks only that one file: a `tpl` elsewhere on `PATH` is neither consulted nor replaced.
+The same command installs and updates. It resolves the latest release and compares its tag with the output of `tpl --version` for the `tpl` in the install directory; when they match it downloads nothing and exits `0`. It checks only that one file: a `tpl` elsewhere on `PATH` is neither consulted nor replaced. The script never installs a pre-release: "latest" is the newest release not marked as one.
 
 The install directory is `/usr/local/bin` unless `TPL_INSTALL_DIR` names another. That variable is read by the script, not by `tpl`, which never reads it:
 
@@ -467,7 +467,7 @@ cargo test --all-features
 cargo audit
 ```
 
-CI runs these five commands on the four targets on every push and pull request (`.github/workflows/ci.yml`). Pushing a `v*` tag runs `.github/workflows/release.yml`, which runs the same validation and publishes a release only if it passes. See [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
+CI runs these five commands on the four targets on every push and pull request (`.github/workflows/ci.yml`). Pushing a `v*` tag runs `.github/workflows/release.yml`, which publishes a release only when the tag is annotated, points at a commit reachable from `main`, is `v` followed by a Semantic Versioning 2.0.0 version equal to `version` in `Cargo.toml`, and has exactly one `release-notes/<tag>-<YYYYMMDD>.md`, which becomes the release body — and only if the same validation then passes on the four targets. A tag with a pre-release identifier, such as `v0.2.0-rc.1`, publishes a GitHub pre-release; the expected order is the `gitflow` procedure's: merge to `main`, create the annotated tag, push `main`, then push the tag. See [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
 
 `unsafe` is forbidden; `#![forbid(unsafe_code)]` stays at the top of the crate.
 

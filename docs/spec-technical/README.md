@@ -43,7 +43,11 @@ no-pipeline section with
 `open-decisions.md` amends `OD-23`; `technology-stack.md` cites the new record.
 After the record's amendment the same day, `operations.md` also cites it for the
 CI toolchain, the pinned and hash-checked tools, the Darwin `tar` flags, and
-`install.sh`.
+`install.sh`; and, for rmp `#293`, for the four provenance gates `release.yml`
+enforces, which `operations.md` adds to
+[The release gates](operations.md#the-release-gates), with the pre-release path;
+`open-decisions.md` names Semantic Versioning 2.0.0 in `OD-03`, a wording
+precision that changes no decision.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree
