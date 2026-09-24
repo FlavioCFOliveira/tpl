@@ -1,7 +1,7 @@
 ---
 title: Architecture Decision Records
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-24
 related: [../spec-technical/README.md, ../spec-technical/open-decisions.md]
 ---
 
@@ -203,10 +203,11 @@ specification, which is how a fourth place starts drifting.
 | [ADR-005](adr-005-async-runtime-scope.md) | The scope of the async runtime | Accepted 2026-09-10 | `NFR-PERF-005`, `NFR-PERF-007` | — |
 | [ADR-006](adr-006-package-layout.md) | The package layout | Accepted 2026-09-10 | `FR-ERR-031`, `NFR-PERF-018` | — |
 | [ADR-007](adr-007-msrv.md) | The minimum supported Rust version | Accepted 2026-09-11 | — | — |
-| [ADR-008](adr-008-packaging-and-build-path.md) | Packaging and the build path for the four targets | Accepted 2026-09-10 | `NFR-PERF-018`, `NFR-PERF-012` | — |
+| [ADR-008](adr-008-packaging-and-build-path.md) | The build path for the four targets | Accepted 2026-09-10 | `NFR-PERF-018`, `NFR-PERF-012` | — |
 | [ADR-009](adr-009-foreign-key-embedding-representation.md) | The in-memory representation of the two foreign-key embeddings | Accepted 2026-09-10 | `FR-CTX-006` … `FR-CTX-010`, `FR-SCH-022` | — |
 | [ADR-010](adr-010-driver-tls-connect-stall.md) | The TLS connect stall in the pinned driver | Accepted 2026-09-11 | `FR-CONF-013`, `NFR-PERF-014` | — |
 | [ADR-011](adr-011-render-memory-accounting.md) | The heap count behind the render memory limit | Accepted 2026-09-23 | `FR-RND-039`, `FR-RND-038` | — |
+| [ADR-012](adr-012-ci-and-release-distribution.md) | Continuous integration and release distribution | Accepted 2026-09-24 | `NFR-PERF-018`, `FR-SRV-019` | — |
 
 The `Serves` column names the requirements a reader is most likely to arrive
 from. The complete list per record is its `requirements:` field, which is the

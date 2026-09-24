@@ -1302,11 +1302,14 @@ statement it uses itself in force.
 **The decision record was the strongest argument the other way, and it does not
 carry.** `ADR-008` records that no `musl` artefact has been run outside a
 container and marks that expectation unverified, so if `CLAUDE.md` asserted a
-verification the two would contradict each other on a matter of fact. That
-record does not read the file that way: it calls the five-command sequence one
-the root coordination document **mandates** and lists the no-second-class rule
-among four obligations **carried by hand** until a pipeline exists. What it
-marks unverified is also narrower than the passage, and both halves of it are
+verification the two would contradict each other on a matter of fact. The
+records do not read the file that way. `ADR-012` prescribes the five-command
+sequence of the root coordination document as what continuous integration
+runs, on all four targets, and names the checks still **carried by hand**: the
+connection clause of `NFR-PERF-005` and the server-side instruments of
+`NFR-PERF-007` on every target, and `FR-SRV-019` before tagging. That is an
+obligation given a venue, not a history of runs. What `ADR-008` marks
+unverified is also narrower than the passage, and both halves of it are
 claims about baselines under `NFR-PERF-012`, which is a different section of
 `CLAUDE.md` and one `DIV-041` has already read and found correct.
 

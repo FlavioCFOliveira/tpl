@@ -2,6 +2,12 @@
 
 `tpl` is a command-line tool that reads the structure — the DDL, or schema — of a **MariaDB** database and renders it through **[MiniJinja](https://docs.rs/minijinja) templates** to produce text or source code.
 
+```sh
+curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.sh | sh
+```
+
+The same command installs and updates `tpl`, into `/usr/local/bin` by default. It works once the first `v*` release is published; until then it reports that there is no published release. See [Installation](#installation).
+
 Its interaction model is modelled on `git`: a single executable, commands with subcommands, short aliases, and read commands whose output is stable enough to pipe into something else. Templates are **plain files on disk, loaded and compiled at render time**, so changing a template never requires rebuilding `tpl`.
 
 The intended caller is an AI coding agent rather than a person at a prompt. Such a caller has three channels for understanding a command-line tool — its help text, its exit code, and what it prints — so all three are treated as contract.
@@ -81,8 +87,46 @@ MySQL is not a target. A server that is not MariaDB is refused rather than read,
 
 ## Installation
 
+Releases are published on [GitHub Releases](https://github.com/FlavioCFOliveira/tpl/releases) when a `v*` tag is pushed. **None has been published yet**: until the first one is, the installer below reports that there is no published release and exits non-zero, and building from source is the only way to obtain `tpl`. How releases are built and published is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
+
+### With the install script
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.sh | sh
+```
+
+The same command installs and updates. It resolves the latest release and compares its tag with the output of `tpl --version` for the `tpl` in the install directory; when they match it downloads nothing and exits `0`. It checks only that one file: a `tpl` elsewhere on `PATH` is neither consulted nor replaced. The script never installs a pre-release: "latest" is the newest release not marked as one.
+
+The install directory is `/usr/local/bin` unless `TPL_INSTALL_DIR` names another. That variable is read by the script, not by `tpl`, which never reads it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.sh | TPL_INSTALL_DIR="$HOME/.local/bin" sh
+```
+
+A missing directory is created. `sudo` is used only when the directory, or its parent when the directory must be created, is not writable.
+
+The script supports four targets, `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `x86_64-apple-darwin` and `aarch64-apple-darwin` — Linux and macOS on `x86_64` and `arm64` — and exits non-zero on any other. Before installing, it verifies the downloaded archive against the release's `SHA256SUMS` and stops on a mismatch. **The archives are not signed**: the checksum proves an archive matches the release's `SHA256SUMS`, not who produced either.
+
+### By hand
+
+Each release carries one archive per target, `tpl-<tag>-<triple>.tar.gz`, holding the `tpl` binary, `README.md`, `LICENSE` and `CHANGELOG.md`, and one `SHA256SUMS` file covering the four. Download the archive for your target and `SHA256SUMS`, verify, and extract:
+
+```sh
+tag=vX.Y.Z                    # the release's tag
+triple=aarch64-apple-darwin   # one of the four targets
+base=https://github.com/FlavioCFOliveira/tpl/releases/download/$tag
+curl -fsSLO "$base/tpl-$tag-$triple.tar.gz"
+curl -fsSLO "$base/SHA256SUMS"
+grep " tpl-$tag-$triple.tar.gz\$" SHA256SUMS | shasum -a 256 -c -   # sha256sum -c - on Linux
+tar -xzf "tpl-$tag-$triple.tar.gz" tpl
+```
+
+Then move `tpl` into a directory on your `PATH`.
+
+### From source
+
 ```bash
-git clone <repository-url> tpl
+git clone https://github.com/FlavioCFOliveira/tpl.git
 cd tpl
 cargo build --release
 ```
@@ -422,6 +466,8 @@ cargo build --release
 cargo test --all-features
 cargo audit
 ```
+
+CI runs these five commands on the four targets on every push and pull request (`.github/workflows/ci.yml`). Pushing a `v*` tag runs `.github/workflows/release.yml`, which publishes a release only when the tag is annotated, points at a commit reachable from `main`, is `v` followed by a Semantic Versioning 2.0.0 version equal to `version` in `Cargo.toml`, and has exactly one `release-notes/<tag>-<YYYYMMDD>.md`, which becomes the release body — and only if the same validation then passes on the four targets. A tag with a pre-release identifier, such as `v0.2.0-rc.1`, publishes a GitHub pre-release; the expected order is the `gitflow` procedure's: merge to `main`, create the annotated tag, push `main`, then push the tag. See [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
 
 `unsafe` is forbidden; `#![forbid(unsafe_code)]` stays at the top of the crate.
 

@@ -1,7 +1,7 @@
 ---
 title: Technology Stack
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -54,9 +54,10 @@ here.
 The toolchain used to build the four targets of `NFR-PERF-018`, and the
 development toolchain that is above the floor, are
 [operations.md](operations.md#msrv-the-development-toolchain-and-the-cross-build-path)'s
-with [`ADR-008`](../adr/adr-008-packaging-and-build-path.md); that section is
-also the one home of the toolchain and tool versions installed on the
-development host.
+with [`ADR-008`](../adr/adr-008-packaging-and-build-path.md), whose build path
+the workflows of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) also
+use; that section is also the one home of the toolchain and tool versions
+installed on the development host.
 
 ## The shipped graph: versions and sources
 
@@ -437,7 +438,7 @@ crate, while declaring a `#[global_allocator]` static of it is safe code
 | How a component uses any crate above | [architecture.md](architecture.md) |
 | Every signature and every contract crossing a boundary | [interfaces.md](interfaces.md) |
 | Every measured figure, and the artefacts a measurement was taken on | `BENCHMARKS.md` |
-| The build, the four targets, the release gates, the validation pipeline, the measurement toolchain, and what the development host has installed | [operations.md](operations.md), with [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) |
+| The build, the four targets, the release gates, the validation pipeline, the measurement toolchain, and what the development host has installed | [operations.md](operations.md), with [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) and [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | The measurement points these choices are read against | [quality-attributes.md](quality-attributes.md) |
 | Trust boundaries, credentials, and transport as subjects | `security.md`, with [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

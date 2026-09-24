@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
@@ -2793,12 +2793,14 @@ against.
 
 *Why the decision record does not carry the other way.* `ADR-008` marks the
 expectation unverified, and if `CLAUDE.md` asserted a verification the two
-would contradict each other on a matter of fact. That record does not read the
-file that way. It calls the five-command sequence one that the root
-coordination document **mandates**, and lists the no-second-class rule of
-`NFR-PERF-018` among four obligations **carried by hand** until a pipeline
-exists — the deontic reading, taken by the record best placed to take it. What
-it marks unverified is also narrower than the passage: that no `musl` artefact
+would contradict each other on a matter of fact. The records do not read the
+file that way. `ADR-012` prescribes the five-command sequence of the root
+coordination document as what continuous integration runs, on all four targets
+of `NFR-PERF-018`, and names the checks still **carried by hand**: the
+connection clause of `NFR-PERF-005` and the server-side instruments of
+`NFR-PERF-007` on every target, and `FR-SRV-019` before tagging — the deontic
+reading, taken by the records best placed to take it. What `ADR-008` marks
+unverified is also narrower than the passage: that no `musl` artefact
 has run outside a container, and that the two `x86_64` targets have never been
 measured. Both are claims about baselines under `NFR-PERF-012`, and the
 sentence of `CLAUDE.md` that carries that rule is in another section, where
