@@ -1,0 +1,278 @@
+---
+id: ADR-012
+title: Continuous integration and release distribution
+status: accepted
+decided: 2026-09-24
+last-reviewed: 2026-09-24
+requirements: [NFR-PERF-018, NFR-PERF-005, NFR-PERF-007, FR-SRV-019, BR-PERF-008]
+supersedes: []
+superseded-by: null
+---
+
+# ADR-012 — Continuous integration and release distribution
+
+## Status
+
+Accepted, 2026-09-24. Decided by the user for rmp `#292`, as relayed by the
+session coordinator, including the release gate, the version pins and the
+archive contents.
+
+This record takes over two parts of `ADR-008`: its refusal to prescribe a
+pipeline, with the rejection that argued it, and its open question on the form
+of the release artefact. `ADR-008` keeps the build path, which is not
+superseded. The register's lifecycle defines no partial supersession, so
+`ADR-008` was edited in place and this record's `supersedes` field is empty.
+
+## Context
+
+`NFR-PERF-018` fixes exactly four targets and makes none second class: a result
+that fails on one of the four fails. `ADR-008` fixes how each is built:
+`cargo-zigbuild` for the two `musl` targets, native builds for the two Darwin
+targets.
+
+`ADR-008` recorded that no pipeline existed and rejected prescribing one,
+because a pipeline that did not exist would have been described as though it
+did. The consequence was a set of obligations carried by hand: the five-command
+validation sequence of the root coordination document, `NFR-PERF-018`'s
+no-second-class rule across all four targets, and `FR-SRV-019`'s
+re-verification of the supported-series table before every release. The same
+record left the release artefact's form open.
+
+**Admission under rule R4.** No requirement delegates this fact: the
+specification-manager judged on 2026-09-24 that distribution is release
+engineering and that `/specification` needs no requirement for it. The record is
+admitted under R4's second limb. It reverses a rejection recorded in an accepted
+record, and a reversal whose alternatives are not kept leaves the earlier
+rejection as the only argument on file. `ADR-008` sets the precedent: packaging
+and the build path were admitted on the same limb.
+
+Two constraints shape what a pipeline can verify. `BR-PERF-008` gives no figure
+the power to fail a change, so a pipeline owes nothing to a measurement. The
+integration suite gates every server-dependent assertion on
+`scripts/mariadb/status.sh`: exit `0` runs it, `1` skips it with a printed
+reason, and `2` (half a fixture) fails the run. The table under *What an
+assertion needs in order to run*, in `specification/performance-requirements.md`,
+states which assertions need the fixture.
+
+## Decision
+
+**`tpl` is distributed through GitHub Actions. Every GitHub Release publishes
+all the artefacts continuous integration produces.** There are two workflows,
+and both run correctness validations only.
+
+1. **`ci.yml` runs on every push and every pull request.** It runs the five
+   commands of the root coordination document, in order:
+   `cargo fmt --all -- --check`,
+   `cargo clippy --all-targets --all-features -- -D warnings`,
+   `cargo build --release`, `cargo test --all-features`, `cargo audit`. They run
+   on all four targets of `NFR-PERF-018`, as a matrix with one entry per target.
+
+2. **No MariaDB fixture runs in continuous integration.** Tests that need the
+   database skip themselves when the fixture is absent, through the gate
+   described in Context. **No benchmark or performance step runs.**
+
+3. **`release.yml` runs when a tag matching `v*` is pushed, and publishes only
+   if the tagged commit passes the five-command validation.** The workflow
+   either runs that validation itself or makes the publish job depend on it. A
+   tag on a commit that fails the validation publishes nothing. On success it
+   builds the four targets and creates a GitHub Release.
+
+4. **The release carries one archive per target and one `SHA256SUMS` file.**
+   Each archive is named `tpl-<tag>-<triple>.tar.gz`, for example
+   `tpl-v1.2.0-aarch64-apple-darwin.tar.gz`, and contains the `tpl` binary,
+   `README.md`, `LICENSE` and `CHANGELOG.md`. `SHA256SUMS` covers the four
+   archives. **No artefact is signed.** Signing is not done, not left open.
+   The two Darwin archives are created with
+   `tar --no-mac-metadata --no-xattrs`, so they carry no extended attributes
+   (Sources).
+
+5. **The build path is `ADR-008`'s, unchanged, and is not restated here.** Each
+   target is built and tested by its own path in both workflows. The two `musl`
+   targets go through `cargo-zigbuild`, which provides `zigbuild`, `clippy` and
+   `test` subcommands (Sources). The two Darwin targets are built natively.
+   **Both workflows pin `cargo-zigbuild` and zig to the versions `ADR-008`
+   records**, and a change to either is a change to that record.
+
+6. **The runner for each target follows from the build path, and no runner
+   label is fixed here.** A native Darwin build needs a macOS runner.
+   `cargo test` on a target executes that target's test binaries, which takes a
+   Linux host for a `musl` target and a macOS host for a Darwin target, each
+   able to run the target's architecture.
+   GitHub-hosted runners exist for Linux and macOS on both x64 and arm64
+   (Sources). The labels are an implementation detail of the workflow files.
+
+7. **The CI toolchain is the MSRV.** Both workflows install the `rust-version`
+   that `Cargo.toml` declares, whose value `ADR-007` fixes.
+
+8. **Every downloaded tool is pinned and hash-checked.** CI installs the
+   prebuilt `cargo-audit` 0.22.2. Each tool the workflows download
+   (`cargo-zigbuild`, zig, `cargo-audit`) is checked against a SHA-256
+   hard-coded in the workflow before it is extracted, and a mismatch fails the
+   job. The `cargo-zigbuild` hashes come from the publisher's `.sha256` files
+   and the zig hashes from `ziglang.org`'s `index.json`. RustSec publishes no
+   checksum for `cargo-audit`: its hashes were computed from the official
+   downloads, and they match the `digest` GitHub reports for each asset.
+
+9. **`install.sh`, at the repository root, installs and updates `tpl`.** It is
+   POSIX `sh`, and one command does both jobs:
+   `curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.sh | sh`,
+   which the root `README.md` carries. The script:
+   - maps the OS and CPU architecture to one of the four targets, and otherwise
+     fails with a clear message and a non-zero exit;
+   - resolves the latest GitHub Release's tag and compares it with the
+     installed `tpl --version`; if they match, it says so and exits `0`
+     without downloading anything;
+   - otherwise downloads that release's archive for the target and its
+     `SHA256SUMS`, verifies the archive, and installs `tpl` into `/usr/local/bin` on Linux and macOS, using
+     `sudo` only when that directory is not writable. It creates the
+     directory when it does not exist, again with `sudo` only when needed.
+     `TPL_INSTALL_DIR` overrides the directory. It is a variable of the script,
+     not of `tpl`, which never reads it.
+
+## Alternatives rejected
+
+- **Running the MariaDB fixture in continuous integration.** Rejected as
+  heavier: the fixture's containers would be raised and torn down on every run.
+  The assertions it would enable are carried by hand instead, as listed under
+  Consequences.
+
+- **Validating on one Linux host only.** Rejected because it breaks
+  `NFR-PERF-018`'s no-second-class rule. A green run on one target says nothing
+  about the other three, and the rule states that a failure on any of the four
+  is a failure.
+
+- **Publishing bare binaries instead of archives.** Rejected by the user in
+  favour of one `.tar.gz` per target with a `SHA256SUMS` file.
+
+- **An archive holding only the binary.** Rejected: the archive also carries
+  the readme, the licence and the changelog.
+
+- **No release gate, with a person checking `ci.yml` before tagging.**
+  Rejected: a tag push publishes, so a check a person can forget would let a
+  failing commit become a release.
+
+- **Running clippy on stable in CI.** Rejected: CI validates the toolchain the
+  crate declares as its floor.
+
+- **An unpinned or latest `cargo-audit`.** Rejected: the validation tool would
+  drift.
+
+- **Pinning downloads by URL only.** Rejected: a URL fixes where a file comes
+  from, not what it contains.
+
+- **`~/.local/bin` as the default install directory.** Rejected: it is not
+  always on `PATH`, for example on macOS.
+
+- **Failing when the install directory is missing.** Rejected in favour of
+  creating it.
+
+- **`--no-mac-metadata` alone for the Darwin archives.** Rejected: on bsdtar it
+  drops the AppleDouble data but still writes the extended attributes as pax
+  headers (Sources).
+
+- **A checksum-only script that always reinstalls.** Rejected in favour of a
+  version check that exits `0` when nothing needs installing.
+
+- **A two-step download-then-run example in the README.** Rejected in favour of
+  the one-line command.
+
+- **Installing the latest `cargo-zigbuild` and zig in CI.** Rejected: the build
+  path would drift from the one `ADR-008` records, which `ADR-008` says breaks
+  the comparability of every recorded figure.
+
+- **Keeping `ADR-008`'s refusal to prescribe a pipeline.** That refusal rested
+  on the pipeline being aspiration. With the user's decision, the pipeline is
+  the chosen mechanism for two of the obligations `ADR-008` listed as manual,
+  and recording it is the accurate statement.
+
+## Consequences
+
+**Two obligations move from a person to `ci.yml`.** The five-command sequence
+and its coverage of all four targets now run on every push and pull request.
+The root coordination document's rule that work is not complete until the five
+commands pass is not changed by this record.
+
+**The server-side checks remain an obligation carried by hand.** Without a
+fixture, `ci.yml` skips every assertion observed through the server's statement
+record or connection record. In particular it skips:
+
+- the connection clause of `NFR-PERF-005`, which that requirement makes
+  verifiable on every target of `NFR-PERF-018` from the server side; and
+- the two server-side instruments of `NFR-PERF-007`, the statement record and
+  the connection record, which that requirement binds to all four targets.
+
+A green `ci.yml` run therefore does not verify these checks. Whoever prepares a
+release runs them against the fixture, through its harness, on every target.
+
+**`FR-SRV-019` stays manual, and it is done before tagging.** The supported-series
+table is re-verified against its source before the `v*` tag is pushed, because
+the push is what publishes the release.
+
+**The file-open observation of `NFR-PERF-005` depends on the runner image.** On
+the two Linux targets, the suite skips that assertion with a printed reason when
+the host has no `strace`. Whether the GitHub-hosted Linux images provide it is
+**unverified**. The differential runs of `NFR-PERF-007` need no server and run in
+`ci.yml` on all four targets.
+
+**A tag push validates the tagged commit twice.** A `push` event fires for tags
+as well as commits (Sources), so a tag push triggers `ci.yml` as well as the
+gated validation of `release.yml`. Only the latter decides whether a release is
+published.
+
+**The checksum file proves integrity, not origin.** `SHA256SUMS` lets a reader
+check an archive against the release page it came from. Because nothing is
+signed, nothing in the release proves who produced it. GitHub also attaches the repository's source archives to every release
+automatically (Sources). `release.yml` does not produce them, and `SHA256SUMS`
+does not cover them.
+
+**A lint the floor raises fails CI.** Clippy's lints differ between toolchains,
+so CI can flag code that clippy on stable accepts. The first run
+on 1.94.0 did: it flagged `clippy::nonminimal_bool` (Sources).
+
+**The hash pins are only as good as their origin.** A hard-coded hash proves a
+download is the file that was hashed. For `cargo-zigbuild` and zig it is the
+publisher's figure. For `cargo-audit` it is this project's own computation,
+cross-checked against GitHub's asset `digest` and attested by no publisher.
+Moving any tool version means replacing its hashes.
+
+**`curl | sh` trusts the `main` branch and TLS.** Whoever can change
+`install.sh` on `main`, or intercept the download, controls what runs. The
+checksum proves the archive matches the release's `SHA256SUMS`. Because nothing
+is signed, it does not prove who produced either file.
+
+**Not fixed by this record:** the runner labels; whether `release.yml` runs the
+validation itself or depends on a validation job.
+
+**No performance figure is produced or consumed.** This is consistent with
+`BR-PERF-008`, and `NFR-PERF-012`'s attribution of a figure to a target and a
+build path is unaffected, because continuous integration records no figure.
+
+**Under R3, this decision lives here alone.** `docs/spec-technical/` cites
+`ADR-012` for the pipeline and the release artefact, and cites `ADR-008` only for
+the build path.
+
+## Sources
+
+| Claim | Source | Consulted |
+|---|---|---|
+| The decision, its rejected alternatives, and the build-path constraint; the release gate, the version pins, the archive name and contents, and the absence of signing | The user's decisions of 2026-09-24, relayed for rmp `#292` | 2026-09-24 |
+| On bsdtar 3.5.3 (libarchive 3.7.4), macOS 26 development host: `tar -czf` with `--no-mac-metadata` still writes a test attribute and `com.apple.provenance` as `LIBARCHIVE.xattr` and `SCHILY.xattr` pax headers, and extraction restores `com.apple.provenance`; adding `--no-xattrs` leaves no attribute in the archive | Probe archive of one file carrying a test attribute, inspected with `strings` | 2026-09-24 |
+| The tar on the macOS runners behaves the same | unverified; untested | — |
+| `README.md`, `LICENSE` and `CHANGELOG.md` exist at the repository root | Repository listing | 2026-09-24 |
+| The CI toolchain, the `cargo-audit` pin, the download hash checks and their origins, and `install.sh` with its rejected alternatives | The user's decisions of 2026-09-24, relayed for rmp `#292` | 2026-09-24 |
+| `rust-version` is `1.94.0` in `Cargo.toml` | `Cargo.toml` | 2026-09-24 |
+| Clippy on 1.94.0 flagged `nonminimal_bool` in `src/render/fault.rs` | Relayed for rmp `#292`; not re-run | 2026-09-24 |
+| `cargo-audit` 0.22.2 is the latest release (published 2026-06-05); its prebuilt assets carry no checksum file, and GitHub reports a `sha256` `digest` for each. That the computed hashes match those digests is relayed, not re-computed here | GitHub API, `rustsec/rustsec` releases, tag `cargo-audit/v0.22.2`; crates.io API, `cargo-audit` | 2026-09-24 |
+| `cargo-zigbuild` v0.23.4 publishes a `.sha256` file beside each archive | GitHub API, `rust-cross/cargo-zigbuild` releases, tag `v0.23.4` | 2026-09-24 |
+| `ziglang.org/download/index.json` carries a `shasum` per 0.16.0 tarball | `https://ziglang.org/download/index.json`, key `0.16.0` | 2026-09-24 |
+| `/specification` needs no requirement for distribution; the connection clause of `NFR-PERF-005` and the server-side checks of `NFR-PERF-007` skip without a fixture; `FR-SRV-019` stays manual | Findings of the specification-manager, relayed for rmp `#292` | 2026-09-24 |
+| A `push` event runs a workflow "when you push a commit or tag"; with no activity types given, `pull_request` runs when a pull request is opened or reopened or its head branch is updated | docs.github.com, *Events that trigger workflows*, `push` and `pull_request` | 2026-09-24 |
+| `on.push.tags` accepts glob patterns; `jobs.<job_id>.strategy.matrix` defines a matrix of job configurations | docs.github.com, *Workflow syntax for GitHub Actions* | 2026-09-24 |
+| GitHub-hosted runners exist for Linux x64, Linux arm64, macOS Intel and macOS arm64 | docs.github.com, *GitHub-hosted runners*, supported runners table (`github/docs`, `data/reusables/actions/supported-github-runners.md`) | 2026-09-24 |
+| Releases are based on Git tags and carry binary files; GitHub automatically adds a zip file and a tarball of the repository at the tag | docs.github.com, *About releases* | 2026-09-24 |
+| `cargo-zigbuild` 0.23.4 provides the `zigbuild`, `clippy` and `test` subcommands | GitHub `rust-cross/cargo-zigbuild`, tag `v0.23.4`, `src/bin/cargo-zigbuild.rs` | 2026-09-24 |
+| Server-dependent tests are gated on `status.sh`: `0` runs, `1` skips with a printed reason, `2` fails; the file-open trace skips with a reason off Linux and on a Linux host without `strace` | `tests/outside_the_process.rs`, module documentation and the `nfr_perf_007` file-open test; `scripts/mariadb/status.sh` | 2026-09-24 |
+| Whether the GitHub-hosted Linux images include `strace` | unverified | — |
+| Which assertions need the fixture; the connection clause of `NFR-PERF-005`; the four instruments of `NFR-PERF-007` and their targets; the four targets and the no-second-class rule | `specification/performance-requirements.md`, *What an assertion needs in order to run*, `NFR-PERF-005`, `NFR-PERF-007`, `NFR-PERF-018` | 2026-09-24 |
+| No figure fails, blocks, rejects or gates a change | `specification/performance-requirements.md`, `BR-PERF-008` | 2026-09-24 |
+| The supported-series table is re-verified against its source before every release | `specification/server-contract.md`, `FR-SRV-019` | 2026-09-24 |

@@ -400,10 +400,10 @@ fn bound_value<'a>(keyword: &str, after: &'a str) -> Option<&'a str> {
     let (value, _) = value.split_once("%}")?;
     let value = value.trim().trim_end_matches('-').trim_end();
     let excluded = [" if ", " recursive"];
-    (!value.is_empty()
-        && !excluded.iter().any(|word| value.contains(word))
-        && !(keyword == "with" && value.contains(',')))
-    .then_some(value)
+    let rejected = value.is_empty()
+        || excluded.iter().any(|word| value.contains(word))
+        || (keyword == "with" && value.contains(','));
+    (!rejected).then_some(value)
 }
 
 /// The value `variable` holds in `context`, WHERE the render bound it.

@@ -1,7 +1,7 @@
 ---
 title: Operations
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, technology-stack.md, data-model.md, quality-attributes.md]
 ---
 
@@ -65,10 +65,10 @@ artefact has been run outside a container, and marks the expectation
 unverified. It is repeated here as a limit on what may be claimed of the Linux
 artefacts, not as a second statement of the fact.
 
-**The form of the release artefact is not fixed** — bare binary, archive,
-checksums, signature. [`ADR-008`](../adr/adr-008-packaging-and-build-path.md)
-declines to invent a constraint the corpus does not state, and this document
-adds none.
+**The form of the release artefact is
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md)'s** — the archive per
+target, its name and contents, the checksum file, and the absence of a
+signature. This document does not restate it.
 
 ## The mandatory validation pipeline
 
@@ -103,12 +103,10 @@ the harness that takes it is [below](#the-measurement-harness).
 
 **Observation — the pipeline names no target, so it exercises the host's.**
 `NFR-PERF-018` makes none of the four second class, so passing on the
-development host is not passing. Covering the other three is the second of the
-four obligations [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) records
-as carried by hand while no pipeline exists. All four target standard libraries
-are installed on the development host
-([below](#msrv-the-development-toolchain-and-the-cross-build-path)), so what the
-obligation costs is four runs rather than a provisioning step.
+development host is not passing. The `ci.yml` workflow that
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes runs the
+five commands on all four targets; see
+[Continuous integration and release](#continuous-integration-and-release).
 
 **Observation — `--all-features` decides what a cargo feature costs here.**
 The flag is documented as "Activate all available features of all selected
@@ -186,6 +184,12 @@ each has exactly one home.
 | The current development toolchain | **Here**, in the inventory below | What the development host has installed and active today. Above the floor, and it moves whenever the host is updated |
 | The toolchain a measurement was taken under | `BENCHMARKS.md`, cited and not restated | Part of the environment of one recorded result. It does not follow the host forward |
 
+**The floor is also the CI toolchain.** Both workflows
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes install
+the `rust-version` the manifest declares, not the development toolchain. A lint
+that clippy raises on the floor and not on the host's toolchain therefore fails
+CI; that record's *Consequences* gives the case already observed.
+
 **The second and the third have already parted**: the host is one patch release
 ahead of the toolchain `BENCHMARKS.md` records for the driver selection. That is
 not a defect and it invalidates nothing —
@@ -212,11 +216,12 @@ not a pin, not a requirement, and re-taken rather than assumed.
 | Targets installed | The four of `NFR-PERF-018`, all four present, and no other |
 | Components beyond the default set | `llvm-tools` |
 
-**All four targets being installed removes provisioning from the hand-carried
-obligation, and nothing else.** Covering the three non-host targets is a matter
-of running the pipeline against each, not of adding a target first; the
-obligation itself is unchanged and is still carried by a person
-([`ADR-008`](../adr/adr-008-packaging-and-build-path.md)).
+**All four targets being installed lets the pipeline run locally against each,
+and nothing else.** Covering all four targets is no longer carried by a person:
+the `ci.yml` workflow that
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes runs the
+pipeline on each, by the build path of
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md).
 
 **The `1.87.0` toolchain is installed and is below the floor.** It is not the
 active one, no path in this document selects it, and the floor
@@ -240,13 +245,18 @@ is the path that is installed.
 |---|---|---|---|
 | The Rust toolchain | Compiles the four targets; above the floor | The inventory above | [`ADR-007`](../adr/adr-007-msrv.md) |
 | The zig-based linker driver | The `musl` cross-link from a Darwin host, which the Apple linker cannot perform | `cargo-zigbuild` and `zig`, at the two versions that record names | [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) |
-| `cargo fmt`, `cargo clippy`, `cargo audit` | The validation pipeline above | The first two ship with the toolchain above; `cargo-audit`, on the terms below | `CLAUDE.md`, *Desenvolvimento* |
+| `cargo fmt`, `cargo clippy`, `cargo audit` | The validation pipeline above | The first two ship with the toolchain above; `cargo-audit`, on the terms below | `CLAUDE.md`, *Desenvolvimento*; in CI, [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | `hyperfine`, `samply` / `cargo flamegraph`, `cargo bloat` | Wall time, CPU attribution and binary size, one tool per question | `hyperfine` 1.20.0; `samply` 0.13.1; `flamegraph` 0.6.14, which provides `cargo flamegraph`; `cargo-bloat` 0.12.1 | `CLAUDE.md`, *Disciplina de medição* |
 | `criterion`, `dhat-rs` | Micro-benchmarks and heap profile | Neither is an installed binary; see below | `CLAUDE.md`, *Disciplina de medição* |
 | Docker | Runs the four fixture containers | 29.7.2 | `scripts/mariadb/README.md` |
 
 The third column is `cargo install --list` for the cargo-installed binaries and
 the host's own report for `hyperfine` and Docker, all on 2026-09-11.
+
+**The table describes the development host, not CI.** In the workflows of
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), `cargo-audit` is the
+prebuilt release at the version that record pins, and it is checked against a
+hard-coded SHA-256 before extraction, as are `cargo-zigbuild` and zig.
 
 The measurement toolchain is listed, not specified: what question each tool
 answers is `CLAUDE.md`'s table, the protocol a reading is taken under is
@@ -321,7 +331,7 @@ fourth fires only when a pin moves.
 | Gate | What is checked | Trigger | Forced by |
 |---|---|---|---|
 | The validation pipeline | All five commands pass, in order | Every change, not only a release | `CLAUDE.md`, *Desenvolvimento* |
-| Every target | The pipeline passes on all four of `NFR-PERF-018`; a failure on one is a failure | Every release | `NFR-PERF-018`; carried by hand per [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) |
+| Every target | The pipeline passes on all four of `NFR-PERF-018`; a failure on one is a failure | Every release | `NFR-PERF-018`; enforced by the workflows of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | The supported-series table | The table of `FR-SRV-015` is re-verified against its source, and its verification date moved | **Every release**, without exception | `FR-SRV-019`, `BR-SRV-004` |
 | The engine pin | Every name of `FR-ENV-018` still exists and still behaves as before | Only when the pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) moves | `FR-ENV-003` |
 
@@ -332,9 +342,9 @@ withdrawn with the requirement that imposed it: under `BR-PERF-008` no figure
 named in the functional corpus, and no figure recorded against it, fails, blocks,
 rejects or gates anything. A regression is therefore an **observation** — worth
 recording, worth investigating if somebody chooses to, and never a reason a
-release stops. [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) counts
-three obligations carried by hand where it once counted four, for the same
-reason.
+release stops. For the same reason, none of the obligations
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) leaves to a person is
+owed to a figure.
 
 **The series gate is the one that decays on a calendar.** `BR-SRV-004` makes a
 wrong table stale rather than the criterion wrong, so the correction is always
@@ -343,9 +353,13 @@ criterion so that the old table stays true. A re-derivation that changes the
 set changes what `FR-SRV-029` must be run against, and therefore what the
 fixture must contain.
 
-**Every gate above is carried by a person.** No pipeline enforces one, which is
-[`ADR-008`](../adr/adr-008-packaging-and-build-path.md)'s decision and its
-consequence together.
+**Two gates are enforced by a workflow, and two are carried by a person.**
+Under [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), `release.yml`
+publishes nothing unless the tagged commit passes the validation pipeline on all
+four targets, which enforces the first two rows. The supported-series table is
+re-verified by hand before the `v*` tag is pushed, as that record requires,
+because the push is what publishes. The engine pin is checked by hand when the
+pin moves; no workflow checks it.
 
 ## The four version numbers: where a bump is enacted
 
@@ -514,21 +528,42 @@ written and records the discharge. `DIV-036` is the entry of
 `specification/upstream-divergences.md` that tracks what naming it still owes
 the root documents, and what that is remains that register's to state.
 
-## No continuous integration is prescribed
+## Continuous integration and release
 
-There is no pipeline, and
-[`ADR-008`](../adr/adr-008-packaging-and-build-path.md) declines to describe one
-rather than record an aspiration as though it were the state of the system.
-Every gate in this document is consequently carried by a person, and
-[`ADR-008`](../adr/adr-008-packaging-and-build-path.md) lists the three
-hand-carried obligations for that reason — an unlisted manual obligation is one
-nobody is accountable for. It listed four until the performance gate was
-withdrawn; no obligation is owed to a figure any more, per `BR-PERF-008`.
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes two GitHub
+Actions workflows, both limited to correctness validations. Their triggers,
+target matrix, release gate and artefacts are that record's and are not
+restated here; the build path each uses per target is
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md)'s.
 
-Two properties make the absence tolerable rather than merely recorded.
-`BR-PROJ-001` makes behaviour fully determined by the contents of the project,
-so a result is reproducible between machines; and `NFR-DET-001` makes a
-difference between two runs over unchanged inputs a defect rather than noise.
+| Workflow | What it enforces in this document |
+|---|---|
+| `ci.yml` | The [validation pipeline](#the-mandatory-validation-pipeline), on all four targets of `NFR-PERF-018`, on every push and pull request |
+| `release.yml` | The first two [release gates](#the-release-gates), before it publishes |
+
+**What each workflow installs is
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md)'s, not the
+development host's.** The toolchain is the
+[floor](#msrv-the-development-toolchain-and-the-cross-build-path).
+`cargo-zigbuild`, zig and `cargo-audit` are pinned, and each download is checked
+against a hard-coded SHA-256 before extraction; a mismatch fails the job. The
+Darwin archives are created with the `tar` flags that record fixes, so that they
+carry no extended attributes. That the runners' `tar` behaves as the development
+host's did is **unverified** in that record.
+
+**`install.sh`, at the repository root, is the installer
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes.** It
+installs or updates `tpl` from the latest release for the host's target, after
+checking the archive against `SHA256SUMS`. Its one-line invocation, its target
+detection, its install directory and its privilege rule are that record's.
+`TPL_INSTALL_DIR` is a variable of the script only: `tpl` never reads it. What
+the one-line invocation and the hash pins trust is that record's *Consequences*.
+
+**Neither workflow runs the fixture or the
+[measurement harness](#the-measurement-harness).** A green run therefore does
+not verify the server-dependent assertions; they stay with a person, and
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) (*Consequences*)
+lists them. No figure is produced or consumed, consistent with `BR-PERF-008`.
 
 ## What this document defers, and to what
 
@@ -544,4 +579,5 @@ difference between two runs over unchanged inputs a defect rather than noise.
 | The six untrusted inputs, credentials, and transport | [security.md](security.md) |
 | The fixture's contents, its deliberate omissions, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
 | The record of every difference observed between the series — fourteen | `FR-SRV-038` |
+| The release artefact: the archive per target, its name and contents, the checksum file, and the absence of a signature; and `install.sh` | [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

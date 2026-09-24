@@ -204,6 +204,15 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
   `scripts/mariadb/datasets/`, each with the source URL, date and checksums it
   was taken at, and `scripts/mariadb/seed-datasets.sh` loads them into a named
   fixture server, re-grants the reader on them, and verifies what arrived.
+- **The install script.** `install.sh` installs and updates `tpl` in one
+  command,
+  `curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.sh | sh`,
+  into `/usr/local/bin` or the directory `TPL_INSTALL_DIR` names, after
+  verifying the archive against the release's `SHA256SUMS`.
+- **Release archives.** Pushing a `v*` tag publishes a GitHub Release carrying
+  one `tpl-<tag>-<triple>.tar.gz` per supported target and a `SHA256SUMS` file
+  covering them, only if the tagged commit passes validation. The archives are
+  not signed.
 
 ## The record before this file
 

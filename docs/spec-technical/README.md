@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -34,6 +34,16 @@ blocks is a statement in a written document, not a document. Every other entry
 is settled. One of those is settled and **interim** — `OD-30`, which records an
 arrangement each later sprint removes one arm of — and it blocks nothing; one
 arm remains.
+
+**Three documents were reconciled on 2026-09-24 with `ADR-012`**, which
+prescribes continuous integration and fixes the release artefact, and with
+`ADR-008`, now reduced to the build path. `operations.md` replaces its
+no-pipeline section with
+[Continuous integration and release](operations.md#continuous-integration-and-release);
+`open-decisions.md` amends `OD-23`; `technology-stack.md` cites the new record.
+After the record's amendment the same day, `operations.md` also cites it for the
+CI toolchain, the pinned and hash-checked tools, the Darwin `tar` flags, and
+`install.sh`.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree
@@ -302,7 +312,8 @@ toolchain and tools as installed on the development host, and the cross-build
 path for the musl targets. The measurement harness, and why it can enforce
 nothing. The release gates. The four version numbers and what a breaking change
 is. Observability. The content `tpl init` ships. The fixture as an operational
-asset. That no continuous-integration pipeline is prescribed.
+asset. The continuous-integration and release workflows, their toolchain and
+tool pins, and the installer, by citation of `ADR-012`.
 
 **Must not contain.** Measured figures, which are `BENCHMARKS.md` — including
 the toolchain a measurement was taken under, which is part of that record's

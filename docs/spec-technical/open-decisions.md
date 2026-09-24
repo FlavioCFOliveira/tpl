@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md]
 ---
 
@@ -55,6 +55,11 @@ qualifies two of its rejections. No entry was added, and none was reopened. The
 poll interval [`ADR-011`](../adr/adr-011-render-memory-accounting.md)
 delegates is fixed in [architecture.md](architecture.md#the-render-bounds), not
 here.
+
+**One settled entry was amended on 2026-09-24**: `OD-23` now cites
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), which reverses the
+entry's refusal to prescribe continuous integration and fixes the release
+artefact.
 
 **One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
 that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
@@ -1858,14 +1863,20 @@ on nothing else in this register.
 
 ## OD-23 — Packaging, artefacts, and the musl build path
 
-**Status: settled. Recorded in [`ADR-008`](../adr/adr-008-packaging-and-build-path.md).**
+**Status: settled. The build path is recorded in
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md); continuous integration,
+the release gate and the release artefact in
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md).** Amended on
+2026-09-24: the entry had recorded that no continuous integration was
+prescribed, which `ADR-012` reverses.
 
-**Decision.** `cargo-zigbuild` for the two `musl` targets, native builds for the
-two Darwin targets, and no continuous integration prescribed.
+**Decision.** `cargo-zigbuild` for the two `musl` targets and native builds for
+the two Darwin targets, per `ADR-008`. Distribution through the GitHub Actions
+workflows of `ADR-012`.
 
-The rationale, the options rejected, the four obligations carried by hand while
-there is no pipeline, and the two targets that have never been measured are
-recorded in `ADR-008` and are **not restated here**, per rule R3 of
+The rationale, the options rejected, the obligations still carried by hand, and
+the two targets that have never been measured are recorded in the two records
+and are **not restated here**, per rule R3 of
 [`docs/adr/README.md`](../adr/README.md).
 
 ---
