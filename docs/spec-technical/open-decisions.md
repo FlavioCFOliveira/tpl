@@ -9,8 +9,8 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Thirty-three entries, each a decision the repository could not settle on its
-own. **Thirty-two are settled. One, `OD-33`, is open.** Nineteen were settled by
+Thirty-four entries, each a decision the repository could not settle on its
+own. **Thirty-three are settled. One, `OD-33`, is open.** Nineteen were settled by
 the product owner in the interview of 2026-09-10, by the establishment of the
 decision register, and by the eighth edition of `/specification`; nine more were
 settled on 2026-09-11, together with all five residuals the eighth edition left
@@ -63,6 +63,9 @@ artefact. The same day, for rmp `#293`, `OD-03` was worded more precisely, and
 its decision is unchanged: its binary-version rule names Semantic Versioning
 2.0.0. For rmp `#294`, `OD-03` was amended: the binary version's value is
 `0.0.1`, the first release the user chose.
+
+**One entry was added on 2026-09-24**, for rmp `#257`: `OD-34`, the in-process
+entry point `run_from`, whose rejected options have no record to live in.
 
 **One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
 that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
@@ -281,6 +284,7 @@ the last two rows below.
 | [OD-31](#od-31--the-models-shape-strings-fields-and-the-attribute) | The model's shape: strings, fields, and the attribute | Settled | — |
 | [OD-32](#od-32--anyhow-in-the-shipped-graph) | `anyhow` in the shipped graph | Settled | — |
 | [OD-33](#od-33--uc-013-and-the-twelve-flow-acceptance-skeleton) | `UC-013` and the twelve-flow acceptance skeleton | Open | user |
+| [OD-34](#od-34--an-in-process-entry-point-over-a-supplied-argument-vector) | An in-process entry point over a supplied argument vector | Settled | — |
 
 Thirty-one entries are settled outright; `OD-19` alone carries an observation
 owed, and `OD-33` is open. Thirty-one, one and one are the whole of the
@@ -2480,6 +2484,50 @@ placed under one of the two kinds that table names — *Integration* and *Server
 of the skeleton is renumbered, reworded or removed by this entry; what the three
 documents say today they say against `UC-001` … `UC-012` and remains true of
 those twelve.
+
+---
+
+## OD-34 — An in-process entry point over a supplied argument vector
+
+**Status: settled.** Decided for rmp `#257` on 2026-09-24; `adr-guardian`
+judged that no architecture decision record is admissible under rule R4 of
+[`docs/adr/README.md`](../adr/README.md), so the rejected options live here.
+
+**The question.** `run()` read `std::env::args_os()` and nothing else. Under
+libFuzzer those arguments are the fuzzer's own, so a coverage-guided harness
+stopped at the parser and reached no other code (`SECURITY-AUDIT.md`,
+*Limitations*). What public entry point lets an in-process caller drive the
+whole invocation?
+
+**Decision.** `pub fn run_from<I, T>(args: I) -> Result<(), Error>`, with
+`I: IntoIterator<Item = T>` and `T: Into<OsString>`, and `run()` reduced to
+`run_from(std::env::args_os())`. The obligations on it are
+[interfaces.md](interfaces.md#the-library-entry-points)'s.
+
+**Rejected.**
+
+- **The name `run_with`.** In the standard library a `_with` suffix marks a
+  closure argument — `Vec::resize_with` takes `f: F` where `F: FnMut() -> T`
+  (doc.rust-lang.org, `std::vec::Vec`, consulted 2026-09-24) — and this function
+  takes a value.
+- **Returning `ExitCode`.** It moves the mapping from error to exit status into
+  the library, which `OD-06` leaves to `main.rs` over `Error::exit_code`.
+- **A `Clone` bound on the iterator or its items.** `run_from` collects the
+  vector once and nothing iterates `args` twice, so the bound would constrain
+  callers for nothing.
+- **A working-directory argument.** Discovery reads the process's current
+  directory under `FR-PROJ-004`; threading a directory through every reader is a
+  change to discovery, outside the question.
+- **An entry compiled only under `#[cfg(fuzzing)]`.** The entry serves a test
+  as well as a fuzz harness, and a test build does not set that configuration.
+- **A harness that spawns the binary per input.** It is the black-box fuzzing
+  already delivered, one process per input; it gives the fuzzer no coverage
+  feedback from inside the process, which is the gap this entry closes.
+
+**Consequence.** The once-per-process state and the two exits that do not
+return make repeated calls in one process differ from repeated invocations of
+the binary; the entry states them rather than removing them, and a caller runs
+each input accordingly.
 
 ---
 

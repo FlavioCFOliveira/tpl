@@ -210,6 +210,9 @@ which belongs to that command's module.
   default: WHEN it is absent, the invocation carries no overall budget and is
   bounded only by the per-phase deadlines of `FR-CONF-005`.
 
+  *Note added in the sixty-first edition.* `FR-GLOB-026` states what the
+  budget bounds and the commands on which it has no effect.
+
   *Amended in the third edition.* The first edition gave the flag the default
   `30` while `FR-CONF-004` made a flag stronger than a `[core]` key. A flag
   that always has a value always wins, so `core.connect_timeout`,
@@ -248,6 +251,50 @@ which belongs to that command's module.
   caller with no diagnosis. A connect to a silent address, a `password_command`
   waiting on a FIFO, and a runaway loop in a template produce that same effect,
   so the invariant is not satisfied without deadlines on every blocking phase.
+
+- **FR-GLOB-026**: The overall budget of `FR-GLOB-011` SHALL bound the
+  blocking phases of `FR-CONF-005` and nothing else. A phase SHALL start with
+  the lesser of its own deadline and what remains of the budget, per
+  `FR-GLOB-012`; a phase that starts after the budget has expired SHALL end at
+  once, and SHALL exit with that phase's code under `FR-GLOB-013`. Work
+  outside those phases — parsing, discovery, reading and writing files under
+  `.tpl`, and writing stdout — SHALL NOT be interrupted by the budget.
+
+  WHERE an invocation runs no blocking phase, `--timeout` SHALL be accepted,
+  SHALL have no effect, and SHALL write no line about it, as `FR-GLOB-007`
+  does for `-d/--database`. By command:
+
+  | Command | Blocking phases it can run | Effect of `--timeout` |
+  |---|---|---|
+  | `tpl cfg database test` | the three connection phases, the catalogue query of `FR-CFG-044`, `password_command` | bounds them; `69` or `78` |
+  | The eight `tpl schema …` subcommands, `tpl cache load` | the three connection phases, catalogue queries, `password_command`, on a miss or always for `tpl cache load` | bounds them; `69` or `78`. A read served wholly from the cache runs none, and the flag has no effect |
+  | `tpl render` | the phases of the row above, without `--context` and on a miss; the render phase always | bounds them; `69`, `78` or `65` |
+  | Every other `tpl cfg` subcommand, `tpl cache clean`, `tpl cache status`, every `tpl template` subcommand, `tpl init`, `tpl help`, `tpl version` | none | none |
+
+  `tpl template check` parses and renders nothing, per `FR-SEC-018`, so it
+  runs no render phase. No `cfg` subcommand other than `database test`
+  contacts a server, per `FR-CFG-005`, so none runs `password_command`, whose
+  output is the password of a connection; `tpl cfg list` states the same of
+  itself in `FR-CFG-014`.
+
+  *Rationale.* `FR-GLOB-011` calls the flag a budget for the invocation, and
+  `FR-GLOB-012` and `FR-GLOB-013` already spend it only through phases: a
+  phase ends at the first of two bounds, and an expiry exits with the code of
+  the phase in progress. With no phase in progress no code exists to exit
+  with. `FR-CONF-005` names the blocking phases, and the work outside them is
+  bounded by the files the invocation touches. This is rmp `#273`.
+
+  *Rejected: a wall-clock deadline over the whole invocation, enforced
+  everywhere.* It needs an exit code for an expiry outside every phase, which
+  `FR-ERR-001` does not carry and which no caller can act on: the caller's
+  next step differs for a network, a credential helper and a template, and the
+  table of `FR-GLOB-013` exists to say which. It would also interrupt a rewrite
+  of `.tpl/.cfg` that `FR-CFG-041` makes atomic, and add a timing outcome to
+  commands whose outcomes are otherwise deterministic. *Rejected: a warning
+  where the flag has no effect,* for the reason `FR-GLOB-007` rejects one for
+  `-d/--database`.
+
+  *Added in the sixty-first edition,* for rmp `#273`.
 
 ### `-v`, `--verbose` and `-q`, `--quiet`
 
@@ -421,6 +468,7 @@ which belongs to that command's module.
   |---|---|---|
   | `-d/--database` | Every command that requires no database entry | `FR-GLOB-007`, `FR-GLOB-025`, `FR-CFG-051` |
   | `--tpl-dir` | `tpl init`, `tpl help`, `-h/--help`, `tpl version`, `-V/--version` | `FR-PROJ-025`, `FR-PROJ-026` |
+  | `--timeout` | Every command that runs no blocking phase, and a cached read served wholly from the cache | `FR-GLOB-026` |
 
   *Amended in the forty-fifth edition: the rule states what `FR-GLOB-007` and
   `FR-PROJ-025` already do.* It read "a flag becomes global only when it

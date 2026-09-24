@@ -62,7 +62,10 @@ disposition of a symbolic link, and completes its recorded gap on the cache;
 `data-model.md` adds that refusal and scopes its write row to object files.
 Against the fifty-eighth edition's amendment of `FR-PROJ-023`, `data-model.md`,
 `traceability.md` and this file count five writers inside `.tpl`, adding
-`tpl cache clean`.
+`tpl cache clean`. For rmp `#257`, `interfaces.md` gains
+[The library entry points](interfaces.md#the-library-entry-points), over
+`run_from`, and `open-decisions.md` gains `OD-34`, which holds its rejected
+options.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree
@@ -196,7 +199,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: thirty-two settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: thirty-three settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. Nothing bounds it: `OD-14`'s owed observation was made on 2026-09-21 and the entry records the answer |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
@@ -282,7 +285,8 @@ Context access from a filter or a test. The configuration reader and writer, the
 one predicate that decides an entry's coherence for both of them, and the two
 codes its two callers produce. The `password_command` child, its process
 group, and why its parent polls. The phase clock's four obligations. The three
-contracts behind the render bounds. The pattern matcher and the
+contracts behind the render bounds. The library entry points, and what an
+in-process caller of `run_from` must know. The pattern matcher and the
 qualified-routine-name parser. The two directions over the document: which
 emitted types are the model's own and which four are not, the two projections,
 the one flattening, what the read-back checks, and the four things it does not. The five

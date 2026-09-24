@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty editions. All are in force;
+The specification has been written in sixty-one editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4799,6 +4799,33 @@ and the index of [open-questions.md](open-questions.md) stays empty.
 the changes. None conflicts with them, so none is amended. The root
 `README.md` names no lookup function and says nothing of `schema_version` in
 a `--context` document, so the fifth validation rule owes nothing.
+
+### Sixty-first edition — what the overall budget bounds
+
+rmp `#273` found that `FR-GLOB-011` calls `--timeout` a budget for every
+invocation while `FR-GLOB-013` gives an exit code only for the network, the
+`password_command` and the render phases, and that most commands never read
+the budget.
+
+**One identifier is assigned: `FR-GLOB-026`.** None is retired and none is
+renumbered. No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The budget bounds the blocking phases** —
+  [global-flags.md](global-flags.md). `FR-GLOB-026` states that the budget
+  bounds the blocking phases of `FR-CONF-005` and nothing else, gives the
+  effect per command, and makes the flag accepted with no effect and no line
+  where no phase runs. `FR-GLOB-011` carries a note, and the table of
+  `BR-GLOB-001` gains a row. A deadline over the whole invocation was
+  rejected.
+
+`FR-GLOB-007`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-CONF-004`, `FR-CONF-005`,
+`FR-CFG-005`, `FR-CFG-014`, `FR-CFG-041`, `FR-CFG-044`, `FR-SEC-018`,
+`FR-SEC-022`, `FR-RND-022`, `FR-RND-033` and `FR-ERR-001` were read against
+the change. None conflicts with it, so none is amended. The root `README.md`
+does not state what `--timeout` bounds, so the fifth validation rule owes
+nothing.
 
 ### Still out of scope
 

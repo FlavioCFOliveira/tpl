@@ -736,7 +736,7 @@ pub enum Error {
         /// after it, where every other token is admitted into a hint
         /// (`FR-ERR-022`, `FR-ERR-040`, `FR-ERR-041`); [`None`] otherwise.
         ///
-        /// Boxed, with `path`, so that the variant leaves [`Error`] within
+        /// Boxed, with `path`, so that the variant leaves [`enum@Error`] within
         /// the size `clippy::result_large_err` admits.
         rebuilt: Option<Box<str>>,
         /// The command path the invocation names once the flag has its
@@ -1381,7 +1381,7 @@ pub enum Error {
         /// declare. The line then reports the missing entry, which the
         /// renderers read out of the key, not a missing key (finding
         /// U-05 of the fourth re-audit of rmp `#263`). A flag rather than the
-        /// name keeps [`Error`] within the size `clippy::result_large_err`
+        /// name keeps [`enum@Error`] within the size `clippy::result_large_err`
         /// admits.
         entry_missing: bool,
         /// The value the configuration gives the key where the file sets
@@ -1407,7 +1407,7 @@ pub enum Error {
         /// The database entry the connection was opened for.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The host attempted.
         host: String,
@@ -1421,7 +1421,7 @@ pub enum Error {
         /// The database entry the connection was opened for.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The host attempted.
         host: String,
@@ -1455,7 +1455,7 @@ pub enum Error {
         /// The database entry the connection was opened for.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The phase that was in progress.
         phase: NetworkPhase,
@@ -1795,7 +1795,7 @@ pub enum Error {
         /// expanded it to rather than what the file holds; [`None`] where the
         /// file holds `found` itself (finding T-04 of the third re-audit of
         /// rmp `#263`). Boxed behind a thin pointer, so that the variant
-        /// leaves [`Error`] no larger: a `Box<str>` is two words wide.
+        /// leaves [`enum@Error`] no larger: a `Box<str>` is two words wide.
         expanded_from: Option<Box<String>>,
     },
 
@@ -2010,7 +2010,7 @@ pub enum Error {
         /// The entry whose connection it was.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// Which of the two conditions of `FR-SRV-010` arose.
         fault: ReadOnlyFault,
@@ -2064,7 +2064,7 @@ pub enum Error {
         /// The entry that reached it.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The product the server reported.
         product: String,
@@ -2077,7 +2077,7 @@ pub enum Error {
         /// The entry that reached it.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The series found, as the server reported it.
         series: String,
