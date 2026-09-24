@@ -226,7 +226,16 @@ opens() {
     case "$backend" in
         strace)
             printf 'observe.sh: tracing on the host with strace\n' >&2
-            strace -f -e "trace=$TRACE_SYSCALLS" -o /dev/stdout -- "$@"
+            # The trace goes to a file and the traced command's stdout is
+            # discarded, as the container backend does: with `-o /dev/stdout`
+            # the command's own output is interleaved with the trace, and a
+            # path the command merely prints reads as a path it opened.
+            local trace status=0
+            trace="$(mktemp)"
+            strace -f -e "trace=$TRACE_SYSCALLS" -o "$trace" -- "$@" >/dev/null || status=$?
+            cat "$trace"
+            rm -f "$trace"
+            return "$status"
             ;;
         container)
             docker image inspect "$OBSERVER_IMAGE" >/dev/null 2>&1 \
