@@ -1436,8 +1436,14 @@ mod tests {
                 command: hostile(),
                 complete: true,
             },
-            Error::ConnectionDetailsMissing { entry: hostile() },
-            Error::NothingToUpdate { entry: hostile() },
+            Error::ConnectionDetailsMissing {
+                entry: hostile(),
+                database_given: true,
+            },
+            Error::NothingToUpdate {
+                entry: hostile(),
+                database_given: true,
+            },
             Error::BlockKeyGiven {
                 key: hostile(),
                 entry: Some(hostile()),

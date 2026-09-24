@@ -672,19 +672,26 @@ fn rewrite(
         offset += usize::from(command[offset..].starts_with(' '));
     }
 
-    // The node the command names, which decides where each flag has effect.
-    let mut words = command[offset..].split(' ');
-    let top = tree.find_subcommand(words.next()?)?;
-    let child = words
-        .next()
-        .and_then(|word| top.find_subcommand(word))
-        .map(clap::Command::get_name);
+    // Where the command ends in the hint: at the first clause that follows it.
     let end = command[offset..]
         .find("; ")
         .into_iter()
         .chain(command[offset..].find(", "))
         .min()
         .map_or(command.len(), |end| offset + end);
+
+    // The node the command names, which decides where each flag has effect.
+    // The words are read within the command, and the punctuation of the
+    // sentence around it is not part of a word: `load,` in "tpl cache load,
+    // or …" names `load` (finding AA-01 of the tenth re-audit of rmp `#263`).
+    let mut words = command[offset..end]
+        .split(' ')
+        .map(|word| word.trim_end_matches(|c: char| c.is_ascii_punctuation() && c != '-'));
+    let top = tree.find_subcommand(words.next()?)?;
+    let child = words
+        .next()
+        .and_then(|word| top.find_subcommand(word))
+        .map(clap::Command::get_name);
     let tpl_dir_applies = !matches!(top.get_name(), "init" | "help" | "version");
     let database_applies = match top.get_name() {
         "schema" => true,

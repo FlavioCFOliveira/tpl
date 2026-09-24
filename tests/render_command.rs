@@ -2206,6 +2206,92 @@ fn z_04_a_misspelt_root_suggests_the_bound_variable_and_a_loop_variable_does_not
 }
 
 #[test]
+fn aa_03_a_misspelt_object_variable_without_its_flag_names_it_and_the_flag() {
+    // Finding AA-03 of the tenth re-audit of rmp #263: without --table,
+    // `tbl.name` was steered to `tpl`, and `tabel.name` got no suggestion.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(
+        CONTEXT,
+        &EMPTY_CONTEXT.replace(r#""tables":[]"#, &format!(r#""tables":{ORDERS}"#)),
+    );
+    for (template, source) in [
+        ("tbl", "{{ tbl.name }}\n"),
+        ("tabel", "{{ tabel.name }}\n"),
+        ("viw", "{{ viw.name }}\n"),
+        ("rotine", "{{ rotine.name }}\n"),
+        ("both", "{{ tbl.version }}\n"),
+    ] {
+        sandbox.write(&format!(".tpl/templates/{template}.jinja"), source);
+    }
+
+    for (template, flag) in [
+        ("tbl", "table"),
+        ("tabel", "table"),
+        ("viw", "view"),
+        ("rotine", "routine"),
+    ] {
+        let written = refused(&sandbox, &["render", template, "--context", CONTEXT], 65);
+        assert_eq!(
+            line(&written, LABELS[2]),
+            format!(
+                "did you mean '{flag}'? '{flag}' exists only when the render names one: correct \
+                 the template and add --{flag} <name> to the tpl render command"
+            ),
+            "{written}"
+        );
+        assert!(!written.contains("'tpl'"), "{written}");
+    }
+
+    // `tpl` holds `version`, so both are candidates, and the line says which
+    // one needs its flag.
+    let written = refused(&sandbox, &["render", "both", "--context", CONTEXT], 65);
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 'tpl' or 'table'? 'table' exists only when the render names one with \
+         --table <name>; correct the template, and if you mean 'table', add --table <name> to \
+         the tpl render command"
+    );
+
+    // With --table, `table` is bound, and `tpl`, which has no `name`, is not
+    // offered.
+    let written = refused(
+        &sandbox,
+        &["render", "tbl", "--context", CONTEXT, "--table", "orders"],
+        65,
+    );
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 'table'? 'tbl' is no variable tpl binds in this render; correct the \
+         template, then print the template's source with: tpl template show tbl.jinja"
+    );
+}
+
+#[test]
+fn aa_04_a_vars_the_template_binds_is_not_blamed_on_set_in_the_cause() {
+    // Finding AA-04 of the tenth re-audit of rmp #263.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+    sandbox.write(
+        ".tpl/templates/shadow.jinja",
+        "{% set vars = {\"a\": 1} %}{{ vars.titl }}\n",
+    );
+
+    let written = refused(&sandbox, &["render", "shadow", "--context", CONTEXT], 65);
+    let cause = line(&written, LABELS[1]);
+    assert!(
+        cause.contains(
+            "'vars' is a variable the template binds, which holds the template's own value, not \
+             the render's, and reading 'titl' of it found nothing"
+        ),
+        "{written}"
+    );
+    assert!(!cause.contains("--set"), "{written}");
+    assert!(!line(&written, LABELS[2]).contains("--set"), "{written}");
+}
+
+#[test]
 fn a_context_variable_name_the_template_binds_is_described_as_the_templates_own() {
     // A loop variable named `table` is not the render's `table`: the walk
     // describes what the loop yields, and never asks for --table.

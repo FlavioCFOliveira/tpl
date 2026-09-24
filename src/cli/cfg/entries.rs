@@ -103,7 +103,13 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
     if !flags.connects() {
         return Err(Error::ConnectionDetailsMissing {
             entry: name.to_owned(),
+            database_given: supplied.database.is_some(),
         });
+    }
+
+    // FR-CFG-051: step 1 of FR-ERR-006 has passed, and step 2 is next.
+    if let Some(given) = supplied.database {
+        crate::diagnostics::emit::database_has_no_effect(ADD, given);
     }
 
     let project = project(supplied)?;
@@ -148,10 +154,16 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
     if flags.is_empty() {
         return Err(Error::NothingToUpdate {
             entry: name.to_owned(),
+            database_given: supplied.database.is_some(),
         });
     }
 
     flags.exclusive()?;
+
+    // FR-CFG-051: step 1 of FR-ERR-006 has passed, and step 2 is next.
+    if let Some(given) = supplied.database {
+        crate::diagnostics::emit::database_has_no_effect(UPDATE, given);
+    }
 
     let project = project(supplied)?;
     let configuration = project.configuration()?;

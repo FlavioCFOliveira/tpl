@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty editions. All are in force;
+The specification has been written in fifty-one editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4376,6 +4376,45 @@ its last segment ignores case, as `FR-PROJ-027` now states. The `66` row of
 `README.md` makes no statement about the hints, the cache clean of an absent
 object, or the JSON help defaults that this edition makes false, so the fifth
 validation rule owes nothing.
+
+### Fifty-first edition — a global flag written for the server database
+
+The tenth re-audit of rmp `#263`, recorded for rmp `#285`, found that
+`tpl cfg database add hs4 --host h --database shop` exited `0` with an entry
+lacking its server database, and that `tpl cfg database update shop --database
+shop2` said that no field flag was given without saying why `--database` did
+not count (finding AA-02). `--database` is the long form of the global
+`-d/--database`, which has no effect on these commands, per `FR-GLOB-007` and
+`BR-GLOB-001`; the server database is written by `--schema`, per `FR-CFG-028`.
+This edition keeps that behaviour and makes it said.
+
+**One identifier is assigned — `FR-CFG-051`; none is retired and none is
+renumbered.** No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A global flag with no effect on an entry write is warned about** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-051` writes one warning line to
+  stderr when `tpl cfg database add` or `tpl cfg database update` is given
+  `-d/--database`, naming `--schema` as the flag that sets the server database.
+  The exit code is unchanged, `-q/--quiet` suppresses the line, and the value
+  is reproduced only under the set of `FR-ERR-022`. It follows the precedent of
+  `FR-PROJ-026`.
+- **The empty `update` names the flag it did not count** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-020` is amended: where the
+  invocation refused for giving no field flag was given `-d/--database`, the
+  `cause` says so and points at `--schema`.
+- **The table of flags without effect cites the new requirement** —
+  [global-flags.md](global-flags.md). The `-d/--database` row of `BR-GLOB-001`
+  adds `FR-CFG-051`.
+
+`FR-GLOB-002`, `FR-GLOB-007`, `FR-GLOB-015`, `FR-GLOB-025`, `FR-CLI-014`,
+`FR-CLI-024`, `FR-CFG-016`, `FR-CFG-027`, `FR-CFG-028`, `FR-ERR-006`,
+`FR-ERR-022`, `FR-OUT-020`, `FR-OUT-023` and `FR-PROJ-026` were read against
+the changes. None conflicts with them, so none is amended. `FR-OUT-023` keeps
+stdout empty; the line goes to stderr. The root `README.md` makes no statement
+about `-d/--database` on the `cfg` commands that this edition makes false, so
+the fifth validation rule owes nothing.
 
 ### Still out of scope
 

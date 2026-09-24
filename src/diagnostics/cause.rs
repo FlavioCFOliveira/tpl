@@ -58,6 +58,12 @@ const VARIABLE_NAME_RULE: &str = "a variable name starts with a letter or an und
 /// What the `cause` line says when the supported window arrives empty.
 const EMPTY_WINDOW: &str = "no series";
 
+/// The clause a refusal of `tpl cfg database add` or `update` for want of a
+/// field flag appends where `-d/--database` was given (`FR-CFG-020`).
+const DATABASE_IS_NOT_A_FIELD: &str = "; -d/--database was given, and it selects the entry for \
+                                       commands that connect, not a field; the database on the \
+                                       server is set with --schema";
+
 /// The content of the `cause` line for `error`, without its label.
 ///
 /// The match is exhaustive and carries no wildcard arm, so a variant added to
@@ -131,14 +137,34 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              format",
             invoked(command)
         )),
-        Error::ConnectionDetailsMissing { entry } => Cow::Owned(format!(
+        // Where `-d/--database` was given, the caller may have meant it as the
+        // database on the server, so the cause says why it did not count. The
+        // value is not written back: the flag alone explains the refusal
+        // (FR-CFG-020, finding AA-02 of the tenth re-audit of rmp `#263`).
+        Error::ConnectionDetailsMissing {
+            entry,
+            database_given,
+        } => Cow::Owned(format!(
             "no --dsn, and none of --host, --port, --user or --schema, was given for entry \
              '{entry}'; --tls, --password-command, --ca-file and --ca-path do not say where to \
-             connect"
+             connect{}",
+            if *database_given {
+                DATABASE_IS_NOT_A_FIELD
+            } else {
+                ""
+            }
         )),
-        Error::NothingToUpdate { entry } => {
-            Cow::Owned(format!("no field flag was given for entry '{entry}'"))
-        }
+        Error::NothingToUpdate {
+            entry,
+            database_given,
+        } => Cow::Owned(format!(
+            "no field flag was given for entry '{entry}'{}",
+            if *database_given {
+                DATABASE_IS_NOT_A_FIELD
+            } else {
+                ""
+            }
+        )),
         Error::BlockKeyGiven { key, entry } => match entry {
             Some(entry) => Cow::Owned(format!(
                 "tpl cfg get reads one key; {key} is the block of entry '{entry}'"
@@ -1363,15 +1389,18 @@ fn missing_step(missing: &Missing) -> String {
         } => {
             let which = template_variable(name, *loop_variable);
             match (step, read) {
-                (Some(step), _) => format!(
+                // A step of a shadowed `vars` would be read as a `--set` key,
+                // which cannot fix it; the hint says the same (finding AA-04
+                // of the tenth re-audit of rmp `#263`).
+                (Some(step), _) if name != "vars" => format!(
                     "{which} holds the template's own value, not the render's, and {}",
                     missing_step(step)
                 ),
-                (None, Some(read)) => format!(
+                (_, Some(read)) => format!(
                     "{which} holds the template's own value, not the render's, and reading \
                      '{read}' of it found nothing"
                 ),
-                (None, None) => format!(
+                (_, None) => format!(
                     "{which} holds the template's own value, not the render's, and a later step \
                      of the expression is not defined"
                 ),

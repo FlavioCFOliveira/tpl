@@ -1694,6 +1694,335 @@ fn fr_cfg_016_an_add_that_says_nowhere_to_connect_names_the_flags_that_do() {
     );
 }
 
+/// The line of `FR-CFG-051` for `command`, with `schema` as the value of
+/// `--schema`.
+fn database_has_no_effect(command: &str, schema: &str) -> String {
+    format!(
+        "warning: -d/--database has no effect on tpl cfg database {command}; it selects the \
+         entry for commands that connect; the database on the server is set with --schema \
+         {schema}"
+    )
+}
+
+#[test]
+fn fr_cfg_051_database_on_add_and_update_is_accepted_warned_about_and_never_written() {
+    // Finding AA-02 of the tenth re-audit of rmp #263.
+    let sandbox = Sandbox::new();
+    sandbox.project(SHOP);
+
+    for (arguments, command, schema) in [
+        (
+            &[
+                "cfg",
+                "database",
+                "add",
+                "hs4",
+                "--host",
+                "h",
+                "--database",
+                "shop",
+            ][..],
+            "add",
+            "shop",
+        ),
+        (
+            &[
+                "-d", "nope", "cfg", "database", "add", "nope", "--host", "h",
+            ][..],
+            "add",
+            "nope",
+        ),
+        (
+            &["cfg", "db", "add", "hs5", "--host", "h", "--database=x1"][..],
+            "add",
+            "x1",
+        ),
+        (
+            &[
+                "cfg", "database", "update", "shop", "--host", "h", "-d", "a b",
+            ][..],
+            "update",
+            "<database>",
+        ),
+        (
+            &[
+                "-v", "cfg", "db", "update", "shop", "--host", "h2", "-d", "s2",
+            ][..],
+            "update",
+            "s2",
+        ),
+    ] {
+        let printed = sandbox.run(arguments);
+        let written = stderr(&printed);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {written}");
+        assert!(printed.stdout.is_empty(), "{arguments:?}");
+        assert_eq!(
+            written.lines().next(),
+            Some(database_has_no_effect(command, schema).as_str()),
+            "{arguments:?}"
+        );
+        assert_eq!(
+            written.matches("warning: ").count(),
+            1,
+            "{arguments:?}: {written}"
+        );
+        assert!(!written.contains("a b"), "{written}");
+    }
+
+    // No effect: nothing the flag gave was written, and the value refused by
+    // the set of FR-ERR-022 is nowhere in the file.
+    let file = String::from_utf8(sandbox.configuration()).expect("the file is UTF-8");
+    for absent in ["database = \"shop\"", "x1", "s2", "a b"] {
+        assert!(!file.contains(absent), "{absent} was written: {file}");
+    }
+    assert!(file.contains("[database.nope]"), "{file}");
+
+    // -q suppresses it; neither core.database nor TPL_DATABASE writes it.
+    sandbox.project("[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n");
+    for (environment, arguments) in [
+        (
+            &[][..],
+            &[
+                "-q", "cfg", "database", "add", "q1", "--host", "h", "-d", "shop",
+            ][..],
+        ),
+        (
+            &[][..],
+            &["cfg", "database", "add", "q2", "--host", "h"][..],
+        ),
+        (
+            &[("TPL_DATABASE", "shop")][..],
+            &["cfg", "database", "update", "q2", "--port", "3307"][..],
+        ),
+    ] {
+        let printed = sandbox.run_from(sandbox.root(), environment, arguments);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        assert!(
+            printed.stderr.is_empty(),
+            "{arguments:?}: {}",
+            stderr(&printed)
+        );
+    }
+
+    // Written before step 2, so it precedes the error the invocation raises,
+    // and the exit code is the one without the flag.
+    let printed = sandbox.run(&["cfg", "database", "add", "q1", "--host", "h", "-d", "shop"]);
+    let written = stderr(&printed);
+    assert_eq!(code(&printed), 64, "{written}");
+    let mut lines = written.lines();
+    assert_eq!(
+        lines.next(),
+        Some(database_has_no_effect("add", "shop").as_str())
+    );
+    assert_eq!(
+        lines.next(),
+        Some("error: database entry 'q1' already exists"),
+        "{written}"
+    );
+    let printed = sandbox.run(&[
+        "cfg", "database", "update", "absent", "--host", "h", "-d", "x",
+    ]);
+    let written = stderr(&printed);
+    assert_eq!(code(&printed), 66, "{written}");
+    assert_eq!(
+        written.lines().next(),
+        Some(database_has_no_effect("update", "x").as_str())
+    );
+}
+
+#[test]
+fn fr_cfg_051_a_refusal_at_step_one_writes_no_warning_and_its_cause_names_the_flag() {
+    // FR-CFG-051 item 3, the FR-CFG-020 amendment of the fifty-first edition,
+    // and the FR-CFG-016 refusal, which carries the same fact.
+    const CLAUSE: &str = "; -d/--database was given, and it selects the entry for commands \
+                          that connect, not a field; the database on the server is set with \
+                          --schema";
+    let sandbox = Sandbox::new();
+    sandbox.project(SHOP);
+    let before = sandbox.configuration();
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "update", "shop", "--database", "shop2"]),
+        64,
+        "update with -d only",
+    );
+    assert_eq!(
+        line(&written, "cause: "),
+        format!("no field flag was given for entry 'shop'{CLAUSE}")
+    );
+    assert!(!written.contains("shop2"), "{written}");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give at least one of --dsn, --host, --port, --user, --schema, --tls, \
+         --password-command, --ca-file, --ca-path"
+    );
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "db", "add", "hs6", "-d", "store"]),
+        64,
+        "add with -d only",
+    );
+    let cause = line(&written, "cause: ");
+    assert!(cause.ends_with(CLAUSE), "{cause}");
+    assert!(!written.contains("store"), "{written}");
+    let hint = line(&written, "hint:  ");
+    assert!(
+        hint.starts_with("say where to connect, e.g.: tpl cfg db add hs6 --host"),
+        "{hint}"
+    );
+
+    // -d given twice is refused at step 1 too.
+    assert_refused(
+        &sandbox.run(&[
+            "-d", "x", "-d", "y", "cfg", "database", "add", "hs7", "--host", "h",
+        ]),
+        64,
+        "-d twice",
+    );
+
+    // Without -d, the causes are as before.
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "add", "hs8", "--tls", "disabled"]),
+        64,
+        "add without -d",
+    );
+    assert!(!written.contains("-d/--database"), "{written}");
+
+    assert_eq!(sandbox.configuration(), before, "the file was written");
+}
+
+#[test]
+fn fr_cfg_051_the_help_of_add_and_update_says_database_has_no_effect_there() {
+    let sandbox = Sandbox::new();
+    for command in ["add", "update"] {
+        let printed = sandbox.run(&["cfg", "database", command, "--help"]);
+        assert_eq!(code(&printed), 0);
+        let help = stdout(&printed)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            help.contains(
+                "-d/--database has no effect here: the database on the server is set with \
+                 --schema."
+            ),
+            "{command}: {help}"
+        );
+    }
+}
+
+#[test]
+fn fr_err_043_every_hint_of_a_command_that_selects_an_entry_carries_the_d_it_was_given() {
+    // Finding AA-01 of the tenth re-audit of rmp #263: `tpl -d e cache load`
+    // restated its command without `-d e`, which selects `core.database`.
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"127.0.0.1\"\nport = 1\n\
+         database = \"s\"\ntls = \"disabled\"\n\n[database.e]\nhost = \"127.0.0.1\"\nport = 1\n\
+         database = \"s\"\npassword = \"${SHOP_PW}\"\ntls = \"disabled\"\n",
+    );
+
+    // Whether `-d` has effect on the node a `tpl` command names, per the table
+    // of BR-GLOB-001.
+    fn selects(command: &str) -> bool {
+        let words: Vec<&str> = command
+            .split(' ')
+            .filter(|word| !word.starts_with('-'))
+            .map(|word| word.trim_end_matches([',', ';', '.']))
+            .collect();
+        match words.as_slice() {
+            ["schema", ..] => true,
+            ["render", ..] => !command.contains("--context"),
+            ["cache", child, ..] => matches!(*child, "load" | "clean" | "status"),
+            _ => false,
+        }
+    }
+
+    let mut checked = 0_usize;
+    for spelling in [
+        &["-d", "e"][..],
+        &["--database", "e"][..],
+        &["--database=e"][..],
+    ] {
+        for (command, trailing) in [
+            (&["cache", "load"][..], false),
+            (&["cache", "load"][..], true),
+            (&["cache", "load", "--table", "orders"][..], false),
+            (&["cache", "status", "--pretty"][..], false),
+            (&["cache", "status", "--pretty"][..], true),
+            (&["cache", "clean", "--pretty"][..], false),
+            (&["cache", "clean", "--routine", "FUNCTION:f"][..], false),
+            (&["schema", "info"][..], false),
+            (&["schema", "tables"][..], false),
+            (&["schema", "tables", "--pretty"][..], false),
+            (&["schema", "table", "orders"][..], false),
+            (&["schema", "views"][..], false),
+            (&["schema", "routines"][..], false),
+            (&["schema", "dump"][..], false),
+            (&["render", "example"][..], false),
+            (&["render", "exmple"][..], false),
+            (&["cfg", "database", "test", "e"][..], false),
+            (&["cfg", "database", "test", "e", "--pretty"][..], false),
+        ] {
+            let arguments = if trailing {
+                [command, spelling].concat()
+            } else {
+                [spelling, command].concat()
+            };
+            let printed = sandbox.run(&arguments);
+            assert_ne!(code(&printed), 0, "{arguments:?}");
+            let written = stderr(&printed);
+            let hint = line(&written, "hint:  ");
+
+            // Every command the hint writes after `tpl `.
+            let mut commands = 0_usize;
+            for (at, _) in hint.match_indices("tpl ") {
+                let before = &hint[..at];
+                if !(before.is_empty() || before.ends_with(' '))
+                    || before.ends_with("the ")
+                    || before.ends_with("no ")
+                {
+                    continue;
+                }
+                let rest = &hint[at + "tpl ".len()..];
+                let end = [rest.find(", "), rest.find("; ")]
+                    .into_iter()
+                    .flatten()
+                    .min()
+                    .unwrap_or(rest.len());
+                let restated = &rest[..end];
+                let carried = spelling.join(" ");
+                let without = restated
+                    .strip_prefix(&format!("{carried} "))
+                    .unwrap_or(restated);
+                if selects(without) {
+                    assert!(
+                        restated.starts_with(&format!("{carried} ")),
+                        "{arguments:?}: 'tpl {restated}' lacks {carried}: {hint}"
+                    );
+                } else {
+                    assert!(
+                        !restated.contains("-d ") && !restated.contains("--database"),
+                        "{arguments:?}: 'tpl {restated}' carries -d where it has no effect: {hint}"
+                    );
+                }
+                commands += 1;
+            }
+            assert!(commands > 0, "{arguments:?}: no command in {hint}");
+            checked += commands;
+        }
+    }
+    assert!(checked >= 54, "{checked}");
+
+    // The hint of AA-01, run as written, acts on the entry it was given.
+    let printed = sandbox.run(&["-d", "e", "cache", "load"]);
+    assert_eq!(
+        line(&stderr(&printed), "hint:  "),
+        "define it in the environment tpl runs in, e.g.: SHOP_PW=<value> tpl -d e cache load, \
+         or export SHOP_PW=<value> in the same shell before running tpl"
+    );
+}
+
 #[test]
 fn fr_cfg_007_a_block_given_to_get_is_64_and_points_at_the_command_that_shows_it() {
     let sandbox = Sandbox::new();

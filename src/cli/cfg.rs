@@ -103,6 +103,12 @@ pub(crate) struct Supplied<'a> {
     /// than passing a second argument to one subcommand is what keeps
     /// `FR-CLI-014`'s reduction in one place.
     budget: Option<Seconds>,
+    /// `-d/--database`, which no subcommand of the arm resolves.
+    ///
+    /// It is carried for `add` and `update` alone, which say that the flag has
+    /// no effect on them (`FR-CFG-051`) and name it in the `cause` of their
+    /// refusal for want of a field flag (`FR-CFG-020`).
+    database: Option<&'a str>,
 }
 
 impl<'a> Supplied<'a> {
@@ -118,6 +124,7 @@ impl<'a> Supplied<'a> {
                 .unwrap_or(Format::Text),
             pretty: output.is_some_and(|output| output.pretty.pretty),
             budget: globals.timeout.first().copied().map(Seconds::new),
+            database: globals.database.first().map(String::as_str),
         }
     }
 
@@ -467,6 +474,7 @@ pub(crate) mod tests {
                 format,
                 pretty,
                 budget: None,
+                database: None,
             }
         }
 

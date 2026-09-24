@@ -396,7 +396,7 @@ which belongs to that command's module.
 
   | Global flag | Nodes on which it has no effect | Requirement |
   |---|---|---|
-  | `-d/--database` | Every command that requires no database entry | `FR-GLOB-007`, `FR-GLOB-025` |
+  | `-d/--database` | Every command that requires no database entry | `FR-GLOB-007`, `FR-GLOB-025`, `FR-CFG-051` |
   | `--tpl-dir` | `tpl init`, `tpl help`, `-h/--help`, `tpl version`, `-V/--version` | `FR-PROJ-025`, `FR-PROJ-026` |
 
   *Amended in the forty-fifth edition: the rule states what `FR-GLOB-007` and

@@ -428,19 +428,48 @@ pub(super) fn unbound(
         return None;
     }
 
+    // AA-03: `table`, `view` and `routine` are candidates whether or not the
+    // render bound them, since a misspelt one is most often written without
+    // its flag too. A bound candidate is kept only where it holds the
+    // attribute the expression reads next, so `tbl.name` is not steered to
+    // `tpl`, which has no `name`; an unbound one cannot be read, and is kept.
+    let (_, rest) = identifier(expression)?;
+    let next = rest
+        .strip_prefix('.')
+        .and_then(identifier)
+        .map(|(attribute, _)| attribute);
+    let mut unbound: Vec<&'static str> = Vec::new();
     let variables: Vec<&'static str> = VARIABLES
         .into_iter()
-        .filter(|variable| bound(context, variable).is_some())
+        .filter(|variable| match bound(context, variable) {
+            Some(value) => next.is_none_or(|attribute| holds(&value, attribute)),
+            None => {
+                let object = matches!(*variable, "table" | "view" | "routine");
+                if object {
+                    unbound.push(variable);
+                }
+                object
+            }
+        })
         .collect();
     let nearest: Vec<&'static str> =
         suggest::suggestions(root, variables.iter().copied(), Population::Names)
             .names()
             .collect();
+    unbound.retain(|variable| nearest.contains(variable));
 
     (!nearest.is_empty()).then(|| Missing::Variable {
         name: root.to_owned(),
         nearest,
+        unbound,
     })
+}
+
+/// Whether `value` holds the attribute `attribute`.
+fn holds(value: &minijinja::Value, attribute: &str) -> bool {
+    value
+        .get_attr(attribute)
+        .is_ok_and(|held| !held.is_undefined())
 }
 
 /// Whether an occurrence of the word `name` in `source` reads as a binding the
@@ -1235,6 +1264,33 @@ mod tests {
             Some(Missing::Variable {
                 name: "tabel".to_owned(),
                 nearest: vec!["table"],
+                unbound: vec![],
+            })
+        );
+        // AA-03: an object variable the render did not bind is a candidate,
+        // and a bound one that lacks the attribute read next is not.
+        assert_eq!(
+            root_of("{{ viw.name }}", "t.jinja"),
+            Some(Missing::Variable {
+                name: "viw".to_owned(),
+                nearest: vec!["view"],
+                unbound: vec!["view"],
+            })
+        );
+        assert_eq!(
+            root_of("{{ tbl.name }}", "t.jinja"),
+            Some(Missing::Variable {
+                name: "tbl".to_owned(),
+                nearest: vec!["table"],
+                unbound: vec![],
+            })
+        );
+        assert_eq!(
+            root_of("{{ tbl.version }}", "t.jinja"),
+            Some(Missing::Variable {
+                name: "tbl".to_owned(),
+                nearest: vec!["tpl"],
+                unbound: vec![],
             })
         );
         assert_eq!(

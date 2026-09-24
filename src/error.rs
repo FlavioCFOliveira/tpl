@@ -277,9 +277,14 @@ pub enum Missing {
     Variable {
         /// The name the expression begins with.
         name: String,
-        /// The bound context variables nearest to `name`, at most three, in
-        /// the order of `FR-ERR-019`; never empty.
+        /// The context variables nearest to `name`, at most three, in the
+        /// order of `FR-ERR-019`; never empty.
         nearest: Vec<&'static str>,
+        /// The members of `nearest` the render did not bind: `table`, `view`
+        /// or `routine`, whose object flag was not given (`FR-RND-023`), so
+        /// the fix needs that flag as well as the name (finding AA-03 of the
+        /// tenth re-audit of rmp `#263`).
+        unbound: Vec<&'static str>,
     },
     /// The expression begins with the name of a context variable that the
     /// template binds itself — a loop variable, a `set`, a `with`, a macro's
@@ -837,6 +842,10 @@ pub enum Error {
     ConnectionDetailsMissing {
         /// The entry the invocation asked to create.
         entry: String,
+        /// Whether the invocation was given `-d/--database`, which the caller
+        /// may have meant as the database on the server; the `cause` then
+        /// says it is not a connection flag.
+        database_given: bool,
     },
 
     /// `tpl cfg database update` given none of the flags of `FR-CFG-027`
@@ -845,6 +854,9 @@ pub enum Error {
     NothingToUpdate {
         /// The entry the invocation named.
         entry: String,
+        /// Whether the invocation was given `-d/--database`, which the
+        /// `cause` then says is not a field flag (`FR-CFG-020`).
+        database_given: bool,
     },
 
     /// A block — `core`, `database` or `database.<name>` — given to
@@ -2699,12 +2711,14 @@ mod tests {
             (
                 Error::ConnectionDetailsMissing {
                     entry: "shop".to_owned(),
+                    database_given: false,
                 },
                 64,
             ),
             (
                 Error::NothingToUpdate {
                     entry: "shop".to_owned(),
+                    database_given: false,
                 },
                 64,
             ),

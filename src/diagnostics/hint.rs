@@ -387,7 +387,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // values only the caller knows, so they stay placeholders.
         // T-01: the caller's own command with the three flags added, every
         // other flag kept.
-        Error::ConnectionDetailsMissing { entry } => {
+        Error::ConnectionDetailsMissing { entry, .. } => {
             const WHERE: &[&str] = &[
                 "--host",
                 "<host>",
@@ -2027,7 +2027,39 @@ fn missing_step(missing: &Missing, template: &str) -> Cow<'static, str> {
         ),
         // Z-04: the nearest are context variables, literals of FR-ERR-022,
         // and the name is written only where its set admits it.
-        Missing::Variable { name, nearest } => {
+        // AA-03: a candidate the render did not bind needs its flag as well
+        // as the corrected name, and the line says so; the flag is the
+        // variable's own name, a literal.
+        Missing::Variable {
+            nearest, unbound, ..
+        } if !unbound.is_empty() => {
+            let flags = unbound
+                .iter()
+                .map(|variable| {
+                    format!(
+                        "'{variable}' exists only when the render names one with --{variable} \
+                         <name>"
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            let generic = match (nearest.len(), unbound.as_slice()) {
+                (1, [variable]) => format!(
+                    "'{variable}' exists only when the render names one: correct the template and \
+                     add --{variable} <name> to the tpl render command"
+                ),
+                (_, [variable]) => format!(
+                    "{flags}; correct the template, and if you mean '{variable}', add \
+                     --{variable} <name> to the tpl render command"
+                ),
+                _ => format!(
+                    "{flags}; correct the template, and add the flag of the one you mean to the \
+                     tpl render command"
+                ),
+            };
+            suggest::hint_line(nearest.iter().copied(), &generic).into_owned()
+        }
+        Missing::Variable { name, nearest, .. } => {
             let generic = if admits(name) {
                 format!(
                     "'{name}' is no variable tpl binds in this render; correct the template, \

@@ -272,6 +272,94 @@ tpl cfg database test   <name>
   `FR-CFG-016` already refuses `tpl cfg database add` with no connection flag
   with `64`; `update` now refuses its own empty invocation with the same code.
 
+  WHERE the refused invocation was given `-d/--database`, the `cause` SHALL
+  also state that `-d/--database` was given, that it selects the entry for
+  commands that connect and is not a field flag, and that the database on the
+  server is set with `--schema`. The `cause` SHALL NOT reproduce the value
+  given to `-d/--database`. The `hint` is unchanged.
+
+  ```
+  tpl cfg database update shop --database shop2
+  error: nothing to change: tpl cfg database update needs at least one field flag
+  cause: no field flag was given for entry 'shop'; -d/--database was given, and it selects the entry for commands that connect, not a field; the database on the server is set with --schema
+  hint:  give at least one of --dsn, --host, --port, --user, --schema, --tls, --password-command, --ca-file, --ca-path
+  exit:  64 (EX_USAGE)
+  ```
+
+  *Amended in the fifty-first edition.* The `cause` said that no field flag was
+  given to a caller who had given `--database` in the belief that it wrote the
+  database on the server, and nothing said why that flag did not count, per
+  finding AA-02 of the tenth re-audit of rmp `#263`, recorded for rmp `#285`.
+  The refusal is decided at step 1 of `FR-ERR-006`, so the warning of
+  `FR-CFG-051` is not written for it, and the `cause` carries the fact instead.
+  The value is not reproduced because the `cause` needs only the flag to be
+  understood, and a value written back would have to pass the set of
+  `FR-ERR-022`.
+
+- **FR-CFG-051**: WHEN `tpl cfg database add` or `tpl cfg database update` is
+  given `-d/--database`, in either spelling and at any position `FR-GLOB-002`
+  accepts, the system SHALL accept the flag, SHALL give it no effect, per
+  `FR-GLOB-007`, and SHALL write exactly one warning line to stderr, per
+  `FR-OUT-020`:
+
+  ```
+  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect; the database on the server is set with --schema <value>
+  ```
+
+  1. **No effect.** The system SHALL NOT resolve the name `-d/--database`
+     gives, and SHALL NOT write it to any field of the entry.
+  2. **The line.** It SHALL name `-d/--database`, SHALL name the command given
+     — `tpl cfg database add` or `tpl cfg database update`, in full whatever
+     alias the invocation used — SHALL state that
+     the flag selects the entry for commands that connect and has no effect
+     here, and SHALL state that the database on the server is set with
+     `--schema`. It SHALL reproduce the value given to `-d/--database` in
+     place of `<value>` only where that value matches the set of `FR-ERR-022`
+     for a database entry; otherwise it SHALL write the placeholder
+     `<database>` and SHALL NOT reproduce the value in any form.
+  3. **When.** The line SHALL be written once, after step 1 of `FR-ERR-006`
+     passes and before step 2, so it is the first line on stderr and precedes
+     any error the invocation then raises. An invocation refused at step 1 —
+     `-d` given twice, per `FR-CLI-014`, `tpl cfg database add` with no
+     connection flag, per `FR-CFG-016`, or `tpl cfg database update` with no
+     field flag, per `FR-CFG-020` — writes the error of that step and no
+     warning.
+  4. **Exit code.** The exit code SHALL be the one the same invocation without
+     `-d/--database` returns.
+  5. **Verbosity.** The line is a warning, so `-q/--quiet` suppresses it, per
+     `FR-GLOB-015`. `-v/--verbose` does not change it.
+  6. **Only the flag.** The line is written for the flag on the command line
+     only. `core.database` in `.tpl/.cfg` writes no line.
+
+  ```
+  tpl cfg database add hs4 --host h --database shop     warning (--schema shop), then 0
+  tpl -d nope cfg database add nope --host h            warning (--schema nope), then 0
+  tpl cfg database update shop --host h -d 'a b'        warning (--schema <database>), then 0
+  tpl -q cfg database add hs4 --host h -d shop          no line; 0
+  tpl cfg database update shop --database shop2        no line; 64 per FR-CFG-020
+  ```
+
+  *Rationale.* `cfg database show` prints the server database under the key
+  `database`, so `--database` is the natural guess for the flag that writes it.
+  `FR-CFG-028` gives that flag the name `--schema`, and `FR-GLOB-007` gives the
+  global `-d/--database` no effect on a command that requires no entry. Before
+  this requirement `tpl cfg database add hs4 --host h --database shop` exited
+  `0` with an entry lacking its server database, and the caller learnt it only
+  at the next connecting command, with a `78`. This is finding AA-02 of the
+  tenth re-audit of rmp `#263`, recorded for rmp `#285`. The line follows the
+  precedent of `FR-PROJ-026`: a global flag with no effect on a node is
+  accepted and warned about, not refused.
+
+  *Rejected: exiting `64`.* It refuses a global flag given alone, which
+  `FR-GLOB-002` and `BR-GLOB-001` forbid, and it refuses the invocation
+  `FR-GLOB-007` exists to admit: `tpl -d nope cfg database add nope --host h`.
+
+  *Rejected: treating `--database` as `--schema` here.* It gives one flag two
+  meanings at one node, which `FR-CFG-028` rejects.
+
+  *Accepted cost.* A caller that passes `-q`, or checks only the exit code,
+  does not see the line, as `FR-PROJ-026` accepts for its own.
+
 - **BR-CFG-001**: `add` creates and `update` changes. Neither silently does the
   other's job: there is no `--force` that replaces wholesale, and no idempotent
   `add` that would make the two verbs synonyms.
