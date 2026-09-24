@@ -641,6 +641,60 @@ Out of scope: the wording of any individual message.
   *Rationale.* It is the line a calling agent uses to correct itself, and the
   one that gives the most in return.
 
+- **FR-ERR-043**: WHERE a `hint` carries a runnable `tpl` command, and the
+  invocation was given `--tpl-dir` or `-d/--database`, the command SHALL carry
+  the same flag with the same value, written immediately after `tpl`, with
+  `--tpl-dir <path>` before `-d <entry>`. It SHALL NOT carry either flag:
+
+  - WHERE the flag has no effect on the node the command names, per the table
+    of `BR-GLOB-001`;
+  - WHERE the `hint` exists to change or to remove that flag, as a `hint`
+    answering `FR-RND-018` removes `-d`, and one answering `FR-GLOB-007` puts a
+    candidate entry in place of the value given; the command then carries what
+    the `hint` proposes.
+
+  The value SHALL be written as the caller wrote it: the path under the set of
+  `FR-ERR-041`, and the entry name under the set of `FR-ERR-022`. IF the set
+  refuses the value, THEN the command SHALL carry the flag with a placeholder
+  in the value's position, and the `hint` SHALL state in words that the
+  placeholder stands for the value this invocation was given.
+
+  ```
+  tpl --tpl-dir /srv/shop/.tpl -d shop schema table ordrs
+  hint:  did you mean 'orders'? list the available tables with: tpl --tpl-dir /srv/shop/.tpl -d shop schema tables
+
+  tpl --tpl-dir '/srv/my shop/.tpl' -d shop schema table ordrs
+  hint:  did you mean 'orders'? list the available tables with: tpl --tpl-dir <path> -d shop schema tables, where <path> is the --tpl-dir this invocation was given
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The examples fix which flags the command carries,
+  where, and the placeholder.
+
+  A value taken from `TPL_DIR`, `TPL_DATABASE` or `core.database` SHALL NOT be
+  written: the same command, run in the same environment and project,
+  resolves it again.
+
+  *Rationale.* A `hint` is copied and run. A `tpl` command copied without the
+  `--tpl-dir` the invocation was given discovers a project from the current
+  directory, and one copied without its `-d` selects the default entry, so
+  either can succeed against another project or another entry and report
+  nothing wrong. `BR-ERR-004` obliges a `hint` to carry a value the invocation
+  knows; this requirement names the two values that decide what a command acts
+  on and fixes where they are written.
+
+  *Why only these two flags.* They are the global flags that decide which
+  project and which entry a command acts on. `--timeout`, `-v` and `-q` change
+  how a command runs and not what it acts on, and `-h` and `-V` are not carried
+  into a command at all.
+
+  *Rejected: writing the resolved absolute path of `--tpl-dir`.* A caller runs
+  the `hint` from the directory it ran the invocation from, where the value as
+  written resolves identically, and the value as written is the one the caller
+  recognises.
+
+  *Added in the forty-seventh edition,* for rmp `#276`.
+
 - **FR-ERR-010**: `cause` SHALL be factual and specific, and SHALL NOT restate
   the `error` line. A `cause` restates the `error` line when it adds nothing to
   it. WHERE a row of `FR-ERR-034` obliges the `cause` to name a fact the
@@ -1188,8 +1242,9 @@ Out of scope: the wording of any individual message.
   over the whole value, which SHALL be at most 1024 characters long and SHALL
   NOT begin with `-`. The paths this requirement governs are the path of the
   project's `.tpl` folder or of a file inside it, as resolved under
-  `FR-PROJ-009`, and the path a caller named with `--tpl-dir`, or its parent
-  directory.
+  `FR-PROJ-009`; the path a caller named with `--tpl-dir`, or its parent
+  directory; and the path a caller gave to `--context`, other than `-`, which
+  names standard input and is not a path.
 
   IF a template name that is a nearest-match candidate falls outside the set,
   THEN the system SHALL drop it, per `FR-ERR-023`. IF a path falls outside the
@@ -1233,6 +1288,14 @@ Out of scope: the wording of any individual message.
 
   *Added in the forty-third edition,* for rmp `#260`, from findings H-07 and
   E-22 of the audit of rmp `#259`.
+
+  *Amended in the forty-seventh edition: the `--context` path is named,* for
+  rmp `#276`. A `hint` that lists the members of a `--context` document names
+  the document's path, and the implementation tested it against this set,
+  while the list above named only the project's paths and that of
+  `--tpl-dir`. A path written into a `hint` and named by no set falls to the
+  closing clause of `FR-ERR-022`, whose set admits no `/`, so the list now
+  names what the implementation already does. The set is unchanged.
 
 - **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, and every C0 control
   character in every value it interpolates into a message — catalogue names,
@@ -1435,6 +1498,11 @@ no requirement of this file is amended.
   depends on.
 
   *Added in the forty-third edition,* for rmp `#260`.
+
+  *Note added in the forty-seventh edition.* The values this rule lists do not
+  include the global flags a copied command needs to act on the same project
+  and entry. `FR-ERR-043` states that a `hint` command carries `--tpl-dir` and
+  `-d/--database` as the invocation was given them.
 
 ## Dependencies
 

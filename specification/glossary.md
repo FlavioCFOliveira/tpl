@@ -322,8 +322,13 @@ cached read, or a `--context` document — and is defined by
 ## nearest match
 
 A suggestion offered when a supplied name does not exist, computed by edit
-distance over the names that do exist, and for a command also by prefix. See
-`FR-ERR-019` and `FR-ERR-042`.
+distance over the names that do exist — for a configuration key, over the key
+space of `FR-CONF-002`, per `FR-CFG-007` and `FR-CFG-009` — and for a command
+also by prefix. See `FR-ERR-019` and `FR-ERR-042`.
+
+*Amended in the forty-seventh edition.* The configuration-key clause is new:
+`FR-CFG-007` draws the suggestion for `tpl cfg get` and `tpl cfg unset` over
+the key space, as `FR-CFG-009` already did for `tpl cfg set`.
 
 *Amended in the forty-sixth edition.* The prefix clause is new: `FR-ERR-042`
 also admits a command of which the supplied token is a proper prefix.

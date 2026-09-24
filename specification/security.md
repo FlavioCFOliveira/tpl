@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md]
 ---
 
@@ -198,8 +198,8 @@ module, `BR-SEC-003` excepted.
   `database.<name>` key, and the name of an environment variable. A **flag value
   the caller supplied in a separate token** is governed too, by a set of its
   own, `[A-Za-z0-9_-]{1,64}` measured over the whole value. A **template
-  name**, and a **filesystem path** of the project or of `--tpl-dir` written
-  into a hint, are governed by a third set, `[A-Za-z0-9_./-]`, measured over the
+  name**, and a **filesystem path** of the project, of `--tpl-dir` or of
+  `--context` written into a hint, are governed by a third set, `[A-Za-z0-9_./-]`, measured over the
   whole value, at most 1024 characters and not beginning with `-`. See
   `FR-ERR-022`, `FR-ERR-023`, `FR-ERR-040` and `FR-ERR-041`.
 
@@ -223,6 +223,10 @@ module, `BR-SEC-003` excepted.
   set, so a hint can name the absolute path of `.tpl/.cfg`. The threat is
   unchanged: the added `/` and `.` are not shell metacharacters, and a value
   beginning with `-` is refused so that none is read as an option.
+
+  *Amended in the forty-seventh edition.* The path given to `--context` joins
+  the paths the third set governs, as `FR-ERR-041` now names it. The set and
+  the threat are unchanged.
 
   *Amended in the twentieth edition.* This rule restated the character set as
   governing every candidate, per `FR-ERR-022` as it then read. It now carries

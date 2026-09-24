@@ -1,7 +1,7 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md]
 ---
 
@@ -80,7 +80,45 @@ tpl cfg database test   <name>
 
 - **FR-CFG-007**: IF the key supplied to `tpl cfg get` is absent from the file,
   THEN the system SHALL exit `66` (`EX_NOINPUT`) with a nearest-match suggestion
-  over the keys that do exist.
+  over the whole key space: every key of `FR-CONF-002`, with the `<name>`
+  segment of each `database.<name>.<field>` form bound to every entry the file
+  declares. The `hint` SHALL state, for each candidate the file does not set,
+  that `.tpl/.cfg` does not set it. The same population and the same statement
+  apply to a key given to `tpl cfg unset`, per `FR-CFG-012`.
+
+  ```
+  tpl cfg get core.conect_timeout
+  error: key 'core.conect_timeout' is not set in .tpl/.cfg
+  cause: core.conect_timeout is not a key of tpl, and .tpl/.cfg does not carry it
+  hint:  did you mean 'core.connect_timeout'? .tpl/.cfg does not set it, so its default applies; list every key, its type and its default with: tpl help cfg set
+  exit:  66 (EX_NOINPUT)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the candidate, the statement that
+  the file does not set it, and the code.
+
+  *Amended in the forty-seventh edition,* for rmp `#276`. The suggestion was
+  drawn over the keys the file sets, so a slip in a key the file does not set
+  — `core.conect_timeout` for `core.connect_timeout` — received no suggestion,
+  and the caller could not tell a misspelt key from an unset one. The key space
+  is the population `FR-CFG-009` already suggests over for `tpl cfg set`, and
+  its spellings are literals of `FR-ERR-022`; an entry name inside a
+  `database.<name>` key stays governed by the character set of that
+  requirement, per `FR-ERR-023`. The code is unchanged: a key the file does not
+  carry is still `66`, per `FR-ERR-035`.
+
+  *Why the hint says the candidate is not set.* `tpl cfg get` and
+  `tpl cfg unset` of a key the file does not set exit `66` again, so a
+  candidate offered without that statement sends the caller to a command that
+  cannot succeed, which `BR-ERR-004` forbids a `hint` to do. With it, the
+  caller learns on first reading that the key it meant is unset, which is the
+  answer to both commands.
+
+  *Rejected: keeping the population to the keys the file sets.* It offers
+  nothing for the slip a caller is most likely to make in a file that sets few
+  keys, and it gives the same silence for a misspelt key and for a correctly
+  spelt unset one.
 
   IF the key supplied to `tpl cfg get` has the form of a block — `core`,
   `database`, or `database.<name>` — rather than of a key of `FR-CONF-002`,
@@ -130,7 +168,14 @@ tpl cfg database test   <name>
   deletion makes.
 
 - **FR-CFG-012**: IF the key or block supplied to `tpl cfg unset` is absent,
-  THEN the system SHALL exit `66`.
+  THEN the system SHALL exit `66`. For a key, the nearest-match suggestion and
+  its `hint` SHALL follow `FR-CFG-007`.
+
+  *Amended in the forty-seventh edition,* for rmp `#276`. The requirement named
+  no suggestion, and the implementation drew one over the keys the file sets,
+  as `FR-CFG-007` then read. It now cites `FR-CFG-007`, so both commands
+  suggest over one population and state which candidates the file does not
+  set.
 
 - **FR-CFG-013**: `tpl cfg list` SHALL print the contents of `.tpl/.cfg`
   literally, with passwords redacted per `FR-CFG-021`.
@@ -463,6 +508,11 @@ tpl cfg database test   <name>
   is that rule's caller. A repeatable flag accumulating one argument per
   occurrence would be a second way to build the same array, and `FR-CLI-014`
   makes a repeated single-value flag `64` in any case.
+
+  *Note added in the forty-seventh edition.* `FR-CONF-046` states the strings
+  the splitting rule refuses with `64`, among them one that begins with `[`,
+  which is how an array written on the command line arrives. "SHALL NOT accept
+  an array" is therefore a refusal, never a string stored as one word.
 
 - **FR-CFG-047**: None of the three flags of the amendment above SHALL carry a
   short form, per `FR-GLOB-024`.

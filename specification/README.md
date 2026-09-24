@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-six editions. All are in force;
+The specification has been written in forty-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4082,6 +4082,62 @@ finding S-02 was read against `FR-CFG-016`, `FR-CONF-040` and `FR-CONF-041`,
 which admit an entry created from one discrete flag and refuse it with `78`
 when it is used; nothing is changed for it. Neither root document paraphrases
 an amended requirement, so the fifth validation rule owes nothing.
+
+### Forty-seventh edition — a key misspelt, an array on the command line, and a hint that acts elsewhere
+
+The help refinement of sprint 21, for rmp `#276`, found four places where a
+requirement in force kept an agent from acting correctly on first reading.
+`tpl cfg get core.conect_timeout` received no suggestion, because the
+suggestion was drawn over the keys the file sets. `tpl cfg set
+database.shop.password_command '["pass","x"]'` stored the one word
+`[pass,x]` and exited `0`. A trailing backslash in the same string was dropped
+without trace. And a `hint` naming another `tpl` command did not carry the
+`--tpl-dir` or `-d` the invocation was given, so the copied command could act
+on another project or another entry; a hint naming a `--context` path tested
+it against a set no requirement named for it.
+
+**Two identifiers are assigned — `FR-CONF-046` and `FR-ERR-043`; none is
+retired and none is renumbered.** No term enters or leaves
+[glossary.md](glossary.md); the entry *nearest match* is amended. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A misspelt configuration key is suggested over the key space** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-007` draws the suggestion for
+  `tpl cfg get` over every key of `FR-CONF-002`, with the entry segment bound
+  to the entries the file declares, and the `hint` states each candidate the
+  file does not set. `FR-CFG-012` applies the same rule to `tpl cfg unset`.
+  The code stays `66`.
+- **A `password_command` string that cannot be what the caller meant is
+  refused** — [configuration-model.md](configuration-model.md).
+  `FR-CONF-046` refuses with `64`, and writes nothing, a string that yields no
+  word, leaves a quote unclosed, ends in a backslash outside any quoted run,
+  or begins with `[`. The first two rows state what the implementation already
+  refused; the last two are new. `FR-CONF-025` and `FR-CFG-046` carry notes.
+- **A `hint` command acts on the same project and entry** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-043` makes a
+  runnable `tpl` command in a `hint` carry the `--tpl-dir` and `-d` the
+  invocation was given, immediately after `tpl`, except on a node where the
+  flag has no effect and in a `hint` that exists to change or remove the flag.
+  A value either set refuses leaves a placeholder, named in words.
+  `BR-ERR-004` carries a note.
+- **The `--context` path is a governed path** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and
+  [security.md](security.md). `FR-ERR-041` names the path given to
+  `--context`, other than `-`, among the paths its set governs, and
+  `FR-SEC-019` restates it. The set is unchanged.
+
+`FR-CFG-009`, `FR-CFG-010`, `FR-CFG-011`, `FR-CONF-023`, `FR-CONF-024`,
+`FR-CONF-026`, `FR-CONF-035`, `FR-CONF-042`, `FR-ERR-009`, `FR-ERR-019`,
+`FR-ERR-022`, `FR-ERR-023`, `FR-ERR-035`, `FR-ERR-037`, `FR-ERR-040`,
+`BR-ERR-003`, `FR-GLOB-007`, `FR-GLOB-009`, `BR-GLOB-001`, `FR-RND-018`,
+`FR-PROJ-008` and `FR-PROJ-026` were read against the changes, and none
+conflicts with them, so none is amended. No security rule yields: the key
+space is a literal of `FR-ERR-022`, an entry name stays under its set, a path
+under the set of `FR-ERR-041`, and no credential enters a message. Neither
+root document paraphrases an amended requirement: the root `README.md`
+describes `password_command` as one string on the command line that `tpl`
+splits, which stays true. The fifth validation rule therefore owes nothing.
 
 ### Still out of scope
 

@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -963,7 +963,64 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 - **FR-CONF-025**: WHEN a `password_command` is supplied as a single string —
   for instance to `tpl cfg set` — the system SHALL split it into words by POSIX
   quoting rules, honouring single and double quotes, and SHALL store the
-  resulting array.
+  resulting array. `FR-CONF-046` states the strings it SHALL refuse instead.
+
+  *Amended in the forty-seventh edition.* The second sentence is new, for rmp
+  `#276`.
+
+- **FR-CONF-046**: IF a `password_command` supplied as a single string — the
+  value given to `tpl cfg set database.<name>.password_command`, or to
+  `--password-command` under `FR-CFG-046` — meets any condition of the table
+  below, THEN the system SHALL exit `64` (`EX_USAGE`), as `FR-CFG-010` does for
+  a value that does not conform to its type, and SHALL write nothing to
+  `.tpl/.cfg`. The `cause` SHALL name the key or the flag and the condition
+  met. The `hint` SHALL show the value written as one command line.
+
+  | The string | Why it is refused |
+  |---|---|
+  | Yields no word: it is empty or holds only whitespace | There is no program to execute |
+  | Leaves a single or a double quote unclosed | The POSIX quoting rules admit no unclosed quote, and a shell refuses one |
+  | Ends in a backslash outside any quoted run, so the backslash escapes no character | The backslash would be dropped without trace; a shell reads it as a line continuation, not as a character |
+  | Has `[` as its first character that is not whitespace | It is how an array written on the command line arrives: `["pass","db/shop"]` would be stored as the one word `[pass,db/shop]`, which names no program |
+
+  Where a string meets more than one condition, the `cause` SHALL name the
+  first in the order of the table.
+
+  ```
+  tpl cfg set database.shop.password_command '["pass","db/shop"]'
+  error: invalid value for database.shop.password_command
+  cause: the value begins with '[', which is how an array arrives; this key takes one command line written as one string, which tpl splits into words
+  hint:  write the command as one command line: tpl cfg set database.shop.password_command '<command line>', as in 'pass db/shop'
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the condition named and the code.
+  The placeholder stands for a value only the caller knows, which
+  `BR-ERR-004` admits.
+
+  *The table states the rule the implementation follows, and adds two rows.*
+  The first two rows are what `tpl cfg set` and `--password-command` already
+  refused, and no requirement stated them. The third and the fourth are new:
+  a trailing backslash was dropped, and a string beginning with `[` was stored
+  as one word, and both exited `0`.
+
+  *Why `[` costs no working command.* `[` is a program on every supported
+  system — `/bin/[`, the `test` utility — but POSIX specifies that `test`
+  writes nothing to its standard output, so it can never supply the password
+  `FR-CONF-027` reads from there. A program whose name begins with `[` remains
+  expressible: the rule tests the first character as written, so a quoted or
+  escaped first word — `'[x]/get' db`, `\[x]/get db` — and an absolute path —
+  `/bin/[` — pass it.
+
+  *Rejected: reading a string that begins with `[` as a JSON array.* It gives
+  one value two grammars chosen by its first character, and `FR-CFG-046` bars
+  an array on the command line. Also rejected: keeping the behaviour and
+  documenting it. The stored value names no program, so the fault would appear
+  only at the first connection, as the `78` of `FR-CONF-042`, far from the
+  command that wrote it.
+
+  *Added in the forty-seventh edition,* for rmp `#276`.
 
 - **FR-CONF-026**: The system SHALL pass shell metacharacters through as literal
   arguments. Pipes, `;`, `&&`, `$(…)`, redirection, and globbing SHALL NOT be
