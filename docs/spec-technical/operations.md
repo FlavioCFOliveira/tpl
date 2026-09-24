@@ -108,7 +108,9 @@ tests the pipeline ignores run on demand with
 `NFR-PERF-018` makes none of the four second class, so passing on the
 development host is not passing. The `ci.yml` workflow that
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes runs the
-five commands on all four targets; see
+five commands on all four targets, but only when someone dispatches it; between
+releases, all-target coverage depends on that dispatch, and only `release.yml`
+enforces it, at release time (that record's *Consequences*). See
 [Continuous integration and release](#continuous-integration-and-release). On
 every target, command 4 leaves out the measurement tests, which carry the
 `ignore` attribute that [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 10, prescribes.
@@ -222,11 +224,12 @@ not a pin, not a requirement, and re-taken rather than assumed.
 | Components beyond the default set | `llvm-tools` |
 
 **All four targets being installed lets the pipeline run locally against each,
-and nothing else.** Covering all four targets is no longer carried by a person:
-the `ci.yml` workflow that
+and nothing else.** The `ci.yml` workflow that
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes runs the
-pipeline on each, by the build path of
-[`ADR-008`](../adr/adr-008-packaging-and-build-path.md).
+pipeline on each target, by the build path of
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md), when someone dispatches
+it. Between releases, all-target coverage therefore still depends on a person;
+only `release.yml` enforces it, at release time (`ADR-012`, *Consequences*).
 
 **The `1.87.0` toolchain is installed and is below the floor.** It is not the
 active one, no path in this document selects it, and the floor
@@ -363,9 +366,10 @@ fixture must contain.
 Under [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), `release.yml`
 publishes nothing unless the tag passes the provenance gates and the tagged
 commit passes the validation pipeline on all four targets, which enforces the
-first three rows. The supported-series table is
-re-verified by hand before the `v*` tag is pushed, as that record requires,
-because the push is what publishes. The engine pin is checked by hand when the
+first three rows. The supported-series table is re-verified by hand before
+the `v*` tag is created, as that record requires, so that any change it forces
+is in the tagged commit; publishing starts only when `release.yml` is
+dispatched against the tag. The engine pin is checked by hand when the
 pin moves; no workflow checks it.
 
 ## The four version numbers: where a bump is enacted
@@ -538,14 +542,17 @@ the root documents, and what that is remains that register's to state.
 ## Continuous integration and release
 
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes two GitHub
-Actions workflows, both limited to correctness validations. Their triggers,
+Actions workflows, both limited to correctness validations and both started by
+`workflow_dispatch` only: no push, pull request or tag starts either. A release
+is `main` pushed, then the annotated tag, then `release.yml` dispatched against
+that tag; `release.yml` refuses a ref that is not a tag. The dispatch commands,
 target matrix, release gate and artefacts are that record's and are not
 restated here; the build path each uses per target is
 [`ADR-008`](../adr/adr-008-packaging-and-build-path.md)'s.
 
 | Workflow | What it enforces in this document |
 |---|---|
-| `ci.yml` | The [validation pipeline](#the-mandatory-validation-pipeline), on all four targets of `NFR-PERF-018`, on every push and pull request |
+| `ci.yml` | The [validation pipeline](#the-mandatory-validation-pipeline), on all four targets of `NFR-PERF-018`, on demand against a chosen ref |
 | `release.yml` | The first three [release gates](#the-release-gates) — the provenance gates first, then the validation on all four targets — before it publishes. A pre-release tag publishes a GitHub pre-release |
 
 **What each workflow installs is

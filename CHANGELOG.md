@@ -36,6 +36,13 @@ workflow, before it closes.
 
 ## Unreleased
 
+### Changed
+
+- **Publishing a release.** A pushed `v*` tag no longer publishes a release by
+  itself: `release.yml` is started with
+  `gh workflow run release.yml --ref vX.Y.Z`, and it refuses a ref that is not
+  a tag.
+
 ## [0.0.1] - 2026-09-24
 
 The first release of `tpl`. No earlier version was ever released or tagged, so
