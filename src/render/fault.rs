@@ -494,11 +494,21 @@ pub(super) fn unbound(
             .names()
             .collect();
     unbound.retain(|variable| nearest.contains(variable));
+    // AC-04: the three object flags exclude one another, so an unbound
+    // candidate beside a bound object is reached by replacing that flag.
+    let replacing = if unbound.is_empty() {
+        None
+    } else {
+        ["table", "view", "routine"]
+            .into_iter()
+            .find(|object| bound(context, object).is_some())
+    };
 
     (!nearest.is_empty()).then(|| Missing::Variable {
         name: root.to_owned(),
         nearest,
         unbound,
+        replacing,
     })
 }
 
@@ -1315,6 +1325,7 @@ mod tests {
                 name: "tabel".to_owned(),
                 nearest: vec!["table"],
                 unbound: vec![],
+                replacing: None,
             })
         );
         // AA-03: an object variable the render did not bind is a candidate,
@@ -1325,6 +1336,9 @@ mod tests {
                 name: "viw".to_owned(),
                 nearest: vec!["view"],
                 unbound: vec!["view"],
+                // AC-04: this context binds `table`, whose flag excludes
+                // `--view`.
+                replacing: Some("table"),
             })
         );
         assert_eq!(
@@ -1333,6 +1347,7 @@ mod tests {
                 name: "tbl".to_owned(),
                 nearest: vec!["table"],
                 unbound: vec![],
+                replacing: None,
             })
         );
         assert_eq!(
@@ -1341,6 +1356,7 @@ mod tests {
                 name: "tbl".to_owned(),
                 nearest: vec!["tpl"],
                 unbound: vec![],
+                replacing: None,
             })
         );
         assert_eq!(

@@ -285,6 +285,11 @@ pub enum Missing {
         /// the fix needs that flag as well as the name (finding AA-03 of the
         /// tenth re-audit of rmp `#263`).
         unbound: Vec<&'static str>,
+        /// The one of `table`, `view` and `routine` the render bound, WHERE
+        /// `unbound` is not empty: its flag excludes theirs, so the fix
+        /// replaces it rather than adding a second (finding AC-04 of the
+        /// twelfth re-audit of rmp `#263`).
+        replacing: Option<&'static str>,
     },
     /// The expression begins with `table`, `view` or `routine`, which the
     /// render did not bind, and the render bound another of the three: its

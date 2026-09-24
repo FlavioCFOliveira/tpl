@@ -642,6 +642,46 @@ pub(crate) enum Look<'a> {
     Routine(RoutineKind<'a>, &'a str),
 }
 
+/// What `.tpl/.cache/` recorded for the path [`Cache::clean_orphan`]
+/// removed (`FR-CACHE-041`, item 2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Recorded {
+    /// The member of `.tpl/.cache/` equal to the name given byte for byte,
+    /// or, where none is, the member the path resolved to; [`None`] where
+    /// neither could be found or read as text.
+    pub(crate) name: Option<String>,
+}
+
+/// The name `.tpl/.cache/` lists for `path`, whose metadata, read without
+/// following a link, is `found`.
+///
+/// The member equal to the last component byte for byte wins; otherwise the
+/// member with the same device and inode, which is the one a filesystem that
+/// ignores case resolved the path to.
+fn recorded_name(path: &Path, found: &fs::Metadata) -> Option<String> {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let given = path.file_name()?;
+    let members = fs::read_dir(path.parent()?).ok()?;
+    let mut resolved = None;
+
+    for member in members.flatten() {
+        let name = member.file_name();
+        if name == given {
+            return name.into_string().ok();
+        }
+        if resolved.is_none()
+            && let Ok(metadata) = fs::symlink_metadata(member.path())
+            && metadata.dev() == found.dev()
+            && metadata.ino() == found.ino()
+        {
+            resolved = Some(name);
+        }
+    }
+
+    resolved?.into_string().ok()
+}
+
 /// One database entry's cache.
 ///
 /// It exists whether or not anything has been written: `FR-CACHE-003` keeps
@@ -1014,6 +1054,61 @@ impl Cache {
                 path: layout.folder().to_owned(),
                 returned,
             }),
+        }
+    }
+
+    /// Removes `.tpl/.cache/<name>` for a name no entry declares, where that
+    /// path exists (`FR-CACHE-041`); answers [`None`] where it did not, and
+    /// otherwise the name `.tpl/.cache/` records for what was removed.
+    ///
+    /// The caller has already established conditions 1 and 2 of that
+    /// requirement; this is condition 3 and the removal. The path is examined
+    /// with `symlink_metadata`, so a symbolic link at `.tpl/.cache/<name>` is
+    /// removed itself and never followed, and a directory is removed with
+    /// [`fs::remove_dir_all`], which removes a link beneath it rather than
+    /// what it points at. Anything else there — a file, a socket — is
+    /// removed as one file, because the condition is "exists, as a file of
+    /// any kind".
+    ///
+    /// The recorded name is read before the removal, per item 2: on a
+    /// filesystem that ignores case it may differ from the name given.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::ProjectFileUnwritable`] — `74` — where the filesystem
+    /// refused to say whether the path exists, or refused the removal.
+    pub(crate) fn clean_orphan(&self) -> Result<Option<Recorded>, Error> {
+        let Some(layout) = self.layout.as_ref() else {
+            return Ok(None);
+        };
+        let folder = layout.folder();
+        let refused = |returned: std::io::Error| Error::ProjectFileUnwritable {
+            path: folder.to_owned(),
+            returned,
+        };
+
+        let found = match fs::symlink_metadata(folder) {
+            Ok(found) => found,
+            Err(returned) if returned.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(returned) => return Err(refused(returned)),
+        };
+        let kind = found.file_type();
+        let recorded = Recorded {
+            name: recorded_name(folder, &found),
+        };
+
+        let removed = if kind.is_dir() {
+            fs::remove_dir_all(folder)
+        } else {
+            fs::remove_file(folder)
+        };
+
+        match removed {
+            // Gone between the two calls: the state the caller asked for.
+            Err(returned) if returned.kind() != std::io::ErrorKind::NotFound => {
+                Err(refused(returned))
+            }
+            _ => Ok(Some(recorded)),
         }
     }
 

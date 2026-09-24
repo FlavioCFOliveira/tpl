@@ -215,15 +215,23 @@ here introduces behaviour of its own.
 - **Actor**: operator
 - **Trigger**: an entry must point at a different server
 - **Main flow**:
-  1. Run `tpl cfg database update shop --host db-staging.example.com`.
+  1. Run `tpl cfg database update shop --host db-staging.example.com`. A
+     warning line names `tpl -d shop cache clean`.
   2. Run `tpl -d shop cache clean`.
 - **Alternate flows**:
   - Step 2 is skipped: reads continue to serve the previous server's catalogue,
     with exit `0` and nothing in the output saying so. The only signal is the
     load time reported by `tpl cache status`.
+  - The entry is repointed by removing and adding it: run
+    `tpl cfg database remove shop`, whose warning line names
+    `tpl -d shop cache clean`; run `tpl -d shop cache clean`, which removes
+    the data cached for `shop` although no entry declares it; then run
+    `tpl cfg database add shop` with the new connection flags. Where the clean
+    is skipped, the new entry reads the old entry's data, with exit `0`.
 - **Notes**: nothing invalidates the cache automatically; this failure mode is
   accepted and documented
-- **Requirements**: `FR-CACHE-028`, `FR-CACHE-029`, `BR-CACHE-003`
+- **Requirements**: `FR-CACHE-028`, `FR-CACHE-029`, `FR-CACHE-041`,
+  `BR-CACHE-003`, `FR-CFG-052`, `FR-CFG-053`
 
 ## UC-012 — Recover from a mistyped name
 

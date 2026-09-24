@@ -145,6 +145,13 @@ which belongs to that command's module.
   `FR-GLOB-006` nor `FR-GLOB-007` reaches it. An absent name there is that
   command's own `66`, over its own argument.
 
+  *Note added in the fifty-third edition.* `tpl cache clean` stays on the
+  list: it resolves a selected name through `-d/--database` or
+  `core.database`, and with no name selected it is `78`, per `FR-GLOB-006`.
+  `FR-CACHE-041` admits one case in which the selected name need not be
+  declared by an entry — no object flag, and a folder of that name under
+  `.tpl/.cache/` — so that the data of a deleted entry can be removed.
+
   *`tpl render` is the one command on both lists*, and `--context` is what
   moves it. `FR-RND-022` keeps a `--context` invocation away from a connection
   and a cache, and `FR-RND-018` makes `--context` with an explicit

@@ -226,13 +226,16 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
     editor.save()?;
 
     // FR-CFG-050: the one key that holds five facts. The block of the entry
-    // writes no such line: the caller named the whole entry.
-    if let Target::Key(Key::Entry {
-        entry,
-        field: EntryKey::Dsn,
-    }) = &target
-    {
-        crate::diagnostics::emit::dsn_unset(entry);
+    // writes no such line: the caller named the whole entry, and FR-CFG-052
+    // writes the line of a deleted entry instead, without looking at the
+    // cache it names.
+    match &target {
+        Target::Key(Key::Entry {
+            entry,
+            field: EntryKey::Dsn,
+        }) => crate::diagnostics::emit::dsn_unset(entry),
+        Target::Entry(entry) => crate::diagnostics::emit::entry_removed(entry),
+        Target::Core | Target::Databases | Target::Key(_) => {}
     }
 
     Ok(())

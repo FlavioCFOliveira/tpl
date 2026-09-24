@@ -2041,6 +2041,38 @@ fn missing_step(missing: &Missing, template: &str) -> Cow<'static, str> {
         // AA-03: a candidate the render did not bind needs its flag as well
         // as the corrected name, and the line says so; the flag is the
         // variable's own name, a literal.
+        // AC-04: where the render bound another of the three objects, the
+        // flag is replaced rather than added; both names are literals.
+        Missing::Variable {
+            nearest,
+            unbound,
+            replacing: Some(bound),
+            ..
+        } if !unbound.is_empty() => {
+            let generic = match (nearest.len(), unbound.as_slice()) {
+                (1, [variable]) => format!(
+                    "this render names a {bound} with --{bound}, so '{variable}' is not bound: \
+                     correct the template to read '{bound}', or correct it and replace --{bound} \
+                     with --{variable} <name> in the tpl render command"
+                ),
+                (_, [variable]) => format!(
+                    "this render names a {bound} with --{bound}, so '{variable}' is not bound; \
+                     correct the template, and if you mean '{variable}', replace --{bound} with \
+                     --{variable} <name> in the tpl render command"
+                ),
+                _ => format!(
+                    "this render names a {bound} with --{bound}, so {} are not bound; correct \
+                     the template, and if you mean one of them, replace --{bound} with its flag \
+                     in the tpl render command",
+                    unbound
+                        .iter()
+                        .map(|variable| format!("'{variable}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                ),
+            };
+            suggest::hint_line(nearest.iter().copied(), &generic).into_owned()
+        }
         Missing::Variable {
             nearest, unbound, ..
         } if !unbound.is_empty() => {

@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-two editions. All are in force;
+The specification has been written in fifty-three editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4448,6 +4448,80 @@ and the index of [open-questions.md](open-questions.md) stays empty.
 None conflicts with them, so none is amended. The root `README.md` makes no
 statement about the warning or the `cause` that this edition makes false, so
 the fifth validation rule owes nothing.
+
+### Fifty-third edition — a cache that outlived its entry, and a warning that corrected the right flag
+
+The twelfth re-audit of rmp `#263`, recorded for rmp `#287`, found that
+`tpl cfg database remove NAME` and `tpl cfg unset database.NAME` leave
+`.tpl/.cache/NAME/` in place, that an entry added later under the same name
+reads that data with exit `0`, and that `tpl -d NAME cache clean` could not
+remove it while no entry declared the name, exiting `66` (finding AC-01). It
+also found that the warning of `FR-CFG-051` advised `--schema <value>` where
+the `-d/--database` value was the entry name itself (finding AC-02).
+
+The preferred ruling for AC-01, deleting the cache folder with the entry, is
+not adopted: `BR-CACHE-004`, `FR-CFG-004` and `FR-CACHE-011` forbid a `cfg`
+command to delete or touch cached data. The alternative the brief named is
+adopted: `tpl cache clean` may name the cache of a deleted entry, and the
+commands that delete or repoint an entry say, without reading the cache, that
+its data is kept and which command removes it.
+
+**Four identifiers are assigned — `FR-CFG-052`, `FR-CFG-053`, `FR-CACHE-041`
+and `FR-HELP-036`; none is retired and none is renumbered.** No term enters or
+leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Deleting an entry says its cache is kept** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-052` writes one warning line to
+  stderr when `tpl cfg database remove` or `tpl cfg unset` of a whole entry
+  exits `0`, naming `tpl -d <name> cache clean`, with nothing on stdout and no
+  access to the cache. `FR-CFG-011`, `FR-CFG-022` and `FR-CFG-050` carry
+  notes or a sentence that cite it.
+- **Repointing an entry says its cache is kept** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-053` writes one warning line to
+  stderr when `tpl cfg database update` is given a flag `FR-CACHE-029` names
+  and exits `0`, naming `tpl -d <name> cache clean`.
+- **The cache of a deleted entry can be cleaned** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-041` lets
+  `tpl cache clean` with no object flag remove `.tpl/.cache/<name>` for a
+  name of `FR-CONF-048` that no entry declares, ignoring ASCII case, where
+  that path exists, with exit `0` and one stderr line. `FR-CACHE-023`,
+  `BR-CACHE-003` and `BR-CACHE-004` carry notes, and `FR-ERR-005` and
+  `FR-GLOB-025` carry notes that name the exception.
+- **The help states the cache facts** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-036` makes the
+  `DESCRIPTION` of `remove`, `unset`, `add`, `update` and `cache clean` state
+  what each does to, or with, an entry's cache, each command carrying
+  `-d NAME`.
+- **The warning does not correct the entry name** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-051` is amended: a new
+  condition 3 ends the line with "the name argument already names the entry"
+  where the `-d/--database` value equals the `<name>` operand byte for byte,
+  and names neither `--schema` nor any value.
+- **The quoted clean acts on the caller's project** —
+  [cfg-commands.md](cfg-commands.md) and
+  [cache-commands.md](cache-commands.md). Amended within this edition: the
+  command in the lines of `FR-CFG-052` and `FR-CFG-053` carries the
+  invocation's explicit `--tpl-dir` as `FR-ERR-043` states for a `hint`, with
+  a placeholder stated in words where `FR-ERR-041` refuses the value. The
+  line of `FR-CACHE-041` carries no command, and names the removed folder as
+  the filesystem records it where that differs in case from the name given.
+- **The repoint use case covers removal** — [use-cases.md](use-cases.md).
+  `UC-011` gains an alternate flow for removing and adding an entry.
+
+`FR-CFG-004`, `FR-CFG-012`, `FR-CFG-020`, `FR-CFG-023`, `FR-CACHE-002`,
+`FR-CACHE-011`, `FR-CACHE-015`, `FR-CACHE-028`, `FR-CACHE-029`,
+`FR-CACHE-036`, `FR-CACHE-040`, `FR-CONF-048`, `FR-GLOB-006`, `FR-GLOB-007`,
+`FR-GLOB-015`, `BR-GLOB-001`, `FR-ERR-001`, `FR-ERR-006`, `FR-ERR-022`,
+`BR-ERR-005`, `FR-ERR-041`, `FR-ERR-043`, `FR-OUT-020`, `FR-OUT-023` and
+`FR-HELP-031` were read against
+the changes. Apart from the notes named above, none conflicts with them, so
+none is amended. The warning lines are not `hint` lines, and the cache they
+name belongs to the entry the invocation names, so `BR-ERR-005` is not
+engaged. The root `README.md` states that removing the entry `core.database`
+names clears it silently; that remains true, so the fifth validation rule
+owes nothing.
 
 ### Still out of scope
 

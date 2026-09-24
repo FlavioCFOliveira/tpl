@@ -114,7 +114,10 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
     // FR-CFG-051: steps 1 to 3 of FR-ERR-006 have passed, and every later
     // check is still to come.
     if let Some(given) = supplied.database {
-        crate::diagnostics::emit::database_has_no_effect(ADD, flags.server_database(false, given));
+        crate::diagnostics::emit::database_has_no_effect(
+            ADD,
+            flags.server_database(false, given, name),
+        );
     }
 
     let mut editor = project.editor()?;
@@ -174,7 +177,7 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
             .is_some_and(|block| block.declares(EntryKey::Dsn));
         crate::diagnostics::emit::database_has_no_effect(
             UPDATE,
-            flags.server_database(by_dsn, given),
+            flags.server_database(by_dsn, given, name),
         );
     }
 
@@ -193,7 +196,15 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
     let mut editor = project.editor()?;
     apply(&mut editor, name, written);
 
-    editor.save()
+    editor.save()?;
+
+    // FR-CFG-053: after the rewrite, and after the line of FR-CFG-051; the
+    // cache is not consulted, so the line does not depend on one existing.
+    if flags.repoints() {
+        crate::diagnostics::emit::entry_repointed(name);
+    }
+
+    Ok(())
 }
 
 /// `tpl cfg database remove <name>` (`FR-CFG-022`, `FR-CFG-023`).
@@ -225,7 +236,13 @@ pub(crate) fn remove(supplied: &Supplied<'_>, name: &str) -> Result<(), Error> {
         )));
     }
 
-    editor.save()
+    editor.save()?;
+
+    // FR-CFG-052: the cache under the name is kept, per BR-CACHE-004, and the
+    // line says so without looking at it.
+    crate::diagnostics::emit::entry_removed(name);
+
+    Ok(())
 }
 
 /// `tpl cfg database list` (`FR-CFG-018`, `FR-CFG-038`, `FR-CFG-040`).
@@ -429,15 +446,28 @@ impl Flags<'_> {
             && self.ca_path.is_none()
     }
 
+    /// Whether the invocation gives a flag that changes where the entry
+    /// points: one of the six `FR-CACHE-029` names, per `FR-CFG-053`.
+    /// `--password-command`, `--ca-file` and `--ca-path` do not.
+    const fn repoints(&self) -> bool {
+        self.connects() || self.tls.is_some()
+    }
+
     /// Where the database on the server of the entry written comes from, for
     /// the last clause of the warning of `FR-CFG-051`: `by_dsn` is whether
-    /// `.tpl/.cfg` already defines the entry by `dsn`, and `given` the value
-    /// of `-d/--database`.
-    const fn server_database<'g>(&self, by_dsn: bool, given: &'g str) -> ServerDatabase<'g> {
+    /// `.tpl/.cfg` already defines the entry by `dsn`, `given` the value of
+    /// `-d/--database`, and `name` the `<name>` operand.
+    ///
+    /// The four conditions are tried in the order of `FR-CFG-051` item 2:
+    /// the dsn form and a given `--schema` precede the equality of condition
+    /// 3, which is byte for byte.
+    fn server_database<'g>(&self, by_dsn: bool, given: &'g str, name: &str) -> ServerDatabase<'g> {
         if by_dsn || self.dsn.is_some() {
             ServerDatabase::Dsn
         } else if self.schema.is_some() {
             ServerDatabase::SchemaGiven
+        } else if given == name {
+            ServerDatabase::NamesEntry
         } else {
             ServerDatabase::Schema(given)
         }

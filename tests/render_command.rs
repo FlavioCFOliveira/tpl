@@ -2514,6 +2514,53 @@ fn ab_04_an_object_variable_the_render_did_not_bind_names_the_flag_to_replace() 
 }
 
 #[test]
+fn ac_04_a_misspelt_object_variable_under_another_object_flag_names_the_flag_to_replace() {
+    // Finding AC-04 of the twelfth re-audit of rmp #263: `vew` in a render
+    // given --table was told to add --view, which --table excludes.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(
+        CONTEXT,
+        &EMPTY_CONTEXT.replace(r#""tables":[]"#, &format!(r#""tables":{ORDERS}"#)),
+    );
+    sandbox.write(".tpl/templates/vw.jinja", "{{ vew.name }}\n");
+    sandbox.write(".tpl/templates/rt.jinja", "{{ routin.name }}\n");
+
+    for (template, root) in [("vw", "view"), ("rt", "routine")] {
+        let written = refused(
+            &sandbox,
+            &[
+                "render",
+                template,
+                "--context",
+                CONTEXT,
+                "--table",
+                "orders",
+            ],
+            65,
+        );
+        assert_eq!(
+            line(&written, LABELS[2]),
+            format!(
+                "did you mean '{root}'? this render names a table with --table, so '{root}' is \
+                 not bound: correct the template to read 'table', or correct it and replace \
+                 --table with --{root} <name> in the tpl render command"
+            ),
+            "{written}"
+        );
+        assert!(!written.contains(&format!("add --{root}")), "{written}");
+    }
+
+    // Without an object flag, the hint still asks for the flag.
+    let written = refused(&sandbox, &["render", "vw", "--context", CONTEXT], 65);
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 'view'? 'view' exists only when the render names one: correct the \
+         template and add --view <name> to the tpl render command"
+    );
+}
+
+#[test]
 fn a_string_subscript_of_a_bound_object_is_answered_as_the_attribute_is() {
     // Recorded by the eleventh re-audit of rmp #263, fixed under #286:
     // `table["nme"]` got "a later step of the expression is not" and no

@@ -355,6 +355,93 @@ tpl -d shop cache status
   that names an object the cache does not hold produces. A clean with no
   object flag of a cache that is already empty still exits `0`.
 
+  *Note added in the fifty-third edition.* `FR-CACHE-041` states the one
+  clean whose selected name no entry of `.tpl/.cfg` declares.
+
+- **FR-CACHE-041**: WHEN `tpl cache clean` is given no object flag, and the
+  selected name — given by `-d/--database` or by `core.database`, per
+  `FR-GLOB-025` — meets all three of the following conditions, the system
+  SHALL remove `.tpl/.cache/<name>`, SHALL exit `0`, SHALL write exactly one
+  warning line to stderr, per `FR-OUT-020`, SHALL write nothing to stdout,
+  and SHALL open no connection:
+
+  1. the name matches `FR-CONF-048`;
+  2. no entry of `.tpl/.cfg` has a name equal to it, ignoring ASCII case;
+  3. `.tpl/.cache/<name>` exists, as a file of any kind.
+
+  A name that an entry declares exactly is cleaned under `FR-CACHE-023`.
+  Every other name for which any of the three conditions fails is answered
+  exactly as before this requirement: a name that does not resolve is `66`,
+  per `FR-ERR-005`, at step 5 of `FR-ERR-006`. A clean given
+  `--table`, `--view` or `--routine` under a name no entry declares is `66`
+  in the same way.
+
+  ```
+  tpl -d shop cache clean
+  warning: no entry 'shop' is declared in .tpl/.cfg; removed the data cached for that name under .tpl/.cache/shop/
+  ```
+
+  1. **Only that path.** The system SHALL remove `.tpl/.cache/<name>` and
+     everything beneath it, and nothing else. It SHALL NOT follow a symbolic
+     link: where `.tpl/.cache/<name>`, or any file beneath it, is a symbolic
+     link, the link itself is removed and nothing it points at.
+  2. **The line.** It SHALL state that no entry of the name given is declared
+     in `.tpl/.cfg`, and that the data cached in the folder it names was
+     removed. The name given has passed condition 1, so it is reproduced
+     under `FR-ERR-022`. The line
+     SHALL name the folder by the name the filesystem records for it in
+     `.tpl/.cache/`, which differs from the name given where the filesystem
+     ignores case: the member of `.tpl/.cache/` equal to the name given byte
+     for byte, or, where none is, the member that the path resolved to. That
+     recorded name SHALL be reproduced only under the set of `FR-ERR-022`;
+     otherwise the line SHALL state that the folder's name differs from the
+     name given and SHALL NOT reproduce it. The line SHALL carry no command.
+     `-q/--quiet` suppresses the line, per `FR-GLOB-015`.
+
+     ```
+     tpl -d Shop cache clean        on a filesystem that ignores case, where .tpl/.cache/shop/ exists
+     warning: no entry 'Shop' is declared in .tpl/.cfg; removed the data cached under .tpl/.cache/shop/
+     ```
+  3. **Failure.** IF the filesystem refuses the removal, THEN the system
+     SHALL exit `74` (`EX_IOERR`), per the row of `FR-ERR-001` for I/O on
+     `.tpl` and what it holds, and SHALL write no warning line.
+     `FR-CACHE-036` does not apply: it governs a read whose answer succeeded,
+     and here the removal is the answer.
+
+  The wording of the line is the implementation's. The example fixes the
+  facts named.
+
+  *Rationale.* Between `tpl cfg database remove shop` and a later
+  `tpl cfg database add shop`, `tpl -d shop cache clean` exited `66` with
+  "database entry 'shop' does not exist", so `tpl` could not remove the data
+  it had cached for the name, and the new entry then read it with exit `0`.
+  This is finding AC-01 of the twelfth re-audit of rmp `#263`, recorded for
+  rmp `#287`. `FR-CFG-052` names this command in the line a removal writes.
+  The command still requires a name, and the name still selects one folder,
+  so `FR-CACHE-002` and `BR-CACHE-004` are unchanged: the cache changes
+  because a `cache` command was told to change it.
+
+  *Why the three conditions.* Condition 1 keeps the path inside
+  `.tpl/.cache/`: a name of `FR-CONF-048` has no separator and no `.`.
+  Condition 2 keeps a clean from reaching the folder of a declared entry
+  under another case on a filesystem that ignores case, where `-d Shop`
+  would name the folder of entry `shop`. Condition 3 keeps a slip in a name
+  that nothing ever used answered by `66` and its nearest-match suggestion.
+
+  *Rejected: deleting the cache in `tpl cfg database remove`.* `FR-CFG-052`
+  states why. *Rejected: accepting an absent entry with an object flag.* A
+  removed entry's data is discarded whole, and a partial clean of it leaves
+  the rest to the next entry of that name.
+
+  *Amended within the fifty-third edition: the folder in item 2 is named as
+  the filesystem records it.* Where the filesystem ignores case, `-d Shop`
+  removes `.tpl/.cache/shop/`, and a line naming `.tpl/.cache/Shop/` would
+  name a path that the listing of `.tpl/.cache/` does not show. The line
+  carries no command, so the `--tpl-dir` rule of `FR-CFG-052` has nothing to
+  apply to here.
+
+  *Added in the fifty-third edition,* for rmp `#287`.
+
 - **FR-CACHE-024**: `tpl cache load` and `tpl cache clean` SHALL name an
   individual object with `--table <name>`, `--view <name>`, or
   `--routine <name>` — the same flag spellings `tpl render` uses. `--routine`
@@ -504,10 +591,23 @@ tpl -d shop cache status
   exit `0`, and nothing in the output says so. The only signal is the load time
   reported by `tpl cache status`.
 
+  *Note added in the fifty-third edition.* The read still says nothing. The
+  command that repoints the entry now does: `FR-CFG-053` writes a warning
+  line naming `tpl -d <name> cache clean` when `tpl cfg database update` is
+  given a flag of `FR-CACHE-029`, and `FR-CFG-052` writes one when an entry
+  is deleted, since an entry added later under the same name reads the same
+  folder, per `FR-CACHE-002`. Neither line reads the cache, and neither
+  changes what is stored.
+
 - **BR-CACHE-004**: The cache changes when it is told to, never on its own. A
   configuration command must not delete cached data as a side effect, and a
   fingerprint compared on the read path would still not cover a hand-edited
   `.cfg`.
+
+  *Note added in the fifty-third edition.* The rule stands. Deleting an
+  entry's cache folder in `tpl cfg database remove` was weighed for rmp
+  `#287` and not adopted, per `FR-CFG-052`. The cache of a deleted entry is
+  removed by `tpl cache clean`, which `FR-CACHE-041` lets name it.
 
 ## Writing and failure
 

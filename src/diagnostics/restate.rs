@@ -498,6 +498,18 @@ pub(super) fn database() -> Option<String> {
     given.placeholder.is_none().then_some(given.text)
 }
 
+/// The `--tpl-dir` the caller wrote on the command line: [`None`] where it
+/// wrote none, `Some(None)` where the set of `FR-ERR-041` refuses the value,
+/// and `Some(Some(value))` otherwise. A value from `TPL_DIR` is never in the
+/// vector, so it is never returned.
+pub(super) fn tpl_dir() -> Option<Option<String>> {
+    let argv = RECORDED.get()?;
+    let words: Vec<Option<&str>> = argv.iter().skip(1).map(|word| word.to_str()).collect();
+    let given = globals(&crate::cli::tree(), &words).tpl_dir?;
+
+    Some(given.placeholder.is_none().then_some(given.text))
+}
+
 /// The `--tpl-dir` value, tested by the set of `FR-ERR-041`.
 fn tpl_dir_given(value: Option<&str>) -> Given {
     match value {

@@ -358,6 +358,10 @@ Out of scope: the wording of any individual message.
   field". `FR-ERR-015` withdraws that field; the argument is unchanged and now
   names the line that actually carries the distinction.
 
+  *Note added in the fifty-third edition.* `FR-CACHE-041` states the one
+  invocation in which a name that no entry declares is not `66`:
+  `tpl cache clean` with no object flag, where `.tpl/.cache/<name>` exists.
+
   *Amended in the thirty-first edition.* The second sentence of each of the two
   requirements above is a cross-reference and not a second rule.
   `FR-GLOB-006` has qualified its `78` with *and the command requires one*

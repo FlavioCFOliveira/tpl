@@ -317,6 +317,35 @@ alongside the command it documents.
   *Added in the forty-fifth edition,* for rmp `#269`, from finding R-11 of the
   re-audit.
 
+- **FR-HELP-036**: The `DESCRIPTION` section of each command below SHALL
+  state, before the four statements of `FR-HELP-031`, the fact the table
+  gives it about the cache of an entry. The same fact SHALL appear at the
+  same place in the `description` of the command's entry in the JSON command
+  tree, per `FR-HELP-019`.
+
+  | Command | Fact stated |
+  |---|---|
+  | `tpl cfg database remove` | Data cached for the entry under `.tpl/.cache/` is kept; an entry added later under the same name reads it; `tpl -d NAME cache clean` removes it, also after the entry is gone |
+  | `tpl cfg unset` | Where the key is the block of a whole entry, the fact stated for `tpl cfg database remove` |
+  | `tpl cfg database add` | Data cached under `.tpl/.cache/NAME/` by an earlier entry of that name is read as it is; `tpl -d NAME cache clean` removes it before the first read |
+  | `tpl cfg database update` | Changing `--host`, `--port`, `--user`, `--schema`, `--tls` or `--dsn` keeps the data cached for the entry, and reads still serve it; `tpl -d NAME cache clean` removes it |
+  | `tpl cache clean` | Without an object flag, it also removes the data cached for a name that no entry of `.tpl/.cfg` declares any more |
+
+  Every command the table names SHALL carry the entry name as `-d NAME` in
+  the command it states, and SHALL NOT state `tpl cache clean` without it.
+  For `tpl cache clean`, the second statement of `FR-HELP-031` SHALL remain
+  true: the command needs a name selected by `-d` or `core.database`, and the
+  name needs no entry only in the case the table states.
+
+  *Rationale.* `FR-CFG-052`, `FR-CFG-053` and `FR-CACHE-041` state the
+  behaviour. A caller that reads the help before building a remove-and-add
+  sequence learns that the cache outlives the entry without running it
+  first. This is part of finding AC-01 of the twelfth re-audit of rmp
+  `#263`, recorded for rmp `#287`, which quoted the help of
+  `tpl cfg database remove` as saying nothing about the cache.
+
+  *Added in the fifty-third edition,* for rmp `#287`.
+
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help
   system itself. `SEE ALSO` SHALL reference only other `tpl` commands.

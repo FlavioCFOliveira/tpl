@@ -54,6 +54,7 @@ use crate::model::document::{self, DatabaseDocument};
 use crate::model::routine::{Routine, RoutineKind};
 use crate::model::view::View;
 use crate::output::{Document, Form, Order, Source, Table};
+use crate::project::config::keys::is_entry_name;
 
 /// The `tpl cache` group node.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
@@ -316,6 +317,25 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
     let wanted = Wanted::of(object, CLEAN)?;
     let reader = Reader::new(globals, None, ending);
     let (project, configuration) = source::project(reader.tpl_dir())?;
+
+    // FR-CACHE-041: the cache of a name no entry declares, where the name
+    // matches FR-CONF-048, no entry has it under another ASCII case, and the
+    // path exists. Any other outcome falls through to the resolution below,
+    // which answers exactly as before: `66` for a name that does not resolve.
+    if matches!(wanted, Wanted::Everything)
+        && let Some(name) = reader
+            .requested()
+            .or(configuration.core().database.as_deref())
+        && is_entry_name(name)
+        && !configuration
+            .names()
+            .any(|declared| declared.eq_ignore_ascii_case(name))
+        && let Some(recorded) = Store::of(project.root(), name).clean_orphan()?
+    {
+        crate::diagnostics::emit::orphan_cache_removed(name, recorded.name.as_deref());
+        return Ok(());
+    }
+
     let entry = source::entry_of(&configuration, reader.requested())?;
     let cache = Store::of(project.root(), entry);
 

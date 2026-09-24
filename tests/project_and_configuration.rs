@@ -1531,7 +1531,13 @@ fn fr_cfg_023_unset_of_the_block_clears_the_reference_and_unset_of_a_leaf_does_n
 
     assert_eq!(code(&block), 0, "{}", stderr(&block));
     assert_eq!(stdout(&block), "");
-    assert_eq!(stderr(&block), "", "the reference is cleared silently");
+    // FR-CFG-023 writes no line of its own; the one line is FR-CFG-052's,
+    // which names the cache and not the reference.
+    assert_eq!(
+        stderr(&block),
+        format!("{}\n", entry_removed("shop")),
+        "the reference is cleared silently"
+    );
     assert_eq!(
         String::from_utf8(sandbox.configuration()).expect("the file is UTF-8"),
         "# the note survives both\n[core]\n"
@@ -1694,6 +1700,31 @@ fn fr_cfg_016_an_add_that_says_nowhere_to_connect_names_the_flags_that_do() {
     );
 }
 
+/// The `<name>` operand of `update` in `arguments`.
+fn entry_after_update<'a>(arguments: &[&'a str]) -> &'a str {
+    let at = arguments
+        .iter()
+        .position(|argument| *argument == "update")
+        .expect("the invocation is an update");
+    arguments[at + 1]
+}
+
+/// The line of `FR-CFG-052` for the deleted entry `name`.
+fn entry_removed(name: &str) -> String {
+    format!(
+        "warning: removed entry '{name}'; data cached for it under .tpl/.cache/{name}/ is kept, \
+         and an entry added later as '{name}' reads it; clear it with: tpl -d {name} cache clean"
+    )
+}
+
+/// The line of `FR-CFG-053` for the repointed entry `name`.
+fn entry_repointed(name: &str) -> String {
+    format!(
+        "warning: entry '{name}' was repointed; data cached for it under .tpl/.cache/{name}/ is \
+         kept, and reads still serve it; clear it with: tpl -d {name} cache clean"
+    )
+}
+
 /// The line of `FR-CFG-051` for `command`, with `schema` as the value of
 /// `--schema`.
 fn database_has_no_effect(command: &str, schema: &str) -> String {
@@ -1726,13 +1757,6 @@ fn fr_cfg_051_database_on_add_and_update_is_accepted_warned_about_and_never_writ
             "shop",
         ),
         (
-            &[
-                "-d", "nope", "cfg", "database", "add", "nope", "--host", "h",
-            ][..],
-            "add",
-            "nope",
-        ),
-        (
             &["cfg", "db", "add", "hs5", "--host", "h", "--database=x1"][..],
             "add",
             "x1",
@@ -1761,9 +1785,12 @@ fn fr_cfg_051_database_on_add_and_update_is_accepted_warned_about_and_never_writ
             Some(database_has_no_effect(command, schema).as_str()),
             "{arguments:?}"
         );
+        // FR-CFG-053: an update given --host that exits 0 writes its own line
+        // second.
+        let expected = if command == "update" { 2 } else { 1 };
         assert_eq!(
             written.matches("warning: ").count(),
-            1,
+            expected,
             "{arguments:?}: {written}"
         );
         assert!(!written.contains("a b"), "{written}");
@@ -1775,7 +1802,6 @@ fn fr_cfg_051_database_on_add_and_update_is_accepted_warned_about_and_never_writ
     for absent in ["database = \"shop\"", "x1", "s2", "a b"] {
         assert!(!file.contains(absent), "{absent} was written: {file}");
     }
-    assert!(file.contains("[database.nope]"), "{file}");
 
     // -q suppresses it; neither core.database nor TPL_DATABASE writes it.
     sandbox.project("[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n");
@@ -1797,11 +1823,18 @@ fn fr_cfg_051_database_on_add_and_update_is_accepted_warned_about_and_never_writ
     ] {
         let printed = sandbox.run_from(sandbox.root(), environment, arguments);
         assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        // The one line an update exiting 0 may write is FR-CFG-053's.
+        let written = stderr(&printed);
         assert!(
-            printed.stderr.is_empty(),
-            "{arguments:?}: {}",
-            stderr(&printed)
+            !written.contains("-d/--database"),
+            "{arguments:?}: {written}"
         );
+        let expected = if arguments.contains(&"update") {
+            format!("{}\n", entry_repointed("q2"))
+        } else {
+            String::new()
+        };
+        assert_eq!(written, expected, "{arguments:?}");
     }
 
     // Written after step 3, so it precedes the error the invocation raises at
@@ -1904,7 +1937,20 @@ fn fr_cfg_051_the_warning_names_only_the_flag_that_can_set_the_server_database()
             ),
             "{arguments:?}: {written}"
         );
-        assert_eq!(written.matches("warning: ").count(), 1, "{written}");
+        // FR-CFG-053: an update that exits 0 adds its line second.
+        let expected = if command == "update" && exit == 0 {
+            2
+        } else {
+            1
+        };
+        assert_eq!(written.matches("warning: ").count(), expected, "{written}");
+        if expected == 2 {
+            assert_eq!(
+                written.lines().nth(1),
+                Some(entry_repointed(entry_after_update(arguments)).as_str()),
+                "{arguments:?}: {written}"
+            );
+        }
         if exit == 64 {
             // FR-CFG-048: the dsn entry refuses a discrete field.
             assert!(
@@ -4093,11 +4139,12 @@ fn fr_cfg_050_unsetting_dsn_warns_of_what_it_carried_and_q_silences_it() {
     assert_eq!(code(&quiet), 0);
     assert!(quiet.stderr.is_empty(), "{}", stderr(&quiet));
 
-    // The whole block names the entry, and writes no such line.
+    // The whole block names the entry, and writes no such line: it writes
+    // the line of FR-CFG-052 instead.
     sandbox.project("[database.ds]\ndsn = \"mysql://r@db/shop\"\n");
     let block = sandbox.run(&["cfg", "unset", "database.ds"]);
     assert_eq!(code(&block), 0);
-    assert!(block.stderr.is_empty(), "{}", stderr(&block));
+    assert_eq!(stderr(&block), format!("{}\n", entry_removed("ds")));
 }
 
 #[test]
@@ -4497,4 +4544,597 @@ fn y_04_a_flag_that_took_a_command_shows_the_placeholder_whatever_the_command() 
         let rerun = run_hinted(&sandbox, &given, &[("<entry>", "shop")]);
         assert_eq!(code(&rerun), 0, "{given}: {}", stderr(&rerun));
     }
+}
+
+/// A cache folder for `name` holding one file, as a load leaves it.
+fn cache_for(sandbox: &Sandbox, name: &str) -> PathBuf {
+    sandbox.write(&format!(".tpl/.cache/{name}/meta.json"), "{}\n");
+    sandbox.path(&format!(".tpl/.cache/{name}"))
+}
+
+#[test]
+fn fr_cfg_052_deleting_an_entry_says_its_cache_is_kept_and_leaves_the_cache_alone() {
+    // Finding AC-01 of the twelfth re-audit of rmp #263.
+    let sandbox = Sandbox::new();
+    let two = "[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n\n[database.crm]\n\
+               host = \"h\"\n";
+
+    for arguments in [
+        &["cfg", "database", "remove", "shop"][..],
+        &["cfg", "db", "remove", "shop"][..],
+        &["cfg", "unset", "database.shop"][..],
+    ] {
+        sandbox.project(two);
+        let cache = cache_for(&sandbox, "shop");
+        let printed = sandbox.run(arguments);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        assert!(printed.stdout.is_empty(), "{arguments:?}");
+        assert_eq!(
+            stderr(&printed),
+            format!("{}\n", entry_removed("shop")),
+            "{arguments:?}"
+        );
+        // BR-CACHE-004: the cache is not touched.
+        assert_eq!(
+            std::fs::read_to_string(cache.join("meta.json")).expect("the cache is kept"),
+            "{}\n",
+            "{arguments:?}"
+        );
+        // FR-CFG-023 still clears the reference in the same rewrite.
+        let file = String::from_utf8(sandbox.configuration()).expect("the file is UTF-8");
+        assert!(!file.contains("database = \"shop\""), "{file}");
+        assert!(file.contains("[database.crm]"), "{file}");
+    }
+
+    // The line is written whether or not a cache exists, and -q suppresses it.
+    std::fs::remove_dir_all(sandbox.path(".tpl/.cache")).expect("the sandbox is ours");
+    sandbox.project(two);
+    let printed = sandbox.run(&["cfg", "database", "remove", "crm"]);
+    assert_eq!(code(&printed), 0);
+    assert_eq!(stderr(&printed), format!("{}\n", entry_removed("crm")));
+    assert!(
+        !sandbox.path(".tpl/.cache").exists(),
+        "a cfg command created the cache"
+    );
+    let printed = sandbox.run(&["-q", "cfg", "database", "remove", "shop"]);
+    assert_eq!(code(&printed), 0);
+    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+
+    // One field deletes no entry, and a refused removal writes no line.
+    sandbox.project(two);
+    let printed = sandbox.run(&["cfg", "unset", "database.shop.host"]);
+    assert_eq!(code(&printed), 0);
+    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "remove", "absent"]),
+        66,
+        "remove of an absent entry",
+    );
+    assert!(!written.contains("warning: "), "{written}");
+}
+
+#[test]
+fn fr_cfg_053_repointing_an_entry_says_its_cache_is_kept() {
+    // Finding AC-01 of the twelfth re-audit of rmp #263.
+    let sandbox = Sandbox::new();
+    let file = "[core]\n\n[database.shop]\nhost = \"h\"\n\n[database.ds]\n\
+                dsn = \"mariadb://u@h/shop\"\n";
+    sandbox.project(file);
+    let cache = cache_for(&sandbox, "shop");
+
+    for (arguments, entry) in [
+        (
+            &["cfg", "database", "update", "shop", "--host", "h2"][..],
+            "shop",
+        ),
+        (
+            &["cfg", "database", "update", "shop", "--port", "3307"][..],
+            "shop",
+        ),
+        (
+            &["cfg", "database", "update", "shop", "--user", "u"][..],
+            "shop",
+        ),
+        (
+            &["cfg", "db", "update", "shop", "--schema", "crm"][..],
+            "shop",
+        ),
+        (
+            &["cfg", "database", "update", "shop", "--tls", "disabled"][..],
+            "shop",
+        ),
+        (
+            &[
+                "cfg",
+                "database",
+                "update",
+                "ds",
+                "--dsn",
+                "mariadb://u@h2/crm",
+            ][..],
+            "ds",
+        ),
+    ] {
+        let printed = sandbox.run(arguments);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        assert!(printed.stdout.is_empty(), "{arguments:?}");
+        assert_eq!(
+            stderr(&printed),
+            format!("{}\n", entry_repointed(entry)),
+            "{arguments:?}"
+        );
+    }
+    assert_eq!(
+        std::fs::read_to_string(cache.join("meta.json")).expect("the cache is kept"),
+        "{}\n"
+    );
+
+    // Fields that do not change where the entry points write no line.
+    for arguments in [
+        &[
+            "cfg",
+            "database",
+            "update",
+            "shop",
+            "--password-command",
+            "pass db",
+        ][..],
+        &[
+            "cfg",
+            "database",
+            "update",
+            "shop",
+            "--ca-file",
+            "/etc/ca.pem",
+        ][..],
+        &["cfg", "database", "update", "shop", "--ca-path", "/etc/ssl"][..],
+    ] {
+        let printed = sandbox.run(arguments);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        assert!(
+            printed.stderr.is_empty(),
+            "{arguments:?}: {}",
+            stderr(&printed)
+        );
+    }
+
+    // A refusal writes no line; -q suppresses it.
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "update", "absent", "--host", "h"]),
+        66,
+        "update of an absent entry",
+    );
+    assert!(!written.contains("warning: "), "{written}");
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "update", "ds", "--host", "h"]),
+        64,
+        "a discrete field on a dsn entry",
+    );
+    assert!(!written.contains("warning: "), "{written}");
+    let printed = sandbox.run(&["-q", "cfg", "database", "update", "shop", "--host", "h3"]);
+    assert_eq!(code(&printed), 0);
+    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+
+    // After the line of FR-CFG-051, which names the entry when -d is NAME.
+    let printed = sandbox.run(&[
+        "-d", "shop", "cfg", "database", "update", "shop", "--host", "h5",
+    ]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(
+        stderr(&printed),
+        format!(
+            "warning: -d/--database has no effect on tpl cfg database update; it selects the \
+             entry for commands that connect; the name argument already names the entry\n{}\n",
+            entry_repointed("shop")
+        )
+    );
+}
+
+#[test]
+fn fr_cfg_051_a_value_equal_to_the_entry_name_does_not_advise_schema() {
+    // Finding AC-02 of the twelfth re-audit of rmp #263: condition 3.
+    const NAMES: &str = "; the name argument already names the entry";
+    let sandbox = Sandbox::new();
+    sandbox.project(SHOP);
+
+    for (arguments, command, last) in [
+        (
+            &[
+                "-d", "nope", "cfg", "database", "add", "nope", "--host", "h",
+            ][..],
+            "add",
+            NAMES.to_owned(),
+        ),
+        (
+            &["cfg", "database", "add", "hs9", "--host", "h", "-d", "hs9"][..],
+            "add",
+            NAMES.to_owned(),
+        ),
+        (
+            &[
+                "-d", "hs9", "cfg", "database", "update", "hs9", "--host", "h5",
+            ][..],
+            "update",
+            NAMES.to_owned(),
+        ),
+        // Byte for byte: another case is not the entry name.
+        (
+            &["cfg", "database", "add", "hs5", "--host", "h", "-d", "Hs5"][..],
+            "add",
+            "; the database on the server is set with --schema Hs5".to_owned(),
+        ),
+        // Condition 2 precedes condition 3.
+        (
+            &[
+                "-d", "hs5", "cfg", "database", "update", "hs5", "--schema", "s",
+            ][..],
+            "update",
+            String::new(),
+        ),
+    ] {
+        let printed = sandbox.run(arguments);
+        let written = stderr(&printed);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {written}");
+        assert_eq!(
+            written.lines().next(),
+            Some(
+                format!(
+                    "warning: -d/--database has no effect on tpl cfg database {command}; it \
+                     selects the entry for commands that connect{last}"
+                )
+                .as_str()
+            ),
+            "{arguments:?}"
+        );
+    }
+    let file = String::from_utf8(sandbox.configuration()).expect("the file is UTF-8");
+    assert!(!file.contains("database = \"hs9\""), "{file}");
+}
+
+#[test]
+fn fr_cache_041_the_cache_of_a_deleted_entry_is_cleaned_by_name() {
+    // Finding AC-01 of the twelfth re-audit of rmp #263.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n\n[database.shop]\nhost = \"127.0.0.1\"\nport = 1\n");
+    let cache = cache_for(&sandbox, "shop");
+    std::fs::create_dir_all(cache.join("tables")).expect("the sandbox is writable");
+    sandbox.write(".tpl/.cache/shop/tables/orders.json", "{}\n");
+
+    assert_eq!(
+        code(&sandbox.run(&["cfg", "database", "remove", "shop"])),
+        0
+    );
+    assert!(cache.exists());
+
+    // An object flag under a name no entry declares is 66, as before.
+    let written = assert_refused(
+        &sandbox.run(&["-d", "shop", "cache", "clean", "--table", "orders"]),
+        66,
+        "clean --table of a deleted entry",
+    );
+    assert!(!written.contains("warning: "), "{written}");
+    assert!(cache.join("tables/orders.json").exists());
+
+    let printed = sandbox.run(&["-d", "shop", "cache", "clean"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(printed.stdout.is_empty());
+    assert_eq!(
+        stderr(&printed),
+        "warning: no entry 'shop' is declared in .tpl/.cfg; removed the data cached for that \
+         name under .tpl/.cache/shop/\n"
+    );
+    assert!(!cache.exists(), "the folder is still there");
+
+    // Nothing is left, so the name no longer resolves to anything: 66.
+    assert_refused(
+        &sandbox.run(&["-d", "shop", "cache", "clean"]),
+        66,
+        "a second clean",
+    );
+
+    // core.database selects the name as -d does, and -q suppresses the line.
+    sandbox.project("[core]\ndatabase = \"gone\"\n");
+    let cache = cache_for(&sandbox, "gone");
+    let printed = sandbox.run(&["-q", "cache", "clean"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+    assert!(!cache.exists());
+}
+
+#[test]
+fn fr_cache_041_the_clean_follows_no_symbolic_link() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    let outside = sandbox.write("outside/keep.txt", "keep\n");
+    let target = sandbox.path("outside");
+
+    // A link beneath the folder is removed, and what it points at is kept.
+    let cache = cache_for(&sandbox, "shop");
+    std::os::unix::fs::symlink(&target, cache.join("tables")).expect("the sandbox is ours");
+    std::os::unix::fs::symlink(&outside, cache.join("one.json")).expect("the sandbox is ours");
+    let printed = sandbox.run(&["-d", "shop", "cache", "clean"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(
+        std::fs::symlink_metadata(&cache).is_err(),
+        "the folder is still there"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&outside).expect("the target is kept"),
+        "keep\n"
+    );
+
+    // The folder itself a link: the link is removed, and the directory it
+    // points at, with its file, is kept.
+    std::fs::create_dir_all(sandbox.path(".tpl/.cache")).expect("the sandbox is writable");
+    let link = sandbox.path(".tpl/.cache/crm");
+    std::os::unix::fs::symlink(&target, &link).expect("the sandbox is ours");
+    let printed = sandbox.run(&["-d", "crm", "cache", "clean"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(
+        std::fs::symlink_metadata(&link).is_err(),
+        "the link is still there"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&outside).expect("the target is kept"),
+        "keep\n"
+    );
+
+    // A plain file at the path is a file of any kind.
+    sandbox.write(".tpl/.cache/f1", "x\n");
+    let printed = sandbox.run(&["-d", "f1", "cache", "clean"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(!sandbox.path(".tpl/.cache/f1").exists());
+}
+
+#[test]
+fn fr_cache_041_a_declared_entry_under_another_case_or_a_name_outside_the_set_is_66() {
+    // Condition 2 keeps `-d SHOP` from reaching the folder of entry `shop` on
+    // a filesystem that ignores case; condition 1 keeps the path inside
+    // `.tpl/.cache/`; condition 3 keeps a slip answered by 66.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n\n[database.shop]\nhost = \"h\"\n");
+    let shop = cache_for(&sandbox, "shop");
+    // On a filesystem that ignores case this is the same folder.
+    let upper = cache_for(&sandbox, "SHOP");
+    let spaced = cache_for(&sandbox, "a b");
+
+    for (arguments, spelled) in [
+        (&["-d", "SHOP", "cache", "clean"][..], "another case"),
+        (&["-d", "Shop", "cache", "clean"][..], "another case"),
+        (
+            &["-d", "a b", "cache", "clean"][..],
+            "a name outside FR-CONF-048",
+        ),
+        (&["-d", "..", "cache", "clean"][..], "a parent reference"),
+        (
+            &["-d", "never", "cache", "clean"][..],
+            "a name nothing used",
+        ),
+    ] {
+        let written = assert_refused(&sandbox.run(arguments), 66, spelled);
+        assert!(!written.contains("warning: "), "{spelled}: {written}");
+    }
+    for kept in [&shop, &upper, &spaced] {
+        assert!(
+            kept.join("meta.json").exists(),
+            "{} was removed",
+            kept.display()
+        );
+    }
+    assert!(sandbox.path(".tpl/.cfg").exists());
+}
+
+#[test]
+fn fr_cache_041_a_refused_removal_is_74_with_no_warning() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    let cache = cache_for(&sandbox, "shop");
+    chmod(&cache, 0o500);
+
+    // The instrument's own control, as FR-CACHE-036's test makes it: a user
+    // the mode does not bind cannot arrange the condition.
+    let probe = cache.join("probe");
+    if std::fs::write(&probe, b"").is_ok() {
+        let _ = std::fs::remove_file(&probe);
+        chmod(&cache, 0o700);
+        fixture::notice(
+            "skipped fr_cache_041_a_refused_removal_is_74_with_no_warning: this user writes into \
+             a directory whose write bit is clear, so a refused removal cannot be arranged here.",
+        );
+        return;
+    }
+
+    let printed = sandbox.run(&["-d", "shop", "cache", "clean"]);
+    chmod(&cache, 0o700);
+    let written = assert_refused(&printed, 74, "a refused removal");
+    assert!(!written.contains("warning: "), "{written}");
+    assert!(cache.join("meta.json").exists());
+}
+
+#[test]
+fn fr_help_036_the_five_descriptions_state_the_cache_fact_with_d_name() {
+    // Findings AC-01 and AC-03 of the twelfth re-audit of rmp #263.
+    let sandbox = Sandbox::new();
+    let facts: [(&[&str], &str); 5] = [
+        (
+            &["cfg", "database", "remove"],
+            "Data cached for the entry under .tpl/.cache/NAME/ is kept, and an entry added later \
+             under the same name reads it; tpl -d NAME cache clean removes it, also after the \
+             entry is gone.",
+        ),
+        (
+            &["cfg", "unset"],
+            "Where KEY is a whole entry, database.NAME, data cached for the entry under \
+             .tpl/.cache/NAME/ is kept, and an entry added later under the same name reads it; \
+             tpl -d NAME cache clean removes it, also after the entry is gone.",
+        ),
+        (
+            &["cfg", "database", "add"],
+            "Data cached under .tpl/.cache/NAME/ by an earlier entry of that name is read as it \
+             is; run tpl -d NAME cache clean before the first read to remove it.",
+        ),
+        (
+            &["cfg", "database", "update"],
+            "Changing --host, --port, --user, --schema, --tls or --dsn keeps the data cached for \
+             the entry, and reads still serve it; tpl -d NAME cache clean removes it.",
+        ),
+        (
+            &["cache", "clean"],
+            "Without an object flag, it also removes the data cached for a name that no entry of \
+             .tpl/.cfg declares any more",
+        ),
+    ];
+
+    let printed = sandbox.run(&["help", "--format", "json"]);
+    assert_eq!(code(&printed), 0);
+    let tree = stdout(&printed);
+
+    for (path, fact) in facts {
+        let printed = sandbox.run(&[&["help"][..], path].concat());
+        assert_eq!(code(&printed), 0, "{path:?}");
+        let help = stdout(&printed)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let description = help
+            .split("DESCRIPTION")
+            .nth(1)
+            .and_then(|rest| rest.split("EXAMPLES").next())
+            .expect("the help has DESCRIPTION and EXAMPLES");
+        // Before the four statements of FR-HELP-031, whose second begins
+        // with "Needs".
+        let at = description
+            .find(fact)
+            .unwrap_or_else(|| panic!("{path:?}: {help}"));
+        assert!(
+            at < description.find("Needs").expect("FR-HELP-031"),
+            "{path:?}"
+        );
+        assert!(
+            !description.contains("run tpl cache clean"),
+            "{path:?}: {help}"
+        );
+        assert!(
+            !description.contains("; tpl cache clean"),
+            "{path:?}: {help}"
+        );
+        // The JSON tree carries the same fact.
+        assert!(tree.contains(fact), "{path:?} is not in the JSON tree");
+    }
+
+    // AC-03: the sentence of `cache clean` names the entry it cleans.
+    let printed = sandbox.run(&["help", "cache", "clean"]);
+    let help = stdout(&printed)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        help.contains(
+            "after pointing entry NAME at another server with tpl cfg database update NAME, run \
+             tpl -d NAME cache clean."
+        ),
+        "{help}"
+    );
+}
+
+#[test]
+fn fr_cfg_052_and_053_the_clean_they_quote_carries_the_callers_tpl_dir() {
+    // Item 2 of FR-CFG-052, which FR-CFG-053 applies.
+    let sandbox = Sandbox::new();
+    let file = "[core]\n\n[database.shop]\nhost = \"h\"\n\n[database.crm]\nhost = \"h\"\n";
+    sandbox.project_at("sp ace", file);
+    sandbox.project_at("w", file);
+    let outside = sandbox.directory("elsewhere");
+    const WORDS: &str = ", where <path> is the --tpl-dir this invocation was given";
+
+    for (arguments, ending) in [
+        (
+            &[
+                "--tpl-dir",
+                "../w/.tpl",
+                "cfg",
+                "database",
+                "update",
+                "shop",
+                "--host",
+                "h2",
+            ][..],
+            "clear it with: tpl --tpl-dir ../w/.tpl -d shop cache clean".to_owned(),
+        ),
+        (
+            &["--tpl-dir=../w/.tpl", "cfg", "unset", "database.crm"][..],
+            "clear it with: tpl --tpl-dir ../w/.tpl -d crm cache clean".to_owned(),
+        ),
+        (
+            &[
+                "--tpl-dir",
+                "../sp ace/.tpl",
+                "cfg",
+                "database",
+                "remove",
+                "shop",
+            ][..],
+            format!("clear it with: tpl --tpl-dir <path> -d shop cache clean{WORDS}"),
+        ),
+        (
+            &[
+                "cfg",
+                "database",
+                "update",
+                "crm",
+                "--port",
+                "3307",
+                "--tpl-dir",
+                "../sp ace/.tpl",
+            ][..],
+            format!("clear it with: tpl --tpl-dir <path> -d crm cache clean{WORDS}"),
+        ),
+    ] {
+        let printed = sandbox.run_from(&outside, &[], arguments);
+        let written = stderr(&printed);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {written}");
+        assert_eq!(written.lines().count(), 1, "{written}");
+        assert!(
+            written.trim_end().ends_with(&ending),
+            "{arguments:?}: {written}"
+        );
+        assert!(!written.contains("sp ace"), "{written}");
+    }
+
+    // A project found by discovery carries no --tpl-dir.
+    let printed = sandbox.run_from(
+        &sandbox.path("w"),
+        &[],
+        &["cfg", "database", "remove", "shop"],
+    );
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(stderr(&printed), format!("{}\n", entry_removed("shop")));
+}
+
+#[test]
+fn fr_cache_041_the_line_names_the_folder_as_the_filesystem_lists_it() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    let cache = cache_for(&sandbox, "shop");
+
+    // Only a filesystem that ignores case resolves `Shop` to `shop`; where
+    // it does not, the name resolves to nothing and is 66.
+    if !sandbox.path(".tpl/.cache/Shop").exists() {
+        assert_refused(
+            &sandbox.run(&["-d", "Shop", "cache", "clean"]),
+            66,
+            "another case on a filesystem that keeps case",
+        );
+        assert!(cache.exists());
+        return;
+    }
+
+    let printed = sandbox.run(&["-d", "Shop", "cache", "clean"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(
+        stderr(&printed),
+        "warning: no entry 'Shop' is declared in .tpl/.cfg; removed the data cached under \
+         .tpl/.cache/shop/\n"
+    );
+    assert!(!cache.exists());
 }

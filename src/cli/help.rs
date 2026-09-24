@@ -2620,11 +2620,16 @@ const ENTRIES: [Entry; 35] = [
         path: &["cache", "clean"],
         description: "Deletes the cached data of the selected entry. With no --table, --view or \
                       --routine, it deletes all of it. Nothing else removes cached data: after \
-                      pointing an entry at another server with tpl cfg database update, run tpl \
-                      cache clean.",
-        blocks: &[],
+                      pointing entry NAME at another server with tpl cfg database update NAME, \
+                      run tpl -d NAME cache clean.",
+        blocks: &[Block::Prose(
+            "Without an object flag, it also removes the data cached for a name that no entry \
+             of .tpl/.cfg declares any more, such as an entry deleted with tpl cfg database \
+             remove NAME: run tpl -d NAME cache clean.",
+        )],
         touches: Some(local_only(
-            NEEDS_ENTRY,
+            "Needs a name selected by -d or core.database, which must name a database entry \
+             except in the case stated above.",
             "Deletes files from the entry's folder under .tpl/.cache/ and writes none.",
             PRINTS_NOTHING,
         )),
@@ -2855,7 +2860,11 @@ const ENTRIES: [Entry; 35] = [
         description: "Removes one key, or a whole block, from .tpl/.cfg. database.shop.host \
                       removes that field; database.shop removes the whole entry, and also clears \
                       core.database when it names that entry.",
-        blocks: &[],
+        blocks: &[Block::Prose(
+            "Where KEY is a whole entry, database.NAME, data cached for the entry under \
+             .tpl/.cache/NAME/ is kept, and an entry added later under the same name reads it; \
+             tpl -d NAME cache clean removes it, also after the entry is gone.",
+        )],
         touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
         examples: &[
             Example {
@@ -2932,6 +2941,10 @@ const ENTRIES: [Entry; 35] = [
                  runs, so give a password through --password-command, as a reference such as \
                  '${SHOP_PASSWORD}' inside --dsn, or afterwards with tpl cfg set \
                  database.NAME.password '${SHOP_PASSWORD}'.",
+            ),
+            Block::Prose(
+                "Data cached under .tpl/.cache/NAME/ by an earlier entry of that name is read as \
+                 it is; run tpl -d NAME cache clean before the first read to remove it.",
             ),
         ],
         touches: Some(local_only(
@@ -3047,9 +3060,9 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["cfg", "database", "update"],
         description: "Changes the fields of one database entry that the flags given name; every \
-                      other field keeps its value, and at least one flag is required. The cache is \
-                      not cleared: after pointing an entry at another server, run tpl -d NAME \
-                      cache clean.",
+                      other field keeps its value, and at least one flag is required. Changing \
+                      --host, --port, --user, --schema, --tls or --dsn keeps the data cached for \
+                      the entry, and reads still serve it; tpl -d NAME cache clean removes it.",
         blocks: &[Block::Prose(
             "A value given here is visible to other users in the process list while tpl runs, \
              so give a password through --password-command, as a reference such as \
@@ -3104,7 +3117,9 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["cfg", "database", "remove"],
         description: "Deletes one database entry from .tpl/.cfg. When core.database names it, \
-                      core.database is cleared too.",
+                      core.database is cleared too. Data cached for the entry under \
+                      .tpl/.cache/NAME/ is kept, and an entry added later under the same name \
+                      reads it; tpl -d NAME cache clean removes it, also after the entry is gone.",
         blocks: &[],
         touches: Some(local_only(
             "Needs the entry that NAME names; -d and core.database are not used.",
