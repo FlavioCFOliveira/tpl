@@ -1054,10 +1054,20 @@ pub enum Error {
     },
 
     /// A key that is absent from `.tpl/.cfg` (`FR-CFG-007`, `FR-CFG-012`).
-    #[error("configuration key '{key}' is not set")]
+    ///
+    /// A spelling outside the key space of `FR-CONF-002` reaches it too, and
+    /// the line says which of the two it is (finding T-05 of the third
+    /// re-audit of rmp `#263`): "not set" of a name that is no key reads as
+    /// though setting it would help.
+    #[error("{}", key_not_found(.key, .default.as_deref(), *.known))]
     ConfigurationKeyNotFound {
         /// The key that was not found.
         key: String,
+        /// Whether the key is one of the space of `FR-CONF-002`.
+        known: bool,
+        /// The value the configuration gives the key where the file sets
+        /// none; [`None`] where it has no default or is not a key.
+        default: Option<String>,
         /// The file it was sought in.
         file: PathBuf,
         /// The nearest matches among the keys the file does carry, selected by
@@ -1391,6 +1401,12 @@ pub enum Error {
         found: String,
         /// The type `FR-CONF-002` declares for the key.
         expected: &'static str,
+        /// The value as the file wrote it, where `found` is what a `${VAR}`
+        /// expanded it to rather than what the file holds; [`None`] where the
+        /// file holds `found` itself (finding T-04 of the third re-audit of
+        /// rmp `#263`). Boxed behind a thin pointer, so that the variant
+        /// leaves [`Error`] no larger: a `Box<str>` is two words wide.
+        expanded_from: Option<Box<String>>,
     },
 
     /// A DSN that is not of the form `FR-CONF-009` fixes, or whose scheme is
@@ -1666,6 +1682,19 @@ fn unknown_command(token: &str, node: &str) -> String {
 /// The `error:` line of [`Error::BlockKeyGiven`], in the words `FR-CFG-007`
 /// shows: a `database.<name>` form that names an existing entry is a whole
 /// entry, and every other block form is a section.
+/// The `error:` line of [`Error::ConfigurationKeyNotFound`]: a key of the
+/// space the file does not set, with its default where it has one, or a name
+/// that is no key at all.
+fn key_not_found(key: &str, default: Option<&str>, known: bool) -> String {
+    match (known, default) {
+        (false, _) => format!("'{key}' is not a configuration key"),
+        (true, Some(default)) => {
+            format!("configuration key '{key}' is not set; tpl uses its default, {default}")
+        }
+        (true, None) => format!("configuration key '{key}' is not set, and it has no default"),
+    }
+}
+
 fn block_key(key: &str, entry: bool) -> String {
     if entry {
         format!("'{key}' names a whole entry, not one value")
@@ -2345,6 +2374,8 @@ mod tests {
             (
                 Error::ConfigurationKeyNotFound {
                     key: "core.database".to_owned(),
+                    known: true,
+                    default: None,
                     file: path(),
                     nearest: Vec::new(),
                 },
@@ -2493,6 +2524,7 @@ mod tests {
                     position: position(),
                     found: "0".to_owned(),
                     expected: "a positive integer number of seconds",
+                    expanded_from: None,
                 },
                 78,
             ),

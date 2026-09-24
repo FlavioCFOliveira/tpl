@@ -76,16 +76,17 @@ const CONFIGURATION_TEMPLATE: &str = "\
 # This file is not versioned: it is per-machine access configuration and may
 # hold credentials. `.tpl/.gitignore` excludes it.
 #
-# Everything below is commented out, and every commented key is shown with the
-# value it takes when it is absent. A fresh project knows about no database
-# until one is added.
+# Everything below is commented out, and every commented key is shown with its
+# default, or with an example where it has none. A fresh project knows about no
+# database until one is added.
 #
 # The keys of [core]:
 #
 #   database            = \"shop\"     the entry every invocation uses when
 #                                    -d/--database is absent; no default
 #   connect_timeout     = 10         seconds, shared by DNS, TCP and TLS
-#   query_timeout       = 30         seconds, per catalogue query
+#   query_timeout       = 30         seconds, per query reading the database
+#                                    structure
 #   password_timeout    = 5          seconds, for password_command
 #   render_timeout      = 30         seconds, for one render
 #   render_fuel         = 100000000  evaluation steps, for one render

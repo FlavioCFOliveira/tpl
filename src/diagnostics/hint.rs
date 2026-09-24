@@ -34,11 +34,13 @@
 use std::borrow::Cow;
 use std::path::Path;
 
+use super::restate::{self, Edit, Replacement};
 use super::suggest;
 use crate::error::{
     CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, LookupKind,
     NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, Unresolved,
 };
+use crate::project::config::keys::ValueType;
 
 /// The longest a name the character set of `FR-ERR-022` governs may be.
 const MAX_NAME: usize = 64;
@@ -209,7 +211,15 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // to run: a node that requires an operand would be written without it,
         // and BR-ERR-004 bars a hint that cannot succeed.
         Error::PrettyWithoutJson { command, complete } => {
-            if *complete && admits_path(command) {
+            // T-01: the caller's own command with the format added, every
+            // other flag and operand kept.
+            if let Some(restated) = restate::restated(&[Edit::FormatJson]) {
+                Cow::Owned(format!(
+                    "add --format json: {}{}; or drop --pretty",
+                    restated.command,
+                    restated.replacing()
+                ))
+            } else if *complete && admits_path(command) {
                 Cow::Owned(format!(
                     "add --format json, e.g.: tpl {command} --format json --pretty; or drop \
                      --pretty"
@@ -221,11 +231,30 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // FR-CFG-016: the four flags that say where to connect, and the one
         // that says it all at once. The host, the user and the database are
         // values only the caller knows, so they stay placeholders.
-        Error::ConnectionDetailsMissing { entry } => Cow::Owned(format!(
-            "say where to connect, e.g.: tpl cfg database add {} --host <host> --user <user> \
-             --schema <database>",
-            entry_or_placeholder(entry)
-        )),
+        // T-01: the caller's own command with the three flags added, every
+        // other flag kept.
+        Error::ConnectionDetailsMissing { entry } => {
+            const WHERE: &[&str] = &[
+                "--host",
+                "<host>",
+                "--user",
+                "<user>",
+                "--schema",
+                "<database>",
+            ];
+            match restate::restated(&[Edit::Append(WHERE)]) {
+                Some(restated) => Cow::Owned(format!(
+                    "say where to connect, e.g.: {}{}",
+                    restated.command,
+                    restated.replacing()
+                )),
+                None => Cow::Owned(format!(
+                    "say where to connect, e.g.: tpl cfg database add {} --host <host> --user \
+                     <user> --schema <database>",
+                    entry_or_placeholder(entry)
+                )),
+            }
+        }
         // FR-CFG-020 fixes this line: every flag of FR-CFG-027.
         Error::NothingToUpdate { .. } => Cow::Borrowed(
             "give at least one of --dsn, --host, --port, --user, --schema, --tls, \
@@ -252,8 +281,19 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             ..
         } => {
             if admits(name) {
-                let invocation = with_template(invocation, template.as_deref());
-                Cow::Owned(format!("write it as: tpl {invocation} {prefix}:{name}"))
+                let corrected = format!("{prefix}:{name}");
+                match restate::restated(&[routine_as(&corrected)]) {
+                    // T-01: the whole invocation, with the one token changed.
+                    Some(restated) => Cow::Owned(format!(
+                        "write it as: {}{}",
+                        restated.command,
+                        restated.replacing()
+                    )),
+                    None => {
+                        let invocation = with_template(invocation, template.as_deref());
+                        Cow::Owned(format!("write it as: tpl {invocation} {corrected}"))
+                    }
+                }
             } else {
                 Cow::Borrowed(
                     "write the qualifying prefix in lower case: 'procedure:' or 'function:'",
@@ -277,11 +317,28 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             ..
         } => {
             if admits(name) {
-                let invocation = with_template(invocation, template.as_deref());
-                Cow::Owned(format!(
-                    "name the kind you mean: tpl {invocation} procedure:{name}, or tpl \
-                     {invocation} function:{name}"
-                ))
+                let procedure = format!("procedure:{name}");
+                let function = format!("function:{name}");
+                match (
+                    restate::restated(&[routine_as(&procedure)]),
+                    restate::restated(&[routine_as(&function)]),
+                ) {
+                    // T-01: the whole invocation twice, each with the one
+                    // token qualified; the placeholders are the same in both.
+                    (Some(first), Some(second)) => Cow::Owned(format!(
+                        "name the kind you mean: {}, or {}{}",
+                        first.command,
+                        second.command,
+                        second.replacing()
+                    )),
+                    _ => {
+                        let invocation = with_template(invocation, template.as_deref());
+                        Cow::Owned(format!(
+                            "name the kind you mean: tpl {invocation} {procedure}, or tpl \
+                             {invocation} {function}"
+                        ))
+                    }
+                }
             } else {
                 Cow::Borrowed("name the kind you mean, with the prefix 'procedure:' or 'function:'")
             }
@@ -315,6 +372,37 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 "write the URL as scheme://host/database, e.g.: --dsn \
                  mysql://db.example.com:3306/shop",
             ),
+            // T-03: the caller's own command with an example command line in
+            // place of the value, which says the form by showing it.
+            (parameter, _)
+                if parameter == "--password-command"
+                    || parameter.ends_with(".password_command") =>
+            {
+                let ids: &[&str] = if parameter == "--password-command" {
+                    &["password_command"]
+                } else {
+                    &["value"]
+                };
+                let example = Edit::Value {
+                    ids,
+                    to: Replacement::Literal("\"pass db/shop\""),
+                };
+                match restate::restated(&[example]) {
+                    Some(restated) => Cow::Owned(format!(
+                        "write the command as one string, e.g.: {}{}",
+                        restated.command,
+                        restated.replacing()
+                    )),
+                    None if admits_key(parameter) => Cow::Owned(format!(
+                        "write the command as one string, e.g.: tpl cfg set {parameter} \
+                         \"pass db/shop\""
+                    )),
+                    None => Cow::Borrowed(
+                        "write the command as one string, e.g.: --password-command \
+                         \"pass db/shop\"",
+                    ),
+                }
+            }
             (_, "cfg set") => {
                 Cow::Borrowed("show every key and the value it takes with: tpl help cfg set")
             }
@@ -555,11 +643,15 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         ),
         // FR-CFG-007 obliges the nearest-match half over the keys that do
         // exist in the file.
-        Error::ConfigurationKeyNotFound { nearest, .. } => {
+        Error::ConfigurationKeyNotFound { nearest, known, .. } => {
             let admitted = admitted(nearest, admits_key);
             suggest::hint_line(
                 admitted.iter().copied(),
-                "list the keys that are set with: tpl cfg list",
+                if *known {
+                    "list the keys that are set with: tpl cfg list"
+                } else {
+                    "list every key, its type and its default with: tpl help cfg set"
+                },
             )
         }
 
@@ -748,11 +840,46 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 )
             }
         }
+        // T-04: the file is valid and `tpl cfg` reads it; what is at fault is
+        // the variable, and the correction is to the environment.
         Error::ConfigurationValueMalformed {
             key,
             file,
             position,
             expected,
+            expanded_from: Some(written),
+            ..
+        } => {
+            let variable = written
+                .strip_prefix("${")
+                .and_then(|rest| rest.strip_suffix('}'))
+                .filter(|name| admits(name));
+            match variable {
+                Some(name) => {
+                    let example = if *expected == ValueType::Port.expected() {
+                        "3306"
+                    } else {
+                        "<value>"
+                    };
+                    Cow::Owned(format!(
+                        "set {name} to {expected}, e.g.: export {name}={example}"
+                    ))
+                }
+                None => Cow::Owned(format!(
+                    "set the variables {} names so that it expands to {expected}, or edit {} at \
+                     line {}",
+                    key_or_placeholder(key),
+                    configuration_file(file),
+                    position.line
+                )),
+            }
+        }
+        Error::ConfigurationValueMalformed {
+            key,
+            file,
+            position,
+            expected,
+            expanded_from: None,
             ..
         } => Cow::Owned(format!(
             "edit {} at line {}: give {} {expected}; {NO_CFG_COMMAND}",
@@ -773,9 +900,12 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                     "edit {}: begin {named} with mysql:// or mariadb://; {NO_CFG_COMMAND}",
                     configuration_file(file)
                 )),
+                // T-04: a `${VAR}` is expanded inside a part the URL already
+                // delimits, per FR-CONF-018, so it never stands for the URL.
                 DsnFault::Form => Cow::Owned(format!(
                     "edit {}: write {named} as scheme://host/database, e.g. \
-                     mysql://db.example.com:3306/shop; {NO_CFG_COMMAND}",
+                     mysql://db.example.com:3306/shop; a ${{VAR}} may stand for one part of the \
+                     URL, never for the whole of it; {NO_CFG_COMMAND}",
                     configuration_file(file)
                 )),
             }
@@ -875,14 +1005,14 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             if !command.is_empty() && command.iter().all(|word| admits(word)) =>
         {
             Cow::Owned(format!(
-                "run it directly to see why it failed: {}; tpl sends its standard error to the \
-                 null device",
+                "tpl discards the command's standard error, so run it directly to see why it \
+                 failed: {}",
                 command.join(" ")
             ))
         }
         Error::PasswordCommandFailed { .. } => Cow::Borrowed(
-            "run the command directly to see why it failed; tpl sends its standard error to the \
-             null device",
+            "tpl discards the command's standard error, so run the command directly to see why \
+             it failed",
         ),
         Error::ReadOnlySessionNotEnforced { entry, fault } => {
             let remedy = match fault {
@@ -1006,6 +1136,15 @@ fn parent_or_here(parent: &Path) -> Cow<'_, str> {
 
 /// An invocation of `FR-ERR-022` with the `<template>` it writes replaced by
 /// the template the render was given, where `FR-ERR-041` admits it.
+/// The edit that writes `corrected` in place of the routine the caller named:
+/// the value of `--routine`, or the operand of `tpl schema routine`.
+fn routine_as(corrected: &str) -> Edit<'_> {
+    Edit::Value {
+        ids: &["routine", "name"],
+        to: Replacement::Literal(corrected),
+    }
+}
+
 fn with_template(invocation: &'static str, template: Option<&str>) -> Cow<'static, str> {
     match template {
         Some(template) if admits_template(template) => {
@@ -1093,7 +1232,8 @@ fn listing_in_document(unresolved: &Unresolved, document: &Path) -> Cow<'static,
 /// name is given, per `FR-RND-023`, and a key of `vars` exists only when a
 /// `--set` defines it, per `FR-CTX-026`. The key is a `--set` key, which
 /// `FR-RND-012` confines to the set of `FR-ERR-022`; one outside it leaves the
-/// placeholder.
+/// placeholder. A bare name that is none of the variables is answered with the
+/// list of them.
 fn defining_flag(expression: &str) -> Option<Cow<'static, str>> {
     let mut segments = expression.split(['.', '[']);
     let root = segments.next()?.trim();
@@ -1114,6 +1254,20 @@ fn defining_flag(expression: &str) -> Option<Cow<'static, str>> {
                 None => "a key of 'vars' is set with --set: add --set <key>=<value> to the tpl \
                          render command"
                     .to_owned(),
+            }))
+        }
+        // T-09: a bare name the render never defines is most often a
+        // misspelling of one it does, so the hint names them all. A dotted
+        // expression may begin with a loop variable or a `set`, which the
+        // render does define, so it is left to the generic hint.
+        other if other == expression.trim() && !matches!(other, "database" | "tpl" | "now") => {
+            const DEFINED: &str = "a template sees database, vars, tpl and now, and table, view \
+                                   or routine when --table, --view or --routine names one; list \
+                                   them with: tpl help render";
+            Some(Cow::Owned(if admits(other) {
+                format!("'{other}' is not a variable of this render: {DEFINED}")
+            } else {
+                format!("the name is not a variable of this render: {DEFINED}")
             }))
         }
         _ => None,
@@ -1232,8 +1386,28 @@ fn unset_key(key: &str) -> Cow<'static, str> {
 /// The value written is a placeholder, never the caller's own: `BR-ERR-003`
 /// bars a DSN from every message.
 fn rewrite_entry(entry: &str, written: &str, unset: &[String], command: &str) -> String {
-    let mut commands: Vec<Cow<'static, str>> = unset.iter().map(|key| unset_key(key)).collect();
-    commands.push(write_again(entry, written, command));
+    // T-01: the write again is the caller's own command, whole; the removals
+    // before it run against the same project, so they carry its --tpl-dir.
+    let again = restate::restated(&[]);
+    let project = restate::project_flag().map(|(flag, _)| flag);
+    let mut commands: Vec<Cow<'static, str>> = unset
+        .iter()
+        .map(|key| match &project {
+            Some(flag) => Cow::Owned(unset_key(key).replacen("tpl ", &format!("tpl {flag} "), 1)),
+            None => unset_key(key),
+        })
+        .collect();
+    let replacing = match again {
+        Some(again) => {
+            let replacing = again.replacing();
+            commands.push(Cow::Owned(again.command));
+            replacing
+        }
+        None => {
+            commands.push(write_again(entry, written, command));
+            String::new()
+        }
+    };
 
     let last = commands.len() - 1;
     let mut line = String::new();
@@ -1245,6 +1419,7 @@ fn rewrite_entry(entry: &str, written: &str, unset: &[String], command: &str) ->
         }
         line.push_str(one);
     }
+    line.push_str(&replacing);
     line
 }
 
@@ -1292,6 +1467,18 @@ fn write_again(entry: &str, written: &str, command: &str) -> Cow<'static, str> {
 /// password is precisely what this refusal is about.
 fn restate_entry(command: &str, entry: &str) -> Cow<'static, str> {
     const FORM: &str = "--dsn <url> --password-command <command>";
+
+    // T-01: the caller's own command, whole, with the DSN as a placeholder.
+    let url = Edit::Value {
+        ids: &["dsn"],
+        to: Replacement::Placeholder {
+            text: "<url>",
+            meaning: "the DSN you gave, without its password",
+        },
+    };
+    if let Some(restated) = restate::restated(&[url]) {
+        return Cow::Owned(format!("{}{}", restated.command, restated.replacing()));
+    }
 
     if !admits_path(command) {
         return Cow::Owned(format!("tpl cfg database add <entry> {FORM}"));

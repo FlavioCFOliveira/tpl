@@ -151,7 +151,11 @@ fn dispatch() -> Result<(), Error> {
     // has not been read, so nothing blocking can have run.
     deadline::mark_process_start();
 
-    let invocation = cli::parse(std::env::args_os())?;
+    // T-01: a hint that corrects the command writes back the whole of it, so
+    // the vector is kept for the one diagnostic this process may write.
+    let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    diagnostics::record_invocation(&argv);
+    let invocation = cli::parse(argv)?;
 
     diagnostics::verbosity::set_level(cli::level(&invocation));
 

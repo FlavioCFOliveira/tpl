@@ -1411,7 +1411,8 @@ fn fr_cfg_048_update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alon
         hint,
         "remove the keys it conflicts with, then write it again: tpl cfg unset \
          database.shop.host; tpl cfg unset database.shop.user; tpl cfg unset \
-         database.shop.password; then tpl cfg database update shop --dsn <url>",
+         database.shop.password; then tpl cfg database update shop --dsn <dsn>; replace <dsn> \
+         with the value you gave --dsn",
         "{written}"
     );
     assert!(!hint.contains("remove shop"), "{written}");
@@ -1772,7 +1773,7 @@ fn fr_out_009_pretty_without_json_names_the_flag_it_needs_and_not_a_flag_never_w
     assert!(!written.contains("--format text"), "{written}");
     assert_eq!(
         line(&written, "hint:  "),
-        "add --format json, e.g.: tpl template list --format json --pretty; or drop --pretty"
+        "add --format json: tpl template list --format json --pretty; or drop --pretty"
     );
 }
 
@@ -2006,8 +2007,7 @@ fn s_13_a_failed_password_command_is_written_out_to_run_directly() {
     );
     assert_eq!(
         line(&written, "hint:  "),
-        "run it directly to see why it failed: false; tpl sends its standard error to the null \
-         device"
+        "tpl discards the command's standard error, so run it directly to see why it failed: false"
     );
 }
 
@@ -2036,4 +2036,160 @@ fn rmp_274_a_non_string_element_of_password_command_is_named_by_its_index() {
         "{written}"
     );
     assert!(!written.contains("is not an array"), "{written}");
+}
+
+#[test]
+fn t_01_a_hint_that_rewrites_a_cfg_command_keeps_every_flag_it_was_given() {
+    // Finding T-01 of the third re-audit of rmp #263.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "database", "add", "zz", "--tls", "required"]),
+        64,
+        "no connection details",
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "say where to connect, e.g.: tpl cfg database add zz --tls required --host <host> --user \
+         <user> --schema <database>"
+    );
+
+    // The project named with --tpl-dir is named again, and --pattern, whose
+    // value the character set refuses, is a placeholder the line explains.
+    let written = assert_refused(
+        &sandbox.run(&[
+            "--tpl-dir",
+            ".tpl",
+            "-d",
+            "shop",
+            "schema",
+            "tables",
+            "--pattern",
+            "ord%",
+            "--pretty",
+        ]),
+        64,
+        "--pretty alone",
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "add --format json: tpl --tpl-dir .tpl -d shop schema tables --pattern <pattern> --format \
+         json --pretty; replace <pattern> with the value you gave --pattern; or drop --pretty"
+    );
+}
+
+#[test]
+fn t_03_and_t_08_a_password_command_is_one_string_with_every_quote_closed() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "set", "database.new.password_command", ""]),
+        64,
+        "an empty command",
+    );
+    assert_eq!(
+        line(&written, "cause: "),
+        "'' was supplied for 'database.new.password_command', which takes a non-empty command \
+         line written as one string, such as \"pass db/shop\", which tpl splits into words"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "write the command as one string, e.g.: tpl cfg set database.new.password_command \
+         \"pass db/shop\""
+    );
+
+    // A shell refuses an unclosed quote, and so does the split.
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "set", "database.new.password_command", "pass 'a b"]),
+        64,
+        "an unclosed quote",
+    );
+    assert!(
+        line(&written, "cause: ").contains("whose every quote is closed"),
+        "{written}"
+    );
+    assert_eq!(sandbox.configuration(), b"[core]\n");
+}
+
+#[test]
+fn t_04_a_port_a_variable_expanded_badly_blames_the_variable() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.x]\nhost = \"127.0.0.1\"\nport = \"${P}\"\ndatabase = \"d\"\n");
+
+    let written = assert_refused(
+        &sandbox.run_from(
+            sandbox.root(),
+            &[("PATH", "/usr/bin:/bin"), ("P", "99999")],
+            &["-d", "x", "schema", "tables"],
+        ),
+        78,
+        "a port the environment makes invalid",
+    );
+    assert!(
+        line(&written, "cause: ").contains(
+            "writes database.x.port as ${P}, which the environment expands to 99999; this key \
+             takes a TCP port between 1 and 65535"
+        ),
+        "{written}"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "set P to a TCP port between 1 and 65535, e.g.: export P=3306"
+    );
+}
+
+#[test]
+fn t_05_cfg_get_tells_an_unknown_name_from_an_unset_key_and_gives_the_default() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let written = assert_refused(&sandbox.run(&["cfg", "get", "nope"]), 66, "no such key");
+    assert_eq!(
+        line(&written, "error: "),
+        "'nope' is not a configuration key"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "list every key, its type and its default with: tpl help cfg set"
+    );
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "get", "core.connect_timeout"]),
+        66,
+        "an unset key",
+    );
+    assert_eq!(
+        line(&written, "error: "),
+        "configuration key 'core.connect_timeout' is not set; tpl uses its default, 10"
+    );
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "unset", "core.database"]),
+        66,
+        "an unset key without a default",
+    );
+    assert_eq!(
+        line(&written, "error: "),
+        "configuration key 'core.database' is not set, and it has no default"
+    );
+}
+
+#[test]
+fn t_07_and_t_10_the_generated_configuration_says_what_its_commented_values_are() {
+    let sandbox = Sandbox::new();
+    let printed = sandbox.run(&["init"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+
+    let written = String::from_utf8(sandbox.configuration()).expect("UTF-8");
+    assert!(
+        written.contains("shown with its\n# default, or with an example where it has none."),
+        "{written}"
+    );
+    assert!(
+        written.contains("per query reading the database"),
+        "{written}"
+    );
+    assert!(!written.contains("catalogue"), "{written}");
 }

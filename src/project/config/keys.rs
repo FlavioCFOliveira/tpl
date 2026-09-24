@@ -318,6 +318,43 @@ impl Key {
             Self::Entry { field, .. } => field.expects(),
         }
     }
+
+    /// The value the configuration gives this key where the file sets none,
+    /// as `tpl cfg get` would print it, or [`None`] where the key has no
+    /// default (finding T-05 of the third re-audit of rmp `#263`).
+    pub(crate) fn default_value(&self) -> Option<String> {
+        use crate::deadline::{Deadlines, Phase};
+        use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
+
+        let deadlines = Deadlines::default();
+        let seconds = |phase: Phase| Some(deadlines.of(phase).get().to_string());
+        match self {
+            Self::Core(CoreKey::Database) => None,
+            Self::Core(CoreKey::ConnectTimeout) => seconds(Phase::TcpConnect),
+            Self::Core(CoreKey::QueryTimeout) => seconds(Phase::CatalogueQuery),
+            Self::Core(CoreKey::PasswordTimeout) => seconds(Phase::PasswordCommand),
+            Self::Core(CoreKey::RenderTimeout) => seconds(Phase::Render),
+            Self::Core(CoreKey::RenderFuel) => Some(RenderFuel::DEFAULT.get().to_string()),
+            Self::Core(CoreKey::RenderOutputLimit) => {
+                Some(RenderOutputLimit::DEFAULT.get().to_string())
+            }
+            Self::Core(CoreKey::RenderMemoryLimit) => {
+                Some(RenderMemoryLimit::DEFAULT.get().to_string())
+            }
+            Self::Entry { field, .. } => match field {
+                EntryKey::Port => Some(crate::project::settings::DEFAULT_PORT.to_string()),
+                EntryKey::Tls => Some(super::entry::TlsMode::default().name().to_owned()),
+                EntryKey::Dsn
+                | EntryKey::Host
+                | EntryKey::User
+                | EntryKey::Password
+                | EntryKey::PasswordCommand
+                | EntryKey::Database
+                | EntryKey::CaFile
+                | EntryKey::CaPath => None,
+            },
+        }
+    }
 }
 
 impl fmt::Display for Key {

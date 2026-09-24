@@ -1249,6 +1249,8 @@ mod tests {
             },
             Error::ConfigurationKeyNotFound {
                 key: hostile(),
+                known: false,
+                default: None,
                 file: hostile_path(),
                 nearest: vec![hostile()],
             },
@@ -1361,6 +1363,7 @@ mod tests {
                 position: position(),
                 found: hostile(),
                 expected: "a positive integer number of seconds",
+                expanded_from: Some(Box::new(hostile())),
             },
             Error::DsnMalformed {
                 key: hostile(),

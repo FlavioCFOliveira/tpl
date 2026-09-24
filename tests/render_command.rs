@@ -1830,3 +1830,125 @@ fn s_12_and_s_13_fail_drops_the_engine_label_and_a_default_entry_needs_no_d_in_t
         "{written}"
     );
 }
+
+/// A procedure and a function both named `r`, for the ambiguity of
+/// `FR-SCH-010` over a `--context` document.
+const TWO_ROUTINES: &str = r#"[{"name":"r","kind":"procedure","parameters":[],"body_kind":"SQL","parameter_style":"SQL","is_deterministic":false,"sql_data_access":"SQL","security_type":"SQL","sql_mode":"SQL","comment":"SQL","definer":"SQL","character_set_client":"SQL","collation_connection":"SQL","database_collation":"SQL"},{"name":"r","kind":"function","parameters":[],"body_kind":"SQL","parameter_style":"SQL","is_deterministic":false,"sql_data_access":"SQL","security_type":"SQL","sql_mode":"SQL","comment":"SQL","definer":"SQL","character_set_client":"SQL","collation_connection":"SQL","database_collation":"SQL"}]"#;
+
+#[test]
+fn t_01_a_hint_that_rewrites_the_render_keeps_every_flag_it_was_given() {
+    // Finding T-01 of the third re-audit of rmp #263: the rewritten command
+    // dropped --context, -d and --set, and copied verbatim it read another
+    // source. The whole invocation comes back, with the one token changed.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(&format!(".tpl/templates/{RESOLVES}.jinja"), "{{ 1 }}\n");
+    sandbox.write(
+        "rt.json",
+        &EMPTY_CONTEXT.replace(r#""routines":[]"#, &format!(r#""routines":{TWO_ROUTINES}"#)),
+    );
+
+    let written = refused(
+        &sandbox,
+        &[
+            "render",
+            RESOLVES,
+            "--context",
+            "rt.json",
+            "--routine",
+            "r",
+            "--set",
+            "a=b",
+        ],
+        64,
+    );
+    assert_eq!(
+        line(&written, LABELS[2]),
+        format!(
+            "name the kind you mean: tpl render {RESOLVES} --context rt.json --routine \
+             procedure:r --set a=b, or tpl render {RESOLVES} --context rt.json --routine \
+             function:r --set a=b"
+        )
+    );
+
+    // A value the character set refuses is a placeholder, and the line says
+    // what it stands for rather than dropping it.
+    let written = refused(
+        &sandbox,
+        &[
+            "render",
+            RESOLVES,
+            "--context",
+            "rt.json",
+            "--routine=FUNCTION:r",
+            "--set",
+            "t=a b",
+        ],
+        64,
+    );
+    assert_eq!(
+        line(&written, LABELS[2]),
+        format!(
+            "write it as: tpl render {RESOLVES} --context rt.json --routine=function:r --set \
+             t=<t>; replace <t> with the value you gave --set t"
+        )
+    );
+}
+
+#[test]
+fn t_02_an_undefined_operand_of_a_filter_names_the_flag_that_defines_it() {
+    // Finding T-02: `{{ table.name|pascal }}` without --table named no flag.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+    sandbox.write(".tpl/templates/piped.jinja", "{{ table.name|pascal }}\n");
+    sandbox.write(".tpl/templates/bare.jinja", "{{ nosuchvar }}\n");
+    sandbox.write(".tpl/templates/typed.jinja", "{{ database|pascal }}\n");
+
+    let written = refused(&sandbox, &["render", "piped", "--context", CONTEXT], 65);
+    assert!(
+        line(&written, LABELS[1]).contains(
+            "reads 'table.name', which is not defined in this render; the template engine \
+             reports: the filter 'pascal' accepts a string, and was given an undefined value"
+        ),
+        "{written}"
+    );
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "'table' exists only when the render names one: add --table <name> to the tpl render \
+         command"
+    );
+
+    // T-09: a bare name the render never defines is answered with the names it
+    // does define.
+    let written = refused(&sandbox, &["render", "bare", "--context", CONTEXT], 65);
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "'nosuchvar' is not a variable of this render: a template sees database, vars, tpl and \
+         now, and table, view or routine when --table, --view or --routine names one; list them \
+         with: tpl help render"
+    );
+
+    // T-07: the type is named in the author's words, not the engine's.
+    let written = refused(&sandbox, &["render", "typed", "--context", CONTEXT], 65);
+    assert!(
+        line(&written, LABELS[1]).contains("and was given an object"),
+        "{written}"
+    );
+}
+
+#[test]
+fn t_07_a_parse_position_is_one_based_at_the_start_of_a_line() {
+    // The decoder reports column 0 for an end of input that begins a line.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(&format!(".tpl/templates/{RESOLVES}.jinja"), "{{ 1 }}\n");
+
+    let printed = sandbox.run_with_stdin(&["render", RESOLVES, "--context", "-"], b"{\n");
+    let written = stderr(&printed);
+    assert_eq!(code(&printed), Some(65), "{written}");
+    assert!(
+        line(&written, LABELS[1]).ends_with("the parser stopped at line 2, column 1"),
+        "{written}"
+    );
+}

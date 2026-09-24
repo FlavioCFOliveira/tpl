@@ -291,9 +291,12 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 unresolved.call,
                 sought(unresolved)
             )),
+            // T-07: the chain FR-ERR-011 carries is introduced as what the
+            // engine reported, so its bare "undefined value" does not read as
+            // a dangling label of this sentence.
             (Some(expression), None) => Cow::Owned(format!(
                 "'{template}' at {position} reads '{expression}', which is not defined in this \
-                 render: {}",
+                 render; the template engine reports: {}",
                 joined(chain)
             )),
             (_, Some(RenderReason::IncludeNotFound { .. }))
@@ -415,9 +418,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // file does not set. The line does not also claim the key is one the
         // space admits, because FR-CFG-007 reaches a key outside it too — a
         // spelling `tpl cfg get` was given and `.tpl/.cfg` does not carry.
-        Error::ConfigurationKeyNotFound { key, file, .. } => {
-            Cow::Owned(format!("{} sets no value for '{key}'", file.display()))
-        }
+        // T-05: a name outside the space is said to be one, because "sets no
+        // value" of it reads as though setting it would help.
+        Error::ConfigurationKeyNotFound {
+            key,
+            file,
+            known: true,
+            ..
+        } => Cow::Owned(format!("{} sets no value for '{key}'", file.display())),
+        Error::ConfigurationKeyNotFound {
+            key, known: false, ..
+        } => Cow::Owned(format!(
+            "'{key}' is none of the keys tpl reads, so no file sets it"
+        )),
 
         // ------------------------------------------------------------ 69 ---
         // The row obliges the phase, the host and port attempted, and what
@@ -625,12 +638,27 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 file.display()
             )
         }),
+        // T-04: a value a `${VAR}` produced is not what the file holds, and
+        // the line says which of the two is at fault.
         Error::ConfigurationValueMalformed {
             key,
             file,
             position,
             found,
             expected,
+            expanded_from: Some(written),
+        } => Cow::Owned(format!(
+            "{} at {position} writes {key} as {written}, which the environment expands to \
+             {found}; this key takes {expected}",
+            file.display()
+        )),
+        Error::ConfigurationValueMalformed {
+            key,
+            file,
+            position,
+            found,
+            expected,
+            expanded_from: None,
         } => Cow::Owned(format!(
             "{} at {position} declares {key} as {found}; this key takes {expected}",
             file.display()

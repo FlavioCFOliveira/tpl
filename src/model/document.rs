@@ -167,9 +167,12 @@ fn fault(bytes: &str, reported: &serde_json::Error) -> ContextFault {
         // Syntax and Eof are both a document that is not well-formed JSON. Io
         // is unreachable: the bytes are already in memory, and a decode from a
         // string performs no read.
+        // The decoder reports column 0 for an end of input at the start of a
+        // line, before any character of it; every other position this system
+        // writes is one-based, so it is the first column (finding T-07).
         Category::Syntax | Category::Eof | Category::Io => ContextFault::NotJson(Position {
             line: reported.line(),
-            column: reported.column(),
+            column: reported.column().max(1),
         }),
     }
 }

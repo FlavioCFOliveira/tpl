@@ -1158,18 +1158,20 @@ fn r_269_the_re_audit_texts_are_stated_in_the_text_help_and_in_the_json_tree() {
     // The findings of the re-audit for rmp #269 whose fix is a sentence of
     // help: each is read in the text help of the node that states it and
     // among the strings of the JSON tree, which FR-HELP-019 makes one content.
-    let cases: [(&[&str], &str); 12] = [
+    let cases: [(&[&str], &str); 16] = [
         // R-04: the one-string form, its splitting, and the stored array.
         (
             &["cfg", "set"],
-            "Given to cfg set as one string such as \"pass db/shop\", split into words as a \
-             shell would (quotes group words); stored in the file as an array, [\"pass\", \
-             \"db/shop\"].",
+            "Given to cfg set as one string, a command line such as \"pass db/shop\", never as \
+             an array; split into words as a shell would (quotes group words, and every quote \
+             must be closed); stored in the file as an array, [\"pass\", \"db/shop\"]. A value \
+             that starts with [ is not read as an array.",
         ),
         (
             &["cfg", "database", "add"],
-            "tpl splits the string into words as a shell would (quotes group words) and stores \
-             them in the file as an array, [\"pass\", \"db/shop\"];",
+            "tpl splits the string into words as a shell would (quotes group words, and every \
+             quote must be closed) and stores them in the file as an array, [\"pass\", \
+             \"db/shop\"]; a value that starts with [ is not read as an array.",
         ),
         // R-05: column() returns the column object.
         (
@@ -1213,6 +1215,23 @@ fn r_269_the_re_audit_texts_are_stated_in_the_text_help_and_in_the_json_tree() {
         // The walkthrough: a local server, and a password from the environment.
         (&[], "--tls disabled"),
         (&[], "tpl cfg set database.shop.password '${SHOP_PASSWORD}'"),
+        // T-06 of the third re-audit: the 64 conditions every command shares,
+        // the ambiguous bare --routine, and what a fourth -v does.
+        (
+            &["version"],
+            "On any command, also -v with -q, or a global flag given a value it does not take, \
+             such as --timeout 0.",
+        ),
+        (
+            &["help"],
+            "On any command, also -v with -q, or a global flag given a value it does not take, \
+             such as --timeout 0.",
+        ),
+        (
+            &["render"],
+            "a bare --routine NAME that names both a procedure and a function;",
+        ),
+        (&[], "A fourth -v, or more, changes nothing."),
     ];
 
     let mut strings = Vec::new();

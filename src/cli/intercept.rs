@@ -659,6 +659,11 @@ fn after_the_terminator(written: &[Cow<'_, str>], token: &str) -> bool {
 /// The population is the node's children **and their aliases**, because
 /// `BR-CLI-001` routes a mistyped alias through this rule rather than through
 /// inference, and `tbl` and `tbls` differ by one character.
+///
+/// A kept alias is offered as the command it names, once: `tpl schema tabl`
+/// is one edit from `table`, from its alias `tbl` and from `tables`, and three
+/// choices of which two run the same command read as three commands (finding
+/// T-09 of the third re-audit of rmp `#263`).
 fn nearest_command(node: &clap::Command, token: &str) -> Vec<String> {
     let population: Vec<&str> = node
         .get_subcommands()
@@ -667,7 +672,16 @@ fn nearest_command(node: &clap::Command, token: &str) -> Vec<String> {
         })
         .collect();
 
-    kept(token, population.iter().copied(), Population::Commands)
+    let mut commands: Vec<String> = Vec::new();
+    for name in kept(token, population.iter().copied(), Population::Commands) {
+        let command = node
+            .find_subcommand(&name)
+            .map_or(name, |child| child.get_name().to_owned());
+        if !commands.contains(&command) {
+            commands.push(command);
+        }
+    }
+    commands
 }
 
 /// The nearest matches to `token` among the flags the invocation could have
@@ -800,7 +814,8 @@ mod tests {
         assert!(line(&lines, "cause: ").contains("'tbles'"));
         assert_eq!(
             line(&lines, "hint:  "),
-            "did you mean 'tables', 'tbls' or 'table'? list what it takes with: tpl help schema"
+            // T-09: the alias `tbls` is offered as the command it names, once.
+            "did you mean 'tables' or 'table'? list what it takes with: tpl help schema"
         );
         assert_eq!(line(&lines, "exit:  "), "64 (EX_USAGE)");
     }

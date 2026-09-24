@@ -40,11 +40,14 @@ mod cause;
 mod escape;
 mod hint;
 mod render;
+mod restate;
 
 pub(crate) mod emit;
 pub(crate) mod panic;
 pub(crate) mod suggest;
 pub(crate) mod verbosity;
+
+pub(crate) use restate::record as record_invocation;
 
 pub(crate) use cause::invoked;
 pub(crate) use render::report;

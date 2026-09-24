@@ -252,6 +252,14 @@ fn failed(reported: &minijinja::Error) -> Option<String> {
 /// the source, or that spans more than one line, yields nothing rather than a
 /// fragment.
 fn undefined(reported: &minijinja::Error) -> Option<String> {
+    if reported.kind() == minijinja::ErrorKind::InvalidOperation
+        && reported
+            .detail()
+            .is_some_and(|detail| detail.ends_with(super::operand::GIVEN_UNDEFINED))
+    {
+        return operand(reported);
+    }
+
     if reported.kind() != minijinja::ErrorKind::UndefinedError {
         return None;
     }
@@ -259,6 +267,14 @@ fn undefined(reported: &minijinja::Error) -> Option<String> {
     let range = reported.range()?;
     let source = reported.template_source()?;
     let start = expression_start(source.as_bytes(), range.start)?;
+
+    // A built-in filter or test the engine refused an undefined operand to
+    // reports the range of its own name, as a registered one does.
+    let before = source[..start].trim_end();
+    if before.ends_with('|') || before.ends_with(" is") || before.ends_with(" not") {
+        return operand(reported);
+    }
+
     let expression = source.get(start..range.end)?.trim();
 
     // The engine's range can begin part-way into the expression — at
@@ -272,6 +288,55 @@ fn undefined(reported: &minijinja::Error) -> Option<String> {
         .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_');
 
     (named && !expression.contains('\n') && expression.len() <= 128).then(|| expression.to_owned())
+}
+
+/// The source text of the operand a filter or a test was handed undefined
+/// (finding T-02 of the third re-audit of rmp `#263`).
+///
+/// The engine's range covers the filter's or the test's name, so the operand
+/// is the expression that ends before the `|`, or before the `is` or `is not`,
+/// that precedes it. An operand that is itself the result of another filter —
+/// `x|lower|pascal` — is quoted not at all rather than as its last filter.
+fn operand(reported: &minijinja::Error) -> Option<String> {
+    let range = reported.range()?;
+    let source = reported.template_source()?;
+    let bytes = source.as_bytes();
+    let skip_space = |mut at: usize| {
+        while at > 0 && bytes[at - 1].is_ascii_whitespace() {
+            at -= 1;
+        }
+        at
+    };
+    let word_before = |at: usize, word: &[u8]| {
+        at >= word.len()
+            && &bytes[at - word.len()..at] == word
+            && (at == word.len() || !bytes[at - word.len() - 1].is_ascii_alphanumeric())
+    };
+
+    let mut end = skip_space(range.start.min(bytes.len()));
+    if end > 0 && bytes[end - 1] == b'|' {
+        end -= 1;
+    } else {
+        if word_before(end, b"not") {
+            end = skip_space(end - 3);
+        }
+        if !word_before(end, b"is") {
+            return None;
+        }
+        end -= 2;
+    }
+    let end = skip_space(end);
+    let start = expression_start(bytes, end)?;
+    let expression = source.get(start..end)?.trim();
+
+    let piped = skip_space(start) > 0 && bytes[skip_space(start) - 1] == b'|';
+    let named = expression
+        .bytes()
+        .next()
+        .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_');
+
+    (named && !piped && !expression.contains('\n') && expression.len() <= 128)
+        .then(|| expression.to_owned())
 }
 
 /// Where the expression that contains the byte at `start` begins: back over
@@ -582,6 +647,26 @@ mod tests {
             .expect_err("the render fails");
 
         during_render("t", &reported)
+    }
+
+    #[test]
+    fn t_02_an_undefined_operand_of_a_filter_or_a_test_is_quoted() {
+        for (source, expected) in [
+            ("{{ table.name|pascal }}", Some("table.name")),
+            ("x\n  {{ vars.title | pascal }}", Some("vars.title")),
+            ("{% if nothing is nullable %}{% endif %}", Some("nothing")),
+            (
+                "{% if nothing is not nullable %}{% endif %}",
+                Some("nothing"),
+            ),
+            ("{{ nothing|lower|pascal }}", Some("nothing")),
+            ("{{ nothing|lower }}", Some("nothing")),
+        ] {
+            let Error::RenderFailed { undefined, .. } = failed_with(source) else {
+                panic!("{source} is a render failure");
+            };
+            assert_eq!(undefined.as_deref(), expected, "{source}");
+        }
     }
 
     #[test]

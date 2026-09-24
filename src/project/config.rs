@@ -260,8 +260,11 @@ impl Configuration {
     /// The condition `FR-CFG-007` and `FR-CFG-012` raise for a key this file
     /// does not set.
     pub(crate) fn key_not_found(&self, key: &str) -> Error {
+        let parsed = keys::Key::parse(key);
         Error::ConfigurationKeyNotFound {
             key: key.to_owned(),
+            known: parsed.is_some(),
+            default: parsed.as_ref().and_then(keys::Key::default_value),
             file: self.file.clone(),
             nearest: self.nearest_key_set(key),
         }
@@ -810,6 +813,7 @@ fn malformed(
         position: at(text, value),
         found,
         expected,
+        expanded_from: None,
     }
 }
 
@@ -821,6 +825,7 @@ fn malformed_section(text: &str, value: &Spanned<DeValue<'_>>, key: &str, file: 
         position: at(text, value),
         found: value.get_ref().type_str().to_owned(),
         expected: A_TABLE,
+        expanded_from: None,
     }
 }
 

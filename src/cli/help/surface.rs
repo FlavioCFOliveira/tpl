@@ -208,7 +208,7 @@ const FILTERS: &[Item] = &[
         operand: Some(Kind::Column),
         arguments: &[],
         purpose: "Returns the column's data_type, such as varchar, or null when tpl does not \
-                  recognise the type; any operand but a column fails the render.",
+                  recognise the type; any value but a column fails the render.",
     },
     Item {
         name: "json",

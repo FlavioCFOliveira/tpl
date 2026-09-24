@@ -486,11 +486,11 @@ fn dsn_item(written: &str) -> Result<Item, Error> {
 
 /// The `password_command` item a `--password-command` writes (`FR-CFG-046`).
 fn command_item(written: &str) -> Result<Item, Error> {
-    let command = PasswordCommand::split(written).ok_or_else(|| Error::MalformedValue {
+    let command = PasswordCommand::split(written).map_err(|expected| Error::MalformedValue {
         parameter: "--password-command".to_owned(),
         command: String::new(),
         value: written.to_owned(),
-        expected: "a command to run",
+        expected,
     })?;
 
     Ok(value(edit::array(command.arguments())))

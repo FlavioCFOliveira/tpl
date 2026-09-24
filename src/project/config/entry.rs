@@ -135,9 +135,14 @@ impl PasswordCommand {
     /// command line, and `FR-CONF-035` is why the rule is **not** applied to a
     /// string found in the file.
     ///
-    /// Returns [`None`] where the string yields no word at all, which is the
-    /// one outcome that cannot be executed.
-    pub(crate) fn split(supplied: &str) -> Option<Self> {
+    /// # Errors
+    ///
+    /// Returns what the value should have been — the `expected` clause of a
+    /// `cause` line — where the string yields no word at all, which cannot be
+    /// executed, or leaves a quote open, which the POSIX quoting rules of
+    /// `FR-CONF-025` do not admit and a shell refuses (finding T-08 of the
+    /// third re-audit of rmp `#263`).
+    pub(crate) fn split(supplied: &str) -> Result<Self, &'static str> {
         let mut words: Vec<String> = Vec::new();
         let mut word = String::new();
         let mut started = false;
@@ -147,18 +152,27 @@ impl PasswordCommand {
             match character {
                 '\'' => {
                     started = true;
+                    let mut closed = false;
                     for quoted in characters.by_ref() {
                         if quoted == '\'' {
+                            closed = true;
                             break;
                         }
                         word.push(quoted);
                     }
+                    if !closed {
+                        return Err(Self::UNCLOSED);
+                    }
                 }
                 '"' => {
                     started = true;
+                    let mut closed = false;
                     while let Some(quoted) = characters.next() {
                         match quoted {
-                            '"' => break,
+                            '"' => {
+                                closed = true;
+                                break;
+                            }
                             '\\' => {
                                 if let Some(escaped) = characters.next() {
                                     word.push(escaped);
@@ -166,6 +180,9 @@ impl PasswordCommand {
                             }
                             other => word.push(other),
                         }
+                    }
+                    if !closed {
+                        return Err(Self::UNCLOSED);
                     }
                 }
                 '\\' => {
@@ -191,8 +208,20 @@ impl PasswordCommand {
             words.push(word);
         }
 
-        Self::new(words)
+        Self::new(words).ok_or(Self::SUPPLIED)
     }
+
+    /// What a `password_command` supplied as one string takes (`FR-CONF-025`),
+    /// as the `cause` of an empty value names it (finding T-03 of the third
+    /// re-audit of rmp `#263`): the caller writes one string, not the array
+    /// the file stores.
+    pub(crate) const SUPPLIED: &'static str = "a non-empty command line written as one string, \
+                                               such as \"pass db/shop\", which tpl splits into \
+                                               words";
+
+    /// What the same value takes where it leaves a quote open.
+    pub(crate) const UNCLOSED: &'static str = "a command line written as one string whose every \
+                                               quote is closed, such as \"pass 'db shop'\"";
 }
 
 /// A value together with where the file wrote it.
@@ -618,8 +647,29 @@ mod tests {
 
     #[test]
     fn fr_conf_025_a_string_that_yields_no_word_is_refused() {
-        assert_eq!(PasswordCommand::split(""), None);
-        assert_eq!(PasswordCommand::split("   "), None);
+        assert_eq!(PasswordCommand::split(""), Err(PasswordCommand::SUPPLIED));
+        assert_eq!(
+            PasswordCommand::split("   "),
+            Err(PasswordCommand::SUPPLIED)
+        );
+    }
+
+    #[test]
+    fn t_08_a_string_that_leaves_a_quote_open_is_refused() {
+        // A shell refuses an unclosed quote, and so do the POSIX quoting rules
+        // FR-CONF-025 splits by.
+        assert_eq!(
+            PasswordCommand::split("pass 'a b"),
+            Err(PasswordCommand::UNCLOSED)
+        );
+        assert_eq!(
+            PasswordCommand::split("pass \"a b"),
+            Err(PasswordCommand::UNCLOSED)
+        );
+        assert_eq!(
+            PasswordCommand::split("pass \"a\\\""),
+            Err(PasswordCommand::UNCLOSED)
+        );
     }
 
     #[test]

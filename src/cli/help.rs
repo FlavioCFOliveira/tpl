@@ -588,10 +588,12 @@ const TLS: Documented = Documented {
 /// `--password-command`, as every node that declares it states it.
 const PASSWORD_COMMAND: Documented = Documented {
     name: "--password-command",
-    purpose: "Sets a command, written as one string such as \"pass db/shop\", whose standard \
-              output is the password. tpl splits the string into words as a shell would (quotes \
-              group words) and stores them in the file as an array, [\"pass\", \"db/shop\"]; the \
-              command runs without a shell, and no password is stored in the file.",
+    purpose: "Sets a command whose standard output is the password. Write it as one string, \
+              a command line such as \"pass db/shop\", never as an array. tpl splits the string \
+              into words as a shell would (quotes group words, and every quote must be closed) \
+              and stores them in the file as an array, [\"pass\", \"db/shop\"]; a value that \
+              starts with [ is not read as an array. The command runs without a shell, and no \
+              password is stored in the file.",
     excludes: &[],
 };
 /// `--ca-file`, as every node that declares it states it.
@@ -837,7 +839,7 @@ const GLOBAL_ARGUMENTS: [Documented; 7] = [
     Documented {
         name: "--verbose",
         purpose: "Writes more diagnostic detail to stderr, one level per occurrence up to three: \
-                  -v, -vv or -vvv.",
+                  -v, -vv or -vvv. A fourth -v, or more, changes nothing.",
         excludes: &["--quiet"],
     },
     Documented {
@@ -1199,7 +1201,8 @@ const GROUP: &[Outcome] = &[
     outcome(Code::Ok, "This help was written to stdout."),
     outcome(
         Code::Usage,
-        "An unknown command or flag, or a flag given twice.",
+        "An unknown command or flag, or a flag given twice. On any command, also -v with -q, or a \
+         global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(Code::IoError, "stdout could not be written."),
 ];
@@ -1212,7 +1215,8 @@ const ROOT: &[Outcome] = &[
     outcome(Code::Ok, "This help was written to stdout."),
     outcome(
         Code::Usage,
-        "An unknown command or flag, or a flag given twice.",
+        "An unknown command or flag, or a flag given twice. On any command, also -v with -q, or a \
+         global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::Software,
@@ -1227,7 +1231,8 @@ const SCHEMA_LISTING: &[Outcome] = &[
     outcome(Code::Ok, "The result was written to stdout."),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, or --pretty without --format json.",
+        "An unknown flag, a flag given twice, or --pretty without --format json. On any command, \
+         also -v with -q, or a global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::NoInput,
@@ -1261,7 +1266,9 @@ const SCHEMA_OBJECT: &[Outcome] = &[
     outcome(Code::Ok, "The description was written to stdout."),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json.",
+        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json. \
+         On any command, also -v with -q, or a global flag given a value it does not take, such \
+         as --timeout 0.",
     ),
     outcome(
         Code::NoInput,
@@ -1296,8 +1303,9 @@ const SCHEMA_ROUTINE: &[Outcome] = &[
     outcome(Code::Ok, "The description was written to stdout."),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, a missing NAME, --pretty without --format json, or a \
-         bare NAME that matches both a procedure and a function.",
+        "An unknown flag, a flag given twice, a missing NAME, --pretty without --format json, or \
+         a bare NAME that matches both a procedure and a function. On any command, also -v with \
+         -q, or a global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::NoInput,
@@ -1333,7 +1341,8 @@ const SCHEMA_DUMP: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag or a flag given twice; --format and --pattern are not flags of this \
-         command.",
+         command. On any command, also -v with -q, or a global flag given a value it does not \
+         take, such as --timeout 0.",
     ),
     outcome(
         Code::NoInput,
@@ -1368,8 +1377,10 @@ const RENDER: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag, a missing TEMPLATE, or a flag given twice; more than one of --table, \
-         --view and --routine; a --set without =, with an invalid key, or with a key given twice; \
-         or --context together with -d/--database or --direct.",
+         --view and --routine; a bare --routine NAME that names both a procedure and a function; \
+         a --set without =, with an invalid key, or with a key given twice; or --context together \
+         with -d/--database or --direct. On any command, also -v with -q, or a global flag given \
+         a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::DataError,
@@ -1416,7 +1427,8 @@ const TEMPLATE_LISTING: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, or --pretty without --format json.",
+        "An unknown flag, a flag given twice, or --pretty without --format json. On any command, \
+         also -v with -q, or a global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::IoError,
@@ -1433,7 +1445,9 @@ const TEMPLATE_NAMED: &[Outcome] = &[
     outcome(Code::Ok, "The source was written to stdout."),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, a missing NAME, or more than one NAME.",
+        "An unknown flag, a flag given twice, a missing NAME, or more than one NAME. On any \
+         command, also -v with -q, or a global flag given a value it does not take, such as \
+         --timeout 0.",
     ),
     outcome(
         Code::DataError,
@@ -1460,7 +1474,8 @@ const TEMPLATE_PATH: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag, a flag given twice, more than one NAME, or --pretty without --format \
-         json.",
+         json. On any command, also -v with -q, or a global flag given a value it does not take, \
+         such as --timeout 0.",
     ),
     outcome(
         Code::DataError,
@@ -1488,7 +1503,11 @@ const TEMPLATE_CHECK: &[Outcome] = &[
         "Every checked template parses. A project with no template checks nothing and still \
          succeeds.",
     ),
-    outcome(Code::Usage, "An unknown flag or a flag given twice."),
+    outcome(
+        Code::Usage,
+        "An unknown flag or a flag given twice. On any command, also -v with -q, or a global flag \
+         given a value it does not take, such as --timeout 0.",
+    ),
     outcome(
         Code::DataError,
         "A checked template has a syntax error; every failing template is reported, one \
@@ -1516,7 +1535,9 @@ const CACHE_LOAD: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag, or a flag given twice; --no-cache; more than one of --table, --view and \
-         --routine; or a bare --routine name that matches both a procedure and a function.",
+         --routine; or a bare --routine name that matches both a procedure and a function. On any \
+         command, also -v with -q, or a global flag given a value it does not take, such as \
+         --timeout 0.",
     ),
     outcome(
         Code::NoInput,
@@ -1552,7 +1573,8 @@ const CACHE_CLEAN: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag (--direct and --no-cache included), a flag given twice, or more than one \
-         of --table, --view and --routine.",
+         of --table, --view and --routine. On any command, also -v with -q, or a global flag \
+         given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::NoInput,
@@ -1578,7 +1600,8 @@ const CACHE_STATUS: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag (--direct and --no-cache included), a flag given twice, or --pretty \
-         without --format json.",
+         without --format json. On any command, also -v with -q, or a global flag given a value \
+         it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::NoInput,
@@ -1601,7 +1624,9 @@ const CFG_GET: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag, a flag given twice, a missing KEY, --pretty without --format json, or a \
-         KEY that names a whole block (core, database or database.<entry>) rather than one value.",
+         KEY that names a whole block (core, database or database.<entry>) rather than one value. \
+         On any command, also -v with -q, or a global flag given a value it does not take, such \
+         as --timeout 0.",
     ),
     outcome(
         Code::NoInput,
@@ -1622,9 +1647,11 @@ const CFG_SET: &[Outcome] = &[
     outcome(Code::Ok, "The value was written to .tpl/.cfg."),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, a missing KEY or VALUE, a KEY that is not one of the \
-         keys listed under DESCRIPTION, a VALUE of the wrong type for its key, or a VALUE that \
-         cannot stand beside a key the entry already holds, such as a dsn beside a host.",
+        "An unknown flag, a flag given twice, a missing KEY or VALUE, a KEY that is not one of \
+         the keys listed under DESCRIPTION, a VALUE of the wrong type for its key, or a VALUE \
+         that cannot stand beside a key the entry already holds, such as a dsn beside a host. On \
+         any command, also -v with -q, or a global flag given a value it does not take, such as \
+         --timeout 0.",
     ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
@@ -1638,7 +1665,8 @@ const CFG_UNSET: &[Outcome] = &[
     outcome(Code::Ok, "The key or the block was removed from .tpl/.cfg."),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, or a missing KEY.",
+        "An unknown flag, a flag given twice, or a missing KEY. On any command, also -v with -q, \
+         or a global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(Code::NoInput, "KEY is not set in .tpl/.cfg."),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
@@ -1656,7 +1684,8 @@ const CFG_LISTING: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, or --pretty without --format json.",
+        "An unknown flag, a flag given twice, or --pretty without --format json. On any command, \
+         also -v with -q, or a global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::IoError,
@@ -1676,7 +1705,8 @@ const CFG_DATABASE_ADD: &[Outcome] = &[
         "An unknown flag, a missing NAME, or a flag given twice; no connection flag was given; \
          --dsn was given with --host, --port, --user or --schema; a --dsn, --port or --tls value \
          is malformed; the password given twice, as a password inside --dsn and as \
-         --password-command; or NAME is already taken.",
+         --password-command; or NAME is already taken. On any command, also -v with -q, or a \
+         global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
@@ -1693,7 +1723,9 @@ const CFG_DATABASE_SHOW: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json.",
+        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json. \
+         On any command, also -v with -q, or a global flag given a value it does not take, such \
+         as --timeout 0.",
     ),
     outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
     outcome(
@@ -1714,7 +1746,9 @@ const CFG_DATABASE_UPDATE: &[Outcome] = &[
         "An unknown flag, a missing NAME, or a flag given twice; no field flag; --dsn given with \
          --host, --port, --user or --schema; a malformed flag value; the password given twice, as \
          a password inside the dsn or password and as --password-command; or a change that would \
-         leave the entry with both a dsn and host, port, user, password or database.",
+         leave the entry with both a dsn and host, port, user, password or database. On any \
+         command, also -v with -q, or a global flag given a value it does not take, such as \
+         --timeout 0.",
     ),
     outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
@@ -1733,7 +1767,8 @@ const CFG_DATABASE_REMOVE: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, or a missing NAME.",
+        "An unknown flag, a flag given twice, or a missing NAME. On any command, also -v with -q, \
+         or a global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
@@ -1752,7 +1787,9 @@ const CFG_DATABASE_TEST: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json.",
+        "An unknown flag, a flag given twice, a missing NAME, or --pretty without --format json. \
+         On any command, also -v with -q, or a global flag given a value it does not take, such \
+         as --timeout 0.",
     ),
     outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
     outcome(
@@ -1783,7 +1820,8 @@ const INIT: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, or more than one PATH.",
+        "An unknown flag, a flag given twice, or more than one PATH. On any command, also -v with \
+         -q, or a global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::CantCreate,
@@ -1801,7 +1839,8 @@ const HELP: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag, a flag given twice, a word of COMMAND_PATH that names no command under \
-         the words before it, or --pretty without --format json.",
+         the words before it, or --pretty without --format json. On any command, also -v with -q, \
+         or a global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::IoError,
@@ -1815,7 +1854,8 @@ const VERSION: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An argument, a flag other than the global ones (this command takes none), or a global \
-         flag that takes a value given twice.",
+         flag that takes a value given twice. On any command, also -v with -q, or a global flag \
+         given a value it does not take, such as --timeout 0.",
     ),
     outcome(Code::IoError, "stdout could not be written."),
 ];
@@ -2690,9 +2730,11 @@ const ENTRIES: [Entry; 35] = [
                     ),
                     row(
                         "database.<name>.password_command",
-                        "A command that prints the password. Given to cfg set as one string \
-                         such as \"pass db/shop\", split into words as a shell would (quotes group \
-                         words); stored in the file as an array, [\"pass\", \"db/shop\"].",
+                        "A command that prints the password. Given to cfg set as one string, \
+                         a command line such as \"pass db/shop\", never as an array; split into \
+                         words as a shell would (quotes group words, and every quote must be \
+                         closed); stored in the file as an array, [\"pass\", \"db/shop\"]. A \
+                         value that starts with [ is not read as an array.",
                     ),
                     row(
                         "database.<name>.database",
