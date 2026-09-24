@@ -1,0 +1,5 @@
+# actionlint 1.7.12's built-in label list predates these GA GitHub-hosted labels; remove this file once actionlint knows them.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm
