@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-eight editions. All are in force;
+The specification has been written in fifty-nine editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4726,6 +4726,47 @@ and `78` already holds the project trust checks, step 6 of `FR-ERR-006`
 already carries `78`, and every command refused could already exit `78`. The
 root `README.md` does not describe how the cache is reached, so the
 fifth validation rule owes nothing.
+
+### Fifty-ninth edition — five configuration checks
+
+Five tasks of sprint 25 were settled in one pass: rmp `#264`, `#266`, `#271`,
+`#277` and `#278`.
+
+**One identifier is assigned: `FR-CFG-054`.** None is retired and none is
+renumbered. No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Entry names (`#264`)** — no change. `FR-CONF-048` has fixed the grammar
+  `[A-Za-z0-9_]{1,64}` since the forty-ninth edition, and refuses a name
+  outside it given to `tpl cfg database add` with `64`, writing nothing.
+- **The default entry must exist (`#271`)** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-054` refuses
+  `tpl cfg set core.database` of a name no entry declares with `66` and a
+  nearest-match suggestion.
+- **`-d` where it has no effect (`#266`)** —
+  [global-flags.md](global-flags.md). `FR-GLOB-007` states that the flag is
+  accepted silently wherever the command requires no entry, save the warning
+  of `FR-CFG-051`.
+- **Blocks are suggestion candidates (`#277`)** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-012` suggests over the blocks
+  the file carries, with a `hint` that shows and never deletes.
+- **Line continuation and two variables that do not exist (`#278`)** —
+  [configuration-model.md](configuration-model.md): `FR-CONF-025` removes a
+  backslash and a newline outside single quotes, as POSIX does.
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and
+  [cfg-commands.md](cfg-commands.md): `FR-ERR-043` and item 2 of `FR-CFG-052`
+  no longer name `TPL_DIR` or `TPL_DATABASE`, which `FR-CONF-030` says do not
+  exist.
+
+`FR-CONF-030`, `FR-CONF-046`, `FR-CFG-007`, `FR-CFG-023`, `FR-CFG-051`,
+`FR-GLOB-005`, `FR-GLOB-025`, `BR-GLOB-001`, `FR-PROJ-026`, `FR-CLI-021`,
+`FR-CLI-024`, `FR-ERR-005`, `FR-ERR-019`, `FR-ERR-020`, `FR-ERR-021`,
+`FR-ERR-035`, `BR-ERR-002`, `BR-ERR-005` and `FR-HELP-031` were read against
+the changes. None conflicts with them, so none is amended. The root
+`README.md` does not state what `tpl cfg set core.database`, `tpl cfg unset`
+or the splitting of `password_command` do, so the fifth validation rule owes
+nothing.
 
 ### Still out of scope
 

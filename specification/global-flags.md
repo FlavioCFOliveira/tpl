@@ -76,8 +76,9 @@ which belongs to that command's module.
   `.tpl/.cfg`, and the command requires an entry, per `FR-GLOB-025`, THEN the
   system SHALL exit `66` (`EX_NOINPUT`) with a nearest-match suggestion over
   the entry names that exist. WHERE the command requires no entry, the system
-  SHALL NOT resolve the name and SHALL NOT refuse the invocation on its
-  account.
+  SHALL NOT resolve the name, SHALL NOT refuse the invocation on its account,
+  and SHALL write no line about the flag, except the warning `FR-CFG-051`
+  writes for `tpl cfg database add` and `tpl cfg database update`.
 
   ```
   tpl -d nope schema tables      66 — schema tables requires an entry
@@ -117,6 +118,21 @@ which belongs to that command's module.
   be allowed to. `BR-GLOB-002` is the rule
   that names the asymmetry — no global flag changes what a command reads from
   the database, and a `cfg` command reads nothing from one.
+
+  *Amended in the fifty-ninth edition,* for rmp `#266`. The requirement did
+  not say whether a flag with no effect is reported. It is not, save for the
+  one warning above: `tpl -d shop template list`, `tpl -d shop init` and
+  `tpl -d shop help` exit as they would without it and write nothing about
+  it. The help of each command states that it requires no entry, per the
+  second statement of `FR-HELP-031`, which is where a caller learns it.
+  `FR-CFG-051` warns because `--database` there is most likely a misspelling
+  of `--schema`, and obeying the misspelling loses a field; `FR-PROJ-026`
+  warns for `tpl init --tpl-dir` for the like reason. No other node has a
+  flag the caller more likely meant. *Rejected: a warning on every command
+  that requires no entry.* An agent that appends `-d` to every line it
+  builds, as `FR-CLI-024` admits, would receive a warning on half the tree,
+  and `BR-ERR-002` gives stderr no weight in its decision. *Rejected:
+  refusing it*, below.
 
   *Rejected: refusing `-d` outright on a command that requires no entry, as an
   unknown flag under `FR-CLI-019`.* `FR-GLOB-002` makes every global flag

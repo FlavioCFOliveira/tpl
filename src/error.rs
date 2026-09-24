@@ -1340,6 +1340,20 @@ pub enum Error {
         by_default: bool,
     },
 
+    /// `tpl cfg set core.database` given a well-formed name no entry of
+    /// `.tpl/.cfg` has (`FR-CFG-054`).
+    #[error("database entry '{name}' does not exist")]
+    DefaultEntryUndeclared {
+        /// The name given, which matches `FR-CONF-048`.
+        name: String,
+        /// The nearest matches among the entry names the file declares,
+        /// selected by `FR-ERR-019` and `FR-ERR-044`. Empty where nothing
+        /// qualified, per `FR-ERR-020`.
+        nearest: Vec<String>,
+        /// Whether the file declares any entry at all.
+        declared: bool,
+    },
+
     /// A key that is absent from `.tpl/.cfg` (`FR-CFG-007`, `FR-CFG-012`).
     ///
     /// A spelling outside the key space of `FR-CONF-002` reaches it too, and
@@ -2498,7 +2512,8 @@ impl Error {
             | Self::ContextObjectNotFound { .. }
             | Self::TemplateNotFound { .. }
             | Self::DatabaseEntryNotFound { .. }
-            | Self::ConfigurationKeyNotFound { .. } => 66,
+            | Self::ConfigurationKeyNotFound { .. }
+            | Self::DefaultEntryUndeclared { .. } => 66,
 
             // 69 EX_UNAVAILABLE
             Self::NameNotResolved { .. }
@@ -2571,7 +2586,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 88;
+    const VARIANT_COUNT: usize = 89;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2940,6 +2955,14 @@ mod tests {
                     file: path(),
                     nearest: vec!["shop".to_owned()],
                     by_default: false,
+                },
+                66,
+            ),
+            (
+                Error::DefaultEntryUndeclared {
+                    name: "shpo".to_owned(),
+                    nearest: vec!["shop".to_owned()],
+                    declared: true,
                 },
                 66,
             ),
@@ -3328,6 +3351,7 @@ mod tests {
             Error::ContextObjectNotFound { .. } => "ContextObjectNotFound",
             Error::TemplateNotFound { .. } => "TemplateNotFound",
             Error::DatabaseEntryNotFound { .. } => "DatabaseEntryNotFound",
+            Error::DefaultEntryUndeclared { .. } => "DefaultEntryUndeclared",
             Error::ConfigurationKeyNotFound { .. } => "ConfigurationKeyNotFound",
             Error::NameNotResolved { .. } => "NameNotResolved",
             Error::ConnectionRefused { .. } => "ConnectionRefused",

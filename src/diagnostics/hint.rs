@@ -913,6 +913,32 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // file defines. An entry name is a value this corpus does not fix, so
         // FR-ERR-022 governs it by the character set and FR-ERR-023 drops a
         // candidate outside it in every form.
+        // FR-CFG-054: the nearest declared entry, written into the command
+        // that sets it; else the listing; else, with no entry at all, the
+        // command that adds one, with its placeholder.
+        Error::DefaultEntryUndeclared {
+            nearest, declared, ..
+        } => {
+            let admitted = admitted(nearest, admits);
+            match admitted.first() {
+                Some(entry) => {
+                    let verb = if admitted.len() == 1 {
+                        "set it"
+                    } else {
+                        "set the nearest"
+                    };
+                    Cow::Owned(
+                        suggest::hint_line(
+                            admitted.iter().copied(),
+                            &format!("{verb} with: tpl cfg set core.database {entry}"),
+                        )
+                        .into_owned(),
+                    )
+                }
+                None if *declared => Cow::Borrowed("list the entries with: tpl cfg database list"),
+                None => Cow::Borrowed("add the entry first with: tpl cfg database add <name>"),
+            }
+        }
         Error::DatabaseEntryNotFound {
             nearest,
             by_default,
@@ -935,6 +961,42 @@ fn bare(error: &Error) -> Cow<'static, str> {
             if crate::error::section_named(key).is_some() =>
         {
             Cow::Borrowed("show every key and its value with: tpl cfg list")
+        }
+        // FR-CFG-012, fifty-ninth edition: an entry's block the file does not
+        // declare. The candidates are the blocks it does declare, and the
+        // hint shows the nearest rather than deleting it, per BR-ERR-005.
+        // With none admitted, the entries are listed.
+        Error::ConfigurationKeyNotFound {
+            key,
+            nearest,
+            entry_missing: true,
+            ..
+        } if crate::project::config::keys::Key::parse(key).is_none() => {
+            let admitted: Vec<&str> = nearest
+                .iter()
+                .map(|(candidate, _)| candidate.as_str())
+                .filter(|candidate| candidate.strip_prefix("database.").is_some_and(admits))
+                .collect();
+            match admitted
+                .first()
+                .and_then(|block| block.strip_prefix("database."))
+            {
+                Some(entry) => {
+                    let verb = if admitted.len() == 1 {
+                        "show it"
+                    } else {
+                        "show the nearest"
+                    };
+                    Cow::Owned(
+                        suggest::hint_line(
+                            admitted.iter().copied(),
+                            &format!("{verb} with: tpl cfg database show {entry}"),
+                        )
+                        .into_owned(),
+                    )
+                }
+                None => Cow::Borrowed("list the entries with: tpl cfg database list"),
+            }
         }
         Error::ConfigurationKeyNotFound {
             nearest,

@@ -28,8 +28,8 @@ Causes: a syntax error (line and column given), an evaluation error (undefined v
 Action: `tpl template check NAME` for syntax. Read the `cause`, which names the expression and often lists the valid attributes. Fix the template and re-render. For a limit, confirm the template does not loop without end before raising the `core.render_*` key the message names.
 
 ### 66 EX_NOINPUT: a named thing does not exist
-Causes: a template, table, view or routine, a database entry (`-d` or `cfg database show`, `update`, `remove`, `test`), a key that `cfg get` or `cfg unset` finds unset (the message states the default), an object to `cache clean` that the cache does not hold, or an object missing from a `--context` document.
-Action: list what exists (`tpl template list`, `tpl -d NAME schema tables --format json`, `tpl cfg database list`) and retry with an exact name. Names are case-sensitive.
+Causes: a template, table, view or routine, a database entry (`-d` or `cfg database show`, `update`, `remove`, `test`), a key that `cfg get` or `cfg unset` finds unset (the message states the default), an object to `cache clean` that the cache does not hold, an object missing from a `--context` document, or `tpl cfg set core.database X` where no entry is named exactly `X` (nothing is written).
+Action: list what exists (`tpl template list`, `tpl -d NAME schema tables --format json`, `tpl cfg database list`) and retry with an exact name. Names are case-sensitive. For `core.database`, run the `tpl cfg set core.database <candidate>` the hint offers after checking the candidate. If the file declares no entry at all, run `tpl cfg database add <name> …` first, then set the default. A value that is not a valid entry name (1 to 64 letters, digits or underscores) is 64, not 66.
 
 ### 69 EX_UNAVAILABLE: the server cannot be reached
 Causes: DNS failure, connection refused, a network or TLS handshake failure, or a connection step past `core.connect_timeout`, `core.query_timeout` or `--timeout`.
@@ -60,7 +60,7 @@ Causes and actions:
 | `--tpl-dir` does not name a `.tpl` folder | Use the path the hint gives |
 | `.cfg` not owned by you, or group- or world-accessible | `chmod 600 .tpl/.cfg` (and fix the owner) |
 | Malformed `.cfg`, unknown key, bad value, dsn with a `?`, `${` in `ca_file` or `ca_path` | Fix it with `cfg set`/`unset`, or edit the named line |
-| No entry selected | `-d NAME` or `tpl cfg set core.database NAME` |
+| No entry selected | `-d NAME`, or `tpl cfg set core.database NAME` for an entry that already exists |
 | Entry incomplete (no host or no server database) | `tpl cfg database update NAME --host … --schema …` |
 | `${VAR}` undefined | Define it in the environment of the command, cache hits included |
 | `password_command` failed, timed out or printed too much | Run the command yourself (without echoing its output) and fix it |

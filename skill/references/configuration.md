@@ -18,7 +18,7 @@ A key outside the space, or a value of the wrong type, anywhere in the file, mak
 | Change some fields | `tpl cfg database update NAME --host …` (other fields keep their values) |
 | Set one key | `tpl cfg set database.NAME.tls verify-ca`, `tpl cfg set core.query_timeout 60` |
 | Remove a field or an entry | `tpl cfg unset database.NAME.port`, `tpl cfg database remove NAME` |
-| Choose the default entry | `tpl cfg set core.database NAME` (a literal name, never `${VAR}`) |
+| Choose the default entry | `tpl cfg set core.database NAME`. `NAME` must already be declared, byte for byte, so run `tpl cfg database add NAME …` first. An undeclared name is exit 66 and nothing is written. It is a literal name, never `${VAR}` |
 | Inspect safely | `tpl cfg list --format json`, `tpl cfg database show NAME --format json` (redacted) |
 | Read one raw value | `tpl cfg get KEY` (**not redacted**: never use it on a password key in a transcript) |
 

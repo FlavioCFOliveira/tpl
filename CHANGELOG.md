@@ -59,9 +59,20 @@ workflow, before it closes.
   `-h`/`--help` at every node — now opens with
   `tpl v<version> - Code Generation based on database schema` and one empty
   line. `tpl help --format json` and `tpl version` are unchanged.
+- **`tpl cfg set core.database` requires the entry to exist.** A name no entry
+  of `.tpl/.cfg` declares is refused with `66`, writing nothing, and the `hint`
+  suggests the nearest declared entry.
+- **`tpl cfg unset` of an absent block suggests the nearest one.** For `core`,
+  `database` or `database.<name>`, the `hint` names the nearest block the file
+  carries, and for an entry's block, `tpl cfg database show <name>`.
 
 ### Fixed
 
+- **A backslash-newline in a `password_command` string is a line
+  continuation.** Given to `tpl cfg set database.<name>.password_command` or
+  to `--password-command`, a backslash followed by a newline outside single
+  quotes is removed before the string is split into words, as POSIX does; it
+  was kept.
 - **`tpl cache clean` removes nothing through a symbolic link.** In every
   form, a linked `.tpl/.cache`, and for `--table`, `--view` or `--routine` a
   linked `.tpl/.cache/<name>` or collection folder, is refused with `78`,

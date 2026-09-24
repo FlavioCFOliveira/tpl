@@ -400,8 +400,9 @@ struct Globals {
 /// `--tpl-dir` and `-d/--database`, immediately after `tpl` and in that order
 /// (`FR-ERR-043`).
 ///
-/// A flag is carried only where the caller wrote it — a value from `TPL_DIR`,
-/// `TPL_DATABASE` or `core.database` is never in the argument vector — and
+/// A flag is carried only where the caller wrote it — a `.tpl` found by
+/// discovery, or an entry selected by `core.database`, is never in the
+/// argument vector — and
 /// only onto a command on which it has an effect, per the table of
 /// `BR-GLOB-001`; a command the hint already writes with the flag keeps the
 /// value the hint proposes, and one on which the flag has no effect loses it.

@@ -633,6 +633,11 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "no template named '{name}' exists under the template folder {}",
             root.display()
         )),
+        // FR-CFG-054: the name matches FR-CONF-048, so it is within the set
+        // of FR-ERR-022 and is reproduced.
+        Error::DefaultEntryUndeclared { name, .. } => Cow::Owned(format!(
+            "core.database names an entry, and .tpl/.cfg declares no entry '{name}'"
+        )),
         Error::DatabaseEntryNotFound {
             name,
             file,

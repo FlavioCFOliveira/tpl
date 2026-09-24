@@ -1252,8 +1252,22 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   quoting rules, honouring single and double quotes, and SHALL store the
   resulting array. `FR-CONF-046` states the strings it SHALL refuse instead.
 
+  A backslash immediately followed by a newline, outside single quotes, SHALL
+  be removed together with the newline before the string is split, so that
+  it joins what precedes it to what follows it and separates no words. Inside
+  single quotes both characters SHALL be kept.
+
   *Amended in the forty-seventh edition.* The second sentence is new, for rmp
   `#276`.
+
+  *Amended in the fifty-ninth edition,* for rmp `#278`. The paragraph on a
+  backslash and a newline states what "POSIX quoting rules" already required:
+  POSIX.1-2024, XCU 2.2.1, reads a backslash followed by a newline as a line
+  continuation and removes both before splitting the input into tokens; XCU
+  2.2.3 keeps that meaning inside double quotes; XCU 2.2.2 keeps every
+  character inside single quotes. **Verified 2026-09-24** against
+  pubs.opengroup.org, *Shell Command Language*. The implementation kept the
+  pair outside quotes.
 
 - **FR-CONF-046**: IF a `password_command` supplied as a single string — the
   value given to `tpl cfg set database.<name>.password_command`, or to
