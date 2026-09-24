@@ -22,7 +22,7 @@ use std::borrow::Cow;
 
 use crate::error::{
     ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, PasswordCommandFault,
-    ReadOnlyFault, TlsFault, TplDirFault,
+    ReadOnlyFault, RenderReason, TlsFault, TplDirFault, Unresolved, context_name, password_pair,
 };
 
 /// The separator between two links of a template-engine error chain.
@@ -71,7 +71,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // line naming only the segment would read identically for a segment
         // mistyped at any depth.
         Error::UnknownCommandPathSegment { segment, node, .. } => Cow::Owned(format!(
-            "'{segment}' is not a child of '{}' (segments are matched in full, never by a prefix)",
+            "'{segment}' is not a subcommand of '{}' (commands are matched in full, never by a \
+             prefix)",
             invoked(node)
         )),
         Error::UnknownFlag { token, command, .. } => Cow::Owned(format!(
@@ -180,18 +181,25 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             written,
             conflicting,
             repair,
-        } => Cow::Owned(match repair {
-            EntryRepair::Restate(_) => format!(
-                "the invocation writes both {written} and {conflicting} to database entry \
-                 '{entry}'; an entry gives its connection either as dsn or as \
-                 host/port/user/database, and its password in one place only; nothing was written"
-            ),
-            EntryRepair::Unset | EntryRepair::Rewrite => format!(
-                "the invocation writes {written} and database entry '{entry}' already declares \
-                 {conflicting}; an entry gives its connection either as dsn or as \
-                 host/port/user/database, and its password in one place only; nothing was written"
-            ),
-        }),
+        } => {
+            // The rule the pair breaks, and only that one: the connection
+            // form, or the source of the password.
+            let rule = if password_pair(written, conflicting) {
+                PASSWORD_RULE
+            } else {
+                CONNECTION_RULE
+            };
+            Cow::Owned(match repair {
+                EntryRepair::Restate(_) => format!(
+                    "the invocation writes both {written} and {conflicting} to database entry \
+                     '{entry}'; {rule}; nothing was written"
+                ),
+                EntryRepair::Unset | EntryRepair::Rewrite => format!(
+                    "the invocation writes {written} and database entry '{entry}' already \
+                     declares {conflicting}; {rule}; nothing was written"
+                ),
+            })
+        }
         Error::UnexpectedArgument { command, token } => Cow::Owned(format!(
             "'{token}' was supplied to '{}', which takes no argument in that position",
             invoked(command)
@@ -263,20 +271,33 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             position,
             chain,
             undefined,
+            reason,
             ..
-        } => match undefined {
-            Some(expression) => Cow::Owned(format!(
+        } => match (undefined, reason.as_deref()) {
+            // FR-SEM-015: the message is on the error line; the cause says
+            // where the call is and what the engine reported.
+            (_, Some(RenderReason::Failed(_))) => Cow::Owned(format!(
+                "'{template}' ended the render on purpose by calling fail() at {position}: {}",
+                joined(chain)
+            )),
+            (Some(expression), Some(RenderReason::Unresolved(unresolved))) => Cow::Owned(format!(
+                "'{template}' at {position} reads '{expression}', and {} found {}, so there is \
+                 nothing to read",
+                unresolved.call,
+                sought(unresolved)
+            )),
+            (Some(expression), None) => Cow::Owned(format!(
                 "'{template}' at {position} reads '{expression}', which is not defined in this \
                  render: {}",
                 joined(chain)
             )),
-            None => Cow::Owned(format!(
+            (None, None | Some(RenderReason::Unresolved(_))) => Cow::Owned(format!(
                 "'{template}' failed while being evaluated, at {position}: {}",
                 joined(chain)
             )),
         },
         Error::TemplateOutsideRoot { name, root } => Cow::Owned(format!(
-            "'{name}' resolves to a path outside the template root {}, and tpl reads no template \
+            "'{name}' resolves to a path outside the template folder {}, and tpl reads no template \
              from outside it",
             root.display()
         )),
@@ -284,16 +305,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // JSON or the structural rule the document failed.
         Error::ContextDocumentMalformed { path, fault } => match fault {
             ContextFault::NotJson(position) => Cow::Owned(format!(
-                "'{}' is not well-formed JSON; the parser stopped at {position}",
-                path.display()
+                "{} is not well-formed JSON; the parser stopped at {position}",
+                context_name(path)
+            )),
+            ContextFault::Empty => Cow::Owned(format!(
+                "{} is empty, and a context document is one JSON object",
+                context_name(path)
             )),
             ContextFault::Structure { at, expected } if at.is_empty() => Cow::Owned(format!(
-                "'{}' is well-formed JSON and is not a context document: {expected}",
-                path.display()
+                "{} is well-formed JSON and is not a context document: {expected}",
+                context_name(path)
             )),
             ContextFault::Structure { at, expected } => Cow::Owned(format!(
-                "'{}' is well-formed JSON, and at {at} {expected}",
-                path.display()
+                "{} is well-formed JSON, and {at} {expected}",
+                context_name(path)
             )),
             // FR-CTX-042: the path, the table carrying the key, the key, and
             // the table it names that `tables` does not carry.
@@ -303,9 +328,9 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 key,
                 names,
             } => Cow::Owned(format!(
-                "'{}' is well-formed JSON, and table '{table}' lists key '{key}' under \
+                "{} is well-formed JSON, and table '{table}' lists key '{key}' under \
                  {collection}, naming table '{names}', which data.database.tables does not carry",
-                path.display()
+                context_name(path)
             )),
         },
         // The row obliges, for a render bound, which bound was exceeded, its
@@ -362,12 +387,22 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             path.display()
         )),
         Error::TemplateNotFound { name, root, .. } => Cow::Owned(format!(
-            "no template named '{name}' exists under the template root {}",
+            "no template named '{name}' exists under the template folder {}",
             root.display()
         )),
-        Error::DatabaseEntryNotFound { name, file, .. } => Cow::Owned(format!(
-            "{} declares no database entry named '{name}'",
-            file.display()
+        Error::DatabaseEntryNotFound {
+            name,
+            file,
+            by_default,
+            ..
+        } => Cow::Owned(format!(
+            "{} declares no database entry named '{name}'{}",
+            file.display(),
+            if *by_default {
+                ", and core.database names it as the entry to use when -d is not given"
+            } else {
+                ""
+            }
         )),
         // FR-ERR-035 separates this from the 64 and the 78 that also name a
         // key, and the exit code carries the separation: this is the key the
@@ -488,7 +523,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             object,
             property,
         } => Cow::Owned(format!(
-            "the catalogue did not return the {property} of {kind} '{object}' to the connecting \
+            "INFORMATION_SCHEMA did not return the {property} of {kind} '{object}' to the connecting \
              user, so the object would be incomplete and tpl does not return it in part"
         )),
 
@@ -542,20 +577,32 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             position,
             found,
         } => Cow::Owned(format!(
-            "{} at {position} declares {key} as a {found}; this key takes an array of strings",
-            file.display()
+            "{} at {position} declares {key} as {} {found}; this key takes an array of strings",
+            file.display(),
+            if found.starts_with(['a', 'e', 'i', 'o', 'u']) {
+                "an"
+            } else {
+                "a"
+            }
         )),
         Error::ConflictingEntryKeys {
             entry,
             file,
             first,
             second,
-        } => Cow::Owned(format!(
-            "{} declares both {first} and {second} for database entry '{entry}'; an entry gives \
-             its connection either as dsn or as host/port/user/database, and its password in one \
-             place only",
-            file.display()
-        )),
+        } => Cow::Owned(if password_pair(first, second) {
+            format!(
+                "{} gives database entry '{entry}' a password through both {first} and {second}; \
+                 {PASSWORD_RULE}",
+                file.display()
+            )
+        } else {
+            format!(
+                "{} declares both {first} and {second} for database entry '{entry}'; \
+                 {CONNECTION_RULE}",
+                file.display()
+            )
+        }),
         Error::ConfigurationValueMalformed {
             key,
             file,
@@ -600,6 +647,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             command,
             bound,
             limit,
+            ..
         } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
                 "password_command {command:?} had not both exited and closed its standard output \
@@ -611,7 +659,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                  its process group was terminated"
             )),
         },
-        Error::PasswordCommandOutputCapExceeded { command, cap } => Cow::Owned(format!(
+        Error::PasswordCommandOutputCapExceeded { command, cap, .. } => Cow::Owned(format!(
             "password_command {command:?} wrote more than {cap} bytes to its standard output, and \
              its process group was terminated"
         )),
@@ -623,6 +671,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             command,
             fault,
             returned,
+            ..
         } => match fault {
             PasswordCommandFault::NotStarted => Cow::Owned(format!(
                 "password_command {command:?} could not be started: {returned}"
@@ -637,7 +686,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // is available, and a Unix reports the signal that ended a child: a
         // line saying only that the child was signalled would read identically
         // for a supervisor, a memory limit and an interactive interrupt.
-        Error::PasswordCommandFailed { command, end } => match end {
+        Error::PasswordCommandFailed { command, end, .. } => match end {
             ChildEnd::Exited(status) => Cow::Owned(format!(
                 "password_command {command:?} exited with status {status}; its standard error went \
                  to the null device and tpl never saw it"
@@ -700,6 +749,26 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              '{series}', which is outside the supported window; tpl supports {}",
             listed(supported)
         )),
+    }
+}
+
+/// The rule of `FR-CONF-007` a pair of password sources breaks.
+const PASSWORD_RULE: &str = "an entry takes its password from one place only: password_command, \
+                             password, or the password inside dsn";
+
+/// The rule of `FR-CONF-006` a pair of connection forms breaks.
+const CONNECTION_RULE: &str = "an entry gives its connection either as dsn or as the separate \
+                               keys host, port, user, password and database";
+
+/// What a lookup that found nothing had sought, as the cause says it: "no
+/// table named 'orders'", or "no column named 'id' in table 'orders'".
+fn sought(unresolved: &Unresolved) -> String {
+    match &unresolved.table {
+        Some(table) => format!(
+            "no {} named '{}' in table '{table}'",
+            unresolved.kind, unresolved.name
+        ),
+        None => format!("no {} named '{}'", unresolved.kind, unresolved.name),
     }
 }
 

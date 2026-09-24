@@ -121,8 +121,9 @@ const EXAMPLE_TEMPLATE: &str = r#"{#
 
       tpl render example --table <table>
 
-  It walks the columns of the bound table and depends on nothing a particular
-  schema carries, so it renders against any table of any supported server.
+  It walks the columns of the table named by --table and depends on nothing
+  a particular schema carries, so it renders against any table of any
+  supported server.
 #}
 // {{ table.name | pascal }}: {{ table.columns | length }} column(s), read from
 // the database {{ database.name }}.

@@ -36,8 +36,8 @@ use std::path::Path;
 
 use super::suggest;
 use crate::error::{
-    CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, NetworkPhase,
-    ReadOnlyFault, TlsFault,
+    CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, LookupKind,
+    NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, Unresolved,
 };
 
 /// The longest a name the character set of `FR-ERR-022` governs may be.
@@ -231,9 +231,11 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             prefix,
             name,
             invocation,
+            template,
             ..
         } => {
             if admits(name) {
+                let invocation = with_template(invocation, template.as_deref());
                 Cow::Owned(format!("write it as: tpl {invocation} {prefix}:{name}"))
             } else {
                 Cow::Borrowed(
@@ -246,12 +248,19 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // is the same invocation qualified. The second arm is the same
         // correction over the other context source.
         Error::AmbiguousRoutineName {
-            name, invocation, ..
+            name,
+            invocation,
+            template,
+            ..
         }
         | Error::AmbiguousRoutineInContext {
-            name, invocation, ..
+            name,
+            invocation,
+            template,
+            ..
         } => {
             if admits(name) {
+                let invocation = with_template(invocation, template.as_deref());
                 Cow::Owned(format!(
                     "name the kind you mean: tpl {invocation} procedure:{name}, or tpl \
                      {invocation} function:{name}"
@@ -364,8 +373,13 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         Error::RenderFailed {
             template,
             undefined,
+            reason,
             ..
         } => {
+            if let Some(RenderReason::Unresolved(unresolved)) = reason.as_deref() {
+                return listing_of(unresolved);
+            }
+
             if let Some(line) = undefined.as_deref().and_then(defining_flag) {
                 return line;
             }
@@ -379,21 +393,30 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             }
         }
         Error::TemplateOutsideRoot { .. } => {
-            Cow::Borrowed("print the template root with: tpl template path")
+            Cow::Borrowed("print the template folder with: tpl template path")
         }
         // The document came from the caller, and `--context` excludes `-d`, so
         // the entry that would produce a valid one is a value only the caller
-        // knows; the placeholders stand for it and for the file.
-        Error::ContextDocumentMalformed { fault, .. } => match fault {
-            ContextFault::NotJson(_) => Cow::Borrowed(
-                "write a well-formed document with: tpl -d <entry> schema dump > <file>",
-            ),
-            ContextFault::Structure { .. } | ContextFault::DanglingReference { .. } => {
-                Cow::Borrowed(
-                    "write a document that matches, with: tpl -d <entry> schema dump > <file>",
-                )
-            }
-        },
+        // knows, and a placeholder stands for it. The file is known, and is
+        // named; standard input is not a file a dump can be redirected to.
+        Error::ContextDocumentMalformed { path, fault } => {
+            // FR-ERR-041 admits the path or puts the placeholder in its
+            // place; `-` begins with `-` and is refused, and is no file.
+            let target = if admits_file(path) {
+                path.to_string_lossy()
+            } else {
+                Cow::Borrowed("<file>")
+            };
+            let lead = match fault {
+                ContextFault::NotJson(_) | ContextFault::Empty => "write a well-formed document",
+                ContextFault::Structure { .. } | ContextFault::DanglingReference { .. } => {
+                    "write a document that matches,"
+                }
+            };
+            Cow::Owned(format!(
+                "{lead} with: tpl -d <entry> schema dump > {target}"
+            ))
+        }
         Error::RenderFuelExhausted { .. } => Cow::Borrowed(
             "look for a loop that never ends, or raise the limit with: tpl cfg set \
              core.render_fuel <evaluation steps>",
@@ -446,8 +469,20 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // document does carry. `tpl` has no subcommand that lists a file the
         // caller supplied, so the generic half names the member of the
         // document that holds the names.
-        Error::ContextObjectNotFound { kind, nearest, .. } => {
+        Error::ContextObjectNotFound {
+            kind,
+            nearest,
+            path,
+            ..
+        } => {
             let generic = match listing(*kind) {
+                // No tpl command lists a document the caller supplied; jq, an
+                // external tool, does, and the line says it is one.
+                Some(listing) if admits_file(path) => Cow::Owned(format!(
+                    "name one the --context document lists under data.database.{listing}; list \
+                     them with jq, if it is installed: jq -r '.data.database.{listing}[].name' {}",
+                    path.display()
+                )),
                 Some(listing) => Cow::Owned(format!(
                     "name one the --context document lists under data.database.{listing}, then \
                      run the command again"
@@ -475,10 +510,19 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // file defines. An entry name is a value this corpus does not fix, so
         // FR-ERR-022 governs it by the character set and FR-ERR-023 drops a
         // candidate outside it in every form.
-        Error::DatabaseEntryNotFound { nearest, .. } => suggested(
+        Error::DatabaseEntryNotFound {
+            nearest,
+            by_default,
+            ..
+        } => suggested(
             nearest,
             admits,
-            "list the entries with: tpl cfg database list",
+            if *by_default {
+                "list the entries with: tpl cfg database list, or change the default with: tpl \
+                 cfg set core.database <entry>"
+            } else {
+                "list the entries with: tpl cfg database list"
+            },
         ),
         // FR-CFG-007 obliges the nearest-match half over the keys that do
         // exist in the file.
@@ -772,6 +816,11 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         Error::PasswordCommandOutputCapExceeded { .. } => {
             Cow::Borrowed("make password_command write the password and nothing else")
         }
+        Error::PasswordCommandNotExecutable { entry, .. } if admits(entry) => Cow::Owned(format!(
+            "make the first word of database.{entry}.password_command an executable program on \
+             PATH or its full path, e.g.: tpl cfg set database.{entry}.password_command \
+             \"<program> <argument>\""
+        )),
         Error::PasswordCommandNotExecutable { .. } => Cow::Borrowed(
             "check that the first element of password_command is the path of an executable \
              program, then run the command again",
@@ -892,6 +941,34 @@ fn parent_or_here(parent: &Path) -> Cow<'_, str> {
         Cow::Borrowed(".")
     } else {
         parent.to_string_lossy()
+    }
+}
+
+/// An invocation of `FR-ERR-022` with the `<template>` it writes replaced by
+/// the template the render was given, where `FR-ERR-041` admits it.
+fn with_template(invocation: &'static str, template: Option<&str>) -> Cow<'static, str> {
+    match template {
+        Some(template) if admits_template(template) => {
+            Cow::Owned(invocation.replace("<template>", template))
+        }
+        _ => Cow::Borrowed(invocation),
+    }
+}
+
+/// The hint for a lookup that found nothing: the command that lists the names
+/// it could have found. A render reads the selected database entry, and so
+/// does the listing.
+fn listing_of(unresolved: &Unresolved) -> Cow<'static, str> {
+    match (unresolved.kind, &unresolved.table) {
+        (LookupKind::Column, Some(table)) if admits(table) => Cow::Owned(format!(
+            "list the columns of table '{table}' with: tpl schema table {table}"
+        )),
+        (LookupKind::Column, _) => {
+            Cow::Borrowed("list the columns of a table with: tpl schema table <table>")
+        }
+        (LookupKind::Table, _) => Cow::Borrowed("list the tables with: tpl schema tables"),
+        (LookupKind::View, _) => Cow::Borrowed("list the views with: tpl schema views"),
+        (LookupKind::Routine, _) => Cow::Borrowed("list the routines with: tpl schema routines"),
     }
 }
 

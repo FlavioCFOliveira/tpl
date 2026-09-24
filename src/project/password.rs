@@ -89,11 +89,15 @@ const POLL: Duration = Duration::from_millis(1);
 /// [`OUTPUT_CAP`] bytes (`FR-CONF-031`), and [`Error::PasswordCommandFailed`]
 /// where it exited non-zero (`FR-CONF-033`) or was ended by a signal `tpl` did
 /// not send (`FR-CONF-043`).
-pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, Error> {
+pub(crate) fn obtain(
+    entry: &str,
+    command: &PasswordCommand,
+    bound: Bound,
+) -> Result<Secret, Error> {
     let arguments = command.arguments();
 
     if bound.expired() {
-        return Err(expired(arguments, bound));
+        return Err(expired(entry, arguments, bound));
     }
 
     let mut child = Command::new(command.program())
@@ -110,6 +114,7 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
         .process_group(0)
         .spawn()
         .map_err(|returned| Error::PasswordCommandNotExecutable {
+            entry: entry.to_owned(),
             command: arguments.to_vec(),
             fault: PasswordCommandFault::NotStarted,
             returned,
@@ -173,6 +178,7 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
                         &mut child,
                         reader,
                         Error::PasswordCommandOutputCapExceeded {
+                            entry: entry.to_owned(),
                             command: arguments.to_vec(),
                             cap: OUTPUT_CAP,
                         },
@@ -197,6 +203,7 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
                         &mut child,
                         reader,
                         Error::PasswordCommandNotExecutable {
+                            entry: entry.to_owned(),
                             command: arguments.to_vec(),
                             fault: PasswordCommandFault::StatusUnreadable,
                             returned,
@@ -213,7 +220,11 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
         if started.elapsed() >= bound.remaining() {
             report();
 
-            return Err(abandon(&mut child, reader, expired(arguments, bound)));
+            return Err(abandon(
+                &mut child,
+                reader,
+                expired(entry, arguments, bound),
+            ));
         }
 
         thread::sleep(POLL);
@@ -230,6 +241,7 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
                 &mut child,
                 reader,
                 Error::PasswordCommandNotExecutable {
+                    entry: entry.to_owned(),
                     command: arguments.to_vec(),
                     fault: PasswordCommandFault::StatusUnreadable,
                     returned,
@@ -245,6 +257,7 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
 
     if bytes.len() > OUTPUT_CAP {
         return Err(Error::PasswordCommandOutputCapExceeded {
+            entry: entry.to_owned(),
             command: arguments.to_vec(),
             cap: OUTPUT_CAP,
         });
@@ -252,6 +265,7 @@ pub(crate) fn obtain(command: &PasswordCommand, bound: Bound) -> Result<Secret, 
 
     if !status.success() {
         return Err(Error::PasswordCommandFailed {
+            entry: entry.to_owned(),
             command: arguments.to_vec(),
             end: ended(&status),
         });
@@ -379,8 +393,9 @@ fn exited(child: &std::process::Child) -> std::io::Result<bool> {
 }
 
 /// The condition of `FR-CONF-028`, naming which bound expired.
-fn expired(arguments: &[String], bound: Bound) -> Error {
+fn expired(entry: &str, arguments: &[String], bound: Bound) -> Error {
     Error::PasswordCommandDeadlineExceeded {
+        entry: entry.to_owned(),
         command: arguments.to_vec(),
         bound: bound.bound(),
         limit: bound.limit(),
@@ -396,6 +411,9 @@ mod tests {
     use crate::project::scratch::Scratch;
     use std::num::NonZeroU64;
     use std::os::unix::process::CommandExt as _;
+
+    /// The database entry every command here is declared by.
+    const ENTRY: &str = "shop";
     use std::path::Path;
     use std::time::{Duration, Instant};
 
@@ -431,7 +449,7 @@ mod tests {
     #[test]
     fn fr_conf_027_the_password_is_the_trimmed_standard_output_of_the_child() {
         // FR-CONF-027.
-        let produced = obtain(&command(&[&echo(), "  hunter2  "]), bound(10))
+        let produced = obtain(ENTRY, &command(&[&echo(), "  hunter2  "]), bound(10))
             .expect("the child produced a password");
 
         assert_eq!(produced.expose(), "hunter2");
@@ -443,7 +461,7 @@ mod tests {
         // shell: `;` would start a second command, `$(…)` would substitute,
         // `|` would pipe, and `*` would glob.
         for hostile in ["a; echo b", "$(echo b)", "a | echo b", "*", "a && echo b"] {
-            let produced = obtain(&command(&[&echo(), hostile]), bound(10))
+            let produced = obtain(ENTRY, &command(&[&echo(), hostile]), bound(10))
                 .expect("the child produced a password");
 
             assert_eq!(
@@ -459,7 +477,7 @@ mod tests {
         // FR-CONF-028, FR-SEC-012: the deadline is what keeps a command
         // waiting on a FIFO from hanging the caller with no diagnosis.
         let sleep = tool(&["/bin/sleep", "/usr/bin/sleep"]);
-        let condition = obtain(&command(&[&sleep, "30"]), bound(1))
+        let condition = obtain(ENTRY, &command(&[&sleep, "30"]), bound(1))
             .expect_err("the child outlives its deadline");
 
         match condition {
@@ -477,7 +495,7 @@ mod tests {
         // the child is terminated.
         let yes = tool(&["/usr/bin/yes", "/bin/yes"]);
         let condition =
-            obtain(&command(&[&yes]), bound(10)).expect_err("the child writes without end");
+            obtain(ENTRY, &command(&[&yes]), bound(10)).expect_err("the child writes without end");
 
         match condition {
             Error::PasswordCommandOutputCapExceeded { cap, .. } => assert_eq!(cap, OUTPUT_CAP),
@@ -497,6 +515,7 @@ mod tests {
         }
 
         let produced = obtain(
+            ENTRY,
             &command(&[&head, "-c", &OUTPUT_CAP.to_string(), zero]),
             bound(10),
         );
@@ -508,10 +527,12 @@ mod tests {
     fn fr_conf_033_a_child_that_exits_non_zero_is_refused_with_the_status_it_returned() {
         // FR-CONF-033: the cause names the command as stored and the status.
         let no = tool(&["/usr/bin/false", "/bin/false"]);
-        let condition = obtain(&command(&[&no]), bound(10)).expect_err("the child fails");
+        let condition = obtain(ENTRY, &command(&[&no]), bound(10)).expect_err("the child fails");
 
         match condition {
-            Error::PasswordCommandFailed { ref command, end } => {
+            Error::PasswordCommandFailed {
+                ref command, end, ..
+            } => {
                 assert_eq!(command, &[no]);
                 assert_eq!(end, ChildEnd::Exited(1));
             }
@@ -522,8 +543,12 @@ mod tests {
 
     #[test]
     fn fr_conf_033_a_program_that_does_not_exist_is_refused_as_a_configuration_fault() {
-        let condition = obtain(&command(&["/nonexistent/tpl-password-helper"]), bound(10))
-            .expect_err("the child cannot be started");
+        let condition = obtain(
+            ENTRY,
+            &command(&["/nonexistent/tpl-password-helper"]),
+            bound(10),
+        )
+        .expect_err("the child cannot be started");
 
         assert!(matches!(
             condition,
@@ -538,6 +563,7 @@ mod tests {
         // nothing to name and the diagnosis is the exit status alone.
         let cat = tool(&["/bin/cat", "/usr/bin/cat"]);
         let condition = obtain(
+            ENTRY,
             &command(&[&cat, "/nonexistent/tpl-file-that-is-not-there"]),
             bound(10),
         )
@@ -612,8 +638,8 @@ mod tests {
         );
 
         let began = Instant::now();
-        let condition =
-            obtain(&command(&[SH, &helper]), bound(1)).expect_err("the output never ends in time");
+        let condition = obtain(ENTRY, &command(&[SH, &helper]), bound(1))
+            .expect_err("the output never ends in time");
         let took = began.elapsed();
 
         match condition {
@@ -651,8 +677,8 @@ mod tests {
             ),
         );
 
-        let condition =
-            obtain(&command(&[SH, &helper]), bound(1)).expect_err("the output never ends in time");
+        let condition = obtain(ENTRY, &command(&[SH, &helper]), bound(1))
+            .expect_err("the output never ends in time");
         assert!(matches!(
             condition,
             Error::PasswordCommandDeadlineExceeded { .. }
@@ -731,8 +757,8 @@ mod tests {
         );
 
         let began = Instant::now();
-        let condition =
-            obtain(&command(&[SH, &helper]), bound(10)).expect_err("the child passes the cap");
+        let condition = obtain(ENTRY, &command(&[SH, &helper]), bound(10))
+            .expect_err("the child passes the cap");
         let took = began.elapsed();
 
         match condition {
@@ -760,7 +786,7 @@ mod tests {
         );
 
         let produced =
-            obtain(&command(&[SH, &helper]), bound(5)).expect("the output ended in time");
+            obtain(ENTRY, &command(&[SH, &helper]), bound(5)).expect("the output ended in time");
 
         assert_eq!(produced.expose(), "secret");
     }
@@ -775,8 +801,12 @@ mod tests {
             NonZeroU64::new(10).expect("the test writes a positive value"),
         ));
 
-        let condition = obtain(&command(&["/nonexistent/tpl-password-helper"]), spent)
-            .expect_err("the budget is spent");
+        let condition = obtain(
+            ENTRY,
+            &command(&["/nonexistent/tpl-password-helper"]),
+            spent,
+        )
+        .expect_err("the budget is spent");
 
         match condition {
             Error::PasswordCommandDeadlineExceeded { bound, .. } => {

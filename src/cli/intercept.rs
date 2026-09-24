@@ -77,6 +77,8 @@ struct Reached<'a> {
     /// That node's path, in canonical spelling and without the program name.
     /// Empty at the root.
     path: String,
+    /// The index in the vector of the first token after that path.
+    after: usize,
 }
 
 /// The [`Error`] a refusal of the parser is reported to the caller as.
@@ -169,9 +171,9 @@ fn unknown_argument(
         None => {
             let nearest = nearest_flag(tree, reached.node, &token);
             Error::UnknownFlag {
+                positional: slot_open(tree, reached, written, &token),
                 token,
                 command: reached.path.clone(),
-                positional: reached.node.get_arguments().any(clap::Arg::is_positional),
                 nearest,
             }
         }
@@ -388,7 +390,57 @@ fn reached<'a>(tree: &'a clap::Command, written: &[Cow<'_, str>]) -> Reached<'a>
         index += 1;
     }
 
-    Reached { node, path }
+    Reached {
+        node,
+        path,
+        after: index,
+    }
+}
+
+/// Whether the node reached takes a positional argument that the vector
+/// leaves unfilled, so that `token`, written with `--` before it, could be
+/// that argument.
+///
+/// The positional tokens are counted over the whole vector after the path,
+/// the refused token aside, because a positional written after the refused
+/// flag fills a slot as surely as one written before it: `tpl template show
+/// -x example` has its NAME, and `tpl template show -- -x example` is refused
+/// for the second one.
+fn slot_open(
+    tree: &clap::Command,
+    reached: &Reached<'_>,
+    written: &[Cow<'_, str>],
+    token: &str,
+) -> bool {
+    let capacity = reached
+        .node
+        .get_positionals()
+        .map(|positional| match positional.get_action() {
+            clap::ArgAction::Append => usize::MAX,
+            _ => positional
+                .get_num_args()
+                .map_or(1, |range| range.max_values()),
+        })
+        .fold(0_usize, usize::saturating_add);
+
+    let mut filled = 0_usize;
+    let mut index = reached.after;
+    let mut terminated = false;
+
+    while let Some(current) = written.get(index) {
+        index += 1;
+
+        if terminated || !current.starts_with('-') {
+            filled += 1;
+        } else if current == TERMINATOR {
+            terminated = true;
+        } else if current != token {
+            let next = written.get(index);
+            index += usize::from(carries_the_next(tree, reached.node, current, next));
+        }
+    }
+
+    filled < capacity
 }
 
 /// Whether the flag `token` names takes its value from the token after it,
@@ -768,6 +820,24 @@ mod tests {
             "did you mean '--pattern'? list the flags of this command with: tpl help schema tables"
         );
         assert_eq!(line(&lines, "exit:  "), "64 (EX_USAGE)");
+    }
+
+    #[test]
+    fn r_12_the_double_dash_advice_is_given_only_where_a_positional_slot_is_still_open() {
+        // Finding R-12 of the re-audit for rmp #269: following the advice on a
+        // node whose positional is already filled is refused again.
+        let advice = |vector: &[&str]| {
+            let error = refused(vector, ErrorKind::UnknownArgument);
+            line(&four_lines(&error), "hint:  ").contains("write -- before it")
+        };
+
+        assert!(advice(&["tpl", "template", "show", "-x"]));
+        assert!(!advice(&["tpl", "template", "show", "example", "-x"]));
+        assert!(!advice(&["tpl", "template", "show", "-x", "example"]));
+        assert!(!advice(&[
+            "tpl", "cfg", "database", "show", "shop", "--dsn", "x"
+        ]));
+        assert!(!advice(&["tpl", "schema", "tables", "-x"]));
     }
 
     #[test]
@@ -1155,6 +1225,7 @@ mod tests {
         let reached = super::Reached {
             node: &crate::cli::tree(),
             path: String::new(),
+            after: 1,
         };
         let named = super::rejected(&clap::Error::raw(ErrorKind::Io, "unreachable"), &reached);
         assert_eq!(named.exit_code(), 64);

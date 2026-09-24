@@ -1572,7 +1572,142 @@ fn fr_err_034_a_context_document_that_breaks_the_contract_names_the_key_path() {
     );
     let cause = line(&written, LABELS[1]);
 
-    assert!(cause.contains("at data.database"), "{cause}");
-    assert!(cause.contains("required key is absent"), "{cause}");
+    assert!(
+        cause.ends_with("and data.database is missing; a context document requires it"),
+        "{cause}"
+    );
     assert!(!cause.contains(".md"), "{cause}");
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "write a document that matches, with: tpl -d <entry> schema dump > shape.json"
+    );
+}
+
+#[test]
+fn r_01_a_map_where_an_array_is_expected_names_that_member_and_not_the_one_before() {
+    // Finding R-01 of the re-audit for rmp #269: the decoder refuses an object
+    // at its opening bracket, and the path named was the member before it.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(&format!(".tpl/templates/{RESOLVES}.jinja"), "{{ 1 }}\n");
+
+    for collection in ["tables", "views", "routines"] {
+        sandbox.write(
+            "shape.json",
+            &EMPTY_CONTEXT.replace(
+                &format!("\"{collection}\":[]"),
+                &format!("\"{collection}\": {{}}"),
+            ),
+        );
+
+        let written = refused(
+            &sandbox,
+            &["render", RESOLVES, "--context", "shape.json"],
+            65,
+        );
+
+        assert_eq!(
+            line(&written, LABELS[1]),
+            format!(
+                "'shape.json' is well-formed JSON, and data.database.{collection} must be an \
+                 array, but it is an object"
+            )
+        );
+    }
+}
+
+#[test]
+fn r_06_a_structural_fault_is_said_in_the_words_of_json_and_not_of_the_decoder() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(&format!(".tpl/templates/{RESOLVES}.jinja"), "{{ 1 }}\n");
+
+    let cases = [
+        (
+            "[]".to_owned(),
+            "'shape.json' is well-formed JSON and is not a context document: the top level must \
+             be an object with the keys schema_version, source and data",
+        ),
+        (
+            EMPTY_CONTEXT.replace(r#""source":"server""#, r#""source":"bogus""#),
+            "'shape.json' is well-formed JSON, and source must be one of server, cache, project, \
+             binary, but it is 'bogus'",
+        ),
+    ];
+
+    for (document, expected) in cases {
+        sandbox.write("shape.json", &document);
+        let written = refused(
+            &sandbox,
+            &["render", RESOLVES, "--context", "shape.json"],
+            65,
+        );
+
+        assert_eq!(line(&written, LABELS[1]), expected);
+    }
+
+    // Empty standard input is named as what it is, and the hint keeps the
+    // placeholder: standard input is no file a dump can be written to.
+    let printed = sandbox.run_with_stdin(&["render", RESOLVES, "--context", "-"], b"");
+    let written = stderr(&printed);
+
+    assert_eq!(code(&printed), Some(65), "{written}");
+    assert_eq!(
+        line(&written, LABELS[0]),
+        "the --context document on standard input is malformed"
+    );
+    assert_eq!(
+        line(&written, LABELS[1]),
+        "standard input is empty, and a context document is one JSON object"
+    );
+    assert!(line(&written, LABELS[2]).ends_with("> <file>"), "{written}");
+}
+
+#[test]
+fn r_02_an_undefined_value_quotes_the_whole_expression_and_a_lookup_that_found_nothing_says_so() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+    sandbox.write(".tpl/templates/deep.jinja", "{{ database.nosuch.x }}");
+    sandbox.write(
+        ".tpl/templates/lookup.jinja",
+        "{{ table(\"orders\").name }}",
+    );
+
+    let written = refused(&sandbox, &["render", "deep", "--context", CONTEXT], 65);
+    assert!(
+        line(&written, LABELS[1]).contains("reads 'database.nosuch.x', which is not defined"),
+        "{written}"
+    );
+
+    let written = refused(&sandbox, &["render", "lookup", "--context", CONTEXT], 65);
+    assert!(
+        line(&written, LABELS[1]).contains(
+            "reads 'table(\"orders\").name', and table(\"orders\") found no table named 'orders'"
+        ),
+        "{written}"
+    );
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "list the tables with: tpl schema tables"
+    );
+}
+
+#[test]
+fn r_09_and_e_21_fail_puts_the_message_on_the_error_line_and_no_location_is_said_three_times() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+    sandbox.write(".tpl/templates/stop.jinja", "{{ fail(\"boom\") }}");
+    sandbox.write(".tpl/templates/broken.jinja", "{% if %}");
+
+    let written = refused(&sandbox, &["render", "stop", "--context", CONTEXT], 65);
+    assert_eq!(
+        line(&written, LABELS[0]),
+        "template 'stop.jinja' called fail() at line 1, column 4: boom"
+    );
+    assert!(!line(&written, LABELS[1]).contains("(in "), "{written}");
+
+    let written = refused(&sandbox, &["render", "broken", "--context", CONTEXT], 65);
+    assert!(!line(&written, LABELS[1]).contains("(in "), "{written}");
 }

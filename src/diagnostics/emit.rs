@@ -110,6 +110,23 @@ fn phase_line(phase: Phase, took: Duration) -> String {
     )
 }
 
+/// Warns that `tpl init` was given `--tpl-dir`, which has no effect on it
+/// (`FR-PROJ-026`).
+///
+/// The requirement fixes the line and forbids it to reproduce the value given
+/// to the flag, which is never examined, so the function takes no argument.
+pub(crate) fn tpl_dir_has_no_effect_on_init() {
+    if !emits(Level::Warnings) {
+        return;
+    }
+
+    write_line(TPL_DIR_ON_INIT);
+}
+
+/// The line of [`tpl_dir_has_no_effect_on_init`], as `FR-PROJ-026` fixes it.
+const TPL_DIR_ON_INIT: &str = "warning: --tpl-dir has no effect on tpl init; it takes its \
+                               destination as an operand: tpl init <path>";
+
 /// Warns that a project just created shadows one in an ancestor directory.
 ///
 /// `FR-PROJ-016` obliges the warning and fixes what it says; the two paths are

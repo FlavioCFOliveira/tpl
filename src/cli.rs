@@ -741,7 +741,15 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation, ending: Ending) -> Resu
             }
         }
 
-        Some(Command::Init { path }) => project::init::create(path),
+        // FR-PROJ-026: the flag is accepted and has no effect; the one line
+        // says so before the destination is examined, and the path it names
+        // is never resolved.
+        Some(Command::Init { path }) => {
+            if !invocation.globals.tpl_dir.is_empty() {
+                crate::diagnostics::emit::tpl_dir_has_no_effect_on_init();
+            }
+            project::init::create(path)
+        }
 
         // The two commands of the tree this sprint implements. Both reach the
         // same two functions the flag forms above reach, which is the whole of

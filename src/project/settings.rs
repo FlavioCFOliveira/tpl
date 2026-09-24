@@ -99,7 +99,7 @@ pub(crate) fn select<'a>(
     let (found, entry) = configuration
         .entries()
         .find(|(defined, _)| *defined == name)
-        .ok_or_else(|| configuration.entry_not_found(name))?;
+        .ok_or_else(|| configuration.entry_not_found(name, selection == Selection::File))?;
 
     Ok((found, entry, selection))
 }
@@ -347,6 +347,7 @@ where
         // FR-CONF-007 has already refused an entry carrying two password
         // sources, so the child is reached only where it is the one source.
         Some(command) => Some(password::obtain(
+            name,
             command,
             clock.bound(deadlines.of(Phase::PasswordCommand)),
         )?),

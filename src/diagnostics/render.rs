@@ -335,11 +335,13 @@ mod tests {
         let stored = vec!["security".to_owned(), "find-generic-password".to_owned()];
 
         let not_started = render(&Error::PasswordCommandNotExecutable {
+            entry: "shop".to_owned(),
             command: stored.clone(),
             fault: PasswordCommandFault::NotStarted,
             returned: io::Error::from(io::ErrorKind::NotFound),
         });
         let unreadable = render(&Error::PasswordCommandNotExecutable {
+            entry: "shop".to_owned(),
             command: stored.clone(),
             fault: PasswordCommandFault::StatusUnreadable,
             returned: io::Error::from(io::ErrorKind::NotFound),
@@ -372,6 +374,7 @@ mod tests {
 
         let signalled = line(
             &render(&Error::PasswordCommandFailed {
+                entry: "shop".to_owned(),
                 command: stored.clone(),
                 end: ChildEnd::Signalled(9),
             }),
@@ -385,6 +388,7 @@ mod tests {
         // the two do not read alike.
         let exited = line(
             &render(&Error::PasswordCommandFailed {
+                entry: "shop".to_owned(),
                 command: stored,
                 end: ChildEnd::Exited(1),
             }),
@@ -1191,6 +1195,7 @@ mod tests {
             },
             Error::RenderFailed {
                 undefined: None,
+                reason: None,
                 invoked: String::from("example"),
                 template: hostile(),
                 position: position(),
@@ -1230,6 +1235,7 @@ mod tests {
                 name: hostile(),
                 file: hostile_path(),
                 nearest: vec![hostile()],
+                by_default: true,
             },
             Error::ConfigurationKeyNotFound {
                 key: hostile(),
@@ -1377,29 +1383,35 @@ mod tests {
                 file: hostile_path(),
             },
             Error::PasswordCommandDeadlineExceeded {
+                entry: "shop".to_owned(),
                 command: vec![hostile()],
                 bound: DeadlineBound::Phase,
                 limit: Duration::from_secs(5),
             },
             Error::PasswordCommandOutputCapExceeded {
+                entry: "shop".to_owned(),
                 command: vec![hostile()],
                 cap: 4096,
             },
             Error::PasswordCommandNotExecutable {
+                entry: "shop".to_owned(),
                 command: vec![hostile()],
                 fault: PasswordCommandFault::NotStarted,
                 returned: io::Error::from(io::ErrorKind::NotFound),
             },
             Error::PasswordCommandNotExecutable {
+                entry: "shop".to_owned(),
                 command: vec![hostile()],
                 fault: PasswordCommandFault::StatusUnreadable,
                 returned: io::Error::from(io::ErrorKind::NotFound),
             },
             Error::PasswordCommandFailed {
+                entry: "shop".to_owned(),
                 command: vec![hostile()],
                 end: ChildEnd::Signalled(9),
             },
             Error::PasswordCommandFailed {
+                entry: "shop".to_owned(),
                 command: vec![hostile()],
                 end: ChildEnd::Unreported,
             },
@@ -1592,6 +1604,7 @@ mod tests {
             template: "t/needtable.jinja".to_owned(),
             invoked: "t/needtable".to_owned(),
             undefined: Some(undefined.to_owned()),
+            reason: None,
             position: position(),
             chain: vec!["undefined value".to_owned()],
         };
@@ -1677,6 +1690,7 @@ mod tests {
     #[test]
     fn e_18_a_password_command_that_never_started_says_so_on_the_error_line() {
         let rendered = render(&Error::PasswordCommandNotExecutable {
+            entry: "shop".to_owned(),
             command: vec!["absent".to_owned()],
             fault: PasswordCommandFault::NotStarted,
             returned: io::Error::from(io::ErrorKind::NotFound),
@@ -1684,7 +1698,175 @@ mod tests {
 
         assert_eq!(
             line(&rendered, Label::Error),
-            "password_command could not be started"
+            "the password_command of database entry 'shop' could not be started"
+        );
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "make the first word of database.shop.password_command an executable program on PATH \
+             or its full path, e.g.: tpl cfg set database.shop.password_command \"<program> \
+             <argument>\""
+        );
+    }
+
+    #[test]
+    fn r_03_a_dsn_beside_password_command_is_refused_for_the_password_it_carries() {
+        let rendered = render(&Error::IncoherentEntryWrite {
+            entry: "s10".to_owned(),
+            written: "database.s10.dsn".to_owned(),
+            conflicting: "database.s10.password_command".to_owned(),
+            repair: EntryRepair::Restate("tpl cfg database add s10".to_owned()),
+        });
+        assert_eq!(
+            line(&rendered, Label::Error),
+            "database entry 's10' would get its password twice: database.s10.dsn carries a \
+             password, and database.s10.password_command gives another"
+        );
+        assert!(
+            line(&rendered, Label::Cause).contains("takes its password from one place only"),
+            "{rendered}"
+        );
+
+        // The connection-form conflict names that rule alone.
+        let rendered = render(&Error::IncoherentEntryWrite {
+            entry: "shop".to_owned(),
+            written: "database.shop.dsn".to_owned(),
+            conflicting: "database.shop.host".to_owned(),
+            repair: EntryRepair::Rewrite,
+        });
+        assert_eq!(
+            line(&rendered, Label::Error),
+            "database entry 'shop' cannot declare both database.shop.dsn and database.shop.host"
+        );
+        assert!(
+            !line(&rendered, Label::Cause).contains("takes its password"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn r_13_an_entry_that_core_database_names_says_so_and_how_to_change_it() {
+        let missing = |by_default| Error::DatabaseEntryNotFound {
+            name: "nope".to_owned(),
+            file: PathBuf::from("/srv/p/.tpl/.cfg"),
+            nearest: Vec::new(),
+            by_default,
+        };
+
+        let rendered = render(&missing(true));
+        assert!(
+            line(&rendered, Label::Cause)
+                .ends_with(", and core.database names it as the entry to use when -d is not given"),
+            "{rendered}"
+        );
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "list the entries with: tpl cfg database list, or change the default with: tpl cfg \
+             set core.database <entry>"
+        );
+
+        let rendered = render(&missing(false));
+        assert!(
+            !line(&rendered, Label::Cause).contains("core.database"),
+            "{rendered}"
+        );
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "list the entries with: tpl cfg database list"
+        );
+    }
+
+    #[test]
+    fn e_07_a_routine_prefix_refused_in_render_names_the_template_in_the_hint() {
+        let rendered = render(&Error::RoutinePrefixNotLowerCase {
+            token: "Procedure:x".to_owned(),
+            prefix: "procedure",
+            name: "x".to_owned(),
+            invocation: "render <template> --routine",
+            template: Some("t/db".to_owned()),
+        });
+
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "write it as: tpl render t/db --routine procedure:x"
+        );
+    }
+
+    #[test]
+    fn e_27_an_object_missing_from_a_context_document_names_a_way_to_list_them() {
+        let rendered = render(&Error::ContextObjectNotFound {
+            kind: CatalogueObjectKind::Table,
+            name: "ordrs".to_owned(),
+            path: PathBuf::from("ctx.json"),
+            database: "shop".to_owned(),
+            nearest: Vec::new(),
+        });
+
+        assert!(
+            line(&rendered, Label::Hint).ends_with("jq -r '.data.database.tables[].name' ctx.json"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn r_14_a_type_name_that_begins_with_a_vowel_takes_an() {
+        let rendered = render(&Error::PasswordCommandNotAnArray {
+            key: "database.x.password_command".to_owned(),
+            file: PathBuf::from("/srv/p/.tpl/.cfg"),
+            position: position(),
+            found: "integer",
+        });
+
+        assert!(
+            line(&rendered, Label::Cause).contains("as an integer;"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn e_07_an_ambiguous_routine_in_render_names_the_template_in_the_hint() {
+        let rendered = render(&Error::AmbiguousRoutineInContext {
+            name: "calc".to_owned(),
+            path: PathBuf::from("ctx.json"),
+            database: "shop".to_owned(),
+            invocation: "render <template> --routine",
+            template: Some("t/db".to_owned()),
+        });
+
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "name the kind you mean: tpl render t/db --routine procedure:calc, or tpl render t/db \
+             --routine function:calc"
+        );
+    }
+
+    #[test]
+    fn r_03_a_file_that_gives_the_password_twice_says_so_and_other_pairs_keep_declares_both() {
+        let conflict = |first: &str, second: &str| Error::ConflictingEntryKeys {
+            entry: "z".to_owned(),
+            file: PathBuf::from("/srv/p/.tpl/.cfg"),
+            first: first.to_owned(),
+            second: second.to_owned(),
+        };
+
+        let rendered = render(&conflict("password", "password_command"));
+        assert_eq!(
+            line(&rendered, Label::Error),
+            "database entry 'z' gets its password twice: password gives one, and \
+             password_command gives another"
+        );
+        assert!(
+            line(&rendered, Label::Cause).contains("a password through both password and"),
+            "{rendered}"
+        );
+
+        let rendered = render(&conflict("dsn", "host"));
+        assert_eq!(
+            line(&rendered, Label::Error),
+            "database entry 'z' declares both dsn and host"
+        );
+        assert!(
+            !line(&rendered, Label::Cause).contains("takes its password"),
+            "{rendered}"
         );
     }
 }

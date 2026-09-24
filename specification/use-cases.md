@@ -1,7 +1,7 @@
 ---
 title: Use Cases
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-24
 related: [schema-commands.md, render-command.md, cache-commands.md, cfg-commands.md, examples.md]
 ---
 
@@ -29,10 +29,13 @@ here introduces behaviour of its own.
   - A `.tpl` already exists at the destination: exit `73`, nothing changed.
   - A `.tpl` exists in an ancestor: the nested project is created, a warning
     goes to stderr, exit `0`.
+  - `--tpl-dir` is given: it has no effect, a warning naming the form
+    `tpl init <path>` goes to stderr, and the flow continues at the
+    destination the invocation would have without the flag.
 - **Postconditions**: the project is usable; no database is known to it, so
   `tpl cfg database list` answers with an empty listing and exit `0`, per
   `FR-CFG-040`
-- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`, `FR-PROJ-025`
+- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`, `FR-PROJ-025`, `FR-PROJ-026`
 
 ## UC-002 — Register a database entry
 

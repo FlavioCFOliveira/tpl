@@ -336,6 +336,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
                     // instance left to name.
                     database: cache.database().unwrap_or_else(|| entry.to_owned()),
                     invocation: CLEAN,
+                    template: None,
                 });
             }
 

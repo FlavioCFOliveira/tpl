@@ -146,6 +146,57 @@ impl fmt::Display for DeadlineBound {
     }
 }
 
+/// The global lookup function a template called (`FR-ENV-020`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LookupKind {
+    /// `table(name)`.
+    Table,
+    /// `view(name)`.
+    View,
+    /// `routine(name)`.
+    Routine,
+    /// `column(table, name)`.
+    Column,
+}
+
+impl fmt::Display for LookupKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Table => "table",
+            Self::View => "view",
+            Self::Routine => "routine",
+            Self::Column => "column",
+        })
+    }
+}
+
+/// What is known of why a render failed, beyond the engine's chain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RenderReason {
+    /// The template called `fail(message)` with this message (`FR-SEM-014`,
+    /// `FR-SEM-015`).
+    Failed(String),
+    /// The undefined expression begins with a lookup call that found nothing.
+    Unresolved(Unresolved),
+}
+
+/// A lookup call, with arguments the template wrote as literals, that found
+/// nothing — the reason an expression built on it is undefined.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unresolved {
+    /// The call as the template wrote it: `table("orders")`.
+    pub call: String,
+    /// What was sought: the function's kind, or [`LookupKind::Table`] for a
+    /// `column` call whose table does not exist.
+    pub kind: LookupKind,
+    /// The name that was not found.
+    pub name: String,
+    /// For a column that was not found in a table that exists, that table.
+    pub table: Option<String>,
+}
+
 /// How a `--context` document failed the contract of `FR-RND-020`.
 ///
 /// `FR-ERR-034` obliges the `cause` line of such a `65` to name the path and
@@ -155,6 +206,8 @@ impl fmt::Display for DeadlineBound {
 pub enum ContextFault {
     /// The bytes are not well-formed JSON, at this position.
     NotJson(Position),
+    /// The bytes hold no JSON text at all: nothing, or only whitespace.
+    Empty,
     /// The document is JSON and does not match the contract of
     /// `context-document.md`.
     ///
@@ -618,6 +671,10 @@ pub enum Error {
         /// `FR-ERR-022` — `schema routine`, `cache load --routine`, or
         /// `cache clean --routine`.
         invocation: &'static str,
+        /// The template of the `tpl render` the token was given to, which the
+        /// invocation writes as `<template>`; [`None`] for every other
+        /// command.
+        template: Option<String>,
     },
 
     /// A bare routine name that names both a procedure and a function
@@ -638,6 +695,10 @@ pub enum Error {
         /// The invocation the token was given to, below `tpl`, as a literal of
         /// `FR-ERR-022`.
         invocation: &'static str,
+        /// The template of the `tpl render` the token was given to, which the
+        /// invocation writes as `<template>`; [`None`] for every other
+        /// command.
+        template: Option<String>,
     },
 
     /// A bare `--routine` name that names both a procedure and a function in a
@@ -662,6 +723,10 @@ pub enum Error {
         /// The invocation the token was given to, below `tpl`, as a literal of
         /// `FR-ERR-022`.
         invocation: &'static str,
+        /// The template of the `tpl render` the token was given to, which the
+        /// invocation writes as `<template>`; [`None`] for every other
+        /// command.
+        template: Option<String>,
     },
 
     /// The same `--set` key supplied more than once (`FR-RND-014`).
@@ -750,7 +815,7 @@ pub enum Error {
     /// the caller must repair; here, `.tpl/.cfg` is valid and stays untouched,
     /// and what is refused is the invocation, which the caller wrote and can
     /// rewrite.
-    #[error("database entry '{entry}' cannot declare both {written} and {conflicting}")]
+    #[error("{}", incoherent_entry_write(entry, written, conflicting))]
     IncoherentEntryWrite {
         /// The entry the write would be applied to.
         entry: String,
@@ -779,7 +844,7 @@ pub enum Error {
 
     /// A render that failed at evaluation time — an undefined variable, a
     /// failing filter, an escape from the template root (`FR-RND-031`).
-    #[error("rendering template '{template}' failed at {position}")]
+    #[error("{}", render_failed(template, position, reason.as_deref()))]
     RenderFailed {
         /// The template being rendered when the failure arose — the included
         /// one, for a failure inside an `{% include %}`.
@@ -795,6 +860,11 @@ pub enum Error {
         /// than "undefined value", and the `hint` name the flag that defines
         /// it — the most common failure a template author meets.
         undefined: Option<String>,
+        /// Why the render failed, WHERE more is known than the engine's
+        /// chain says: the template ended it with `fail`, or a lookup found
+        /// nothing. Boxed, because it is rare and the variant is the size of
+        /// every `Result` this crate returns.
+        reason: Option<Box<RenderReason>>,
         /// Where evaluation stopped.
         position: Position,
         /// The chain of underlying template-engine errors, outermost first
@@ -805,7 +875,7 @@ pub enum Error {
     /// A resolved template path that lies outside the template root
     /// (`FR-TMPL-026`), reached without rendering — `tpl template show` on a
     /// symbolic link is the case `FR-TMPL-024` describes.
-    #[error("template '{name}' resolves outside the template root")]
+    #[error("template '{name}' resolves outside the template folder .tpl/templates/")]
     TemplateOutsideRoot {
         /// The template name, as the caller named it.
         name: String,
@@ -815,7 +885,7 @@ pub enum Error {
 
     /// A `--context` document that is not well-formed JSON or does not match
     /// the document contract (`FR-RND-020`, `FR-ERR-029`).
-    #[error("the --context document '{}' is malformed", .path.display())]
+    #[error("the --context document {} is malformed", context_origin(.path))]
     ContextDocumentMalformed {
         /// The path the document was read from.
         path: PathBuf,
@@ -941,6 +1011,10 @@ pub enum Error {
         /// nothing qualified, per `FR-ERR-020`. `FR-GLOB-007` obliges the
         /// suggestion.
         nearest: Vec<String>,
+        /// Whether `core.database` named the entry, rather than `-d` or an
+        /// argument of the command: the diagnostic then says so, and names the
+        /// command that changes the default.
+        by_default: bool,
     },
 
     /// A key that is absent from `.tpl/.cfg` (`FR-CFG-007`, `FR-CFG-012`).
@@ -1328,7 +1402,7 @@ pub enum Error {
 
     /// One entry declares two keys that exclude one another (`FR-CONF-006`,
     /// `FR-CONF-007`).
-    #[error("database entry '{entry}' declares both {first} and {second}")]
+    #[error("{}", conflicting_entry_keys(entry, first, second))]
     ConflictingEntryKeys {
         /// The entry name.
         entry: String,
@@ -1368,8 +1442,10 @@ pub enum Error {
     /// `password_command` did not finish within its deadline — it had not
     /// both exited and reached end of file on its standard output — and its
     /// process group was terminated (`FR-CONF-028`, `FR-ERR-027`).
-    #[error("password_command exceeded {bound} of {limit:?}")]
+    #[error("the password_command of database entry '{entry}' exceeded {bound} of {limit:?}")]
     PasswordCommandDeadlineExceeded {
+        /// The database entry that declares the command.
+        entry: String,
         /// The command as stored, which `FR-CONF-017` guarantees carries no
         /// expanded value and therefore no secret.
         command: Vec<String>,
@@ -1381,8 +1457,10 @@ pub enum Error {
 
     /// `password_command` wrote more than the cap of `FR-CONF-031` to standard
     /// output, and its process group was terminated.
-    #[error("password_command wrote more than {cap} bytes")]
+    #[error("the password_command of database entry '{entry}' wrote more than {cap} bytes")]
     PasswordCommandOutputCapExceeded {
+        /// The database entry that declares the command.
+        entry: String,
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
         /// The cap, in bytes — `FR-CONF-031` obliges the `cause` line to name
@@ -1404,8 +1482,10 @@ pub enum Error {
     /// which, because `FR-CONF-042` obliges the `cause` line to: one wording
     /// for both is what that requirement was written over, and `FR-ERR-002`
     /// forbids it.
-    #[error("{}", password_command_unusable(*.fault))]
+    #[error("the password_command of database entry '{entry}' {}", password_command_unusable(*.fault))]
     PasswordCommandNotExecutable {
+        /// The database entry that declares the command.
+        entry: String,
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
         /// Which of the two conditions of `FR-CONF-042` arose.
@@ -1420,8 +1500,10 @@ pub enum Error {
     ///
     /// Its standard error is not carried because it was never captured:
     /// `FR-CONF-032` sends it to the null device.
-    #[error("password_command did not exit successfully")]
+    #[error("the password_command of database entry '{entry}' did not exit successfully")]
     PasswordCommandFailed {
+        /// The database entry that declares the command.
+        entry: String,
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
         /// How the child ended, which decides which of the two requirements
@@ -1571,10 +1653,105 @@ fn tpl_dir_unusable(path: &std::path::Path, fault: TplDirFault) -> String {
 /// `cause` beneath it said the command had never started.
 const fn password_command_unusable(fault: PasswordCommandFault) -> &'static str {
     match fault {
-        PasswordCommandFault::NotStarted => "password_command could not be started",
-        PasswordCommandFault::StatusUnreadable => {
-            "password_command ended with a status tpl could not read"
+        PasswordCommandFault::NotStarted => "could not be started",
+        PasswordCommandFault::StatusUnreadable => "ended with a status tpl could not read",
+    }
+}
+
+/// Whether a pair of entry keys `FR-CONF-007` refuses is two sources of the
+/// password — `password_command` beside a DSN that carries one, or beside
+/// `password` — rather than two forms of the connection.
+pub(crate) fn password_pair(first: &str, second: &str) -> bool {
+    let leaf = |key: &'_ str| key.rsplit('.').next().unwrap_or_default().to_owned();
+    let (first, second) = (leaf(first), leaf(second));
+    let other = match (first.as_str(), second.as_str()) {
+        ("password_command", other) | (other, "password_command") => other.to_owned(),
+        _ => return false,
+    };
+
+    matches!(other.as_str(), "dsn" | "password")
+}
+
+/// The `error:` line of [`Error::ConflictingEntryKeys`]: two sources of the
+/// password are the password given twice, and two forms of the connection
+/// are two keys declared together.
+fn conflicting_entry_keys(entry: &str, first: &str, second: &str) -> String {
+    if password_pair(first, second) {
+        let (source, command) = if first.ends_with(".password_command") {
+            (second, first)
+        } else {
+            (first, second)
+        };
+        let gives = if source.ends_with(".dsn") {
+            "carries a password"
+        } else {
+            "gives one"
+        };
+        format!(
+            "database entry '{entry}' gets its password twice: {source} {gives}, and {command} \
+             gives another"
+        )
+    } else {
+        format!("database entry '{entry}' declares both {first} and {second}")
+    }
+}
+
+/// The `error:` line of [`Error::IncoherentEntryWrite`]: a DSN beside
+/// `password_command` is refused only because the DSN carries a password, and
+/// the line says so rather than state a rule that is false of a DSN without
+/// one.
+fn incoherent_entry_write(entry: &str, written: &str, conflicting: &str) -> String {
+    if password_pair(written, conflicting) {
+        let (source, command) = if written.ends_with(".password_command") {
+            (conflicting, written)
+        } else {
+            (written, conflicting)
+        };
+        let gives = if source.ends_with(".dsn") {
+            "carries a password"
+        } else {
+            "gives one"
+        };
+        format!(
+            "database entry '{entry}' would get its password twice: {source} {gives}, and \
+             {command} gives another"
+        )
+    } else {
+        format!("database entry '{entry}' cannot declare both {written} and {conflicting}")
+    }
+}
+
+/// The `error:` line of [`Error::RenderFailed`]: the author's own message
+/// where the template ended the render with `fail` (`FR-SEM-015`), and the
+/// template and the position otherwise.
+fn render_failed(template: &str, position: &Position, reason: Option<&RenderReason>) -> String {
+    match reason {
+        Some(RenderReason::Failed(message)) => {
+            format!("template '{template}' called fail() at {position}: {message}")
         }
+        Some(RenderReason::Unresolved(_)) | None => {
+            format!("rendering template '{template}' failed at {position}")
+        }
+    }
+}
+
+/// Where the `--context` document was read from, as the `error:` line says
+/// it: `on standard input` for `-`, and the quoted path otherwise.
+fn context_origin(path: &std::path::Path) -> String {
+    if path == std::path::Path::new("-") {
+        "on standard input".to_owned()
+    } else {
+        format!("'{}'", path.display())
+    }
+}
+
+/// How a diagnostic names the `--context` document read from `path`: `-` is
+/// standard input, which a reader would not recognise in the quoted `'-'`.
+pub(crate) fn context_name(path: &std::path::Path) -> String {
+    if path == std::path::Path::new("-") {
+        "standard input".to_owned()
+    } else {
+        format!("'{}'", path.display())
     }
 }
 
@@ -1911,6 +2088,7 @@ mod tests {
                     prefix: "procedure",
                     name: "calc_vat".to_owned(),
                     invocation: "schema routine",
+                    template: None,
                 },
                 64,
             ),
@@ -1920,6 +2098,7 @@ mod tests {
                     entry: "shop".to_owned(),
                     database: "shop".to_owned(),
                     invocation: "schema routine",
+                    template: None,
                 },
                 64,
             ),
@@ -1929,6 +2108,7 @@ mod tests {
                     path: PathBuf::from("context.json"),
                     database: "freight".to_owned(),
                     invocation: "render --routine",
+                    template: None,
                 },
                 64,
             ),
@@ -2034,6 +2214,7 @@ mod tests {
             (
                 Error::RenderFailed {
                     undefined: None,
+                    reason: None,
                     invoked: String::from("example"),
                     template: "example.jinja".to_owned(),
                     position: position(),
@@ -2099,6 +2280,7 @@ mod tests {
                     name: "shup".to_owned(),
                     file: path(),
                     nearest: vec!["shop".to_owned()],
+                    by_default: false,
                 },
                 66,
             ),
@@ -2306,6 +2488,7 @@ mod tests {
             ),
             (
                 Error::PasswordCommandDeadlineExceeded {
+                    entry: "shop".to_owned(),
                     command: vec!["security".to_owned(), "find-generic-password".to_owned()],
                     bound: DeadlineBound::Phase,
                     limit: Duration::from_secs(5),
@@ -2314,6 +2497,7 @@ mod tests {
             ),
             (
                 Error::PasswordCommandOutputCapExceeded {
+                    entry: "shop".to_owned(),
                     command: vec!["cat".to_owned(), "/dev/urandom".to_owned()],
                     cap: 4096,
                 },
@@ -2321,6 +2505,7 @@ mod tests {
             ),
             (
                 Error::PasswordCommandNotExecutable {
+                    entry: "shop".to_owned(),
                     command: vec!["pass".to_owned()],
                     fault: PasswordCommandFault::NotStarted,
                     returned: io::Error::from(io::ErrorKind::NotFound),
@@ -2329,6 +2514,7 @@ mod tests {
             ),
             (
                 Error::PasswordCommandFailed {
+                    entry: "shop".to_owned(),
                     command: vec!["op".to_owned(), "read".to_owned()],
                     end: ChildEnd::Exited(1),
                 },

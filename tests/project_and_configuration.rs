@@ -1842,3 +1842,40 @@ fn fr_cli_017_a_value_beginning_with_a_dash_is_told_to_follow_the_terminator() {
     assert!(hint.contains("tpl help cfg set"), "{hint}");
     assert!(hint.contains("write -- before it"), "{hint}");
 }
+
+#[test]
+fn fr_proj_026_init_warns_that_tpl_dir_has_no_effect_and_never_looks_at_its_path() {
+    // FR-PROJ-026: the flag is accepted, the destination is FR-PROJ-012's,
+    // one warning line precedes everything else on stderr, and the exit code
+    // is the one the same invocation without the flag returns.
+    const WARNING: &str = "warning: --tpl-dir has no effect on tpl init; it takes its \
+                           destination as an operand: tpl init <path>";
+    let sandbox = Sandbox::new();
+    let named = sandbox.path("elsewhere/.tpl");
+    let flag = named.to_str().expect("the sandbox path is UTF-8");
+
+    let printed = sandbox.run(&["init", "--tpl-dir", flag]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(stderr(&printed), format!("{WARNING}\n"));
+    assert!(sandbox.path(".tpl/.cfg").is_file());
+    assert!(
+        !sandbox.path("elsewhere").exists(),
+        "the flag's path was created"
+    );
+
+    // The same invocation again is FR-PROJ-014's 73, with the warning first.
+    let printed = sandbox.run(&["init", "--tpl-dir", flag]);
+    let written = stderr(&printed);
+    assert_eq!(code(&printed), 73, "{written}");
+    assert_eq!(written.lines().next(), Some(WARNING));
+    assert!(
+        !written.contains(flag),
+        "the value is written back: {written}"
+    );
+
+    // -q suppresses it; the positional still names the destination.
+    let printed = sandbox.run(&["-q", "init", "nested", "--tpl-dir", flag]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+    assert!(sandbox.path("nested/.tpl/.cfg").is_file());
+}

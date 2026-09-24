@@ -1,8 +1,8 @@
 ---
 title: Help and Version
 status: approved
-last-reviewed: 2026-09-23
-related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md, context-document.md, render-command.md]
+last-reviewed: 2026-09-24
+related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md, context-document.md, render-command.md, project-and-discovery.md]
 ---
 
 # Help and Version
@@ -292,6 +292,30 @@ alongside the command it documents.
 
   *Added in the forty-third edition,* for rmp `#260`, from findings H-02 and
   H-03 of the audit of rmp `#259`.
+
+- **FR-HELP-034**: The `DESCRIPTION` section of `tpl init` SHALL state, in one
+  sentence placed before the four statements of `FR-HELP-031`, that
+  `--tpl-dir` has no effect on the command and that the destination is the
+  `PATH` operand, or the current directory when it is absent. The same sentence
+  SHALL appear at the same place in the `description` of the command's entry
+  in the JSON command tree, per `FR-HELP-019`.
+
+  ```
+  --tpl-dir has no effect here: the project is created at PATH, or in the
+  current directory when PATH is absent.
+  ```
+
+  *Rationale.* `FR-PROJ-026` gives the flag no effect on `tpl init` and warns
+  on stderr when it is given. A caller that reads the help before building the
+  invocation learns the fact without making the mistake first.
+
+  *Weighed against `FR-GLOB-003`.* That requirement keeps global flags out of
+  the `OPTIONS` section of every node but the root, and this sentence is in
+  `DESCRIPTION`. It states what one command does with a flag, which is
+  description, and the flag is still listed once, at the root.
+
+  *Added in the forty-fifth edition,* for rmp `#269`, from finding R-11 of the
+  re-audit.
 
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help

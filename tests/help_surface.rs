@@ -1130,3 +1130,174 @@ fn fr_help_013_a_default_the_configuration_applies_is_stated_where_the_flag_is()
 
     assert_eq!(port["default"], serde_json::json!(["3306"]));
 }
+
+/// Every string the JSON command tree carries, in document order.
+fn strings_of(value: &serde_json::Value, into: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(text) => into.push(text.clone()),
+        serde_json::Value::Array(items) => items.iter().for_each(|item| strings_of(item, into)),
+        serde_json::Value::Object(members) => {
+            members.values().for_each(|member| strings_of(member, into));
+        }
+        _ => {}
+    }
+}
+
+/// The text help of `path`, with its line breaks and indentation folded into
+/// single spaces so that a sentence reads the same wherever it wrapped.
+fn folded_help(path: &[&str]) -> String {
+    let mut arguments = vec!["help"];
+    arguments.extend_from_slice(path);
+    let text = String::from_utf8(succeeds(&arguments)).expect("help is UTF-8");
+
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn r_269_the_re_audit_texts_are_stated_in_the_text_help_and_in_the_json_tree() {
+    // The findings of the re-audit for rmp #269 whose fix is a sentence of
+    // help: each is read in the text help of the node that states it and
+    // among the strings of the JSON tree, which FR-HELP-019 makes one content.
+    let cases: [(&[&str], &str); 12] = [
+        // R-04: the one-string form, its splitting, and the stored array.
+        (
+            &["cfg", "set"],
+            "Given to cfg set as one string such as \"pass db/shop\", split into words as a \
+             shell would (quotes group words); stored in the file as an array, [\"pass\", \
+             \"db/shop\"].",
+        ),
+        (
+            &["cfg", "database", "add"],
+            "tpl splits the string into words as a shell would (quotes group words) and stores \
+             them in the file as an array, [\"pass\", \"db/shop\"];",
+        ),
+        // R-05: column() returns the column object.
+        (
+            &["render"],
+            "Returns the column called name in the table called table, as the same object \
+             table.columns holds;",
+        ),
+        // R-07: the missing clauses of the 64 and 65 rows.
+        (
+            &["render"],
+            "An unknown flag, a missing TEMPLATE, or a flag given twice;",
+        ),
+        (
+            &["render"],
+            "or TEMPLATE resolves to a path outside .tpl/templates/.",
+        ),
+        (
+            &["cache", "load"],
+            "An unknown flag, or a flag given twice; --no-cache;",
+        ),
+        // R-08: what text output is, per command, and the header line.
+        (
+            &["cfg", "list"],
+            "text is the file itself, comments included, with passwords redacted;",
+        ),
+        (
+            &["template", "list"],
+            "Prints a NAME header line, then one template name per line.",
+        ),
+        // R-10: the object flags say what the command does with the object.
+        (
+            &["cache", "clean"],
+            "Deletes only this table's cached copy.",
+        ),
+        // FR-HELP-034.
+        (
+            &["init"],
+            "--tpl-dir has no effect here: the project is created at PATH, or in the current \
+             directory when PATH is absent.",
+        ),
+        // The walkthrough: a local server, and a password from the environment.
+        (&[], "--tls disabled"),
+        (&[], "tpl cfg set database.shop.password '${SHOP_PASSWORD}'"),
+    ];
+
+    let mut strings = Vec::new();
+    strings_of(&document(), &mut strings);
+    let folded: Vec<String> = strings
+        .iter()
+        .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect();
+
+    for (path, sentence) in cases {
+        assert!(
+            folded_help(path).contains(sentence),
+            "tpl help {} does not state: {sentence}",
+            path.join(" ")
+        );
+        assert!(
+            folded.iter().any(|text| text.contains(sentence)),
+            "the JSON tree does not state: {sentence}"
+        );
+    }
+
+    // The every-table loops say they need jq.
+    for path in [&["render"][..], &["schema", "tables"][..]] {
+        assert!(
+            folded_help(path).contains("this needs jq, an external JSON tool."),
+            "tpl help {}",
+            path.join(" ")
+        );
+    }
+}
+
+#[test]
+fn r_269_every_example_that_pipes_into_jq_says_it_needs_jq() {
+    // An example that runs jq, an external tool, says so in its caption, in
+    // the words the every-table loops use; the root is not a command entry,
+    // and its examples run no jq.
+    let tree = document();
+    let commands = tree["data"]["commands"]
+        .as_array()
+        .expect("the tree lists its commands");
+    let mut seen = 0;
+
+    for command in commands {
+        for example in command["examples"].as_array().into_iter().flatten() {
+            let runs_jq = example["lines"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|line| {
+                    line["text"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("jq "))
+                });
+            if runs_jq {
+                seen += 1;
+                let caption = example["caption"].as_str().unwrap_or_default();
+                assert!(
+                    caption.ends_with("; this needs jq, an external JSON tool."),
+                    "{}: {caption}",
+                    command["path"]
+                );
+            }
+        }
+    }
+
+    assert!(seen >= 7, "only {seen} examples run jq");
+}
+
+#[test]
+fn r_269_the_password_rows_of_add_and_update_state_the_password_given_twice() {
+    for (path, sentence) in [
+        (
+            &["cfg", "database", "add"][..],
+            "the password given twice, as a password inside --dsn and as --password-command;",
+        ),
+        (
+            &["cfg", "database", "update"][..],
+            "the password given twice, as a password inside the dsn or password and as \
+             --password-command;",
+        ),
+    ] {
+        assert!(
+            folded_help(path).contains(sentence),
+            "tpl help {} does not state: {sentence}",
+            path.join(" ")
+        );
+    }
+}

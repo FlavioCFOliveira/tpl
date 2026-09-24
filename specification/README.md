@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-four editions. All are in force;
+The specification has been written in forty-five editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3976,6 +3976,57 @@ the index of [open-questions.md](open-questions.md) stays empty.
 `FR-CACHE-033`, `BR-CACHE-002`, `BR-CACHE-004`, `BR-CDOC-004` and `UC-011` were read against
 the changes and none conflicts with them, so none is amended. Neither root
 document paraphrases either requirement, so the fifth validation rule owes
+nothing.
+
+### Forty-fifth edition — a global flag that does nothing says so
+
+The re-audit of sprint 21, closed for rmp `#269`, found that `tpl init` given
+`--tpl-dir` acts on its own destination and says nothing about the flag, so a
+`73` names a `.tpl` the caller did not point at (finding R-11). No requirement
+fixed the outcome. This edition fixes it. The flag is accepted with no effect,
+as `FR-GLOB-007` already does for `-d`, and the invocation says so on stderr
+and in its help.
+
+**Two identifiers are assigned — `FR-PROJ-026` and `FR-HELP-034`; none is
+retired and none is renumbered.** No term enters or leaves
+[glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **`tpl init` warns about `--tpl-dir`** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-026` accepts
+  the flag with no effect: the path it names is not resolved, examined or
+  checked. The requirement writes one fixed warning line to stderr, naming the
+  flag and the form `tpl init <path>` and never reproducing the value. The line
+  comes first, before any error of `FR-PROJ-014` or `FR-PROJ-015` and before the
+  warning of `FR-PROJ-016`. The exit code is the one the invocation has without
+  the flag, and `-q` suppresses the line. `UC-001` in
+  [use-cases.md](use-cases.md) gains the alternate flow and cites it.
+- **The help of `tpl init` states it** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-034` puts one sentence
+  before the four statements of `FR-HELP-031`, in the text `DESCRIPTION` and in
+  the JSON `description`: `--tpl-dir` has no effect, and the destination is
+  `PATH` or the current directory.
+- **`BR-GLOB-001` states what the corpus does** —
+  [global-flags.md](global-flags.md). The rule read that a flag one node would
+  have to ignore or reject is local, which made `-d/--database` and `--tpl-dir`
+  local under `FR-GLOB-007` and `FR-PROJ-025`. It now reads as follows. A node
+  may give a global flag no effect, and a global flag is never refused on its
+  own. A refusal is admitted only for a combination, as in `FR-RND-018`. A flag
+  some node would have to refuse on its own is local. A table names the nodes on
+  which each of the two flags has no effect.
+
+`FR-GLOB-002`, `FR-GLOB-003`, `FR-GLOB-009`, `FR-GLOB-010`, `FR-GLOB-015`,
+`FR-GLOB-021`, `FR-CLI-014`, `FR-CLI-024`, `FR-PROJ-008` through `FR-PROJ-016`,
+`FR-PROJ-022`, `FR-PROJ-025`, `FR-SEC-016`, `FR-OUT-020`, `FR-OUT-023`,
+`BR-CLI-004`, `FR-ERR-006`, `FR-HELP-019`, `FR-HELP-031`, `NFR-PERF-005` and
+`NFR-PERF-007` were read against the changes, and none conflicts with them, so
+none is amended. The trust checks of `FR-GLOB-010`, `FR-PROJ-008` and
+`FR-SEC-016` govern a folder an invocation uses as its project, and `tpl init`
+uses none. The warning is a line on stderr and not an error, so the validation
+order of `FR-ERR-006` gains no step. Neither root document paraphrases an
+amended requirement: the root `README.md` describes `--tpl-dir` under
+`FR-GLOB-009`, which is unchanged. The fifth validation rule therefore owes
 nothing.
 
 ### Still out of scope

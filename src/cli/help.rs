@@ -465,6 +465,34 @@ const FORMAT: Documented = Documented {
               json is a stable document, so use it whenever a program reads the output.",
     excludes: &[],
 };
+/// `--format` on `tpl cfg list`, whose text output is the file itself.
+const FORMAT_CFG_LIST: Documented = Documented {
+    name: "--format",
+    purpose: "Chooses the output: text is the file itself, comments included, with passwords \
+              redacted; json is a stable document, so use it whenever a program reads the output.",
+    excludes: &[],
+};
+/// `--format` on `tpl cfg get`, whose text output is the value alone.
+const FORMAT_CFG_GET: Documented = Documented {
+    name: "--format",
+    purpose: "Chooses the output: text is the bare value; json is a stable document, so use it \
+              whenever a program reads the output.",
+    excludes: &[],
+};
+/// `--format` on `tpl template path`, whose text output is a path alone.
+const FORMAT_TEMPLATE_PATH: Documented = Documented {
+    name: "--format",
+    purpose: "Chooses the output: text is the path alone; json is a stable document, so use it \
+              whenever a program reads the output.",
+    excludes: &[],
+};
+/// `--format` on `tpl help`, whose text output is the help itself.
+const FORMAT_HELP: Documented = Documented {
+    name: "--format",
+    purpose: "Chooses the output: text is the help as written here; json is the same help as a \
+              stable document, so use it whenever a program reads the output.",
+    excludes: &[],
+};
 /// `--pretty`, as every node that declares it states it.
 const PRETTY: Documented = Documented {
     name: "--pretty",
@@ -546,8 +574,9 @@ const TLS: Documented = Documented {
 const PASSWORD_COMMAND: Documented = Documented {
     name: "--password-command",
     purpose: "Sets a command, written as one string such as \"pass db/shop\", whose standard \
-              output is the password; it runs without a shell, and no password is stored in the \
-              file.",
+              output is the password. tpl splits the string into words as a shell would (quotes \
+              group words) and stores them in the file as an array, [\"pass\", \"db/shop\"]; the \
+              command runs without a shell, and no password is stored in the file.",
     excludes: &[],
 };
 /// `--ca-file`, as every node that declares it states it.
@@ -607,6 +636,49 @@ const OBJECT_ROUTINE: Documented = Documented {
     name: "--routine",
     purpose: "Acts on this one routine only, named bare or as procedure:<name> or function:<name>; \
               in tpl render, the template then sees it as the variable routine.",
+    excludes: &["--table", "--view"],
+};
+
+// The same three flags on `tpl cache load` and `tpl cache clean`, where no
+// template sees anything: their purposes say what each command does with the
+// object.
+
+/// `--table` on `tpl cache load`.
+const LOAD_TABLE: Documented = Documented {
+    name: "--table",
+    purpose: "Loads only this table into the cache.",
+    excludes: &["--view", "--routine"],
+};
+/// `--view` on `tpl cache load`.
+const LOAD_VIEW: Documented = Documented {
+    name: "--view",
+    purpose: "Loads only this view into the cache.",
+    excludes: &["--table", "--routine"],
+};
+/// `--routine` on `tpl cache load`.
+const LOAD_ROUTINE: Documented = Documented {
+    name: "--routine",
+    purpose: "Loads only this routine into the cache, named bare or as procedure:<name> or \
+              function:<name>.",
+    excludes: &["--table", "--view"],
+};
+/// `--table` on `tpl cache clean`.
+const CLEAN_TABLE: Documented = Documented {
+    name: "--table",
+    purpose: "Deletes only this table's cached copy.",
+    excludes: &["--view", "--routine"],
+};
+/// `--view` on `tpl cache clean`.
+const CLEAN_VIEW: Documented = Documented {
+    name: "--view",
+    purpose: "Deletes only this view's cached copy.",
+    excludes: &["--table", "--routine"],
+};
+/// `--routine` on `tpl cache clean`.
+const CLEAN_ROUTINE: Documented = Documented {
+    name: "--routine",
+    purpose: "Deletes only this routine's cached copy, named bare or as procedure:<name> or \
+              function:<name>.",
     excludes: &["--table", "--view"],
 };
 
@@ -811,7 +883,10 @@ const ARGUMENTS: [(&[&str], &[Documented]); 28] = [
     (&["template", "list"], &[FORMAT, PRETTY]),
     (&["template", "show"], &[TEMPLATE_SHOW_NAME]),
     (&["template", "check"], &[TEMPLATE_CHECK_NAME]),
-    (&["template", "path"], &[TEMPLATE_PATH_NAME, FORMAT, PRETTY]),
+    (
+        &["template", "path"],
+        &[TEMPLATE_PATH_NAME, FORMAT_TEMPLATE_PATH, PRETTY],
+    ),
     (
         &["render"],
         &[
@@ -828,22 +903,22 @@ const ARGUMENTS: [(&[&str], &[Documented]); 28] = [
     (
         &["cache", "load"],
         &[
-            OBJECT_TABLE,
-            OBJECT_VIEW,
-            OBJECT_ROUTINE,
+            LOAD_TABLE,
+            LOAD_VIEW,
+            LOAD_ROUTINE,
             CACHE_LOAD_DIRECT,
             CACHE_LOAD_NO_CACHE,
         ],
     ),
     (
         &["cache", "clean"],
-        &[OBJECT_TABLE, OBJECT_VIEW, OBJECT_ROUTINE],
+        &[CLEAN_TABLE, CLEAN_VIEW, CLEAN_ROUTINE],
     ),
     (&["cache", "status"], &[FORMAT, PRETTY]),
-    (&["cfg", "get"], &[CFG_GET_KEY, FORMAT, PRETTY]),
+    (&["cfg", "get"], &[CFG_GET_KEY, FORMAT_CFG_GET, PRETTY]),
     (&["cfg", "set"], &[CFG_SET_KEY, CFG_SET_VALUE]),
     (&["cfg", "unset"], &[CFG_UNSET_KEY]),
-    (&["cfg", "list"], &[FORMAT, PRETTY]),
+    (&["cfg", "list"], &[FORMAT_CFG_LIST, PRETTY]),
     (
         &["cfg", "database", "add"],
         &[
@@ -885,7 +960,7 @@ const ARGUMENTS: [(&[&str], &[Documented]); 28] = [
         &[ENTRY_TEST_NAME, FORMAT, PRETTY],
     ),
     (&["init"], &[INIT_PATH]),
-    (&["help"], &[HELP_COMMAND_PATH, FORMAT, PRETTY]),
+    (&["help"], &[HELP_COMMAND_PATH, FORMAT_HELP, PRETTY]),
 ];
 
 /// What help states about the argument `name` at the node `path` names.
@@ -1271,15 +1346,16 @@ const RENDER: &[Outcome] = &[
     outcome(Code::Ok, "The rendered text was written to stdout."),
     outcome(
         Code::Usage,
-        "More than one of --table, --view and --routine; a --set without =, with an invalid key, \
-         or with a key given twice; or --context together with -d/--database.",
+        "An unknown flag, a missing TEMPLATE, or a flag given twice; more than one of --table, \
+         --view and --routine; a --set without =, with an invalid key, or with a key given twice; \
+         or --context together with -d/--database.",
     ),
     outcome(
         Code::DataError,
         "The template has a syntax error; the render failed, for example on an undefined variable, \
          a filter given the wrong type, or fail(); the --context document is malformed; or a \
          render limit was reached: core.render_timeout, core.render_fuel, core.render_output_limit \
-         or core.render_memory_limit.",
+         or core.render_memory_limit; or TEMPLATE resolves to a path outside .tpl/templates/.",
     ),
     outcome(
         Code::NoInput,
@@ -1415,8 +1491,8 @@ const CACHE_LOAD: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "--no-cache; more than one of --table, --view and --routine; or a bare --routine name that \
-         matches both a procedure and a function.",
+        "An unknown flag, or a flag given twice; --no-cache; more than one of --table, --view and \
+         --routine; or a bare --routine name that matches both a procedure and a function.",
     ),
     outcome(
         Code::NoInput,
@@ -1520,9 +1596,9 @@ const CFG_SET: &[Outcome] = &[
     outcome(Code::Ok, "The value was written to .tpl/.cfg."),
     outcome(
         Code::Usage,
-        "An unknown flag, a missing KEY or VALUE, a KEY that is not one of the keys listed under \
-         DESCRIPTION, a VALUE of the wrong type for its key, or a VALUE that cannot stand beside a \
-         key the entry already holds, such as a dsn beside a host.",
+        "An unknown flag, a flag given twice, a missing KEY or VALUE, a KEY that is not one of the \
+         keys listed under DESCRIPTION, a VALUE of the wrong type for its key, or a VALUE that \
+         cannot stand beside a key the entry already holds, such as a dsn beside a host.",
     ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
@@ -1571,8 +1647,9 @@ const CFG_DATABASE_ADD: &[Outcome] = &[
     outcome(Code::Ok, "The entry was written to .tpl/.cfg."),
     outcome(
         Code::Usage,
-        "No connection flag was given; --dsn was given with --host, --port, --user or --schema; a \
-         --dsn, --port or --tls value is malformed; a password in --dsn was given with \
+        "An unknown flag, a missing NAME, or a flag given twice; no connection flag was given; \
+         --dsn was given with --host, --port, --user or --schema; a --dsn, --port or --tls value \
+         is malformed; the password given twice, as a password inside --dsn and as \
          --password-command; or NAME is already taken.",
     ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
@@ -1608,9 +1685,10 @@ const CFG_DATABASE_UPDATE: &[Outcome] = &[
     outcome(Code::Ok, "The entry was changed in .tpl/.cfg."),
     outcome(
         Code::Usage,
-        "A missing NAME; no field flag; --dsn given with --host, --port, --user or --schema; a \
-         malformed flag value; or a change that would leave the entry holding two keys that cannot \
-         stand together, such as a dsn beside a host.",
+        "An unknown flag, a missing NAME, or a flag given twice; no field flag; --dsn given with \
+         --host, --port, --user or --schema; a malformed flag value; the password given twice, as \
+         a password inside the dsn or password and as --password-command; or a change that would \
+         leave the entry with both a dsn and host, port, user, password or database.",
     ),
     outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
@@ -1811,7 +1889,10 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "help", "--format", "json"])],
             },
             Example {
-                caption: "Set up a project, connect it to a database and render one table.",
+                caption: "Set up a project, connect it to a local server that has no trusted \
+                          certificate (hence --tls disabled), take the password from the \
+                          environment variable SHOP_PASSWORD (or write the password itself in \
+                          place of the reference), and render one table.",
                 lines: &[
                     run(&["tpl", "init"]),
                     run(&[
@@ -1821,13 +1902,20 @@ const ENTRIES: [Entry; 35] = [
                         "add",
                         "shop",
                         "--host",
-                        "db.example.com",
+                        "127.0.0.1",
                         "--user",
                         "reader",
                         "--schema",
                         "shop",
-                        "--password-command",
-                        "\"pass db/shop\"",
+                        "--tls",
+                        "disabled",
+                    ]),
+                    run(&[
+                        "tpl",
+                        "cfg",
+                        "set",
+                        "database.shop.password",
+                        "'${SHOP_PASSWORD}'",
                     ]),
                     run(&["tpl", "cfg", "set", "core.database", "shop"]),
                     run(&["tpl", "schema", "tables"]),
@@ -1872,7 +1960,8 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "-d", "shop", "schema", "info"])],
             },
             Example {
-                caption: "Read the server version from the JSON document.",
+                caption: "Read the server version from the JSON document; this needs jq, \
+                          an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -1910,7 +1999,8 @@ const ENTRIES: [Entry; 35] = [
                 ])],
             },
             Example {
-                caption: "Render one file per table, which is how a caller iterates.",
+                caption: "Render one file per table, which is how a caller iterates; this needs \
+                          jq, an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -1998,7 +2088,7 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "-d", "shop", "schema", "view", "v_sales"])],
             },
             Example {
-                caption: "Print the SQL definition alone.",
+                caption: "Print the SQL definition alone; this needs jq, an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -2027,7 +2117,8 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "-d", "shop", "schema", "routines"])],
             },
             Example {
-                caption: "List each routine with its kind, one per line.",
+                caption: "List each routine with its kind, one per line; this needs jq, \
+                          an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -2088,7 +2179,7 @@ const ENTRIES: [Entry; 35] = [
                 )],
             },
             Example {
-                caption: "Render from the dump, without touching a server.",
+                caption: "Render from a dump; the render itself contacts no server.",
                 lines: &[
                     run_in("", &["tpl", "-d", "shop", "schema", "dump"], " |"),
                     run_in(
@@ -2141,7 +2232,7 @@ const ENTRIES: [Entry; 35] = [
         touches: Some(local_only(
             NO_ENTRY,
             NO_FILE,
-            "Prints the template names, one per line.",
+            "Prints a NAME header line, then one template name per line.",
         )),
         examples: &[
             Example {
@@ -2218,7 +2309,7 @@ const ENTRIES: [Entry; 35] = [
         touches: Some(local_only(NO_ENTRY, NO_FILE, "Prints the path.")),
         examples: &[
             Example {
-                caption: "Print the template root.",
+                caption: "Print the template folder, .tpl/templates/.",
                 lines: &[run(&["tpl", "template", "path"])],
             },
             Example {
@@ -2298,7 +2389,8 @@ const ENTRIES: [Entry; 35] = [
                 ])],
             },
             Example {
-                caption: "Render one file per table, which is how a caller iterates.",
+                caption: "Render one file per table, which is how a caller iterates; this needs \
+                          jq, an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -2387,7 +2479,7 @@ const ENTRIES: [Entry; 35] = [
         }),
         examples: &[
             Example {
-                caption: "Load the whole catalogue of the entry named shop.",
+                caption: "Load the whole database of the entry named shop.",
                 lines: &[run(&["tpl", "-d", "shop", "cache", "load"])],
             },
             Example {
@@ -2444,7 +2536,8 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "-d", "shop", "cache", "status"])],
             },
             Example {
-                caption: "Read the load time from the JSON document.",
+                caption: "Read the load time from the JSON document; this needs jq, \
+                          an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -2564,8 +2657,9 @@ const ENTRIES: [Entry; 35] = [
                     ),
                     row(
                         "database.<name>.password_command",
-                        "A command that prints the password, as one string such as \
-                         \"pass db/shop\".",
+                        "A command that prints the password. Given to cfg set as one string \
+                         such as \"pass db/shop\", split into words as a shell would (quotes group \
+                         words); stored in the file as an array, [\"pass\", \"db/shop\"].",
                     ),
                     row(
                         "database.<name>.database",
@@ -2765,7 +2859,7 @@ const ENTRIES: [Entry; 35] = [
         touches: Some(local_only(
             NO_ENTRY,
             NO_FILE,
-            "Prints the entry names, one per line.",
+            "Prints a NAME header line, then one entry name per line.",
         )),
         examples: &[
             Example {
@@ -2892,7 +2986,8 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "cfg", "database", "test", "shop"])],
             },
             Example {
-                caption: "Read the fourth answer, which the exit code does not carry.",
+                caption: "Read the fourth answer, which the exit code does not carry; this \
+                          needs jq, an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -2917,12 +3012,16 @@ const ENTRIES: [Entry; 35] = [
                       examples and no database entry; .tpl/.gitignore; and .tpl/templates/, \
                       holding example.jinja and the Rust type macros rust/_types.jinja. Next, add \
                       a database entry with tpl cfg database add.",
-        blocks: &[],
+        // FR-HELP-034: the sentence, before the four statements of FR-HELP-031.
+        blocks: &[Block::Prose(
+            "--tpl-dir has no effect here: the project is created at PATH, or in the current \
+             directory when PATH is absent.",
+        )],
         touches: Some(local_only(
             NO_ENTRY,
             "Writes the new .tpl folder and what it holds.",
             "Prints nothing; a warning goes to stderr when the new project hides one in a parent \
-             directory.",
+             directory, and when --tpl-dir is given.",
         )),
         examples: &[
             Example {

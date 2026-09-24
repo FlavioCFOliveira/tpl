@@ -423,6 +423,64 @@ pub(super) fn run<W: std::io::Write>(
     globals: &Globals,
     supplied: &Supplied<'_>,
 ) -> Result<(), Error> {
+    run_body(out, globals, supplied).map_err(|refused| with_template(refused, supplied.template))
+}
+
+/// A refusal whose hint writes the corrected `tpl render` invocation, given
+/// the template this invocation named in place of the `<template>`
+/// placeholder of [`ROUTINE_INVOCATION`]: the template is known here, and
+/// `BR-ERR-004` asks for the value rather than a placeholder.
+fn with_template(refused: Error, named: &str) -> Error {
+    match refused {
+        Error::RoutinePrefixNotLowerCase {
+            token,
+            prefix,
+            name,
+            invocation,
+            ..
+        } => Error::RoutinePrefixNotLowerCase {
+            token,
+            prefix,
+            name,
+            invocation,
+            template: Some(named.to_owned()),
+        },
+        Error::AmbiguousRoutineName {
+            name,
+            entry,
+            database,
+            invocation,
+            ..
+        } => Error::AmbiguousRoutineName {
+            name,
+            entry,
+            database,
+            invocation,
+            template: Some(named.to_owned()),
+        },
+        Error::AmbiguousRoutineInContext {
+            name,
+            path,
+            database,
+            invocation,
+            ..
+        } => Error::AmbiguousRoutineInContext {
+            name,
+            path,
+            database,
+            invocation,
+            template: Some(named.to_owned()),
+        },
+        other => other,
+    }
+}
+
+/// The body of [`run`].
+fn run_body<W: std::io::Write>(
+    out: &mut W,
+    globals: &Globals,
+    supplied: &Supplied<'_>,
+) -> Result<(), Error> {
     // Step 1 of FR-ERR-006, in the order this module's documentation states.
     let defined = context::vars(supplied.set)?;
     let binding = Binding::of(supplied.object)?;

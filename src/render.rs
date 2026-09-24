@@ -228,7 +228,19 @@ impl Environment {
             Err(reported) if fault::out_of_fuel(&reported) => Err(Error::RenderFuelExhausted {
                 fuel: self.bounds.fuel.get(),
             }),
-            Err(reported) => Err(fault::during_render(&resolved.name, &reported)),
+            Err(reported) => {
+                let mut condition = fault::during_render(&resolved.name, &reported);
+                if let Error::RenderFailed {
+                    undefined: Some(expression),
+                    reason: reason @ None,
+                    ..
+                } = &mut condition
+                {
+                    *reason = fault::unresolved(self.engine(), context, expression)
+                        .map(|found| Box::new(crate::error::RenderReason::Unresolved(found)));
+                }
+                Err(condition)
+            }
         }
     }
 

@@ -146,7 +146,7 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
     let configuration = project.configuration()?;
 
     if configuration.entry(name).is_none() {
-        return Err(configuration.entry_not_found(name));
+        return Err(configuration.entry_not_found(name, false));
     }
 
     let written = flags.items().map_err(|refused| at(refused, UPDATE))?;
@@ -175,7 +175,7 @@ pub(crate) fn remove(supplied: &Supplied<'_>, name: &str) -> Result<(), Error> {
     let configuration = project.configuration()?;
 
     if configuration.entry(name).is_none() {
-        return Err(configuration.entry_not_found(name));
+        return Err(configuration.entry_not_found(name, false));
     }
 
     let mut editor = project.editor()?;
@@ -238,7 +238,7 @@ pub(crate) fn show<W: Write>(
     let configuration = project(supplied)?.configuration()?;
 
     let Some(block) = configuration.entry(name) else {
-        return Err(configuration.entry_not_found(name));
+        return Err(configuration.entry_not_found(name, false));
     };
 
     let fields = redacted(block);

@@ -269,12 +269,13 @@ impl Configuration {
     }
 
     /// The condition `FR-GLOB-007` raises for an entry this file does not
-    /// define.
-    pub(crate) fn entry_not_found(&self, name: &str) -> Error {
+    /// define; `by_default` where `core.database` is what named it.
+    pub(crate) fn entry_not_found(&self, name: &str, by_default: bool) -> Error {
         Error::DatabaseEntryNotFound {
             name: name.to_owned(),
             file: self.file.clone(),
             nearest: self.nearest_entry(name),
+            by_default,
         }
     }
 }

@@ -1,8 +1,8 @@
 ---
 title: Project and Discovery
 status: approved
-last-reviewed: 2026-09-23
-related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md, errors-and-exit-codes.md]
+last-reviewed: 2026-09-24
+related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md, errors-and-exit-codes.md, global-flags.md, help-and-version.md]
 ---
 
 # Project and Discovery
@@ -337,6 +337,67 @@ tpl init [<path>]
   destination for it and for neither of the other three. `NFR-PERF-005` states
   that per command rather than leaving a reader to infer it from a clause
   written over the whole table.
+
+- **FR-PROJ-026**: WHEN `tpl init` is given `--tpl-dir`, the system SHALL
+  accept the flag, SHALL give it no effect, and SHALL write exactly one warning
+  line to stderr, per `FR-OUT-020`:
+
+  ```
+  warning: --tpl-dir has no effect on tpl init; it takes its destination as an operand: tpl init <path>
+  ```
+
+  1. **No effect.** The destination SHALL be the one `FR-PROJ-012` gives: the
+     positional path, or the current directory. The system SHALL NOT resolve,
+     examine or create the path `--tpl-dir` names, and SHALL apply to it none
+     of the checks of `FR-PROJ-008` through `FR-PROJ-011`. Those checks govern
+     a folder an invocation uses as its project, and `tpl init` uses none, per
+     `FR-PROJ-025`.
+  2. **The line.** It SHALL name `--tpl-dir`, SHALL state that the flag has no
+     effect on `tpl init`, and SHALL carry the form `tpl init <path>`. It SHALL
+     NOT reproduce the value given to `--tpl-dir`: the value is not examined,
+     so it is not written back.
+  3. **When.** The line SHALL be written once, after step 1 of `FR-ERR-006`
+     passes and before the destination is examined, so it is the first line on
+     stderr. It SHALL precede the message of `FR-PROJ-014` or `FR-PROJ-015`
+     and the warning of `FR-PROJ-016`. An invocation refused at step 1 —
+     `--tpl-dir` given twice, per `FR-CLI-014`, for instance — writes the
+     error of that step and no warning.
+  4. **Exit code.** The exit code SHALL be the one the same invocation without
+     `--tpl-dir` returns: `0`, or `73` per `FR-PROJ-014` and `FR-PROJ-015`.
+  5. **Verbosity.** The line is a warning, so `-q/--quiet` suppresses it, per
+     `FR-GLOB-015`. `-v/--verbose` does not change it.
+
+  ```
+  tpl init --tpl-dir /srv/shop/.tpl       warning, then 0 or 73 for ./.tpl
+  tpl init /srv/shop --tpl-dir x          warning, then 0 or 73 for /srv/shop/.tpl
+  tpl -q init --tpl-dir x                 no line; 0 or 73 for ./.tpl
+  ```
+
+  *Rationale.* `FR-GLOB-002` makes every global flag acceptable at every node,
+  and `BR-GLOB-001` states that a global flag may have no effect on a node and
+  is never refused alone. `FR-GLOB-007` applies the same rule to `-d` on a
+  command that requires no entry. What is added here is the line. `--tpl-dir`
+  names a location, and `tpl init` writes at one, so a caller that gave the
+  flag looks for the project where the flag pointed. Before this requirement
+  the invocation acted on the current directory in silence, and a `73` then
+  named a `.tpl` the caller had not pointed at. This is finding R-11 of the
+  re-audit recorded for rmp `#269`.
+
+  *Rejected: exiting `64`.* It refuses a global flag given alone, which
+  `FR-GLOB-002` and `BR-GLOB-001` forbid. It also breaks the case
+  `FR-CLI-024` protects: an agent that appends the same global flags to every
+  command it builds.
+
+  *Rejected: using `--tpl-dir` as the destination.* It would give `tpl init`
+  two ways to name one place and amend `FR-PROJ-012` and `FR-PROJ-017`. It
+  would also need a rule for a named path whose last segment is not `.tpl`.
+  `FR-PROJ-008` already points a caller from `--tpl-dir` to
+  `tpl init <parent>`, not to the flag.
+
+  *Accepted cost.* A caller that passes `-q`, or checks only the exit code,
+  does not see the line. `FR-PROJ-016` accepts the same cost for its warning,
+  and the help of `tpl init` states the fact where it is read, per
+  `FR-HELP-034`.
 
 - **FR-PROJ-017**: `tpl init` SHALL create exactly five artefacts:
 

@@ -415,15 +415,15 @@ const FUNCTIONS: &[Item] = &[
             required("table", Kind::String),
             required("name", Kind::String),
         ],
-        purpose: "Returns the column name of the table named table; using the result fails the \
-                  render when either is missing.",
+        purpose: "Returns the column called name in the table called table, as the same object \
+                  table.columns holds; using the result fails the render when either is missing.",
     },
     Item {
         name: "fail",
         signature: "fail(message)",
         operand: None,
         arguments: &[required("message", Kind::String)],
-        purpose: "Stops the render with exit 65, reporting message as the error.",
+        purpose: "Stops the render with exit 65; the error: line carries message.",
     },
 ];
 

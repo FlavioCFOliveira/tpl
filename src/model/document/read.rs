@@ -36,8 +36,8 @@ use crate::model::foreign_key::{ForeignKey, IncomingForeignKey};
 use crate::model::table::{Table, TableParts};
 
 /// The rule `FR-CAT-044` states, as the `cause` line names it.
-const KEYS_NAME_CARRIED_COLUMNS: &str =
-    "every column an index or a key of this table names must be one of its own columns";
+const KEYS_NAME_CARRIED_COLUMNS: &str = "breaks a rule: every column an index or a key of this table names must be one of its own \
+     columns";
 
 /// Reads the `database` object back as a model.
 ///

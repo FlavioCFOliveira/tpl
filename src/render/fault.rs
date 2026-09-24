@@ -37,7 +37,8 @@
 use std::error::Error as _;
 use std::path::Path;
 
-use crate::error::{Error, Position};
+use super::function::Failed;
+use crate::error::{Error, LookupKind, Position, RenderReason, Unresolved};
 
 /// The condition a failed compile is (`FR-TMPL-020`, `FR-RND-030`).
 pub(super) fn during_compile(root: &Path, name: &str, reported: &minijinja::Error) -> Error {
@@ -84,9 +85,134 @@ pub(super) fn during_render(name: &str, reported: &minijinja::Error) -> Error {
         template: template(name, reported),
         invoked: name.to_owned(),
         undefined: undefined(reported),
+        reason: failed(reported).map(|message| Box::new(RenderReason::Failed(message))),
         position: position(reported),
         chain: chain(reported),
     }
+}
+
+/// The lookup call an undefined expression begins with, WHERE its arguments
+/// are literals and the call, evaluated again against the same context,
+/// finds nothing.
+///
+/// `table("orders").name` is undefined either because there is no table
+/// `orders` or because a table has no member `name`; evaluating the call alone
+/// is what tells the two apart, with the very function the template called.
+/// An argument that is not a literal — `table(t.name)` — names a value only
+/// the template's own scope holds, so no claim is made.
+pub(super) fn unresolved(
+    engine: &minijinja::Environment<'_>,
+    context: &minijinja::Value,
+    expression: &str,
+) -> Option<Unresolved> {
+    let (function, rest) = expression.split_once('(')?;
+    let kind = match function {
+        "table" => LookupKind::Table,
+        "view" => LookupKind::View,
+        "routine" => LookupKind::Routine,
+        "column" => LookupKind::Column,
+        _ => return None,
+    };
+    let (arguments, length) = literals(rest)?;
+    let call = &expression[..function.len() + 1 + length];
+    let undefined = |call: &str| {
+        engine
+            .compile_expression(call)
+            .and_then(|compiled| compiled.eval(context))
+            .is_ok_and(|value| value.is_undefined())
+    };
+
+    if !undefined(call) {
+        return None;
+    }
+
+    match (kind, arguments.as_slice()) {
+        (LookupKind::Column, [table, name]) => {
+            let table_call = format!("table({})", quoted(table));
+            Some(if undefined(&table_call) {
+                Unresolved {
+                    call: call.to_owned(),
+                    kind: LookupKind::Table,
+                    name: table.clone(),
+                    table: None,
+                }
+            } else {
+                Unresolved {
+                    call: call.to_owned(),
+                    kind,
+                    name: name.clone(),
+                    table: Some(table.clone()),
+                }
+            })
+        }
+        (LookupKind::Column, _) | (_, []) => None,
+        (_, [name, ..]) => Some(Unresolved {
+            call: call.to_owned(),
+            kind,
+            name: name.clone(),
+            table: None,
+        }),
+    }
+}
+
+/// The string literals of an argument list, read from just after its opening
+/// parenthesis, and the length up to and including the closing one; [`None`]
+/// where an argument is anything other than a string literal.
+fn literals(rest: &str) -> Option<(Vec<String>, usize)> {
+    let bytes = rest.as_bytes();
+    let mut arguments = Vec::new();
+    let mut index = 0;
+
+    loop {
+        while bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
+            index += 1;
+        }
+        match bytes.get(index)? {
+            b')' if arguments.is_empty() => return Some((arguments, index + 1)),
+            quote @ (b'"' | b'\'') => {
+                let end = index + 1 + rest[index + 1..].find(char::from(*quote))?;
+                let literal = &rest[index + 1..end];
+                if literal.contains('\\') {
+                    return None;
+                }
+                arguments.push(literal.to_owned());
+                index = end + 1;
+            }
+            _ => return None,
+        }
+        while bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
+            index += 1;
+        }
+        match bytes.get(index)? {
+            b',' => index += 1,
+            b')' => return Some((arguments, index + 1)),
+            _ => return None,
+        }
+    }
+}
+
+/// A name as a string literal the engine reads back as the same name.
+fn quoted(name: &str) -> String {
+    if name.contains('"') {
+        format!("'{name}'")
+    } else {
+        format!("\"{name}\"")
+    }
+}
+
+/// The message the template gave `fail(message)`, where that call is what
+/// ended the render.
+fn failed(reported: &minijinja::Error) -> Option<String> {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(reported);
+
+    while let Some(error) = current {
+        if let Some(Failed(message)) = error.downcast_ref::<Failed>() {
+            return Some(message.clone());
+        }
+        current = error.source();
+    }
+
+    None
 }
 
 /// The source text of the expression the engine found undefined, where the
@@ -103,10 +229,60 @@ fn undefined(reported: &minijinja::Error) -> Option<String> {
     }
 
     let range = reported.range()?;
-    let expression = reported.template_source()?.get(range)?.trim();
+    let source = reported.template_source()?;
+    let start = expression_start(source.as_bytes(), range.start)?;
+    let expression = source.get(start..range.end)?.trim();
 
-    (!expression.is_empty() && !expression.contains('\n') && expression.len() <= 128)
-        .then(|| expression.to_owned())
+    // The engine's range can begin part-way into the expression — at
+    // `.nosuch.x` of `database.nosuch.x`, or at `("orders").name` of
+    // `table("orders").name` — so it is extended back to where the expression
+    // begins; one that still does not begin with a name is quoted not at all
+    // rather than as a fragment.
+    let named = expression
+        .bytes()
+        .next()
+        .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_');
+
+    (named && !expression.contains('\n') && expression.len() <= 128).then(|| expression.to_owned())
+}
+
+/// Where the expression that contains the byte at `start` begins: back over
+/// names, dots, and balanced call or subscript brackets.
+fn expression_start(source: &[u8], start: usize) -> Option<usize> {
+    let mut at = start.min(source.len());
+
+    while let Some(before) = at.checked_sub(1).map(|index| source[index]) {
+        match before {
+            byte if byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.') => at -= 1,
+            b')' | b']' => at = opening(source, at - 1)?,
+            _ => break,
+        }
+    }
+
+    Some(at)
+}
+
+/// The index of the bracket that `close` closes, reading backwards.
+fn opening(source: &[u8], close: usize) -> Option<usize> {
+    let (open, shut) = if source[close] == b')' {
+        (b'(', b')')
+    } else {
+        (b'[', b']')
+    };
+    let mut depth = 0_usize;
+    let mut index = close;
+
+    loop {
+        if source[index] == shut {
+            depth += 1;
+        } else if source[index] == open {
+            depth -= 1;
+            if depth == 0 {
+                return Some(index);
+            }
+        }
+        index = index.checked_sub(1)?;
+    }
 }
 
 /// Whether the engine stopped because the render exhausted its fuel
@@ -162,12 +338,34 @@ fn column(reported: &minijinja::Error) -> usize {
 }
 
 /// The chain of underlying engine errors, outermost first (`FR-ERR-011`).
+///
+/// The engine ends each message with ` (in <template>:<line>)`. Where that
+/// names the template and the line the diagnostic already states, it is cut:
+/// the `error:` line and the `cause` carry both, and a third copy adds
+/// nothing. A location naming another template — one an include reached — is
+/// kept, because it is said nowhere else.
 fn chain(reported: &minijinja::Error) -> Vec<String> {
-    let mut chain = vec![reported.to_string()];
+    let stated = reported
+        .name()
+        .zip(reported.line())
+        .map(|(name, line)| format!(" (in {name}:{line})"));
+    let located = |message: String| match &stated {
+        Some(suffix) => match message.strip_suffix(suffix.as_str()) {
+            Some(head) => head.to_owned(),
+            None => message,
+        },
+        None => message,
+    };
+
+    let mut chain = vec![located(reported.to_string())];
     let mut source = reported.source();
 
     while let Some(current) = source {
-        chain.push(current.to_string());
+        // The mark `fail` attaches repeats the message the error above it
+        // already carries.
+        if current.downcast_ref::<Failed>().is_none() {
+            chain.push(located(current.to_string()));
+        }
         source = current.source();
     }
 
@@ -177,7 +375,7 @@ fn chain(reported: &minijinja::Error) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{during_compile, during_render};
-    use crate::error::Error;
+    use crate::error::{Error, RenderReason};
     use std::path::Path;
 
     /// The engine the two mappings are exercised against.
@@ -294,5 +492,93 @@ mod tests {
 
         assert_eq!(undefined.as_deref(), Some("table.name"));
         assert_eq!(invoked, "t/needtable");
+    }
+
+    /// The engine with the lookups of `FR-ENV-020` registered, and the
+    /// fixture's context.
+    fn surfaced() -> (minijinja::Environment<'static>, minijinja::Value) {
+        let mut engine = engine();
+        crate::render::surface::register(&mut engine);
+
+        (engine, crate::render::fixture::context())
+    }
+
+    /// The condition a render of `source` against the fixture fails with.
+    fn failed_with(source: &str) -> Error {
+        let (engine, context) = surfaced();
+        let reported = engine
+            .render_named_str("t.jinja", source, &context)
+            .expect_err("the render fails");
+
+        during_render("t", &reported)
+    }
+
+    #[test]
+    fn r_02_an_undefined_expression_is_quoted_from_where_it_begins() {
+        // Finding R-02: the engine's range begins part-way into the
+        // expression, and the quote lost its first name.
+        for (source, expected) in [
+            ("{{ database.nosuch.x }}", Some("database.nosuch.x")),
+            ("{{ table('absent').name }}", Some("table('absent').name")),
+            ("{{ \"x\".y.z }}", None),
+        ] {
+            let Error::RenderFailed { undefined, .. } = failed_with(source) else {
+                panic!("{source} is a render failure");
+            };
+            assert_eq!(undefined.as_deref(), expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn r_02_a_lookup_that_found_nothing_is_told_apart_from_a_member_that_is_absent() {
+        use crate::error::{LookupKind, Unresolved};
+
+        let (engine, context) = surfaced();
+        let unresolved = |expression: &str| super::unresolved(&engine, &context, expression);
+
+        assert_eq!(
+            unresolved("table(\"absent\").name"),
+            Some(Unresolved {
+                call: "table(\"absent\")".to_owned(),
+                kind: LookupKind::Table,
+                name: "absent".to_owned(),
+                table: None,
+            })
+        );
+        assert_eq!(
+            unresolved("column('consignment', 'absent').name"),
+            Some(Unresolved {
+                call: "column('consignment', 'absent')".to_owned(),
+                kind: LookupKind::Column,
+                name: "absent".to_owned(),
+                table: Some("consignment".to_owned()),
+            })
+        );
+        assert_eq!(
+            unresolved("column('absent', 'reference')").map(|found| found.kind),
+            Some(LookupKind::Table)
+        );
+        // The table exists, so the member is what is absent.
+        assert_eq!(unresolved("table('consignment').nosuch"), None);
+        // An argument only the template's scope holds is not evaluated.
+        assert_eq!(unresolved("table(t.name).x"), None);
+        assert_eq!(unresolved("database.nosuch"), None);
+    }
+
+    #[test]
+    fn r_09_fail_carries_the_message_apart_and_the_chain_says_it_once() {
+        let Error::RenderFailed { reason, chain, .. } = failed_with("{{ fail('boom') }}") else {
+            panic!("fail is a render failure");
+        };
+
+        assert_eq!(
+            reason.as_deref(),
+            Some(&RenderReason::Failed("boom".to_owned()))
+        );
+        assert_eq!(chain.iter().filter(|line| line.contains("boom")).count(), 1);
+        assert!(
+            chain.iter().all(|line| !line.contains("(in t.jinja")),
+            "{chain:?}"
+        );
     }
 }

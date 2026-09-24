@@ -155,6 +155,12 @@ pub(crate) fn read<'a>(bytes: &'a str, path: &Path) -> Result<Database<'a>, Erro
 /// of the specification. The decoder states what it expected and where it
 /// stopped, and [`path_at`] turns where it stopped into the key path.
 fn fault(bytes: &str, reported: &serde_json::Error) -> ContextFault {
+    // No JSON text at all is its own fault: "the parser stopped at line 1,
+    // column 0" would state a position that tells the reader nothing.
+    if bytes.trim_start().is_empty() {
+        return ContextFault::Empty;
+    }
+
     match reported.classify() {
         Category::Data => structure(bytes, reported),
         // Syntax and Eof are both a document that is not well-formed JSON. Io
@@ -169,6 +175,12 @@ fn fault(bytes: &str, reported: &serde_json::Error) -> ContextFault {
 
 /// The structural fault the decoder reported, as a key path and what was
 /// expected there.
+///
+/// `expected` is written as a clause that follows the path — "is missing",
+/// "must be an array, and it is an object" — in the vocabulary of JSON and
+/// not of the decoder: `map`, `sequence` and `struct TableShape` are the
+/// decoder's words for what a reader of the document calls an object and an
+/// array.
 fn structure(bytes: &str, reported: &serde_json::Error) -> ContextFault {
     let offset = offset(bytes, reported.line(), reported.column());
     let (mut at, closed) = path_at(bytes, offset);
@@ -187,18 +199,64 @@ fn structure(bytes: &str, reported: &serde_json::Error) -> ContextFault {
             } else {
                 format!("{at}.{field}")
             };
-            "a required key is absent".to_owned()
+            MISSING.to_owned()
         }
-        _ => match message.strip_prefix("invalid type: ") {
-            Some(rest) => match rest.split_once(", expected ") {
-                Some((found, wanted)) => format!("{wanted} was expected, and {found} was found"),
-                None => rest.to_owned(),
-            },
-            None => message.to_owned(),
-        },
+        // The top level is the envelope, whatever the decoder says it found.
+        _ if at.is_empty() => ENVELOPE.to_owned(),
+        _ => expectation(message),
     };
 
     ContextFault::Structure { at, expected }
+}
+
+/// What [`structure`] says of a required key the document does not carry.
+const MISSING: &str = "is missing; a context document requires it";
+
+/// What [`structure`] says of a top level that is not the envelope.
+const ENVELOPE: &str =
+    "the top level must be an object with the keys schema_version, source and data";
+
+/// The decoder's message for a value it refused, as a clause that follows the
+/// value's path.
+fn expectation(message: &str) -> String {
+    if let Some(rest) = message.strip_prefix("invalid type: ")
+        && let Some((found, wanted)) = rest.split_once(", expected ")
+    {
+        return format!(
+            "must be {}, but it is {}",
+            json_term(wanted),
+            json_term(found)
+        );
+    }
+
+    // "invalid length 0, expected struct TableShape with 13 elements" is an
+    // array given where an object is expected.
+    if let Some(rest) = message.strip_prefix("invalid length ")
+        && rest.contains("expected struct ")
+    {
+        return "must be an object, but it is an array".to_owned();
+    }
+
+    // "unknown variant `bogus`, expected one of `server`, `cache`".
+    if let Some(rest) = message.strip_prefix("unknown variant `")
+        && let Some((found, allowed)) = rest.split_once("`, expected ")
+    {
+        let allowed = allowed.trim_start_matches("one of ").replace('`', "");
+        return format!("must be one of {allowed}, but it is '{found}'");
+    }
+
+    format!("does not match the contract: {message}")
+}
+
+/// A decoder's name for a kind of value, as JSON calls it.
+fn json_term(decoder: &str) -> String {
+    match decoder {
+        "map" | "a map" => "an object".to_owned(),
+        "sequence" | "a sequence" => "an array".to_owned(),
+        "null" => "null".to_owned(),
+        other if other.starts_with("struct ") => "an object".to_owned(),
+        other => other.to_owned(),
+    }
 }
 
 /// The byte offset of a one-based line and column the decoder reported.
@@ -275,6 +333,18 @@ fn path_at(bytes: &str, offset: usize) -> (String, bool) {
             _ => {}
         }
         index += 1;
+    }
+
+    // The decoder refuses an object or an array where it peeks the opening
+    // bracket, and reports the offset before that bracket rather than after a
+    // value: the member at fault is then the one whose value opens there — the
+    // key just read, or the array element being read — and not the value
+    // before it.
+    let opens = text
+        .get(index..)
+        .and_then(|rest| rest.iter().find(|byte| !byte.is_ascii_whitespace()));
+    if matches!(opens, Some(b'{' | b'[')) {
+        last = (render(&stack), false);
     }
 
     last
@@ -837,13 +907,42 @@ mod tests {
     }
 
     #[test]
+    fn r_01_an_object_or_an_array_refused_at_its_bracket_is_named_by_its_own_path() {
+        // Finding R-01 of the re-audit for rmp #269: the decoder reports the
+        // offset before the bracket, and the path was the member before it.
+        for collection in ["tables", "views", "routines"] {
+            let mut document = editable();
+            document["data"]["database"][collection] = serde_json::json!({});
+            let ContextFault::Structure { at, expected } = refused(&document.to_string()) else {
+                panic!("an object in place of an array is a structural fault");
+            };
+            assert_eq!(at, format!("data.database.{collection}"));
+            assert_eq!(expected, "must be an array, but it is an object");
+        }
+
+        let mut document = editable();
+        document["data"]["database"]["tables"] = serde_json::json!([[]]);
+        let ContextFault::Structure { at, expected } = refused(&document.to_string()) else {
+            panic!("an array in place of an object is a structural fault");
+        };
+        assert_eq!(at, "data.database.tables[0]");
+        assert_eq!(expected, "must be an object, but it is an array");
+    }
+
+    #[test]
+    fn r_06_no_json_text_at_all_is_its_own_fault() {
+        assert_eq!(refused(""), ContextFault::Empty);
+        assert_eq!(refused(" \n"), ContextFault::Empty);
+    }
+
+    #[test]
     fn fr_err_034_a_missing_key_is_named_by_its_path_and_a_wrong_type_by_what_was_expected() {
         let absent = refused(r#"{"schema_version":1,"source":"server","data":{}}"#);
         let ContextFault::Structure { at, expected } = absent else {
             panic!("an absent key is a structural fault");
         };
         assert_eq!(at, "data.database");
-        assert_eq!(expected, "a required key is absent");
+        assert_eq!(expected, "is missing; a context document requires it");
 
         let mut document = editable();
         document["data"]["database"]["name"] = serde_json::json!(7);
@@ -851,6 +950,9 @@ mod tests {
             panic!("a wrong type is a structural fault");
         };
         assert_eq!(at, "data.database.name");
-        assert!(expected.contains("was expected"), "{expected}");
+        assert!(
+            expected.starts_with("must be a string, but it is"),
+            "{expected}"
+        );
     }
 }
