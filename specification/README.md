@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-four editions. All are in force;
+The specification has been written in fifty-five editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4560,6 +4560,50 @@ stderr only, reads nothing under `.tpl/.cache/` and deletes nothing, so
 `FR-CFG-004`, `FR-CACHE-011` and `BR-CACHE-004` hold. The root `README.md`
 makes no statement about what `tpl cfg set` or `tpl cfg unset` writes to
 stderr, so the fifth validation rule owes nothing.
+
+### Fifty-fifth edition — the whole database block, and a warning that states only what it knows
+
+The fourteenth re-audit of rmp `#263`, recorded for rmp `#290`, found that
+`tpl cfg unset database` deletes every entry with exit `0` and nothing on
+stderr, leaving each entry's cache to be read by an entry added later under
+the same name (finding AE-01), and that the line of `FR-CFG-053` states as
+fact a repoint and a cache the command cannot know of (finding AE-02).
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Unsetting the whole block warns for every entry** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-052` is amended: `tpl cfg unset
+  database` that exits `0` writes one line per deleted entry, in file order,
+  each with its own `tpl -d NAME cache clean` carrying the invocation's
+  `--tpl-dir`, with no access to the cache; `-q` suppresses them. Refusing
+  the command was rejected by the coordinator of rmp `#290`. `FR-CFG-011`
+  and `FR-CFG-053` gain a clause that cites it.
+- **The repoint line is true in every case** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-053` item 1 is amended: the
+  line says the entry may now point at another server and that any data
+  cached for it is kept and still served, whether the entry is new, its value
+  unchanged, or no cache exists. The command carried and every other item are
+  unchanged.
+- **The help states the fact** —
+  [help-and-version.md](help-and-version.md). The `tpl cfg unset` row of
+  `FR-HELP-036` gains a clause for the key `database`, and the rows for
+  `tpl cfg database remove`, `tpl cfg set`, `tpl cfg database add` and
+  `tpl cfg database update` say "any data cached", so that each holds where
+  no cache exists.
+- **The rule on repointing records both changes** —
+  [cache-commands.md](cache-commands.md). `BR-CACHE-003` carries a note.
+
+`FR-CFG-004`, `FR-CFG-023`, `FR-CFG-050`, `FR-CACHE-002`, `FR-CACHE-011`,
+`FR-CACHE-041`, `BR-CACHE-004`, `FR-CONF-048`, `FR-ERR-022`, `FR-ERR-043`,
+`FR-OUT-020`, `FR-OUT-023` and `FR-GLOB-015` were read against the changes.
+None conflicts with them, so none is amended: `FR-CFG-023` already clears
+`core.database` whenever the entry it names is deleted, by any command. The
+root `README.md` makes no statement about what `tpl cfg unset database`
+writes, and does not quote the line of `FR-CFG-053`, so the fifth validation
+rule owes nothing.
 
 ### Still out of scope
 

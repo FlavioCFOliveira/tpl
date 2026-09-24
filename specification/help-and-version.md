@@ -325,11 +325,11 @@ alongside the command it documents.
 
   | Command | Fact stated |
   |---|---|
-  | `tpl cfg database remove` | Data cached for the entry under `.tpl/.cache/` is kept; an entry added later under the same name reads it; `tpl -d NAME cache clean` removes it, also after the entry is gone |
-  | `tpl cfg set` | Writing `host`, `port`, `user`, `database`, `tls` or `dsn` of an entry keeps the data cached for it under `.tpl/.cache/NAME/`, and reads still serve it; `tpl -d NAME cache clean` removes it |
-  | `tpl cfg unset` | Where the key is the block of a whole entry, the fact stated for `tpl cfg database remove`; where the key is `host`, `port`, `user`, `database`, `tls` or `dsn` of an entry, the fact stated for `tpl cfg set`, with removing in place of writing |
-  | `tpl cfg database add` | Data cached under `.tpl/.cache/NAME/` by an earlier entry of that name is read as it is; `tpl -d NAME cache clean` removes it before the first read |
-  | `tpl cfg database update` | Changing `--host`, `--port`, `--user`, `--schema`, `--tls` or `--dsn` keeps the data cached for the entry, and reads still serve it; `tpl -d NAME cache clean` removes it |
+  | `tpl cfg database remove` | Any data cached for the entry under `.tpl/.cache/NAME/` is kept; an entry added later under the same name reads it; clear it with `tpl -d NAME cache clean`, also after the entry is gone |
+  | `tpl cfg set` | After writing `host`, `port`, `user`, `database`, `tls` or `dsn` of an entry, any data cached for it under `.tpl/.cache/NAME/` is kept and still served; clear it with `tpl -d NAME cache clean` |
+  | `tpl cfg unset` | Where the key is the block of a whole entry, the fact stated for `tpl cfg database remove`; where the key is `database`, every entry is removed, and the same fact holds for each; where the key is `host`, `port`, `user`, `database`, `tls` or `dsn` of an entry, the fact stated for `tpl cfg set`, with removing in place of writing |
+  | `tpl cfg database add` | Any data cached under `.tpl/.cache/NAME/` by an earlier entry of that name is read as it is; clear it with `tpl -d NAME cache clean` before the first read |
+  | `tpl cfg database update` | After changing `--host`, `--port`, `--user`, `--schema`, `--tls` or `--dsn`, any data cached for the entry is kept and still served; clear it with `tpl -d NAME cache clean` |
   | `tpl cache clean` | Without an object flag, it also removes the data cached for a name that no entry of `.tpl/.cfg` declares any more |
 
   Every command the table names SHALL carry the entry name as `-d NAME` in
@@ -352,6 +352,17 @@ alongside the command it documents.
   line for those two commands, and their help said nothing about the cache
   of an entry whose field they change. This is finding AD-01 of the
   thirteenth re-audit of rmp `#263`, recorded for rmp `#289`.
+
+  *Amended in the fifty-fifth edition: the `tpl cfg unset` row gains a
+  clause for the key `database`.* `FR-CFG-052` now writes one line for each
+  entry that `tpl cfg unset database` deletes, and the help named only the
+  block of one entry. This is finding AE-01 of the fourteenth re-audit of
+  rmp `#263`, recorded for rmp `#290`. The rows for `tpl cfg database
+  remove`, `tpl cfg set`, `tpl cfg database add` and `tpl cfg database
+  update` now say "any data cached", so that each holds where no cache
+  exists, as the line of `FR-CFG-053` does after finding AE-02; the
+  `tpl cfg unset` row inherits the wording by reference. The `tpl cache
+  clean` row states no cache as present and is unchanged.
 
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help

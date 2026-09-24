@@ -220,6 +220,14 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
     };
 
     let mut editor = project.editor()?;
+    // FR-CFG-052 item 6: every entry the block `database` holds, in the order
+    // of `.tpl/.cfg` before the rewrite, read from the document that is about
+    // to lose them.
+    let removed = if matches!(target, Target::Databases) {
+        editor.entry_names()
+    } else {
+        Vec::new()
+    };
     if !editor.remove(&target) {
         return Err(configuration.key_not_found(key));
     }
@@ -238,7 +246,8 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
     // FR-CFG-050: the one key that holds five facts. The block of the entry
     // writes no such line: the caller named the whole entry, and FR-CFG-052
     // writes the line of a deleted entry instead, without looking at the
-    // cache it names. FR-CFG-053 follows for a field that changes where the
+    // cache it names, once for each entry where the block is `database`
+    // (item 6). FR-CFG-053 follows for a field that changes where the
     // entry points, after the line of FR-CFG-050 where both are written.
     match &target {
         Target::Key(Key::Entry { entry, field }) => {
@@ -250,7 +259,12 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
             }
         }
         Target::Entry(entry) => crate::diagnostics::emit::entry_removed(entry),
-        Target::Core | Target::Databases | Target::Key(_) => {}
+        Target::Databases => {
+            for entry in &removed {
+                crate::diagnostics::emit::entry_removed(entry);
+            }
+        }
+        Target::Core | Target::Key(_) => {}
     }
 
     Ok(())

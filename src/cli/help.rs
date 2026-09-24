@@ -2831,9 +2831,9 @@ const ENTRIES: [Entry; 35] = [
                  = \"${SHOP_PORT}\".",
             ),
             Block::Prose(
-                "Writing host, port, user, database, tls or dsn of an entry keeps the data \
-                 cached for it under .tpl/.cache/NAME/, and reads still serve it; tpl -d NAME \
-                 cache clean removes it.",
+                "After writing host, port, user, database, tls or dsn of an entry, any data \
+                 cached for it under .tpl/.cache/NAME/ is kept and still served; clear it with \
+                 tpl -d NAME cache clean.",
             ),
         ],
         touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
@@ -2866,12 +2866,13 @@ const ENTRIES: [Entry; 35] = [
                       removes that field; database.shop removes the whole entry, and also clears \
                       core.database when it names that entry.",
         blocks: &[Block::Prose(
-            "Where KEY is a whole entry, database.NAME, data cached for the entry under \
-             .tpl/.cache/NAME/ is kept, and an entry added later under the same name reads it; \
-             tpl -d NAME cache clean removes it, also after the entry is gone. Where KEY is \
-             host, port, user, database, tls or dsn of an entry, removing it keeps the data \
-             cached for the entry under .tpl/.cache/NAME/, and reads still serve it; tpl -d \
-             NAME cache clean removes it.",
+            "Where KEY is a whole entry, database.NAME, any data cached for the entry under \
+             .tpl/.cache/NAME/ is kept; an entry added later under the same name reads it; \
+             clear it with tpl -d NAME cache clean, also after the entry is gone. Where KEY is \
+             database, every entry is removed, and the same holds for each entry. Where KEY is \
+             host, port, user, database, tls or dsn of an entry, after removing it any data \
+             cached for the entry under .tpl/.cache/NAME/ is kept and still served; clear it \
+             with tpl -d NAME cache clean.",
         )],
         touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
         examples: &[
@@ -2951,8 +2952,8 @@ const ENTRIES: [Entry; 35] = [
                  database.NAME.password '${SHOP_PASSWORD}'.",
             ),
             Block::Prose(
-                "Data cached under .tpl/.cache/NAME/ by an earlier entry of that name is read as \
-                 it is; run tpl -d NAME cache clean before the first read to remove it.",
+                "Any data cached under .tpl/.cache/NAME/ by an earlier entry of that name is \
+                 read as it is; clear it with tpl -d NAME cache clean before the first read.",
             ),
         ],
         touches: Some(local_only(
@@ -3068,9 +3069,10 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["cfg", "database", "update"],
         description: "Changes the fields of one database entry that the flags given name; every \
-                      other field keeps its value, and at least one flag is required. Changing \
-                      --host, --port, --user, --schema, --tls or --dsn keeps the data cached for \
-                      the entry, and reads still serve it; tpl -d NAME cache clean removes it.",
+                      other field keeps its value, and at least one flag is required. After \
+                      changing --host, --port, --user, --schema, --tls or --dsn, any data cached \
+                      for the entry is kept and still served; clear it with tpl -d NAME cache \
+                      clean.",
         blocks: &[Block::Prose(
             "A value given here is visible to other users in the process list while tpl runs, \
              so give a password through --password-command, as a reference such as \
@@ -3125,9 +3127,9 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["cfg", "database", "remove"],
         description: "Deletes one database entry from .tpl/.cfg. When core.database names it, \
-                      core.database is cleared too. Data cached for the entry under \
-                      .tpl/.cache/NAME/ is kept, and an entry added later under the same name \
-                      reads it; tpl -d NAME cache clean removes it, also after the entry is gone.",
+                      core.database is cleared too. Any data cached for the entry under \
+                      .tpl/.cache/NAME/ is kept; an entry added later under the same name reads \
+                      it; clear it with tpl -d NAME cache clean, also after the entry is gone.",
         blocks: &[],
         touches: Some(local_only(
             "Needs the entry that NAME names; -d and core.database are not used.",

@@ -127,6 +127,26 @@ impl Editor {
             .is_some_and(|table| table.contains_key(name))
     }
 
+    /// The name of every database entry the document defines, in the order
+    /// the entries appear in the file.
+    ///
+    /// `toml_edit` keeps the order the file wrote, which the read path's
+    /// `NFR-DET-002` order does not; item 6 of `FR-CFG-052` asks for the
+    /// file's.
+    pub(crate) fn entry_names(&self) -> Vec<String> {
+        self.document
+            .get(DATABASE)
+            .and_then(Item::as_table_like)
+            .map(|table| {
+                table
+                    .iter()
+                    .filter(|(_, item)| item.is_table_like())
+                    .map(|(name, _)| name.to_owned())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Writes `item` under `key`, creating the sections it sits in.
     ///
     /// A value that replaces one the file already carried keeps that value's

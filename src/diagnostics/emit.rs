@@ -257,12 +257,14 @@ fn entry_removed_line(entry: &str, project: Option<Option<&str>>) -> String {
 }
 
 /// Warns that `tpl cfg database update`, `tpl cfg set` or `tpl cfg unset`
-/// repointed an entry and left the data cached for it (`FR-CFG-053`).
+/// wrote a field that may repoint an entry, and that any data cached for it is
+/// kept (`FR-CFG-053`).
 ///
 /// It is written after the rewrite succeeded, and after the line of
 /// `FR-CFG-051` or `FR-CFG-050` where the invocation writes both. Nothing under
-/// `.tpl/.cache/` is read to decide it. The command it carries carries the
-/// caller's `--tpl-dir`, per item 2.
+/// `.tpl/.cache/` is read to decide it, and no value is compared, so the line
+/// states neither a repoint nor a cache as fact (item 1). The command it
+/// carries carries the caller's `--tpl-dir`, per item 2.
 pub(crate) fn entry_repointed(entry: &str) {
     if !emits(Level::Warnings) {
         return;
@@ -279,8 +281,8 @@ pub(crate) fn entry_repointed(entry: &str) {
 fn entry_repointed_line(entry: &str, project: Option<Option<&str>>) -> String {
     let (command, placeholder) = clean_command(entry, project);
     format!(
-        "{WARNING_TOKEN} entry '{entry}' was repointed; data cached for it under \
-         .tpl/.cache/{entry}/ is kept, and reads still serve it; clear it with: \
+        "{WARNING_TOKEN} entry '{entry}' may now point at another server; any data cached for \
+         it under .tpl/.cache/{entry}/ is kept and still served; clear it with: \
          {command}{placeholder}"
     )
 }
@@ -475,9 +477,13 @@ mod tests {
     fn fr_cfg_053_the_warning_names_the_entry_its_cache_and_the_clean_that_removes_it() {
         assert_eq!(
             entry_repointed_line("shop", None),
-            "warning: entry 'shop' was repointed; data cached for it under .tpl/.cache/shop/ is \
-             kept, and reads still serve it; clear it with: tpl -d shop cache clean"
+            "warning: entry 'shop' may now point at another server; any data cached for it under \
+             .tpl/.cache/shop/ is kept and still served; clear it with: tpl -d shop cache clean"
         );
+        // Item 1: nothing the command cannot know is stated as fact.
+        let line = entry_repointed_line("shop", None);
+        assert!(!line.contains("was repointed"), "{line}");
+        assert!(!line.contains("; data cached"), "{line}");
         assert!(
             entry_repointed_line("shop", Some(Some("../w/.tpl")))
                 .ends_with("clear it with: tpl --tpl-dir ../w/.tpl -d shop cache clean")

@@ -1869,8 +1869,8 @@ fn entry_removed(name: &str) -> String {
 /// The line of `FR-CFG-053` for the repointed entry `name`.
 fn entry_repointed(name: &str) -> String {
     format!(
-        "warning: entry '{name}' was repointed; data cached for it under .tpl/.cache/{name}/ is \
-         kept, and reads still serve it; clear it with: tpl -d {name} cache clean"
+        "warning: entry '{name}' may now point at another server; any data cached for it under \
+         .tpl/.cache/{name}/ is kept and still served; clear it with: tpl -d {name} cache clean"
     )
 }
 
@@ -4767,6 +4767,100 @@ fn fr_cfg_052_deleting_an_entry_says_its_cache_is_kept_and_leaves_the_cache_alon
 }
 
 #[test]
+fn fr_cfg_052_unsetting_the_database_block_warns_once_for_each_entry_in_file_order() {
+    // Finding AE-01 of the fourteenth re-audit of rmp #263; item 6.
+    let sandbox = Sandbox::new();
+    // `shop` before `crm`: the file's order, not the sorted one.
+    let two = "[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n\n[database.crm]\n\
+               host = \"h\"\n";
+
+    sandbox.project(two);
+    let cache = cache_for(&sandbox, "shop");
+    let printed = sandbox.run(&["cfg", "unset", "database"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(printed.stdout.is_empty());
+    assert_eq!(
+        stderr(&printed),
+        format!("{}\n{}\n", entry_removed("shop"), entry_removed("crm"))
+    );
+    // BR-CACHE-004: the cache is not touched, and none is created for `crm`.
+    assert_eq!(
+        std::fs::read_to_string(cache.join("meta.json")).expect("the cache is kept"),
+        "{}\n"
+    );
+    assert!(!sandbox.path(".tpl/.cache/crm").exists());
+    // FR-CFG-023 clears the reference in the same rewrite.
+    let file = String::from_utf8(sandbox.configuration()).expect("the file is UTF-8");
+    assert!(!file.contains("database"), "{file}");
+
+    // Item 2 for every line: the caller's --tpl-dir.
+    sandbox.project_at("w", two);
+    let outside = sandbox.directory("elsewhere");
+    let printed = sandbox.run_from(
+        &outside,
+        &[],
+        &["--tpl-dir", "../w/.tpl", "cfg", "unset", "database"],
+    );
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    let written = stderr(&printed);
+    let lines = written.lines().collect::<Vec<_>>();
+    assert_eq!(lines.len(), 2, "{written}");
+    assert!(
+        lines[0].ends_with("clear it with: tpl --tpl-dir ../w/.tpl -d shop cache clean"),
+        "{written}"
+    );
+    assert!(
+        lines[1].ends_with("clear it with: tpl --tpl-dir ../w/.tpl -d crm cache clean"),
+        "{written}"
+    );
+
+    // Item 4: -q suppresses every line.
+    sandbox.project(two);
+    let printed = sandbox.run(&["-q", "cfg", "unset", "database"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+
+    // A block that held no entry writes no line.
+    sandbox.project("[core]\n\n[database]\n");
+    let printed = sandbox.run(&["cfg", "unset", "database"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+}
+
+#[test]
+fn fr_cfg_053_the_line_is_true_for_a_new_entry_an_unchanged_value_and_no_cache() {
+    // Finding AE-02 of the fourteenth re-audit of rmp #263; item 1.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n\n[database.shop]\nhost = \"h\"\n");
+
+    for arguments in [
+        // The entry did not exist; `cfg set` creates it.
+        &["cfg", "set", "database.fresh.host", "h"][..],
+        // The value the file already holds.
+        &["cfg", "set", "database.shop.host", "h"][..],
+        &["cfg", "database", "update", "shop", "--host", "h"][..],
+    ] {
+        let printed = sandbox.run(arguments);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        let written = stderr(&printed);
+        let entry = if arguments.contains(&"database.fresh.host") {
+            "fresh"
+        } else {
+            "shop"
+        };
+        assert_eq!(
+            written,
+            format!("{}\n", entry_repointed(entry)),
+            "{arguments:?}"
+        );
+        assert!(!written.contains("was repointed"), "{written}");
+        assert!(written.contains("any data cached"), "{written}");
+    }
+    // No cache exists, and none was created.
+    assert!(!sandbox.path(".tpl/.cache").exists());
+}
+
+#[test]
 fn fr_cfg_053_repointing_an_entry_says_its_cache_is_kept() {
     // Finding AC-01 of the twelfth re-audit of rmp #263.
     let sandbox = Sandbox::new();
@@ -5225,42 +5319,46 @@ fn fr_cache_041_a_refused_removal_is_74_with_no_warning() {
 #[test]
 fn fr_help_036_each_description_states_the_cache_fact_with_d_name() {
     // Findings AC-01 and AC-03 of the twelfth re-audit of rmp #263, and AD-01
-    // of the thirteenth.
+    // of the thirteenth; AE-01 and AE-02 of the fourteenth.
     let sandbox = Sandbox::new();
-    let facts: [(&[&str], &str); 7] = [
+    let facts: [(&[&str], &str); 8] = [
         (
             &["cfg", "set"],
-            "Writing host, port, user, database, tls or dsn of an entry keeps the data cached \
-             for it under .tpl/.cache/NAME/, and reads still serve it; tpl -d NAME cache clean \
-             removes it.",
+            "After writing host, port, user, database, tls or dsn of an entry, any data cached \
+             for it under .tpl/.cache/NAME/ is kept and still served; clear it with tpl -d NAME \
+             cache clean.",
         ),
         (
             &["cfg", "unset"],
-            "Where KEY is host, port, user, database, tls or dsn of an entry, removing it keeps \
-             the data cached for the entry under .tpl/.cache/NAME/, and reads still serve it; \
-             tpl -d NAME cache clean removes it.",
+            "Where KEY is host, port, user, database, tls or dsn of an entry, after removing it \
+             any data cached for the entry under .tpl/.cache/NAME/ is kept and still served; \
+             clear it with tpl -d NAME cache clean.",
         ),
         (
             &["cfg", "database", "remove"],
-            "Data cached for the entry under .tpl/.cache/NAME/ is kept, and an entry added later \
-             under the same name reads it; tpl -d NAME cache clean removes it, also after the \
+            "Any data cached for the entry under .tpl/.cache/NAME/ is kept; an entry added later \
+             under the same name reads it; clear it with tpl -d NAME cache clean, also after the \
              entry is gone.",
         ),
         (
             &["cfg", "unset"],
-            "Where KEY is a whole entry, database.NAME, data cached for the entry under \
-             .tpl/.cache/NAME/ is kept, and an entry added later under the same name reads it; \
-             tpl -d NAME cache clean removes it, also after the entry is gone.",
+            "Where KEY is a whole entry, database.NAME, any data cached for the entry under \
+             .tpl/.cache/NAME/ is kept; an entry added later under the same name reads it; clear \
+             it with tpl -d NAME cache clean, also after the entry is gone.",
+        ),
+        (
+            &["cfg", "unset"],
+            "Where KEY is database, every entry is removed, and the same holds for each entry.",
         ),
         (
             &["cfg", "database", "add"],
-            "Data cached under .tpl/.cache/NAME/ by an earlier entry of that name is read as it \
-             is; run tpl -d NAME cache clean before the first read to remove it.",
+            "Any data cached under .tpl/.cache/NAME/ by an earlier entry of that name is read as \
+             it is; clear it with tpl -d NAME cache clean before the first read.",
         ),
         (
             &["cfg", "database", "update"],
-            "Changing --host, --port, --user, --schema, --tls or --dsn keeps the data cached for \
-             the entry, and reads still serve it; tpl -d NAME cache clean removes it.",
+            "After changing --host, --port, --user, --schema, --tls or --dsn, any data cached \
+             for the entry is kept and still served; clear it with tpl -d NAME cache clean.",
         ),
         (
             &["cache", "clean"],

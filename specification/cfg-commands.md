@@ -166,8 +166,8 @@ tpl cfg database test   <name>
 - **FR-CFG-011**: `tpl cfg unset <key>` SHALL accept either a leaf key, such as
   `database.shop.host`, or a whole block, such as `database.shop`, and SHALL
   delete what it is given. `FR-CFG-023` states the one further change a
-  deletion makes, `FR-CFG-052` the line written when a whole entry is
-  deleted, and `FR-CFG-053` the line written when the key holds a field that
+  deletion makes, `FR-CFG-052` the line written for each whole entry
+  deleted, including every entry the block `database` holds, and `FR-CFG-053` the line written when the key holds a field that
   changes where the entry points.
 
 - **FR-CFG-050**: WHEN `tpl cfg unset` deletes the key
@@ -443,16 +443,21 @@ tpl cfg database test   <name>
 
   ```
   tpl cfg database update shop --host db-staging.example.com
-  warning: entry 'shop' was repointed; data cached for it under .tpl/.cache/shop/ is kept, and reads still serve it; clear it with: tpl -d shop cache clean
+  warning: entry 'shop' may now point at another server; any data cached for it under .tpl/.cache/shop/ is kept and still served; clear it with: tpl -d shop cache clean
 
   tpl cfg set database.shop.host db-staging.example.com
-  warning: entry 'shop' was repointed; data cached for it under .tpl/.cache/shop/ is kept, and reads still serve it; clear it with: tpl -d shop cache clean
+  warning: entry 'shop' may now point at another server; any data cached for it under .tpl/.cache/shop/ is kept and still served; clear it with: tpl -d shop cache clean
   ```
 
-  1. **Content.** The line SHALL name the entry, SHALL state that data cached
-     for it under `.tpl/.cache/<name>/` is kept and that reads still serve it,
-     and SHALL carry the command `tpl -d <name> cache clean`, with the entry
-     name in place of `<name>`. The name has passed `FR-CONF-048`: at step 3
+  1. **Content.** The line SHALL name the entry, SHALL state that the entry
+     may now point at another server, SHALL state that any data cached for
+     it under `.tpl/.cache/<name>/` is kept and still served, and SHALL carry
+     the command `tpl -d <name> cache clean`, with the entry name in place of
+     `<name>`. The line SHALL NOT state as fact that the entry was repointed,
+     that it existed before the invocation, or that a cache exists for it:
+     items 3 and 7 bar the system from knowing any of the three, and the
+     line SHALL be true whether the entry is new, its value is unchanged, or
+     no cache exists. The name has passed `FR-CONF-048`: at step 3
      of `FR-ERR-006` where the entry is read from `.tpl/.cfg`, and on the
      command line where it is the `<name>` segment of a key given to
      `tpl cfg set`. It is reproduced under `FR-ERR-022`.
@@ -476,8 +481,8 @@ tpl cfg database test   <name>
   invocation given only `--password-command`, `--ca-file` or `--ca-path`, and
   a `tpl cfg set` or `tpl cfg unset` given any key other than the six above,
   writes no such line: those fields do not change where the entry points.
-  `tpl cfg unset` given the block `database.<name>` writes the line of
-  `FR-CFG-052` instead.
+  `tpl cfg unset` given the block `database.<name>`, or the block `database`,
+  writes the lines of `FR-CFG-052` instead.
 
   The wording of the line is the implementation's. The example fixes the
   facts named and the command carried.
@@ -500,7 +505,8 @@ tpl cfg database test   <name>
   spare costs one line of stderr.
 
   *Accepted cost.* A caller that passes `-q`, or checks only the exit code,
-  does not see the line, and a cache the line names may not exist.
+  does not see the line, and a cache the line names may not exist; the line
+  says "any data" so that it stays true where none does.
 
   *Amended within the fifty-third edition: item 2 is new.* The command the
   line carried was `tpl -d <name> cache clean` whatever `--tpl-dir` the
@@ -526,6 +532,20 @@ tpl cfg database test   <name>
   before the invocation.* The facts the line states hold for any entry of
   that name, per `FR-CACHE-002`, and the extra condition would spare a line
   that is still true.
+
+  *Amended in the fifty-fifth edition: item 1 states what is known.* The line
+  said that the entry "was repointed" and that data cached for it "is kept",
+  and wrote so for `tpl cfg set` of an entry that did not exist before, for
+  a second identical `tpl cfg set`, and for an entry with no cache: three
+  cases in which items 3 and 7 leave the system unable to know either fact.
+  The line now says the entry may point at another server and that any data
+  cached for it is kept and still served. This is finding AE-02 of the
+  fourteenth re-audit of rmp `#263`, recorded for rmp `#290`. The command
+  carried, its `--tpl-dir` rule, the bar on cache access, the order, the
+  verbosity and the exit code are unchanged.
+  *Rejected: comparing values or testing for the cache so that the old
+  wording is true when written.* Items 3 and 7 reject both, for the reasons
+  stated above.
 
 - **BR-CFG-001**: `add` creates and `update` changes. Neither silently does the
   other's job: there is no `--force` that replaces wholesale, and no idempotent
@@ -681,10 +701,12 @@ tpl cfg database test   <name>
   prevent.
 
 - **FR-CFG-052**: WHEN a `cfg` command deletes a database entry —
-  `tpl cfg database remove <name>`, or `tpl cfg unset` given the block
-  `database.<name>` — and exits `0`, the system SHALL write exactly one
-  warning line to stderr, per `FR-OUT-020`, after the rewrite of `.tpl/.cfg`
-  succeeds, and SHALL write nothing to stdout, per `FR-OUT-023`.
+  `tpl cfg database remove <name>`, `tpl cfg unset` given the block
+  `database.<name>`, or `tpl cfg unset` given the block `database`, which
+  deletes every entry — and exits `0`, the system SHALL write exactly one
+  warning line to stderr for each entry deleted, per `FR-OUT-020`, after the
+  rewrite of `.tpl/.cfg` succeeds, and SHALL write nothing to stdout, per
+  `FR-OUT-023`.
 
   ```
   tpl cfg database remove shop
@@ -719,6 +741,18 @@ tpl cfg database test   <name>
   4. **Verbosity.** The line is a warning, so `-q/--quiet` suppresses it, per
      `FR-GLOB-015`.
   5. **Exit code.** The line does not change the exit code.
+  6. **Every entry.** WHERE the invocation is `tpl cfg unset database`, the
+     system SHALL write one line for each entry the block held, in the order
+     the entries appear in `.tpl/.cfg` before the rewrite. Each line SHALL
+     name its own entry and carry its own `tpl -d <name> cache clean`, under
+     items 1 and 2; items 3, 4 and 5 hold for every line. `-q/--quiet`
+     suppresses them all. A block that held no entry writes no line.
+
+     ```
+     tpl cfg unset database
+     warning: removed entry 'shop'; data cached for it under .tpl/.cache/shop/ is kept, and an entry added later as 'shop' reads it; clear it with: tpl -d shop cache clean
+     warning: removed entry 's2'; data cached for it under .tpl/.cache/s2/ is kept, and an entry added later as 's2' reads it; clear it with: tpl -d s2 cache clean
+     ```
 
   `FR-CFG-023` clears `core.database` in the same rewrite where it names the
   entry, and writes no line of its own. `tpl cfg unset` of one field of an
@@ -761,6 +795,21 @@ tpl cfg database test   <name>
   closes for a `hint`.
 
   *Added in the fifty-third edition,* for rmp `#287`.
+
+  *Amended in the fifty-fifth edition: `tpl cfg unset database` and item 6
+  are new.* The requirement named the block of one entry, and
+  `tpl cfg unset database` deletes every entry with exit `0` and nothing on
+  stderr, after which an entry added under an old name reads the data cached
+  for the deleted one. This is finding AE-01 of the fourteenth re-audit of
+  rmp `#263`, recorded for rmp `#290`. The content of each line, its
+  `--tpl-dir` rule and its bar on cache access are those of the other two
+  commands. *Rejected: refusing `tpl cfg unset database` with `64` and a
+  hint to `tpl cfg database remove`.* It contradicts `FR-CFG-011`, which
+  deletes the block it is given, and departs from the precedent of
+  `FR-CFG-050`, which warns about a legal deletion rather than refusing it;
+  the coordinator of rmp `#290` ruled for the warning. *Rejected: one line
+  naming every entry.* One line per entry keeps the line of item 1
+  unchanged and gives each entry a command a caller can copy whole.
 
 - **FR-CFG-024**: `tpl cfg database test <name>` SHALL perform exactly the
   following four steps, in this order, and SHALL report the outcome of each:
