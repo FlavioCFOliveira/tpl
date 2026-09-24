@@ -12,6 +12,11 @@ on:
 permissions:
   contents: read
 
+# One run per tag, never cancelled: a release must not stop mid-publish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
   # ADR-008 pins; a change here is a change to that record. Each download is
@@ -36,7 +41,7 @@ defaults:
 jobs:
   # ADR-012 Decision 3: the four gates, in order, before anything is built.
   gate:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       notes: ${{ steps.gate.outputs.notes }}
       prerelease: ${{ steps.gate.outputs.prerelease }}
@@ -105,16 +110,16 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-musl
-            os: ubuntu-24.04
+            os: ubuntu-26.04
             cargo: cargo-zigbuild
           - target: aarch64-unknown-linux-musl
-            os: ubuntu-24.04-arm
+            os: ubuntu-26.04-arm
             cargo: cargo-zigbuild
           - target: x86_64-apple-darwin
-            os: macos-15-intel
+            os: macos-26-intel
             cargo: cargo
           - target: aarch64-apple-darwin
-            os: macos-15
+            os: macos-26
             cargo: cargo
     steps:
       - uses: actions/checkout@v7.0.1
@@ -191,7 +196,7 @@ jobs:
 
   publish:
     needs: [gate, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:

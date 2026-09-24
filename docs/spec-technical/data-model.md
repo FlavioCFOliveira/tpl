@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -441,7 +441,7 @@ whose rationale and rejected options are not restated here.
 
 | Number | Starting value | What moves it | Fixed by |
 |---|---|---|---|
-| Binary version | `0.1.0` | A release. Full semantic versioning; while below 1.0 a breaking change is a **minor** bump | `OD-03`; the value is the one `FR-HELP-005` and `FR-CTX-027` already assume |
+| Binary version | `0.0.1` | A release. Full semantic versioning; while below 1.0 a breaking change is a **minor** bump | `OD-03`; the value is the user's choice of first release, and the `0.1.0` of `FR-HELP-005` and `FR-CTX-027` is illustrative |
 | `schema_version` | `1` | A change on one of the three breaking rows of `FR-OUT-014` — removing a field, renaming one, changing a field's type. Adding a field or an enumerated value does **not** move it | `FR-OUT-011`, `FR-OUT-014`, `FR-CDOC-003` |
 | `cache_format` | `1` | A change to the on-disk arrangement alone: which files exist, where they sit, how they are named | `FR-CDOC-002`, `FR-CDOC-005` |
 | Changelog | `CHANGELOG.md`, Keep a Changelog format | A release, and every change `FR-ENV-029` requires to be recorded there — renaming or removing a guaranteed template name | `FR-ENV-029`; `CLAUDE.md` *Fluxo de Trabalho* names a changelog in the workflow |

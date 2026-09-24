@@ -473,6 +473,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "measurement: needs `sleep 30` to outlast a 1 s wall-clock deadline"]
     fn fr_conf_028_a_child_that_exceeds_its_deadline_is_terminated_and_refused() {
         // FR-CONF-028, FR-SEC-012: the deadline is what keeps a command
         // waiting on a FIFO from hanging the caller with no diagnosis.
@@ -621,6 +622,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "measurement: asserts the refusal takes under 2 s against a 1 s wall-clock deadline"]
     fn fr_conf_028_a_descendant_holding_the_output_after_the_child_exits_ends_at_the_deadline() {
         // FR-CONF-028, FR-SEC-012, finding SEC-01: the child writes a password,
         // leaves a descendant holding its standard output, and exits 0. The
@@ -657,6 +659,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "measurement: a 1 s wall-clock deadline, with the child state sampled by `ps` every 20 ms"]
     fn fr_conf_028_the_child_is_still_unreaped_when_its_group_is_killed_at_the_deadline() {
         // The exit is observed without reaping, so the pid — the group's id —
         // is still held when the group is signalled. A descendant in the group
@@ -698,6 +701,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "measurement: polls every 5 ms for the child exit, bounded at 5 s of wall clock"]
     fn fr_conf_028_an_exit_is_observed_without_reaping_and_the_group_kill_precedes_the_reap() {
         // The two functions the deadline path is made of, driven directly.
         let scratch = Scratch::new();
@@ -741,6 +745,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "measurement: asserts the refusal takes under 10 s and the group is gone within 2 s"]
     fn fr_conf_031_passing_the_cap_ends_the_whole_group_descendants_included() {
         // FR-CONF-031, FR-SEC-024: the cap terminates the group the deadline
         // does, so a descendant holding the pipe does not survive it.
@@ -774,6 +779,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "measurement: needs a 0.2 s descendant to finish inside a 5 s wall-clock deadline"]
     fn fr_conf_028_a_descendant_that_releases_the_output_in_time_leaves_the_password_usable() {
         // FR-CONF-028: the phase ends at the exit and the end of file, so a
         // descendant that closes its copy of the pipe before the deadline

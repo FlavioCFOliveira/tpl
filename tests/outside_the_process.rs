@@ -1261,6 +1261,34 @@ const SLOW_TEMPLATE: &str = "slow";
 const SLOW: &str = "kept\n{% for a in range(8000) %}{% for b in range(8000) %}\
                     {% endfor %}{% endfor %}done\n";
 
+/// A project holding the document `tpl schema dump` produces against
+/// `server`, the templates [`REPORT`], [`SLOW_TEMPLATE`] and every one of
+/// [`FAILING`], and `configuration` as its `.tpl/.cfg`.
+///
+/// The document is produced by the product against this server, in a project
+/// of its own: the project returned names no entry, because `FR-RND-022` gives
+/// a render from a document no use for one.
+fn document_project(server: &fixture::Server, configuration: &str) -> Sandbox {
+    let source = project(server);
+    let dumped = succeeds(&source, &["schema", "dump", "--direct", "--no-cache"]);
+
+    let sandbox = Sandbox::new();
+    sandbox.project(configuration);
+    sandbox.write(CONTEXT, &dumped);
+    sandbox.write(&format!(".tpl/templates/{REPORT}.jinja"), REPORT_SOURCE);
+    sandbox.write(&format!(".tpl/templates/{SLOW_TEMPLATE}.jinja"), SLOW);
+    for (template, body, _) in FAILING {
+        sandbox.write(&format!(".tpl/templates/{template}.jinja"), body);
+    }
+
+    sandbox
+}
+
+/// Renders `template` in `sandbox` from its document, for [`BOUND`].
+fn render_document(sandbox: &Sandbox, template: &str) -> std::process::Output {
+    sandbox.run(&["render", template, "--context", CONTEXT, "--table", BOUND])
+}
+
 #[test]
 fn fr_rnd_034_and_fr_sem_020_a_render_that_fails_leaves_nothing_on_the_process_s_own_stdout() {
     // FR-RND-034 admits at most one incomplete result on stdout when a render
@@ -1287,25 +1315,8 @@ fn fr_rnd_034_and_fr_sem_020_a_render_that_fails_leaves_nothing_on_the_process_s
 
     for server in series {
         let name = server.name();
-
-        // The document, produced by the product against this server, in a
-        // project of its own: the project the renders run in names no entry,
-        // because FR-RND-022 gives a render from a document no use for one.
-        let source = project(server);
-        let dumped = succeeds(&source, &["schema", "dump", "--direct", "--no-cache"]);
-
-        let sandbox = Sandbox::new();
-        sandbox.project(BOUNDED);
-        sandbox.write(CONTEXT, &dumped);
-        sandbox.write(&format!(".tpl/templates/{REPORT}.jinja"), REPORT_SOURCE);
-        sandbox.write(&format!(".tpl/templates/{SLOW_TEMPLATE}.jinja"), SLOW);
-        for (template, body, _) in FAILING {
-            sandbox.write(&format!(".tpl/templates/{template}.jinja"), body);
-        }
-
-        let render = |template: &str| {
-            sandbox.run(&["render", template, "--context", CONTEXT, "--table", BOUND])
-        };
+        let sandbox = document_project(server, "[core]\n");
+        let render = |template: &str| render_document(&sandbox, template);
 
         // The control.
         let produced = render(REPORT);
@@ -1323,8 +1334,7 @@ fn fr_rnd_034_and_fr_sem_020_a_render_that_fails_leaves_nothing_on_the_process_s
              stdout below establishes nothing"
         );
 
-        // The five failures of FR-RND-030, FR-RND-031 and render-semantics.md,
-        // and the deadline of FR-RND-033 beside them.
+        // The five failures of FR-RND-030, FR-RND-031 and render-semantics.md.
         for (template, _, requirement) in FAILING {
             let printed = render(template);
 
@@ -1342,6 +1352,44 @@ fn fr_rnd_034_and_fr_sem_020_a_render_that_fails_leaves_nothing_on_the_process_s
                 String::from_utf8_lossy(&printed.stdout)
             );
         }
+    }
+}
+
+#[test]
+#[ignore = "measurement: needs the render to outlast a 1 s wall-clock deadline"]
+fn fr_rnd_034_a_render_ended_by_its_deadline_leaves_nothing_on_the_process_s_own_stdout() {
+    // FR-RND-034 and FR-GLOB-013 for the deadline of FR-RND-033, which ends
+    // the process through `std::process::exit` and therefore runs no
+    // destructor and flushes nothing: the process's own file descriptor 1
+    // stays empty. The instrument and its control are those of
+    // `fr_rnd_034_and_fr_sem_020_a_render_that_fails_leaves_nothing_on_the_process_s_own_stdout`.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_rnd_034_a_render_ended_by_its_deadline_leaves_nothing_on_the_process_s_own_stdout",
+    ) else {
+        return;
+    };
+
+    for server in series {
+        let name = server.name();
+        let sandbox = document_project(server, BOUNDED);
+        let render = |template: &str| render_document(&sandbox, template);
+
+        // The control.
+        let produced = render(REPORT);
+
+        assert_eq!(
+            produced.status.code(),
+            Some(0),
+            "{name}: the control render exited {:?}: {}",
+            produced.status.code(),
+            String::from_utf8_lossy(&produced.stderr)
+        );
+        assert!(
+            !produced.stdout.is_empty(),
+            "{name}: the control render wrote nothing to stdout, so an empty \
+             stdout below establishes nothing"
+        );
 
         let expired = render(SLOW_TEMPLATE);
         let reported = String::from_utf8_lossy(&expired.stderr).into_owned();

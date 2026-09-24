@@ -4,7 +4,7 @@ title: Continuous integration and release distribution
 status: accepted
 decided: 2026-09-24
 last-reviewed: 2026-09-24
-requirements: [NFR-PERF-018, NFR-PERF-005, NFR-PERF-007, FR-SRV-019, BR-PERF-008]
+requirements: [NFR-PERF-018, NFR-PERF-005, NFR-PERF-007, FR-SRV-019, BR-PERF-008, FR-RND-039, FR-CONF-028, FR-CONF-031]
 supersedes: []
 superseded-by: null
 ---
@@ -16,7 +16,8 @@ superseded-by: null
 Accepted, 2026-09-24. Decided by the user for rmp `#292`, as relayed by the
 session coordinator, including the release gate, the version pins and the
 archive contents. The provenance gates of Decision point 3 were decided by the
-user for rmp `#293`, on the same day.
+user for rmp `#293`, on the same day. Decision point 10 was decided by the user
+for rmp `#267`, on the same day.
 
 This record takes over two parts of `ADR-008`: its refusal to prescribe a
 pipeline, with the rejection that argued it, and its open question on the form
@@ -151,6 +152,13 @@ and both run correctness validations only.
      `TPL_INSTALL_DIR` overrides the directory. It is a variable of the script,
      not of `tpl`, which never reads it.
 
+10. **The release path runs correctness tests only.** The release path is the
+    `cargo test --all-features` that both workflows run. A test whose verdict
+    depends on timing, a wall-clock deadline, sampling or host load is a
+    measurement test. It carries `#[ignore = "measurement: <reason>"]`, so
+    `cargo test` never runs it, and it runs on demand with
+    `cargo test --all-features -- --ignored`, outside both workflows.
+
 ## Alternatives rejected
 
 - **Running the MariaDB fixture in continuous integration.** Rejected as
@@ -179,6 +187,16 @@ and both run correctness validations only.
 
 - **Exempting pre-releases from gate 4.** Rejected: a gate does not vary with
   the kind of tag.
+
+- **Retrying a measurement test, or tuning its thresholds.** Rejected: the rule
+  forbids measurement on the release path, and a retry or a wider threshold
+  keeps it there.
+
+- **Checking the peak at the end of the render.** Rejected here: it needs
+  `ADR-011` and `FR-RND-039` changed. It is recorded as backlog rmp `#297`.
+
+- **A separate measurement workflow.** Rejected: the workflows stay very simple
+  and correctness-only.
 
 - **Accepting any `v*` string as a version.** Rejected: the tag would not be
   guaranteed to be a version at all.
@@ -276,6 +294,17 @@ pre-release cannot be set as latest (Sources). `/releases/latest`, which
 `install.sh` follows, therefore never resolves to one. A pre-release is
 installed only by hand.
 
+**Some requirements lose their automatic check on the release path.** The
+measurement tests cover the memory limit of `FR-RND-039`, the deadlines of
+`FR-CONF-028` and `FR-CONF-031`, and the render deadlines. They are checked by
+hand, on demand. The evidence for the rule comes from rmp `#267`:
+`fr_conf_045_raising_the_memory_limit_lets_a_legitimately_large_render_pass`
+let a render escape the 16 MiB limit in 3 of 300 runs on an idle host and 29 of
+400 under load. The limit is enforced by sampling (`ADR-011`, Decision point 2,
+at the interval `docs/spec-technical/architecture.md` fixes), and
+`FR-RND-039` acts on the observed count, so the escape is not a product
+defect.
+
 **Gate 4 matches the tag literally.** A tag carries `.` and may carry `+`,
 which are metacharacters in a regular expression, so the tag is compared as a
 literal string and only the date part as eight digits.
@@ -327,6 +356,8 @@ the build path.
 | The tar on the macOS runners behaves the same | unverified; untested | — |
 | The four provenance gates, their order, the release-notes body, and the three rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#293` | 2026-09-24 |
 | Gate 4's anchored `release-notes/<tag>-<YYYYMMDD>.md` pattern and its two rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#293` | 2026-09-24 |
+| The measurement-test rule, its three rejected alternatives, and the escape counts 3/300 idle and 29/400 under load | The user's decision of 2026-09-24 and the findings of rmp `#267`, relayed; counts not re-run | 2026-09-24 |
+| `#[ignore]` accepts a reason in the name-value form; `--ignored` runs only ignored tests | The Rust Reference, *Testing attributes*, `ignore`; *The rustc book*, *Tests*, `--ignored` | 2026-09-24 |
 | SemVer as the default versioning rule; gate 3's SemVer check; pre-release tags published as pre-releases; the two rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#293` | 2026-09-24 |
 | The numbered-capture-group regular expression for a Semantic Versioning 2.0.0 version, compatible with ECMAScript, PCRE, Python and Go | semver.org, *Semantic Versioning 2.0.0*, FAQ "Is there a suggested regular expression (RegEx) to check a SemVer string?"; the same text in GitHub `semver/semver`, `semver.md` | 2026-09-24 |
 | The latest release is "the most recent non-prerelease, non-draft release"; "Drafts and prereleases cannot be set as latest"; `releases/latest` links to the latest release | docs.github.com, REST API *Releases*, "Get the latest release" and "Create a release" (`make_latest`); *Linking to releases* | 2026-09-24 |

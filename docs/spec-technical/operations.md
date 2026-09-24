@@ -89,7 +89,7 @@ cargo audit
 | 1 | `rustfmt` with its default configuration is the formatting authority | No formatting question is settled by this folder |
 | 2 | `clippy` with `-D warnings` is the idiom authority. A justified suppression is a local `#[allow(...)]` with its reason, never a crate-level one | `#![forbid(unsafe_code)]` is the one prohibition this escape does not reach ([technology-stack.md](technology-stack.md#the-consequence-of-forbidding-unsafe)) |
 | 3 | The only command of the five that compiles under the release profile | The profile is [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md)'s |
-| 4 | The test suite, with every feature active | See the two observations below |
+| 4 | The test suite, with every feature active, correctness tests only. Measurement tests are ignored and are not part of the run ([`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 10) | See the two observations below |
 | 5 | The dependency graph against the advisory database | `cargo audit` is described by its publisher as auditing "`Cargo.lock` for crates with security vulnerabilities" (crates.io crate index and rustsec.org, `cargo-audit` 0.22.2, consulted 2026-09-11), so it needs a resolved lockfile |
 
 **Nothing is added to the five for a change to a hot path.** The root
@@ -99,14 +99,19 @@ and record it**, and never a condition for the work being complete
 (`CLAUDE.md`, *Desenvolvimento*, with *Disciplina de medição*). The protocol a
 reading is taken under is
 [quality-attributes.md](quality-attributes.md#the-measurement-protocol)'s, and
-the harness that takes it is [below](#the-measurement-harness).
+the harness that takes it is [below](#the-measurement-harness). The measurement
+tests the pipeline ignores run on demand with
+`cargo test --all-features -- --ignored`, outside both workflows, under
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 10.
 
 **Observation — the pipeline names no target, so it exercises the host's.**
 `NFR-PERF-018` makes none of the four second class, so passing on the
 development host is not passing. The `ci.yml` workflow that
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes runs the
 five commands on all four targets; see
-[Continuous integration and release](#continuous-integration-and-release).
+[Continuous integration and release](#continuous-integration-and-release). On
+every target, command 4 leaves out the measurement tests, which carry the
+`ignore` attribute that [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 10, prescribes.
 
 **Observation — `--all-features` decides what a cargo feature costs here.**
 The flag is documented as "Activate all available features of all selected
