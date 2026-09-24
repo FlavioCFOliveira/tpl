@@ -129,7 +129,8 @@ read from the server on a miss.
   miss under `FR-CACHE-033`.
 
   A lookup by name — the tests `primary_key` and `unique` of `FR-ENV-015` and
-  the functions `table`, `view`, `routine` and `column` of `FR-ENV-020` —
+  the functions `table_named`, `view_named`, `routine_named` and `column` of
+  `FR-ENV-020` —
   SHALL resolve the name from the collection's listing and SHALL reach only the
   object it returns. An object the lookup passes over is not reached by it, and
   a lookup that returns no object reaches none.

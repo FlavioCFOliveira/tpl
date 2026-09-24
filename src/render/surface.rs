@@ -103,9 +103,9 @@ declare! {
     }
     functions {
         // FR-ENV-020, in the order of its table.
-        "table" => function::table,
-        "view" => function::view,
-        "routine" => function::routine,
+        "table_named" => function::table_named,
+        "view_named" => function::view_named,
+        "routine_named" => function::routine_named,
         "column" => function::column,
         "fail" => function::fail,
     }
@@ -191,7 +191,13 @@ mod tests {
         );
         assert_eq!(
             REGISTERED_FUNCTIONS,
-            ["table", "view", "routine", "column", "fail"]
+            [
+                "table_named",
+                "view_named",
+                "routine_named",
+                "column",
+                "fail"
+            ]
         );
     }
 

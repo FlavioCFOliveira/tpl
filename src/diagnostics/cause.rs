@@ -525,6 +525,13 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         )),
         // The row obliges the path and either the position of the malformed
         // JSON or the structural rule the document failed.
+        // FR-RND-042: the path or the stream, the version found and the
+        // version this binary reads.
+        Error::ContextDocumentVersion { path, found } => Cow::Owned(format!(
+            "{} carries schema_version {found}; this tpl reads schema_version {}",
+            context_name(path),
+            crate::output::SCHEMA_VERSION
+        )),
         Error::ContextDocumentMalformed { path, fault, .. } => match fault {
             ContextFault::NotJson(position) => Cow::Owned(format!(
                 "{} is not well-formed JSON; the parser stopped at {position}",

@@ -1742,9 +1742,9 @@ mod tests {
                      AFTER {{ ns.s | length }} {{ ns.n }}";
 
         for reach in [
-            "{% set t = table('carrier') %}",
-            "{% if table('carrier') is defined %}{% endif %}",
-            "{{ table('carrier') is none }}",
+            "{% set t = table_named('carrier') %}",
+            "{% if table_named('carrier') is defined %}{% endif %}",
+            "{{ table_named('carrier') is none }}",
             "{{ column('carrier', 'carrier_id') is defined }}",
         ] {
             let scratch = Scratch::new();
@@ -1801,7 +1801,7 @@ mod tests {
 
     /// The reach of `carrier` through a lookup function, which the render
     /// survives, per the test above.
-    const REACH: &str = "{% set t = table('carrier') %}";
+    const REACH: &str = "{% set t = table_named('carrier') %}";
 
     #[test]
     fn fr_cache_039_an_abandoned_render_that_exhausts_its_fuel_ends_the_invocation_with_65() {
@@ -2127,7 +2127,7 @@ mod tests {
         for (template, source, object, kept, expected) in [
             (
                 "table",
-                "{{ table('consignment_leg').name }}",
+                "{{ table_named('consignment_leg').name }}",
                 &whole,
                 &["tables/consignment_leg.json"][..],
                 "consignment_leg",
@@ -2141,7 +2141,7 @@ mod tests {
             ),
             (
                 "view",
-                "{{ view('v_consignment_manifest').name }}",
+                "{{ view_named('v_consignment_manifest').name }}",
                 &whole,
                 &["views/v_consignment_manifest.json"][..],
                 "v_consignment_manifest",
@@ -2169,7 +2169,10 @@ mod tests {
         let scratch = Scratch::new();
         let tpl_dir = cached(
             &scratch,
-            &[("routine.jinja", "{{ routine('sp_book_consignment').kind }}")],
+            &[(
+                "routine.jinja",
+                "{{ routine_named('sp_book_consignment').kind }}",
+            )],
         );
         let listed = crate::cache::Cache::of(&tpl_dir, ENTRY)
             .shelved()
@@ -2190,12 +2193,15 @@ mod tests {
 
     #[test]
     fn fr_cache_038_a_procedure_and_a_function_of_one_name_resolve_as_the_scan_did() {
-        // The tie of NFR-DET-002 is kept as it was: `routine(name)` returns the
+        // The tie of NFR-DET-002 is kept as it was: `routine_named(name)` returns the
         // routine a scan of the up-front read's collection meets first.
         let scratch = Scratch::new();
         let tpl_dir = cached(
             &scratch,
-            &[("routine.jinja", "{{ routine('sp_book_consignment').kind }}")],
+            &[(
+                "routine.jinja",
+                "{{ routine_named('sp_book_consignment').kind }}",
+            )],
         );
         let loaded = crate::cache::Cache::of(&tpl_dir, ENTRY)
             .everything()
@@ -2215,7 +2221,7 @@ mod tests {
         let scratch = Scratch::new();
         let tpl_dir = cached(
             &scratch,
-            &[("found.jinja", "{{ table('consignment_leg').name }}")],
+            &[("found.jinja", "{{ table_named('consignment_leg').name }}")],
         );
         for damaged in ["tables/carrier.json", "tables/consignment.json"] {
             std::fs::write(stored(&tpl_dir, damaged), "{ torn").expect("ours");
@@ -2235,7 +2241,10 @@ mod tests {
         let scratch = Scratch::new();
         let tpl_dir = cached(
             &scratch,
-            &[("found.jinja", "written first {{ table('carrier').name }}")],
+            &[(
+                "found.jinja",
+                "written first {{ table_named('carrier').name }}",
+            )],
         );
         std::fs::write(stored(&tpl_dir, "tables/carrier.json"), "{ torn").expect("ours");
 
@@ -2258,11 +2267,11 @@ mod tests {
             &[
                 (
                     "guarded.jinja",
-                    "{{ table('nosuch') is defined }} {{ view('nosuch') is defined }} \
-                     {{ routine('nosuch') is defined }} {{ column('nosuch', 'id') is defined }} \
+                    "{{ table_named('nosuch') is defined }} {{ view_named('nosuch') is defined }} \
+                     {{ routine_named('nosuch') is defined }} {{ column('nosuch', 'id') is defined }} \
                      {{ column('carrier', 'nosuch') is defined }}",
                 ),
-                ("used.jinja", "{{ table('nosuch').name }}"),
+                ("used.jinja", "{{ table_named('nosuch').name }}"),
             ],
         );
         keep_only(&tpl_dir, &["tables/carrier.json"]);

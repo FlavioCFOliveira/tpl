@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-nine editions. All are in force;
+The specification has been written in sixty editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4767,6 +4767,38 @@ the changes. None conflicts with them, so none is amended. The root
 `README.md` does not state what `tpl cfg set core.database`, `tpl cfg unset`
 or the splitting of `password_command` do, so the fifth validation rule owes
 nothing.
+
+### Sixtieth edition — the unbound object, and a context document of another version
+
+rmp `#301` found that a template rendered without an object flag sees `table`,
+`view` and `routine` as defined, because the three lookup functions carried
+the names of the three object variables. rmp `#270` found that
+`tpl render --context` renders a document whose `schema_version` the binary
+does not emit, at exit `0`.
+
+**One identifier is assigned: `FR-RND-042`.** None is retired and none is
+renumbered. No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The lookups are renamed** —
+  [template-environment.md](template-environment.md). `FR-ENV-020` names them
+  `table_named(name)`, `view_named(name)` and `routine_named(name)`, and bars
+  any filter, test or function from carrying the name of a context variable.
+  The rename is breaking under `FR-ENV-029` and is owed to the project
+  changelog. `FR-RND-006` in [render-command.md](render-command.md) carries a
+  note, and `FR-CACHE-038` in [cache-commands.md](cache-commands.md) cites the
+  new names.
+- **A context document of another version is refused** —
+  [render-command.md](render-command.md). `FR-RND-042` exits `65`, renders
+  nothing, and points at `tpl schema dump`. `FR-RND-020` carries a note.
+
+`FR-RND-018`, `FR-RND-023`, `FR-RND-031`, `BR-RND-001`, `FR-ENV-015`,
+`FR-ENV-029`, `FR-ENV-047`, `FR-HELP-032`, `FR-HELP-033`, `FR-SCH-017`,
+`FR-OUT-014`, `FR-OUT-025`, `FR-OUT-038` and `FR-CDOC-004` were read against
+the changes. None conflicts with them, so none is amended. The root
+`README.md` names no lookup function and says nothing of `schema_version` in
+a `--context` document, so the fifth validation rule owes nothing.
 
 ### Still out of scope
 

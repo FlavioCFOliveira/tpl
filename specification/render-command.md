@@ -72,6 +72,10 @@ tpl render <template> --routine <name>      binds routine
 - **FR-RND-006**: WHEN no object flag is supplied, the system SHALL render the
   template once with the whole database in context and no object variable bound.
 
+  *Note added in the sixtieth edition.* An object variable that is not
+  bound is undefined: nothing else in the template's namespace carries its
+  name, per `FR-ENV-020`. This requirement is unchanged.
+
 - **FR-RND-007**: The system SHALL NOT provide `--all-tables`, `--all-views`,
   `--all-routines`, or `--pattern` on `tpl render`.
 
@@ -189,6 +193,49 @@ tpl render <template> --routine <name>      binds routine
   requirement names include `FR-CTX-042`: a document in which a foreign key
   names a table its `tables` collection does not carry does not match the
   contract and is `65` here, never `70`.
+
+  *Note added in the sixtieth edition.* `FR-RND-042` states the document
+  whose `schema_version` the binary does not emit.
+
+- **FR-RND-042**: IF the document supplied to `--context` carries a
+  `schema_version` other than the one the running binary emits, per
+  `FR-OUT-038`, THEN the system SHALL exit `65` (`EX_DATAERR`), SHALL render
+  nothing, and SHALL write nothing to stdout. A `schema_version` that is
+  absent or is not an integer fails the outer shape of `FR-SCH-017` and is
+  already `65` under `FR-RND-020`.
+
+  The `cause` SHALL name the path, or the stream under `FR-RND-017`, the
+  version the document carries and the version the binary reads. The `hint`
+  SHALL carry `tpl -d <entry> schema dump`, with its placeholder, as the
+  command that produces a document this binary reads.
+
+  ```
+  tpl render model.jinja --context old.json
+  error: context document old.json has an unsupported schema_version
+  cause: old.json carries schema_version 2; this tpl reads schema_version 1
+  hint:  produce a document this tpl reads with: tpl -d <entry> schema dump
+  exit:  65 (EX_DATAERR)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command and
+  the code.
+
+  *Rationale.* `schema_version` versions the document contract, per
+  `FR-OUT-025`, and moves only on a change `FR-OUT-014` classifies as
+  breaking: a removed, renamed or retyped field. A document of another
+  version may therefore carry the same keys with other meanings, and a render
+  from it would exit `0` with output built on a contract the binary does not
+  know. It is the input side of `FR-CDOC-004`, which serves no cached data of
+  an unknown version. `65` is the code `FR-RND-020` gives a document that
+  does not match the contract, and the caller can correct the document. This
+  is rmp `#270`.
+
+  *Rejected: ignoring the version.* It renders a document the binary cannot
+  vouch for at exit `0`. *Rejected: accepting any lower version.* The binary
+  reads the one contract it emits and holds no reading of another.
+
+  *Added in the sixtieth edition,* for rmp `#270`.
 
 - **FR-RND-035**: IF the file or the stream supplied to `--context` cannot be
   read — it does not exist, the filesystem refused the read, or the stream

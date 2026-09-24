@@ -685,9 +685,9 @@ row is a case the implementation SHALL satisfy.
 
   | Function | Purpose |
   |---|---|
-  | `table(name)` | Resolve a table by name in the render context |
-  | `view(name)` | Resolve a view by name in the render context |
-  | `routine(name)` | Resolve a routine by name in the render context |
+  | `table_named(name)` | Resolve a table by name in the render context |
+  | `view_named(name)` | Resolve a view by name in the render context |
+  | `routine_named(name)` | Resolve a routine by name in the render context |
   | `column(table, name)` | Resolve a column of a named table |
   | `fail(message)` | End the render with `65`, carrying the author's message |
 
@@ -698,6 +698,42 @@ row is a case the implementation SHALL satisfy.
   a lookup returns, including whether it finds anything, is decided from the
   names the listing carries, which are the names an up-front read would have
   found.
+
+  No filter, test or global function SHALL carry the name of a top-level
+  context variable of `FR-RND-023`. The names `table`, `view` and `routine`
+  SHALL resolve only to the object variable an object flag binds, so that,
+  WHEN no object flag is supplied, each of them is undefined, per
+  `FR-RND-006`: `table is defined` is `false`, and reading `table` is the
+  undefined variable of `FR-RND-031`, which exits `65`.
+
+  *Amended in the sixtieth edition,* for rmp `#301`. The three lookups were
+  named `table(name)`, `view(name)` and `routine(name)`, the names of the
+  three object variables. A template sees one namespace, so each pair
+  collided: without an object flag, `table is defined` was `true` and
+  `{{ table }}` printed the function, against `FR-RND-006`, `BR-RND-001` and
+  the help's "absent without --table"; with `--table`, the bound object hid
+  the function, so `table("customers")` could not be called in the very
+  render `FR-CACHE-038` describes a lookup in. The rename removes both
+  collisions. It is a rename in group 1, which `FR-ENV-029` makes breaking
+  and obliges the project changelog to record; no release of the binary has
+  been made, so no released template depends on the old names, and
+  `schema_version` stays `1`, per `FR-OUT-038`. `column(table, name)` is
+  unchanged: no context variable is named `column`.
+
+  *Rejected: giving the variable precedence over the function.* A bound
+  render's variable already hides the function, and an unbound render would
+  have to hide it too for `table` to be undefined, so the function could be
+  called in no render at all: a removal in effect, which `FR-ENV-029` makes
+  breaking as well, leaving this table listing three functions no template
+  can reach. *Rejected: documenting that `table` is defined without
+  `--table`.* It contradicts `FR-RND-006` and `BR-RND-001`, and it keeps the
+  lookup unreachable in a bound render. *Rejected: a namespace object, such as
+  `lookup.table(name)`.* It adds a value that is not a function to a group
+  of functions, and a new shape to the items of `FR-ENV-047`, to solve what a
+  rename solves. *Rejected: `find_table` and its like.* A find suggests
+  something about a name that resolves to nothing, and the rename is not the
+  place to change what a lookup does then; `table_named` states only that the
+  argument is a name.
 
 - **FR-ENV-021**: `fail(message)` SHALL end the render with `65` and SHALL carry
   the message the template supplied, per `FR-SEM-014`.

@@ -150,11 +150,11 @@ impl fmt::Display for DeadlineBound {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LookupKind {
-    /// `table(name)`.
+    /// `table_named(name)`.
     Table,
-    /// `view(name)`.
+    /// `view_named(name)`.
     View,
-    /// `routine(name)`.
+    /// `routine_named(name)`.
     Routine,
     /// `column(table, name)`.
     Column,
@@ -207,7 +207,7 @@ pub enum RenderReason {
 /// nothing — the reason an expression built on it is undefined.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unresolved {
-    /// The call as the template wrote it: `table("orders")`.
+    /// The call as the template wrote it: `table_named("orders")`.
     pub call: String,
     /// What was sought: the function's kind, or [`LookupKind::Table`] for a
     /// `column` call whose table does not exist.
@@ -1191,6 +1191,16 @@ pub enum Error {
         /// Whether `core.database` names an entry, so that the dump the hint
         /// suggests needs no `-d`.
         default_entry: bool,
+    },
+
+    /// A `--context` document whose `schema_version` is not the one this
+    /// binary emits (`FR-RND-042`).
+    #[error("the --context document {} has an unsupported schema_version", context_origin(.path))]
+    ContextDocumentVersion {
+        /// The path the document was read from, `-` for standard input.
+        path: Box<Path>,
+        /// The version the document declares.
+        found: u32,
     },
 
     /// The render did not finish within its deadline (`FR-RND-033`,
@@ -2501,6 +2511,7 @@ impl Error {
             | Self::RenderFailed { .. }
             | Self::TemplateOutsideRoot { .. }
             | Self::ContextDocumentMalformed { .. }
+            | Self::ContextDocumentVersion { .. }
             | Self::RenderDeadlineExceeded { .. }
             | Self::RenderFuelExhausted { .. }
             | Self::RenderOutputLimitExceeded { .. }
@@ -2586,7 +2597,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 89;
+    const VARIANT_COUNT: usize = 90;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2896,6 +2907,13 @@ mod tests {
                     path: std::path::Path::new("context.json").into(),
                     fault: ContextFault::NotJson(position()),
                     default_entry: false,
+                },
+                65,
+            ),
+            (
+                Error::ContextDocumentVersion {
+                    path: std::path::Path::new("old.json").into(),
+                    found: 2,
                 },
                 65,
             ),
@@ -3342,6 +3360,7 @@ mod tests {
             Error::RenderFailed { .. } => "RenderFailed",
             Error::TemplateOutsideRoot { .. } => "TemplateOutsideRoot",
             Error::ContextDocumentMalformed { .. } => "ContextDocumentMalformed",
+            Error::ContextDocumentVersion { .. } => "ContextDocumentVersion",
             Error::RenderDeadlineExceeded { .. } => "RenderDeadlineExceeded",
             Error::RenderFuelExhausted { .. } => "RenderFuelExhausted",
             Error::RenderOutputLimitExceeded { .. } => "RenderOutputLimitExceeded",

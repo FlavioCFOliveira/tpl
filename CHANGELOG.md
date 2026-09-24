@@ -65,9 +65,21 @@ workflow, before it closes.
 - **`tpl cfg unset` of an absent block suggests the nearest one.** For `core`,
   `database` or `database.<name>`, the `hint` names the nearest block the file
   carries, and for an entry's block, `tpl cfg database show <name>`.
+- **Breaking: the lookup functions are renamed.** In the registered template
+  surface, `table(name)`, `view(name)` and `routine(name)` are now
+  `table_named(name)`, `view_named(name)` and `routine_named(name)`; `column`
+  is unchanged. A template that calls an old name fails with `65`. Under the
+  pre-1.0 rule, this moves the minor number of the next release.
 
 ### Fixed
 
+- **`table`, `view` and `routine` are undefined without an object flag.** A
+  `tpl render` given no `--table`, `--view` or `--routine` no longer sees them
+  as defined: they resolved to the lookup functions of the same names.
+- **`tpl render --context` refuses a document of another `schema_version`.**
+  A document whose `schema_version` is not the one this `tpl` emits exits
+  `65`, rendering nothing, and the `hint` carries `tpl -d <entry> schema dump`;
+  it was rendered.
 - **A backslash-newline in a `password_command` string is a line
   continuation.** Given to `tpl cfg set database.<name>.password_command` or
   to `--password-command`, a backslash followed by a newline outside single

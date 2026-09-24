@@ -794,6 +794,11 @@ fn bare(error: &Error) -> Cow<'static, str> {
                  with --context {target}"
             ))
         }
+        // FR-RND-042: the command that produces a document this binary
+        // reads, with the placeholder the requirement writes.
+        Error::ContextDocumentVersion { .. } => {
+            Cow::Borrowed("produce a document this tpl reads with: tpl -d <entry> schema dump")
+        }
         Error::RenderFuelExhausted { .. } => Cow::Borrowed(
             "look for a loop that never ends, or raise the limit with: tpl cfg set \
              core.render_fuel <evaluation steps>",
