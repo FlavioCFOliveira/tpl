@@ -356,11 +356,11 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
             // T-03: the cause names what a caller writes — one string — and
             // not the array the file stores, which is what `expected` says.
             let command =
-                PasswordCommand::split(supplied).map_err(|expected| Error::MalformedValue {
+                PasswordCommand::split(supplied).map_err(|fault| Error::MalformedValue {
                     parameter: key.to_string(),
                     command: "cfg set".to_owned(),
                     value: supplied.to_owned(),
-                    expected,
+                    expected: fault.condition(),
                 })?;
             value(array(command.arguments()))
         }

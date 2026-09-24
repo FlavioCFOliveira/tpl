@@ -1165,13 +1165,14 @@ fn r_269_the_re_audit_texts_are_stated_in_the_text_help_and_in_the_json_tree() {
             "Given to cfg set as one string, a command line such as \"pass db/shop\", never as \
              an array; split into words as a shell would (quotes group words, and every quote \
              must be closed); stored in the file as an array, [\"pass\", \"db/shop\"]. A value \
-             that starts with [ is not read as an array.",
+             that starts with an unquoted [, or ends in a backslash outside quotes, is refused.",
         ),
         (
             &["cfg", "database", "add"],
             "tpl splits the string into words as a shell would (quotes group words, and every \
              quote must be closed) and stores them in the file as an array, [\"pass\", \
-             \"db/shop\"]; a value that starts with [ is not read as an array.",
+             \"db/shop\"]. A value that starts with an unquoted [, or ends in a backslash \
+             outside quotes, is refused.",
         ),
         // R-05: column() returns the column object.
         (

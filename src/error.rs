@@ -802,7 +802,8 @@ pub enum Error {
         /// The value as written.
         value: String,
         /// The type that was expected, per `FR-CONF-002` where the parameter
-        /// is a configuration key.
+        /// is a configuration key. For a `password_command` supplied as one
+        /// string it is instead the condition of `FR-CONF-046` the string met.
         expected: &'static str,
     },
 
@@ -1070,10 +1071,15 @@ pub enum Error {
         default: Option<String>,
         /// The file it was sought in.
         file: PathBuf,
-        /// The nearest matches among the keys the file does carry, selected by
-        /// `FR-ERR-019` and ordered as it fixes. Empty where nothing qualified,
-        /// per `FR-ERR-020`. `FR-CFG-007` obliges the suggestion.
-        nearest: Vec<String>,
+        /// The nearest matches over the whole key space of `FR-CONF-002`, the
+        /// `<name>` segment bound to every entry the file declares, selected
+        /// by `FR-ERR-019` and ordered as it fixes. Empty where nothing
+        /// qualified, per `FR-ERR-020`. `FR-CFG-007` obliges the suggestion.
+        ///
+        /// Each candidate is paired with whether the file sets it: the `hint`
+        /// says of one the file does not set that it does not set it
+        /// (`FR-CFG-007`, `BR-ERR-004`).
+        nearest: Vec<(String, bool)>,
     },
 
     // ---------------------------------------------------------------- 69 ---

@@ -486,11 +486,12 @@ fn dsn_item(written: &str) -> Result<Item, Error> {
 
 /// The `password_command` item a `--password-command` writes (`FR-CFG-046`).
 fn command_item(written: &str) -> Result<Item, Error> {
-    let command = PasswordCommand::split(written).map_err(|expected| Error::MalformedValue {
+    // FR-CONF-046: the condition met is what `expected` carries.
+    let command = PasswordCommand::split(written).map_err(|fault| Error::MalformedValue {
         parameter: "--password-command".to_owned(),
         command: String::new(),
         value: written.to_owned(),
-        expected,
+        expected: fault.condition(),
     })?;
 
     Ok(value(edit::array(command.arguments())))

@@ -129,20 +129,25 @@ impl PasswordCommand {
     /// Splits a single string into the stored array by the POSIX quoting rules
     /// of `FR-CONF-025`.
     ///
-    /// Single and double quotes are honoured and removed; a backslash escapes
-    /// the next character outside a single-quoted run. Unquoted runs of
-    /// whitespace separate words. `FR-CFG-046` is this rule's caller on the
-    /// command line, and `FR-CONF-035` is why the rule is **not** applied to a
-    /// string found in the file.
+    /// Single and double quotes are honoured and removed. Outside any quoted
+    /// run a backslash escapes the next character; inside a double-quoted run
+    /// it escapes only `$`, `` ` ``, `"`, `\` and a newline — the backslash and
+    /// the newline it escapes are both removed, as POSIX line continuation
+    /// removes them — and before any other character it is kept, so `"a\b"`
+    /// is the word `a\b`. Unquoted runs of whitespace separate words.
+    /// `FR-CFG-046` is this rule's caller on the command line, and
+    /// `FR-CONF-035` is why the rule is **not** applied to a string found in
+    /// the file.
     ///
     /// # Errors
     ///
-    /// Returns what the value should have been — the `expected` clause of a
-    /// `cause` line — where the string yields no word at all, which cannot be
-    /// executed, or leaves a quote open, which the POSIX quoting rules of
-    /// `FR-CONF-025` do not admit and a shell refuses (finding T-08 of the
-    /// third re-audit of rmp `#263`).
-    pub(crate) fn split(supplied: &str) -> Result<Self, &'static str> {
+    /// Returns the first condition of the table of `FR-CONF-046` the string
+    /// meets, in the order of that table.
+    pub(crate) fn split(supplied: &str) -> Result<Self, SplitFault> {
+        if supplied.chars().all(char::is_whitespace) {
+            return Err(SplitFault::NoWord);
+        }
+
         let mut words: Vec<String> = Vec::new();
         let mut word = String::new();
         let mut started = false;
@@ -161,7 +166,7 @@ impl PasswordCommand {
                         word.push(quoted);
                     }
                     if !closed {
-                        return Err(Self::UNCLOSED);
+                        return Err(SplitFault::UnclosedQuote);
                     }
                 }
                 '"' => {
@@ -173,24 +178,36 @@ impl PasswordCommand {
                                 closed = true;
                                 break;
                             }
-                            '\\' => {
-                                if let Some(escaped) = characters.next() {
-                                    word.push(escaped);
+                            '\\' => match characters.next() {
+                                // POSIX 2.2.3: the backslash keeps its special
+                                // meaning before these five characters only.
+                                Some('\n') => {}
+                                Some(escaped @ ('$' | '`' | '"' | '\\')) => word.push(escaped),
+                                Some(other) => {
+                                    word.push('\\');
+                                    word.push(other);
                                 }
-                            }
+                                // The quote is left open; the loop ends and
+                                // reports it.
+                                None => word.push('\\'),
+                            },
                             other => word.push(other),
                         }
                     }
                     if !closed {
-                        return Err(Self::UNCLOSED);
+                        return Err(SplitFault::UnclosedQuote);
                     }
                 }
-                '\\' => {
-                    started = true;
-                    if let Some(escaped) = characters.next() {
+                '\\' => match characters.next() {
+                    Some(escaped) => {
+                        started = true;
                         word.push(escaped);
                     }
-                }
+                    // Nothing follows: the backslash escapes no character.
+                    // It is reported once every quote is known to be closed,
+                    // because FR-CONF-046 names an unclosed quote first.
+                    None => return Err(SplitFault::TrailingBackslash),
+                },
                 whitespace if whitespace.is_whitespace() => {
                     if started {
                         words.push(std::mem::take(&mut word));
@@ -208,20 +225,53 @@ impl PasswordCommand {
             words.push(word);
         }
 
-        Self::new(words).ok_or(Self::SUPPLIED)
+        // The first character as written, not the first of the first word, so
+        // a quoted or escaped `[` passes.
+        if supplied.trim_start().starts_with('[') {
+            return Err(SplitFault::LeadingBracket);
+        }
+
+        // Every string with a character that is not whitespace yields a word
+        // or met a condition above; the fallback is written rather than an
+        // `expect`, so the module carries no panic.
+        Self::new(words).ok_or(SplitFault::NoWord)
     }
+}
 
-    /// What a `password_command` supplied as one string takes (`FR-CONF-025`),
-    /// as the `cause` of an empty value names it (finding T-03 of the third
-    /// re-audit of rmp `#263`): the caller writes one string, not the array
-    /// the file stores.
-    pub(crate) const SUPPLIED: &'static str = "a non-empty command line written as one string, \
-                                               such as \"pass db/shop\", which tpl splits into \
-                                               words";
+/// A condition of the table of `FR-CONF-046`, under which a `password_command`
+/// supplied as one string is refused rather than split.
+///
+/// The variants are declared in the order of that table, which is the order
+/// [`PasswordCommand::split`] tests them in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SplitFault {
+    /// The string is empty or holds only whitespace.
+    NoWord,
+    /// A single or a double quote is left unclosed.
+    UnclosedQuote,
+    /// The string ends in a backslash outside any quoted run.
+    TrailingBackslash,
+    /// The first character that is not whitespace is `[`.
+    LeadingBracket,
+}
 
-    /// What the same value takes where it leaves a quote open.
-    pub(crate) const UNCLOSED: &'static str = "a command line written as one string whose every \
-                                               quote is closed, such as \"pass 'db shop'\"";
+impl SplitFault {
+    /// The condition, as the `cause` of the refusal names it: a clause whose
+    /// subject is the value.
+    pub(crate) const fn condition(self) -> &'static str {
+        match self {
+            Self::NoWord => "the value holds no word, so it names no program to execute",
+            Self::UnclosedQuote => {
+                "the value leaves a quote unclosed, which the POSIX quoting rules tpl splits by \
+                 do not admit"
+            }
+            Self::TrailingBackslash => {
+                "the value ends in a backslash outside quotes, which escapes no character and \
+                 would be dropped"
+            }
+            Self::LeadingBracket => "the value begins with '[', which is how an array arrives",
+        }
+    }
 }
 
 /// A value together with where the file wrote it.
@@ -535,7 +585,9 @@ fn path(value: Option<&std::path::Path>) -> Option<Written<'_>> {
 #[cfg(test)]
 mod tests {
     use super::super::keys::EntryKey;
-    use super::{Combination, Entry, Located, PasswordCommand, PortSetting, TlsMode, Written};
+    use super::{
+        Combination, Entry, Located, PasswordCommand, PortSetting, SplitFault, TlsMode, Written,
+    };
     use crate::error::Position;
 
     fn position() -> Position {
@@ -646,29 +698,85 @@ mod tests {
     }
 
     #[test]
-    fn fr_conf_025_a_string_that_yields_no_word_is_refused() {
-        assert_eq!(PasswordCommand::split(""), Err(PasswordCommand::SUPPLIED));
-        assert_eq!(
-            PasswordCommand::split("   "),
-            Err(PasswordCommand::SUPPLIED)
-        );
+    fn fr_conf_025_inside_double_quotes_a_backslash_escapes_five_characters_only() {
+        // FR-CONF-025, POSIX 2.2.3: before any other character the backslash
+        // is kept.
+        let split = |supplied: &str| {
+            PasswordCommand::split(supplied)
+                .expect("the string is split")
+                .arguments()
+                .to_vec()
+        };
+
+        assert_eq!(split(r#"get "a\b""#), ["get", r"a\b"]);
+        assert_eq!(split(r#"get "C:\dir\n""#), ["get", r"C:\dir\n"]);
+        assert_eq!(split(r#"get "\$ \` \" \\""#), ["get", r#"$ ` " \"#]);
+        assert_eq!(split("get \"a\\\nb\""), ["get", "ab"]);
+        // Outside quotes the backslash still escapes whatever follows it, and
+        // inside single quotes it is an ordinary character.
+        assert_eq!(split(r"get a\b"), ["get", "ab"]);
+        assert_eq!(split(r"get 'a\b'"), ["get", r"a\b"]);
     }
 
     #[test]
-    fn t_08_a_string_that_leaves_a_quote_open_is_refused() {
+    fn fr_conf_046_a_string_that_yields_no_word_is_refused() {
+        assert_eq!(PasswordCommand::split(""), Err(SplitFault::NoWord));
+        assert_eq!(PasswordCommand::split(" \t "), Err(SplitFault::NoWord));
+    }
+
+    #[test]
+    fn fr_conf_046_a_string_that_leaves_a_quote_open_is_refused() {
         // A shell refuses an unclosed quote, and so do the POSIX quoting rules
         // FR-CONF-025 splits by.
+        for supplied in ["pass 'a b", "pass \"a b", "pass \"a\\\"", "pass \"a\\"] {
+            assert_eq!(
+                PasswordCommand::split(supplied),
+                Err(SplitFault::UnclosedQuote),
+                "{supplied:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_conf_046_a_trailing_backslash_outside_quotes_is_refused() {
+        for supplied in [r"pass db/shop\", "\\", r"pass a\\\"] {
+            assert_eq!(
+                PasswordCommand::split(supplied),
+                Err(SplitFault::TrailingBackslash),
+                "{supplied:?}"
+            );
+        }
+        // An escaped backslash is a character, and a quoted one is kept.
+        assert!(PasswordCommand::split(r"pass a\\").is_ok());
+        assert!(PasswordCommand::split(r"pass 'a\'").is_ok());
+    }
+
+    #[test]
+    fn fr_conf_046_a_leading_unquoted_bracket_is_refused() {
+        for supplied in [r#"["pass","db/shop"]"#, "  [x] y", "["] {
+            assert_eq!(
+                PasswordCommand::split(supplied),
+                Err(SplitFault::LeadingBracket),
+                "{supplied:?}"
+            );
+        }
+        // Quoted, escaped, or not first: it names a program.
+        for supplied in ["'[x]/get' db", r"\[x]/get db", "/bin/[ x", "get [x]"] {
+            assert!(PasswordCommand::split(supplied).is_ok(), "{supplied:?}");
+        }
+    }
+
+    #[test]
+    fn fr_conf_046_the_first_condition_in_table_order_is_the_one_named() {
+        // Unclosed quote before trailing backslash and leading bracket;
+        // trailing backslash before leading bracket.
         assert_eq!(
-            PasswordCommand::split("pass 'a b"),
-            Err(PasswordCommand::UNCLOSED)
+            PasswordCommand::split("['a \\"),
+            Err(SplitFault::UnclosedQuote)
         );
         assert_eq!(
-            PasswordCommand::split("pass \"a b"),
-            Err(PasswordCommand::UNCLOSED)
-        );
-        assert_eq!(
-            PasswordCommand::split("pass \"a\\\""),
-            Err(PasswordCommand::UNCLOSED)
+            PasswordCommand::split(r"[a\"),
+            Err(SplitFault::TrailingBackslash)
         );
     }
 

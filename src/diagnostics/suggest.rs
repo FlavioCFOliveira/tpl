@@ -790,7 +790,7 @@ mod tests {
 
         assert_eq!(
             hint_line(selected.names(), &hint::hint(&error)),
-            "did you mean 'orders'? list the available tables with: tpl -d shop schema tables"
+            "did you mean 'orders'? list the available tables with: tpl schema tables"
         );
     }
 

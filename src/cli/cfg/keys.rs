@@ -98,7 +98,7 @@ enum Printed<'a> {
 /// # Errors
 ///
 /// Returns what opening the project returns, and
-/// [`Error::ConfigurationKeyNotFound`] where the file sets no value for the
+/// key — with a nearest-match suggestion over the whole key space.
 /// key — with a nearest-match suggestion over the keys that do exist.
 pub(crate) fn get<W: Write>(out: &mut W, supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
     let configuration = project(supplied)?.configuration()?;
@@ -337,15 +337,15 @@ mod tests {
 
     #[test]
     fn fr_cfg_007_a_key_absent_from_the_file_is_a_named_object_that_does_not_exist() {
-        // FR-CFG-007: 66, with a nearest-match suggestion over the keys that do
-        // exist.
+        // FR-CFG-007: 66, with a nearest-match suggestion over the key space,
+        // each candidate paired with whether the file sets it.
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
 
         let condition = harness.get_refused("core.databse");
 
         match condition {
             Error::ConfigurationKeyNotFound { ref nearest, .. } => {
-                assert_eq!(nearest, &["core.database".to_owned()]);
+                assert_eq!(nearest, &[("core.database".to_owned(), true)]);
             }
             other => panic!("expected a missing key, got {other:?}"),
         }
@@ -359,6 +359,51 @@ mod tests {
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
 
         assert_eq!(harness.get_refused("core.query_timeout").exit_code(), 66);
+    }
+
+    #[test]
+    fn fr_cfg_007_the_suggestion_covers_the_key_space_and_says_what_is_unset() {
+        // FR-CFG-007: a slip in a key the file does not set is suggested too,
+        // and the hint says the candidate is unset, so that the caller is not
+        // sent to a command that exits 66 again (BR-ERR-004).
+        let harness =
+            Harness::new("[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n");
+
+        let refused = harness.get_refused("core.conect_timeout");
+        match &refused {
+            Error::ConfigurationKeyNotFound { nearest, .. } => {
+                assert_eq!(nearest, &[("core.connect_timeout".to_owned(), false)]);
+            }
+            other => panic!("expected a missing key, got {other:?}"),
+        }
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(
+            rendered.contains(
+                "hint:  did you mean 'core.connect_timeout'? .tpl/.cfg does not set it, so its \
+                 default applies; list every key, its type and its default with: tpl help cfg set"
+            ),
+            "{rendered}"
+        );
+
+        // The <name> segment is bound to the entries the file declares, and a
+        // candidate the file sets is not said to be unset.
+        let refused = harness.get_refused("database.shop.hots");
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(
+            rendered.contains("hint:  did you mean 'database.shop.host'? list every key"),
+            "{rendered}"
+        );
+
+        // FR-CFG-012: unset draws the same population and says the same.
+        let refused = harness.unset("database.shop.pasword").expect_err("absent");
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(
+            rendered.contains(
+                "hint:  did you mean 'database.shop.password'? .tpl/.cfg does not set it; list \
+                 every key"
+            ),
+            "{rendered}"
+        );
     }
 
     #[test]

@@ -213,9 +213,8 @@ impl Configuration {
 
     /// Every key the file **sets**, fully qualified, in a fixed order.
     ///
-    /// This is the population `FR-CFG-007` suggests over: the keys that do
-    /// exist, as against the enumerated space `FR-CFG-009` and `FR-CONF-034`
-    /// suggest over.
+    /// `FR-CFG-007` suggests over the enumerated space, and this is what says
+    /// which of its candidates the file does not set.
     pub(crate) fn keys(&self) -> Vec<String> {
         let mut present: Vec<String> = CoreKey::ALL
             .into_iter()
@@ -232,12 +231,6 @@ impl Configuration {
         }
 
         present
-    }
-
-    /// The nearest matches to `supplied` among the keys the file sets
-    /// (`FR-CFG-007`).
-    pub(crate) fn nearest_key_set(&self, supplied: &str) -> Vec<String> {
-        nearest(supplied, &self.keys(), Population::ConfigurationKeys)
     }
 
     /// The nearest matches to `supplied` among the enumerated key space
@@ -259,14 +252,28 @@ impl Configuration {
 
     /// The condition `FR-CFG-007` and `FR-CFG-012` raise for a key this file
     /// does not set.
+    ///
+    /// The suggestion is drawn over the whole key space, as `tpl cfg set`
+    /// draws it (`FR-CFG-009`), and each candidate the file does not set is
+    /// recorded as such, because the `hint` must say so: a `tpl cfg get` or a
+    /// `tpl cfg unset` of that candidate is itself a `66`.
     pub(crate) fn key_not_found(&self, key: &str) -> Error {
         let parsed = keys::Key::parse(key);
+        let set = self.keys();
+        let nearest = self
+            .nearest_key_in_space(key)
+            .into_iter()
+            .map(|candidate| {
+                let carried = set.contains(&candidate);
+                (candidate, carried)
+            })
+            .collect();
         Error::ConfigurationKeyNotFound {
             key: key.to_owned(),
             known: parsed.is_some(),
             default: parsed.as_ref().and_then(keys::Key::default_value),
             file: self.file.clone(),
-            nearest: self.nearest_key_set(key),
+            nearest,
         }
     }
 

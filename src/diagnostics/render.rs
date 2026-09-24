@@ -9,7 +9,7 @@
 //! ```text
 //! error: table 'ordrs' does not exist in database 'shop'
 //! cause: no row of INFORMATION_SCHEMA matches table 'ordrs' in database 'shop', …
-//! hint:  list the available tables with: tpl -d shop schema tables
+//! hint:  list the available tables with: tpl schema tables
 //! exit:  66 (EX_NOINPUT)
 //! ```
 //!
@@ -630,7 +630,7 @@ mod tests {
             "error: table 'ordrs' does not exist in database 'shop_prod'\n\
              cause: no row of INFORMATION_SCHEMA matches table 'ordrs' in database 'shop_prod', \
              read through database entry 'shop'\n\
-             hint:  list the available tables with: tpl -d shop schema tables\n\
+             hint:  list the available tables with: tpl schema tables\n\
              exit:  66 (EX_NOINPUT)\n"
         );
     }
@@ -1252,7 +1252,7 @@ mod tests {
                 known: false,
                 default: None,
                 file: hostile_path(),
-                nearest: vec![hostile()],
+                nearest: vec![(hostile(), false)],
             },
             Error::NameNotResolved {
                 entry: String::from("shop"),
@@ -1562,18 +1562,19 @@ mod tests {
     fn fr_err_022_a_name_the_character_set_admits_still_reaches_its_hint() {
         // The control that makes the test above mean something: the gate lets
         // an admissible name through, so a hint that carried nothing at all
-        // would not pass for a hint that refused a hostile name.
+        // would not pass for a hint that refused a hostile name. The entry is
+        // not written: FR-ERR-043 writes -d only where the caller gave it.
         let rendered = render(&Error::CatalogueObjectNotFound {
             kind: CatalogueObjectKind::Table,
             name: "ordrs".to_owned(),
             entry: "shop".to_owned(),
             database: "shop".to_owned(),
-            nearest: Vec::new(),
+            nearest: vec!["orders".to_owned()],
         });
 
         assert_eq!(
             line(&rendered, Label::Hint),
-            "list the available tables with: tpl -d shop schema tables"
+            "did you mean 'orders'? list the available tables with: tpl schema tables"
         );
     }
 
@@ -1896,6 +1897,70 @@ mod tests {
             line(&rendered, Label::Hint).ends_with("jq -r '.data.database.tables[].name' ctx.json"),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn fr_err_041_a_context_path_outside_the_set_is_not_written() {
+        // FR-ERR-041, forty-seventh edition: the --context path is governed.
+        for path in ["/a b/ctx.json", "-ctx.json", "ctx;rm.json"] {
+            let rendered = render(&Error::ContextObjectNotFound {
+                kind: CatalogueObjectKind::Table,
+                name: "ordrs".to_owned(),
+                path: PathBuf::from(path),
+                database: "shop".to_owned(),
+                nearest: Vec::new(),
+            });
+            let hint = line(&rendered, Label::Hint);
+            assert!(!hint.contains("jq -r"), "{hint}");
+            assert!(!hint.contains(path), "{hint}");
+            assert!(hint.contains("data.database.tables"), "{hint}");
+        }
+    }
+
+    #[test]
+    fn fr_conf_046_a_refused_password_command_names_the_condition() {
+        use crate::project::config::entry::SplitFault;
+
+        let refused = |parameter: &str, fault: SplitFault| {
+            render(&Error::MalformedValue {
+                parameter: parameter.to_owned(),
+                command: "cfg set".to_owned(),
+                value: "[\"pass\",\"db/shop\"]".to_owned(),
+                expected: fault.condition(),
+            })
+        };
+
+        let rendered = refused("database.shop.password_command", SplitFault::LeadingBracket);
+        assert_eq!(
+            line(&rendered, Label::Cause),
+            "the value begins with '[', which is how an array arrives; \
+             database.shop.password_command takes one command line written as one string, which \
+             tpl splits into words"
+        );
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "write the command as one command line: tpl cfg set database.shop.password_command \
+             '<command line>', where '<command line>' stands for the command, written as one \
+             command line, as in 'pass db/shop'"
+        );
+        assert!(rendered.ends_with("exit:  64 (EX_USAGE)\n"), "{rendered}");
+
+        for (fault, named) in [
+            (SplitFault::NoWord, "holds no word"),
+            (SplitFault::UnclosedQuote, "leaves a quote unclosed"),
+            (
+                SplitFault::TrailingBackslash,
+                "ends in a backslash outside quotes",
+            ),
+        ] {
+            let rendered = refused("--password-command", fault);
+            let cause = line(&rendered, Label::Cause);
+            assert!(cause.contains(named), "{cause}");
+            assert!(
+                cause.contains("--password-command takes one command line"),
+                "{cause}"
+            );
+        }
     }
 
     #[test]

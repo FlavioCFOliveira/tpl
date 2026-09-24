@@ -160,6 +160,16 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'tpl cache load' reads the server in order to store what it read, so an invocation \
              that forbids the store asks the command to do nothing",
         ),
+        // FR-CONF-046: the condition the string met, then what the key or the
+        // flag takes. The condition is what `expected` carries for these two.
+        Error::MalformedValue {
+            parameter,
+            expected,
+            ..
+        } if is_password_command(parameter) => Cow::Owned(format!(
+            "{expected}; {parameter} takes one command line written as one string, which tpl \
+             splits into words"
+        )),
         Error::MalformedValue {
             parameter,
             value,
@@ -878,6 +888,12 @@ fn joined(chain: &[String]) -> Cow<'_, str> {
         [only] => Cow::Borrowed(only.as_str()),
         _ => Cow::Owned(chain.join(CHAIN_SEPARATOR)),
     }
+}
+
+/// Whether `parameter` is one that takes a `password_command` supplied as one
+/// string: the flag of `FR-CFG-046`, or the key of `FR-CONF-002`.
+pub(super) fn is_password_command(parameter: &str) -> bool {
+    parameter == "--password-command" || parameter.ends_with(".password_command")
 }
 
 #[cfg(test)]

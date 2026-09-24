@@ -22,6 +22,7 @@
 //!
 //! [`Error`]: crate::error::Error
 
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::sync::OnceLock;
 
@@ -108,35 +109,377 @@ pub(super) fn restated(edits: &[Edit<'_>]) -> Option<Restated> {
     restate(&crate::cli::tree(), &words, edits)
 }
 
-/// The `--tpl-dir` the caller gave, as the words to write after `tpl` in a
-/// command that must run against the same project, or [`None`] where none was
-/// given. A path the set of `FR-ERR-041` refuses is a placeholder, and the
-/// second member says what it stands for.
-pub(super) fn project_flag() -> Option<(String, Option<(String, String)>)> {
-    let argv = RECORDED.get()?;
-    let mut words = argv.iter().skip(1);
+/// Which of the two flags of `FR-ERR-043` a hint may carry: `false` where the
+/// hint exists to change or to remove that flag, and so carries what it
+/// proposes instead.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Carry {
+    /// Whether `--tpl-dir` may be carried.
+    pub(super) tpl_dir: bool,
+    /// Whether `-d/--database` may be carried.
+    pub(super) database: bool,
+}
+
+/// A value of one of the two flags, as it may be written into a command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Given {
+    /// The value, or the placeholder that stands for it.
+    text: String,
+    /// The placeholder and what it stands for, where the value's set refused
+    /// the value.
+    placeholder: Option<(&'static str, &'static str)>,
+}
+
+/// The `--tpl-dir` placeholder and its meaning; the same words [`valued`]
+/// gives the flag, so that a restated command and a carried one agree.
+const TPL_DIR_PLACEHOLDER: (&str, &str) = ("<tpl-dir>", "the value you gave --tpl-dir");
+
+/// The `-d/--database` placeholder and its meaning.
+const DATABASE_PLACEHOLDER: (&str, &str) = ("<database>", "the value you gave --database");
+
+/// The `--tpl-dir` and the `-d/--database` the caller wrote, each tested by
+/// the set that governs it.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Globals {
+    tpl_dir: Option<Given>,
+    database: Option<Given>,
+}
+
+/// `hint` with every runnable `tpl` command it writes carrying the caller's
+/// `--tpl-dir` and `-d/--database`, immediately after `tpl` and in that order
+/// (`FR-ERR-043`).
+///
+/// A flag is carried only where the caller wrote it — a value from `TPL_DIR`,
+/// `TPL_DATABASE` or `core.database` is never in the argument vector — and
+/// only onto a command on which it has an effect, per the table of
+/// `BR-GLOB-001`; a command the hint already writes with the flag keeps the
+/// value the hint proposes, and one on which the flag has no effect loses it.
+/// A value its set refuses is a placeholder, and a clause at the end of the
+/// line says what the placeholder stands for.
+///
+/// Where no vector was recorded, or the caller wrote neither flag, `hint` is
+/// returned unchanged.
+pub(super) fn carried(hint: Cow<'static, str>, carry: Carry) -> Cow<'static, str> {
+    let Some(argv) = RECORDED.get() else {
+        return hint;
+    };
+    let words: Vec<Option<&str>> = argv.iter().skip(1).map(|word| word.to_str()).collect();
+    let tree = crate::cli::tree();
+    let given = globals(&tree, &words);
+    carry_into(&tree, &hint, &given, carry).map_or(hint, Cow::Owned)
+}
+
+/// The two flags as the caller wrote them in `words`, the vector without
+/// `argv[0]`, up to the first `--`.
+///
+/// The scan does not need the whole vector to parse: a hint is written for an
+/// invocation the parser may have refused. A token that is the value of
+/// another flag is skipped, so that value is never read as one of the two.
+fn globals(tree: &clap::Command, words: &[Option<&str>]) -> Globals {
+    let mut found = Globals::default();
+    let mut words = words.iter().copied();
+
     while let Some(word) = words.next() {
-        let text = word.to_str();
-        if text == Some("--") {
-            return None;
+        let Some(text) = word else { continue };
+        if text == "--" {
+            break;
         }
-        let value = match text.and_then(|text| text.strip_prefix("--tpl-dir")) {
-            Some("") => words.next().and_then(|value| value.to_str()),
-            Some(attached) if attached.starts_with('=') => Some(&attached[1..]),
-            _ => continue,
+
+        if let Some(long) = text.strip_prefix("--") {
+            let (name, attached) = match long.split_once('=') {
+                Some((name, value)) => (name, Some(value)),
+                None => (long, None),
+            };
+            match name {
+                "tpl-dir" => {
+                    let value = attached.or_else(|| words.next().flatten());
+                    found.tpl_dir.get_or_insert_with(|| tpl_dir_given(value));
+                }
+                "database" => {
+                    let value = attached.or_else(|| words.next().flatten());
+                    found.database.get_or_insert_with(|| database_given(value));
+                }
+                _ if attached.is_none()
+                    && takes_value_anywhere(tree, |a| a.get_long() == Some(name)) =>
+                {
+                    words.next();
+                }
+                _ => {}
+            }
+            continue;
+        }
+
+        let Some(cluster) = text.strip_prefix('-').filter(|cluster| !cluster.is_empty()) else {
+            continue;
         };
-        return Some(match value {
-            Some(path) if admits_template(path) => (format!("--tpl-dir {path}"), None),
-            _ => (
-                "--tpl-dir <tpl-dir>".to_owned(),
-                Some((
-                    "<tpl-dir>".to_owned(),
-                    "the value you gave --tpl-dir".to_owned(),
-                )),
-            ),
-        });
+        for (at, short) in cluster.char_indices() {
+            let known = |argument: &clap::Arg| argument.get_short() == Some(short);
+            if !takes_value_anywhere(tree, known) {
+                if any_argument(tree, &known) {
+                    continue;
+                }
+                break;
+            }
+            let rest = &cluster[at + short.len_utf8()..];
+            let rest = rest.strip_prefix('=').unwrap_or(rest);
+            let value = if rest.is_empty() {
+                words.next().flatten()
+            } else {
+                Some(rest)
+            };
+            if short == 'd' {
+                found.database.get_or_insert_with(|| database_given(value));
+            }
+            break;
+        }
     }
-    None
+
+    found
+}
+
+/// The `--tpl-dir` value, tested by the set of `FR-ERR-041`.
+fn tpl_dir_given(value: Option<&str>) -> Given {
+    match value {
+        Some(path) if admits_template(path) => Given {
+            text: path.to_owned(),
+            placeholder: None,
+        },
+        _ => Given {
+            text: TPL_DIR_PLACEHOLDER.0.to_owned(),
+            placeholder: Some(TPL_DIR_PLACEHOLDER),
+        },
+    }
+}
+
+/// The `-d/--database` value, tested by the set of `FR-ERR-022`.
+fn database_given(value: Option<&str>) -> Given {
+    match value {
+        Some(entry) if admits(entry) => Given {
+            text: entry.to_owned(),
+            placeholder: None,
+        },
+        _ => Given {
+            text: DATABASE_PLACEHOLDER.0.to_owned(),
+            placeholder: Some(DATABASE_PLACEHOLDER),
+        },
+    }
+}
+
+/// Whether some node of `tree` declares an argument `matches` selects.
+fn any_argument(tree: &clap::Command, matches: &impl Fn(&clap::Arg) -> bool) -> bool {
+    tree.get_arguments().any(matches)
+        || tree
+            .get_subcommands()
+            .any(|child| any_argument(child, matches))
+}
+
+/// Whether the argument `matches` selects, wherever the tree declares it,
+/// takes a value.
+fn takes_value_anywhere(tree: &clap::Command, matches: impl Fn(&clap::Arg) -> bool) -> bool {
+    fn walk(node: &clap::Command, matches: &impl Fn(&clap::Arg) -> bool) -> bool {
+        node.get_arguments()
+            .any(|argument| matches(argument) && takes_value(argument))
+            || node.get_subcommands().any(|child| walk(child, matches))
+    }
+    walk(tree, &matches)
+}
+
+/// The words that open a command in a hint and precede `tpl` in prose that
+/// only names one: "the tpl render command", "no tpl cfg command runs".
+const PROSE: &[&str] = &["the ", "no ", "No "];
+
+/// The line with `given` carried into each command, or [`None`] where no
+/// command changed.
+fn carry_into(tree: &clap::Command, hint: &str, given: &Globals, carry: Carry) -> Option<String> {
+    if given.tpl_dir.is_none() && given.database.is_none() {
+        return None;
+    }
+
+    let mut line = String::with_capacity(hint.len() + 64);
+    let mut placeholders: Vec<(&'static str, &'static str)> = Vec::new();
+    let mut changed = false;
+    let mut copied = 0_usize;
+    let mut searched = 0_usize;
+
+    while let Some(found) = hint[searched..].find("tpl ") {
+        let at = searched + found;
+        let flags_at = at + "tpl ".len();
+        let before = &hint[..at];
+        let opens = (before.is_empty() || before.ends_with(' '))
+            && !PROSE.iter().any(|word| before.ends_with(word));
+
+        if opens && let Some(rewritten) = rewrite(tree, &hint[flags_at..], given, carry) {
+            line.push_str(&hint[copied..flags_at]);
+            line.push_str(&rewritten.flags);
+            copied = flags_at + rewritten.consumed;
+            for placeholder in rewritten.placeholders {
+                if !placeholders.contains(&placeholder) {
+                    placeholders.push(placeholder);
+                }
+            }
+            changed = true;
+        }
+        searched = flags_at.max(copied);
+    }
+
+    if !changed {
+        return None;
+    }
+    line.push_str(&hint[copied..]);
+
+    // The words for each placeholder carried, unless the line already says
+    // them — a restated command names its own.
+    let unexplained: Vec<(&str, &str)> = placeholders
+        .into_iter()
+        .filter(|(placeholder, _)| !line.contains(&format!("{placeholder} with ")))
+        .collect();
+    for (index, (placeholder, meaning)) in unexplained.iter().enumerate() {
+        line.push_str(match index {
+            0 => "; replace ",
+            _ if index + 1 == unexplained.len() => ", and ",
+            _ => ", ",
+        });
+        line.push_str(placeholder);
+        line.push_str(" with ");
+        line.push_str(meaning);
+    }
+
+    Some(line)
+}
+
+/// The leading flags of one command, rewritten under `FR-ERR-043`.
+#[derive(Debug)]
+struct Rewritten {
+    /// The flags to write after `tpl `, each followed by a space.
+    flags: String,
+    /// How many bytes of the original command the flags replace.
+    consumed: usize,
+    /// The placeholders written into `flags` from the invocation.
+    placeholders: Vec<(&'static str, &'static str)>,
+}
+
+/// Which of the two flags a leading flag of a command is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Leading {
+    TplDir,
+    Database,
+    Other,
+}
+
+/// The flags `command` — the text after `tpl ` — should lead with, or
+/// [`None`] where it names no command of the tree or needs no change.
+fn rewrite(
+    tree: &clap::Command,
+    command: &str,
+    given: &Globals,
+    carry: Carry,
+) -> Option<Rewritten> {
+    // The leading flags, each with its value, and where the node begins.
+    let mut leading: Vec<(Leading, &str)> = Vec::new();
+    let mut offset = 0_usize;
+    loop {
+        let rest = &command[offset..];
+        let token = rest.split(' ').next().unwrap_or_default();
+        if token.len() < 2 || !token.starts_with('-') || token == "--" {
+            break;
+        }
+        let (name, attached) = match token.split_once('=') {
+            Some((name, _)) => (name, true),
+            None => (token, false),
+        };
+        let (kind, valued) = match name {
+            "--tpl-dir" => (Leading::TplDir, true),
+            "-d" | "--database" => (Leading::Database, true),
+            _ if name.starts_with("-d") && !name.starts_with("--") => (Leading::Database, false),
+            _ => {
+                let argument = tree.get_arguments().find(|argument| {
+                    name.strip_prefix("--").map_or_else(
+                        || name.chars().nth(1) == argument.get_short(),
+                        |long| argument.get_long() == Some(long),
+                    )
+                });
+                (Leading::Other, argument.is_some_and(takes_value))
+            }
+        };
+        let mut length = token.len();
+        if valued && !attached {
+            let value = rest[length..].strip_prefix(' ')?;
+            length += 1 + value.split(' ').next().unwrap_or_default().len();
+        }
+        leading.push((kind, &rest[..length]));
+        offset += length;
+        offset += usize::from(command[offset..].starts_with(' '));
+    }
+
+    // The node the command names, which decides where each flag has effect.
+    let mut words = command[offset..].split(' ');
+    let top = tree.find_subcommand(words.next()?)?;
+    let child = words
+        .next()
+        .and_then(|word| top.find_subcommand(word))
+        .map(clap::Command::get_name);
+    let end = command[offset..]
+        .find("; ")
+        .into_iter()
+        .chain(command[offset..].find(", "))
+        .min()
+        .map_or(command.len(), |end| offset + end);
+    let tpl_dir_applies = !matches!(top.get_name(), "init" | "help" | "version");
+    let database_applies = match top.get_name() {
+        "schema" => true,
+        "render" => !command[offset..end].contains("--context"),
+        "cache" => matches!(child, Some("load" | "clean" | "status")),
+        _ => false,
+    };
+
+    let written = |kind: Leading| {
+        leading
+            .iter()
+            .find(|(held, _)| *held == kind)
+            .map(|(_, text)| *text)
+    };
+    let mut flags = String::new();
+    let mut placeholders = Vec::new();
+    for (kind, applies, allowed, value, flag) in [
+        (
+            Leading::TplDir,
+            tpl_dir_applies,
+            carry.tpl_dir,
+            &given.tpl_dir,
+            "--tpl-dir",
+        ),
+        (
+            Leading::Database,
+            database_applies,
+            carry.database,
+            &given.database,
+            "-d",
+        ),
+    ] {
+        if !applies {
+            continue;
+        }
+        if let Some(text) = written(kind) {
+            flags.push_str(text);
+            flags.push(' ');
+        } else if let (true, Some(value)) = (allowed, value) {
+            flags.push_str(flag);
+            flags.push(' ');
+            flags.push_str(&value.text);
+            flags.push(' ');
+            placeholders.extend(value.placeholder);
+        }
+    }
+    for (_, text) in leading.iter().filter(|(kind, _)| *kind == Leading::Other) {
+        flags.push_str(text);
+        flags.push(' ');
+    }
+
+    (flags != command[..offset]).then_some(Rewritten {
+        flags,
+        consumed: offset,
+        placeholders,
+    })
 }
 
 /// One word of the restated command.
@@ -250,6 +593,7 @@ fn restate(tree: &clap::Command, words: &[Option<&str>], edits: &[Edit<'_>]) -> 
     for edit in edits {
         apply(&mut pieces, *edit)?;
     }
+    hoist(&mut pieces);
 
     let mut command = String::from("tpl");
     let mut placeholders: Vec<(String, String)> = Vec::new();
@@ -271,6 +615,29 @@ fn restate(tree: &clap::Command, words: &[Option<&str>], edits: &[Edit<'_>]) -> 
         command,
         placeholders,
     })
+}
+
+/// Moves `--tpl-dir` and `-d/--database`, each with its value, to the front of
+/// the command, in that order, as `FR-ERR-043` writes them.
+fn hoist(pieces: &mut Vec<Piece>) {
+    let mut front: Vec<Piece> = Vec::with_capacity(4);
+    for id in ["tpl_dir", "database"] {
+        let Some(at) = pieces
+            .iter()
+            .position(|piece| piece.value_of.as_deref() == Some(id))
+        else {
+            continue;
+        };
+        // A value glued to its flag is one word; otherwise the flag is the
+        // word before it.
+        let start = if pieces[at].glued.is_some() {
+            at
+        } else {
+            at.saturating_sub(1)
+        };
+        front.extend(pieces.drain(start..=at));
+    }
+    pieces.splice(0..0, front);
 }
 
 /// Applies one edit, or answers [`None`] where it found nothing to act on.
@@ -422,7 +789,7 @@ fn placeholder(id: Option<&str>, text: String, meaning: String) -> Piece {
 
 #[cfg(test)]
 mod tests {
-    use super::{Edit, Replacement, restate};
+    use super::{Carry, Edit, Globals, Replacement, carry_into, globals, restate};
 
     fn restated(words: &[&str], edits: &[Edit<'_>]) -> (String, String) {
         let words: Vec<Option<&str>> = words.iter().copied().map(Some).collect();
@@ -503,7 +870,7 @@ mod tests {
         );
         assert_eq!(
             command,
-            "tpl -vv -d shop schema tables --pattern <pattern> --format json --pretty"
+            "tpl -d shop -vv schema tables --pattern <pattern> --format json --pretty"
         );
         assert_eq!(
             replacing,
@@ -575,5 +942,232 @@ mod tests {
     fn t_01_an_edit_with_nothing_to_act_on_restates_nothing() {
         let words = [Some("version")];
         assert!(restate(&crate::cli::tree(), &words, &[FUNCTION_F]).is_none());
+    }
+
+    const BOTH: Carry = Carry {
+        tpl_dir: true,
+        database: true,
+    };
+
+    /// What `hint` becomes for an invocation written as `words`.
+    fn carried(words: &[&str], hint: &str, carry: Carry) -> String {
+        let tree = crate::cli::tree();
+        let words: Vec<Option<&str>> = words.iter().copied().map(Some).collect();
+        let given = globals(&tree, &words);
+        carry_into(&tree, hint, &given, carry).unwrap_or_else(|| hint.to_owned())
+    }
+
+    const SHOP: &[&str] = &[
+        "--tpl-dir",
+        "/srv/shop/.tpl",
+        "-d",
+        "shop",
+        "schema",
+        "table",
+        "ordrs",
+    ];
+
+    #[test]
+    fn fr_err_043_the_two_flags_follow_tpl_in_order() {
+        assert_eq!(
+            carried(
+                SHOP,
+                "did you mean 'orders'? list the available tables with: tpl schema tables",
+                BOTH
+            ),
+            "did you mean 'orders'? list the available tables with: tpl --tpl-dir \
+             /srv/shop/.tpl -d shop schema tables"
+        );
+        // Written in any order and any spelling, carried as --tpl-dir first.
+        assert_eq!(
+            carried(
+                &[
+                    "--database=shop",
+                    "schema",
+                    "tables",
+                    "--tpl-dir=/srv/shop/.tpl"
+                ],
+                "list them with: tpl schema views",
+                BOTH
+            ),
+            "list them with: tpl --tpl-dir /srv/shop/.tpl -d shop schema views"
+        );
+        assert_eq!(
+            carried(
+                &["-vdshop", "schema", "tables"],
+                "run: tpl schema views",
+                BOTH
+            ),
+            "run: tpl -d shop schema views"
+        );
+    }
+
+    #[test]
+    fn fr_err_043_a_refused_value_is_a_placeholder_the_line_explains() {
+        assert_eq!(
+            carried(
+                &[
+                    "--tpl-dir",
+                    "/srv/my shop/.tpl",
+                    "-d",
+                    "shop",
+                    "schema",
+                    "table",
+                    "x"
+                ],
+                "list the available tables with: tpl schema tables",
+                BOTH
+            ),
+            "list the available tables with: tpl --tpl-dir <tpl-dir> -d shop schema tables; \
+             replace <tpl-dir> with the value you gave --tpl-dir"
+        );
+        assert_eq!(
+            carried(
+                &["-d", "my-shop", "schema", "table", "x"],
+                "list them with: tpl schema tables",
+                BOTH
+            ),
+            "list them with: tpl -d <database> schema tables; replace <database> with the value \
+             you gave --database"
+        );
+        // A restated command already says what its placeholder stands for.
+        assert_eq!(
+            carried(
+                &["--tpl-dir", "/a b", "cfg", "list"],
+                "run: tpl --tpl-dir <tpl-dir> cfg list; replace <tpl-dir> with the value you gave \
+                 --tpl-dir",
+                BOTH
+            ),
+            "run: tpl --tpl-dir <tpl-dir> cfg list; replace <tpl-dir> with the value you gave \
+             --tpl-dir"
+        );
+    }
+
+    #[test]
+    fn fr_err_043_a_flag_is_carried_only_where_it_has_an_effect() {
+        let cases = [
+            (
+                "see: tpl cfg list",
+                "see: tpl --tpl-dir /srv/shop/.tpl cfg list",
+            ),
+            (
+                "see: tpl template show t",
+                "see: tpl --tpl-dir /srv/shop/.tpl template show t",
+            ),
+            (
+                "see: tpl cache load",
+                "see: tpl --tpl-dir /srv/shop/.tpl -d shop cache load",
+            ),
+            (
+                "see: tpl render t --table x",
+                "see: tpl --tpl-dir /srv/shop/.tpl -d shop render t --table x",
+            ),
+            (
+                "see: tpl render t --context c.json; or not",
+                "see: tpl --tpl-dir /srv/shop/.tpl render t --context c.json; or not",
+            ),
+            ("see: tpl help cfg set", "see: tpl help cfg set"),
+            ("see: tpl init <path>", "see: tpl init <path>"),
+            ("see: tpl version", "see: tpl version"),
+        ];
+        for (hint, expected) in cases {
+            assert_eq!(carried(SHOP, hint, BOTH), expected, "{hint}");
+        }
+
+        // A restated command loses a flag the node it names ignores.
+        assert_eq!(
+            carried(
+                &[
+                    "-d", "shop", "cfg", "database", "update", "f", "--port", "1"
+                ],
+                "write: tpl -d shop cfg database update f --dsn <dsn>",
+                BOTH
+            ),
+            "write: tpl cfg database update f --dsn <dsn>"
+        );
+    }
+
+    #[test]
+    fn fr_err_043_a_hint_that_changes_a_flag_keeps_what_it_proposes() {
+        // A candidate entry stands in place of the one -d gave.
+        assert_eq!(
+            carried(SHOP, "try: tpl -d shops schema tables", BOTH),
+            "try: tpl --tpl-dir /srv/shop/.tpl -d shops schema tables"
+        );
+        assert_eq!(
+            carried(
+                SHOP,
+                "list: tpl cfg database list",
+                Carry {
+                    tpl_dir: true,
+                    database: false
+                }
+            ),
+            "list: tpl --tpl-dir /srv/shop/.tpl cfg database list"
+        );
+        assert_eq!(
+            carried(
+                SHOP,
+                "name one with: tpl --tpl-dir <path>/.tpl <command>",
+                BOTH
+            ),
+            "name one with: tpl --tpl-dir <path>/.tpl <command>"
+        );
+        assert_eq!(
+            carried(
+                SHOP,
+                "run: tpl schema tables",
+                Carry {
+                    tpl_dir: false,
+                    database: true
+                }
+            ),
+            "run: tpl -d shop schema tables"
+        );
+    }
+
+    #[test]
+    fn fr_err_043_every_command_of_the_line_is_carried_and_prose_is_not() {
+        assert_eq!(
+            carried(
+                SHOP,
+                "tpl cfg unset a.b; tpl cfg unset c.d; then tpl cfg set e.f <v>",
+                BOTH
+            ),
+            "tpl --tpl-dir /srv/shop/.tpl cfg unset a.b; tpl --tpl-dir /srv/shop/.tpl cfg unset \
+             c.d; then tpl --tpl-dir /srv/shop/.tpl cfg set e.f <v>"
+        );
+        for prose in [
+            "add --set title=<value> to the tpl render command",
+            "no tpl cfg command runs until the file is valid",
+            "tpl discards the command's standard error",
+            "the file .tpl/.cfg does not set it",
+        ] {
+            assert_eq!(carried(SHOP, prose, BOTH), prose);
+        }
+    }
+
+    #[test]
+    fn fr_err_043_only_what_the_caller_wrote_is_carried() {
+        let tree = crate::cli::tree();
+        let scan = |words: &[&str]| {
+            let words: Vec<Option<&str>> = words.iter().copied().map(Some).collect();
+            globals(&tree, &words)
+        };
+
+        assert_eq!(scan(&["schema", "tables"]), Globals::default());
+        // After `--`, and as the value of another flag, `-d` is not the flag.
+        assert_eq!(
+            scan(&["render", "t", "--", "-d", "shop"]),
+            Globals::default()
+        );
+        assert_eq!(
+            scan(&["schema", "tables", "--pattern", "-d"]),
+            Globals::default()
+        );
+        assert_eq!(
+            carried(&["schema", "tables"], "run: tpl schema views", BOTH),
+            "run: tpl schema views"
+        );
     }
 }

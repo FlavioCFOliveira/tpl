@@ -591,9 +591,9 @@ const PASSWORD_COMMAND: Documented = Documented {
     purpose: "Sets a command whose standard output is the password. Write it as one string, \
               a command line such as \"pass db/shop\", never as an array. tpl splits the string \
               into words as a shell would (quotes group words, and every quote must be closed) \
-              and stores them in the file as an array, [\"pass\", \"db/shop\"]; a value that \
-              starts with [ is not read as an array. The command runs without a shell, and no \
-              password is stored in the file.",
+              and stores them in the file as an array, [\"pass\", \"db/shop\"]. A value that \
+              starts with an unquoted [, or ends in a backslash outside quotes, is refused. The \
+              command runs without a shell, and no password is stored in the file.",
     excludes: &[],
 };
 /// `--ca-file`, as every node that declares it states it.
@@ -2734,7 +2734,8 @@ const ENTRIES: [Entry; 35] = [
                          a command line such as \"pass db/shop\", never as an array; split into \
                          words as a shell would (quotes group words, and every quote must be \
                          closed); stored in the file as an array, [\"pass\", \"db/shop\"]. A \
-                         value that starts with [ is not read as an array.",
+                         value that starts with an unquoted [, or ends in a backslash outside \
+                         quotes, is refused.",
                     ),
                     row(
                         "database.<name>.database",

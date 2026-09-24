@@ -62,11 +62,36 @@ pub(super) const SOFTWARE_DEFECT: &str = "this is a defect in tpl and is not cor
                                           caller; report it with the command you ran and the \
                                           output of: tpl version";
 
-/// The content of the `hint` line for `error`, without its label.
+/// The content of the `hint` line for `error`, without its label, with the
+/// caller's `--tpl-dir` and `-d/--database` carried into every runnable `tpl`
+/// command it writes (`FR-ERR-043`).
+pub(super) fn hint(error: &Error) -> Cow<'static, str> {
+    restate::carried(bare(error), carried(error))
+}
+
+/// Which of the two flags of `FR-ERR-043` the hint of `error` may carry.
+///
+/// Both, except where the hint exists to change the flag: a `hint` answering
+/// `FR-GLOB-007` names an entry in place of the one `-d` gave, and one
+/// answering `FR-PROJ-006` or `FR-PROJ-008` names a project in place of the one
+/// `--tpl-dir` gave or failed to find. A variant added to [`Error`] carries
+/// both, which is what the requirement asks of every other hint.
+fn carried(error: &Error) -> restate::Carry {
+    restate::Carry {
+        tpl_dir: !matches!(
+            error,
+            Error::ProjectNotFound { .. } | Error::ProjectDirUnusable { .. }
+        ),
+        database: !matches!(error, Error::DatabaseEntryNotFound { .. }),
+    }
+}
+
+/// The `hint` line of `error` before `FR-ERR-043` carries the caller's global
+/// flags into the commands it writes.
 ///
 /// The match is exhaustive and carries no wildcard arm, so a variant added to
 /// [`Error`] does not compile until it is given a hint.
-pub(super) fn hint(error: &Error) -> Cow<'static, str> {
+fn bare(error: &Error) -> Cow<'static, str> {
     match error {
         // ------------------------------------------------------------ 64 ---
         // FR-CLI-003 obliges the nearest-match half of these two lines and
@@ -372,12 +397,14 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 "write the URL as scheme://host/database, e.g.: --dsn \
                  mysql://db.example.com:3306/shop",
             ),
-            // T-03: the caller's own command with an example command line in
-            // place of the value, which says the form by showing it.
-            (parameter, _)
-                if parameter == "--password-command"
-                    || parameter.ends_with(".password_command") =>
-            {
+            // T-03, FR-CONF-046: the caller's own command with a placeholder
+            // in place of the value, quoted as the one string the value is, and
+            // an example command line after it, which says the form by showing
+            // it. The placeholder stands for a command only the caller knows.
+            (parameter, _) if super::cause::is_password_command(parameter) => {
+                const LINE: &str = "'<command line>'";
+                const MEANING: &str = "where '<command line>' stands for the command, written as \
+                                       one command line, as in 'pass db/shop'";
                 let ids: &[&str] = if parameter == "--password-command" {
                     &["password_command"]
                 } else {
@@ -385,22 +412,22 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 };
                 let example = Edit::Value {
                     ids,
-                    to: Replacement::Literal("\"pass db/shop\""),
+                    to: Replacement::Literal(LINE),
                 };
                 match restate::restated(&[example]) {
                     Some(restated) => Cow::Owned(format!(
-                        "write the command as one string, e.g.: {}{}",
+                        "write the command as one command line: {}, {MEANING}{}",
                         restated.command,
                         restated.replacing()
                     )),
                     None if admits_key(parameter) => Cow::Owned(format!(
-                        "write the command as one string, e.g.: tpl cfg set {parameter} \
-                         \"pass db/shop\""
+                        "write the command as one command line: tpl cfg set {parameter} {LINE}, \
+                         {MEANING}"
                     )),
-                    None => Cow::Borrowed(
-                        "write the command as one string, e.g.: --password-command \
-                         \"pass db/shop\"",
-                    ),
+                    None => Cow::Owned(format!(
+                        "write the command as one command line: --password-command {LINE}, \
+                         {MEANING}"
+                    )),
                 }
             }
             (_, "cfg set") => {
@@ -563,16 +590,11 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // line is composed here from what the variant carries, and an object
         // name is a value this corpus does not fix, so FR-ERR-022 governs it
         // by the character set and FR-ERR-023 drops a candidate outside it.
-        Error::CatalogueObjectNotFound {
-            kind,
-            entry,
-            nearest,
-            ..
-        } => {
+        Error::CatalogueObjectNotFound { kind, nearest, .. } => {
             let generic = match listing(*kind) {
-                Some(listing) if admits(entry) => Cow::Owned(format!(
-                    "list the available {listing} with: tpl -d {entry} schema {listing}"
-                )),
+                // FR-ERR-043: the entry is written only where the caller gave
+                // it with -d, and then it is carried in; one taken from
+                // core.database or TPL_DATABASE resolves again by itself.
                 Some(listing) => Cow::Owned(format!(
                     "list the available {listing} with: tpl schema {listing}"
                 )),
@@ -641,18 +663,45 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 "list the entries with: tpl cfg database list"
             },
         ),
-        // FR-CFG-007 obliges the nearest-match half over the keys that do
-        // exist in the file.
+        // FR-CFG-007 obliges the nearest-match half over the whole key space,
+        // and BR-ERR-004 the statement that the file does not set a
+        // candidate: `tpl cfg get` or `tpl cfg unset` of it is a 66 again.
         Error::ConfigurationKeyNotFound { nearest, known, .. } => {
-            let admitted = admitted(nearest, admits_key);
-            suggest::hint_line(
-                admitted.iter().copied(),
-                if *known {
-                    "list the keys that are set with: tpl cfg list"
-                } else {
-                    "list every key, its type and its default with: tpl help cfg set"
+            let kept: Vec<&(String, bool)> = nearest
+                .iter()
+                .filter(|(candidate, _)| admits_key(candidate))
+                .collect();
+            let admitted: Vec<&str> = kept.iter().map(|(key, _)| key.as_str()).collect();
+            let unset: Vec<&str> = kept
+                .iter()
+                .filter(|(_, set)| !set)
+                .map(|(key, _)| key.as_str())
+                .collect();
+            let generic = if *known && unset.is_empty() {
+                "list the keys that are set with: tpl cfg list"
+            } else {
+                "list every key, its type and its default with: tpl help cfg set"
+            };
+            let statement = match (unset.as_slice(), admitted.len()) {
+                ([], _) => String::new(),
+                ([only], 1) => match crate::project::config::keys::Key::parse(only)
+                    .and_then(|key| key.default_value())
+                {
+                    Some(_) => ".tpl/.cfg does not set it, so its default applies; ".to_owned(),
+                    None => ".tpl/.cfg does not set it; ".to_owned(),
                 },
-            )
+                (all, count) if all.len() == count => ".tpl/.cfg sets none of them; ".to_owned(),
+                (some, _) => {
+                    let quoted: Vec<String> = some.iter().map(|key| format!("'{key}'")).collect();
+                    format!(
+                        ".tpl/.cfg does not set {}; ",
+                        super::cause::alternatives(&quoted)
+                    )
+                }
+            };
+            let generic = format!("{statement}{generic}");
+
+            Cow::Owned(suggest::hint_line(admitted.iter().copied(), &generic).into_owned())
         }
 
         // ------------------------------------------------------------ 69 ---
@@ -1387,16 +1436,10 @@ fn unset_key(key: &str) -> Cow<'static, str> {
 /// bars a DSN from every message.
 fn rewrite_entry(entry: &str, written: &str, unset: &[String], command: &str) -> String {
     // T-01: the write again is the caller's own command, whole; the removals
-    // before it run against the same project, so they carry its --tpl-dir.
+    // before it run against the same project, and FR-ERR-043 carries its
+    // --tpl-dir into them where the whole line is composed.
     let again = restate::restated(&[]);
-    let project = restate::project_flag().map(|(flag, _)| flag);
-    let mut commands: Vec<Cow<'static, str>> = unset
-        .iter()
-        .map(|key| match &project {
-            Some(flag) => Cow::Owned(unset_key(key).replacen("tpl ", &format!("tpl {flag} "), 1)),
-            None => unset_key(key),
-        })
-        .collect();
+    let mut commands: Vec<Cow<'static, str>> = unset.iter().map(|key| unset_key(key)).collect();
     let replacing = match again {
         Some(again) => {
             let replacing = again.replacing();

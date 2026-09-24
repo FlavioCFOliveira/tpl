@@ -2091,13 +2091,15 @@ fn t_03_and_t_08_a_password_command_is_one_string_with_every_quote_closed() {
     );
     assert_eq!(
         line(&written, "cause: "),
-        "'' was supplied for 'database.new.password_command', which takes a non-empty command \
-         line written as one string, such as \"pass db/shop\", which tpl splits into words"
+        "the value holds no word, so it names no program to execute; \
+         database.new.password_command takes one command line written as one string, which tpl \
+         splits into words"
     );
     assert_eq!(
         line(&written, "hint:  "),
-        "write the command as one string, e.g.: tpl cfg set database.new.password_command \
-         \"pass db/shop\""
+        "write the command as one command line: tpl cfg set database.new.password_command \
+         '<command line>', where '<command line>' stands for the command, written as one command \
+         line, as in 'pass db/shop'"
     );
 
     // A shell refuses an unclosed quote, and so does the split.
@@ -2107,10 +2109,186 @@ fn t_03_and_t_08_a_password_command_is_one_string_with_every_quote_closed() {
         "an unclosed quote",
     );
     assert!(
-        line(&written, "cause: ").contains("whose every quote is closed"),
+        line(&written, "cause: ").starts_with("the value leaves a quote unclosed"),
         "{written}"
     );
     assert_eq!(sandbox.configuration(), b"[core]\n");
+}
+
+#[test]
+fn fr_conf_046_a_trailing_backslash_and_a_leading_bracket_are_refused_and_write_nothing() {
+    let sandbox = Sandbox::new();
+    let file = "[database.shop]\nhost = \"db.example.com\"\n";
+    sandbox.project(file);
+
+    for (arguments, condition) in [
+        (
+            &[
+                "cfg",
+                "set",
+                "database.shop.password_command",
+                r#"["pass","db/shop"]"#,
+            ][..],
+            "the value begins with '[', which is how an array arrives",
+        ),
+        (
+            &[
+                "cfg",
+                "set",
+                "database.shop.password_command",
+                r"pass db/shop\",
+            ][..],
+            "the value ends in a backslash outside quotes",
+        ),
+        (
+            &[
+                "cfg",
+                "database",
+                "update",
+                "shop",
+                "--password-command=[x] y",
+            ][..],
+            "the value begins with '['",
+        ),
+        (
+            &[
+                "cfg",
+                "database",
+                "update",
+                "shop",
+                r"--password-command=pass \",
+            ][..],
+            "the value ends in a backslash outside quotes",
+        ),
+    ] {
+        let written = assert_refused(&sandbox.run(arguments), 64, &arguments.join(" "));
+        assert!(
+            line(&written, "cause: ").starts_with(condition),
+            "{arguments:?}: {written}"
+        );
+        assert!(
+            line(&written, "hint:  ").starts_with("write the command as one command line: tpl "),
+            "{arguments:?}: {written}"
+        );
+        assert_eq!(sandbox.configuration(), file.as_bytes(), "{arguments:?}");
+    }
+
+    // A quoted or escaped bracket, or an absolute path, names a program.
+    for supplied in ["'[x]/get' db", r"\[x]/get db", "/bin/[ x"] {
+        let printed = sandbox.run(&["cfg", "set", "database.shop.password_command", supplied]);
+        assert_eq!(code(&printed), 0, "{supplied}: {}", stderr(&printed));
+    }
+}
+
+#[test]
+fn fr_conf_025_inside_double_quotes_a_backslash_before_another_character_is_kept() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let printed = sandbox.run(&[
+        "cfg",
+        "set",
+        "database.shop.password_command",
+        r#"get "a\b" "\$x""#,
+    ]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+
+    let printed = sandbox.run(&[
+        "cfg",
+        "get",
+        "database.shop.password_command",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    let document = String::from_utf8(printed.stdout).expect("UTF-8");
+    assert!(document.contains(r#"["get","a\\b","$x"]"#), "{document}");
+}
+
+#[test]
+fn fr_cfg_007_a_slip_in_an_unset_key_is_suggested_and_said_to_be_unset() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    for command in ["get", "unset"] {
+        let written = assert_refused(
+            &sandbox.run(&["cfg", command, "core.conect_timeout"]),
+            66,
+            command,
+        );
+        assert_eq!(
+            line(&written, "hint:  "),
+            "did you mean 'core.connect_timeout'? .tpl/.cfg does not set it, so its default \
+             applies; list every key, its type and its default with: tpl help cfg set",
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn fr_err_043_a_hint_command_carries_the_tpl_dir_and_the_entry_the_caller_gave() {
+    let sandbox = Sandbox::new();
+    sandbox.project_at("p", "[core]\n");
+    sandbox.project_at("my dir", "[core]\n");
+
+    // --tpl-dir is carried; -d is not, since no cfg command reads an entry.
+    let written = assert_refused(
+        &sandbox.run(&[
+            "--tpl-dir",
+            "p/.tpl",
+            "-d",
+            "shop",
+            "cfg",
+            "get",
+            "core.database",
+        ]),
+        66,
+        "an unset key",
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "list the keys that are set with: tpl --tpl-dir p/.tpl cfg list"
+    );
+
+    // A path outside the set of FR-ERR-041 is a placeholder the line explains.
+    let written = assert_refused(
+        &sandbox.run(&[
+            "-d",
+            "shop",
+            "--tpl-dir",
+            "my dir/.tpl",
+            "template",
+            "show",
+            "nope",
+        ]),
+        66,
+        "a missing template",
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "list the project's templates with: tpl --tpl-dir <tpl-dir> template list; replace \
+         <tpl-dir> with the value you gave --tpl-dir"
+    );
+
+    // Both flags lead a command on which both have effect, in order, wherever
+    // the caller wrote them.
+    let written = assert_refused(
+        &sandbox.run(&[
+            "schema",
+            "tables",
+            "-d",
+            "shop",
+            "--pretty",
+            "--tpl-dir=p/.tpl",
+        ]),
+        64,
+        "--pretty alone",
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "add --format json: tpl --tpl-dir=p/.tpl -d shop schema tables --format json --pretty; \
+         or drop --pretty"
+    );
 }
 
 #[test]

@@ -540,16 +540,29 @@ fn fr_sch_010_a_named_object_that_does_not_exist_exits_sixty_six_with_a_suggesti
     };
     let sandbox = project(server, ROOT);
 
-    // One candidate: `charg` is one deletion from `charge`.
+    // One candidate: `charg` is one deletion from `charge`. The entry comes
+    // from core.database, so FR-ERR-043 does not write it.
     let one = run(&sandbox, &["schema", "table", "charg"]);
     assert_eq!(one.code, Some(66), "{}", one.err);
     assert_eq!(
         line(&one.err, "hint:"),
-        format!(
-            "did you mean '{TABLE}'? list the available tables with: tpl -d {ENTRY} schema tables"
-        )
+        format!("did you mean '{TABLE}'? list the available tables with: tpl schema tables")
     );
     assert!(one.out.is_empty(), "FR-ERR-033 leaves stdout empty");
+
+    // FR-ERR-043: the --tpl-dir and the -d the caller wrote lead the command.
+    let given = run(
+        &sandbox,
+        &["schema", "table", "charg", "-d", ENTRY, "--tpl-dir", ".tpl"],
+    );
+    assert_eq!(given.code, Some(66), "{}", given.err);
+    assert_eq!(
+        line(&given.err, "hint:"),
+        format!(
+            "did you mean '{TABLE}'? list the available tables with: tpl --tpl-dir .tpl -d \
+             {ENTRY} schema tables"
+        )
+    );
 
     // FR-ERR-037's wording for two and three candidates is exercised where a
     // population that holds two within the distance of one name exists: no two

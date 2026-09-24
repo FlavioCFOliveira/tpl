@@ -514,7 +514,7 @@ mod tests {
         assert!(
             rendered.contains(
                 "hint:  did you mean 'v_sale' or 'v_sales'? list the available views with: \
-                 tpl -d shop schema views"
+                 tpl schema views"
             ),
             "{rendered}"
         );
