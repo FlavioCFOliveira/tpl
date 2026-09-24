@@ -17,7 +17,8 @@ Accepted, 2026-09-24. Decided by the user for rmp `#292`, as relayed by the
 session coordinator, including the release gate, the version pins and the
 archive contents. The provenance gates of Decision point 3 were decided by the
 user for rmp `#293`, on the same day. Decision point 10 was decided by the user
-for rmp `#267`, and the on-demand triggers for rmp `#299`, on the same day.
+for rmp `#267`, the on-demand triggers for rmp `#299`, and the skill asset and
+its installer (Decision points 4 and 11) for rmp `#303`, on the same day.
 
 This record takes over two parts of `ADR-008`: its refusal to prescribe a
 pipeline, with the rejection that argued it, and its open question on the form
@@ -108,11 +109,16 @@ nothing runs on GitHub in reaction to a push or a tag.
    for the version number itself is `OD-03`'s, in
    `docs/spec-technical/open-decisions.md`, and is not restated here.
 
-4. **The release carries one archive per target and one `SHA256SUMS` file.**
+4. **The release carries one archive per target, one skill archive and one
+   `SHA256SUMS` file.**
    Each archive is named `tpl-<tag>-<triple>.tar.gz`, for example
    `tpl-v1.2.0-aarch64-apple-darwin.tar.gz`, and contains the `tpl` binary,
-   `README.md`, `LICENSE` and `CHANGELOG.md`. `SHA256SUMS` covers the four
-   archives. **No artefact is signed.** Signing is not done, not left open.
+   `README.md`, `LICENSE` and `CHANGELOG.md`. The skill archive,
+   `tpl-skill-<tag>.tar.gz`, contains the `skill/` tree at the tagged commit.
+   It is platform-independent and is built once, in the publish job, so the
+   skill's version is the version of the binary it describes. `SHA256SUMS`
+   covers all five archives. **No artefact is signed.** Signing is not done,
+   not left open.
    The two Darwin archives are created with
    `tar --no-mac-metadata --no-xattrs`, so they carry no extended attributes
    (Sources).
@@ -167,6 +173,19 @@ nothing runs on GitHub in reaction to a push or a tag.
     `cargo test` never runs it, and it runs on demand with
     `cargo test --all-features -- --ignored`, outside both workflows.
 
+11. **`install-skill.sh`, at the repository root, installs and updates the
+    Claude Code skill.** It is POSIX `sh`, and runs as
+    `curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh`.
+    It resolves the latest GitHub Release as `install.sh` does, downloads
+    `tpl-skill-<tag>.tar.gz` and `SHA256SUMS`, and verifies the archive before
+    it touches anything. The destination is
+    `${TPL_SKILL_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/tpl}`, the
+    personal skills location, which loads in every project on the machine
+    (Sources). An existing destination is removed and replaced; if it is a
+    symbolic link, only the link is removed, never its target. The script never
+    uses `sudo`, because the path belongs to the user. `TPL_SKILL_DIR` is a
+    variable of the script, not of `tpl`.
+
 ## Alternatives rejected
 
 - **Running the MariaDB fixture in continuous integration.** Rejected as
@@ -195,6 +214,21 @@ nothing runs on GitHub in reaction to a push or a tag.
 
 - **Exempting pre-releases from gate 4.** Rejected: a gate does not vary with
   the kind of tag.
+
+- **GitHub's source tarball as the skill's release asset.** Rejected:
+  `SHA256SUMS` does not cover it.
+
+- **Installing the skill from the `main` branch.** Rejected: `main` is not a
+  release, and it drifts.
+
+- **The project's `.claude/skills/` as the skill's destination.** Rejected: it
+  loads only in that repository, not everywhere.
+
+- **Keeping an existing skill, or merging into it.** Rejected: the user wants
+  a replacement.
+
+- **Skipping the skill install when the version is unchanged.** Rejected: not
+  asked for.
 
 - **Retrying a measurement test, or tuning its thresholds.** Rejected: the rule
   forbids measurement on the release path, and a retry or a wider threshold
@@ -357,7 +391,21 @@ Moving any tool version means replacing its hashes.
 **`curl | sh` trusts the `main` branch and TLS.** Whoever can change
 `install.sh` on `main`, or intercept the download, controls what runs. The
 checksum proves the archive matches the release's `SHA256SUMS`. Because nothing
-is signed, it does not prove who produced either file.
+is signed, it does not prove who produced either file. `install-skill.sh`
+follows the same trust path.
+
+**`install-skill.sh` works only from the first release that carries the skill
+archive.** `v0.0.1` does not carry it.
+
+**A symlinked skill is replaced by a copy.** Claude Code documents that a
+personal skill entry can be a symbolic link to a directory elsewhere (Sources),
+which is how `skill/README.md` suggests linking the repository. The script
+removes such a link and installs a copy, leaving the link's target untouched.
+
+**The replacement reloads live, with one exception.** Claude Code picks up an
+added, edited or removed skill under the personal skills directory without a
+restart; if that top-level directory did not exist when the session started, a
+restart is needed (Sources).
 
 **Not fixed by this record:** the runner labels; whether `release.yml` runs the
 validation itself or depends on a validation job.
@@ -385,6 +433,10 @@ the build path.
 | The numbered-capture-group regular expression for a Semantic Versioning 2.0.0 version, compatible with ECMAScript, PCRE, Python and Go | semver.org, *Semantic Versioning 2.0.0*, FAQ "Is there a suggested regular expression (RegEx) to check a SemVer string?"; the same text in GitHub `semver/semver`, `semver.md` | 2026-09-24 |
 | The latest release is "the most recent non-prerelease, non-draft release"; "Drafts and prereleases cannot be set as latest"; `releases/latest` links to the latest release | docs.github.com, REST API *Releases*, "Get the latest release" and "Create a release" (`make_latest`); *Linking to releases* | 2026-09-24 |
 | The `workflow_dispatch`-only triggers, the dispatch commands, the `ref_type` refusal, and the three rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#299` | 2026-09-24 |
+| The skill archive, `install-skill.sh`, its destination, replacement and symlink rules, and the five rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#303` | 2026-09-24 |
+| Personal skills live at `~/.claude/skills/<skill-name>/SKILL.md` and load in "all your projects on this machine"; a skill entry can be a symlink to a directory elsewhere; changes under `~/.claude/skills/` are picked up in the current session, except for a top-level skills directory created after the session started | code.claude.com, `docs/en/skills.md`, *Choose where skills load* and *Edit a skill during a session* | 2026-09-24 |
+| With `CLAUDE_CONFIG_DIR` set, every `~/.claude` path lives under that directory instead; its default is `~/.claude` | code.claude.com, `docs/en/claude-directory.md` and `docs/en/env-vars.md`, `CLAUDE_CONFIG_DIR` | 2026-09-24 |
+| `v0.0.1` is the only tag | `git tag -l` in this repository | 2026-09-24 |
 | For `workflow_dispatch`, `GITHUB_REF` is the branch or tag that received the dispatch and `GITHUB_SHA` the last commit on it; the event triggers a run only if the workflow file exists on the default branch | docs.github.com, *Events that trigger workflows*, `workflow_dispatch` | 2026-09-24 |
 | `github.ref` is `refs/tags/<tag_name>` for a tag; `github.ref_type` is `branch` or `tag` | docs.github.com, *Contexts reference*, `github` context | 2026-09-24 |
 | `gh workflow run --ref` names the "branch or tag name which contains the version of the workflow file you'd like to run" | GitHub `cli/cli`, `pkg/cmd/workflow/run/run.go` | 2026-09-24 |

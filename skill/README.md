@@ -18,7 +18,17 @@ skill/
 
 ## Install globally
 
-Link the folder, so that updates to this repository reach Claude at once:
+Install or update the skill from the latest release with one command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh
+```
+
+The script downloads `tpl-skill-<tag>.tar.gz`, verifies it against the release's `SHA256SUMS`, and installs it into `$CLAUDE_CONFIG_DIR/skills/tpl`, where `CLAUDE_CONFIG_DIR` defaults to `~/.claude`. `TPL_SKILL_DIR` names another destination. An existing skill at the destination is replaced; if it is a symbolic link, only the link is removed, never its target. The script never uses `sudo`. It works from the first release that ships the skill archive: v0.0.1 does not, so today it reports that the release has no skill archive.
+
+### From a clone, for development
+
+Link the folder, so that `git pull` in this repository updates the skill:
 
 ```sh
 mkdir -p ~/.claude/skills
@@ -31,12 +41,13 @@ Or copy it, which gives a snapshot you must refresh yourself:
 cp -R skill ~/.claude/skills/tpl
 ```
 
-Claude Code discovers the skill at the start of its next session.
-
 ## Update
 
+- **Installed by the script:** run the same command again.
 - **Symlinked:** run `git pull` in this repository. Nothing else is needed.
 - **Copied:** replace the copy: `rm -rf ~/.claude/skills/tpl && cp -R skill ~/.claude/skills/tpl`.
+
+Claude Code picks up changes to its skills directory in the current session. Only a skills directory created after the session started needs Claude Code to be restarted.
 
 The skill needs a `tpl` binary on `PATH`. To install or update `tpl` itself:
 

@@ -66,9 +66,10 @@ unverified. It is repeated here as a limit on what may be claimed of the Linux
 artefacts, not as a second statement of the fact.
 
 **The form of the release artefact is
-[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md)'s** — the archive per
-target, its name and contents, the checksum file, and the absence of a
-signature. This document does not restate it.
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md)'s** (Decision 4) —
+the archive per target, the one platform-independent skill archive, their names
+and contents, the `SHA256SUMS` file covering all five archives, and the absence
+of a signature. This document does not restate them.
 
 ## The mandatory validation pipeline
 
@@ -563,7 +564,10 @@ development host's.** The toolchain is the
 against a hard-coded SHA-256 before extraction; a mismatch fails the job. The
 Darwin archives are created with the `tar` flags that record fixes, so that they
 carry no extended attributes. That the runners' `tar` behaves as the development
-host's did is **unverified** in that record.
+host's did is **unverified** in that record. The skill archive is built once, in
+the publish job, on a Linux runner with GNU `tar`, so the Darwin flags do not
+apply to it; the runner was decided by the user for rmp `#303`, as relayed by
+the session coordinator on 2026-09-24.
 
 **`install.sh`, at the repository root, is the installer
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes.** It
@@ -572,6 +576,16 @@ checking the archive against `SHA256SUMS`. Its one-line invocation, its target
 detection, its install directory and its privilege rule are that record's.
 `TPL_INSTALL_DIR` is a variable of the script only: `tpl` never reads it. What
 the one-line invocation and the hash pins trust is that record's *Consequences*.
+
+**`install-skill.sh`, at the repository root, is the skill installer
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes**
+(Decision 11). It installs or updates the Claude Code skill from the latest
+release's skill archive, after checking it against `SHA256SUMS` and before it
+touches anything. Its one-line invocation, its destination, its replacement and
+symbolic-link rules, and its refusal of `sudo` are that record's.
+`TPL_SKILL_DIR` is a variable of the script only: `tpl` never reads it. The
+script shares `install.sh`'s trust path, and works only from the first release
+that carries the skill archive; both are that record's *Consequences*.
 
 **Neither workflow runs the fixture or the
 [measurement harness](#the-measurement-harness).** A green run therefore does
@@ -593,5 +607,5 @@ lists them. No figure is produced or consumed, consistent with `BR-PERF-008`.
 | The six untrusted inputs, credentials, and transport | [security.md](security.md) |
 | The fixture's contents, its deliberate omissions, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
 | The record of every difference observed between the series — fourteen | `FR-SRV-038` |
-| The release artefact: the archive per target, its name and contents, the checksum file, and the absence of a signature; and `install.sh` | [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
+| The release artefact: the archive per target, the skill archive, their names and contents, the checksum file, and the absence of a signature; `install.sh` and `install-skill.sh` | [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

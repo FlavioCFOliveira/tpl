@@ -39,9 +39,15 @@ workflow, before it closes.
 ### Added
 
 - **The Claude Code skill.** `skill/` makes Claude the sole operator of `tpl`
-  for Claude Code agents. It is installed by linking or copying the folder into
-  `~/.claude/skills/tpl`, and `skill/scripts/check-coverage.sh` checks its
+  for Claude Code agents. It is installed by `install-skill.sh`, or from a
+  clone by linking or copying the folder into `~/.claude/skills/tpl`, and `skill/scripts/check-coverage.sh` checks its
   command map against `tpl help --format json`.
+- **The skill installer and its release asset.** A release now carries
+  `tpl-skill-<tag>.tar.gz`, listed in `SHA256SUMS`, and
+  `curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh`
+  installs or updates the skill from it into `~/.claude/skills/tpl` — under
+  `CLAUDE_CONFIG_DIR` when set, or `TPL_SKILL_DIR` — replacing an existing skill
+  or symbolic link there.
 
 ### Changed
 
