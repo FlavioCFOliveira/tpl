@@ -41,6 +41,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 - [What `tpl` is for](#what-tpl-is-for)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Claude Code skill](#claude-code-skill)
 - [Quick start](#quick-start)
 - [Worked examples](#worked-examples)
 - [The `.tpl` project](#the-tpl-project)
@@ -132,6 +133,29 @@ cargo build --release
 ```
 
 The binary is produced at `target/release/tpl`.
+
+---
+
+## Claude Code skill
+
+[`skill/`](skill/README.md) is a Claude Code skill that makes Claude the sole operator of `tpl` for Claude Code agents: every `tpl` task goes through the `tpl` binary, never through a reimplementation of it. The skill needs `tpl` on `PATH`.
+
+Install it globally, from the root of a clone, by linking the folder:
+
+```sh
+mkdir -p ~/.claude/skills
+ln -s "$PWD/skill" ~/.claude/skills/tpl
+```
+
+Or copy it, which gives a snapshot you must refresh yourself:
+
+```sh
+cp -R skill ~/.claude/skills/tpl
+```
+
+To update a linked skill, run `git pull` in the clone. To update a copy, replace it: `rm -rf ~/.claude/skills/tpl && cp -R skill ~/.claude/skills/tpl`. Claude Code picks up the skill at the start of its next session.
+
+[`skill/README.md`](skill/README.md) describes what the skill holds, and how to run `skill/scripts/check-coverage.sh`, which checks that the skill's command map names every command and alias the installed `tpl` publishes.
 
 ---
 

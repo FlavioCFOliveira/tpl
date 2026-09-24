@@ -36,6 +36,13 @@ workflow, before it closes.
 
 ## Unreleased
 
+### Added
+
+- **The Claude Code skill.** `skill/` makes Claude the sole operator of `tpl`
+  for Claude Code agents. It is installed by linking or copying the folder into
+  `~/.claude/skills/tpl`, and `skill/scripts/check-coverage.sh` checks its
+  command map against `tpl help --format json`.
+
 ### Changed
 
 - **Publishing a release.** A pushed `v*` tag no longer publishes a release by
