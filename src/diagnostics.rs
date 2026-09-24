@@ -40,14 +40,35 @@ mod cause;
 mod escape;
 mod hint;
 mod render;
+mod restate;
 
 pub(crate) mod emit;
 pub(crate) mod panic;
 pub(crate) mod suggest;
 pub(crate) mod verbosity;
 
+pub(crate) use restate::destination;
+pub(crate) use restate::record as record_invocation;
+
 pub(crate) use cause::invoked;
 pub(crate) use render::report;
 
 #[cfg(test)]
 pub(crate) use render::rendered;
+
+/// `text` with the caller's `--tpl-dir` and `-d/--database` carried into
+/// every runnable `tpl` command it writes, exactly as a `hint` carries them
+/// (`FR-ERR-043`).
+///
+/// For a line outside the four of `FR-ERR-008` that names a command to run:
+/// copied without the flags, it would act on another project or another entry
+/// (finding AB-01 of the eleventh re-audit of rmp `#263`).
+pub(crate) fn carried(text: &'static str) -> std::borrow::Cow<'static, str> {
+    restate::carried(
+        std::borrow::Cow::Borrowed(text),
+        restate::Carry {
+            tpl_dir: true,
+            database: true,
+        },
+    )
+}

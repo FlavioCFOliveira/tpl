@@ -1,7 +1,7 @@
 ---
 title: Render Command (Third Arm)
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md, configuration-model.md, context-document.md]
 ---
 
@@ -261,6 +261,55 @@ tpl render <template> --routine <name>      binds routine
 
 - **FR-RND-025**: `tpl render` SHALL declare `--direct` and `--no-cache`, with
   the meanings defined in [cache-commands.md](cache-commands.md).
+
+  *Note added in the forty-sixth edition.* `FR-RND-041` refuses `--direct`
+  together with `--context`.
+
+- **FR-RND-041**: IF `--context` and `--direct` are both supplied to
+  `tpl render`, THEN the system SHALL exit `64` (`EX_USAGE`) at argument
+  parsing, step 1 of `FR-ERR-006`, before any project is discovered, and SHALL
+  read neither the document nor the server. The `cause` SHALL name both flags
+  and state why they contradict each other, per the `64` row of `FR-ERR-034`:
+  `--context` supplies the context from a document and reads no server, per
+  `FR-RND-022`, and `--direct` requires a read from the server, per
+  `FR-CACHE-013`. The `hint` SHALL say which flag to remove for each outcome:
+  remove `--direct` to render from the document, or remove `--context` to read
+  the server. It SHALL NOT reproduce the path given to `--context`.
+
+  ```
+  error: --direct cannot be used with --context
+  cause: --context reads the context from a document and contacts no server; --direct demands a read from the server
+  hint:  remove --direct to render from the document, or remove --context to read the server
+  exit:  64 (EX_USAGE)
+  ```
+
+  WHERE `--context` is also combined with `-d/--database` given explicitly,
+  the system SHALL report the conflict of `FR-RND-018` and not this one.
+
+  *Rationale.* `FR-RND-018` refuses `--context` with an explicit
+  `-d/--database` because the two name conflicting context sources, and this
+  is the same contradiction: `--direct` asks for the one source `--context`
+  excludes. Accepting the pair made the invocation exit `0` with `--direct`
+  having done nothing, while the help of `--direct` says it reads from the
+  server. `BR-GLOB-001` admits the refusal of a combination a requirement makes
+  contradictory, and `--direct` is a local flag, per `FR-GLOB-021`, so no
+  appended-global-flag argument protects it.
+
+  *Why the `hint` carries no runnable command.* The only runnable form is the
+  caller's own command line with one flag removed, and rebuilding it would
+  echo the `--context` path and every `--set` value, which `FR-ERR-022` would
+  test and often refuse. Naming the flag to remove is the correction in full.
+
+  *Rejected: accepting the pair with a warning on stderr.* The warning keeps an
+  invocation that cannot do what one of its flags says, and exit `0` tells a
+  calling agent that it did.
+
+  *Rejected: letting `--direct` win and ignoring `--context`.* It reads a
+  server the caller told `tpl` not to read, and it would need an entry the
+  invocation did not select, per `FR-RND-019`.
+
+  *Added in the forty-sixth edition,* for rmp `#274`, from finding S-11 of the
+  second re-audit.
 
 - **FR-RND-026**: WHEN no `--context` is supplied, `tpl render` SHALL read the
   catalogue through the cache, per `FR-CACHE-006`.

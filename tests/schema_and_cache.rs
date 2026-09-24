@@ -540,16 +540,29 @@ fn fr_sch_010_a_named_object_that_does_not_exist_exits_sixty_six_with_a_suggesti
     };
     let sandbox = project(server, ROOT);
 
-    // One candidate: `charg` is one deletion from `charge`.
+    // One candidate: `charg` is one deletion from `charge`. The entry comes
+    // from core.database, so FR-ERR-043 does not write it.
     let one = run(&sandbox, &["schema", "table", "charg"]);
     assert_eq!(one.code, Some(66), "{}", one.err);
     assert_eq!(
         line(&one.err, "hint:"),
-        format!(
-            "did you mean '{TABLE}'? list the available tables with: tpl -d {ENTRY} schema tables"
-        )
+        format!("did you mean '{TABLE}'? list the available tables with: tpl schema tables")
     );
     assert!(one.out.is_empty(), "FR-ERR-033 leaves stdout empty");
+
+    // FR-ERR-043: the --tpl-dir and the -d the caller wrote lead the command.
+    let given = run(
+        &sandbox,
+        &["schema", "table", "charg", "-d", ENTRY, "--tpl-dir", ".tpl"],
+    );
+    assert_eq!(given.code, Some(66), "{}", given.err);
+    assert_eq!(
+        line(&given.err, "hint:"),
+        format!(
+            "did you mean '{TABLE}'? list the available tables with: tpl --tpl-dir .tpl -d \
+             {ENTRY} schema tables"
+        )
+    );
 
     // FR-ERR-037's wording for two and three candidates is exercised where a
     // population that holds two within the distance of one name exists: no two
@@ -1062,6 +1075,12 @@ fn fr_cache_025_status_reports_the_entry_the_load_time_and_the_counts() {
         printed.contains("COLLECTIONS\nNAME  COUNT  WHOLE\n"),
         "{printed}"
     );
+    // The text says what an absent load time means and what fills it, where
+    // the JSON carries `null`.
+    assert!(
+        printed.contains("loaded_at  never (the cache is empty; fill it with tpl cache load)\n"),
+        "{printed}"
+    );
 
     succeeds(&sandbox, &["cache", "load"]);
 
@@ -1223,6 +1242,45 @@ fn fr_cache_023_clean_removes_everything_or_the_one_object_it_was_given() {
 }
 
 #[test]
+fn fr_cache_040_a_clean_that_names_nothing_cached_is_66_suggests_and_deletes_nothing() {
+    // FR-CACHE-040: the population is what the cache holds, the hint carries
+    // no clean command, and nothing is removed.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_040_a_clean_that_names_nothing_cached_is_66_suggests_and_deletes_nothing",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+    let held = store(&sandbox).join("tables").join(format!("{TABLE}.json"));
+    let before = std::fs::read(&held).expect("the table is cached");
+
+    let typo = format!("{TABLE}x");
+    let outcome = run(&sandbox, &["cache", "clean", "--table", &typo]);
+    assert_eq!(outcome.code, Some(66), "{}", outcome.err);
+    assert_eq!(
+        line(&outcome.err, "hint:"),
+        format!("did you mean '{TABLE}'? nothing was removed")
+    );
+    assert_eq!(std::fs::read(&held).expect("still cached"), before);
+
+    // A second clean of the same object finds it gone.
+    succeeds(&sandbox, &["cache", "clean", "--table", TABLE]);
+    let again = run(&sandbox, &["cache", "clean", "--table", TABLE]);
+    assert_eq!(again.code, Some(66), "{}", again.err);
+    assert!(
+        !line(&again.err, "hint:").contains("cache clean"),
+        "{}",
+        again.err
+    );
+}
+
+#[test]
 fn fr_cache_029_repointing_an_entry_invalidates_nothing() {
     // FR-CACHE-029 and BR-CACHE-003, stated plainly because the consequence is
     // accepted: after repointing an entry, a read serves the previous server's
@@ -1282,7 +1340,7 @@ fn fr_conf_040_and_fr_conf_041_an_entry_that_describes_no_read_is_refused_with_s
     );
     assert_eq!(
         line(&no_host.err, "hint:"),
-        format!("tpl cfg database update {ENTRY} --host <host>")
+        format!("set it with: tpl cfg database update {ENTRY} --host <host>")
     );
 
     // With a host and no database, the second of the two.
@@ -1305,7 +1363,7 @@ fn fr_conf_040_and_fr_conf_041_an_entry_that_describes_no_read_is_refused_with_s
     );
     assert_eq!(
         line(&no_database.err, "hint:"),
-        format!("tpl cfg database update {ENTRY} --schema <database>")
+        format!("set it with: tpl cfg database update {ENTRY} --schema <database>")
     );
 }
 
@@ -1370,7 +1428,10 @@ fn fr_cache_024_the_cache_arm_names_a_routine_by_the_same_rules_the_schema_arm_d
     assert!(cause.contains(&format!("'function:{FUNCTION}'")), "{cause}");
     assert_eq!(
         line(&ambiguous.err, "hint:"),
-        format!("name the kind you mean: tpl cache clean --routine procedure:{FUNCTION}")
+        format!(
+            "name the kind you mean: tpl cache clean --routine procedure:{FUNCTION}, or tpl \
+             cache clean --routine function:{FUNCTION}"
+        )
     );
 
     // Qualified, it removes the one it names and leaves the other.
@@ -1384,6 +1445,34 @@ fn fr_cache_024_the_cache_arm_names_a_routine_by_the_same_rules_the_schema_arm_d
         ],
     );
     assert!(!routines.join(format!("procedure.{FUNCTION}.json")).exists());
+    assert!(routines.join(format!("function.{FUNCTION}.json")).exists());
+
+    // Y-05 of the eighth re-audit of rmp #263: the procedure is gone and the
+    // function stays, so the lines name the kind asked for and the one held.
+    let other = run(
+        &sandbox,
+        &[
+            "cache",
+            "clean",
+            "--routine",
+            &format!("procedure:{FUNCTION}"),
+        ],
+    );
+    assert_eq!(other.code, Some(66), "{}", other.err);
+    assert!(
+        line(&other.err, "cause:").ends_with(&format!(
+            "holds no procedure named '{FUNCTION}'; it holds a function of that name"
+        )),
+        "{}",
+        other.err
+    );
+    assert_eq!(
+        line(&other.err, "hint:"),
+        format!(
+            "did you mean 'function:{FUNCTION}'? the cache holds a function named '{FUNCTION}'; \
+             nothing was removed"
+        )
+    );
     assert!(routines.join(format!("function.{FUNCTION}.json")).exists());
 }
 

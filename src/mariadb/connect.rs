@@ -79,6 +79,8 @@ pub(crate) struct Target<'a> {
     /// The database entry these settings came from, which every condition of
     /// `FR-SRV-010`, `FR-SRV-003` and `FR-SRV-030` names.
     entry: &'a str,
+    /// Whether that entry is defined by `dsn` (`FR-ERR-045`).
+    by_dsn: bool,
     /// The host, with an IPv6 literal's brackets removed.
     host: &'a str,
     /// The port, defaulted to `3306` by `FR-CONF-002` before it reaches here.
@@ -104,6 +106,7 @@ impl<'a> Target<'a> {
     pub(crate) fn of(settings: &'a Settings) -> Option<Self> {
         Some(Self {
             entry: settings.entry(),
+            by_dsn: settings.by_dsn(),
             // The driver's tokio path connects through `(&str, u16)`, which
             // parses an address literal and otherwise resolves a name; a
             // bracketed IPv6 literal is neither, and would be looked up as a
@@ -159,6 +162,11 @@ impl<'a> Target<'a> {
     /// The database entry these settings came from.
     pub(crate) const fn entry(&self) -> &'a str {
         self.entry
+    }
+
+    /// Whether the entry is defined by `dsn` (`FR-ERR-045`).
+    pub(crate) const fn by_dsn(&self) -> bool {
+        self.by_dsn
     }
 
     /// The host the connection is made to.
@@ -240,7 +248,7 @@ const fn ssl_mode(mode: TlsMode) -> MySqlSslMode {
 ///
 /// # Errors
 ///
-/// Returns [`Error::ProjectFileUnreadable`] — `74` — naming the path the
+/// Returns [`Error::TrustMaterialUnreadable`] — `74` — naming the path the
 /// configuration declared, or the directory entry's own path, where a file, a
 /// directory or an entry cannot be read; and
 /// [`Error::TrustDirectoryEmpty`] — `78` — where `ca_path` is declared and no
@@ -256,7 +264,7 @@ fn trust(target: &Target<'_>) -> Result<Option<Vec<u8>>, Error> {
     let mut bundle = Vec::new();
 
     if let Some(file) = target.ca_file {
-        bundle.extend_from_slice(&read(file)?);
+        bundle.extend_from_slice(&read(target.entry, CA_FILE, file)?);
         // ADR-002: each block ends before the next begins. The terminator is
         // written here and not only after a directory entry, because the seam
         // between `ca_file` and the first entry of `ca_path` is a seam like any
@@ -267,8 +275,13 @@ fn trust(target: &Target<'_>) -> Result<Option<Vec<u8>>, Error> {
     if let Some(directory) = target.ca_path {
         let mut paths = Vec::new();
 
-        for entry in unreadable(directory, std::fs::read_dir(directory))? {
-            paths.push(unreadable(directory, entry)?.path());
+        for entry in unreadable(
+            target.entry,
+            CA_PATH,
+            directory,
+            std::fs::read_dir(directory),
+        )? {
+            paths.push(unreadable(target.entry, CA_PATH, directory, entry)?.path());
         }
 
         // NFR-DET-001: the order is the directory's own names, ascending, fixed
@@ -282,11 +295,11 @@ fn trust(target: &Target<'_>) -> Result<Option<Vec<u8>>, Error> {
             // which is the whole of the amendment: what decides is the kind of
             // the **target**. A failure to resolve is reported against the
             // entry's own path — the link, not what it points at.
-            if !unreadable(&path, std::fs::metadata(&path))?.is_file() {
+            if !unreadable(target.entry, CA_PATH, &path, std::fs::metadata(&path))?.is_file() {
                 continue;
             }
 
-            bundle.extend_from_slice(&read(&path)?);
+            bundle.extend_from_slice(&read(target.entry, CA_PATH, &path)?);
             // A bundle is a concatenation of PEM blocks, and a file whose last
             // line carries no terminator would otherwise run into the next
             // file's first line.
@@ -312,13 +325,30 @@ fn trust(target: &Target<'_>) -> Result<Option<Vec<u8>>, Error> {
 
 /// The bytes of `path`, or the condition `FR-ERR-001` puts an unreadable file
 /// on.
-fn read(path: &Path) -> Result<Vec<u8>, Error> {
-    unreadable(path, std::fs::read(path))
+fn read(entry: &str, key: &'static str, path: &Path) -> Result<Vec<u8>, Error> {
+    unreadable(entry, key, path, std::fs::read(path))
 }
 
+/// The setting of an entry that names one file of trust material.
+const CA_FILE: &str = "ca_file";
+
+/// The setting of an entry that names a directory of trust material.
+const CA_PATH: &str = "ca_path";
+
 /// `outcome`, or the condition an unreadable path produces, naming `path`.
-fn unreadable<T>(path: &Path, outcome: std::io::Result<T>) -> Result<T, Error> {
-    outcome.map_err(|returned| Error::ProjectFileUnreadable {
+///
+/// The path is outside `.tpl`, so the condition names the setting of `entry`
+/// that declared it rather than sending the caller to the project's own
+/// permissions.
+fn unreadable<T>(
+    entry: &str,
+    key: &'static str,
+    path: &Path,
+    outcome: std::io::Result<T>,
+) -> Result<T, Error> {
+    outcome.map_err(|returned| Error::TrustMaterialUnreadable {
+        entry: entry.to_owned(),
+        key,
         path: path.to_owned(),
         returned,
     })
@@ -456,6 +486,7 @@ pub(super) fn open(
 
         if bound.expired() {
             return Err(fault::expired(
+                target.entry,
                 NetworkPhase::DnsResolution,
                 host,
                 port,
@@ -470,6 +501,7 @@ pub(super) fn open(
         let resolved = match resolved {
             Err(_) => {
                 return Err(fault::expired(
+                    target.entry,
                     NetworkPhase::DnsResolution,
                     host,
                     port,
@@ -485,6 +517,8 @@ pub(super) fn open(
         // of this phase.
         if !resolved.is_ok_and(|mut addresses| addresses.next().is_some()) {
             return Err(Error::NameNotResolved {
+                by_dsn: false,
+                entry: target.entry.to_owned(),
                 host: host.to_owned(),
                 port,
             });
@@ -493,7 +527,13 @@ pub(super) fn open(
         let bound = budget.remaining();
 
         if bound.expired() {
-            return Err(fault::expired(NetworkPhase::TcpConnect, host, port, bound));
+            return Err(fault::expired(
+                target.entry,
+                NetworkPhase::TcpConnect,
+                host,
+                port,
+                bound,
+            ));
         }
 
         let started = Instant::now();
@@ -504,13 +544,20 @@ pub(super) fn open(
         emit::phase_ran(Phase::TcpConnect, started.elapsed());
 
         match opened {
-            Err(_) => Err(fault::expired(NetworkPhase::TcpConnect, host, port, bound)),
+            Err(_) => Err(fault::expired(
+                target.entry,
+                NetworkPhase::TcpConnect,
+                host,
+                port,
+                bound,
+            )),
             Ok(Ok(connection)) => Ok(connection),
             // The database is the one the entry names, per `FR-CONF-041`, and
             // it is passed because the handshake is where a packet about it
             // arrives: the connection carries the database, so a server that
             // will not show it refuses the connection rather than a statement.
             Ok(Err(driver)) => Err(fault::connecting(
+                target.entry,
                 &driver,
                 host,
                 port,
@@ -793,7 +840,7 @@ mod tests {
         assert_eq!(condition.exit_code(), 74);
 
         match condition {
-            Error::ProjectFileUnreadable { ref path, .. } => {
+            Error::TrustMaterialUnreadable { ref path, .. } => {
                 assert_eq!(path, &link, "the condition names the target, not the link");
                 assert_ne!(path, &gone);
             }

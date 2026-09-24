@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md]
 ---
 
@@ -166,11 +166,23 @@ module, `BR-SEC-003` excepted.
   *Threat closed.* A `.cfg` writable by anyone else can no longer choose the
   `password_command` that runs with the caller's privileges.
 
+  WHERE the `.tpl` folder holds no `.cfg`, the folder itself SHALL be owned by
+  the current user. See `FR-PROJ-028`.
+
+  *Amended in the forty-eighth edition.* The paragraph above is new. A `.tpl`
+  planted without `.cfg` passed both checks, so the claim of `FR-SEC-013` that
+  a planted `.tpl` is refused held only for one that carried a `.cfg`. It now
+  holds for both.
+
 - **FR-SEC-015**: Paths SHALL be canonicalised before being checked, so that a
   symlinked `.tpl` is verified at its real target. See `FR-PROJ-009`.
 
 - **FR-SEC-016**: `--tpl-dir` SHALL be subject to the same checks, without
   exemption. See `FR-PROJ-008`.
+
+  *Note added in the forty-eighth edition.* `--tpl-dir` SHALL name a directory
+  whose last segment is `.tpl`, per `FR-PROJ-027`, so that the flag names no
+  folder the walk would not find.
 
 ## Template containment
 
@@ -194,11 +206,14 @@ module, `BR-SEC-003` excepted.
   generic hint is emitted alone. A spelling this specification enumerates — a
   command, a flag, a key of `FR-CONF-002` — is a literal; every other value is
   governed by the set, whatever its source, among them a table, a view, a
-  routine, a template, a database entry, the entry name inside a
+  routine, a database entry, the entry name inside a
   `database.<name>` key, and the name of an environment variable. A **flag value
   the caller supplied in a separate token** is governed too, by a set of its
-  own, `[A-Za-z0-9_-]{1,64}` measured over the whole value. See
-  `FR-ERR-022`, `FR-ERR-023` and `FR-ERR-040`.
+  own, `[A-Za-z0-9_-]{1,64}` measured over the whole value. A **template
+  name**, and a **filesystem path** of the project, of `--tpl-dir` or of
+  `--context` written into a hint, are governed by a third set, `[A-Za-z0-9_./-]`, measured over the
+  whole value, at most 1024 characters and not beginning with `-`. See
+  `FR-ERR-022`, `FR-ERR-023`, `FR-ERR-040` and `FR-ERR-041`.
 
   *Threat closed.* A table name is free text on the server and can contain
   semicolons, quotes, and newlines; formatting one into a suggested command is
@@ -212,6 +227,18 @@ module, `BR-SEC-003` excepted.
   population alone and bounds the whole value at 64 characters. The threat is
   unchanged and the admitted alphabet holds no shell metacharacter, no quote,
   no whitespace and no newline.
+
+  *Amended in the forty-third edition: two populations are governed by a third
+  set.* The template name moves from the first set to the set of `FR-ERR-041`,
+  because every nested template name carries a `/` and none could be
+  suggested; a path of the project, or of `--tpl-dir`, is governed by the same
+  set, so a hint can name the absolute path of `.tpl/.cfg`. The threat is
+  unchanged: the added `/` and `.` are not shell metacharacters, and a value
+  beginning with `-` is refused so that none is read as an option.
+
+  *Amended in the forty-seventh edition.* The path given to `--context` joins
+  the paths the third set governs, as `FR-ERR-041` now names it. The set and
+  the threat are unchanged.
 
   *Amended in the twentieth edition.* This rule restated the character set as
   governing every candidate, per `FR-ERR-022` as it then read. It now carries

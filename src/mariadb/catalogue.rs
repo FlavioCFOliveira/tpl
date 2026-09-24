@@ -296,7 +296,12 @@ pub(crate) fn probe(
         // is what `FR-GLOB-018` and `OD-06` leave a caller of the driver.
         Err(driver) if driver.as_database_error().is_some() => Ok(false),
 
-        Err(driver) => Err(fault::speaking(&driver, target.host(), target.port())),
+        Err(driver) => Err(fault::speaking(
+            target.entry(),
+            &driver,
+            target.host(),
+            target.port(),
+        )),
     }
 }
 
@@ -316,7 +321,7 @@ fn fetch(
     statement: &Statement<'_>,
 ) -> Result<Vec<MySqlRow>, Error> {
     issue(session, target, clock, statement)?
-        .map_err(|driver| fault::speaking(&driver, target.host(), target.port()))
+        .map_err(|driver| fault::speaking(target.entry(), &driver, target.host(), target.port()))
 }
 
 /// Sends one statement and hands back what the driver answered.
@@ -342,6 +347,7 @@ fn issue(
     let bound = clock.bound(target.deadlines().of(Phase::CatalogueQuery));
     let expired = || {
         fault::expired(
+            target.entry(),
             NetworkPhase::CatalogueQuery,
             target.host(),
             target.port(),

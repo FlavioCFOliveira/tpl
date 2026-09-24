@@ -110,7 +110,7 @@ pub(super) fn json(value: &Value) -> Result<Value, Error> {
         .map_err(|returned| {
             Error::new(
                 ErrorKind::BadSerialization,
-                "the filter 'json' could not serialise its operand",
+                "the filter 'json' could not serialise its value",
             )
             .with_source(returned)
         })

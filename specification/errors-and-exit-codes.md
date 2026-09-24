@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md]
 ---
 
@@ -51,7 +51,7 @@ Out of scope: the wording of any individual message.
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
   | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space |
   | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue | Fix the credentials, or request read access |
-  | `78` | `EX_CONFIG` | No `.tpl` found; unsafe `.cfg` ownership or mode; malformed `.cfg`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
+  | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
 
   The codes are a closed set and the *Condition* column is not. *And no
   others* above fixes the list of codes; each *Condition* cell characterises
@@ -126,6 +126,14 @@ Out of scope: the wording of any individual message.
   The cell named the deadline and would otherwise have characterised the class
   as bounded in time alone. The code set is unchanged and the column still
   characterises rather than enumerates.
+
+  *Amended in the forty-eighth edition: the `78` cell names three conditions
+  the class already held.* `FR-PROJ-027` refuses a `--tpl-dir` that names a
+  directory which is not a `.tpl` folder, `FR-PROJ-028` refuses a `.tpl`
+  folder without `.cfg` that another user owns, and `FR-CONF-047` refuses a
+  `${VAR}` written into `ca_file` or `ca_path`. Each is the project or its
+  configuration failing to be usable, which is what `78` means. The code set
+  is unchanged and the column still characterises rather than enumerates.
 
   *Amended in the fifth edition.* The `78` row gains five conditions, all of
   them from decisions written into
@@ -350,6 +358,10 @@ Out of scope: the wording of any individual message.
   field". `FR-ERR-015` withdraws that field; the argument is unchanged and now
   names the line that actually carries the distinction.
 
+  *Note added in the fifty-third edition.* `FR-CACHE-041` states the one
+  invocation in which a name that no entry declares is not `66`:
+  `tpl cache clean` with no object flag, where `.tpl/.cache/<name>` exists.
+
   *Amended in the thirty-first edition.* The second sentence of each of the two
   requirements above is a cross-reference and not a second rule.
   `FR-GLOB-006` has qualified its `78` with *and the command requires one*
@@ -368,6 +380,7 @@ Out of scope: the wording of any individual message.
   | Where the key was met | Code | Stated by |
   |---|---|---|
   | Named on the invocation of `tpl cfg set`, and outside the enumerated key space of `FR-CONF-002` | `64` | `FR-CFG-009`, and `FR-CFG-010` where the key is in that space and the value does not conform to the type declared for it |
+  | Named on the invocation of `tpl cfg get` in the form of a block — `core`, `database`, or `database.<name>` — rather than a key of `FR-CONF-002` | `64` | `FR-CFG-007` |
   | Named on the invocation of `tpl cfg get`, or of `tpl cfg unset` as a key or as a block, and absent from `.tpl/.cfg` | `66` | `FR-CFG-007`, `FR-CFG-012` |
   | Carried by `.tpl/.cfg`, anywhere in the file, and outside the enumerated key space of `FR-CONF-002` | `78` | `FR-CONF-034` |
 
@@ -393,6 +406,12 @@ Out of scope: the wording of any individual message.
   file carries and the space refuses is the configuration failing to describe a
   usable connection, which is what `78` means and what the fifth edition's note
   under `FR-ERR-001` says of the five conditions it added there.
+
+  *Amended in the forty-third edition.* The row for a block given to
+  `tpl cfg get` is new, and is decided by `FR-CFG-007`. It is evaluated before
+  the question of presence, so a block form is `64` whether or not the file
+  carries the block. It does not collide with the other rows: `tpl cfg unset`
+  accepts a block, per `FR-CFG-011`, and `tpl cfg get` does not.
 
   *This requirement routes; it does not restate.* Each of the three conditions
   belongs to the module that owns the command or the file, and the three
@@ -605,6 +624,19 @@ Out of scope: the wording of any individual message.
   again only for an abandoned render that returned within every bound, per
   `FR-CACHE-039` and `FR-RND-038`.
 
+  *Note added in the forty-sixth edition.* "The first that fails" names a
+  condition, not an object. One condition met by several objects of one
+  invocation is reported once per object only where a requirement says so,
+  and one does: `FR-TMPL-032` reports every template `tpl template check`
+  finds with a syntax error, one message each, all with `65`. The order of the
+  steps, and which code wins between two conditions, are unchanged.
+
+  *Note added in the forty-eighth edition.* Steps 2 and 3 run for the four
+  `template` subcommands, which require a project and are not named by
+  `FR-PROJ-025`; `FR-TMPL-003` states it. `FR-PROJ-027` and `FR-PROJ-028` are
+  conditions of step 2, and a project without `.cfg` passes step 3 with an
+  empty configuration, per `FR-PROJ-028`.
+
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
 
@@ -626,6 +658,60 @@ Out of scope: the wording of any individual message.
 
   *Rationale.* It is the line a calling agent uses to correct itself, and the
   one that gives the most in return.
+
+- **FR-ERR-043**: WHERE a `hint` carries a runnable `tpl` command, and the
+  invocation was given `--tpl-dir` or `-d/--database`, the command SHALL carry
+  the same flag with the same value, written immediately after `tpl`, with
+  `--tpl-dir <path>` before `-d <entry>`. It SHALL NOT carry either flag:
+
+  - WHERE the flag has no effect on the node the command names, per the table
+    of `BR-GLOB-001`;
+  - WHERE the `hint` exists to change or to remove that flag, as a `hint`
+    answering `FR-RND-018` removes `-d`, and one answering `FR-GLOB-007` puts a
+    candidate entry in place of the value given; the command then carries what
+    the `hint` proposes.
+
+  The value SHALL be written as the caller wrote it: the path under the set of
+  `FR-ERR-041`, and the entry name under the set of `FR-ERR-022`. IF the set
+  refuses the value, THEN the command SHALL carry the flag with a placeholder
+  in the value's position, and the `hint` SHALL state in words that the
+  placeholder stands for the value this invocation was given.
+
+  ```
+  tpl --tpl-dir /srv/shop/.tpl -d shop schema table ordrs
+  hint:  did you mean 'orders'? list the available tables with: tpl --tpl-dir /srv/shop/.tpl -d shop schema tables
+
+  tpl --tpl-dir '/srv/my shop/.tpl' -d shop schema table ordrs
+  hint:  did you mean 'orders'? list the available tables with: tpl --tpl-dir <path> -d shop schema tables, where <path> is the --tpl-dir this invocation was given
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The examples fix which flags the command carries,
+  where, and the placeholder.
+
+  A value taken from `TPL_DIR`, `TPL_DATABASE` or `core.database` SHALL NOT be
+  written: the same command, run in the same environment and project,
+  resolves it again.
+
+  *Rationale.* A `hint` is copied and run. A `tpl` command copied without the
+  `--tpl-dir` the invocation was given discovers a project from the current
+  directory, and one copied without its `-d` selects the default entry, so
+  either can succeed against another project or another entry and report
+  nothing wrong. `BR-ERR-004` obliges a `hint` to carry a value the invocation
+  knows; this requirement names the two values that decide what a command acts
+  on and fixes where they are written.
+
+  *Why only these two flags.* They are the global flags that decide which
+  project and which entry a command acts on. `--timeout`, `-v` and `-q` change
+  how a command runs and not what it acts on, and `-h` and `-V` are not carried
+  into a command at all.
+
+  *Rejected: writing the resolved absolute path of `--tpl-dir`.* A caller runs
+  the `hint` from the directory it ran the invocation from, where the value as
+  written resolves identically, and the value as written is the one the caller
+  recognises.
+
+  *Added in the forty-seventh edition,* for rmp `#276`.
 
 - **FR-ERR-010**: `cause` SHALL be factual and specific, and SHALL NOT restate
   the `error` line. A `cause` restates the `error` line when it adds nothing to
@@ -667,14 +753,14 @@ Out of scope: the wording of any individual message.
   | Code | The `cause` line SHALL name |
   |---|---|
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
-  | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or the structural rule of [context-document.md](context-document.md) it failed. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012`. For a render bound, which bound was exceeded, its resolved value, and the key of `FR-CONF-002` that raises it, per `FR-RND-036`, `FR-RND-037` and `FR-RND-039` |
+  | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or, for a document that does not match the contract, the key path of the first member in document order that fails it and what the contract expects there: the type expected, that the key is required, or, for a reference `FR-CTX-042` governs, the table named and that `tables` does not carry it. It SHALL NOT cite a file of this specification. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012`. For a render bound, which bound was exceeded, its resolved value, and the key of `FR-CONF-002` that raises it, per `FR-RND-036`, `FR-RND-037` and `FR-RND-039` |
   | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, the key space of `FR-CONF-002`, or the `--context` document and the collection of it the name was sought in |
   | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
   | `74` | The path or stream that failed, the operation attempted on it, and what the filesystem or the stream returned |
   | `77` | For authentication, the user and the host the server refused, and that the refusal came from the server. For privileges, which property of which object could not be read, per `FR-PRIV-013` |
-  | `78` | The key and the file, with the value found and the value expected; or, where the fault is not a key, the specific condition — the directory the walk ended at without finding `.tpl`, the name of the undefined variable, or the series found and why it is not supported, per `FR-SRV-030` |
+  | `78` | The key and the file, with the value found and the value expected; or, where the fault is not a key, the specific condition — the directory the walk ended at without finding `.tpl`; or, WHERE `--tpl-dir` suppressed the walk, the path it named, why that path is not usable, and that no upward search was made, per `FR-PROJ-008`; the name of the undefined variable, or the series found and why it is not supported, per `FR-SRV-030` |
 
   `0` is the tenth code of `FR-ERR-001` and produces no message.
 
@@ -722,6 +808,18 @@ Out of scope: the wording of any individual message.
   met by its `cause`. The clause added obliges the bound, its resolved value and
   the key that raises it, so the caller learns both what stopped the render and
   where to change it. The other clauses are unchanged.
+
+  *Amended in the forty-third edition: the `65` row names the fault in a
+  `--context` document, and the `78` row the path `--tpl-dir` named.* The `65`
+  row asked for "the structural rule of context-document.md it failed", and
+  the implementation obeyed it: the `cause` restated the rule and cited a file
+  the caller does not have, and named no key, per finding E-08 of the audit of
+  rmp `#259`. The row now asks for the key path and what was expected there,
+  which is the instance this requirement prefers to the category. The `78` row
+  named only the directory a walk ended at, and `--tpl-dir` suppresses the
+  walk, so a wrong `--tpl-dir` was reported as a walk that never happened,
+  per finding E-03. The row now names the path the flag named. The other
+  clauses of both rows are unchanged.
 
   *Amended in the twenty-fifth edition: the `69` row names a fifth phase.* It
   named four, and one statement this system issues belonged to none of them.
@@ -817,6 +915,67 @@ Out of scope: the wording of any individual message.
   most three suggestions, drawn from names within an edit distance of two,
   ordered by distance and then by name.
 
+  *Note added in the forty-sixth edition.* For a command token, `FR-ERR-042`
+  also admits a child of which the token is a proper prefix, at any distance.
+  The cap of three and this order govern the candidates of both rules
+  together.
+
+  *Note added in the forty-ninth edition.* `FR-ERR-044` bounds the distance
+  further by the length of the names compared.
+
+- **FR-ERR-044**: A candidate SHALL be admitted by the edit distance of
+  `FR-ERR-019` only WHERE that distance is also strictly less than the length
+  of the longer of the two names, the supplied name and the candidate,
+  counted in characters as `FR-ERR-039` counts them. The bound applies to
+  every population of `FR-ERR-021` and to no candidate `FR-ERR-042` admits by
+  prefix.
+
+  | Supplied | Candidate | Distance | Longer length | Admitted |
+  |---|---|---|---|---|
+  | `zz` | `n1` | 2 | 2 | no |
+  | `q` | `n1` | 2 | 2 | no |
+  | `a` | `b` | 1 | 1 | no |
+  | `t1` | `t2` | 1 | 2 | yes |
+  | `shp` | `shop` | 1 | 4 | yes |
+  | `ordres` | `orders` | 1 | 6 | yes |
+
+  *What the bound means.* No two names are further apart than the length of
+  the longer, which is the cost of substituting or inserting every one of its
+  characters. A distance below that length is reached only by an alignment
+  that keeps at least one character, unchanged or transposed with its
+  neighbour. A candidate that keeps no character of the supplied name is not
+  offered.
+
+  *Rationale.* A distance of two covers every pair of names of two
+  characters or fewer, so `FR-ERR-019` alone offered any short name for any
+  other: with entries `n1` and `shop`, `tpl cfg database remove zz`, `ab` and
+  `q` each answered `did you mean 'n1'?`, and a caller that follows the hint
+  deletes an entry it never named. This is finding W-02 of the sixth
+  re-audit, recorded for rmp `#281`. The bound removes every suggestion of
+  that shape and none of the slips the threshold exists for, which keep
+  nearly every character in place.
+
+  *Why no rule of its own for a command that deletes.* The suggestion is a
+  question on every command alike, and nothing runs until the caller runs
+  it. The harm observed came from a candidate with nothing in common with the
+  name supplied, and the bound removes that candidate from every command at
+  once. Where two candidates remain, `FR-ERR-037` writes them as a choice.
+
+  *Rejected: a threshold that scales with the length, such as
+  `min(2, ⌊len/3⌋)`.* It withdraws distance-one suggestions from every name of
+  three to five characters, `shp` for `shop` among them, which are the slips
+  the threshold exists for. Also rejected: withholding every suggestion on
+  `tpl cfg database remove` and `tpl cfg unset`. It removes the useful
+  suggestions there along with the harmful ones.
+
+  *Accepted cost.* A one-character name is never offered for another
+  one-character name, and a two-character name is never offered for one that
+  keeps no character of it. The generic `hint`, the listing
+  command, still leads to the name in one further invocation.
+
+  *Added in the forty-ninth edition,* for rmp `#281`, from finding W-02 of the
+  sixth re-audit.
+
 - **FR-ERR-039**: The edit distance of `FR-ERR-019` SHALL be the **restricted**
   Damerau-Levenshtein distance — optimal string alignment — in which the
   insertion, the deletion and the substitution of one character, and the
@@ -884,6 +1043,60 @@ Out of scope: the wording of any individual message.
 - **FR-ERR-020**: IF no candidate is within that distance, THEN the system SHALL
   omit the suggestion entirely rather than offer a poor one.
 
+  *Note added in the forty-sixth edition.* For a command, a candidate is also
+  one `FR-ERR-042` admits by prefix. A suggestion is omitted only where neither
+  rule admits a candidate.
+
+  *Note added in the forty-ninth edition.* A candidate within the distance of
+  `FR-ERR-019` and outside the bound of `FR-ERR-044` is not within that
+  distance for this requirement.
+
+- **FR-ERR-042**: WHERE the supplied name is a command token — a first
+  non-flag token that is not a command, per `FR-CLI-003`; a token after a group
+  node that names none of its children; or a segment of the path of
+  `tpl help` that names no child, per `FR-HELP-028` — the system SHALL also
+  admit as a candidate every canonical name and every alias among the children
+  of the node reached of which the supplied token is a proper prefix, compared
+  over the characters as written, per `FR-ERR-038`, whatever its distance
+  under `FR-ERR-039`. The candidates admitted by `FR-ERR-019` and by this
+  requirement SHALL form one set, ordered by distance and then by name and
+  capped at three, per `FR-ERR-019`, and written per `FR-ERR-037`. The
+  suggestion SHALL NOT be acted on: the invocation still exits `64`
+  (`EX_USAGE`), per `FR-CLI-004`.
+
+  ```
+  tpl sch tables
+  error: unknown command 'sch'
+  cause: 'sch' is not a command of tpl; commands are matched in full, never by prefix
+  hint:  did you mean 'schema'? list the commands with: tpl help
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the candidate and the code.
+
+  *Rationale.* A caller that shortens a command writes a prefix of it, and a
+  prefix is far from the whole name by edit distance: `sch` is three steps
+  from `schema`, outside the threshold of `FR-ERR-019`, so the caller received
+  no suggestion for the slip it was most likely to make. The command space is
+  closed and small, so every prefix candidate is a real command, and the
+  suggestion costs nothing on the success path.
+
+  *Why this does not reopen `FR-CLI-004`.* That requirement bars **inferring**
+  a command from a prefix, because a prefix unique today stops being unique
+  when a command is added. A suggestion is not an inference: nothing runs, the
+  caller chooses, and a prefix that matches two commands produces a suggestion
+  naming both.
+
+  *Rejected: extending the rule to every population of `FR-ERR-021`.* Tables,
+  templates and entries are open populations of up to hundreds of names, where
+  a short prefix admits many candidates and the cap of three would choose
+  among them by name alone. The finding was about commands, and commands are
+  where the population is closed and known.
+
+  *Added in the forty-sixth edition,* for rmp `#274`, from finding S-14 of the
+  second re-audit.
+
 - **FR-ERR-021**: Suggestions SHALL apply to tables, views, routines, templates,
   database entries, commands, flags, and configuration keys.
 
@@ -921,10 +1134,11 @@ Out of scope: the wording of any individual message.
   of the command tree of [cli-contract.md](cli-contract.md), a flag a node
   declares, and a key of the enumerated space of `FR-CONF-002`. Every other
   value is subject to a character set, whatever its source — the set above,
-  except for the one population `FR-ERR-040` governs by a set of its own; the
-  values this specification names are a table, a view, a routine, a template, a
-  database entry, the `<name>` segment of a `database.<name>` key, and the name
-  of an environment variable. Each such value SHALL be tested on its own, and the
+  except for the populations `FR-ERR-040` and `FR-ERR-041` govern by sets of
+  their own; the values this specification names are a table, a view, a
+  routine, a template, a database entry, the `<name>` segment of a
+  `database.<name>` key, and the name of an environment variable. Each such
+  value SHALL be tested on its own, and the
   separators that join names into a command or into a key are literals — the
   space between command-path segments, the `-` or `--` that introduces a flag,
   and the `.` between key segments.
@@ -963,6 +1177,11 @@ Out of scope: the wording of any individual message.
   naming an entry outside the set is dropped by `FR-ERR-023`, exactly as that
   entry name would be dropped as a candidate in its own right.
 
+  *Amended in the forty-ninth edition: the consequence above no longer
+  drops anything.* `FR-CONF-048` restricts an entry name to the set of this
+  requirement, so every entry name, and every `database.<name>` key, is
+  admissible in a runnable command.
+
   *Amended in the thirty-first edition: one population is named that this
   requirement governs and could not admit.* *Every other value is subject to
   the character set, whatever its source* reaches a **flag value the caller
@@ -975,8 +1194,21 @@ Out of scope: the wording of any individual message.
   states the set that governs it, and this requirement's own set is unchanged
   for every other value.
 
-- **FR-ERR-023**: IF a nearest-match candidate is subject to that character set
-  and falls outside it, THEN the system SHALL NOT present that candidate at all
+  *Amended in the forty-third edition: two populations are governed by a third
+  set.* A template name is a path relative to `.tpl/templates/`, per
+  `FR-TMPL-006`, so every nested template carries a `/` and the set above
+  refused all of them: `tpl template show rust/_type` offered no suggestion,
+  although `rust/_types` is one edit away, while the help promised the nearest
+  matches, per finding H-07 of the audit of rmp `#259`. A filesystem path
+  written into a hint was refused for the same reason, so a hint could name
+  `.tpl/.cfg` only in the relative form, which fails when run from a
+  subdirectory of the project, per finding E-22. `FR-ERR-041` states the set
+  that governs both, and the set above is unchanged for every other value.
+
+- **FR-ERR-023**: IF a nearest-match candidate is subject to the character set
+  that governs it — that of `FR-ERR-022`, or that of `FR-ERR-041` for a
+  template name — and falls outside it, THEN the system SHALL NOT present that
+  candidate at all
   — neither as an executable suggestion nor as prose — and SHALL emit the
   generic hint alone.
 
@@ -998,6 +1230,10 @@ Out of scope: the wording of any individual message.
   which candidates the set governs, and this rule drops those and no others;
   what it does to a candidate it governs is unchanged, and so is the ground
   for it.
+
+  *Amended in the forty-third edition.* A template name is governed by the set
+  of `FR-ERR-041`, and this rule drops a template candidate that falls outside
+  that set. What it does to a dropped candidate is unchanged.
 
   *Accepted cost.* A caller that mistypes the name of an object whose real name
   contains a character outside `[A-Za-z0-9_]` receives no suggestion, only the
@@ -1084,6 +1320,71 @@ Out of scope: the wording of any individual message.
   in return, and a hint that never names the value the caller wrote tells them
   only that a rule exists.
 
+- **FR-ERR-041**: A template name, and a filesystem path written into a
+  `hint`, SHALL be governed by the character set `[A-Za-z0-9_./-]`, measured
+  over the whole value, which SHALL be at most 1024 characters long and SHALL
+  NOT begin with `-`. The paths this requirement governs are the path of the
+  project's `.tpl` folder or of a file inside it, as resolved under
+  `FR-PROJ-009`; the path a caller named with `--tpl-dir`, its parent
+  directory, or that path followed by `/.tpl`, per `FR-PROJ-027`; and the path a caller gave to `--context`, other than `-`, which
+  names standard input and is not a path.
+
+  IF a template name that is a nearest-match candidate falls outside the set,
+  THEN the system SHALL drop it, per `FR-ERR-023`. IF a path falls outside the
+  set, THEN the system SHALL write a placeholder in the path's position, and
+  SHALL present the path nowhere else in the `hint`, on the ground
+  `FR-ERR-040` states for a flag value.
+
+  ```
+  hint:  did you mean 'rust/_types'? list the templates with: tpl template list
+  hint:  restrict the file's mode with: chmod 600 /home/ana/shop/.tpl/.cfg
+  hint:  restrict the file's mode with: chmod 600 <project>/.tpl/.cfg
+  ```
+
+  *Why these characters.* `/` and `.` are the characters a path is made of, and
+  `-` is common in a file name. None of the three is a shell metacharacter, and
+  the set holds no quotation mark, no whitespace, and no newline, so a value it
+  admits cannot end the command it is written into and start another. A value
+  that began with `-` could be read as an option by the command it is passed
+  to, so none may.
+
+  *Why 1024.* It is `PATH_MAX` on macOS, the smaller of the two limits of the
+  supported systems; Linux fixes 4096. A longer path cannot be passed to a
+  command on every supported system, so a hint carrying one could not succeed
+  on all of them. The number is taken rather than chosen, as `FR-ERR-040`
+  takes 64.
+
+  *Rejected: quoting the value instead of testing it.* Quoting admits every
+  byte, and the value is escaped by `FR-ERR-024` after it is quoted, so a path
+  holding a newline would reach the caller as a different path. A set the
+  value either meets or does not keeps one rule for every population:
+  what is written is what is run.
+
+  *Rejected: widening the set of `FR-ERR-022` for every value.* The ground the
+  twentieth edition gave stands: every widening is paid for by every untrusted
+  name, and a `/` admitted for a template name would be admitted for a table
+  name the server chooses.
+
+  *Accepted cost.* A project under a directory whose name holds a space, or
+  any other character outside the set, receives a placeholder where the path
+  would stand, and the caller substitutes it.
+
+  *Added in the forty-third edition,* for rmp `#260`, from findings H-07 and
+  E-22 of the audit of rmp `#259`.
+
+  *Amended in the forty-seventh edition: the `--context` path is named,* for
+  rmp `#276`. A `hint` that lists the members of a `--context` document names
+  the document's path, and the implementation tested it against this set,
+  while the list above named only the project's paths and that of
+  `--tpl-dir`. A path written into a `hint` and named by no set falls to the
+  closing clause of `FR-ERR-022`, whose set admits no `/`, so the list now
+  names what the implementation already does. The set is unchanged.
+
+  *Amended in the forty-eighth edition: the corrected `--tpl-dir` value is
+  named,* for rmp `#265`. `FR-PROJ-027` writes the path given to `--tpl-dir`
+  followed by `/.tpl` into its `hint`. The set is unchanged, and the suffix
+  holds only characters of it.
+
 - **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, and every C0 control
   character in every value it interpolates into a message — catalogue names,
   comments, defaults, `--context` values, and the argument vector. This
@@ -1117,6 +1418,46 @@ Out of scope: the wording of any individual message.
   pass-through — is a question about this requirement and `FR-OUT-018`
   together, and it is recorded as an item in the
   [README](README.md#maintenance-debt) rather than settled from one side of it.
+
+- **FR-ERR-045**: WHERE a `hint` carries a command that changes the host, the
+  port, the user, the password or the database of an entry defined by `dsn`,
+  the command SHALL be `tpl cfg database update <entry> --dsn <url>`, with
+  the entry name filled in. The `hint` SHALL state in words that the field is
+  changed inside the dsn, and that `<url>` stands for the whole connection URL
+  with that field changed. It SHALL NOT carry the stored dsn or any part of
+  it, per `BR-ERR-003`, and SHALL NOT carry `--host`, `--port`, `--user`,
+  `--schema`, or `tpl cfg set` of one of those fields for that entry.
+
+  This governs every `hint` that repoints or completes an entry: the
+  connection `hint` of a `69` for DNS resolution, a refused connection or a
+  connect deadline; the `hint` of `FR-SRV-030`; the `hint` of `FR-CONF-041`
+  for a dsn with no `/database` segment; and the `hint` of `FR-CFG-048`. An
+  entry defined by the discrete fields keeps the flags those requirements
+  name.
+
+  ```
+  PW=x tpl -d ds schema info
+  error: cannot connect to 127.0.0.1:1 for database entry 'ds'
+  cause: TCP connect to 127.0.0.1:1 was refused
+  hint:  check that the server is running and listening on port 1, or change the address inside the dsn: tpl cfg database update ds --dsn <url>, where <url> is the whole connection URL with the new host or port
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the command carried and the code.
+
+  *Rationale.* `FR-CONF-006` makes `dsn` and the discrete fields exclusive in
+  one entry, and `FR-CFG-048` refuses a write that would join them. A `hint`
+  naming `--host` for a dsn entry is therefore a command that cannot succeed,
+  which `BR-ERR-004` forbids, and its own conflict `hint` then led to the loss
+  `BR-ERR-005` describes. `tpl cfg database update <entry> --dsn <url>`
+  exits `0` and keeps every other field. This is finding X-01 of the seventh
+  re-audit of rmp `#263`, recorded for rmp `#282`.
+
+  *Why a placeholder.* The new URL is a value only the caller knows, and the
+  stored one may carry a password, which `BR-ERR-003` bars from every message.
+
+  *Added in the fiftieth edition,* for rmp `#282`.
 
 ## `EPIPE`
 
@@ -1262,6 +1603,76 @@ no requirement of this file is amended.
   requirements govern; this rule states the exception rather than being read
   past. Nothing else on this list yields: a credential is barred without
   exception, and so is the resolved DSN and every other key of the file.
+
+- **BR-ERR-004**: A `hint` SHALL NOT name a command that cannot succeed in the
+  state the invocation found. A `tpl cfg` command cannot succeed while
+  `.tpl/.cfg` fails step 3 of `FR-ERR-006`, because no `cfg` subcommand is
+  excused from that step, per `FR-ERR-035`; for such a fault the `hint` SHALL
+  name the file, the position, and the edit to make. WHERE the invocation knows
+  a value the `hint` needs — the command path, the template, the database
+  entry, the key, or the path of the project — the `hint` SHALL carry that
+  value and not a placeholder. A placeholder is admissible only WHERE
+  `FR-ERR-022`, `FR-ERR-040` or `FR-ERR-041` refuses the value, or WHERE the
+  value is one only the caller knows, such as a new host or a new value for a
+  key.
+
+  *What this adds to `FR-ERR-009`.* That requirement asks for a concrete,
+  runnable command wherever one exists. A command can be concrete and runnable
+  and still fail: `tpl cfg set database.s6.port 3306` for a `.tpl/.cfg` whose
+  port is `0` fails with the same `78`, per finding E-01 of the audit of rmp
+  `#259`. A placeholder where the value is known is not concrete: the audit
+  found `<entry>` printed for an entry the invocation had named, per finding
+  E-07. This rule states both outcomes, which a caller copying the line
+  depends on.
+
+  *Added in the forty-third edition,* for rmp `#260`.
+
+  *Note added in the forty-seventh edition.* The values this rule lists do not
+  include the global flags a copied command needs to act on the same project
+  and entry. `FR-ERR-043` states that a `hint` command carries `--tpl-dir` and
+  `-d/--database` as the invocation was given them.
+
+  *Note added in the fiftieth edition.* A command that repoints an entry
+  defined by `dsn` with `--host`, `--port`, `--user` or `--schema` cannot
+  succeed: `FR-CFG-048` refuses it with `64`. `FR-ERR-045` states the command
+  such a `hint` carries instead.
+
+- **BR-ERR-005**: A `hint` SHALL NOT name a command that deletes or overwrites
+  stored state the invocation did not name: a value of `.tpl/.cfg`, or an
+  object of `.tpl/.cache/`. The invocation names a value it writes or deletes,
+  and a value whose information its own write supplies anew: the password of
+  an entry, where the invocation writes `password`, `password_command`, or a
+  `dsn` that carries a password. WHERE the only command that would make the
+  invocation succeed deletes or overwrites such state, the `hint` SHALL name
+  instead a command that makes the change the invocation asked for and deletes
+  nothing else. `FR-ERR-045` and `FR-CFG-048` state that command for a
+  database entry, and `FR-CACHE-040` states the `hint` of a clean that names
+  nothing cached.
+
+  A nearest-match candidate stands for the name the invocation gave. A `hint`
+  MAY carry a command that writes the invocation's own value under the
+  candidate, and SHALL NOT carry a command that deletes the candidate: the
+  caller may have meant another name, and the next command does not undo a
+  deletion.
+
+  *What this adds to `BR-ERR-004`.* That rule asks whether the command can
+  succeed. A command can succeed and still cost the caller configuration it
+  never named. For an entry added with
+  `--dsn 'mysql://reader:${PW}@127.0.0.1:1/shop'`, the conflict `hint` of
+  `tpl cfg database update ds --host 127.0.0.1` read
+  `tpl cfg unset database.ds.dsn, then run the command again`. Both commands
+  exited `0`. The user `reader`, the database `shop` and the `${PW}` reference
+  were gone, no message said so, and the next read logged in with no user.
+  Every step was a `hint` copied as written. This is finding X-01 of the
+  seventh re-audit of rmp `#263`, recorded for rmp `#282`.
+
+  *Rejected: naming the deleting command beside a statement of what it
+  deletes.* A caller that copies the command runs it, and a weak reader acts
+  on the command and not on the sentence around it. Switching an entry from
+  one form of connection to the other is the caller's decision; the `cause`
+  of `FR-CFG-048` states what that switch removes, and no `hint` performs it.
+
+  *Added in the fiftieth edition,* for rmp `#282`.
 
 ## Dependencies
 

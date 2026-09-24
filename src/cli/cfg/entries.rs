@@ -31,10 +31,11 @@ use toml_edit::{Item, value};
 
 use super::super::local::Format;
 use super::{Supplied, coherence, form, project};
-use crate::error::Error;
+use crate::diagnostics::emit::ServerDatabase;
+use crate::error::{EntryNameGiven, Error};
 use crate::output::{self, Collection, Document, Order, Source, Table};
 use crate::project::config::entry::{Entry as Block, PasswordCommand};
-use crate::project::config::keys::{EntryKey, Key};
+use crate::project::config::keys::{EntryKey, Key, is_entry_name};
 use crate::project::config::redact;
 use crate::project::edit::{self, Editor};
 
@@ -65,11 +66,13 @@ struct Named<'a> {
 /// The `data` of `tpl cfg database show` (`FR-CFG-038`, `FR-OUT-031`).
 ///
 /// One key, named for the kind in the singular, whose value is that entry with
-/// the redaction of `FR-CFG-021` applied.
+/// the redaction of `FR-CFG-021` applied, each value in the TOML type the file
+/// holds it in (`FR-CFG-049`): a port is a number and a `password_command` an
+/// array, as `tpl cfg get` and `tpl cfg list` print them.
 #[derive(Debug, Serialize)]
 struct Shown<'a> {
     /// The entry.
-    entry: BTreeMap<&'a str, Cow<'a, str>>,
+    entry: BTreeMap<&'static str, super::keys::Printed<'a>>,
 }
 
 /// `tpl cfg database add <name>` (`FR-CFG-015` … `FR-CFG-017`).
@@ -79,7 +82,7 @@ struct Shown<'a> {
 ///
 /// # Errors
 ///
-/// Returns what opening the project returns, [`Error::MissingArgument`] where
+/// Returns what opening the project returns, [`Error::ConnectionDetailsMissing`] where
 /// neither `--dsn` nor a discrete connection flag was supplied
 /// (`FR-CFG-016`), [`Error::MutuallyExclusiveFlags`] where both groups were
 /// (`FR-CFG-029`), [`Error::DatabaseEntryAlreadyExists`] where the name is
@@ -87,17 +90,36 @@ struct Shown<'a> {
 /// flags describe is a combination `FR-CONF-007` refuses (`FR-CFG-048`), and
 /// [`Error::ProjectFileUnwritable`] where the rewrite failed.
 pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Result<(), Error> {
+    // FR-CONF-048: the name is written into every `hint` that names the
+    // entry, so it is held to the set that governs it there.
+    if !is_entry_name(name) {
+        return Err(Error::InvalidEntryName {
+            given: EntryNameGiven::Add,
+            name: name.to_owned(),
+        });
+    }
+
     flags.exclusive()?;
 
     if !flags.connects() {
-        return Err(Error::MissingArgument {
-            command: ADD.to_owned(),
-            argument: "--dsn, or one of --host, --port, --user and --schema".to_owned(),
+        return Err(Error::ConnectionDetailsMissing {
+            entry: name.to_owned(),
+            database_given: supplied.database.is_some(),
         });
     }
 
     let project = project(supplied)?;
     let configuration = project.configuration()?;
+
+    // FR-CFG-051: steps 1 to 3 of FR-ERR-006 have passed, and every later
+    // check is still to come.
+    if let Some(given) = supplied.database {
+        crate::diagnostics::emit::database_has_no_effect(
+            ADD,
+            flags.server_database(false, given, name),
+        );
+    }
+
     let mut editor = project.editor()?;
 
     if editor.defines(name) {
@@ -110,7 +132,7 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
     // Every value is validated, and the entry the flags would leave behind is
     // then measured against `FR-CONF-007` — both before the editor is asked to
     // hold anything, so a refusal of either leaves the file as it was.
-    let written = flags.items()?;
+    let written = flags.items().map_err(|refused| at(refused, ADD))?;
     coherence::refuse(&configuration, ADD, name, &named(&written), flags.dsn)?;
 
     apply(&mut editor, name, written);
@@ -121,31 +143,49 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
 /// `tpl cfg database update <name>` (`FR-CFG-020`).
 ///
 /// Only the fields the flags name are changed; the rest of the entry is left
-/// untouched. An invocation that names no flag changes nothing and writes
-/// nothing.
+/// untouched.
 ///
 /// # Errors
 ///
-/// Returns what opening the project returns,
+/// Returns [`Error::NothingToUpdate`] where no field flag was given, before
+/// the project is opened (`FR-CFG-020`); what opening the project returns;
 /// [`Error::MutuallyExclusiveFlags`] where both flag groups were supplied
 /// (`FR-CFG-029`), [`Error::DatabaseEntryNotFound`] where the entry does not
 /// exist, [`Error::IncoherentEntryWrite`] where the fields the flags name
 /// cannot stand beside the fields they leave alone (`FR-CFG-048`), and
 /// [`Error::ProjectFileUnwritable`] where the rewrite failed.
 pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Result<(), Error> {
+    // FR-CFG-020: an invocation with no field flag is refused at argument
+    // parsing, before the entry is resolved, and leaves the file unchanged.
+    if flags.is_empty() {
+        return Err(Error::NothingToUpdate {
+            entry: name.to_owned(),
+            database_given: supplied.database.is_some(),
+        });
+    }
+
     flags.exclusive()?;
 
     let project = project(supplied)?;
     let configuration = project.configuration()?;
 
-    if configuration.entry(name).is_none() {
-        return Err(configuration.entry_not_found(name));
+    // FR-CFG-051: steps 1 to 3 of FR-ERR-006 have passed, and step 3 is where
+    // `.tpl/.cfg` says whether the entry is defined by `dsn`.
+    if let Some(given) = supplied.database {
+        let by_dsn = configuration
+            .entry(name)
+            .is_some_and(|block| block.declares(EntryKey::Dsn));
+        crate::diagnostics::emit::database_has_no_effect(
+            UPDATE,
+            flags.server_database(by_dsn, given, name),
+        );
     }
 
-    let written = flags.items()?;
-    if written.is_empty() {
-        return Ok(());
+    if configuration.entry(name).is_none() {
+        return Err(configuration.entry_not_found(name, false));
     }
+
+    let written = flags.items().map_err(|refused| at(refused, UPDATE))?;
 
     // `FR-CFG-020` leaves the rest of the entry untouched, so the combination
     // measured is the entry as it stands with these fields changed — and
@@ -156,7 +196,15 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
     let mut editor = project.editor()?;
     apply(&mut editor, name, written);
 
-    editor.save()
+    editor.save()?;
+
+    // FR-CFG-053: after the rewrite, and after the line of FR-CFG-051; the
+    // cache is not consulted, so the line does not depend on one existing.
+    if flags.repoints() {
+        crate::diagnostics::emit::entry_repointed(name);
+    }
+
+    Ok(())
 }
 
 /// `tpl cfg database remove <name>` (`FR-CFG-022`, `FR-CFG-023`).
@@ -171,7 +219,7 @@ pub(crate) fn remove(supplied: &Supplied<'_>, name: &str) -> Result<(), Error> {
     let configuration = project.configuration()?;
 
     if configuration.entry(name).is_none() {
-        return Err(configuration.entry_not_found(name));
+        return Err(configuration.entry_not_found(name, false));
     }
 
     let mut editor = project.editor()?;
@@ -188,7 +236,13 @@ pub(crate) fn remove(supplied: &Supplied<'_>, name: &str) -> Result<(), Error> {
         )));
     }
 
-    editor.save()
+    editor.save()?;
+
+    // FR-CFG-052: the cache under the name is kept, per BR-CACHE-004, and the
+    // line says so without looking at it.
+    crate::diagnostics::emit::entry_removed(name);
+
+    Ok(())
 }
 
 /// `tpl cfg database list` (`FR-CFG-018`, `FR-CFG-038`, `FR-CFG-040`).
@@ -234,18 +288,22 @@ pub(crate) fn show<W: Write>(
     let configuration = project(supplied)?.configuration()?;
 
     let Some(block) = configuration.entry(name) else {
-        return Err(configuration.entry_not_found(name));
+        return Err(configuration.entry_not_found(name, false));
     };
-
-    let fields = redacted(block);
 
     match supplied.format() {
         Format::Json => output::emit_to(
             out,
-            &Document::new(Source::Project, Shown { entry: fields }),
+            &Document::new(
+                Source::Project,
+                Shown {
+                    entry: typed(block),
+                },
+            ),
             form(supplied),
         ),
         Format::Text => {
+            let fields = redacted(block);
             let rows: Vec<[Cow<'_, str>; 2]> = fields
                 .into_iter()
                 .map(|(key, value)| [Cow::Borrowed(key), value])
@@ -271,6 +329,19 @@ fn redacted(block: &Block) -> BTreeMap<&'static str, Cow<'_, str>> {
     fields
 }
 
+/// The entry's keys and values for the `json` document, typed per
+/// `FR-CFG-049` and redacted per `FR-CFG-021`.
+fn typed(block: &Block) -> BTreeMap<&'static str, super::keys::Printed<'_>> {
+    EntryKey::ALL
+        .iter()
+        .filter_map(|&field| {
+            block
+                .written(field)
+                .map(|value| (field.leaf(), super::keys::printed(field, value)))
+        })
+        .collect()
+}
+
 /// Writes the flags of `FR-CFG-027` into the entry `name`.
 ///
 /// Every value has already been validated by [`Flags::items`], so nothing here
@@ -284,6 +355,36 @@ fn apply(editor: &mut Editor, name: &str, written: Vec<(EntryKey, Item)>) {
             },
             item,
         );
+    }
+}
+
+/// `refused` with the command whose help states what its flag takes, where it
+/// is a value the flag did not accept.
+fn at(refused: Error, command: &str) -> Error {
+    match refused {
+        Error::MalformedValue {
+            parameter,
+            value,
+            expected,
+            ..
+        } => Error::MalformedValue {
+            parameter,
+            command: command.to_owned(),
+            value,
+            expected,
+        },
+        Error::InvalidReference {
+            parameter, fault, ..
+        } => Error::InvalidReference {
+            parameter,
+            command: command.to_owned(),
+            fault,
+        },
+        Error::EmptyValue { parameter, .. } => Error::EmptyValue {
+            parameter,
+            command: command.to_owned(),
+        },
+        other => other,
     }
 }
 
@@ -334,6 +435,42 @@ impl Flags<'_> {
             || self.port.is_some()
             || self.user.is_some()
             || self.schema.is_some()
+    }
+
+    /// Whether the invocation supplied none of the nine flags (`FR-CFG-020`).
+    const fn is_empty(&self) -> bool {
+        !self.connects()
+            && self.tls.is_none()
+            && self.password_command.is_none()
+            && self.ca_file.is_none()
+            && self.ca_path.is_none()
+    }
+
+    /// Whether the invocation gives a flag that changes where the entry
+    /// points: one of the six `FR-CACHE-029` names, per `FR-CFG-053`.
+    /// `--password-command`, `--ca-file` and `--ca-path` do not.
+    const fn repoints(&self) -> bool {
+        self.connects() || self.tls.is_some()
+    }
+
+    /// Where the database on the server of the entry written comes from, for
+    /// the last clause of the warning of `FR-CFG-051`: `by_dsn` is whether
+    /// `.tpl/.cfg` already defines the entry by `dsn`, `given` the value of
+    /// `-d/--database`, and `name` the `<name>` operand.
+    ///
+    /// The four conditions are tried in the order of `FR-CFG-051` item 2:
+    /// the dsn form and a given `--schema` precede the equality of condition
+    /// 3, which is byte for byte.
+    fn server_database<'g>(&self, by_dsn: bool, given: &'g str, name: &str) -> ServerDatabase<'g> {
+        if by_dsn || self.dsn.is_some() {
+            ServerDatabase::Dsn
+        } else if self.schema.is_some() {
+            ServerDatabase::SchemaGiven
+        } else if given == name {
+            ServerDatabase::NamesEntry
+        } else {
+            ServerDatabase::Schema(given)
+        }
     }
 
     /// Refuses `--dsn` beside a discrete connection flag (`FR-CFG-029`).
@@ -389,19 +526,19 @@ impl Flags<'_> {
         let mut written: Vec<(EntryKey, Result<Item, Error>)> = Vec::with_capacity(9);
 
         if let Some(dsn) = self.dsn {
-            written.push((EntryKey::Dsn, dsn_item(dsn)));
+            written.push((EntryKey::Dsn, referenced(DSN, dsn).and_then(dsn_item)));
         }
         if let Some(host) = self.host {
-            written.push((EntryKey::Host, Ok(value(host))));
+            written.push((EntryKey::Host, nonempty("--host", host)));
         }
         if let Some(port) = self.port {
             written.push((EntryKey::Port, Ok(value(i64::from(port)))));
         }
         if let Some(user) = self.user {
-            written.push((EntryKey::User, Ok(value(user))));
+            written.push((EntryKey::User, referenced("--user", user).map(value)));
         }
         if let Some(schema) = self.schema {
-            written.push((EntryKey::Database, Ok(value(schema))));
+            written.push((EntryKey::Database, nonempty("--schema", schema)));
         }
         if let Some(command) = self.password_command {
             written.push((EntryKey::PasswordCommand, command_item(command)));
@@ -420,6 +557,33 @@ impl Flags<'_> {
     }
 }
 
+/// `written`, where every `${NAME}` it holds is well formed (`FR-CONF-049`).
+///
+/// The command is filled in by the caller, as for every refused flag value.
+fn referenced<'v>(flag: &str, written: &'v str) -> Result<&'v str, Error> {
+    match crate::project::config::expand::reference_fault(written) {
+        Some(fault) => Err(Error::InvalidReference {
+            parameter: flag.to_owned(),
+            command: String::new(),
+            fault,
+        }),
+        None => Ok(written),
+    }
+}
+
+/// The item `--host` or `--schema` writes: not empty (`FR-CONF-050`), and with
+/// every reference well formed (`FR-CONF-049`).
+fn nonempty(flag: &str, written: &str) -> Result<Item, Error> {
+    if crate::project::config::keys::is_blank(written) {
+        return Err(Error::EmptyValue {
+            parameter: flag.to_owned(),
+            command: String::new(),
+        });
+    }
+
+    referenced(flag, written).map(value)
+}
+
 /// The `dsn` item a `--dsn` writes, verbatim, once the grammar has accepted it.
 ///
 /// `FR-CFG-031` stores the value **verbatim**, and nothing here rewrites it:
@@ -429,23 +593,37 @@ impl Flags<'_> {
 /// value the file cannot be read with would make every later invocation — the
 /// `tpl cfg database remove` that would undo it included — a `78`.
 fn dsn_item(written: &str) -> Result<Item, Error> {
-    crate::project::config::dsn::parse(written, DSN, std::path::Path::new("")).map_err(|_| {
-        Error::MalformedValue {
+    // FR-CFG-031: the flag admits what the file admits, so the fault the file
+    // would report is the one the flag states, in the same terms.
+    crate::project::config::dsn::parse(written, DSN, std::path::Path::new("")).map_err(
+        |refused| Error::MalformedValue {
             parameter: DSN.to_owned(),
+            command: String::new(),
             value: written.to_owned(),
-            expected: "a connection URL",
-        }
-    })?;
+            expected: match refused {
+                Error::DsnQueryParameter { .. } => {
+                    "a connection URL with no '?' query parameters; each option is a flag of its own"
+                }
+                Error::DsnMalformed {
+                    fault: crate::error::DsnFault::Scheme,
+                    ..
+                } => "a connection URL beginning with mysql:// or mariadb://",
+                _ => "a connection URL of the form scheme://[user[:password]@]host[:port]/database",
+            },
+        },
+    )?;
 
     Ok(value(written))
 }
 
 /// The `password_command` item a `--password-command` writes (`FR-CFG-046`).
 fn command_item(written: &str) -> Result<Item, Error> {
-    let command = PasswordCommand::split(written).ok_or_else(|| Error::MalformedValue {
+    // FR-CONF-046: the condition met is what `expected` carries.
+    let command = PasswordCommand::split(written).map_err(|fault| Error::MalformedValue {
         parameter: "--password-command".to_owned(),
+        command: String::new(),
         value: written.to_owned(),
-        expected: "a command to run",
+        expected: fault.condition(),
     })?;
 
     Ok(value(edit::array(command.arguments())))
@@ -453,10 +631,14 @@ fn command_item(written: &str) -> Result<Item, Error> {
 
 /// The item a path flag writes.
 fn path_item(field: EntryKey, path: &std::path::Path) -> Result<Item, Error> {
+    // FR-CONF-047: neither key is expanded, so a `${` is refused with `64`
+    // rather than stored and read later as a file named after the reference.
     path.to_str()
+        .filter(|text| !text.contains("${"))
         .map(value)
         .ok_or_else(|| Error::MalformedValue {
             parameter: format!("--{}", field.leaf().replace('_', "-")),
+            command: String::new(),
             value: path.to_string_lossy().into_owned(),
             expected: "a filesystem path",
         })
@@ -543,7 +725,7 @@ mod tests {
                 .add("shop", flags)
                 .expect_err("no connection was described");
 
-            assert!(matches!(condition, Error::MissingArgument { .. }));
+            assert!(matches!(condition, Error::ConnectionDetailsMissing { .. }));
             assert_eq!(condition.exit_code(), 64);
         }
     }
@@ -774,6 +956,35 @@ mod tests {
     }
 
     #[test]
+    fn fr_cfg_049_show_writes_each_value_in_the_toml_type_the_file_holds() {
+        // FR-CFG-049: a port is a number, a password_command an array, a
+        // redacted value the string `***`, and a reference a string.
+        let harness = Harness::new(concat!(
+            "[database.shop]\n",
+            "host = \"${SHOP_HOST}\"\n",
+            "port = 3307\n",
+            "database = \"shop\"\n",
+            "password_command = [\"echo\", \"${PW}\"]\n",
+            "[database.other]\n",
+            "host = \"h\"\n",
+            "password = \"hunter2\"\n",
+        ));
+
+        assert_eq!(
+            harness.show_json("shop"),
+            concat!(
+                "{\"schema_version\":1,\"source\":\"project\",\"data\":{\"entry\":{",
+                "\"database\":\"shop\",\"host\":\"${SHOP_HOST}\",",
+                "\"password_command\":[\"echo\",\"${PW}\"],\"port\":3307}}}\n",
+            )
+        );
+        assert_eq!(
+            harness.show_json("other"),
+            "{\"schema_version\":1,\"source\":\"project\",\"data\":{\"entry\":{\"host\":\"h\",\"password\":\"***\"}}}\n"
+        );
+    }
+
+    #[test]
     fn fr_cfg_019_show_does_not_expand_a_reference() {
         // FR-CFG-019.
         let harness = Harness::new(
@@ -943,17 +1154,24 @@ mod tests {
             } => {
                 assert_eq!(written, "database.shop.host");
                 assert_eq!(conflicting, "database.shop.dsn");
-                assert_eq!(*repair, EntryRepair::Unset);
+                // FR-CFG-048 row one, FR-ERR-045: changed inside the dsn,
+                // never by unsetting it.
+                assert_eq!(
+                    *repair,
+                    EntryRepair::InsideDsn {
+                        fields: vec!["host"].into()
+                    }
+                );
             }
             other => panic!("expected an incoherent write, got {other:?}"),
         }
     }
 
     #[test]
-    fn fr_cfg_048_an_entry_with_more_than_one_conflicting_field_is_repaired_by_a_rewrite() {
-        // FR-CFG-048: the hint carries a command that makes the write legal,
-        // and no single `tpl cfg unset` does where three discrete fields stand
-        // against the DSN.
+    fn fr_cfg_048_a_dsn_written_over_discrete_fields_is_repaired_by_their_own_flags() {
+        // FR-CFG-048 row two and BR-ERR-005: the hint writes the fields the
+        // new dsn changes with their own flags and unsets nothing; the cause
+        // names the fields a switch to dsn would have to unset.
         let harness = Harness::new(
             "[database.shop]\nhost = \"db\"\nuser = \"alice\"\npassword = \"hunter2\"\n",
         );
@@ -970,7 +1188,13 @@ mod tests {
 
         match condition {
             Error::IncoherentEntryWrite { ref repair, .. } => {
-                assert_eq!(*repair, EntryRepair::Rewrite);
+                assert_eq!(
+                    *repair,
+                    EntryRepair::Discrete {
+                        carried: vec!["host", "user", "password"].into(),
+                        changed: vec!["host", "user", "database"].into(),
+                    }
+                );
             }
             other => panic!("expected an incoherent write, got {other:?}"),
         }

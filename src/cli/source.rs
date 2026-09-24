@@ -78,14 +78,14 @@ use std::path::Path;
 use crate::cache::paths::Collection;
 use crate::cache::{Cache, Covered, Listed, Look, Summary};
 use crate::deadline::{Clock, Deadlines, Seconds};
-use crate::error::Error;
+use crate::error::{Error, KeyAbsence};
 use crate::mariadb::{self, Target, catalogue};
 use crate::model::document::{self, DatabaseDocument};
 use crate::output::Source;
 use crate::project::Project;
 use crate::project::config::Configuration;
 use crate::project::config::expand;
-use crate::project::config::keys::EntryKey;
+use crate::project::config::keys::{EntryKey, is_blank};
 use crate::project::settings::{self, Settings};
 
 use super::Ending;
@@ -103,6 +103,13 @@ const SCHEMA_FLAG: &str = "--schema";
 
 /// The placeholder the hint of `FR-CONF-041` writes after it.
 const SCHEMA_PLACEHOLDER: &str = "<database>";
+
+/// The flag of `FR-CFG-027` that writes `database.<name>.dsn`, which the hint
+/// of an entry defined by dsn carries instead (`FR-ERR-045`).
+const DSN_FLAG: &str = "--dsn";
+
+/// The placeholder the hint writes after it.
+const DSN_PLACEHOLDER: &str = "<url>";
 
 /// What one invocation supplies to a read: the project, the entry, the budget,
 /// the two cache flags, and whether the process exits when the command
@@ -314,7 +321,7 @@ impl<'a> Reader<'a> {
             &expand::environment,
         )?;
 
-        connection_keys(&settings, configuration.file())?;
+        connection_keys(&settings, &configuration)?;
 
         let cache = Cache::of(project.root(), settings.entry());
 
@@ -350,6 +357,7 @@ impl<'a> Reader<'a> {
             file: file.to_owned(),
             flag,
             placeholder,
+            absence: KeyAbsence::Absent,
         };
 
         let Some(target) = Target::of(settings) else {
@@ -634,23 +642,51 @@ pub(super) fn project(tpl_dir: Option<&Path>) -> Result<(Project, Configuration)
 ///
 /// Returns [`Error::EntryKeyMissing`] naming whichever of the two keys the
 /// entry does not carry.
-pub(super) fn connection_keys(settings: &Settings, file: &Path) -> Result<(), Error> {
-    let missing = |key: EntryKey, flag, placeholder| Error::EntryKeyMissing {
-        entry: settings.entry().to_owned(),
-        key: format!("database.{}.{key}", settings.entry()),
-        file: file.to_owned(),
-        flag,
-        placeholder,
+pub(super) fn connection_keys(
+    settings: &Settings,
+    configuration: &Configuration,
+) -> Result<(), Error> {
+    let raw = configuration.entry(settings.entry());
+    let missing = |key: EntryKey, value: Option<&str>| {
+        // FR-CONF-050: an empty value, as written or after expansion, is an
+        // absent key, and the cause says which of the three it is.
+        let written = raw.and_then(|entry| match (&entry.dsn, key) {
+            (Some(dsn), _) => Some(dsn.value.as_str()),
+            (None, EntryKey::Host) => entry.host.as_deref(),
+            (None, _) => entry.database.as_deref(),
+        });
+        let absence = match (value, written) {
+            (None, _) => KeyAbsence::Absent,
+            (Some(_), Some(written)) if written.contains("${") => KeyAbsence::ExpandsToEmpty,
+            (Some(_), _) => KeyAbsence::Empty,
+        };
+        // FR-ERR-045: an entry defined by dsn is completed inside its dsn.
+        let (flag, placeholder) = match (settings.by_dsn(), key) {
+            (true, _) => (DSN_FLAG, DSN_PLACEHOLDER),
+            (false, EntryKey::Host) => (HOST_FLAG, HOST_PLACEHOLDER),
+            (false, _) => (SCHEMA_FLAG, SCHEMA_PLACEHOLDER),
+        };
+
+        Error::EntryKeyMissing {
+            entry: settings.entry().to_owned(),
+            key: format!("database.{}.{key}", settings.entry()),
+            file: configuration.file().to_owned(),
+            flag,
+            placeholder,
+            absence,
+        }
     };
 
-    if settings.host().is_none() {
-        return Err(missing(EntryKey::Host, HOST_FLAG, HOST_PLACEHOLDER));
+    match settings.host() {
+        None => return Err(missing(EntryKey::Host, None)),
+        Some(host) if is_blank(host) => return Err(missing(EntryKey::Host, Some(host))),
+        Some(_) => {}
     }
-    if settings.database().is_none() {
-        return Err(missing(EntryKey::Database, SCHEMA_FLAG, SCHEMA_PLACEHOLDER));
+    match settings.database() {
+        None => Err(missing(EntryKey::Database, None)),
+        Some(database) if is_blank(database) => Err(missing(EntryKey::Database, Some(database))),
+        Some(_) => Ok(()),
     }
-
-    Ok(())
 }
 
 /// The entry such an invocation selects (`FR-GLOB-004` … `FR-GLOB-008`).

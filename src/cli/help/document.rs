@@ -17,6 +17,7 @@
 //! | `global_flags` | The seven flags of `FR-GLOB-001`, **once** | `FR-HELP-017`, `FR-HELP-018` |
 //! | `commands` | A flat array, one entry per node **below** `tpl` | `FR-HELP-019` |
 //! | `template_surface` | The three groups of the template surface | `FR-HELP-017`, `FR-ENV-005` |
+//! | `context_variables` | The seven top-level variables a template reads | `FR-HELP-017`, `FR-HELP-032` |
 //!
 //! `data` is an **open** set of keys, per `FR-HELP-017`: a later edition adds a
 //! key after the last, so the position of every key already present is
@@ -59,14 +60,18 @@
 //! that requirement derives `registered` from the registrations the environment
 //! actually performs, for the reason `FR-HELP-021` gives for the command tree,
 //! so the four arrays that carry names are read from that module's constants
-//! and no name is written here. [`TemplateSurface::PUBLISHED`] states which of
-//! the twelve values are permanent and which are read from the environment.
+//! and no name is written here. Each name is then looked up in
+//! [`super::surface`], which holds the item of `FR-ENV-047` — signature,
+//! operand, arguments and purpose — in the typed table of `FR-HELP-022`.
+//! [`TemplateSurface::published`] states which of the twelve values are
+//! permanent and which are read from the environment.
 
 use std::io::Write;
 
 use clap::{Arg, Command};
 use serde::Serialize;
 
+use super::surface::{self, Family, Item, Variable};
 use super::{Example as Declared, Line as Written, Outcome, render};
 use crate::cli::rules;
 use crate::error::{self, Error};
@@ -115,7 +120,7 @@ pub(super) fn emit<W: Write>(
 
 /// The `data` of the document, per `FR-HELP-017`.
 ///
-/// The four keys are the four fields, in the order the requirement fixes them,
+/// The five keys are the five fields, in the order the requirement fixes them,
 /// and `OD-18` makes that declaration order the emitted key order.
 #[derive(Debug, Serialize)]
 struct Surface<'a> {
@@ -132,6 +137,9 @@ struct Surface<'a> {
 
     /// The three groups of the template surface, per `FR-ENV-005`.
     template_surface: TemplateSurface,
+
+    /// The seven top-level context variables, per `FR-HELP-032`.
+    context_variables: &'static [Variable],
 }
 
 /// One command of the tree, per `FR-HELP-019`.
@@ -154,8 +162,10 @@ struct Entry<'a> {
     /// The aliases of `FR-CLI-011` this node answers to, per `FR-CLI-013`.
     aliases: Vec<&'a str>,
 
-    /// The `DESCRIPTION` the typed table carries, unwrapped.
-    description: &'static str,
+    /// The `DESCRIPTION` the typed table carries, unwrapped, its paragraphs
+    /// separated by a blank line and ending with the four statements of
+    /// `FR-HELP-031` on a leaf.
+    description: String,
 
     /// The positional arguments the node declares, in declaration order.
     ///
@@ -200,9 +210,10 @@ struct Argument<'a> {
     /// The values the argument enumerates, or `null` where it enumerates none.
     permitted: Option<Vec<String>>,
 
-    /// What the argument is worth when it is not given, or `null` where it has
-    /// no default.
-    default: Option<Vec<String>>,
+    /// What the argument is worth when it is not given, as one string written
+    /// as a caller writes it, or `null` where it has no default — the shape
+    /// `FR-HELP-035` gives a flag.
+    default: Option<String>,
 
     /// Whether the invocation must supply it.
     required: bool,
@@ -243,9 +254,10 @@ struct Flag<'a> {
     /// The values the flag enumerates, or `null` where it enumerates none.
     permitted: Option<Vec<String>>,
 
-    /// What the flag is worth when it is not given, or `null` where it has no
-    /// default.
-    default: Option<Vec<String>>,
+    /// What the flag is worth when it is not given, as one string written as
+    /// a caller writes it on the command line, or `null` where it has no
+    /// default (`FR-HELP-035`).
+    default: Option<String>,
 
     /// Whether the invocation must supply it.
     required: bool,
@@ -283,8 +295,9 @@ struct Line<'a> {
     text: String,
 
     /// The argument vector of the `tpl` call on this line, beginning with
-    /// `tpl`, or `null` where the line carries none.
-    invocation: Option<&'a [&'a str]>,
+    /// `tpl`, or `null` where the line carries none or the shell would expand
+    /// one of its tokens.
+    invocation: Option<Vec<&'a str>>,
 }
 
 /// One row of a command's `EXIT CODES`, per `FR-HELP-011` and `FR-HELP-022`.
@@ -326,14 +339,14 @@ struct Group {
     /// What the group promises: `contract`, `pinned` or `none`.
     guarantee: &'static str,
 
-    /// The filter names, or `null`.
-    filters: Option<&'static [&'static str]>,
+    /// One item per filter, or `null`.
+    filters: Option<Vec<&'static Item>>,
 
-    /// The test names, or `null`.
-    tests: Option<&'static [&'static str]>,
+    /// One item per test, or `null`.
+    tests: Option<Vec<&'static Item>>,
 
-    /// The global function names, or `null`.
-    functions: Option<&'static [&'static str]>,
+    /// One item per global function, or `null`.
+    functions: Option<Vec<&'static Item>>,
 }
 
 impl TemplateSurface {
@@ -356,26 +369,47 @@ impl TemplateSurface {
     /// the names on the engine; the filters of `inherited` are the closed list
     /// of `FR-ENV-019`, which `tpl` does not register and `ADR-001` guarantees
     /// against the engine pin.
-    const PUBLISHED: Self = Self {
-        registered: Group {
-            guarantee: "contract",
-            filters: Some(crate::render::REGISTERED_FILTERS),
-            tests: Some(crate::render::REGISTERED_TESTS),
-            functions: Some(crate::render::REGISTERED_FUNCTIONS),
-        },
-        inherited: Group {
-            guarantee: "pinned",
-            filters: Some(crate::render::INHERITED_FILTERS),
-            tests: Some(&[]),
-            functions: Some(&[]),
-        },
-        other: Group {
-            guarantee: "none",
-            filters: None,
-            tests: None,
-            functions: None,
-        },
-    };
+    ///
+    /// Each name is published as the item [`surface`] describes it by, per
+    /// `FR-ENV-047`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InternalInvariant`] where a name carries no item.
+    fn published() -> Result<Self, Error> {
+        Ok(Self {
+            registered: Group {
+                guarantee: "contract",
+                filters: Some(surface::items(
+                    Family::Filter,
+                    crate::render::REGISTERED_FILTERS,
+                )?),
+                tests: Some(surface::items(
+                    Family::Test,
+                    crate::render::REGISTERED_TESTS,
+                )?),
+                functions: Some(surface::items(
+                    Family::Function,
+                    crate::render::REGISTERED_FUNCTIONS,
+                )?),
+            },
+            inherited: Group {
+                guarantee: "pinned",
+                filters: Some(surface::items(
+                    Family::Filter,
+                    crate::render::INHERITED_FILTERS,
+                )?),
+                tests: Some(Vec::new()),
+                functions: Some(Vec::new()),
+            },
+            other: Group {
+                guarantee: "none",
+                filters: None,
+                tests: None,
+                functions: None,
+            },
+        })
+    }
 }
 
 /// The `data` of the document `emit` writes.
@@ -395,7 +429,8 @@ fn surface<'a>(
         tpl_version: VERSION,
         global_flags: flags(tree, &[]),
         commands,
-        template_surface: TemplateSurface::PUBLISHED,
+        template_surface: TemplateSurface::published()?,
+        context_variables: surface::VARIABLES,
     })
 }
 
@@ -452,7 +487,7 @@ fn entry<'a>(node: &'a Command, path: &[&'a str]) -> Result<Entry<'a>, Error> {
     Ok(Entry {
         path: path.to_vec(),
         aliases: node.get_all_aliases().collect(),
-        description: declared.description,
+        description: declared.written_description(),
         arguments: node
             .get_arguments()
             .filter(|argument| argument.is_positional())
@@ -504,7 +539,7 @@ fn argument<'a>(declared: &'a Arg, path: &[&str]) -> Argument<'a> {
         purpose,
         value_type: render::type_name(declared),
         permitted: permitted(declared),
-        default: default(declared),
+        default: default_of(declared),
         required: declared.is_required_set(),
         repeatable: rules::repeats(declared),
         excludes,
@@ -524,6 +559,9 @@ fn flag<'a>(declared: &'a Arg, path: &[&str]) -> Flag<'a> {
             .unwrap_or_else(|| declared.get_id().as_str())
     );
     let (purpose, excludes) = stated(path, &long);
+    let default = super::implied(path, &long)
+        .map(str::to_owned)
+        .or_else(|| default_of(declared));
 
     Flag {
         long,
@@ -537,7 +575,7 @@ fn flag<'a>(declared: &'a Arg, path: &[&str]) -> Flag<'a> {
         // this tree accepts — the text help says `Takes no value.` of the same
         // flag, and the two consumers of one declaration may not disagree.
         permitted: takes_value.then(|| permitted(declared)).flatten(),
-        default: default(declared),
+        default,
         required: declared.is_required_set(),
         repeatable: rules::repeats(declared),
         excludes,
@@ -556,17 +594,17 @@ fn permitted(declared: &Arg) -> Option<Vec<String>> {
     })
 }
 
-/// What an argument is worth when it is not given, or [`None`] where it has no
-/// default.
-fn default(declared: &Arg) -> Option<Vec<String>> {
-    let values = declared.get_default_values();
-
-    (!values.is_empty()).then(|| {
-        values
-            .iter()
-            .map(|value| value.to_string_lossy().into_owned())
-            .collect()
-    })
+/// What a flag or an argument is worth when it is not given, as the one
+/// string a caller writes, or [`None`] where it has no default
+/// (`FR-HELP-035`).
+///
+/// No flag of the tree declares more than one default value, which a test
+/// pins, so the first is the whole of it.
+fn default_of(declared: &Arg) -> Option<String> {
+    declared
+        .get_default_values()
+        .first()
+        .map(|value| value.to_string_lossy().into_owned())
 }
 
 /// One example, as the typed table carries it.
@@ -578,11 +616,48 @@ fn example<'a>(declared: &'a Declared) -> Example<'a> {
 }
 
 /// One line of an example.
+///
+/// `invocation` is what the shell would hand `tpl`: a token the text writes in
+/// quotes is published without them. A line whose tokens the shell would
+/// expand — a `$variable` outside single quotes — has no argument vector that
+/// can be written down, so its `invocation` is `null`, as for a line of shell
+/// alone; its `text` still carries it.
 fn line<'a>(written: &'a Written) -> Line<'a> {
+    let invocation = if written.invocation.is_empty() {
+        None
+    } else {
+        written
+            .invocation
+            .iter()
+            .map(|token| unquoted(token))
+            .collect::<Option<Vec<&str>>>()
+    };
+
     Line {
         text: render::shell(written),
-        invocation: (!written.invocation.is_empty()).then_some(written.invocation),
+        invocation,
     }
+}
+
+/// `token` as the shell passes it to the program, or [`None`] where the shell
+/// would expand it.
+///
+/// The table writes a token in single quotes to keep a `${VAR}` literal, and in
+/// double quotes to keep a space; those are the only two forms it uses.
+fn unquoted(token: &str) -> Option<&str> {
+    if let Some(inner) = token
+        .strip_prefix('\'')
+        .and_then(|rest| rest.strip_suffix('\''))
+    {
+        return Some(inner);
+    }
+
+    let inner = token
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+        .unwrap_or(token);
+
+    (!inner.contains(['$', '`', '\\'])).then_some(inner)
 }
 
 /// One row of an `EXIT CODES` section.
@@ -596,7 +671,7 @@ fn exit_code(declared: &Outcome) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{Surface, TemplateSurface, surface};
+    use super::{Item, Surface, TemplateSurface, surface};
     use crate::cli::{parse, tree};
     use crate::output::{Document, Source};
     use clap::Command;
@@ -773,7 +848,7 @@ mod tests {
         for entry in &published.commands {
             for example in &entry.examples {
                 for line in &example.lines {
-                    let Some(invocation) = line.invocation else {
+                    let Some(invocation) = &line.invocation else {
                         continue;
                     };
 
@@ -906,30 +981,57 @@ mod tests {
         assert!(at(r#""tpl_version""#) < at(r#""global_flags""#));
         assert!(at(r#""global_flags""#) < at(r#""commands""#));
         assert!(at(r#""commands""#) < at(r#""template_surface""#));
+        assert!(at(r#""template_surface""#) < at(r#""context_variables""#));
+    }
+
+    /// The names one array of the published surface carries, in its order.
+    fn names(items: Option<&Vec<&Item>>) -> Option<Vec<&'static str>> {
+        items.map(|listed| listed.iter().map(|item| item.name).collect())
     }
 
     #[test]
     fn fr_env_005_the_template_surface_is_the_three_groups_of_the_requirement() {
         // FR-ENV-005: three sibling objects of one shape, each carrying
         // `guarantee`, `filters`, `tests` and `functions` in that order, with
-        // the guarantee its table gives the group. The four arrays `render/`
-        // fills carry the names of FR-ENV-006 followed by those of FR-ENV-007,
-        // then those of FR-ENV-014, FR-ENV-020 and FR-ENV-018, each in the
-        // order its requirement states them, per FR-HELP-023. The two
-        // FR-ENV-018 and FR-ENV-019 fix as empty are empty in every document,
-        // and the three of group 3 are `null` in every document.
-        assert_eq!(
-            serde_json::to_string(&TemplateSurface::PUBLISHED).expect("it serialises"),
-            concat!(
-                r#"{"registered":{"guarantee":"contract","filters":["pascal","camel","snake","#,
-                r#""upper_snake","kebab","quote","sql_type","json","indent","comment","escape"],"#,
-                r#""tests":["nullable","primary_key","auto_increment","unique","numeric",""#,
-                r#"temporal","textual"],"functions":["table","view","routine","column","fail"]},"#,
-                r#""inherited":{"guarantee":"pinned","filters":["default","join","length","map","#,
-                r#""select","reject","first","last","reverse","sort","trim","upper","lower","#,
-                r#""replace"],"tests":[],"functions":[]},"other":{"guarantee":"none","#,
-                r#""filters":null,"tests":null,"functions":null}}"#
-            )
+        // the guarantee its table gives the group. The two arrays FR-ENV-018
+        // and FR-ENV-019 fix as empty are empty in every document, and the
+        // three of group 3 are `null` in every document. Each member of a
+        // filled array is an item of FR-ENV-047, whose five keys open with the
+        // name.
+        let written =
+            serde_json::to_string(&TemplateSurface::published().expect("every name is described"))
+                .expect("it serialises");
+
+        assert!(
+            written.starts_with(concat!(
+                r#"{"registered":{"guarantee":"contract","filters":[{"name":"pascal","#,
+                r#""signature":"value | pascal","operand":"string","arguments":[],"purpose":"#
+            )),
+            "{written}"
+        );
+        assert!(
+            written.contains(concat!(
+                r#"{"name":"indent","signature":"value | indent(n)","operand":"string","#,
+                r#""arguments":[{"name":"n","type":"integer","required":true,"default":null}],"#,
+                r#""purpose":"#
+            )),
+            "{written}"
+        );
+        assert!(
+            written.contains(concat!(
+                r#"{"name":"column","signature":"column(table, name)","operand":null,"#,
+                r#""arguments":[{"name":"table","type":"string","required":true,"default":null},"#,
+                r#"{"name":"name","type":"string","required":true,"default":null}],"purpose":"#
+            )),
+            "{written}"
+        );
+        assert!(
+            written.contains(r#"],"tests":[],"functions":[]},"other":{"guarantee":"none","#),
+            "{written}"
+        );
+        assert!(
+            written.ends_with(r#""filters":null,"tests":null,"functions":null}}"#),
+            "{written}"
         );
     }
 
@@ -939,24 +1041,48 @@ mod tests {
         // environment actually performs. The document holds no copy of the
         // names, so this asserts the derivation rather than the names — which
         // `render/` asserts against their requirements.
-        let published = TemplateSurface::PUBLISHED;
+        let published = TemplateSurface::published().expect("every name is described");
 
         assert_eq!(
-            published.registered.filters,
-            Some(crate::render::REGISTERED_FILTERS)
+            names(published.registered.filters.as_ref()),
+            Some(crate::render::REGISTERED_FILTERS.to_vec())
         );
         assert_eq!(
-            published.registered.tests,
-            Some(crate::render::REGISTERED_TESTS)
+            names(published.registered.tests.as_ref()),
+            Some(crate::render::REGISTERED_TESTS.to_vec())
         );
         assert_eq!(
-            published.registered.functions,
-            Some(crate::render::REGISTERED_FUNCTIONS)
+            names(published.registered.functions.as_ref()),
+            Some(crate::render::REGISTERED_FUNCTIONS.to_vec())
         );
         assert_eq!(
-            published.inherited.filters,
-            Some(crate::render::INHERITED_FILTERS)
+            names(published.inherited.filters.as_ref()),
+            Some(crate::render::INHERITED_FILTERS.to_vec())
         );
+    }
+
+    #[test]
+    fn fr_help_032_the_context_variables_are_the_last_key_of_data() {
+        // FR-HELP-017 places `context_variables` after the last key, and
+        // FR-HELP-032 fixes each member's four keys in order.
+        let tree = tree();
+        let published = surface(&tree, &tree, &[]).expect("every node has an entry");
+        let document = compact(&published);
+
+        let at = document
+            .find(r#","context_variables":["#)
+            .expect("the key is present");
+        let tail = &document[at..];
+
+        assert!(
+            tail.starts_with(concat!(
+                r#","context_variables":[{"name":"database","type":"object","bound_by":null,"#,
+                r#""purpose":"The whole database: name, charset, collation, server, tables, "#,
+                r#"views and routines."},{"name":"table","type":"object","bound_by":"--table","#
+            )),
+            "{tail}"
+        );
+        assert!(tail.ends_with(r#""}]}}"#), "{tail}");
     }
 
     #[test]
@@ -988,5 +1114,21 @@ mod tests {
         {
             assert_ne!(argument.value_type, "value", "{argument:?}");
         }
+    }
+
+    #[test]
+    fn fr_help_035_no_flag_of_the_tree_declares_more_than_one_default() {
+        fn walk(node: &clap::Command) {
+            for argument in node.get_arguments() {
+                assert!(
+                    argument.get_default_values().len() <= 1,
+                    "{} declares more than one default",
+                    argument.get_id()
+                );
+            }
+            node.get_subcommands().for_each(walk);
+        }
+
+        walk(&crate::cli::tree());
     }
 }

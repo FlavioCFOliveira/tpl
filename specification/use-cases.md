@@ -1,7 +1,7 @@
 ---
 title: Use Cases
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-24
 related: [schema-commands.md, render-command.md, cache-commands.md, cfg-commands.md, examples.md]
 ---
 
@@ -29,10 +29,16 @@ here introduces behaviour of its own.
   - A `.tpl` already exists at the destination: exit `73`, nothing changed.
   - A `.tpl` exists in an ancestor: the nested project is created, a warning
     goes to stderr, exit `0`.
+  - `--tpl-dir` is given: it has no effect, a warning naming the form
+    `tpl init <path>` goes to stderr, and the flow continues at the
+    destination the invocation would have without the flag.
+  - The path names a `.tpl` folder, as in `tpl init proj/.tpl`: exit `64`,
+    nothing created, and the `hint` carries `tpl init proj`.
 - **Postconditions**: the project is usable; no database is known to it, so
   `tpl cfg database list` answers with an empty listing and exit `0`, per
   `FR-CFG-040`
-- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`, `FR-PROJ-025`
+- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`, `FR-PROJ-025`, `FR-PROJ-026`,
+  `FR-PROJ-029`
 
 ## UC-002 — Register a database entry
 
@@ -50,8 +56,18 @@ here introduces behaviour of its own.
   - Neither `--dsn` nor any discrete flag is given: exit `64`.
   - The entry already exists: exit `64`, with a hint pointing at
     `tpl cfg database update`.
+  - The project is a clone and `.tpl` holds no `.cfg`: the command creates
+    `.tpl/.cfg` at mode `0600`, writes the block, and exits `0`.
+  - `--tpl-dir` names the directory that holds `.tpl`, not `.tpl` itself:
+    exit `78`, nothing written, and the `hint` carries the corrected
+    `--tpl-dir`.
+  - `--ca-file` or `--ca-path` holds `${VAR}`: exit `64`, nothing written.
+  - The entry name is empty or holds a character other than a letter, a
+    digit or an underscore, or `--host` or `--schema` is empty: exit `64`,
+    nothing written.
 - **Postconditions**: `-d shop` resolves
-- **Requirements**: `FR-CFG-015` … `FR-CFG-017`, `FR-CFG-027`
+- **Requirements**: `FR-CFG-015` … `FR-CFG-017`, `FR-CFG-027`, `FR-PROJ-027`,
+  `FR-PROJ-028`, `FR-CONF-047`, `FR-CONF-048`, `FR-CONF-050`
 
 ## UC-003 — Keep the password out of the file
 
@@ -199,15 +215,23 @@ here introduces behaviour of its own.
 - **Actor**: operator
 - **Trigger**: an entry must point at a different server
 - **Main flow**:
-  1. Run `tpl cfg database update shop --host db-staging.example.com`.
+  1. Run `tpl cfg database update shop --host db-staging.example.com`. A
+     warning line names `tpl -d shop cache clean`.
   2. Run `tpl -d shop cache clean`.
 - **Alternate flows**:
   - Step 2 is skipped: reads continue to serve the previous server's catalogue,
     with exit `0` and nothing in the output saying so. The only signal is the
     load time reported by `tpl cache status`.
+  - The entry is repointed by removing and adding it: run
+    `tpl cfg database remove shop`, whose warning line names
+    `tpl -d shop cache clean`; run `tpl -d shop cache clean`, which removes
+    the data cached for `shop` although no entry declares it; then run
+    `tpl cfg database add shop` with the new connection flags. Where the clean
+    is skipped, the new entry reads the old entry's data, with exit `0`.
 - **Notes**: nothing invalidates the cache automatically; this failure mode is
   accepted and documented
-- **Requirements**: `FR-CACHE-028`, `FR-CACHE-029`, `BR-CACHE-003`
+- **Requirements**: `FR-CACHE-028`, `FR-CACHE-029`, `FR-CACHE-041`,
+  `BR-CACHE-003`, `FR-CFG-052`, `FR-CFG-053`
 
 ## UC-012 — Recover from a mistyped name
 
@@ -227,8 +251,10 @@ here introduces behaviour of its own.
     the error is not. `FR-ERR-033` makes every diagnostic the same four lines of
     text, whatever the format, and the exit code is the machine-comparable
     signal
+  - The mistyped name is a shortened command, `tpl sch tables`: it is not
+    executed, and the `64` suggests `schema`, per `FR-ERR-042`.
 - **Requirements**: `FR-ERR-008`, `FR-ERR-009`, `FR-ERR-019` … `FR-ERR-024`,
-  `FR-ERR-033`, `FR-ERR-034`
+  `FR-ERR-033`, `FR-ERR-034`, `FR-ERR-042`
 
 ## UC-013 — Build an application's data layer from a known schema
 

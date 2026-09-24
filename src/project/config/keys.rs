@@ -251,6 +251,19 @@ impl EntryKey {
         }
     }
 
+    /// Whether writing or removing this key changes where the entry points
+    /// (`FR-CFG-053`): the six keys that hold what the flags of
+    /// `FR-CACHE-029` write.
+    ///
+    /// `password`, `password_command`, `ca_file` and `ca_path` do not: the
+    /// entry still reaches the same server and the same database.
+    pub(crate) const fn repoints(self) -> bool {
+        matches!(
+            self,
+            Self::Host | Self::Port | Self::User | Self::Database | Self::Tls | Self::Dsn
+        )
+    }
+
     /// Whether the value of this key may itself be a credential.
     ///
     /// `FR-ERR-013` bars a credential from every message, so a `cause` line
@@ -265,6 +278,30 @@ impl fmt::Display for EntryKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.leaf())
     }
+}
+
+/// Whether `value` names no host and no database (`FR-CONF-050`): it has no
+/// character, or only the six ASCII whitespace characters `U+0009` through
+/// `U+000D` and `U+0020`.
+///
+/// The set is spelled out because [`u8::is_ascii_whitespace`] leaves out the
+/// vertical tab, which the requirement names. The value is never trimmed.
+pub(crate) fn is_blank(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| matches!(byte, b'\t'..=b'\r' | b' '))
+}
+
+/// Whether `name` is an entry name: one to sixty-four ASCII letters, digits
+/// and underscores (`FR-CONF-048`).
+///
+/// It is the set of `FR-ERR-022`, so every entry name is printable in every
+/// `hint` that names it.
+pub(crate) fn is_entry_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
 /// One key of the space of `FR-CONF-002`, fully qualified.
@@ -285,9 +322,9 @@ pub(crate) enum Key {
 impl Key {
     /// The key a dotted name spells, or [`None`] where the space has none.
     ///
-    /// A `database.<name>.<field>` key is split at its **last** dot, so an
-    /// entry whose name carries one — which `FR-CONF-008` does not forbid —
-    /// still round-trips between the file and the command line.
+    /// A `database.<name>.<field>` key is split at its **last** dot, so a
+    /// name that carries one still parses, and `tpl cfg set` can refuse it
+    /// under `FR-CONF-048` as a name rather than as an unknown key.
     pub(crate) fn parse(text: &str) -> Option<Self> {
         if let Some(leaf) = text
             .strip_prefix(CORE)
@@ -316,6 +353,43 @@ impl Key {
         match self {
             Self::Core(key) => key.expects(),
             Self::Entry { field, .. } => field.expects(),
+        }
+    }
+
+    /// The value the configuration gives this key where the file sets none,
+    /// as `tpl cfg get` would print it, or [`None`] where the key has no
+    /// default (finding T-05 of the third re-audit of rmp `#263`).
+    pub(crate) fn default_value(&self) -> Option<String> {
+        use crate::deadline::{Deadlines, Phase};
+        use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
+
+        let deadlines = Deadlines::default();
+        let seconds = |phase: Phase| Some(deadlines.of(phase).get().to_string());
+        match self {
+            Self::Core(CoreKey::Database) => None,
+            Self::Core(CoreKey::ConnectTimeout) => seconds(Phase::TcpConnect),
+            Self::Core(CoreKey::QueryTimeout) => seconds(Phase::CatalogueQuery),
+            Self::Core(CoreKey::PasswordTimeout) => seconds(Phase::PasswordCommand),
+            Self::Core(CoreKey::RenderTimeout) => seconds(Phase::Render),
+            Self::Core(CoreKey::RenderFuel) => Some(RenderFuel::DEFAULT.get().to_string()),
+            Self::Core(CoreKey::RenderOutputLimit) => {
+                Some(RenderOutputLimit::DEFAULT.get().to_string())
+            }
+            Self::Core(CoreKey::RenderMemoryLimit) => {
+                Some(RenderMemoryLimit::DEFAULT.get().to_string())
+            }
+            Self::Entry { field, .. } => match field {
+                EntryKey::Port => Some(crate::project::settings::DEFAULT_PORT.to_string()),
+                EntryKey::Tls => Some(super::entry::TlsMode::default().name().to_owned()),
+                EntryKey::Dsn
+                | EntryKey::Host
+                | EntryKey::User
+                | EntryKey::Password
+                | EntryKey::PasswordCommand
+                | EntryKey::Database
+                | EntryKey::CaFile
+                | EntryKey::CaPath => None,
+            },
         }
     }
 }
@@ -381,9 +455,11 @@ impl fmt::Display for Target {
 /// enumerated space of `FR-CONF-002`, written out.
 ///
 /// The eight `[core]` keys are the whole of the section. The ten entry keys are
-/// written once per entry name the file defines and once for the name the
-/// supplied key itself carries, so that `database.shop.hst` is corrected in a
-/// project whose file does not yet define `shop`.
+/// written once per entry name the file defines; where the supplied key names
+/// an entry, they are written for that entry alone, so that
+/// `database.shop.hst` is corrected in a project whose file does not yet
+/// define `shop`, and is not offered the keys of another entry the caller did
+/// not name.
 ///
 /// The names are collected rather than borrowed because the entry names come
 /// from two populations with different lifetimes and the selection of
@@ -392,13 +468,21 @@ pub(crate) fn candidates<'a, N>(defined: N, supplied: &str) -> Vec<String>
 where
     N: IntoIterator<Item = &'a str>,
 {
-    let mut entries: Vec<String> = defined.into_iter().map(str::to_owned).collect();
-
-    if let Some(named) = entry_named_by(supplied)
-        && !entries.iter().any(|known| known == named)
-    {
-        entries.push(named.to_owned());
+    match entry_named_by(supplied) {
+        Some(named) => space([named]),
+        None => space(defined),
     }
+}
+
+/// The enumerated space of `FR-CONF-002`, written out with the `<name>`
+/// segment bound to each of `entries`: the population `FR-CFG-007` suggests
+/// over for `tpl cfg get` and `tpl cfg unset`, whose key names an entry the
+/// file must already declare.
+pub(crate) fn space<'a, N>(entries: N) -> Vec<String>
+where
+    N: IntoIterator<Item = &'a str>,
+{
+    let entries: Vec<&str> = entries.into_iter().collect();
 
     let mut population: Vec<String> = CoreKey::ALL
         .iter()
@@ -430,7 +514,7 @@ fn entry_named_by(supplied: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CoreKey, EntryKey, Key, Target, ValueType, candidates};
+    use super::{CoreKey, EntryKey, Key, Target, ValueType, candidates, is_blank};
 
     #[test]
     fn fr_conf_002_the_space_is_exactly_the_eighteen_forms_the_table_declares() {
@@ -602,8 +686,9 @@ mod tests {
 
         assert!(population.iter().any(|key| key == "core.database"));
         assert!(population.iter().any(|key| key == "database.shop.host"));
+        // S-10: the entry the key names is the only one it is corrected in.
         assert!(
-            population
+            !population
                 .iter()
                 .any(|key| key == "database.reporting.host")
         );
@@ -618,5 +703,24 @@ mod tests {
             .count();
 
         assert_eq!(hosts, 1);
+    }
+
+    #[test]
+    fn fr_conf_050_the_six_ascii_whitespace_characters_alone_are_blank() {
+        for blank in [
+            "",
+            " ",
+            "\t",
+            "\n",
+            "\u{b}",
+            "\u{c}",
+            "\r",
+            " \t\u{b}\u{c}\r\n",
+        ] {
+            assert!(is_blank(blank), "{blank:?}");
+        }
+        for named in ["h", " h ", "\u{a0}", "\u{85}", "\u{2003}"] {
+            assert!(!is_blank(named), "{named:?}");
+        }
     }
 }

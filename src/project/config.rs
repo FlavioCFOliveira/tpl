@@ -213,9 +213,8 @@ impl Configuration {
 
     /// Every key the file **sets**, fully qualified, in a fixed order.
     ///
-    /// This is the population `FR-CFG-007` suggests over: the keys that do
-    /// exist, as against the enumerated space `FR-CFG-009` and `FR-CONF-034`
-    /// suggest over.
+    /// `FR-CFG-007` suggests over the enumerated space, and this is what says
+    /// which of its candidates the file does not set.
     pub(crate) fn keys(&self) -> Vec<String> {
         let mut present: Vec<String> = CoreKey::ALL
             .into_iter()
@@ -234,21 +233,14 @@ impl Configuration {
         present
     }
 
-    /// The nearest matches to `supplied` among the keys the file sets
-    /// (`FR-CFG-007`).
-    pub(crate) fn nearest_key_set(&self, supplied: &str) -> Vec<String> {
-        nearest(supplied, &self.keys(), Population::ConfigurationKeys)
-    }
-
     /// The nearest matches to `supplied` among the enumerated key space
     /// (`FR-CFG-009`, `FR-CONF-034`).
     pub(crate) fn nearest_key_in_space(&self, supplied: &str) -> Vec<String> {
         let names: Vec<&str> = self.names().collect();
-        nearest(
-            supplied,
-            &keys::candidates(names, supplied),
-            Population::ConfigurationKeys,
-        )
+        let population = keys::candidates(names, supplied);
+        let suggested = nearest(supplied, &population, Population::ConfigurationKeys);
+
+        misplaced(supplied, &population, suggested)
     }
 
     /// The nearest matches to `supplied` among the entry names the file defines
@@ -258,23 +250,89 @@ impl Configuration {
         nearest(supplied, &names, Population::Names)
     }
 
-    /// The condition `FR-CFG-007` and `FR-CFG-012` raise for a key this file
-    /// does not set.
+    /// The condition `FR-CFG-007` and `FR-CFG-012` raise for a key or block
+    /// this file does not set.
+    ///
+    /// The population is the key space of `FR-CONF-002` with the `<name>`
+    /// segment bound to every entry the file declares (`FR-CFG-007`). A key of
+    /// that population exists, so `FR-ERR-019` offers it no suggestion: the
+    /// caller spelt it right and the file does not set it, which the `error`
+    /// line says with the key's default (finding U-01 of the fourth re-audit of
+    /// rmp `#263`). Only a name outside the population is offered candidates,
+    /// and each candidate the file does not set is recorded as such, because
+    /// the `hint` must say so: a `tpl cfg get` or a `tpl cfg unset` of that
+    /// candidate is itself a `66`.
+    ///
+    /// A key or block that names an entry the file does not declare records
+    /// the entry, so that the diagnostic reports the missing entry rather than
+    /// a missing key (finding U-05).
     pub(crate) fn key_not_found(&self, key: &str) -> Error {
+        let parsed = keys::Key::parse(key);
+        let named = match (&parsed, keys::Target::parse(key)) {
+            (Some(keys::Key::Entry { entry, .. }), _) => Some(entry.clone()),
+            (_, Some(keys::Target::Entry(entry))) => Some(entry),
+            _ => None,
+        };
+        let missing_entry = named.filter(|entry| self.entry(entry).is_none());
+
+        let set = self.keys();
+        let unset_or_not = |candidate: String| {
+            let carried = set.contains(&candidate);
+            (candidate, carried)
+        };
+        let section = matches!(
+            keys::Target::parse(key),
+            Some(keys::Target::Core | keys::Target::Databases)
+        );
+        let nearest = match (&parsed, &missing_entry) {
+            // FR-ERR-019: the name exists in the population; nothing is
+            // offered. A section of the space exists too.
+            (Some(_), None) => Vec::new(),
+            _ if section => Vec::new(),
+            // A block of an entry the file does not declare: the blocks it
+            // does, each of which the file carries.
+            (None, Some(entry)) => self
+                .nearest_entry(entry)
+                .into_iter()
+                .map(|name| (format!("{DATABASE}.{name}"), true))
+                .collect(),
+            // A key of an undeclared entry: the declared population alone,
+            // without the same-leaf fallback, which would offer another
+            // entry's key for no likeness of name.
+            (Some(_), Some(_)) => {
+                let population = keys::space(self.names());
+                nearest(key, &population, Population::ConfigurationKeys)
+                    .into_iter()
+                    .map(unset_or_not)
+                    .collect()
+            }
+            (None, None) => {
+                let population = keys::space(self.names());
+                let suggested = nearest(key, &population, Population::ConfigurationKeys);
+                misplaced(key, &population, suggested)
+                    .into_iter()
+                    .map(unset_or_not)
+                    .collect()
+            }
+        };
         Error::ConfigurationKeyNotFound {
             key: key.to_owned(),
+            known: parsed.is_some(),
+            default: parsed.as_ref().and_then(keys::Key::default_value),
             file: self.file.clone(),
-            nearest: self.nearest_key_set(key),
+            entry_missing: missing_entry.is_some(),
+            nearest,
         }
     }
 
     /// The condition `FR-GLOB-007` raises for an entry this file does not
-    /// define.
-    pub(crate) fn entry_not_found(&self, name: &str) -> Error {
+    /// define; `by_default` where `core.database` is what named it.
+    pub(crate) fn entry_not_found(&self, name: &str, by_default: bool) -> Error {
         Error::DatabaseEntryNotFound {
             name: name.to_owned(),
             file: self.file.clone(),
             nearest: self.nearest_entry(name),
+            by_default,
         }
     }
 }
@@ -350,6 +408,7 @@ fn read(text: &str, file: &Path) -> Result<Document, Error> {
     let parsed = DeTable::parse(text).map_err(|refused| Error::ConfigurationMalformed {
         path: file.to_owned(),
         position: position(text, refused.span().map_or(0, |span| span.start)),
+        reason: parser_reason(refused.message()),
     })?;
     let root = parsed.get_ref();
 
@@ -392,29 +451,46 @@ fn check_key_space(
         match section {
             CORE => {
                 let table = expect_table(value, CORE, text, file)?;
-                for leaf in table.keys() {
-                    let leaf = leaf.get_ref().as_ref();
+                for spelled in table.keys() {
+                    let leaf = spelled.get_ref().as_ref();
                     if CoreKey::from_leaf(leaf).is_none() {
-                        return Err(outside_space(&format!("{CORE}.{leaf}"), known, file));
+                        let at = position(text, spelled.span().start);
+                        return Err(outside_space(&format!("{CORE}.{leaf}"), known, file, at));
                     }
                 }
             }
             DATABASE => {
                 let table = expect_table(value, DATABASE, text, file)?;
-                for (entry, block) in table.iter() {
-                    let entry = entry.get_ref().as_ref();
+                for (spelled, block) in table.iter() {
+                    let entry = spelled.get_ref().as_ref();
+
+                    // FR-CONF-048, at step 3: the name is part of the key.
+                    if !keys::is_entry_name(entry) {
+                        return Err(Error::ConfigurationEntryName {
+                            file: file.to_owned(),
+                            name: entry.to_owned(),
+                            core: false,
+                            position: position(text, spelled.span().start),
+                        });
+                    }
+
                     let qualified = format!("{DATABASE}.{entry}");
                     let block = expect_table(block, &qualified, text, file)?;
 
-                    for leaf in block.keys() {
-                        let leaf = leaf.get_ref().as_ref();
+                    for spelled in block.keys() {
+                        let leaf = spelled.get_ref().as_ref();
                         if EntryKey::from_leaf(leaf).is_none() {
-                            return Err(outside_space(&format!("{qualified}.{leaf}"), known, file));
+                            let at = position(text, spelled.span().start);
+                            let key = format!("{qualified}.{leaf}");
+                            return Err(outside_space(&key, known, file, at));
                         }
                     }
                 }
             }
-            other => return Err(outside_space(other, known, file)),
+            other => {
+                let at = position(text, name.span().start);
+                return Err(outside_space(other, known, file, at));
+            }
         }
     }
 
@@ -422,14 +498,38 @@ fn check_key_space(
 }
 
 /// The refusal of `FR-CONF-034`, with the nearest-match suggestion it obliges.
-fn outside_space(key: &str, known: &[&str], file: &Path) -> Error {
+fn outside_space(key: &str, known: &[&str], file: &Path, position: Position) -> Error {
     let population = keys::candidates(known.iter().copied(), key);
+    let suggested = nearest(key, &population, Population::ConfigurationKeys);
+    let suggested = misplaced(key, &population, suggested);
 
     Error::ConfigurationKeyOutsideSpace {
         key: key.to_owned(),
         file: file.to_owned(),
-        nearest: nearest(key, &population, Population::ConfigurationKeys),
+        position,
+        nearest: suggested,
     }
+}
+
+/// The suggestions for `key`, or, where the distance of `FR-ERR-019` found
+/// none, the key of the same name in the table that holds it.
+///
+/// A known key written in the wrong table — `password_timeout` above `[core]`,
+/// or under `[database.x]` — is a whole segment away from its own spelling, so
+/// the distance never reaches it. The key is offered under every table that
+/// does hold a key of that name.
+fn misplaced(key: &str, population: &[String], suggested: Vec<String>) -> Vec<String> {
+    if !suggested.is_empty() {
+        return suggested;
+    }
+
+    let leaf = key.rsplit('.').next().unwrap_or(key);
+    population
+        .iter()
+        .filter(|candidate| candidate.as_str() != key && candidate.rsplit('.').next() == Some(leaf))
+        .take(3)
+        .cloned()
+        .collect()
 }
 
 /// The table `value` holds, or the refusal of a section that is not one.
@@ -464,7 +564,19 @@ fn read_core(root: &DeTable<'_>, text: &str, file: &Path) -> Result<Core, Error>
 
         match key {
             CoreKey::Database => {
-                core.database = Some(string(value, text, &qualified, key.expects(), file)?);
+                let name = string(value, text, &qualified, key.expects(), file)?;
+
+                // FR-CONF-048: a value outside the type of `core.database` is
+                // the same fault as a name outside it, at step 3.
+                if !keys::is_entry_name(&name) {
+                    return Err(Error::ConfigurationEntryName {
+                        file: file.to_owned(),
+                        name,
+                        core: true,
+                        position: at(text, value),
+                    });
+                }
+                core.database = Some(name);
             }
             CoreKey::ConnectTimeout => {
                 core.connect_timeout = Some(seconds(value, text, &qualified, file)?);
@@ -576,10 +688,10 @@ fn read_entry(block: &DeTable<'_>, text: &str, entry: &str, file: &Path) -> Resu
             EntryKey::Database => read.database = Some(string(value, text, &key, expects, file)?),
             EntryKey::Tls => read.tls = Some(tls(value, text, &key, file)?),
             EntryKey::CaFile => {
-                read.ca_file = Some(PathBuf::from(string(value, text, &key, expects, file)?));
+                read.ca_file = Some(PathBuf::from(literal_path(value, text, &key, file)?));
             }
             EntryKey::CaPath => {
-                read.ca_path = Some(PathBuf::from(string(value, text, &key, expects, file)?));
+                read.ca_path = Some(PathBuf::from(literal_path(value, text, &key, file)?));
             }
         }
     }
@@ -636,6 +748,28 @@ fn string(
         .as_str()
         .map(str::to_owned)
         .ok_or_else(|| malformed(text, value, key, expects.expected(), file))
+}
+
+/// The path `value` holds for `ca_file` or `ca_path`, which `FR-CONF-047`
+/// reads literally and refuses where it holds `${`.
+fn literal_path(
+    value: &Spanned<DeValue<'_>>,
+    text: &str,
+    key: &str,
+    file: &Path,
+) -> Result<String, Error> {
+    let path = string(value, text, key, ValueType::Path, file)?;
+
+    if path.contains("${") {
+        return Err(Error::ConfigurationPathReference {
+            key: key.to_owned(),
+            file: file.to_owned(),
+            position: at(text, value),
+            value: path,
+        });
+    }
+
+    Ok(path)
 }
 
 /// The positive number of seconds `value` holds (`FR-CONF-002`).
@@ -729,27 +863,32 @@ fn arguments(
     key: &str,
     file: &Path,
 ) -> Result<PasswordCommand, Error> {
-    let not_an_array = |found: &'static str| Error::PasswordCommandNotAnArray {
+    let not_an_array = |found: &'static str, element| Error::PasswordCommandNotAnArray {
         key: key.to_owned(),
         file: file.to_owned(),
         position: at(text, value),
         found,
+        element,
     };
 
     let Some(members) = value.get_ref().as_array() else {
-        return Err(not_an_array(value.get_ref().type_str()));
+        return Err(not_an_array(value.get_ref().type_str(), None));
     };
 
     let mut collected = Vec::with_capacity(members.len());
-    for member in members.iter() {
+    for (index, member) in members.iter().enumerate() {
         let Some(argument) = member.get_ref().as_str() else {
-            return Err(not_an_array(member.get_ref().type_str()));
+            return Err(not_an_array(member.get_ref().type_str(), Some(index)));
         };
         collected.push(argument.to_owned());
     }
 
-    PasswordCommand::new(collected).ok_or_else(|| not_an_array("an empty array"))
+    PasswordCommand::new(collected).ok_or_else(|| not_an_array(EMPTY_ARRAY, None))
 }
+
+/// The `found` of [`Error::PasswordCommandNotAnArray`] for `password_command =
+/// []`: an array, but one with no program to run.
+pub(crate) const EMPTY_ARRAY: &str = "empty array";
 
 /// The refusal of a value that is not of its declared type.
 ///
@@ -781,6 +920,7 @@ fn malformed(
         position: at(text, value),
         found,
         expected,
+        expanded_from: None,
     }
 }
 
@@ -792,6 +932,7 @@ fn malformed_section(text: &str, value: &Spanned<DeValue<'_>>, key: &str, file: 
         position: at(text, value),
         found: value.get_ref().type_str().to_owned(),
         expected: A_TABLE,
+        expanded_from: None,
     }
 }
 
@@ -806,6 +947,28 @@ pub(crate) fn at(text: &str, value: &Spanned<DeValue<'_>>) -> Position {
 }
 
 /// The line and column, counted from one, of a byte offset into `text`.
+/// What the TOML parser said it expected, on one line.
+///
+/// The parser's message is its own diagnosis — "invalid table header",
+/// "expected `.`, `]`" — and carries no excerpt of the file; the excerpt is
+/// what its `Display` adds, and `BR-ERR-003` bars the contents of `.tpl/.cfg`
+/// from every message, so the message is taken alone. Its lines are joined,
+/// because `FR-ERR-008` gives the `cause` one line.
+pub(crate) fn parser_reason(message: &str) -> String {
+    let joined = message
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("; ");
+
+    if joined.is_empty() {
+        "the parser gave no reason".to_owned()
+    } else {
+        joined
+    }
+}
+
 fn position(text: &str, offset: usize) -> Position {
     let upto = text.get(..offset).unwrap_or(text);
     let line = upto.bytes().filter(|byte| *byte == b'\n').count() + 1;

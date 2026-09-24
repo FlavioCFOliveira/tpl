@@ -40,14 +40,15 @@ use crate::project::config::{Configuration, dsn};
 /// pair, with the repair whose runnable command makes the write legal.
 pub(super) fn refuse(
     configuration: &Configuration,
-    command: &str,
+    command: &'static str,
     name: &str,
     written: &[EntryKey],
     dsn: Option<&str>,
 ) -> Result<(), Error> {
     let carried = configuration.entry(name);
 
-    let mut combination = carried.map(Combination::of).unwrap_or_default();
+    let carried_combination = carried.map(Combination::of).unwrap_or_default();
+    let mut combination = carried_combination;
     for field in written {
         combination.declare(*field, true);
     }
@@ -87,33 +88,89 @@ pub(super) fn refuse(
         entry: name.to_owned(),
         written: qualified(name, writes),
         conflicting: qualified(name, conflicting),
-        repair: repair(command, combination, written, conflicting),
+        repair: repair(command, carried_combination, written, conflicting, dsn),
     })
 }
 
-/// Which runnable command makes the write legal.
+/// Which runnable command makes the write legal, per the table of
+/// `FR-CFG-048`.
+///
+/// Every row names a command that makes the change the invocation asked for
+/// and deletes nothing it did not name (`BR-ERR-005`). In particular no row
+/// unsets `dsn` beside a discrete field, or the discrete fields beside a `dsn`:
+/// switching an entry from one form to the other is the caller's decision, and
+/// the `cause` states what the switch removes.
 fn repair(
-    command: &str,
-    combination: Combination,
+    command: &'static str,
+    carried: Combination,
     written: &[EntryKey],
     conflicting: EntryKey,
+    dsn: Option<&str>,
 ) -> EntryRepair {
     if written.contains(&conflicting) {
         return EntryRepair::Restate(command.to_owned());
     }
 
-    // Whether removing the one key resolves the refusal is asked of the rule
-    // rather than counted: an entry carrying a DSN beside three discrete fields
-    // is still refused once one of the three is gone, and a hint naming that
-    // one would not be the command `FR-CFG-048` asks for.
-    let mut without = combination;
-    without.declare(conflicting, false);
-
-    if without.refused().is_some() {
-        EntryRepair::Rewrite
-    } else {
-        EntryRepair::Unset
+    match conflicting {
+        // Row one: the entry is defined by dsn, and the invocation writes a
+        // discrete connection field, which is changed inside the dsn.
+        EntryKey::Dsn
+            if written
+                .iter()
+                .any(|field| EntryKey::DISCRETE.contains(field)) =>
+        {
+            EntryRepair::InsideDsn {
+                fields: EntryKey::DISCRETE
+                    .into_iter()
+                    .filter(|field| written.contains(field))
+                    .map(EntryKey::leaf)
+                    .collect(),
+            }
+        }
+        // Row five: the dsn carries a password, and the invocation writes
+        // password_command.
+        EntryKey::Dsn => EntryRepair::DsnWithoutPassword,
+        // Row three: the entry carries password, and the invocation writes
+        // password_command. `password` is also a discrete connection field, so
+        // this arm precedes row two, which is about a dsn the invocation
+        // writes and not about the source of the password.
+        EntryKey::Password if written.contains(&EntryKey::PasswordCommand) => EntryRepair::Unset,
+        // Row two: the entry is described by discrete fields, and the
+        // invocation writes a dsn.
+        field if EntryKey::DISCRETE.contains(&field) => EntryRepair::Discrete {
+            carried: EntryKey::DISCRETE
+                .into_iter()
+                .filter(|field| carried.declares(*field))
+                .map(EntryKey::leaf)
+                .collect(),
+            changed: stated(dsn),
+        },
+        // Rows three and four: one source of the password replaces the other.
+        _ => EntryRepair::Unset,
     }
+}
+
+/// The discrete connection fields a dsn states, as leaf names in the order
+/// `FR-CONF-002` gives them.
+///
+/// A dsn always states its host. The port, the user, the password and the
+/// database are stated only where the value carries them, and a field the
+/// value leaves out is not one it changes.
+fn stated(dsn: Option<&str>) -> Box<[&'static str]> {
+    let Some(parsed) = dsn.and_then(|value| dsn::parse(value, "", Path::new("")).ok()) else {
+        return Box::new([EntryKey::Host.leaf()]);
+    };
+
+    [
+        (EntryKey::Host, true),
+        (EntryKey::Port, parsed.port().is_some()),
+        (EntryKey::User, parsed.user().is_some()),
+        (EntryKey::Password, parsed.password().is_some()),
+        (EntryKey::Database, !parsed.database().raw().is_empty()),
+    ]
+    .into_iter()
+    .filter_map(|(field, stated)| stated.then_some(field.leaf()))
+    .collect()
 }
 
 /// One key of one entry, fully qualified as `FR-CONF-002` spells it.

@@ -29,7 +29,7 @@
 use std::fmt;
 use std::io;
 use std::panic::Location;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use thiserror::Error;
@@ -116,7 +116,7 @@ impl fmt::Display for NetworkPhase {
             Self::DnsResolution => "DNS resolution",
             Self::TcpConnect => "the TCP connect",
             Self::TlsHandshake => "the TLS handshake",
-            Self::CatalogueQuery => "the catalogue query",
+            Self::CatalogueQuery => "a query reading the database structure",
         };
         f.write_str(name)
     }
@@ -146,6 +146,182 @@ impl fmt::Display for DeadlineBound {
     }
 }
 
+/// The global lookup function a template called (`FR-ENV-020`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LookupKind {
+    /// `table(name)`.
+    Table,
+    /// `view(name)`.
+    View,
+    /// `routine(name)`.
+    Routine,
+    /// `column(table, name)`.
+    Column,
+}
+
+impl fmt::Display for LookupKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Table => "table",
+            Self::View => "view",
+            Self::Routine => "routine",
+            Self::Column => "column",
+        })
+    }
+}
+
+/// What is known of why a render failed, beyond the engine's chain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RenderReason {
+    /// The template called `fail(message)` with this message (`FR-SEM-014`,
+    /// `FR-SEM-015`).
+    Failed(String),
+    /// The undefined expression begins with a lookup call that found nothing.
+    Unresolved(Unresolved),
+    /// The undefined expression begins with a context variable the render
+    /// bound, and what is undefined is a step of the expression after it
+    /// (finding Y-01 of the eighth re-audit of rmp `#263`, extended to every
+    /// context variable by finding Z-01 of the ninth); or it begins with a
+    /// name that is no context variable, near one the render bound (finding
+    /// Z-04).
+    Missing(Missing),
+    /// An `{% include %}` named a template the loader does not hold
+    /// (`FR-TMPL-009`).
+    IncludeNotFound {
+        /// The name the include wrote.
+        name: String,
+        /// Whether the name with `.jinja` appended is a template of the
+        /// project: the include then only lacks the extension `FR-TMPL-009`
+        /// requires it to write.
+        lacks_extension: bool,
+        /// The templates of the project nearest to the name, each with the
+        /// extension an include writes, at most three, in the order of
+        /// `FR-ERR-019` (finding Z-03 of the ninth re-audit of rmp `#263`).
+        nearest: Vec<String>,
+    },
+}
+
+/// A lookup call, with arguments the template wrote as literals, that found
+/// nothing — the reason an expression built on it is undefined.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unresolved {
+    /// The call as the template wrote it: `table("orders")`.
+    pub call: String,
+    /// What was sought: the function's kind, or [`LookupKind::Table`] for a
+    /// `column` call whose table does not exist.
+    pub kind: LookupKind,
+    /// The name that was not found.
+    pub name: String,
+    /// For a column that was not found in a table that exists, that table.
+    pub table: Option<String>,
+    /// The `--context` document the render read, WHERE it read one: the
+    /// names a lookup could have found are then that document's, and no `tpl`
+    /// command lists them.
+    pub document: Option<std::path::PathBuf>,
+}
+
+/// The step of an expression rooted at a bound context variable that found
+/// nothing, or the root itself where it is no context variable.
+///
+/// `owner` is the part of the expression before that step, as the template
+/// wrote it. It is built only from names and decimal indexes, so every
+/// character of it is in `[A-Za-z0-9_.\[\]-]`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Missing {
+    /// `owner` holds no attribute `name`.
+    Attribute {
+        /// The part of the expression before the attribute.
+        owner: String,
+        /// The attribute the template read.
+        name: String,
+        /// What `owner` is, in words: `an object`, `a list`, `a string`.
+        kind: &'static str,
+        /// The attributes `owner` holds, in the order it holds them, WHERE it
+        /// is an object.
+        attributes: Vec<String>,
+        /// The attributes nearest to `name`, at most three, in the order of
+        /// `FR-ERR-019`.
+        nearest: Vec<String>,
+    },
+    /// `owner` is a list with no item at `index`.
+    Index {
+        /// The part of the expression before the index.
+        owner: String,
+        /// The index the template read.
+        index: i64,
+        /// The number of items `owner` holds.
+        length: usize,
+    },
+    /// `owner` is not a list, and holds no item at `index`.
+    NotList {
+        /// The part of the expression before the index.
+        owner: String,
+        /// The index the template read.
+        index: i64,
+        /// What `owner` is, in words.
+        kind: &'static str,
+    },
+    /// The variable is bound, and the step that found nothing could not be
+    /// located: the expression calls a function, a filter or a method.
+    Elsewhere {
+        /// The bound variable: `database`, `table`, `view`, `routine`,
+        /// `vars`, `tpl` or `now`.
+        root: &'static str,
+    },
+    /// The expression begins with `name`, which is no context variable of
+    /// this render, and is near one the render bound (finding Z-04 of the
+    /// ninth re-audit of rmp `#263`).
+    Variable {
+        /// The name the expression begins with.
+        name: String,
+        /// The context variables nearest to `name`, at most three, in the
+        /// order of `FR-ERR-019`; never empty.
+        nearest: Vec<&'static str>,
+        /// The members of `nearest` the render did not bind: `table`, `view`
+        /// or `routine`, whose object flag was not given (`FR-RND-023`), so
+        /// the fix needs that flag as well as the name (finding AA-03 of the
+        /// tenth re-audit of rmp `#263`).
+        unbound: Vec<&'static str>,
+        /// The one of `table`, `view` and `routine` the render bound, WHERE
+        /// `unbound` is not empty: its flag excludes theirs, so the fix
+        /// replaces it rather than adding a second (finding AC-04 of the
+        /// twelfth re-audit of rmp `#263`).
+        replacing: Option<&'static str>,
+    },
+    /// The expression begins with `table`, `view` or `routine`, which the
+    /// render did not bind, and the render bound another of the three: its
+    /// object flag was given in place of the one the template reads, and the
+    /// two exclude each other (finding AB-04 of the eleventh re-audit of rmp
+    /// `#263`).
+    OtherObject {
+        /// The object variable the expression begins with.
+        root: &'static str,
+        /// The object variable the render bound, whose flag was given.
+        bound: &'static str,
+    },
+    /// The expression begins with the name of a context variable that the
+    /// template binds itself — a loop variable, a `set`, a `with`, a macro's
+    /// parameter — so what it reads is the template's value, not the
+    /// render's.
+    Bound {
+        /// The name the template binds.
+        name: String,
+        /// Whether every binding of the name is a loop's.
+        loop_variable: bool,
+        /// The step that found nothing in the value the binding holds, WHERE
+        /// that value could be evaluated against the context alone; never
+        /// [`Missing::Elsewhere`], [`Missing::Variable`] or another
+        /// [`Missing::Bound`].
+        step: Option<Box<Missing>>,
+        /// The first attribute the expression reads after the name, WHERE it
+        /// reads one.
+        read: Option<String>,
+    },
+}
+
 /// How a `--context` document failed the contract of `FR-RND-020`.
 ///
 /// `FR-ERR-034` obliges the `cause` line of such a `65` to name the path and
@@ -155,11 +331,24 @@ impl fmt::Display for DeadlineBound {
 pub enum ContextFault {
     /// The bytes are not well-formed JSON, at this position.
     NotJson(Position),
+    /// The bytes hold no JSON text at all: nothing, or only whitespace.
+    Empty,
     /// The document is JSON and does not match the contract of
-    /// `context-document.md`; the field names the rule it failed.
+    /// `context-document.md`.
+    ///
+    /// The forty-third edition of the `65` row of `FR-ERR-034` obliges the
+    /// `cause` line to name the key path of the first member, in document
+    /// order, that fails the contract, and what the contract expects there —
+    /// and to cite no file of the specification. The two fields are those two
+    /// facts.
     Structure {
-        /// The structural rule that was not satisfied.
-        rule: &'static str,
+        /// The key path of the member that fails, written as a caller reads it
+        /// in the document — `data.database.tables[0].name` — or the empty
+        /// string where the failure is the document as a whole.
+        at: String,
+        /// What the contract expects there: the type, that the key is
+        /// required, or the rule the member breaks.
+        expected: String,
     },
     /// A foreign key of a member of `tables` names a table that `tables` does
     /// not carry (`FR-CTX-042`).
@@ -199,20 +388,49 @@ pub enum DsnFault {
 
 /// How a write `FR-CFG-048` refuses is made legal.
 ///
-/// That requirement obliges the `hint` to carry a runnable command, and which
-/// command that is depends on where each member of the refused pair came from.
-/// Only the writer knows that, so the distinction is made where the refusal is
+/// That requirement obliges the `hint` to carry a runnable command that makes
+/// the change the invocation asked for and deletes nothing it did not name
+/// (`BR-ERR-005`), and its table fixes that command for each refused pair.
+/// Which row applies depends on where each member of the pair came from, and
+/// only the writer knows that, so the distinction is made where the refusal is
 /// raised rather than where the line is composed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntryRepair {
-    /// `.tpl/.cfg` carries the conflicting key, and removing that one key makes
-    /// the write legal: one `tpl cfg unset`.
+    /// The entry carries one source of the password and the invocation writes
+    /// the other: one `tpl cfg unset` of the source the entry carries, then the
+    /// same write again (rows three and four of the `FR-CFG-048` table).
+    ///
+    /// The password is information the invocation's own write supplies anew,
+    /// so removing the source it replaces deletes nothing the caller did not
+    /// name, per `BR-ERR-005`.
     Unset,
 
-    /// The entry carries more than one key the write conflicts with, so no
-    /// single removal makes it legal and the entry is written afresh:
-    /// `tpl cfg database remove`, then `tpl cfg database add`.
-    Rewrite,
+    /// The entry is defined by `dsn` and the invocation writes discrete
+    /// connection fields (row one of the table, `FR-ERR-045`): the field is
+    /// changed inside the dsn, with `tpl cfg database update <entry> --dsn
+    /// <url>`.
+    InsideDsn {
+        /// The leaf names of the discrete connection fields the invocation
+        /// writes, in the order `FR-CONF-002` states them.
+        fields: Box<[&'static str]>,
+    },
+
+    /// The entry's dsn carries a password and the invocation writes
+    /// `password_command` (row five of the table): the dsn is written again
+    /// without its password, then the same write again.
+    DsnWithoutPassword,
+
+    /// The entry is described by discrete connection fields and the
+    /// invocation writes a `dsn` (row two of the table): the fields the new
+    /// value changes are written with their own flags instead.
+    Discrete {
+        /// The leaf names of the discrete connection fields the entry carries,
+        /// which the `cause` names.
+        carried: Box<[&'static str]>,
+        /// The leaf names of the fields the dsn written states, whose flags
+        /// the `hint` carries.
+        changed: Box<[&'static str]>,
+    },
 
     /// The invocation itself supplies both members, so nothing in the file has
     /// to change and the command is written again without one of the two.
@@ -277,6 +495,76 @@ pub enum ChildEnd {
     Unreported,
 }
 
+/// What the TLS handshake of `FR-CONF-013` returned, as the driver's
+/// discriminants classify it.
+///
+/// The `69` row of `FR-ERR-034` obliges the `cause` line to name what the
+/// phase returned, and `FR-GLOB-018` bars the driver's own message from every
+/// stream, so what it returned is stated as this classification and the
+/// message is dropped where it is made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TlsFault {
+    /// The TLS layer refused the connection before any certificate was judged:
+    /// the server offers no TLS, or the negotiation itself failed.
+    Refused,
+    /// The server presented a certificate and it was not accepted: its chain
+    /// is not trusted by the trust material, or it does not name the host.
+    CertificateRejected,
+}
+
+/// Where an entry name the rule of `FR-CONF-048` refuses was given on the
+/// command line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryNameGiven {
+    /// The operand of `tpl cfg database add`.
+    Add,
+    /// The `<name>` segment of a `database.<name>.<field>` key given to
+    /// `tpl cfg set`, with the leaf of that key.
+    Key(&'static str),
+    /// The value given to `tpl cfg set core.database`.
+    CoreDatabase,
+}
+
+/// What is wrong with a `${NAME}` reference (`FR-CONF-021`, `FR-CONF-049`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReferenceFault {
+    /// A `${` with no closing brace.
+    Unclosed,
+    /// A reference whose name is not `[A-Za-z_][A-Za-z0-9_]*`, carrying the
+    /// name as written.
+    Name(String),
+}
+
+/// Why a selected entry does not carry a key it needs (`FR-CONF-040`,
+/// `FR-CONF-041`, `FR-CONF-050`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyAbsence {
+    /// The entry does not declare the key.
+    Absent,
+    /// The entry declares the key as the empty string.
+    Empty,
+    /// The key holds a `${VAR}` reference that expands to the empty string.
+    ExpandsToEmpty,
+}
+
+/// Why the path `--tpl-dir` named cannot be used as the project
+/// (`FR-PROJ-008`, `FR-PROJ-027`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TplDirFault {
+    /// Nothing exists at the path.
+    Missing,
+    /// Something exists at the path, and it is not a directory.
+    NotDirectory,
+    /// The path is a directory whose last segment is `.tpl` in neither its
+    /// written nor its canonical form, and it holds a directory named `.tpl`:
+    /// the caller named the project directory instead of its `.tpl` folder
+    /// (`FR-PROJ-027`).
+    HoldsTplFolder,
+    /// The path is a directory whose last segment is `.tpl` in neither form,
+    /// and it holds no directory named `.tpl` (`FR-PROJ-027`).
+    NotTplFolder,
+}
+
 /// Every condition `tpl` reports as a failure.
 ///
 /// One variant per distinct condition the specification names, each carrying
@@ -308,10 +596,18 @@ pub enum ChildEnd {
 pub enum Error {
     // ---------------------------------------------------------------- 64 ---
     /// A command the tree of `FR-CLI-002` does not declare (`FR-CLI-003`).
-    #[error("unknown command '{token}'")]
+    #[error("{}", unknown_command(.token, .node))]
     UnknownCommand {
         /// The token as written, never normalised (`FR-CLI-020`).
         token: String,
+        /// The command path of the node the token was written under, without
+        /// the program name, and empty at the root.
+        ///
+        /// It is carried so that both lines name the group a mistyped
+        /// subcommand was sought in, and so that the hint lists that group's
+        /// children rather than the root's, as `FR-HELP-028` already does for
+        /// the same mistake made inside `tpl help`.
+        node: String,
         /// The nearest matches among the children of the node the token was
         /// written at, selected by `FR-ERR-019` and ordered as it fixes.
         ///
@@ -362,10 +658,23 @@ pub enum Error {
     UnknownFlag {
         /// The token as written.
         token: String,
+        /// The command path of the node the token was written at, without the
+        /// program name, and empty at the root — the node whose help lists the
+        /// flags it does declare.
+        command: String,
+        /// Whether that node takes a positional argument, so that a value
+        /// beginning with `-` can have been meant for it; `FR-CLI-017` accepts
+        /// such a value after `--`, and the hint says so.
+        positional: bool,
         /// The nearest matches among the flags the invoked node declares,
         /// selected by `FR-ERR-019` and ordered as it fixes. Empty where
         /// nothing qualified, per `FR-ERR-020`.
         nearest: Vec<String>,
+        /// The command path of the command that declares the flag, WHERE the
+        /// flag was written before that command's name: only a global flag
+        /// may come before its command (`FR-CLI-024`), and the hint moves the
+        /// flag after it (finding Y-02 of the eighth re-audit of rmp `#263`).
+        belongs_to: Option<String>,
     },
 
     /// A token supplied where the invoked command takes no further argument
@@ -412,11 +721,37 @@ pub enum Error {
         flag: String,
     },
 
+    /// `-d/--database` or `--tpl-dir` took a command name from a separate
+    /// token as its value, and the token after it then named no command
+    /// (`FR-CLI-026`).
+    #[error("{flag} needs a value")]
+    FlagTookCommand {
+        /// The flag as written.
+        flag: String,
+        /// The command name it took as its value.
+        value: String,
+        /// The token that was then read as the command.
+        token: String,
+        /// The invocation after `tpl` with the flag's placeholder inserted
+        /// after it, where every other token is admitted into a hint
+        /// (`FR-ERR-022`, `FR-ERR-040`, `FR-ERR-041`); [`None`] otherwise.
+        ///
+        /// Boxed, with `path`, so that the variant leaves [`Error`] within
+        /// the size `clippy::result_large_err` admits.
+        rebuilt: Option<Box<str>>,
+        /// The command path the invocation names once the flag has its
+        /// value, which the hint carries alone where `rebuilt` is [`None`].
+        path: Box<str>,
+    },
+
     /// A flag that carries a value was given without one.
     #[error("the flag '{flag}' was given without a value")]
     FlagValueMissing {
         /// The flag, in the long form the tree declares it under.
         flag: String,
+        /// The values the flag accepts, where it accepts a fixed set, in the
+        /// order the tree declares them; empty otherwise.
+        permitted: Vec<String>,
     },
 
     /// A flag value beginning with `-` was supplied as a separate token
@@ -444,6 +779,10 @@ pub enum Error {
     ValueOutsideEnumeration {
         /// The flag, in the long form the tree declares it under.
         flag: String,
+        /// The command path of the node the flag was given to, without the
+        /// program name, and empty for a global flag — the node whose help
+        /// states the values.
+        command: String,
         /// The value as written.
         value: String,
         /// The values the flag enumerates, in the order it declares them.
@@ -458,8 +797,15 @@ pub enum Error {
     /// the language. That arm produces this variant, and this variant produces
     /// `64` — never another code, so no unclassified refusal can move a caller
     /// onto a different branch.
-    #[error("the invocation was rejected")]
+    #[error("the invocation was rejected: {reason}")]
     InvocationRejected {
+        /// What the parser refused, in plain words, as the kind it reported
+        /// classifies it. It is a literal: the parser's own message is not
+        /// carried.
+        reason: &'static str,
+        /// The command path of the node the invocation reached, without the
+        /// program name, and empty at the root.
+        command: String,
         /// The token the parser named, where it named one. A refusal that
         /// carries no token — a value that is not valid UTF-8 is the one this
         /// tree can reach — leaves it [`None`], which is the one case
@@ -468,7 +814,7 @@ pub enum Error {
     },
 
     /// A required argument was not supplied (`FR-ERR-001`, the `64` row).
-    #[error("the command '{command}' requires the argument '{argument}'")]
+    #[error("'{}' needs the argument {argument}", crate::diagnostics::invoked(.command))]
     MissingArgument {
         /// The command path, as written.
         command: String,
@@ -484,6 +830,61 @@ pub enum Error {
         first: String,
         /// The second member of the pair, as written.
         second: String,
+    },
+
+    /// `tpl render` was given `--direct` together with `--context`
+    /// (`FR-RND-041`): the one demands the server read the other excludes.
+    #[error("--direct cannot be used with --context")]
+    DirectWithContext,
+
+    /// `--pretty` given where the format in force is not JSON (`FR-OUT-009`).
+    ///
+    /// It was reported as the pair `--pretty` and `--format text`, which named
+    /// a flag the caller had usually not written — `text` is the default — and
+    /// sent the caller to remove it. `FR-OUT-009` states the rule as a
+    /// requirement of one flag on another, and the message states it so.
+    #[error("'--pretty' needs '--format json'")]
+    PrettyWithoutJson {
+        /// The command path the flag was given to, without the program name.
+        command: String,
+        /// Whether that command runs with no operand, so that the hint can
+        /// write it out whole and it succeeds as written (`BR-ERR-004`).
+        complete: bool,
+    },
+
+    /// `tpl cfg database add` given neither `--dsn` nor a discrete connection
+    /// flag (`FR-CFG-016`).
+    #[error("'tpl cfg database add' needs connection details for entry '{entry}'")]
+    ConnectionDetailsMissing {
+        /// The entry the invocation asked to create.
+        entry: String,
+        /// Whether the invocation was given `-d/--database`, which the caller
+        /// may have meant as the database on the server; the `cause` then
+        /// says it is not a connection flag.
+        database_given: bool,
+    },
+
+    /// `tpl cfg database update` given none of the flags of `FR-CFG-027`
+    /// (`FR-CFG-020`).
+    #[error("nothing to change: tpl cfg database update needs at least one field flag")]
+    NothingToUpdate {
+        /// The entry the invocation named.
+        entry: String,
+        /// Whether the invocation was given `-d/--database`, which the
+        /// `cause` then says is not a field flag (`FR-CFG-020`).
+        database_given: bool,
+    },
+
+    /// A block — `core`, `database` or `database.<name>` — given to
+    /// `tpl cfg get`, which reads one value (`FR-CFG-007`).
+    #[error("{}", block_key(.key, .entry.is_some()))]
+    BlockKeyGiven {
+        /// The key as written.
+        key: String,
+        /// The entry the key names, WHERE it has the form `database.<name>`
+        /// and `.tpl/.cfg` defines that entry — the case in which the hint is
+        /// `tpl cfg database show <name>`.
+        entry: Option<String>,
     },
 
     /// A token naming one routine whose qualifying prefix is spelled in a case
@@ -510,6 +911,10 @@ pub enum Error {
         /// `FR-ERR-022` — `schema routine`, `cache load --routine`, or
         /// `cache clean --routine`.
         invocation: &'static str,
+        /// The template of the `tpl render` the token was given to, which the
+        /// invocation writes as `<template>`; [`None`] for every other
+        /// command.
+        template: Option<String>,
     },
 
     /// A bare routine name that names both a procedure and a function
@@ -530,6 +935,10 @@ pub enum Error {
         /// The invocation the token was given to, below `tpl`, as a literal of
         /// `FR-ERR-022`.
         invocation: &'static str,
+        /// The template of the `tpl render` the token was given to, which the
+        /// invocation writes as `<template>`; [`None`] for every other
+        /// command.
+        template: Option<String>,
     },
 
     /// A bare `--routine` name that names both a procedure and a function in a
@@ -554,6 +963,10 @@ pub enum Error {
         /// The invocation the token was given to, below `tpl`, as a literal of
         /// `FR-ERR-022`.
         invocation: &'static str,
+        /// The template of the `tpl render` the token was given to, which the
+        /// invocation writes as `<template>`; [`None`] for every other
+        /// command.
+        template: Option<String>,
     },
 
     /// The same `--set` key supplied more than once (`FR-RND-014`).
@@ -581,7 +994,12 @@ pub enum Error {
     /// report the contradiction as an unknown flag, which says the wrong
     /// thing.
     #[error("'--no-cache' cannot be given to 'tpl cache load'")]
-    LoadWithoutStoring,
+    LoadWithoutStoring {
+        /// The object the invocation named, as the `schema` subcommand that
+        /// reads it (`table`, `view` or `routine`) and the name given, where
+        /// it named one.
+        object: Option<(&'static str, String)>,
+    },
 
     /// A value that does not conform to the type its parameter declares: a
     /// flag value (`FR-ERR-001`, the `64` row) or a `tpl cfg set` value
@@ -590,10 +1008,15 @@ pub enum Error {
     MalformedValue {
         /// The flag or the configuration key the value was given for.
         parameter: String,
+        /// The command path whose help states what the parameter takes,
+        /// without the program name: the node that declares the flag, empty
+        /// for a global flag, and `cfg set` for a configuration key.
+        command: String,
         /// The value as written.
         value: String,
         /// The type that was expected, per `FR-CONF-002` where the parameter
-        /// is a configuration key.
+        /// is a configuration key. For a `password_command` supplied as one
+        /// string it is instead the condition of `FR-CONF-046` the string met.
         expected: &'static str,
     },
 
@@ -638,7 +1061,7 @@ pub enum Error {
     /// the caller must repair; here, `.tpl/.cfg` is valid and stays untouched,
     /// and what is refused is the invocation, which the caller wrote and can
     /// rewrite.
-    #[error("database entry '{entry}' cannot declare both {written} and {conflicting}")]
+    #[error("{}", incoherent_entry_write(entry, written, conflicting))]
     IncoherentEntryWrite {
         /// The entry the write would be applied to.
         entry: String,
@@ -649,6 +1072,56 @@ pub enum Error {
         conflicting: String,
         /// Which runnable command makes the write legal.
         repair: EntryRepair,
+    },
+
+    /// The destination of `tpl init` names a `.tpl` folder (`FR-PROJ-029`).
+    /// Nothing is created.
+    #[error("tpl init takes the directory that will hold .tpl, not the .tpl folder")]
+    InitDestinationIsTplFolder {
+        /// The path as written, or `.` where no operand was given.
+        written: PathBuf,
+        /// The canonical path, where it is the canonical form whose last
+        /// segment is `.tpl` rather than the path as written.
+        canonical: Option<PathBuf>,
+        /// The directory that holds the folder named, or [`None`] where it is
+        /// the current directory.
+        parent: Option<PathBuf>,
+    },
+
+    /// An entry name given on the command line is outside
+    /// `[A-Za-z0-9_]{1,64}` (`FR-CONF-048`). Nothing is written.
+    ///
+    /// The same name in the file is
+    /// [`ConfigurationEntryName`](Error::ConfigurationEntryName) and `78`.
+    #[error("{}", invalid_entry_name(*given))]
+    InvalidEntryName {
+        /// Where the name was given.
+        given: EntryNameGiven,
+        /// The name as written.
+        name: String,
+    },
+
+    /// A value given on the command line for a field `FR-CONF-015` expands
+    /// holds a reference left unclosed or whose name is not a variable name
+    /// (`FR-CONF-049`). Nothing is written.
+    #[error("invalid value for {parameter}")]
+    InvalidReference {
+        /// The flag or the fully qualified key the value was given for.
+        parameter: String,
+        /// The command path the value was given to, without the program name.
+        command: String,
+        /// What is wrong with the reference.
+        fault: ReferenceFault,
+    },
+
+    /// An empty value given on the command line for a host or a database
+    /// (`FR-CONF-050`). Nothing is written.
+    #[error("invalid value for {parameter}")]
+    EmptyValue {
+        /// The flag or the fully qualified key the value was given for.
+        parameter: String,
+        /// The command path the value was given to, without the program name.
+        command: String,
     },
 
     // ---------------------------------------------------------------- 65 ---
@@ -667,10 +1140,27 @@ pub enum Error {
 
     /// A render that failed at evaluation time — an undefined variable, a
     /// failing filter, an escape from the template root (`FR-RND-031`).
-    #[error("rendering template '{template}' failed at {position}")]
+    #[error("{}", render_failed(template, position, reason.as_deref()))]
     RenderFailed {
-        /// The template being rendered when the failure arose.
+        /// The template being rendered when the failure arose — the included
+        /// one, for a failure inside an `{% include %}`.
         template: String,
+        /// The template the render was asked for, as the caller named it. It
+        /// differs from `template` only for a failure inside an include, and
+        /// it is the one the hint's command renders.
+        invoked: String,
+        /// The source text of the expression the engine found undefined,
+        /// WHERE the failure is an undefined value and the engine located it.
+        ///
+        /// It is what lets the `cause` name `table` or `vars.title` rather
+        /// than "undefined value", and the `hint` name the flag that defines
+        /// it — the most common failure a template author meets.
+        undefined: Option<String>,
+        /// Why the render failed, WHERE more is known than the engine's
+        /// chain says: the template ended it with `fail`, or a lookup found
+        /// nothing. Boxed, because it is rare and the variant is the size of
+        /// every `Result` this crate returns.
+        reason: Option<Box<RenderReason>>,
         /// Where evaluation stopped.
         position: Position,
         /// The chain of underlying template-engine errors, outermost first
@@ -681,7 +1171,7 @@ pub enum Error {
     /// A resolved template path that lies outside the template root
     /// (`FR-TMPL-026`), reached without rendering — `tpl template show` on a
     /// symbolic link is the case `FR-TMPL-024` describes.
-    #[error("template '{name}' resolves outside the template root")]
+    #[error("template '{name}' resolves outside the template folder .tpl/templates/")]
     TemplateOutsideRoot {
         /// The template name, as the caller named it.
         name: String,
@@ -691,12 +1181,16 @@ pub enum Error {
 
     /// A `--context` document that is not well-formed JSON or does not match
     /// the document contract (`FR-RND-020`, `FR-ERR-029`).
-    #[error("the --context document '{}' is malformed", .path.display())]
+    #[error("the --context document {} is malformed", context_origin(.path))]
     ContextDocumentMalformed {
-        /// The path the document was read from.
-        path: PathBuf,
+        /// The path the document was read from. Boxed, so that the flag
+        /// below leaves every `Result` this crate returns no larger.
+        path: Box<Path>,
         /// Which half of `FR-RND-020` it failed.
         fault: ContextFault,
+        /// Whether `core.database` names an entry, so that the dump the hint
+        /// suggests needs no `-d`.
+        default_entry: bool,
     },
 
     /// The render did not finish within its deadline (`FR-RND-033`,
@@ -751,6 +1245,29 @@ pub enum Error {
         /// where nothing qualified, per `FR-ERR-020`. `FR-SCH-010` obliges the
         /// suggestion.
         nearest: Vec<String>,
+    },
+
+    /// `tpl cache clean` named an object the cache of the entry does not hold
+    /// (`FR-CACHE-040`). Nothing was deleted and no connection was opened.
+    #[error("nothing cached for {kind} '{name}' in database entry '{entry}'")]
+    NothingCachedNamed {
+        /// The kind the object flag named.
+        kind: CatalogueObjectKind,
+        /// The name it gave.
+        name: String,
+        /// The database entry whose cache was consulted.
+        entry: String,
+        /// The nearest matches among the names of that kind the cache holds,
+        /// selected by `FR-ERR-019` and `FR-ERR-044`; empty where nothing
+        /// qualified.
+        nearest: Vec<String>,
+        /// The routine kind the name was qualified with — `procedure` or
+        /// `function` — WHERE `--routine` wrote one.
+        qualified: Option<&'static str>,
+        /// The other routine kind, WHERE the cache holds a routine of that
+        /// kind under the same name (finding Y-05 of the eighth re-audit of
+        /// rmp `#263`).
+        held_as: Option<&'static str>,
     },
 
     /// A table, view or routine that the `--context` document does not carry
@@ -817,25 +1334,57 @@ pub enum Error {
         /// nothing qualified, per `FR-ERR-020`. `FR-GLOB-007` obliges the
         /// suggestion.
         nearest: Vec<String>,
+        /// Whether `core.database` named the entry, rather than `-d` or an
+        /// argument of the command: the diagnostic then says so, and names the
+        /// command that changes the default.
+        by_default: bool,
     },
 
     /// A key that is absent from `.tpl/.cfg` (`FR-CFG-007`, `FR-CFG-012`).
-    #[error("configuration key '{key}' is not set")]
+    ///
+    /// A spelling outside the key space of `FR-CONF-002` reaches it too, and
+    /// the line says which of the two it is (finding T-05 of the third
+    /// re-audit of rmp `#263`): "not set" of a name that is no key reads as
+    /// though setting it would help.
+    #[error("{}", key_not_found(.key, .default.as_deref(), *.known, *.entry_missing))]
     ConfigurationKeyNotFound {
         /// The key that was not found.
         key: String,
+        /// Whether the key is one of the space of `FR-CONF-002`.
+        known: bool,
+        /// Whether the key is a `database.<name>.<field>` key, or the block a
+        /// `database.<name>` form names, of an entry the file does not
+        /// declare. The line then reports the missing entry, which the
+        /// renderers read out of the key, not a missing key (finding
+        /// U-05 of the fourth re-audit of rmp `#263`). A flag rather than the
+        /// name keeps [`Error`] within the size `clippy::result_large_err`
+        /// admits.
+        entry_missing: bool,
+        /// The value the configuration gives the key where the file sets
+        /// none; [`None`] where it has no default or is not a key.
+        default: Option<String>,
         /// The file it was sought in.
         file: PathBuf,
-        /// The nearest matches among the keys the file does carry, selected by
-        /// `FR-ERR-019` and ordered as it fixes. Empty where nothing qualified,
-        /// per `FR-ERR-020`. `FR-CFG-007` obliges the suggestion.
-        nearest: Vec<String>,
+        /// The nearest matches over the whole key space of `FR-CONF-002`, the
+        /// `<name>` segment bound to every entry the file declares, selected
+        /// by `FR-ERR-019` and ordered as it fixes. Empty where nothing
+        /// qualified, per `FR-ERR-020`. `FR-CFG-007` obliges the suggestion.
+        ///
+        /// Each candidate is paired with whether the file sets it: the `hint`
+        /// says of one the file does not set that it does not set it
+        /// (`FR-CFG-007`, `BR-ERR-004`).
+        nearest: Vec<(String, bool)>,
     },
 
     // ---------------------------------------------------------------- 69 ---
     /// The host name could not be resolved.
-    #[error("host '{host}' could not be resolved")]
+    #[error("host '{host}' could not be resolved, for database entry '{entry}'")]
     NameNotResolved {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The host attempted.
         host: String,
         /// The port attempted.
@@ -843,8 +1392,13 @@ pub enum Error {
     },
 
     /// The server refused the TCP connection.
-    #[error("the server at {host}:{port} refused the connection")]
+    #[error("the server at {host}:{port} refused the connection, for database entry '{entry}'")]
     ConnectionRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The host attempted.
         host: String,
         /// The port attempted.
@@ -856,18 +1410,29 @@ pub enum Error {
     /// The right-hand column of `FR-CONF-038` is the ordinary case: a server
     /// offering no TLS cannot satisfy `required`, `verify-ca` or
     /// `verify-identity`.
-    #[error("the TLS handshake with {host}:{port} failed")]
+    #[error("the TLS handshake with {host}:{port} failed, for database entry '{entry}'")]
     TlsHandshakeFailed {
+        /// The database entry the connection was opened for.
+        entry: String,
         /// The host attempted.
         host: String,
         /// The port attempted.
         port: u16,
+        /// What the handshake returned, as classified.
+        fault: TlsFault,
     },
 
     /// A network phase did not finish within its deadline (`FR-ERR-027`,
     /// `FR-GLOB-013`).
-    #[error("{phase} for {host}:{port} exceeded {bound} of {limit:?}")]
+    #[error(
+        "{phase} for {host}:{port} exceeded {bound} of {limit:?}, for database entry '{entry}'"
+    )]
     NetworkDeadlineExceeded {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The phase that was in progress.
         phase: NetworkPhase,
         /// The host attempted.
@@ -932,6 +1497,42 @@ pub enum Error {
         returned: io::Error,
     },
 
+    /// The document `--context` named could not be read (`FR-RND-016`, the
+    /// `74` row of `FR-ERR-001`).
+    ///
+    /// It is not [`ProjectFileUnreadable`](Error::ProjectFileUnreadable): the
+    /// path is the caller's and may sit anywhere, so the hint points at the
+    /// flag rather than at the project's permissions.
+    #[error("the --context file {} could not be read", .path.display())]
+    ContextDocumentUnreadable {
+        /// The path `--context` named, or `-` for standard input.
+        path: PathBuf,
+        /// What the filesystem or the stream returned.
+        #[source]
+        returned: io::Error,
+    },
+
+    /// A file or directory of trust material that `ca_file` or `ca_path`
+    /// declares could not be read (`FR-CONF-014`, the `74` row of
+    /// `FR-ERR-001`).
+    ///
+    /// It is not [`ProjectFileUnreadable`](Error::ProjectFileUnreadable): the
+    /// path is outside `.tpl`, and the setting that named it is what the caller
+    /// corrects, so the message names the setting.
+    #[error("the {key} of database entry '{entry}' could not be read: {}", .path.display())]
+    TrustMaterialUnreadable {
+        /// The entry whose setting it is.
+        entry: String,
+        /// The setting that named the path: `ca_file` or `ca_path`.
+        key: &'static str,
+        /// The path that failed — the one declared, or an entry of the
+        /// directory `ca_path` declares.
+        path: PathBuf,
+        /// What the filesystem returned.
+        #[source]
+        returned: io::Error,
+    },
+
     /// A file of the project could not be written (`FR-ERR-001`, the `74`
     /// row).
     ///
@@ -973,8 +1574,12 @@ pub enum Error {
     ///
     /// The credential itself never enters the value: `FR-ERR-013` and
     /// `BR-ERR-003` bar it from every message at every verbosity.
-    #[error("the server at '{host}' refused authentication for user '{user}'")]
+    #[error(
+        "the server at '{host}' refused authentication for user '{user}', for database entry '{entry}'"
+    )]
     AuthenticationRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
         /// The user the server refused.
         user: String,
         /// The host that refused it.
@@ -1019,6 +1624,55 @@ pub enum Error {
         walk_ended_at: PathBuf,
     },
 
+    /// `--tpl-dir` named a path that does not exist or is not a directory
+    /// (`FR-PROJ-008`).
+    ///
+    /// No walk was made — the flag suppresses it — so the condition is not
+    /// [`ProjectNotFound`](Error::ProjectNotFound), whose `cause` describes a
+    /// walk and whose hint creates a project in the working directory.
+    #[error("{}", tpl_dir_unusable(.path, *.fault))]
+    ProjectDirUnusable {
+        /// The path `--tpl-dir` named, as the caller wrote it.
+        path: PathBuf,
+        /// Why it is not usable.
+        fault: TplDirFault,
+    },
+
+    /// The project's `.tpl` folder holds no `.cfg`, and the folder is owned by
+    /// another user (`FR-PROJ-028`, `FR-SEC-014`).
+    ///
+    /// With no file, [`ConfigurationNotOwned`](Error::ConfigurationNotOwned)
+    /// has nothing to check, and a planted folder would otherwise supply
+    /// templates and receive the `.cfg` the caller's next `tpl cfg` writes.
+    #[error("the .tpl folder at {} cannot be used as a project", .path.display())]
+    ProjectFolderNotOwned {
+        /// The `.tpl` folder, canonical per `FR-PROJ-009`.
+        path: PathBuf,
+        /// The owner found.
+        owner: u32,
+        /// The owner expected — the invoking user.
+        expected: u32,
+    },
+
+    /// `.tpl/.cfg` declares `ca_file` or `ca_path` with a value that contains
+    /// `${` (`FR-CONF-047`).
+    ///
+    /// Neither key is expanded, so the value would be read as a file named
+    /// after the reference. The same value supplied to a command is
+    /// [`MalformedValue`](Error::MalformedValue) and `64`.
+    #[error("{key} holds a ${{VAR}} reference, which tpl does not expand in this key")]
+    ConfigurationPathReference {
+        /// The fully qualified key, `database.<name>.ca_file` or
+        /// `database.<name>.ca_path`.
+        key: String,
+        /// The file that declares it.
+        file: PathBuf,
+        /// Where the value begins.
+        position: Position,
+        /// The value as written.
+        value: String,
+    },
+
     /// `.tpl/.cfg` is not owned by the current user (`FR-PROJ-010`).
     #[error("{} is not owned by the current user", .path.display())]
     ConfigurationNotOwned {
@@ -1046,6 +1700,10 @@ pub enum Error {
         path: PathBuf,
         /// Where the parser stopped.
         position: Position,
+        /// What the parser expected there, in its own words, with the source
+        /// excerpt it would quote removed so that no byte of the file is
+        /// written back (`BR-ERR-003`).
+        reason: String,
     },
 
     /// `.tpl/.cfg` carries a key outside the enumerated space of
@@ -1056,6 +1714,10 @@ pub enum Error {
         key: String,
         /// The file that declares it.
         file: PathBuf,
+        /// Where the file writes the key, so that the `hint` names the line to
+        /// delete, as the TOML errors do (finding U-08 of the fourth re-audit
+        /// of rmp `#263`).
+        position: Position,
         /// The nearest matches among the enumerated key space of
         /// `FR-CONF-002`, selected by `FR-ERR-019` and ordered as it fixes.
         /// Empty where nothing qualified, per `FR-ERR-020`. `FR-CONF-034`
@@ -1087,6 +1749,12 @@ pub enum Error {
         found: String,
         /// The type `FR-CONF-002` declares for the key.
         expected: &'static str,
+        /// The value as the file wrote it, where `found` is what a `${VAR}`
+        /// expanded it to rather than what the file holds; [`None`] where the
+        /// file holds `found` itself (finding T-04 of the third re-audit of
+        /// rmp `#263`). Boxed behind a thin pointer, so that the variant
+        /// leaves [`Error`] no larger: a `Box<str>` is two words wide.
+        expanded_from: Option<Box<String>>,
     },
 
     /// A DSN that is not of the form `FR-CONF-009` fixes, or whose scheme is
@@ -1116,9 +1784,36 @@ pub enum Error {
         file: PathBuf,
     },
 
+    /// A `${NAME}` whose name is not `[A-Za-z_][A-Za-z0-9_]*`, met where the
+    /// field is expanded (`FR-CONF-049`).
+    #[error("{key} carries a ${{VAR}} reference whose name is not a variable name")]
+    InvalidReferenceName {
+        /// The fully qualified key whose value carries it.
+        key: String,
+        /// The file that declares it.
+        file: PathBuf,
+        /// The name as written between the braces.
+        name: String,
+    },
+
+    /// `.tpl/.cfg` declares a `[database.<name>]` block, or a `core.database`
+    /// value, outside `[A-Za-z0-9_]{1,64}` (`FR-CONF-048`).
+    #[error("{}", configuration_entry_name(.file, *core))]
+    ConfigurationEntryName {
+        /// The file that declares it.
+        file: PathBuf,
+        /// The name as written.
+        name: String,
+        /// Whether it is the value of `core.database` rather than the name of
+        /// a block.
+        core: bool,
+        /// Where the file writes it.
+        position: Position,
+    },
+
     /// `password_command` is stored as something other than an array of
     /// strings (`FR-CONF-035`).
-    #[error("{key} is not an array")]
+    #[error("{}", password_command_not_an_array(key, found, *element))]
     PasswordCommandNotAnArray {
         /// The fully qualified key.
         key: String,
@@ -1130,11 +1825,14 @@ pub enum Error {
         position: Position,
         /// The TOML type found, against the array of `FR-CONF-023` expected.
         found: &'static str,
+        /// The zero-based index of the element that is not a string, WHERE
+        /// the value is an array and one of its elements is the fault.
+        element: Option<usize>,
     },
 
     /// One entry declares two keys that exclude one another (`FR-CONF-006`,
     /// `FR-CONF-007`).
-    #[error("database entry '{entry}' declares both {first} and {second}")]
+    #[error("{}", conflicting_entry_keys(entry, first, second))]
     ConflictingEntryKeys {
         /// The entry name.
         entry: String,
@@ -1174,8 +1872,10 @@ pub enum Error {
     /// `password_command` did not finish within its deadline — it had not
     /// both exited and reached end of file on its standard output — and its
     /// process group was terminated (`FR-CONF-028`, `FR-ERR-027`).
-    #[error("password_command exceeded {bound} of {limit:?}")]
+    #[error("the password_command of database entry '{entry}' exceeded {bound} of {limit:?}")]
     PasswordCommandDeadlineExceeded {
+        /// The database entry that declares the command.
+        entry: String,
         /// The command as stored, which `FR-CONF-017` guarantees carries no
         /// expanded value and therefore no secret.
         command: Vec<String>,
@@ -1187,8 +1887,10 @@ pub enum Error {
 
     /// `password_command` wrote more than the cap of `FR-CONF-031` to standard
     /// output, and its process group was terminated.
-    #[error("password_command wrote more than {cap} bytes")]
+    #[error("the password_command of database entry '{entry}' wrote more than {cap} bytes")]
     PasswordCommandOutputCapExceeded {
+        /// The database entry that declares the command.
+        entry: String,
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
         /// The cap, in bytes — `FR-CONF-031` obliges the `cause` line to name
@@ -1210,8 +1912,10 @@ pub enum Error {
     /// which, because `FR-CONF-042` obliges the `cause` line to: one wording
     /// for both is what that requirement was written over, and `FR-ERR-002`
     /// forbids it.
-    #[error("password_command yielded no exit status")]
+    #[error("the password_command of database entry '{entry}' {}", password_command_unusable(*.fault))]
     PasswordCommandNotExecutable {
+        /// The database entry that declares the command.
+        entry: String,
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
         /// Which of the two conditions of `FR-CONF-042` arose.
@@ -1226,8 +1930,10 @@ pub enum Error {
     ///
     /// Its standard error is not carried because it was never captured:
     /// `FR-CONF-032` sends it to the null device.
-    #[error("password_command did not exit successfully")]
+    #[error("the password_command of database entry '{entry}' did not exit successfully")]
     PasswordCommandFailed {
+        /// The database entry that declares the command.
+        entry: String,
         /// The command as stored (`FR-CONF-017`).
         command: Vec<String>,
         /// How the child ended, which decides which of the two requirements
@@ -1261,6 +1967,9 @@ pub enum Error {
     ReadOnlySessionNotEnforced {
         /// The entry whose connection it was.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// Which of the two conditions of `FR-SRV-010` arose.
         fault: ReadOnlyFault,
     },
@@ -1274,7 +1983,7 @@ pub enum Error {
     /// invocation reads the catalogue. `FR-CONF-040` rejects composing either
     /// refusal further down, where neither the file nor the position that
     /// declared the entry is in hand.
-    #[error("database entry '{entry}' does not carry '{key}'")]
+    #[error("{}", entry_key_missing(.entry, .key))]
     EntryKeyMissing {
         /// The entry that carries neither the key nor the alternative.
         entry: String,
@@ -1289,6 +1998,9 @@ pub enum Error {
         flag: &'static str,
         /// The placeholder the hint writes after that flag, as a literal.
         placeholder: &'static str,
+        /// Whether the key is absent, empty, or expands to the empty string
+        /// (`FR-CONF-050`).
+        absence: KeyAbsence,
     },
 
     /// The command requires a database entry and none is selected — neither
@@ -1298,6 +2010,9 @@ pub enum Error {
         /// The file the selection would have come from; `FR-GLOB-006` obliges
         /// the message to name it.
         file: PathBuf,
+        /// Whether that file declares any entry at all; where it declares
+        /// none, there is nothing to select and the hint says how to add one.
+        has_entries: bool,
     },
 
     /// The server is reachable and authenticated and is not MariaDB
@@ -1306,6 +2021,9 @@ pub enum Error {
     ServerNotMariaDb {
         /// The entry that reached it.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The product the server reported.
         product: String,
     },
@@ -1316,6 +2034,9 @@ pub enum Error {
     SeriesNotSupported {
         /// The entry that reached it.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The series found, as the server reported it.
         series: String,
         /// The series that are supported, as the caller that raised this
@@ -1330,6 +2051,277 @@ pub enum Error {
         /// table compiled into the binary, and the type admits no other.
         supported: &'static [&'static str],
     },
+}
+
+/// The `error:` line of [`Error::UnknownCommand`]: the token, and the group it
+/// was sought under where that is not the root.
+fn unknown_command(token: &str, node: &str) -> String {
+    // W-05 of the sixth re-audit of rmp `#263`: a token holding a space is a
+    // command path given as one argument, and the line reads as the one
+    // `tpl help` writes for the same token, which names the node.
+    if node.is_empty() && !token.contains(char::is_whitespace) {
+        format!("unknown command '{token}'")
+    } else {
+        format!(
+            "unknown command '{token}' under '{}'",
+            crate::diagnostics::invoked(node)
+        )
+    }
+}
+
+/// The `error:` line of [`Error::ConfigurationKeyNotFound`]: a key of the
+/// space the file does not set, with its default where it has one, or a name
+/// that is no key at all.
+///
+/// A key of the space is said to be one, so that a caller who spelt it right
+/// is not left wondering whether it did (finding U-01 of the fourth re-audit of
+/// rmp `#263`); a name that reaches an entry the file does not declare says
+/// that the entry is what is missing (finding U-05).
+///
+/// `core` and `database` reach it only from `tpl cfg unset`, where the file
+/// has no such section: the line says there is nothing to remove, rather than
+/// that a block of the space is no key (`FR-CFG-012`).
+fn key_not_found(key: &str, default: Option<&str>, known: bool, entry_missing: bool) -> String {
+    if let Some(section) = section_named(key) {
+        return format!("{section}, and .tpl/.cfg has none, so there is nothing to remove");
+    }
+    match (entry_missing, known, default) {
+        (true, _, _) => format!(
+            "database entry '{}' does not exist, so .tpl/.cfg holds no '{key}'",
+            named_entry(key)
+        ),
+        (false, false, _) => format!("'{key}' is not a configuration key"),
+        (false, true, Some(default)) => format!(
+            "'{key}' is a configuration key that .tpl/.cfg does not set; tpl uses its default, \
+             {default}"
+        ),
+        (false, true, None) => format!(
+            "'{key}' is a configuration key that .tpl/.cfg does not set, and it has no default"
+        ),
+    }
+}
+
+/// The entry a `database.<name>.<field>` key or a `database.<name>` block
+/// names: the segment between `database.` and the field, or everything after
+/// `database.` for a block.
+pub(crate) fn named_entry(key: &str) -> &str {
+    let rest = key.strip_prefix("database.").unwrap_or(key);
+    if crate::project::config::keys::Key::parse(key).is_some() {
+        rest.rsplit_once('.').map_or(rest, |(entry, _)| entry)
+    } else {
+        rest
+    }
+}
+
+/// What `core` or `database` names, as the lines of a block say it, or
+/// [`None`] for any other key.
+pub(crate) fn section_named(key: &str) -> Option<&'static str> {
+    match key {
+        "core" => Some("'core' names the [core] section"),
+        "database" => Some("'database' names every [database.<name>] block"),
+        _ => None,
+    }
+}
+
+/// The `error:` line of [`Error::BlockKeyGiven`], in the words `FR-CFG-007`
+/// shows: a `database.<name>` form is a whole entry, said not to exist where
+/// the file does not declare it, and `core` and `database` are sections.
+fn block_key(key: &str, entry: bool) -> String {
+    if entry {
+        return format!("'{key}' names a whole entry, not one value");
+    }
+    match key.strip_prefix("database.") {
+        Some(name) => format!(
+            "'{key}' names a whole entry, not one value, and database entry '{name}' does not \
+             exist"
+        ),
+        None => format!("'{key}' names a whole section, not one value"),
+    }
+}
+
+/// The `error:` line of [`Error::ProjectDirUnusable`], in the words
+/// `FR-PROJ-008` shows.
+fn tpl_dir_unusable(path: &std::path::Path, fault: TplDirFault) -> String {
+    match fault {
+        TplDirFault::Missing => format!(
+            "the folder named by --tpl-dir does not exist: {}",
+            path.display()
+        ),
+        TplDirFault::NotDirectory => format!(
+            "the path named by --tpl-dir is not a folder: {}",
+            path.display()
+        ),
+        TplDirFault::HoldsTplFolder | TplDirFault::NotTplFolder => format!(
+            "--tpl-dir names {}, which is not a .tpl folder",
+            path.display()
+        ),
+    }
+}
+
+/// The `error:` line of [`Error::PasswordCommandNotExecutable`], which states
+/// which of the two conditions of `FR-CONF-042` arose: "yielded no exit
+/// status" is true of both and was the only thing the line said, while the
+/// `cause` beneath it said the command had never started.
+const fn password_command_unusable(fault: PasswordCommandFault) -> &'static str {
+    match fault {
+        PasswordCommandFault::NotStarted => "could not be started",
+        PasswordCommandFault::StatusUnreadable => "ended with a status tpl could not read",
+    }
+}
+
+/// Whether a pair of entry keys `FR-CONF-007` refuses is two sources of the
+/// password — `password_command` beside a DSN that carries one, or beside
+/// `password` — rather than two forms of the connection.
+pub(crate) fn password_pair(first: &str, second: &str) -> bool {
+    let leaf = |key: &'_ str| key.rsplit('.').next().unwrap_or_default().to_owned();
+    let (first, second) = (leaf(first), leaf(second));
+    let other = match (first.as_str(), second.as_str()) {
+        ("password_command", other) | (other, "password_command") => other.to_owned(),
+        _ => return false,
+    };
+
+    matches!(other.as_str(), "dsn" | "password")
+}
+
+/// The `error:` line of [`Error::ConflictingEntryKeys`]: two sources of the
+/// password are the password given twice, and two forms of the connection
+/// are two keys declared together.
+fn conflicting_entry_keys(entry: &str, first: &str, second: &str) -> String {
+    if password_pair(first, second) {
+        let (source, command) = if first.ends_with(".password_command") {
+            (second, first)
+        } else {
+            (first, second)
+        };
+        let gives = if source.ends_with(".dsn") {
+            "carries a password"
+        } else {
+            "gives one"
+        };
+        format!(
+            "database entry '{entry}' gets its password twice: {source} {gives}, and {command} \
+             gives another"
+        )
+    } else {
+        format!("database entry '{entry}' declares both {first} and {second}")
+    }
+}
+
+/// The `error:` line of [`Error::IncoherentEntryWrite`]: a DSN beside
+/// `password_command` is refused only because the DSN carries a password, and
+/// the line says so rather than state a rule that is false of a DSN without
+/// one.
+fn incoherent_entry_write(entry: &str, written: &str, conflicting: &str) -> String {
+    if password_pair(written, conflicting) {
+        let (source, command) = if written.ends_with(".password_command") {
+            (conflicting, written)
+        } else {
+            (written, conflicting)
+        };
+        let gives = if source.ends_with(".dsn") {
+            "carries a password"
+        } else {
+            "gives one"
+        };
+        format!(
+            "database entry '{entry}' would get its password twice: {source} {gives}, and \
+             {command} gives another"
+        )
+    } else {
+        format!("database entry '{entry}' cannot declare both {written} and {conflicting}")
+    }
+}
+
+/// The `error:` line of [`Error::RenderFailed`]: the author's own message
+/// where the template ended the render with `fail` (`FR-SEM-015`), and the
+/// template and the position otherwise.
+fn render_failed(template: &str, position: &Position, reason: Option<&RenderReason>) -> String {
+    match reason {
+        Some(RenderReason::Failed(message)) => {
+            format!("template '{template}' called fail() at {position}: {message}")
+        }
+        Some(
+            RenderReason::Unresolved(_)
+            | RenderReason::Missing(_)
+            | RenderReason::IncludeNotFound { .. },
+        )
+        | None => {
+            format!("rendering template '{template}' failed at {position}")
+        }
+    }
+}
+
+/// Where the `--context` document was read from, as the `error:` line says
+/// it: `on standard input` for `-`, and the quoted path otherwise.
+fn context_origin(path: &std::path::Path) -> String {
+    if path == std::path::Path::new("-") {
+        "on standard input".to_owned()
+    } else {
+        format!("'{}'", path.display())
+    }
+}
+
+/// How a diagnostic names the `--context` document read from `path`: `-` is
+/// standard input, which a reader would not recognise in the quoted `'-'`.
+pub(crate) fn context_name(path: &std::path::Path) -> String {
+    if path == std::path::Path::new("-") {
+        "standard input".to_owned()
+    } else {
+        format!("'{}'", path.display())
+    }
+}
+
+/// The `error:` line of [`Error::PasswordCommandNotAnArray`]: an empty array is
+/// an array, so the line says what is wrong with it instead.
+fn password_command_not_an_array(key: &str, found: &str, element: Option<usize>) -> String {
+    if let Some(index) = element {
+        format!("{key} holds a non-string element at index {index}")
+    } else if found == crate::project::config::EMPTY_ARRAY {
+        format!("{key} is an empty array")
+    } else {
+        format!("{key} is not an array")
+    }
+}
+
+/// The `error:` line of [`Error::InvalidEntryName`].
+fn invalid_entry_name(given: EntryNameGiven) -> &'static str {
+    match given {
+        EntryNameGiven::Add => "invalid entry name for tpl cfg database add",
+        EntryNameGiven::Key(_) => "invalid entry name in the key given to tpl cfg set",
+        EntryNameGiven::CoreDatabase => "invalid value for core.database",
+    }
+}
+
+/// The `error:` line of [`Error::ConfigurationEntryName`].
+fn configuration_entry_name(file: &std::path::Path, core: bool) -> String {
+    if core {
+        format!(
+            "{} sets core.database to a value that is not an entry name",
+            file.display()
+        )
+    } else {
+        format!(
+            "{} declares a database entry with an invalid name",
+            file.display()
+        )
+    }
+}
+
+/// The `error:` line of [`Error::EntryKeyMissing`].
+///
+/// `database.<name>.database` names the word three times over, which is how the
+/// entry, the key and the server-side database came to read as one thing; the
+/// line says which of the two keys it is in words, and gives the key after.
+fn entry_key_missing(entry: &str, key: &str) -> String {
+    let what = if key.ends_with(".database") {
+        "no server database name"
+    } else if key.ends_with(".host") {
+        "no host"
+    } else {
+        "a required key missing"
+    };
+
+    format!("database entry '{entry}' has {what} (key {key})")
 }
 
 /// Checks an internal invariant, and reports `FR-ERR-030` where it does not
@@ -1391,6 +2383,26 @@ pub(crate) fn trigger_internal_invariant() -> Result<(), Error> {
 }
 
 impl Error {
+    /// The same condition, marked as raised for an entry defined by `dsn`
+    /// where it is one whose `hint` repoints the entry (`FR-ERR-045`).
+    ///
+    /// The conditions are raised below the layer that knows the entry's form,
+    /// so the one function that opens a connection marks what it returns. Any
+    /// other condition is returned unchanged.
+    #[must_use]
+    pub(crate) fn of_dsn_entry(mut self) -> Self {
+        match &mut self {
+            Self::NameNotResolved { by_dsn, .. }
+            | Self::ConnectionRefused { by_dsn, .. }
+            | Self::NetworkDeadlineExceeded { by_dsn, .. }
+            | Self::ReadOnlySessionNotEnforced { by_dsn, .. }
+            | Self::ServerNotMariaDb { by_dsn, .. }
+            | Self::SeriesNotSupported { by_dsn, .. } => *by_dsn = true,
+            _ => {}
+        }
+        self
+    }
+
     /// The process exit status this condition produces, per `FR-ERR-001`.
     ///
     /// The match is exhaustive and carries no wildcard arm, which is what makes
@@ -1410,6 +2422,7 @@ impl Error {
     ///
     /// let error = Error::UnknownCommand {
     ///     token: "sch".to_owned(),
+    ///     node: String::new(),
     ///     nearest: Vec::new(),
     /// };
     /// assert_eq!(error.exit_code(), 64);
@@ -1426,20 +2439,30 @@ impl Error {
             | Self::RepeatedValueFlag { .. }
             | Self::RepeatedFlag { .. }
             | Self::FlagValueMissing { .. }
+            | Self::FlagTookCommand { .. }
             | Self::SeparateTokenValue { .. }
             | Self::ValueOutsideEnumeration { .. }
             | Self::InvocationRejected { .. }
             | Self::MissingArgument { .. }
             | Self::MutuallyExclusiveFlags { .. }
+            | Self::DirectWithContext
+            | Self::PrettyWithoutJson { .. }
+            | Self::ConnectionDetailsMissing { .. }
+            | Self::NothingToUpdate { .. }
+            | Self::BlockKeyGiven { .. }
             | Self::RoutinePrefixNotLowerCase { .. }
             | Self::AmbiguousRoutineName { .. }
             | Self::AmbiguousRoutineInContext { .. }
             | Self::RepeatedSetKey { .. }
-            | Self::LoadWithoutStoring
+            | Self::LoadWithoutStoring { .. }
             | Self::MalformedValue { .. }
             | Self::UnknownConfigurationKey { .. }
             | Self::DatabaseEntryAlreadyExists { .. }
-            | Self::IncoherentEntryWrite { .. } => 64,
+            | Self::IncoherentEntryWrite { .. }
+            | Self::InitDestinationIsTplFolder { .. }
+            | Self::InvalidEntryName { .. }
+            | Self::InvalidReference { .. }
+            | Self::EmptyValue { .. } => 64,
 
             // 65 EX_DATAERR
             Self::TemplateSyntax { .. }
@@ -1452,7 +2475,8 @@ impl Error {
             | Self::RenderMemoryLimitExceeded { .. } => 65,
 
             // 66 EX_NOINPUT
-            Self::CatalogueObjectNotFound { .. }
+            Self::NothingCachedNamed { .. }
+            | Self::CatalogueObjectNotFound { .. }
             | Self::ContextObjectNotFound { .. }
             | Self::TemplateNotFound { .. }
             | Self::DatabaseEntryNotFound { .. }
@@ -1472,6 +2496,8 @@ impl Error {
 
             // 74 EX_IOERR
             Self::ProjectFileUnreadable { .. }
+            | Self::ContextDocumentUnreadable { .. }
+            | Self::TrustMaterialUnreadable { .. }
             | Self::ProjectFileUnwritable { .. }
             | Self::StdoutUnwritable { .. }
             | Self::StdoutClosedMidDocument => 74,
@@ -1481,6 +2507,9 @@ impl Error {
 
             // 78 EX_CONFIG
             Self::ProjectNotFound { .. }
+            | Self::ProjectDirUnusable { .. }
+            | Self::ProjectFolderNotOwned { .. }
+            | Self::ConfigurationPathReference { .. }
             | Self::ConfigurationNotOwned { .. }
             | Self::ConfigurationUnsafeMode { .. }
             | Self::ConfigurationMalformed { .. }
@@ -1488,6 +2517,8 @@ impl Error {
             | Self::ConfigurationValueMalformed { .. }
             | Self::DsnMalformed { .. }
             | Self::UnclosedExpansion { .. }
+            | Self::InvalidReferenceName { .. }
+            | Self::ConfigurationEntryName { .. }
             | Self::PasswordCommandNotAnArray { .. }
             | Self::ConflictingEntryKeys { .. }
             | Self::DsnQueryParameter { .. }
@@ -1509,9 +2540,9 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
-        NetworkPhase, PasswordCommandFault, Position, ReadOnlyFault, ensure_invariant,
-        trigger_internal_invariant,
+        CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven,
+        EntryRepair, Error, KeyAbsence, NetworkPhase, PasswordCommandFault, Position,
+        ReadOnlyFault, ReferenceFault, ensure_invariant, trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -1521,7 +2552,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 69;
+    const VARIANT_COUNT: usize = 87;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -1546,6 +2577,7 @@ mod tests {
             // 64 EX_USAGE
             (
                 Error::UnknownCommand {
+                    node: String::new(),
                     token: "sch".to_owned(),
                     nearest: vec!["schema".to_owned()],
                 },
@@ -1561,8 +2593,11 @@ mod tests {
             ),
             (
                 Error::UnknownFlag {
+                    positional: false,
+                    command: String::new(),
                     token: "--data".to_owned(),
                     nearest: vec!["--database".to_owned()],
+                    belongs_to: None,
                 },
                 64,
             ),
@@ -1582,6 +2617,16 @@ mod tests {
                 64,
             ),
             (
+                Error::FlagTookCommand {
+                    flag: "-d".to_owned(),
+                    value: "schema".to_owned(),
+                    token: "tables".to_owned(),
+                    rebuilt: Some("-d <entry> schema tables".into()),
+                    path: "schema tables".into(),
+                },
+                64,
+            ),
+            (
                 Error::RepeatedFlag {
                     flag: "--quiet".to_owned(),
                 },
@@ -1590,6 +2635,7 @@ mod tests {
             (
                 Error::FlagValueMissing {
                     flag: "--timeout".to_owned(),
+                    permitted: Vec::new(),
                 },
                 64,
             ),
@@ -1602,6 +2648,7 @@ mod tests {
             ),
             (
                 Error::ValueOutsideEnumeration {
+                    command: String::new(),
                     flag: "--format".to_owned(),
                     value: "xml".to_owned(),
                     permitted: vec!["text".to_owned(), "json".to_owned()],
@@ -1610,6 +2657,8 @@ mod tests {
             ),
             (
                 Error::InvocationRejected {
+                    reason: "the value is not one the argument accepts",
+                    command: String::new(),
                     token: Some("-x".to_owned()),
                 },
                 64,
@@ -1628,12 +2677,14 @@ mod tests {
                 },
                 64,
             ),
+            (Error::DirectWithContext, 64),
             (
                 Error::RoutinePrefixNotLowerCase {
                     token: "PROCEDURE:calc_vat".to_owned(),
                     prefix: "procedure",
                     name: "calc_vat".to_owned(),
                     invocation: "schema routine",
+                    template: None,
                 },
                 64,
             ),
@@ -1643,6 +2694,7 @@ mod tests {
                     entry: "shop".to_owned(),
                     database: "shop".to_owned(),
                     invocation: "schema routine",
+                    template: None,
                 },
                 64,
             ),
@@ -1652,6 +2704,7 @@ mod tests {
                     path: PathBuf::from("context.json"),
                     database: "freight".to_owned(),
                     invocation: "render --routine",
+                    template: None,
                 },
                 64,
             ),
@@ -1663,9 +2716,61 @@ mod tests {
                 },
                 64,
             ),
-            (Error::LoadWithoutStoring, 64),
+            (Error::LoadWithoutStoring { object: None }, 64),
+            (
+                Error::PrettyWithoutJson {
+                    command: "template list".to_owned(),
+                    complete: true,
+                },
+                64,
+            ),
+            (
+                Error::ConnectionDetailsMissing {
+                    entry: "shop".to_owned(),
+                    database_given: false,
+                },
+                64,
+            ),
+            (
+                Error::NothingToUpdate {
+                    entry: "shop".to_owned(),
+                    database_given: false,
+                },
+                64,
+            ),
+            (
+                Error::BlockKeyGiven {
+                    key: "database.shop".to_owned(),
+                    entry: Some("shop".to_owned()),
+                },
+                64,
+            ),
+            (
+                Error::ContextDocumentUnreadable {
+                    path: PathBuf::from("context.json"),
+                    returned: io::Error::from(io::ErrorKind::NotFound),
+                },
+                74,
+            ),
+            (
+                Error::TrustMaterialUnreadable {
+                    entry: "shop".to_owned(),
+                    key: "ca_file",
+                    path: PathBuf::from("/etc/ssl/ca.pem"),
+                    returned: io::Error::from(io::ErrorKind::NotFound),
+                },
+                74,
+            ),
+            (
+                Error::ProjectDirUnusable {
+                    path: PathBuf::from("/srv/shop/.tpl"),
+                    fault: super::TplDirFault::Missing,
+                },
+                78,
+            ),
             (
                 Error::MalformedValue {
+                    command: String::new(),
                     parameter: "--timeout".to_owned(),
                     value: "soon".to_owned(),
                     expected: "integer",
@@ -1695,6 +2800,36 @@ mod tests {
                 },
                 64,
             ),
+            (
+                Error::InitDestinationIsTplFolder {
+                    written: PathBuf::from("proj/.tpl"),
+                    canonical: None,
+                    parent: Some(PathBuf::from("proj")),
+                },
+                64,
+            ),
+            (
+                Error::InvalidEntryName {
+                    given: EntryNameGiven::Add,
+                    name: "a b".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::InvalidReference {
+                    parameter: "database.shop.user".to_owned(),
+                    command: "cfg set".to_owned(),
+                    fault: ReferenceFault::Name("1X".to_owned()),
+                },
+                64,
+            ),
+            (
+                Error::EmptyValue {
+                    parameter: "--host".to_owned(),
+                    command: "cfg database add".to_owned(),
+                },
+                64,
+            ),
             // 65 EX_DATAERR
             (
                 Error::TemplateSyntax {
@@ -1706,6 +2841,9 @@ mod tests {
             ),
             (
                 Error::RenderFailed {
+                    undefined: None,
+                    reason: None,
+                    invoked: String::from("example"),
                     template: "example.jinja".to_owned(),
                     position: position(),
                     chain: vec!["undefined value".to_owned()],
@@ -1721,8 +2859,9 @@ mod tests {
             ),
             (
                 Error::ContextDocumentMalformed {
-                    path: PathBuf::from("context.json"),
+                    path: std::path::Path::new("context.json").into(),
                     fault: ContextFault::NotJson(position()),
+                    default_entry: false,
                 },
                 65,
             ),
@@ -1737,6 +2876,17 @@ mod tests {
             (Error::RenderOutputLimitExceeded { limit: 67_108_864 }, 65),
             (Error::RenderMemoryLimitExceeded { limit: 134_217_728 }, 65),
             // 66 EX_NOINPUT
+            (
+                Error::NothingCachedNamed {
+                    kind: CatalogueObjectKind::Table,
+                    name: "ordrs".to_owned(),
+                    entry: "shop".to_owned(),
+                    nearest: vec!["orders".to_owned()],
+                    qualified: None,
+                    held_as: None,
+                },
+                66,
+            ),
             (
                 Error::CatalogueObjectNotFound {
                     kind: CatalogueObjectKind::Table,
@@ -1770,12 +2920,16 @@ mod tests {
                     name: "shup".to_owned(),
                     file: path(),
                     nearest: vec!["shop".to_owned()],
+                    by_default: false,
                 },
                 66,
             ),
             (
                 Error::ConfigurationKeyNotFound {
                     key: "core.database".to_owned(),
+                    known: true,
+                    default: None,
+                    entry_missing: false,
                     file: path(),
                     nearest: Vec::new(),
                 },
@@ -1784,6 +2938,8 @@ mod tests {
             // 69 EX_UNAVAILABLE
             (
                 Error::NameNotResolved {
+                    by_dsn: false,
+                    entry: String::from("shop"),
                     host: "db.example.com".to_owned(),
                     port: 3306,
                 },
@@ -1791,6 +2947,8 @@ mod tests {
             ),
             (
                 Error::ConnectionRefused {
+                    by_dsn: false,
+                    entry: String::from("shop"),
                     host: "127.0.0.1".to_owned(),
                     port: 3306,
                 },
@@ -1798,6 +2956,8 @@ mod tests {
             ),
             (
                 Error::TlsHandshakeFailed {
+                    fault: crate::error::TlsFault::Refused,
+                    entry: String::from("shop"),
                     host: "db.example.com".to_owned(),
                     port: 3306,
                 },
@@ -1805,6 +2965,8 @@ mod tests {
             ),
             (
                 Error::NetworkDeadlineExceeded {
+                    by_dsn: false,
+                    entry: String::from("shop"),
                     phase: NetworkPhase::CatalogueQuery,
                     host: "db.example.com".to_owned(),
                     port: 3306,
@@ -1860,6 +3022,7 @@ mod tests {
             // 77 EX_NOPERM
             (
                 Error::AuthenticationRefused {
+                    entry: String::from("shop"),
                     user: "reader".to_owned(),
                     host: "db.example.com".to_owned(),
                 },
@@ -1889,6 +3052,23 @@ mod tests {
                 78,
             ),
             (
+                Error::ProjectFolderNotOwned {
+                    path: PathBuf::from("/tmp/.tpl"),
+                    owner: 0,
+                    expected: 501,
+                },
+                78,
+            ),
+            (
+                Error::ConfigurationPathReference {
+                    key: "database.shop.ca_file".to_owned(),
+                    file: path(),
+                    position: position(),
+                    value: "${SHOP_CA}".to_owned(),
+                },
+                78,
+            ),
+            (
                 Error::ConfigurationUnsafeMode {
                     path: path(),
                     mode: 0o644,
@@ -1897,6 +3077,7 @@ mod tests {
             ),
             (
                 Error::ConfigurationMalformed {
+                    reason: "expected `]`".to_owned(),
                     path: path(),
                     position: position(),
                 },
@@ -1906,6 +3087,7 @@ mod tests {
                 Error::ConfigurationKeyOutsideSpace {
                     key: "core.databse".to_owned(),
                     file: path(),
+                    position: position(),
                     nearest: vec!["core.database".to_owned()],
                 },
                 78,
@@ -1917,6 +3099,7 @@ mod tests {
                     position: position(),
                     found: "0".to_owned(),
                     expected: "a positive integer number of seconds",
+                    expanded_from: None,
                 },
                 78,
             ),
@@ -1936,11 +3119,29 @@ mod tests {
                 78,
             ),
             (
+                Error::InvalidReferenceName {
+                    key: "database.shop.user".to_owned(),
+                    file: path(),
+                    name: "1X".to_owned(),
+                },
+                78,
+            ),
+            (
+                Error::ConfigurationEntryName {
+                    file: path(),
+                    name: "x.y".to_owned(),
+                    core: false,
+                    position: position(),
+                },
+                78,
+            ),
+            (
                 Error::PasswordCommandNotAnArray {
                     key: "database.shop.password_command".to_owned(),
                     file: path(),
                     position: position(),
                     found: "string",
+                    element: None,
                 },
                 78,
             ),
@@ -1970,6 +3171,7 @@ mod tests {
             ),
             (
                 Error::PasswordCommandDeadlineExceeded {
+                    entry: "shop".to_owned(),
                     command: vec!["security".to_owned(), "find-generic-password".to_owned()],
                     bound: DeadlineBound::Phase,
                     limit: Duration::from_secs(5),
@@ -1978,6 +3180,7 @@ mod tests {
             ),
             (
                 Error::PasswordCommandOutputCapExceeded {
+                    entry: "shop".to_owned(),
                     command: vec!["cat".to_owned(), "/dev/urandom".to_owned()],
                     cap: 4096,
                 },
@@ -1985,6 +3188,7 @@ mod tests {
             ),
             (
                 Error::PasswordCommandNotExecutable {
+                    entry: "shop".to_owned(),
                     command: vec!["pass".to_owned()],
                     fault: PasswordCommandFault::NotStarted,
                     returned: io::Error::from(io::ErrorKind::NotFound),
@@ -1993,6 +3197,7 @@ mod tests {
             ),
             (
                 Error::PasswordCommandFailed {
+                    entry: "shop".to_owned(),
                     command: vec!["op".to_owned(), "read".to_owned()],
                     end: ChildEnd::Exited(1),
                 },
@@ -2007,6 +3212,7 @@ mod tests {
             ),
             (
                 Error::ReadOnlySessionNotEnforced {
+                    by_dsn: false,
                     entry: "shop".to_owned(),
                     fault: ReadOnlyFault::ReadBackDisagreed,
                 },
@@ -2019,12 +3225,20 @@ mod tests {
                     file: path(),
                     flag: "--host",
                     placeholder: "<host>",
+                    absence: KeyAbsence::Absent,
                 },
                 78,
             ),
-            (Error::NoDatabaseEntrySelected { file: path() }, 78),
+            (
+                Error::NoDatabaseEntrySelected {
+                    file: path(),
+                    has_entries: true,
+                },
+                78,
+            ),
             (
                 Error::ServerNotMariaDb {
+                    by_dsn: false,
                     entry: "shop".to_owned(),
                     product: "MySQL".to_owned(),
                 },
@@ -2032,6 +3246,7 @@ mod tests {
             ),
             (
                 Error::SeriesNotSupported {
+                    by_dsn: false,
                     entry: "shop".to_owned(),
                     series: "10.6".to_owned(),
                     supported: WINDOW,
@@ -2053,20 +3268,26 @@ mod tests {
             Error::RepeatedValueFlag { .. } => "RepeatedValueFlag",
             Error::RepeatedFlag { .. } => "RepeatedFlag",
             Error::FlagValueMissing { .. } => "FlagValueMissing",
+            Error::FlagTookCommand { .. } => "FlagTookCommand",
             Error::SeparateTokenValue { .. } => "SeparateTokenValue",
             Error::ValueOutsideEnumeration { .. } => "ValueOutsideEnumeration",
             Error::InvocationRejected { .. } => "InvocationRejected",
             Error::MissingArgument { .. } => "MissingArgument",
             Error::MutuallyExclusiveFlags { .. } => "MutuallyExclusiveFlags",
+            Error::DirectWithContext => "DirectWithContext",
             Error::RoutinePrefixNotLowerCase { .. } => "RoutinePrefixNotLowerCase",
             Error::AmbiguousRoutineName { .. } => "AmbiguousRoutineName",
             Error::AmbiguousRoutineInContext { .. } => "AmbiguousRoutineInContext",
             Error::RepeatedSetKey { .. } => "RepeatedSetKey",
-            Error::LoadWithoutStoring => "LoadWithoutStoring",
+            Error::LoadWithoutStoring { .. } => "LoadWithoutStoring",
             Error::MalformedValue { .. } => "MalformedValue",
             Error::UnknownConfigurationKey { .. } => "UnknownConfigurationKey",
             Error::DatabaseEntryAlreadyExists { .. } => "DatabaseEntryAlreadyExists",
             Error::IncoherentEntryWrite { .. } => "IncoherentEntryWrite",
+            Error::InitDestinationIsTplFolder { .. } => "InitDestinationIsTplFolder",
+            Error::InvalidEntryName { .. } => "InvalidEntryName",
+            Error::InvalidReference { .. } => "InvalidReference",
+            Error::EmptyValue { .. } => "EmptyValue",
             Error::TemplateSyntax { .. } => "TemplateSyntax",
             Error::RenderFailed { .. } => "RenderFailed",
             Error::TemplateOutsideRoot { .. } => "TemplateOutsideRoot",
@@ -2076,6 +3297,7 @@ mod tests {
             Error::RenderOutputLimitExceeded { .. } => "RenderOutputLimitExceeded",
             Error::RenderMemoryLimitExceeded { .. } => "RenderMemoryLimitExceeded",
             Error::CatalogueObjectNotFound { .. } => "CatalogueObjectNotFound",
+            Error::NothingCachedNamed { .. } => "NothingCachedNamed",
             Error::ContextObjectNotFound { .. } => "ContextObjectNotFound",
             Error::TemplateNotFound { .. } => "TemplateNotFound",
             Error::DatabaseEntryNotFound { .. } => "DatabaseEntryNotFound",
@@ -2095,12 +3317,16 @@ mod tests {
             Error::PropertyNotReadable { .. } => "PropertyNotReadable",
             Error::ProjectNotFound { .. } => "ProjectNotFound",
             Error::ConfigurationNotOwned { .. } => "ConfigurationNotOwned",
+            Error::ProjectFolderNotOwned { .. } => "ProjectFolderNotOwned",
+            Error::ConfigurationPathReference { .. } => "ConfigurationPathReference",
             Error::ConfigurationUnsafeMode { .. } => "ConfigurationUnsafeMode",
             Error::ConfigurationMalformed { .. } => "ConfigurationMalformed",
             Error::ConfigurationKeyOutsideSpace { .. } => "ConfigurationKeyOutsideSpace",
             Error::ConfigurationValueMalformed { .. } => "ConfigurationValueMalformed",
             Error::DsnMalformed { .. } => "DsnMalformed",
             Error::UnclosedExpansion { .. } => "UnclosedExpansion",
+            Error::InvalidReferenceName { .. } => "InvalidReferenceName",
+            Error::ConfigurationEntryName { .. } => "ConfigurationEntryName",
             Error::PasswordCommandNotAnArray { .. } => "PasswordCommandNotAnArray",
             Error::ConflictingEntryKeys { .. } => "ConflictingEntryKeys",
             Error::DsnQueryParameter { .. } => "DsnQueryParameter",
@@ -2113,6 +3339,13 @@ mod tests {
             Error::ReadOnlySessionNotEnforced { .. } => "ReadOnlySessionNotEnforced",
             Error::EntryKeyMissing { .. } => "EntryKeyMissing",
             Error::NoDatabaseEntrySelected { .. } => "NoDatabaseEntrySelected",
+            Error::PrettyWithoutJson { .. } => "PrettyWithoutJson",
+            Error::ConnectionDetailsMissing { .. } => "ConnectionDetailsMissing",
+            Error::NothingToUpdate { .. } => "NothingToUpdate",
+            Error::BlockKeyGiven { .. } => "BlockKeyGiven",
+            Error::ContextDocumentUnreadable { .. } => "ContextDocumentUnreadable",
+            Error::TrustMaterialUnreadable { .. } => "TrustMaterialUnreadable",
+            Error::ProjectDirUnusable { .. } => "ProjectDirUnusable",
             Error::ServerNotMariaDb { .. } => "ServerNotMariaDb",
             Error::SeriesNotSupported { .. } => "SeriesNotSupported",
         }
@@ -2250,6 +3483,7 @@ mod tests {
                 file: path(),
                 position: position(),
                 found: "string",
+                element: None,
             }
             .to_string(),
             "database.shop.password_command is not an array"
@@ -2258,6 +3492,7 @@ mod tests {
         // FR-SRV-030's own example.
         assert_eq!(
             Error::SeriesNotSupported {
+                by_dsn: false,
                 entry: "shop".to_owned(),
                 series: "10.6".to_owned(),
                 supported: WINDOW,

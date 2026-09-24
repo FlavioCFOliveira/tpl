@@ -103,6 +103,12 @@ pub(crate) struct Supplied<'a> {
     /// than passing a second argument to one subcommand is what keeps
     /// `FR-CLI-014`'s reduction in one place.
     budget: Option<Seconds>,
+    /// `-d/--database`, which no subcommand of the arm resolves.
+    ///
+    /// It is carried for `add` and `update` alone, which say that the flag has
+    /// no effect on them (`FR-CFG-051`) and name it in the `cause` of their
+    /// refusal for want of a field flag (`FR-CFG-020`).
+    database: Option<&'a str>,
 }
 
 impl<'a> Supplied<'a> {
@@ -118,6 +124,7 @@ impl<'a> Supplied<'a> {
                 .unwrap_or(Format::Text),
             pretty: output.is_some_and(|output| output.pretty.pretty),
             budget: globals.timeout.first().copied().map(Seconds::new),
+            database: globals.database.first().map(String::as_str),
         }
     }
 
@@ -208,14 +215,14 @@ pub(crate) enum Command {
         key: String,
     },
 
-    /// Lists the configuration keys the project carries.
+    /// Prints the whole configuration file.
     List {
         /// `--format` and `--pretty`, per `FR-GLOB-021`.
         #[command(flatten)]
         output: local::Output,
     },
 
-    /// The database entries of `.tpl/.cfg`.
+    /// Manages the database entries of `.tpl/.cfg`.
     #[command(visible_alias = "db")]
     Database(Database),
 }
@@ -274,7 +281,15 @@ pub(crate) struct Entry {
     ///
     /// Absent, the entry carries no port and the default of `FR-CONF-002`,
     /// `3306`, applies when the entry is read.
-    #[arg(long = "port", value_name = "PORT", action = ArgAction::Append)]
+    // FR-CONF-002 types the key as a TCP port and the reader refuses `0`, so
+    // the flag refuses it too: a value the flag admitted and the file then
+    // refused would leave every later command, the repair included, a `78`.
+    #[arg(
+        long = "port",
+        value_name = "PORT",
+        action = ArgAction::Append,
+        value_parser = clap::value_parser!(u16).range(1..)
+    )]
     pub(crate) port: Vec<u16>,
 
     /// The user to authenticate as, written to `database.<name>.user`.
@@ -459,6 +474,7 @@ pub(crate) mod tests {
                 format,
                 pretty,
                 budget: None,
+                database: None,
             }
         }
 

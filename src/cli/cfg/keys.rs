@@ -37,11 +37,11 @@ use serde::Serialize;
 
 use super::super::local::Format;
 use super::{Supplied, coherence, form, project};
-use crate::error::Error;
+use crate::error::{EntryNameGiven, Error};
 use crate::output::{self, Document, Source};
 use crate::project::config::Configuration;
 use crate::project::config::entry::Written;
-use crate::project::config::keys::{CoreKey, EntryKey, Key, Target};
+use crate::project::config::keys::{CoreKey, EntryKey, Key, Target, is_entry_name};
 use crate::project::config::redact;
 use crate::project::edit;
 
@@ -84,7 +84,7 @@ struct Listing<'a> {
 /// carries no map, per `FR-OUT-013`.
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
-enum Printed<'a> {
+pub(super) enum Printed<'a> {
     /// A string, redacted or the file's own.
     Text(Cow<'a, str>),
     /// A TOML integer.
@@ -97,14 +97,26 @@ enum Printed<'a> {
 ///
 /// # Errors
 ///
-/// Returns what opening the project returns, and
-/// [`Error::ConfigurationKeyNotFound`] where the file sets no value for the
-/// key — with a nearest-match suggestion over the keys that do exist.
+/// Returns what opening the project returns, [`Error::BlockKeyGiven`] where
+/// the key names a whole block, and [`Error::ConfigurationKeyNotFound`] where
+/// the file does not set the key.
 pub(crate) fn get<W: Write>(out: &mut W, supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
     let configuration = project(supplied)?.configuration()?;
 
     let Some(parsed) = Key::parse(key) else {
-        return Err(configuration.key_not_found(key));
+        // FR-CFG-007: a block is refused for its form, before the question of
+        // presence, whether or not the file carries it.
+        return Err(match Target::parse(key) {
+            Some(Target::Core | Target::Databases) => Error::BlockKeyGiven {
+                key: key.to_owned(),
+                entry: None,
+            },
+            Some(Target::Entry(name)) => Error::BlockKeyGiven {
+                key: key.to_owned(),
+                entry: configuration.entry(&name).is_some().then_some(name),
+            },
+            Some(Target::Key(_)) | None => configuration.key_not_found(key),
+        });
     };
     let Some(value) = configuration.written(&parsed) else {
         return Err(configuration.key_not_found(key));
@@ -154,6 +166,16 @@ pub(crate) fn set(supplied: &Supplied<'_>, key: &str, value: &str) -> Result<(),
         });
     };
 
+    // FR-CONF-048: the `<name>` segment of the key is an entry name.
+    if let Key::Entry { entry, field } = &parsed
+        && !is_entry_name(entry)
+    {
+        return Err(Error::InvalidEntryName {
+            given: EntryNameGiven::Key(field.leaf()),
+            name: entry.clone(),
+        });
+    }
+
     let item = edit::assign(&parsed, value)?;
 
     // FR-CFG-048: one key of one entry is still a write to that entry, and
@@ -169,7 +191,17 @@ pub(crate) fn set(supplied: &Supplied<'_>, key: &str, value: &str) -> Result<(),
     let mut editor = project.editor()?;
     editor.set(&parsed, item);
 
-    editor.save()
+    editor.save()?;
+
+    // FR-CFG-053: after the rewrite, whatever the file held for the entry
+    // before (item 7), and without looking under `.tpl/.cache/` (item 3).
+    if let Key::Entry { entry, field } = &parsed
+        && field.repoints()
+    {
+        crate::diagnostics::emit::entry_repointed(entry);
+    }
+
+    Ok(())
 }
 
 /// `tpl cfg unset <key>` (`FR-CFG-011`, `FR-CFG-012`).
@@ -188,6 +220,14 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
     };
 
     let mut editor = project.editor()?;
+    // FR-CFG-052 item 6: every entry the block `database` holds, in the order
+    // of `.tpl/.cfg` before the rewrite, read from the document that is about
+    // to lose them.
+    let removed = if matches!(target, Target::Databases) {
+        editor.entry_names()
+    } else {
+        Vec::new()
+    };
     if !editor.remove(&target) {
         return Err(configuration.key_not_found(key));
     }
@@ -201,7 +241,33 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
         editor.remove(&Target::Key(Key::Core(CoreKey::Database)));
     }
 
-    editor.save()
+    editor.save()?;
+
+    // FR-CFG-050: the one key that holds five facts. The block of the entry
+    // writes no such line: the caller named the whole entry, and FR-CFG-052
+    // writes the line of a deleted entry instead, without looking at the
+    // cache it names, once for each entry where the block is `database`
+    // (item 6). FR-CFG-053 follows for a field that changes where the
+    // entry points, after the line of FR-CFG-050 where both are written.
+    match &target {
+        Target::Key(Key::Entry { entry, field }) => {
+            if *field == EntryKey::Dsn {
+                crate::diagnostics::emit::dsn_unset(entry);
+            }
+            if field.repoints() {
+                crate::diagnostics::emit::entry_repointed(entry);
+            }
+        }
+        Target::Entry(entry) => crate::diagnostics::emit::entry_removed(entry),
+        Target::Databases => {
+            for entry in &removed {
+                crate::diagnostics::emit::entry_removed(entry);
+            }
+        }
+        Target::Core | Target::Key(_) => {}
+    }
+
+    Ok(())
 }
 
 /// Whether `target` deletes the entry `core.database` names (`FR-CFG-023`).
@@ -268,12 +334,13 @@ fn listing(configuration: &Configuration) -> Listing<'_> {
     Listing { core, database }
 }
 
-/// `value` as `FR-CFG-021` prints it, for a document that carries it as JSON.
+/// `value` as `FR-CFG-021` prints it, for a document that carries it as JSON,
+/// in the TOML type the file holds it in (`FR-CFG-049`).
 ///
 /// A key the rule reaches is always printed as a string, because `***` is one
 /// and so is a DSN with `***` in it; a value the rule leaves alone keeps the
 /// shape the file wrote it in, so a port stays a number.
-fn printed(field: EntryKey, value: Written<'_>) -> Printed<'_> {
+pub(super) fn printed(field: EntryKey, value: Written<'_>) -> Printed<'_> {
     match field {
         EntryKey::Password | EntryKey::Dsn => Printed::Text(redact::value(field, value)),
         _ => match value {
@@ -287,7 +354,7 @@ fn printed(field: EntryKey, value: Written<'_>) -> Printed<'_> {
 #[cfg(test)]
 mod tests {
     use super::super::tests::Harness;
-    use crate::error::Error;
+    use crate::error::{EntryRepair, Error};
 
     #[test]
     fn fr_cfg_006_get_prints_the_value_as_written_and_does_not_redact_it() {
@@ -325,15 +392,15 @@ mod tests {
 
     #[test]
     fn fr_cfg_007_a_key_absent_from_the_file_is_a_named_object_that_does_not_exist() {
-        // FR-CFG-007: 66, with a nearest-match suggestion over the keys that do
-        // exist.
+        // FR-CFG-007: 66, with a nearest-match suggestion over the key space,
+        // each candidate paired with whether the file sets it.
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
 
         let condition = harness.get_refused("core.databse");
 
         match condition {
             Error::ConfigurationKeyNotFound { ref nearest, .. } => {
-                assert_eq!(nearest, &["core.database".to_owned()]);
+                assert_eq!(nearest, &[("core.database".to_owned(), true)]);
             }
             other => panic!("expected a missing key, got {other:?}"),
         }
@@ -347,6 +414,85 @@ mod tests {
         let harness = Harness::new("[core]\ndatabase = \"shop\"\n");
 
         assert_eq!(harness.get_refused("core.query_timeout").exit_code(), 66);
+    }
+
+    #[test]
+    fn fr_cfg_007_the_suggestion_covers_the_key_space_and_says_what_is_unset() {
+        // FR-CFG-007: a slip in a key the file does not set is suggested too,
+        // and the hint says the candidate is unset, so that the caller is not
+        // sent to a command that exits 66 again (BR-ERR-004).
+        let harness =
+            Harness::new("[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n");
+
+        let refused = harness.get_refused("core.conect_timeout");
+        match &refused {
+            Error::ConfigurationKeyNotFound { nearest, .. } => {
+                assert_eq!(nearest, &[("core.connect_timeout".to_owned(), false)]);
+            }
+            other => panic!("expected a missing key, got {other:?}"),
+        }
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(
+            rendered.contains(
+                "hint:  did you mean 'core.connect_timeout'? .tpl/.cfg does not set it, so its \
+                 default applies; list every key, its type and its default with: tpl help cfg set"
+            ),
+            "{rendered}"
+        );
+
+        // The <name> segment is bound to the entries the file declares, and a
+        // candidate the file sets is not said to be unset.
+        let refused = harness.get_refused("database.shop.hots");
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(
+            rendered.contains("hint:  did you mean 'database.shop.host'? list every key"),
+            "{rendered}"
+        );
+
+        // FR-CFG-012: unset draws the same population and says the same.
+        let refused = harness.unset("database.shop.pasword").expect_err("absent");
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(
+            rendered.contains(
+                "hint:  did you mean 'database.shop.password'? .tpl/.cfg does not set it; list \
+                 every key"
+            ),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn fr_err_019_a_key_of_the_population_is_offered_no_candidate() {
+        // U-01: the population is the key space bound to the entries the file
+        // declares, and a name in it exists, so nothing is suggested; U-05: a
+        // key of an undeclared entry records the entry.
+        let harness =
+            Harness::new("[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n");
+
+        match harness.get_refused("database.shop.port") {
+            Error::ConfigurationKeyNotFound {
+                nearest,
+                known,
+                entry_missing,
+                ..
+            } => {
+                assert!(nearest.is_empty(), "{nearest:?}");
+                assert!(known);
+                assert!(!entry_missing);
+            }
+            other => panic!("expected a missing key, got {other:?}"),
+        }
+        match harness.get_refused("database.nope.host") {
+            Error::ConfigurationKeyNotFound {
+                ref key,
+                entry_missing,
+                ..
+            } => {
+                assert!(entry_missing);
+                assert_eq!(crate::error::named_entry(key), "nope");
+            }
+            other => panic!("expected a missing key, got {other:?}"),
+        }
     }
 
     #[test]
@@ -642,6 +788,23 @@ mod tests {
 
         assert_eq!(condition.exit_code(), 64);
         assert_eq!(harness.written(), file);
+
+        // Row three of the FR-CFG-048 table, not the dsn switch of row two:
+        // `password` is also a discrete connection field (AD-02 of the
+        // thirteenth re-audit of rmp #263).
+        match condition {
+            Error::IncoherentEntryWrite {
+                ref written,
+                ref conflicting,
+                ref repair,
+                ..
+            } => {
+                assert_eq!(written, "database.shop.password_command");
+                assert_eq!(conflicting, "database.shop.password");
+                assert_eq!(*repair, EntryRepair::Unset);
+            }
+            other => panic!("expected an incoherent write, got {other:?}"),
+        }
     }
 
     #[test]

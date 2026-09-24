@@ -157,7 +157,7 @@ impl Phase {
             Self::DnsResolution => "dns resolution",
             Self::TcpConnect => "tcp connect",
             Self::TlsHandshake => "tls handshake",
-            Self::CatalogueQuery => "catalogue query",
+            Self::CatalogueQuery => "server query",
             Self::PasswordCommand => "password command",
             Self::Render => "render",
         }
@@ -453,6 +453,12 @@ mod tests {
     use crate::error::DeadlineBound;
     use std::num::NonZeroU64;
     use std::time::Duration;
+
+    #[test]
+    fn rmp_274_the_query_phase_is_named_in_plain_words() {
+        // FR-GLOB-017 fixes that the phase line exists, not its wording.
+        assert_eq!(Phase::CatalogueQuery.name(), "server query");
+    }
 
     /// A deadline of `seconds`, for a test that knows the value is positive.
     fn seconds(value: u64) -> Seconds {

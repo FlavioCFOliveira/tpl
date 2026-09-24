@@ -77,6 +77,8 @@ struct Reached<'a> {
     /// That node's path, in canonical spelling and without the program name.
     /// Empty at the root.
     path: String,
+    /// The index in the vector of the first token after that path.
+    after: usize,
 }
 
 /// The [`Error`] a refusal of the parser is reported to the caller as.
@@ -95,16 +97,20 @@ pub(super) fn intercepted(refused: &clap::Error, tree: &clap::Command, argv: &[O
         // the node it was written at. BR-CLI-001 routes a mistyped alias here
         // too, which is why an alias is a candidate beside a canonical name.
         ErrorKind::InvalidSubcommand => match one(refused, ContextKind::InvalidSubcommand) {
-            Some(token) => {
+            Some(token) => took_command(tree, &written, &token).unwrap_or_else(|| {
                 let nearest = nearest_command(reached.node, &token);
-                Error::UnknownCommand { token, nearest }
-            }
-            None => rejected(refused),
+                Error::UnknownCommand {
+                    token,
+                    node: reached.path.clone(),
+                    nearest,
+                }
+            }),
+            None => rejected(refused, &reached),
         },
 
         ErrorKind::UnknownArgument => match one(refused, ContextKind::InvalidArg) {
             Some(token) => unknown_argument(tree, &reached, &written, token),
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
         ErrorKind::MissingRequiredArgument => match one(refused, ContextKind::InvalidArg) {
@@ -112,12 +118,12 @@ pub(super) fn intercepted(refused: &clap::Error, tree: &clap::Command, argv: &[O
                 command: reached.path,
                 argument,
             },
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
         ErrorKind::InvalidValue => match one(refused, ContextKind::InvalidArg) {
             Some(argument) => invalid_value(tree, &reached, &written, refused, &argument),
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
         ErrorKind::ValueValidation => match one(refused, ContextKind::InvalidArg) {
@@ -126,18 +132,107 @@ pub(super) fn intercepted(refused: &clap::Error, tree: &clap::Command, argv: &[O
                 Error::MalformedValue {
                     value: one(refused, ContextKind::InvalidValue).unwrap_or_default(),
                     expected: expected(&flag),
+                    command: declaring(tree, &reached, &flag),
                     parameter: flag,
                 }
             }
-            None => rejected(refused),
+            None => rejected(refused, &reached),
         },
 
-        ErrorKind::ArgumentConflict => conflict(refused),
+        ErrorKind::ArgumentConflict => conflict(refused, &reached),
 
         // OD-08's wildcard arm, which `ErrorKind` being `#[non_exhaustive]`
         // obliges. It produces `64` and never another code.
-        _ => rejected(refused),
+        _ => rejected(refused, &reached),
     }
+}
+
+/// The refusal of `FR-CLI-026`, where `-d/--database` or `--tpl-dir` took a
+/// command name from a separate token and `refused` is the next non-flag token,
+/// which names no command; [`None`] for every other unknown command.
+///
+/// The walk is the one [`reached`] makes, and it remembers the last of the two
+/// flags whose value names a child of the node it was written at. Descending
+/// into a child forgets it: the value is then a value the invocation used.
+fn took_command(tree: &clap::Command, written: &[Cow<'_, str>], refused: &str) -> Option<Error> {
+    let mut node = tree;
+    let mut path: Vec<&str> = Vec::new();
+    let mut took: Option<(usize, &clap::Command, Vec<&str>)> = None;
+    let mut index = 1;
+
+    while let Some(token) = written.get(index) {
+        if token == TERMINATOR {
+            return None;
+        }
+
+        if token.starts_with('-') {
+            let next = written.get(index + 1);
+            let carries = carries_the_next(tree, node, token, next);
+            let names_a_child =
+                next.is_some_and(|next| node.find_subcommand(next.as_ref()).is_some());
+            if carries
+                && names_a_child
+                && matches!(token.as_ref(), "-d" | "--database" | "--tpl-dir")
+            {
+                took = Some((index, node, path.clone()));
+            }
+            index += 1 + usize::from(carries);
+            continue;
+        }
+
+        let Some(child) = node.find_subcommand(token.as_ref()) else {
+            break;
+        };
+        path.push(child.get_name());
+        node = child;
+        took = None;
+        index += 1;
+    }
+
+    let (at, at_node, mut command) = took?;
+    if written.get(index).map(AsRef::as_ref) != Some(refused) {
+        return None;
+    }
+
+    let flag = written.get(at)?.to_string();
+    let value = written.get(at + 1)?.to_string();
+
+    // The command path the invocation names once the flag has its value: the
+    // value, and each token after it that names a child in turn.
+    let mut reached = at_node;
+    for word in written.iter().skip(at + 1) {
+        if word.starts_with('-') {
+            break;
+        }
+        let Some(child) = reached.find_subcommand(word.as_ref()) else {
+            break;
+        };
+        command.push(child.get_name());
+        reached = child;
+    }
+
+    let placeholder = if flag == "--tpl-dir" {
+        "<path>"
+    } else {
+        "<entry>"
+    };
+    let mut tokens: Vec<&str> = Vec::with_capacity(written.len());
+    let mut whole = true;
+    for (position, word) in written.iter().enumerate().skip(1) {
+        whole &= !word.is_empty() && !word.contains(char::is_whitespace);
+        tokens.push(word.as_ref());
+        if position == at {
+            tokens.push(placeholder);
+        }
+    }
+
+    Some(Error::FlagTookCommand {
+        flag,
+        value,
+        token: refused.to_owned(),
+        rebuilt: whole.then(|| tokens.join(" ").into()),
+        path: command.join(" ").into(),
+    })
 }
 
 /// A token the parser did not accept as a flag of the node it was written at.
@@ -163,9 +258,51 @@ fn unknown_argument(
         Some((flag, value)) => Error::SeparateTokenValue { flag, value },
         None => {
             let nearest = nearest_flag(tree, reached.node, &token);
-            Error::UnknownFlag { token, nearest }
+            Error::UnknownFlag {
+                positional: slot_open(tree, reached, written, &token),
+                belongs_to: written_before(tree, written, &token),
+                token,
+                command: reached.path.clone(),
+                nearest,
+            }
         }
     }
+}
+
+/// The command path of the command that declares the flag `token`, WHERE the
+/// vector writes it before that command's name (finding Y-02 of the eighth
+/// re-audit of rmp `#263`); [`None`] otherwise.
+///
+/// The command is the one the vector names when every flag is set aside, so
+/// `tpl --format json schema tables` is read as `schema tables`, whose
+/// `--format` the parser refused at the root.
+fn written_before(tree: &clap::Command, written: &[Cow<'_, str>], token: &str) -> Option<String> {
+    let words: Vec<Option<&str>> = written
+        .iter()
+        .skip(1)
+        .map(|word| Some(word.as_ref()))
+        .collect();
+    let (path, end) = crate::diagnostics::destination(tree, &words);
+    let target = path.last()?;
+    let name = token.split('=').next().unwrap_or(token);
+
+    let before = words[..end]
+        .iter()
+        .any(|word| word.is_some_and(|word| word.split('=').next() == Some(name)));
+    let declares = target.get_arguments().any(|argument| {
+        name.strip_prefix(TERMINATOR).map_or_else(
+            || name.len() == 2 && name[1..].chars().next() == argument.get_short(),
+            |long| argument.get_long() == Some(long),
+        )
+    });
+
+    (path.len() > 1 && before && declares).then(|| {
+        path.iter()
+            .skip(1)
+            .map(|node| node.get_name())
+            .collect::<Vec<_>>()
+            .join(" ")
+    })
 }
 
 /// A value the parser did not accept for the flag it was written after.
@@ -185,20 +322,26 @@ fn invalid_value(
     if value.is_empty() {
         return match value_after(tree, reached.node, written, &flag) {
             Some(value) => Error::SeparateTokenValue { flag, value },
-            None => Error::FlagValueMissing { flag },
+            None => Error::FlagValueMissing {
+                flag,
+                permitted: many(refused, ContextKind::ValidValue),
+            },
         };
     }
 
     let permitted = many(refused, ContextKind::ValidValue);
+    let command = declaring(tree, reached, &flag);
     if permitted.is_empty() {
         Error::MalformedValue {
             value,
             expected: expected(&flag),
+            command,
             parameter: flag,
         }
     } else {
         Error::ValueOutsideEnumeration {
             flag,
+            command,
             value,
             permitted,
         }
@@ -212,7 +355,7 @@ fn invalid_value(
 /// parser — so the pair the parser names is one argument twice: a flag that
 /// carries no value, given more than once. The two-argument reading is kept
 /// because the kind admits it and costs a line.
-fn conflict(refused: &clap::Error) -> Error {
+fn conflict(refused: &clap::Error, reached: &Reached<'_>) -> Error {
     match (
         one(refused, ContextKind::InvalidArg),
         one(refused, ContextKind::PriorArg),
@@ -224,17 +367,60 @@ fn conflict(refused: &clap::Error) -> Error {
             first: named(&first),
             second: named(&second),
         },
-        _ => rejected(refused),
+        _ => rejected(refused, reached),
     }
 }
 
 /// The wildcard outcome of `OD-08`: a `64` naming the token, where the parser
-/// named one.
-fn rejected(refused: &clap::Error) -> Error {
+/// named one, and what the parser refused, in plain words.
+///
+/// `FR-ERR-034` bars a `cause` that would fit any failure, so the kind the
+/// parser reported is translated into the fact it stands for rather than
+/// reported as "rejected". The parser's own message is not carried: it is
+/// composed for its own renderer, which `OD-07` never invokes.
+fn rejected(refused: &clap::Error, reached: &Reached<'_>) -> Error {
     Error::InvocationRejected {
+        reason: reason(refused.kind()),
+        command: reached.path.clone(),
         token: one(refused, ContextKind::InvalidArg)
             .or_else(|| one(refused, ContextKind::InvalidSubcommand))
             .or_else(|| one(refused, ContextKind::InvalidValue)),
+    }
+}
+
+/// What a kind of refusal means, in the words a `cause` line uses.
+fn reason(kind: ErrorKind) -> &'static str {
+    match kind {
+        ErrorKind::InvalidUtf8 => "a token is not valid UTF-8, and tpl reads text arguments only",
+        ErrorKind::TooManyValues => "more values were given than the argument takes",
+        ErrorKind::TooFewValues | ErrorKind::WrongNumberOfValues => {
+            "the argument was given the wrong number of values"
+        }
+        ErrorKind::NoEquals => "the flag takes its value joined by '='",
+        ErrorKind::MissingSubcommand => "a subcommand is required here",
+        ErrorKind::InvalidSubcommand => "no such command at this position",
+        ErrorKind::UnknownArgument => "the token is not an argument this command takes",
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
+            "the value is not one the argument accepts"
+        }
+        ErrorKind::MissingRequiredArgument => "a required argument is missing",
+        ErrorKind::ArgumentConflict => "two arguments cannot be given together",
+        _ => "the parser refused it for a reason tpl does not name",
+    }
+}
+
+/// The command path whose help states what `flag` takes: empty for a global
+/// flag, and the node the invocation reached for any other.
+fn declaring(tree: &clap::Command, reached: &Reached<'_>, flag: &str) -> String {
+    let long = flag.strip_prefix(TERMINATOR).unwrap_or(flag);
+    let global = tree
+        .get_arguments()
+        .any(|argument| argument.get_long() == Some(long));
+
+    if global {
+        String::new()
+    } else {
+        reached.path.clone()
     }
 }
 
@@ -288,7 +474,7 @@ fn expected(flag: &str) -> &'static str {
         // FR-GLOB-011: a positive integer number of seconds.
         "--timeout" => "a whole number of seconds, greater than zero",
         // FR-CONF-002: the port of a `[database.<name>]` entry.
-        "--port" => "a whole number from 0 to 65535",
+        "--port" => "a whole number from 1 to 65535",
         _ => UNNAMED_TYPE,
     }
 }
@@ -332,7 +518,57 @@ fn reached<'a>(tree: &'a clap::Command, written: &[Cow<'_, str>]) -> Reached<'a>
         index += 1;
     }
 
-    Reached { node, path }
+    Reached {
+        node,
+        path,
+        after: index,
+    }
+}
+
+/// Whether the node reached takes a positional argument that the vector
+/// leaves unfilled, so that `token`, written with `--` before it, could be
+/// that argument.
+///
+/// The positional tokens are counted over the whole vector after the path,
+/// the refused token aside, because a positional written after the refused
+/// flag fills a slot as surely as one written before it: `tpl template show
+/// -x example` has its NAME, and `tpl template show -- -x example` is refused
+/// for the second one.
+fn slot_open(
+    tree: &clap::Command,
+    reached: &Reached<'_>,
+    written: &[Cow<'_, str>],
+    token: &str,
+) -> bool {
+    let capacity = reached
+        .node
+        .get_positionals()
+        .map(|positional| match positional.get_action() {
+            clap::ArgAction::Append => usize::MAX,
+            _ => positional
+                .get_num_args()
+                .map_or(1, |range| range.max_values()),
+        })
+        .fold(0_usize, usize::saturating_add);
+
+    let mut filled = 0_usize;
+    let mut index = reached.after;
+    let mut terminated = false;
+
+    while let Some(current) = written.get(index) {
+        index += 1;
+
+        if terminated || !current.starts_with('-') {
+            filled += 1;
+        } else if current == TERMINATOR {
+            terminated = true;
+        } else if current != token {
+            let next = written.get(index);
+            index += usize::from(carries_the_next(tree, reached.node, current, next));
+        }
+    }
+
+    filled < capacity
 }
 
 /// Whether the flag `token` names takes its value from the token after it,
@@ -548,6 +784,11 @@ fn after_the_terminator(written: &[Cow<'_, str>], token: &str) -> bool {
 /// The population is the node's children **and their aliases**, because
 /// `BR-CLI-001` routes a mistyped alias through this rule rather than through
 /// inference, and `tbl` and `tbls` differ by one character.
+///
+/// A kept alias is offered as the command it names, once: `tpl schema tabl`
+/// is one edit from `table`, from its alias `tbl` and from `tables`, and three
+/// choices of which two run the same command read as three commands (finding
+/// T-09 of the third re-audit of rmp `#263`).
 fn nearest_command(node: &clap::Command, token: &str) -> Vec<String> {
     let population: Vec<&str> = node
         .get_subcommands()
@@ -556,7 +797,16 @@ fn nearest_command(node: &clap::Command, token: &str) -> Vec<String> {
         })
         .collect();
 
-    kept(token, population.iter().copied(), Population::Commands)
+    let mut commands: Vec<String> = Vec::new();
+    for name in kept(token, population.iter().copied(), Population::Commands) {
+        let command = node
+            .find_subcommand(&name)
+            .map_or(name, |child| child.get_name().to_owned());
+        if !commands.contains(&command) {
+            commands.push(command);
+        }
+    }
+    commands
 }
 
 /// The nearest matches to `token` among the flags the invocation could have
@@ -570,11 +820,16 @@ fn nearest_command(node: &clap::Command, token: &str) -> Vec<String> {
 fn nearest_flag(tree: &clap::Command, node: &clap::Command, token: &str) -> Vec<String> {
     let mut population: BTreeSet<String> = BTreeSet::new();
 
+    // A one-letter token is one edit from every other one-letter flag, so
+    // offering them is noise: `-5` would suggest `-V`, `-d` and `-h`. Only
+    // the long forms are offered for it.
+    let offer_short = !short(token);
+
     for argument in node.get_arguments().chain(tree.get_arguments()) {
         if let Some(long) = argument.get_long() {
             population.insert(format!("--{long}"));
         }
-        if let Some(short) = argument.get_short() {
+        if let Some(short) = argument.get_short().filter(|_| offer_short) {
             population.insert(format!("-{short}"));
         }
     }
@@ -677,11 +932,15 @@ mod tests {
         let lines = four_lines(&error);
 
         assert_eq!(error.exit_code(), 64);
-        assert_eq!(line(&lines, "error: "), "unknown command 'tbles'");
+        assert_eq!(
+            line(&lines, "error: "),
+            "unknown command 'tbles' under 'tpl schema'"
+        );
         assert!(line(&lines, "cause: ").contains("'tbles'"));
         assert_eq!(
             line(&lines, "hint:  "),
-            "did you mean 'tables', 'tbls' or 'table'? list the commands with: tpl help"
+            // T-09: the alias `tbls` is offered as the command it names, once.
+            "did you mean 'tables' or 'table'? list what it takes with: tpl help schema"
         );
         assert_eq!(line(&lines, "exit:  "), "64 (EX_USAGE)");
     }
@@ -701,9 +960,27 @@ mod tests {
         assert!(line(&lines, "cause: ").contains("'--pattrn'"));
         assert_eq!(
             line(&lines, "hint:  "),
-            "did you mean '--pattern'? list the flags a command declares with: tpl help <command>"
+            "did you mean '--pattern'? list the flags of this command with: tpl help schema tables"
         );
         assert_eq!(line(&lines, "exit:  "), "64 (EX_USAGE)");
+    }
+
+    #[test]
+    fn r_12_the_double_dash_advice_is_given_only_where_a_positional_slot_is_still_open() {
+        // Finding R-12 of the re-audit for rmp #269: following the advice on a
+        // node whose positional is already filled is refused again.
+        let advice = |vector: &[&str]| {
+            let error = refused(vector, ErrorKind::UnknownArgument);
+            line(&four_lines(&error), "hint:  ").contains("write -- before it")
+        };
+
+        assert!(advice(&["tpl", "template", "show", "-x"]));
+        assert!(!advice(&["tpl", "template", "show", "example", "-x"]));
+        assert!(!advice(&["tpl", "template", "show", "-x", "example"]));
+        assert!(!advice(&[
+            "tpl", "cfg", "database", "show", "shop", "--dsn", "x"
+        ]));
+        assert!(!advice(&["tpl", "schema", "tables", "-x"]));
     }
 
     #[test]
@@ -1004,7 +1281,7 @@ mod tests {
                 &["tpl", "cfg", "database", "add", "shop", "--port", "abc"][..],
                 "--port",
                 "abc",
-                "a whole number from 0 to 65535",
+                "a whole number from 1 to 65535",
             ),
         ] {
             let error = refused(vector, ErrorKind::ValueValidation);
@@ -1033,7 +1310,7 @@ mod tests {
         assert_eq!(error.exit_code(), 64);
         assert_eq!(
             line(&lines, "error: "),
-            "the command 'cfg set' requires the argument '<VALUE>'"
+            "'tpl cfg set' needs the argument <VALUE>"
         );
         assert_eq!(
             line(&lines, "hint:  "),
@@ -1080,13 +1357,25 @@ mod tests {
         let lines = four_lines(&error);
 
         assert_eq!(error.exit_code(), 64, "the wildcard arm produces 64");
-        assert_eq!(line(&lines, "error: "), "the invocation was rejected");
+        assert_eq!(
+            line(&lines, "error: "),
+            "the invocation was rejected: a token is not valid UTF-8, and tpl reads text \
+             arguments only"
+        );
         assert_eq!(line(&lines, "exit:  "), "64 (EX_USAGE)");
 
         // And the arm names the token wherever the refusal carries one.
-        let named = super::rejected(&clap::Error::raw(ErrorKind::Io, "unreachable"));
+        let reached = super::Reached {
+            node: &crate::cli::tree(),
+            path: String::new(),
+            after: 1,
+        };
+        let named = super::rejected(&clap::Error::raw(ErrorKind::Io, "unreachable"), &reached);
         assert_eq!(named.exit_code(), 64);
-        assert!(matches!(named, Error::InvocationRejected { token: None }));
+        assert!(matches!(
+            named,
+            Error::InvocationRejected { token: None, .. }
+        ));
     }
 
     #[test]

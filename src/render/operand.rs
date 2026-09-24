@@ -87,11 +87,36 @@ pub(super) fn refused(role: Role, name: &str, accepts: &str, given: &Value) -> E
     Error::new(
         ErrorKind::InvalidOperation,
         format!(
-            "the {} '{name}' accepts {accepts}, and was given a value of type {}",
+            "the {} '{name}' accepts {accepts}, and was given {}",
             role.word(),
-            given.kind()
+            described(given.kind())
         ),
     )
+}
+
+/// How a refusal names an operand that is not defined.
+///
+/// [`super::fault`] reads it back to quote the expression the author wrote
+/// and to give the hint an undefined variable gets (finding T-02 of the third
+/// re-audit of rmp `#263`).
+pub(super) const GIVEN_UNDEFINED: &str = "was given an undefined value";
+
+/// The kind of a value in the words a template author uses, not the engine's
+/// labels: a map is an object and a sequence is a list (finding T-07).
+fn described(kind: ValueKind) -> &'static str {
+    match kind {
+        ValueKind::Undefined => "an undefined value",
+        ValueKind::None => "none",
+        ValueKind::Bool => "a boolean",
+        ValueKind::Number => "a number",
+        ValueKind::String => "a string",
+        ValueKind::Bytes => "bytes",
+        ValueKind::Seq | ValueKind::Iterable => "a list",
+        ValueKind::Map => "an object",
+        // `ValueKind` is the engine's and is non-exhaustive; a kind added to
+        // it is still a value, and is named as one.
+        _ => "a value of another kind",
+    }
 }
 
 /// The string operand of `FR-SEM-008`, with no coercion (`FR-SEM-009`).

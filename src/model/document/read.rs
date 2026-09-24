@@ -36,7 +36,8 @@ use crate::model::foreign_key::{ForeignKey, IncomingForeignKey};
 use crate::model::table::{Table, TableParts};
 
 /// The rule `FR-CAT-044` states, as the `cause` line names it.
-const KEYS_NAME_CARRIED_COLUMNS: &str = "every key of a table names a column that table carries";
+const KEYS_NAME_CARRIED_COLUMNS: &str = "breaks a rule: every column an index or a key of this table names must be one of its own \
+     columns";
 
 /// Reads the `database` object back as a model.
 ///
@@ -47,8 +48,8 @@ const KEYS_NAME_CARRIED_COLUMNS: &str = "every key of a table names a column tha
 /// `FR-ERR-034` obliges.
 pub(super) fn database(document: DatabaseDocument<'_>) -> Result<Database<'_>, ContextFault> {
     let mut tables = Vec::with_capacity(document.tables.len());
-    for table in document.tables {
-        tables.push(self::table(table)?);
+    for (index, table) in document.tables.into_iter().enumerate() {
+        tables.push(self::table(table, index)?);
     }
 
     references_are_carried(&tables)?;
@@ -71,7 +72,7 @@ pub(super) fn database(document: DatabaseDocument<'_>) -> Result<Database<'_>, C
 /// a referenced table, so each embedded object contributes exactly the name it
 /// was built from and nothing else of it is read. The embedded table itself is
 /// present in `tables` in its own right, per `FR-CTX-023`.
-fn table(document: TableDocument<'_>) -> Result<Table<'_>, ContextFault> {
+fn table(document: TableDocument<'_>, index: usize) -> Result<Table<'_>, ContextFault> {
     let TableShape {
         name,
         table_type,
@@ -132,7 +133,8 @@ fn table(document: TableDocument<'_>) -> Result<Table<'_>, ContextFault> {
         restricted,
     })
     .map_err(|_| ContextFault::Structure {
-        rule: KEYS_NAME_CARRIED_COLUMNS,
+        at: format!("data.database.tables[{index}]"),
+        expected: KEYS_NAME_CARRIED_COLUMNS.to_owned(),
     })
 }
 

@@ -650,3 +650,93 @@ fn fr_tmpl_021_path_answers_with_the_root_and_with_where_one_name_resolves() {
         serde_json::Value::from(root.to_str().expect("the sandbox path is UTF-8"))
     );
 }
+
+#[test]
+fn fr_err_041_a_nested_template_name_is_suggested_like_any_other() {
+    // Finding H-07: the set of FR-ERR-022 refused the `/` every nested name
+    // carries, so `rust/_type` was offered nothing although `rust/_types` is
+    // one edit away. FR-ERR-041 governs a template name.
+    let sandbox = Sandbox::new();
+    project(&sandbox, NO_ENTRY, &[("rust/_types.jinja", "{{ 1 }}\n")]);
+
+    let written = refused(&sandbox, &["template", "show", "rust/_type"], 66);
+
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 'rust/_types'? list the project's templates with: tpl template list"
+    );
+}
+
+#[test]
+fn fr_err_021_a_syntax_error_names_the_template_to_check_again() {
+    let sandbox = Sandbox::new();
+    project(&sandbox, NO_ENTRY, &[("t/syntax.jinja", "{% if %}\n")]);
+
+    let written = refused(&sandbox, &["template", "check"], 65);
+
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "correct line 1 of template 't/syntax.jinja', then check it with: tpl template check \
+         t/syntax.jinja"
+    );
+}
+
+// ------------------------------------------------------------ FR-TMPL-032 ---
+
+/// The `error:` lines of a diagnostic stream, without their label.
+fn error_lines(written: &str) -> Vec<String> {
+    written
+        .lines()
+        .filter_map(|line| line.strip_prefix("error: "))
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn fr_tmpl_032_check_reports_every_failing_template_one_message_each_in_checking_order() {
+    // FR-TMPL-032, S-05 of #274: every selected template is checked before
+    // anything is reported, and each failure is one four-line message.
+    let sandbox = Sandbox::new();
+    project(
+        &sandbox,
+        NO_ENTRY,
+        &[
+            ("a.jinja", "{% if %}\n"),
+            ("b.jinja", "fine\n"),
+            ("c.jinja", "ok\n{{ x.\n"),
+        ],
+    );
+
+    let printed = sandbox.run(&["template", "check"]);
+    let written = stderr(&printed);
+
+    assert_eq!(code(&printed), 65, "{written}");
+    assert!(printed.stdout.is_empty(), "point 4: stdout stays empty");
+
+    // Point 2: no separator, so eight lines, each message in label order and
+    // ending with the one exit line.
+    let lines: Vec<&str> = written.lines().collect();
+    assert_eq!(lines.len(), 8, "{written}");
+    for (line, label) in lines.iter().zip(LABELS.iter().cycle()) {
+        assert!(line.starts_with(label), "{written}");
+    }
+    assert_eq!(lines[3], "exit:  65 (EX_DATAERR)");
+    assert_eq!(lines[7], "exit:  65 (EX_DATAERR)");
+
+    // Point 3: the order of FR-TMPL-013 with no argument.
+    let errors = error_lines(&written);
+    assert!(errors[0].contains("'a.jinja'"), "{written}");
+    assert!(errors[1].contains("'c.jinja'"), "{written}");
+
+    // Point 3: with names, the order written, and a repetition checked once.
+    let written = stderr(&sandbox.run(&["template", "check", "c", "b", "a", "c.jinja"]));
+    let errors = error_lines(&written);
+    assert_eq!(errors.len(), 2, "{written}");
+    assert!(errors[0].contains("'c.jinja'"), "{written}");
+    assert!(errors[1].contains("'a.jinja'"), "{written}");
+
+    // Resolution runs first over every name: one that resolves to nothing is
+    // reported alone, with its own code.
+    let written = refused(&sandbox, &["template", "check", "a", "nosuch"], 66);
+    assert!(line(&written, "error:").contains("nosuch"), "{written}");
+}

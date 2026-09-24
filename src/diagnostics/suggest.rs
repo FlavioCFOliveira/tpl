@@ -74,6 +74,9 @@ pub(crate) enum Population {
     /// routine, a template, a database entry — together with the name of an
     /// environment variable, which `FR-ERR-022` governs alike.
     Names,
+    /// The template names of a project, which `FR-ERR-041` governs: a nested
+    /// name carries a `/`, and the set of `FR-ERR-022` would refuse every one.
+    Templates,
 }
 
 impl Population {
@@ -97,6 +100,7 @@ impl Population {
             Self::Flags => hint::admits_flag(candidate),
             Self::ConfigurationKeys => hint::admits_key(candidate),
             Self::Names => hint::admits(candidate),
+            Self::Templates => hint::admits_template(candidate),
         }
     }
 }
@@ -164,7 +168,9 @@ impl<'a> Suggestions<'a> {
 /// candidate it refuses is dropped before it is measured, so it occupies none
 /// of the three places and reaches no line of the output, which is
 /// `FR-ERR-023`. What survives is measured against `supplied` and kept where it
-/// lies within `MAX_DISTANCE`, ordered by distance and then by name.
+/// lies within `MAX_DISTANCE` and below the length of the longer of the two
+/// names (`FR-ERR-044`) — or, for a command, where `supplied` is a
+/// proper prefix of it (`FR-ERR-042`) — ordered by distance and then by name.
 ///
 /// **A candidate equal to `supplied` is refused before it is measured**, over
 /// every population this function serves. `FR-ERR-019` admits a candidate by
@@ -200,8 +206,28 @@ where
             continue;
         }
 
-        if let Some(distance) = matrix.distance(candidate, MAX_DISTANCE) {
+        // FR-ERR-044: a distance is admitted only where it is strictly less
+        // than the length of the longer name, so a candidate that keeps no
+        // character of the supplied name is never offered. The prefix rule of
+        // FR-ERR-042 below is not bounded by it.
+        let admitted = matrix
+            .distance(candidate, MAX_DISTANCE)
+            .filter(|&distance| distance < matrix.longer(candidate));
+
+        if let Some(distance) = admitted {
             kept.offer(distance, candidate);
+        } else if matches!(population, Population::Commands)
+            && !supplied.is_empty()
+            && candidate.starts_with(supplied)
+        {
+            // FR-ERR-042: a command of which the token is a proper prefix is a
+            // candidate at any distance. Its distance is the characters the
+            // token lacks, which only deletions from the candidate reach, so
+            // it ranks among the others by the order of FR-ERR-019.
+            kept.offer(
+                candidate.chars().count() - supplied.chars().count(),
+                candidate,
+            );
         }
     }
 
@@ -377,6 +403,12 @@ impl Matrix {
         (measured <= ceiling).then_some(measured)
     }
 
+    /// The length, in characters, of the longer of the supplied name and
+    /// `candidate` (`FR-ERR-044`, counted as `FR-ERR-039` counts).
+    fn longer(&self, candidate: &str) -> usize {
+        self.supplied.len().max(candidate.chars().count())
+    }
+
     /// Advances the window by one row: `i` becomes `i - 1`, and `i - 1`
     /// becomes `i - 2`.
     ///
@@ -433,6 +465,7 @@ mod tests {
                 Population::Flags => "--patern",
                 Population::ConfigurationKeys => "core.render_timeut",
                 Population::Names => "order",
+                Population::Templates => "rust/struct",
             };
 
             assert_eq!(
@@ -622,6 +655,33 @@ mod tests {
     }
 
     #[test]
+    fn fr_err_044_a_candidate_that_keeps_no_character_of_the_name_is_not_offered() {
+        // FR-ERR-044, the table of the requirement, over every population.
+        for (population, _) in EVERY_POPULATION {
+            assert!(kept("zz", &["n1"], population).is_empty(), "{population:?}");
+            assert!(kept("q", &["n1"], population).is_empty(), "{population:?}");
+            assert!(kept("a", &["b"], population).is_empty(), "{population:?}");
+            assert_eq!(kept("t1", &["t2"], population), ["t2"], "{population:?}");
+            assert_eq!(
+                kept("shp", &["shop"], population),
+                ["shop"],
+                "{population:?}"
+            );
+            assert_eq!(
+                kept("ordres", &["orders"], population),
+                ["orders"],
+                "{population:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_err_044_the_bound_does_not_reach_a_command_admitted_by_prefix() {
+        // FR-ERR-044 excludes the candidates FR-ERR-042 admits by prefix.
+        assert_eq!(kept("c", &["cfg"], Population::Commands), ["cfg"]);
+    }
+
+    #[test]
     fn fr_err_020_nothing_within_the_distance_yields_nothing() {
         // FR-ERR-020: the suggestion is omitted rather than weakened.
         let selected = suggestions(
@@ -772,7 +832,7 @@ mod tests {
 
         assert_eq!(
             hint_line(selected.names(), &hint::hint(&error)),
-            "did you mean 'orders'? list the available tables with: tpl -d shop schema tables"
+            "did you mean 'orders'? list the available tables with: tpl schema tables"
         );
     }
 

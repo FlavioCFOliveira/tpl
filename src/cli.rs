@@ -210,10 +210,10 @@ pub(crate) enum Command {
     /// Reads the structure of the selected database.
     Schema(Schema),
 
-    /// Reads the templates the project carries.
+    /// Lists, prints and checks the templates of the project.
     Template(Template),
 
-    /// Renders one template, once.
+    /// Renders one template to stdout.
     Render {
         /// The template to render, with or without its `.jinja` extension
         /// (`FR-RND-001`).
@@ -263,10 +263,10 @@ pub(crate) enum Command {
         caching: local::Caching,
     },
 
-    /// The catalogue cache.
+    /// Manages the local copy of what tpl read from the server.
     Cache(Cache),
 
-    /// The `.tpl/.cfg` file.
+    /// Reads and writes the configuration file `.tpl/.cfg`.
     Cfg(Cfg),
 
     /// Creates a `.tpl` project.
@@ -741,7 +741,15 @@ fn route<W: Write>(out: &mut W, invocation: &Invocation, ending: Ending) -> Resu
             }
         }
 
-        Some(Command::Init { path }) => project::init::create(path),
+        // FR-PROJ-026: the flag is accepted and has no effect; the one line
+        // says so before the destination is examined, and the path it names
+        // is never resolved.
+        Some(Command::Init { path }) => {
+            if !invocation.globals.tpl_dir.is_empty() {
+                crate::diagnostics::emit::tpl_dir_has_no_effect_on_init();
+            }
+            project::init::create(path)
+        }
 
         // The two commands of the tree this sprint implements. Both reach the
         // same two functions the flag forms above reach, which is the whole of

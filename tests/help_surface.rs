@@ -281,7 +281,7 @@ fn fr_glob_019_a_leaf_that_requires_an_operand_still_answers_both_flag_forms() {
             written(&path)
         );
         assert!(
-            String::from_utf8_lossy(&refused.stderr).contains("requires the argument"),
+            String::from_utf8_lossy(&refused.stderr).contains("needs the argument"),
             "{} did not report the missing operand: {}",
             written(&path),
             String::from_utf8_lossy(&refused.stderr)
@@ -444,10 +444,11 @@ fn fr_help_025_a_group_node_with_no_child_prints_what_its_help_form_prints() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn fr_help_017_the_document_is_the_envelope_of_the_contract_carrying_the_four_keys_of_data() {
+fn fr_help_017_the_document_is_the_envelope_of_the_contract_carrying_the_five_keys_of_data() {
     // FR-HELP-017 with FR-OUT-024 and FR-OUT-026: the three envelope keys in
     // order, `source` set to `binary`, and a `data` carrying `tpl_version`,
-    // `global_flags`, `commands` and `template_surface` in that order. The
+    // `global_flags`, `commands`, `template_surface` and `context_variables`
+    // in that order. The
     // bytes are compared rather than the parsed value, because the order is
     // the property under test and parsing discards it.
     let printed = String::from_utf8(succeeds(&["help", "--format", "json"])).expect("UTF-8");
@@ -466,6 +467,7 @@ fn fr_help_017_the_document_is_the_envelope_of_the_contract_carrying_the_four_ke
         (r#""tpl_version""#, r#""global_flags""#),
         (r#""global_flags""#, r#""commands""#),
         (r#""commands""#, r#""template_surface""#),
+        (r#""template_surface""#, r#""context_variables""#),
     ] {
         assert!(
             printed.find(first) < printed.find(second),
@@ -905,4 +907,584 @@ fn excluded_in(collapsed: &str) -> Vec<String> {
     }
 
     named
+}
+
+// ---------------------------------------------------------------------------
+// What a leaf touches, and what a template sees
+// ---------------------------------------------------------------------------
+
+/// The `DESCRIPTION` section of `help`, its lines joined by one space.
+fn description(help: &str) -> String {
+    help.split_once("DESCRIPTION\n")
+        .and_then(|(_, rest)| rest.split("\nARGUMENTS\n").next())
+        .and_then(|rest| rest.split("\nOPTIONS\n").next())
+        .and_then(|rest| rest.split("\nEXAMPLES\n").next())
+        .map(|section| section.split_whitespace().collect::<Vec<&str>>().join(" "))
+        .unwrap_or_default()
+}
+
+#[test]
+fn fr_help_031_every_leaf_ends_its_description_with_the_four_statements() {
+    // FR-HELP-031: the first statement answers the server question, the
+    // second the entry question, and both channels end with the same four.
+    // Each of the four is recognised by the words the first two open with;
+    // the text and the JSON are compared against each other rather than
+    // against a copy of the sentences.
+    let document = document();
+    let commands = document["data"]["commands"]
+        .as_array()
+        .expect("commands is an array");
+
+    for path in node_paths() {
+        let is_leaf = !commands.iter().any(|other| {
+            let segments = other["path"].as_array().expect("path is an array");
+            segments.len() == path.len() + 1
+                && segments
+                    .iter()
+                    .zip(&path)
+                    .all(|(segment, own)| segment.as_str() == Some(own.as_str()))
+        });
+
+        if !is_leaf {
+            continue;
+        }
+
+        let text = description(
+            &String::from_utf8(succeeds(&borrowed(&with(&path, &["--help"])))).expect("UTF-8"),
+        );
+        let entry = commands
+            .iter()
+            .find(|entry| {
+                entry["path"].as_array().is_some_and(|segments| {
+                    segments
+                        .iter()
+                        .map(|s| s.as_str())
+                        .eq(path.iter().map(|s| Some(s.as_str())))
+                })
+            })
+            .expect("the node has an entry");
+        let json = entry["description"].as_str().expect("a description");
+        let closing = json.rsplit("\n\n").next().expect("a last paragraph");
+
+        assert!(
+            closing.starts_with("Connects")
+                || closing.starts_with("Always connects")
+                || closing.starts_with("Does not contact the server."),
+            "{} does not open its last paragraph with the server statement: {closing}",
+            written(&path)
+        );
+        assert!(
+            closing.contains(" Needs "),
+            "{} states no entry requirement: {closing}",
+            written(&path)
+        );
+        assert!(
+            closing.contains(" Writes ")
+                || closing.contains(" Stores ")
+                || closing.contains(" Deletes "),
+            "{} states no file statement: {closing}",
+            written(&path)
+        );
+        assert!(
+            closing.contains(" Prints "),
+            "{} states nothing about stdout: {closing}",
+            written(&path)
+        );
+        assert!(
+            text.ends_with(closing),
+            "{} ends its text DESCRIPTION differently from its JSON description",
+            written(&path)
+        );
+    }
+}
+
+#[test]
+fn fr_help_033_the_help_of_render_lists_every_variable_and_every_guaranteed_name() {
+    // FR-HELP-033: every context variable, and every filter, test and
+    // function of groups 1 and 2 with its signature and purpose, read from
+    // the JSON document so that both channels are held to one statement.
+    let document = document();
+    let render = description(&String::from_utf8(succeeds(&["render", "--help"])).expect("UTF-8"));
+
+    for variable in document["data"]["context_variables"]
+        .as_array()
+        .expect("an array")
+    {
+        let line = format!(
+            "{} {}",
+            variable["name"].as_str().expect("a name"),
+            variable["purpose"].as_str().expect("a purpose")
+        );
+        assert!(render.contains(&line), "render help omits: {line}");
+    }
+
+    let surface = &document["data"]["template_surface"];
+    let mut listed = 0;
+
+    for group in ["registered", "inherited"] {
+        for family in ["filters", "tests", "functions"] {
+            for item in surface[group][family].as_array().expect("an array") {
+                let line = format!(
+                    "{} {}",
+                    item["signature"].as_str().expect("a signature"),
+                    item["purpose"].as_str().expect("a purpose")
+                );
+                assert!(render.contains(&line), "render help omits: {line}");
+                listed += 1;
+            }
+        }
+    }
+
+    assert_eq!(
+        listed, 37,
+        "groups 1 and 2 hold 23 registered and 14 inherited names"
+    );
+    assert!(
+        render.contains(
+            "Everything else the template engine offers also works, but carries no guarantee"
+        ),
+        "render help does not state that group 3 is unguaranteed"
+    );
+
+    // The list appears in no other node's help, per BR-HELP-002.
+    for path in node_paths() {
+        if path == ["render"] {
+            continue;
+        }
+
+        let help =
+            String::from_utf8(succeeds(&borrowed(&with(&path, &["--help"])))).expect("UTF-8");
+        assert!(
+            !help.contains("A template sees these variables"),
+            "{} repeats the template surface",
+            written(&path)
+        );
+    }
+}
+
+#[test]
+fn fr_help_022_an_example_invocation_is_the_vector_the_shell_would_pass() {
+    // BR-HELP-003 asks that an example parse; a vector that carries the
+    // shell's own quotes parses and still is not what the shell passes. A
+    // line whose token the shell would expand has no vector to publish.
+    let document = document();
+
+    for entry in document["data"]["commands"].as_array().expect("an array") {
+        for example in entry["examples"].as_array().expect("an array") {
+            for line in example["lines"].as_array().expect("an array") {
+                let text = line["text"].as_str().expect("a text");
+                let Some(invocation) = line["invocation"].as_array() else {
+                    continue;
+                };
+
+                assert!(
+                    !text.contains("\"$"),
+                    "{text} expands a variable and still publishes a vector"
+                );
+
+                for token in invocation {
+                    let token = token.as_str().expect("a token");
+                    assert!(
+                        !token.starts_with(['"', '\'']) && !token.ends_with(['"', '\'']),
+                        "{text} carries the shell's quotes: {token:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn fr_help_013_a_default_the_configuration_applies_is_stated_where_the_flag_is() {
+    // `tpl cfg database add` writes no key for a flag it is not given, and the
+    // configuration then gives `port` 3306 and `tls` verify-identity. Help says
+    // so on the flag, in both channels; `update` leaves an absent field as it
+    // was, so it states no default.
+    let add = String::from_utf8(succeeds(&["cfg", "database", "add", "--help"])).expect("UTF-8");
+    let collapsed = add.split_whitespace().collect::<Vec<&str>>().join(" ");
+
+    assert!(
+        collapsed.contains("Type: integer. Default: \"3306\"."),
+        "{add}"
+    );
+    assert!(collapsed.contains("Default: \"verify-identity\"."), "{add}");
+
+    let update =
+        String::from_utf8(succeeds(&["cfg", "database", "update", "--help"])).expect("UTF-8");
+    assert!(!update.contains("Default: \"3306\""), "{update}");
+
+    let document = document();
+    let options = document["data"]["commands"]
+        .as_array()
+        .expect("an array")
+        .iter()
+        .find(|entry| entry["path"] == serde_json::json!(["cfg", "database", "add"]))
+        .expect("the entry")["options"]
+        .clone();
+    let port = options
+        .as_array()
+        .expect("an array")
+        .iter()
+        .find(|flag| flag["long"] == "--port")
+        .expect("--port");
+
+    assert_eq!(port["default"], serde_json::json!("3306"));
+}
+
+/// Every string the JSON command tree carries, in document order.
+fn strings_of(value: &serde_json::Value, into: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(text) => into.push(text.clone()),
+        serde_json::Value::Array(items) => items.iter().for_each(|item| strings_of(item, into)),
+        serde_json::Value::Object(members) => {
+            members.values().for_each(|member| strings_of(member, into));
+        }
+        _ => {}
+    }
+}
+
+/// The text help of `path`, with its line breaks and indentation folded into
+/// single spaces so that a sentence reads the same wherever it wrapped.
+fn folded_help(path: &[&str]) -> String {
+    let mut arguments = vec!["help"];
+    arguments.extend_from_slice(path);
+    let text = String::from_utf8(succeeds(&arguments)).expect("help is UTF-8");
+
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn r_269_the_re_audit_texts_are_stated_in_the_text_help_and_in_the_json_tree() {
+    // The findings of the re-audit for rmp #269 whose fix is a sentence of
+    // help: each is read in the text help of the node that states it and
+    // among the strings of the JSON tree, which FR-HELP-019 makes one content.
+    let cases: [(&[&str], &str); 16] = [
+        // R-04: the one-string form, its splitting, and the stored array.
+        (
+            &["cfg", "set"],
+            "Given to cfg set as one string, a command line such as \"pass db/shop\", never as \
+             an array; split into words as a shell would (quotes group words, and every quote \
+             must be closed); stored in the file as an array, [\"pass\", \"db/shop\"]. A value \
+             that starts with an unquoted [, or ends in a backslash outside quotes, is refused.",
+        ),
+        (
+            &["cfg", "database", "add"],
+            "tpl splits the string into words as a shell would (quotes group words, and every \
+             quote must be closed) and stores them in the file as an array, [\"pass\", \
+             \"db/shop\"]. A value that starts with an unquoted [, or ends in a backslash \
+             outside quotes, is refused.",
+        ),
+        // R-05: column() returns the column object.
+        (
+            &["render"],
+            "Returns the column called name in the table called table, as the same object \
+             table.columns holds;",
+        ),
+        // R-07: the missing clauses of the 64 and 65 rows.
+        (
+            &["render"],
+            "An unknown flag, a missing TEMPLATE, or a flag given twice;",
+        ),
+        (
+            &["render"],
+            "or TEMPLATE resolves to a path outside .tpl/templates/.",
+        ),
+        (
+            &["cache", "load"],
+            "An unknown flag, or a flag given twice; --no-cache;",
+        ),
+        // R-08: what text output is, per command, and the header line.
+        (
+            &["cfg", "list"],
+            "text is the file itself, comments included, with passwords redacted;",
+        ),
+        (
+            &["template", "list"],
+            "Prints a NAME header line, then one template name per line.",
+        ),
+        // R-10: the object flags say what the command does with the object.
+        (
+            &["cache", "clean"],
+            "Deletes only this table's cached copy.",
+        ),
+        // FR-HELP-034.
+        (
+            &["init"],
+            "--tpl-dir has no effect here: the project is created at PATH, or in the current \
+             directory when PATH is absent.",
+        ),
+        // The walkthrough: a local server, and a password from the environment.
+        (&[], "--tls disabled"),
+        (&[], "tpl cfg set database.shop.password '${SHOP_PASSWORD}'"),
+        // T-06 of the third re-audit: the 64 conditions every command shares,
+        // the ambiguous bare --routine, and what a fourth -v does.
+        (
+            &["version"],
+            "On any command, also -v with -q, or a global flag given a value it does not take, \
+             such as --timeout 0.",
+        ),
+        (
+            &["help"],
+            "On any command, also -v with -q, or a global flag given a value it does not take, \
+             such as --timeout 0.",
+        ),
+        (
+            &["render"],
+            "a bare --routine NAME that names both a procedure and a function;",
+        ),
+        (&[], "A fourth -v, or more, changes nothing."),
+    ];
+
+    let mut strings = Vec::new();
+    strings_of(&document(), &mut strings);
+    let folded: Vec<String> = strings
+        .iter()
+        .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect();
+
+    for (path, sentence) in cases {
+        assert!(
+            folded_help(path).contains(sentence),
+            "tpl help {} does not state: {sentence}",
+            path.join(" ")
+        );
+        assert!(
+            folded.iter().any(|text| text.contains(sentence)),
+            "the JSON tree does not state: {sentence}"
+        );
+    }
+
+    // The every-table loops say they need jq.
+    for path in [&["render"][..], &["schema", "tables"][..]] {
+        assert!(
+            folded_help(path).contains("this needs jq, an external JSON tool."),
+            "tpl help {}",
+            path.join(" ")
+        );
+    }
+}
+
+#[test]
+fn r_269_every_example_that_pipes_into_jq_says_it_needs_jq() {
+    // An example that runs jq, an external tool, says so in its caption, in
+    // the words the every-table loops use; the root is not a command entry,
+    // and its examples run no jq.
+    let tree = document();
+    let commands = tree["data"]["commands"]
+        .as_array()
+        .expect("the tree lists its commands");
+    let mut seen = 0;
+
+    for command in commands {
+        for example in command["examples"].as_array().into_iter().flatten() {
+            let runs_jq = example["lines"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|line| {
+                    line["text"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("jq "))
+                });
+            if runs_jq {
+                seen += 1;
+                let caption = example["caption"].as_str().unwrap_or_default();
+                assert!(
+                    caption.ends_with("; this needs jq, an external JSON tool."),
+                    "{}: {caption}",
+                    command["path"]
+                );
+            }
+        }
+    }
+
+    assert!(seen >= 7, "only {seen} examples run jq");
+}
+
+#[test]
+fn r_269_the_password_rows_of_add_and_update_state_the_password_given_twice() {
+    for (path, sentence) in [
+        (
+            &["cfg", "database", "add"][..],
+            "the password given twice, as a password inside --dsn and as --password-command;",
+        ),
+        (
+            &["cfg", "database", "update"][..],
+            "the password given twice, as a password inside the dsn or password and as \
+             --password-command;",
+        ),
+    ] {
+        assert!(
+            folded_help(path).contains(sentence),
+            "tpl help {} does not state: {sentence}",
+            path.join(" ")
+        );
+    }
+}
+
+/// The help of `path`, as text with its lines rejoined, so that a sentence
+/// the layout wrapped can be found whole.
+fn prose(path: &[&str]) -> String {
+    let mut arguments = vec!["help"];
+    arguments.extend_from_slice(path);
+    let written = String::from_utf8(succeeds(&arguments)).expect("the help is UTF-8");
+
+    written.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn rmp_274_the_help_states_what_the_second_re_audit_found_it_left_out() {
+    let render = prose(&["render"]);
+    for stated in [
+        // S-01: the object flags bind one object; database stays whole.
+        "The template always sees the whole database as database; --table, --view or \
+         --routine also binds that one object as table, view or routine.",
+        "Binds this table as the variable table; database still holds every table.",
+        "Binds this view as the variable view; database still holds every view.",
+        // S-11 and FR-HELP-013: the exclusion is stated on both flags.
+        "Not to be given with --database or --direct.",
+        "Not to be given with --context.",
+        "or --context together with -d/--database or --direct.",
+        // --no-cache is accepted and ignored with --context.
+        "It has no effect with --context, which uses no cache.",
+    ] {
+        assert!(render.contains(stated), "tpl help render lacks {stated:?}");
+    }
+    assert!(!render.contains("Acts on this one"), "{render}");
+
+    // S-02: what an entry needs before it can connect.
+    let add = prose(&["cfg", "database", "add"]);
+    assert!(
+        add.contains(
+            "To connect, the entry needs --host and --schema, or a --dsn that names both; --port \
+             defaults to 3306 and --user is optional. An entry without them is stored, but every \
+             later command that connects with it exits 78."
+        ),
+        "{add}"
+    );
+
+    // S-05 and FR-TMPL-032.
+    assert!(
+        prose(&["template", "check"]).contains("every failing template is reported"),
+        "tpl help template check"
+    );
+
+    // S-09: the conditions the 78 and 64 rows left out.
+    for path in [
+        &["schema", "tables"][..],
+        &["render"][..],
+        &["cfg", "database", "test"][..],
+    ] {
+        let text = prose(path);
+        for stated in ["password_command failed", "ca_path holds no certificate"] {
+            assert!(text.contains(stated), "tpl help {path:?} lacks {stated:?}");
+        }
+    }
+    assert!(prose(&["help"]).contains("An unknown flag, a flag given twice"));
+    assert!(prose(&["version"]).contains("a global flag that takes a value given twice"));
+
+    // The walkthrough: --schema is glossed, and listing points at JSON.
+    let root = prose(&[]);
+    assert!(
+        root.contains("Its --schema is the name of the database on that server"),
+        "{root}"
+    );
+    assert!(root.contains("tpl schema tables --format json"), "{root}");
+}
+
+#[test]
+fn u_02_every_help_that_reads_the_cache_says_it_never_expires_in_the_same_words() {
+    // Finding U-02 of the fourth re-audit of rmp #263.
+    const RULE: &str = "Nothing in the cache expires: after the database structure changes, run \
+                        tpl cache load or add --direct.";
+    let mut paths: Vec<Vec<&str>> = vec![vec![], vec!["render"]];
+    for leaf in [
+        "tables", "table", "views", "view", "routines", "routine", "info", "dump",
+    ] {
+        paths.push(vec!["schema", leaf]);
+    }
+
+    for path in &paths {
+        let text = prose(path);
+        assert_eq!(text.matches(RULE).count(), 1, "tpl help {path:?}: {text}");
+    }
+}
+
+#[test]
+fn u_04_no_example_names_a_missing_template_unannounced_or_truncates_a_file_it_renders_into() {
+    // Finding U-04 of the fourth re-audit of rmp #263: the template commands
+    // name the templates tpl init creates, and a render into a file goes
+    // through a temporary one.
+    let tree = document();
+    let commands = tree["data"]["commands"]
+        .as_array()
+        .expect("the tree lists its commands");
+
+    for command in commands {
+        let path: Vec<&str> = command["path"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+            .collect();
+        let path = path.join(" ");
+        for example in command["examples"].as_array().into_iter().flatten() {
+            let lines: Vec<&str> = example["lines"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|line| line["text"].as_str())
+                .collect();
+            let joined = lines.join("\n");
+            if path.starts_with("template ") {
+                assert!(!joined.contains("rust/struct"), "{path}: {joined}");
+                assert!(!joined.contains("docs/table.md"), "{path}: {joined}");
+            }
+            if joined.contains(" render ") && joined.contains(" > ") {
+                for line in lines.iter().filter(|line| line.contains(" > ")) {
+                    assert!(line.contains(".tmp"), "{path}: {line}");
+                }
+                assert!(joined.contains("mv "), "{path}: {joined}");
+            }
+        }
+    }
+    assert!(
+        prose(&["render"]).contains(
+            "The examples below use rust/struct and docs/table.md as stand-ins for templates of \
+             your own, which must exist before they render."
+        ),
+        "tpl help render"
+    );
+}
+
+#[test]
+fn fr_help_035_every_flag_and_argument_default_is_null_or_one_string() {
+    let document = document();
+    let mut flags: Vec<serde_json::Value> = document["data"]["global_flags"]
+        .as_array()
+        .expect("an array")
+        .clone();
+    for entry in document["data"]["commands"].as_array().expect("an array") {
+        flags.extend(
+            entry["options"]
+                .as_array()
+                .expect("an array")
+                .iter()
+                .cloned(),
+        );
+    }
+
+    assert!(!flags.is_empty());
+    for flag in &flags {
+        let default = &flag["default"];
+        assert!(
+            default.is_null() || default.is_string(),
+            "{}: {default}",
+            if flag["long"].is_null() {
+                &flag["name"]
+            } else {
+                &flag["long"]
+            }
+        );
+    }
 }

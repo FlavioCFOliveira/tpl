@@ -34,6 +34,7 @@
 
 use std::borrow::Cow;
 use std::io::Write;
+use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 use serde::Serialize;
@@ -46,12 +47,14 @@ use super::schema::named;
 use super::source::{self, Opened, Reader};
 use crate::cache::paths::Collection;
 use crate::cache::{Cache as Store, Covered, Held, Status};
-use crate::error::Error;
+use crate::diagnostics::suggest::{self, Population};
+use crate::error::{CatalogueObjectKind, Error};
 use crate::model::document::shape::TableDocument;
 use crate::model::document::{self, DatabaseDocument};
 use crate::model::routine::{Routine, RoutineKind};
 use crate::model::view::View;
 use crate::output::{Document, Form, Order, Source, Table};
+use crate::project::config::keys::is_entry_name;
 
 /// The `tpl cache` group node.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
@@ -65,7 +68,7 @@ pub(crate) struct Cache {
 /// The three children of `tpl cache`, and `FR-CACHE-021` admits no fourth.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub(crate) enum Command {
-    /// Reads the catalogue and writes it to the cache.
+    /// Reads from the server and stores the result in the cache.
     Load {
         /// `--table`, `--view` and `--routine`, per `FR-CACHE-024`.
         #[command(flatten)]
@@ -76,7 +79,7 @@ pub(crate) enum Command {
         caching: local::Caching,
     },
 
-    /// Removes the cached catalogue.
+    /// Deletes cached data.
     Clean {
         /// `--table`, `--view` and `--routine`, per `FR-CACHE-024`.
         #[command(flatten)]
@@ -246,7 +249,13 @@ fn load(
     // command declares and what the command does is decided from the
     // invocation alone, before anything is discovered or opened.
     if caching.no_cache {
-        return Err(Error::LoadWithoutStoring);
+        let named =
+            |kind: &'static str, names: &[String]| names.first().map(|name| (kind, name.clone()));
+        return Err(Error::LoadWithoutStoring {
+            object: named("table", &object.table)
+                .or_else(|| named("view", &object.view))
+                .or_else(|| named("routine", &object.routine)),
+        });
     }
 
     let wanted = Wanted::of(object, LOAD)?;
@@ -308,15 +317,104 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
     let wanted = Wanted::of(object, CLEAN)?;
     let reader = Reader::new(globals, None, ending);
     let (project, configuration) = source::project(reader.tpl_dir())?;
+
+    // FR-CACHE-041: the cache of a name no entry declares, where the name
+    // matches FR-CONF-048, no entry has it under another ASCII case, and the
+    // path exists. Any other outcome falls through to the resolution below,
+    // which answers exactly as before: `66` for a name that does not resolve.
+    if matches!(wanted, Wanted::Everything)
+        && let Some(name) = reader
+            .requested()
+            .or(configuration.core().database.as_deref())
+        && is_entry_name(name)
+        && !configuration
+            .names()
+            .any(|declared| declared.eq_ignore_ascii_case(name))
+        && let Some(recorded) = Store::of(project.root(), name).clean_orphan()?
+    {
+        crate::diagnostics::emit::orphan_cache_removed(name, recorded.name.as_deref());
+        return Ok(());
+    }
+
     let entry = source::entry_of(&configuration, reader.requested())?;
     let cache = Store::of(project.root(), entry);
 
+    // FR-CACHE-040: an object flag that names nothing the cache holds deletes
+    // nothing and is 66, with the nearest cached names of that kind.
+    let absent = |collection: Collection,
+                  kind: CatalogueObjectKind,
+                  name: &str,
+                  qualified: Option<&'static str>,
+                  held_as: Option<&'static str>| {
+        let names = cache.names(collection);
+        let nearest =
+            suggest::suggestions(name, names.iter().map(String::as_str), Population::Names)
+                .names()
+                .map(str::to_owned)
+                .collect();
+        Error::NothingCachedNamed {
+            kind,
+            name: name.to_owned(),
+            entry: entry.to_owned(),
+            nearest,
+            qualified,
+            held_as,
+        }
+    };
+    let held =
+        |collection: Collection, kind: CatalogueObjectKind, name: &str, file: Option<PathBuf>| {
+            if Store::holds(file.as_deref()) {
+                cache.clean_one(collection, file)
+            } else {
+                Err(absent(collection, kind, name, None, None))
+            }
+        };
+
     match wanted {
         Wanted::Everything => cache.clean(),
-        Wanted::Table(name) => cache.clean_one(Collection::Tables, cache.table_file(name)),
-        Wanted::View(name) => cache.clean_one(Collection::Views, cache.view_file(name)),
+        Wanted::Table(name) => held(
+            Collection::Tables,
+            CatalogueObjectKind::Table,
+            name,
+            cache.table_file(name),
+        ),
+        Wanted::View(name) => held(
+            Collection::Views,
+            CatalogueObjectKind::View,
+            name,
+            cache.view_file(name),
+        ),
         Wanted::Routine(named::Wanted::Qualified(kind, name)) => {
-            cache.clean_one(Collection::Routines, cache.routine_file(&kind, name))
+            let file = cache.routine_file(&kind, name);
+            if Store::holds(file.as_deref()) {
+                return cache.clean_one(Collection::Routines, file);
+            }
+            // Y-05 of the eighth re-audit of rmp `#263`: a routine of the
+            // other kind under the same name is cached, and the lines say so
+            // rather than that no routine of that name is.
+            let (qualified, other, other_kind) = match kind {
+                RoutineKind::Procedure => (
+                    Some("procedure"),
+                    Some(RoutineKind::Function),
+                    Some("function"),
+                ),
+                RoutineKind::Function => (
+                    Some("function"),
+                    Some(RoutineKind::Procedure),
+                    Some("procedure"),
+                ),
+                _ => (None, None, None),
+            };
+            let held_as = other
+                .filter(|other| Store::holds(cache.routine_file(other, name).as_deref()))
+                .and(other_kind);
+            Err(absent(
+                Collection::Routines,
+                CatalogueObjectKind::Routine,
+                name,
+                qualified,
+                held_as,
+            ))
         }
         Wanted::Routine(named::Wanted::Bare(name)) => {
             let procedure = cache.routine_file(&RoutineKind::Procedure, name);
@@ -336,16 +434,22 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
                     // instance left to name.
                     database: cache.database().unwrap_or_else(|| entry.to_owned()),
                     invocation: CLEAN,
+                    template: None,
                 });
             }
 
-            let held = if Store::holds(procedure.as_deref()) {
+            let file = if Store::holds(procedure.as_deref()) {
                 procedure
             } else {
                 function
             };
 
-            cache.clean_one(Collection::Routines, held)
+            held(
+                Collection::Routines,
+                CatalogueObjectKind::Routine,
+                name,
+                file,
+            )
         }
     }
 }
@@ -400,6 +504,9 @@ fn status<W: Write>(
     }
 }
 
+/// What the text report writes for `loaded_at` when the cache is empty.
+const NEVER_LOADED: &str = "never (the cache is empty; fill it with tpl cache load)";
+
 /// Writes the `text` form of `tpl cache status`.
 ///
 /// Two parts: the entry and the load time, which are properties of the store,
@@ -411,11 +518,21 @@ fn status<W: Write>(
 ///
 /// Returns [`Error::StdoutUnwritable`] where the stream refused the write.
 fn text<W: Write>(out: &mut W, entry: &str, held: &Status) -> Result<(), Error> {
+    // AB-01 of the eleventh re-audit of rmp `#263`: the command the row names
+    // carries the caller's -d and --tpl-dir, as a hint's does, so that copied
+    // it fills this entry's cache and not the default entry's.
+    let loaded_at = held
+        .loaded_at
+        .as_deref()
+        .map_or_else(|| crate::diagnostics::carried(NEVER_LOADED), Cow::Borrowed);
     let own: Vec<[layout::Cell<'_>; 2]> = vec![
         [layout::text("entry"), layout::text(entry)],
         [
             layout::text("loaded_at"),
-            layout::optional(held.loaded_at.as_deref()),
+            // An empty cell here read as a value nobody printed; the text says
+            // what the absence means and what fills it. The JSON path keeps
+            // the `null` of FR-CACHE-035.
+            layout::text(&loaded_at),
         ],
     ];
     let collections: Vec<[layout::Cell<'_>; 3]> = held

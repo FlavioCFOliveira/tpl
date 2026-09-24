@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -339,6 +339,77 @@ tls      = "verify-identity"
 - **FR-CONF-008**: The entry name SHALL be a label local to the project. It need
   not match the name of any database on the server.
 
+  *Note added in the forty-ninth edition.* `FR-CONF-048` fixes which strings
+  an entry name may be.
+
+- **FR-CONF-048**: An entry name SHALL match `[A-Za-z0-9_]{1,64}`: one to
+  sixty-four ASCII letters, digits and underscores. The rule governs the
+  `<name>` segment of every `database.<name>` key of `FR-CONF-002`, and the
+  value of `core.database`, whose type is *entry name*:
+
+  1. **On the command line.** IF the name given to
+     `tpl cfg database add`, the `<name>` segment of a key given to
+     `tpl cfg set`, or the value given to `tpl cfg set core.database` does not
+     match the rule, THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL
+     write nothing to `.tpl/.cfg`.
+  2. **In the file.** IF `.tpl/.cfg` declares a `[database.<name>]` block, or
+     a `core.database` value, that does not match the rule, THEN the system
+     SHALL exit `78` (`EX_CONFIG`) at step 3 of `FR-ERR-006`.
+
+  In both cases the `cause` SHALL state the rule and SHALL name the value, or
+  state that it is empty. The value enters the `cause` only under the set of
+  `FR-ERR-022`; a value outside it is described, not reproduced. WHERE the
+  value contains `${`, the `cause` SHALL also state that `core.database`
+  names an entry and that `${VAR}` is not expanded in it, per `FR-CONF-015`.
+  The `hint` SHALL show the form with a placeholder, as in
+  `tpl cfg database add <name>` or `tpl cfg set core.database <entry>`.
+
+  ```
+  tpl cfg set core.database '${DB}'
+  error: invalid value for core.database
+  cause: core.database names a database entry and does not expand ${VAR}; an entry name is 1 to 64 letters, digits or underscores
+  hint:  give the entry name itself: tpl cfg set core.database <entry>
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code.
+
+  A name that only **selects or names** an entry — the value of
+  `-d/--database`, and the operand of
+  `tpl cfg database show`, `update`, `remove` and `test` — is not refused by
+  this rule. No entry can carry a name outside it, so such a name names no
+  entry, and `FR-ERR-005` or `FR-GLOB-007` answers it.
+
+  *Rationale.* The name is written into every `hint` that names the entry,
+  and the set of `FR-ERR-022` governs it there. A name outside that set was
+  accepted and then dropped from every such `hint`: `''`, `a b` and `x.y`
+  were all stored, `tpl cfg database list` printed an empty line for `''`, and
+  each `hint` for these entries printed `<entry>`. A rule equal to that set
+  makes every entry name printable in every `hint`. The empty name, and the
+  value `${DB}` in `core.database`, were stored and then failed as an entry
+  that does not exist, with no word on the cause. This is findings W-04 and
+  W-06 of the sixth re-audit, recorded for rmp `#281`. The rule also keeps the
+  name a single path segment wherever the system uses it as one.
+
+  *Why the file is `78` at step 3.* The name is part of the key, and a key
+  outside the space of `FR-CONF-002` in the file is `78` at step 3, per
+  `FR-CONF-034`. A `core.database` value outside its type is the same fault in
+  a value.
+
+  *Rejected: admitting the hyphen, as a TOML bare key does.* The set of
+  `FR-ERR-022` refuses it, and `FR-ERR-022` rejects widening that set. A
+  hyphenated name would be dropped from every `hint`, which is the defect.
+  Also rejected: expanding `${VAR}` in `core.database`. The entry an
+  invocation reads would then be chosen by the environment, which `BR-CLI-002`
+  exists to prevent; `-d` already chooses it where the caller means to.
+
+  *Accepted cost.* A `.tpl/.cfg` whose entry names carry a hyphen, a dot or
+  any other character outside the rule is refused with `78` until each name
+  is rewritten, by hand, with the underscore in place of the character.
+
+  *Added in the forty-ninth edition,* for rmp `#281`.
+
 ## What an entry must describe
 
 An entry must supply two facts that have no default: the host to connect to,
@@ -361,6 +432,12 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   `FR-ERR-009` and `FR-CFG-027`, built under `FR-ERR-022` and dropped under
   `FR-ERR-023` where the entry name falls outside the character set that
   requirement applies to it.
+
+  *Note added in the forty-ninth edition.* An entry whose `host` is the empty
+  string, as written or after expansion, does not carry `host` for this
+  requirement, per `FR-CONF-050`. Every entry name is inside the character
+  set of `FR-ERR-022` since `FR-CONF-048`, so the `hint` is never dropped for
+  the name.
 
   *Why `dsn` satisfies it.* The grammar of `FR-CONF-009` makes `host`
   mandatory in a DSN, so an entry defined by `dsn` names a host by carrying
@@ -410,6 +487,14 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   `FR-ERR-009` and `FR-CFG-027`, under the same construction rules as
   `FR-CONF-040`.
 
+  *Note added in the forty-ninth edition.* An entry whose `database` is the
+  empty string, as written or after expansion, names none for this
+  requirement, per `FR-CONF-050`.
+
+  *Note added in the fiftieth edition.* WHERE the entry is defined by a `dsn`
+  with no `/database` segment, the `hint` SHALL carry
+  `tpl cfg database update <entry> --dsn <url>` instead, per `FR-ERR-045`.
+
   *What it reaches.* Every `schema` subcommand, which cannot select a database
   without it; every read `tpl render` makes against a live or cached source;
   `tpl cache load`; and the privilege probe of `FR-CFG-044`, which is a
@@ -449,6 +534,68 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   key for the value, and what was missing was the rule that the key is the
   answer.
 
+- **FR-CONF-050**: An empty string SHALL NOT name a host or a database. For
+  this requirement a value is empty WHERE it has no character, or WHERE every
+  character it has is a space, a horizontal tab, a line feed, a vertical tab,
+  a form feed or a carriage return (`U+0009` through `U+000D`, and `U+0020`).
+  A value that holds any other character is not empty, and the system SHALL
+  NOT trim it:
+
+  1. **On the command line.** IF the value given to `--host` or `--schema`
+     under `FR-CFG-027`, or to `tpl cfg set database.<name>.host` or
+     `tpl cfg set database.<name>.database`, is empty, THEN the system SHALL
+     exit `64` (`EX_USAGE`) and SHALL write nothing to `.tpl/.cfg`. The
+     `cause` SHALL name the flag or the key and state that the value is
+     empty. The `hint` SHALL show the flag or the key with a placeholder, as
+     in `--host <host>`.
+  2. **In the file.** An entry whose `host` or `database` is the empty string,
+     as written or after the expansion of `FR-CONF-015`, SHALL be treated as
+     an entry that does not carry that key. `FR-CONF-040` or `FR-CONF-041`
+     SHALL then refuse it with `78` (`EX_CONFIG`), at entry resolution and
+     before any connection is opened, and the `cause` SHALL state that the
+     key holds the empty string, or that the variable it references expands
+     to the empty string.
+
+  ```
+  tpl cfg database add shop --host '' --schema shop
+  error: invalid value for --host
+  cause: --host is empty; an entry must name a host
+  hint:  give the host: tpl cfg database add shop --host <host> --schema shop
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code.
+
+  *Rationale.* `--host "$DB_HOST"` with the variable unset passes the empty
+  string. It was stored, and the next read exited `69` with a DNS error for
+  the host `''`, while the help lists a missing host as `78`. An empty
+  `--schema` was stored the same way. This is finding W-06 of the sixth
+  re-audit, recorded for rmp `#281`.
+
+  *Why the file is not refused at step 3.* `FR-CONF-040` rejects refusing a
+  file for an entry no invocation selected, because the
+  `tpl cfg database update` that repairs the entry would itself be refused.
+  An empty value leaves the caller with the same next step as an absent one,
+  so it takes the same path and keeps the same repair.
+
+  *Why after expansion as well.* `BR-CONF-002` refuses an undefined variable.
+  A variable that is defined and empty yields the same empty host, and the
+  caller's next step is the one `FR-CONF-040` names.
+
+  *Added in the forty-ninth edition,* for rmp `#281`.
+
+  *Amended in the fiftieth edition,* for rmp `#282`. `--host '   '` was
+  stored with exit `0`, and the next read exited `69` with "host '   ' could
+  not be resolved", per finding X-08 of the seventh re-audit of rmp `#263`.
+  A value of whitespace alone names no host and no database, and the caller's
+  next step is the one for an empty value, so both take the same path. The
+  `cause` SHALL state that the value is empty or holds only whitespace.
+  *Rejected: trimming every value.* It changes a value the caller wrote, and
+  it would store a host other than the one given. *Accepted cost.* A database whose name is whitespace alone
+  cannot be named in an entry. A host name holds no whitespace, and no finding
+  reached a database named that way.
+
 ## DSN
 
 - **FR-CONF-009**: A DSN SHALL have the form
@@ -478,8 +625,15 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 
   *Accepted cost.* A DSN copied from another tool, which commonly carries
   parameters such as a connection charset or a socket path, is refused rather
-  than partly honoured. The refusal names the `?` and the `hint` points at
-  `tpl cfg database add` with the discrete flags.
+  than partly honoured. The refusal names the `?`, and the `hint` names
+  `.tpl/.cfg`, the entry's `dsn` key, and the edit that removes the `?` and
+  everything after it.
+
+  *Amended in the forty-third edition.* The `hint` pointed at
+  `tpl cfg database add` with the discrete flags. That command cannot succeed
+  for an entry the file already carries, per `FR-CFG-017`, and `BR-ERR-004`
+  bars a `hint` naming a command that cannot
+  succeed.
 
 - **FR-CONF-012**: A TLS parameter in a DSN SHALL be a special case of
   `FR-CONF-011` and SHALL exit `78` for the same reason as any other parameter.
@@ -903,6 +1057,16 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 - **FR-CONF-015**: The system SHALL expand `${VAR}` only in the following
   fields: `dsn`, `host`, `port`, `user`, `password`, and `database`.
 
+  *Note added in the forty-eighth edition.* A field outside this list is not
+  expanded. For `ca_file` and `ca_path` a reference is also refused, per
+  `FR-CONF-047`.
+
+  *Note added in the forty-ninth edition.* The six are fields of a database
+  entry: `database` here is `database.<name>.database`. No key under `[core]`
+  is expanded. In `core.database` a reference is also refused, per
+  `FR-CONF-048`, and `FR-CONF-049` fixes the form of a reference in the six
+  fields.
+
 - **FR-CONF-016**: The system SHALL NOT expand `${VAR}` in `tls`.
 
   *Rationale.* An injected `TLS_MODE=disabled` must not be able to turn off
@@ -911,6 +1075,73 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 - **FR-CONF-017**: The system SHALL NOT expand `${VAR}` in `password_command`.
 
   *Rationale.* The environment must not be able to alter the command executed.
+
+  *Amended in the forty-ninth edition: a reference is passed as written, and
+  is not refused.* A word of `password_command` that holds `${VAR}` SHALL be
+  passed to the program exactly as written, per `FR-CONF-024`, and SHALL NOT
+  be refused, on the command line or in the file. The help states the fact,
+  per `FR-CFG-033`. `tpl cfg set database.<name>.password_command 'echo ${PW}'`
+  was accepted and the program printed the literal `${PW}`, with nothing to
+  say why, per finding W-04 of the sixth re-audit, recorded for rmp `#281`.
+
+  *Rejected: refusing `${`, as `FR-CONF-047` does for `ca_file` and
+  `ca_path`.* A literal `${VAR}` is what a program that reads its own
+  environment is given: `sh -c 'pass show "${ENTRY}"'` passes the reference to
+  a shell the caller chose, which expands it. The refusal would cost that
+  working command, and `FR-CONF-046` admitted its refusal of a leading `[`
+  only after showing that it costs none. `ca_file` and `ca_path` are read by `tpl` itself, so a reference there
+  can mean nothing but a path that is not the one intended.
+
+- **FR-CONF-047**: The system SHALL NOT expand `${VAR}` in `ca_file` or
+  `ca_path`, and SHALL refuse a value of either key that contains `${`:
+
+  1. **On the command line.** IF the value given to
+     `tpl cfg set database.<name>.ca_file` or
+     `tpl cfg set database.<name>.ca_path`, or to `--ca-file` or `--ca-path`
+     under `FR-CFG-027`, contains `${`, THEN the system SHALL exit `64`
+     (`EX_USAGE`), as `FR-CFG-010` does for a value that does not conform to
+     its type, and SHALL write nothing to `.tpl/.cfg`.
+  2. **In the file.** IF `.tpl/.cfg` declares `ca_file` or `ca_path` with a
+     value that contains `${`, in any entry, THEN the system SHALL exit `78`
+     (`EX_CONFIG`) at step 3 of `FR-ERR-006`.
+
+  In both cases the `cause` SHALL name the key or the flag, and SHALL state
+  that the key is read as a literal path and that `${VAR}` is not expanded in
+  it. The `hint` SHALL show the key set to the path itself, with a placeholder
+  where the path stands.
+
+  ```
+  tpl cfg set database.shop.ca_file '${SHOP_CA}'
+  error: invalid value for database.shop.ca_file
+  cause: ca_file is read as a literal path, and ${VAR} is not expanded in it; the value holds ${SHOP_CA}
+  hint:  give the path itself: tpl cfg set database.shop.ca_file <path>
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code. The
+  variable name enters the `cause` only under the set of `FR-ERR-022`.
+
+  *Rationale.* `FR-CONF-015` omits both keys from the fields it expands, so a
+  reference written into either was stored and then read as a file named
+  `${SHOP_CA}`. The failure appeared only at connection time, as the `74` of
+  `FR-CONF-014`, with a `cause` that did not say the reference was not
+  expanded. A caller that exported the variable and retried failed the same
+  way. This is finding V-03 of the fifth re-audit, rmp `#263`.
+
+  *Why not expand.* The trust material decides which authority a
+  `verify-ca` or `verify-identity` connection accepts. An injected variable
+  would choose it, which is the ground `FR-CONF-016` states for `tls`.
+
+  *Why `${` and not a whole reference.* A value holding `${` is either a
+  reference or a fragment of one, and the caller meant neither as a path.
+  The escape `$$` of `FR-CONF-020` belongs to expansion, and neither key is
+  expanded, so the test is on the two characters as written.
+
+  *Accepted cost.* A path whose name contains `${` cannot be named by either
+  key. The caller names it through a link.
+
+  *Added in the forty-eighth edition,* from finding V-03 of rmp `#263`.
 
 - **FR-CONF-018**: WHEN expanding inside a `dsn`, the system SHALL parse the URL
   first, SHALL expand within the already-delimited field, and SHALL then
@@ -928,6 +1159,69 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 
 - **FR-CONF-021**: IF an expansion is unclosed — `${VAR` with no closing brace —
   THEN the system SHALL exit `78`.
+
+- **FR-CONF-049**: In the fields `FR-CONF-015` expands, a reference SHALL be
+  written `${NAME}`, and `NAME` SHALL match `[A-Za-z_][A-Za-z0-9_]*`: a letter
+  or an underscore, followed by letters, digits and underscores, which is the
+  portable form of a shell variable name. A reference begins at `${`, except
+  where that `$` is the second of a `$$` pair, which `FR-CONF-020` reads as a
+  literal `$`, and it ends at the first `}` after it.
+
+  1. **On the command line.** IF a value given for one of those fields — to
+     `tpl cfg set`, or to `--dsn`, `--host`, `--port`, `--user` or `--schema`
+     under `FR-CFG-027` — holds a reference whose name does not match the
+     rule, or a reference left unclosed, THEN the system SHALL exit `64`
+     (`EX_USAGE`) and SHALL write nothing to `.tpl/.cfg`.
+  2. **In the file.** IF such a field in `.tpl/.cfg` holds a reference whose
+     name does not match the rule, THEN the system SHALL exit `78`
+     (`EX_CONFIG`) when it expands the field, as it does for an unclosed
+     reference under `FR-CONF-021`.
+
+  In both cases the `cause` SHALL name the key or the flag and SHALL state the
+  rule for a variable name. The name found enters the `cause` only under the
+  set of `FR-ERR-022`; a name outside it is described, not reproduced. The
+  `hint` SHALL show the reference in the form `${NAME}`, with a placeholder
+  for the name.
+
+  ```
+  tpl cfg set database.shop.user '${1X}'
+  error: invalid value for database.shop.user
+  cause: ${1X} is not a valid reference; a variable name starts with a letter or an underscore and holds only letters, digits and underscores
+  hint:  write the reference with a valid name: tpl cfg set database.shop.user '${<NAME>}'
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code.
+
+  *Rationale.* `tpl cfg set database.n1.user '${1X}'` was stored, and the
+  connection then failed with `hint: define it with: export 1X=<value>`, which
+  a shell refuses. A name that no shell can define can never be satisfied, so
+  the reference is a fault the moment it is written. This is finding W-06 of
+  the sixth re-audit, recorded for rmp `#281`. With this rule, the variable
+  that the `hint` for an undefined variable tells the caller to define always
+  has a name a shell accepts.
+
+  *Amended in the fiftieth edition.* The sentence above named the text of
+  that `hint`, `export NAME=<value>`, which no requirement fixes and which
+  finding X-02 of the seventh re-audit of rmp `#263` asks to change. It now
+  states the property this rule guarantees, whatever the wording.
+
+  *Why the unclosed reference is refused on the command line as well.* It is
+  the same fault in the same grammar. `FR-CONF-021` refuses it in the file,
+  and a value that the next expansion must refuse is refused where the caller
+  wrote it, as `FR-CFG-031` does for a DSN.
+
+  *Why the file is not refused at step 3.* The fault is met where the field
+  is expanded, which is where `FR-CONF-021` and `FR-CONF-022` meet theirs, and
+  a refusal at step 3 would block the `cfg` command that repairs the value,
+  per the rationale of `FR-CONF-040`.
+
+  *Rejected: writing the `hint` of `FR-CONF-022` as `env '1X=<value>' tpl …`.*
+  It makes the reference satisfiable only through one utility, and the name
+  was never a variable the caller meant to define.
+
+  *Added in the forty-ninth edition,* for rmp `#281`.
 
 - **FR-CONF-022**: IF a referenced environment variable is undefined, THEN the
   system SHALL exit `78`.
@@ -956,7 +1250,64 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 - **FR-CONF-025**: WHEN a `password_command` is supplied as a single string —
   for instance to `tpl cfg set` — the system SHALL split it into words by POSIX
   quoting rules, honouring single and double quotes, and SHALL store the
-  resulting array.
+  resulting array. `FR-CONF-046` states the strings it SHALL refuse instead.
+
+  *Amended in the forty-seventh edition.* The second sentence is new, for rmp
+  `#276`.
+
+- **FR-CONF-046**: IF a `password_command` supplied as a single string — the
+  value given to `tpl cfg set database.<name>.password_command`, or to
+  `--password-command` under `FR-CFG-046` — meets any condition of the table
+  below, THEN the system SHALL exit `64` (`EX_USAGE`), as `FR-CFG-010` does for
+  a value that does not conform to its type, and SHALL write nothing to
+  `.tpl/.cfg`. The `cause` SHALL name the key or the flag and the condition
+  met. The `hint` SHALL show the value written as one command line.
+
+  | The string | Why it is refused |
+  |---|---|
+  | Yields no word: it is empty or holds only whitespace | There is no program to execute |
+  | Leaves a single or a double quote unclosed | The POSIX quoting rules admit no unclosed quote, and a shell refuses one |
+  | Ends in a backslash outside any quoted run, so the backslash escapes no character | The backslash would be dropped without trace; a shell reads it as a line continuation, not as a character |
+  | Has `[` as its first character that is not whitespace | It is how an array written on the command line arrives: `["pass","db/shop"]` would be stored as the one word `[pass,db/shop]`, which names no program |
+
+  Where a string meets more than one condition, the `cause` SHALL name the
+  first in the order of the table.
+
+  ```
+  tpl cfg set database.shop.password_command '["pass","db/shop"]'
+  error: invalid value for database.shop.password_command
+  cause: the value begins with '[', which is how an array arrives; this key takes one command line written as one string, which tpl splits into words
+  hint:  write the command as one command line: tpl cfg set database.shop.password_command '<command line>', as in 'pass db/shop'
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the condition named and the code.
+  The placeholder stands for a value only the caller knows, which
+  `BR-ERR-004` admits.
+
+  *The table states the rule the implementation follows, and adds two rows.*
+  The first two rows are what `tpl cfg set` and `--password-command` already
+  refused, and no requirement stated them. The third and the fourth are new:
+  a trailing backslash was dropped, and a string beginning with `[` was stored
+  as one word, and both exited `0`.
+
+  *Why `[` costs no working command.* `[` is a program on every supported
+  system — `/bin/[`, the `test` utility — but POSIX specifies that `test`
+  writes nothing to its standard output, so it can never supply the password
+  `FR-CONF-027` reads from there. A program whose name begins with `[` remains
+  expressible: the rule tests the first character as written, so a quoted or
+  escaped first word — `'[x]/get' db`, `\[x]/get db` — and an absolute path —
+  `/bin/[` — pass it.
+
+  *Rejected: reading a string that begins with `[` as a JSON array.* It gives
+  one value two grammars chosen by its first character, and `FR-CFG-046` bars
+  an array on the command line. Also rejected: keeping the behaviour and
+  documenting it. The stored value names no program, so the fault would appear
+  only at the first connection, as the `78` of `FR-CONF-042`, far from the
+  command that wrote it.
+
+  *Added in the forty-seventh edition,* for rmp `#276`.
 
 - **FR-CONF-026**: The system SHALL pass shell metacharacters through as literal
   arguments. Pipes, `;`, `&&`, `$(…)`, redirection, and globbing SHALL NOT be

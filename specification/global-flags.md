@@ -1,8 +1,8 @@
 ---
 title: Global Flags
 status: approved
-last-reviewed: 2026-09-23
-related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md]
+last-reviewed: 2026-09-24
+related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md, project-and-discovery.md, render-command.md]
 ---
 
 # Global Flags
@@ -144,6 +144,13 @@ which belongs to that command's module.
   is resolved through `-d/--database` or through `core.database` and neither
   `FR-GLOB-006` nor `FR-GLOB-007` reaches it. An absent name there is that
   command's own `66`, over its own argument.
+
+  *Note added in the fifty-third edition.* `tpl cache clean` stays on the
+  list: it resolves a selected name through `-d/--database` or
+  `core.database`, and with no name selected it is `78`, per `FR-GLOB-006`.
+  `FR-CACHE-041` admits one case in which the selected name need not be
+  declared by an entry — no object flag, and a folder of that name under
+  `.tpl/.cache/` — so that the data of a deleted entry can be removed.
 
   *`tpl render` is the one command on both lists*, and `--context` is what
   moves it. `FR-RND-022` keeps a `--context` invocation away from a connection
@@ -387,9 +394,37 @@ which belongs to that command's module.
 
 ## Business rules
 
-- **BR-GLOB-001**: The global set is small on purpose. A flag becomes global
-  only when it applies to every node of the tree without exception; the moment
-  one node would have to ignore it or reject it, it is local.
+- **BR-GLOB-001**: The global set is small on purpose. Every node accepts every
+  global flag, per `FR-GLOB-002`, and a node may give one no effect. A global
+  flag is never refused on its own, at any node. A refusal is admitted only for
+  a combination that a requirement makes contradictory, as `FR-RND-018` does for
+  `--context` with an explicit `-d/--database`. A flag that some node would
+  have to refuse on its own is local.
+
+  | Global flag | Nodes on which it has no effect | Requirement |
+  |---|---|---|
+  | `-d/--database` | Every command that requires no database entry | `FR-GLOB-007`, `FR-GLOB-025`, `FR-CFG-051` |
+  | `--tpl-dir` | `tpl init`, `tpl help`, `-h/--help`, `tpl version`, `-V/--version` | `FR-PROJ-025`, `FR-PROJ-026` |
+
+  *Amended in the forty-fifth edition: the rule states what `FR-GLOB-007` and
+  `FR-PROJ-025` already do.* It read "a flag becomes global only when it
+  applies to every node of the tree without exception; the moment one node
+  would have to ignore it or reject it, it is local." Read literally, it made
+  both flags in the table local. `FR-GLOB-007` gives `-d/--database` no effect
+  on a command that requires no entry, and `FR-PROJ-025` keeps five commands
+  away from any project, so `--tpl-dir` has nothing to name for them. Those two
+  requirements carry their grounds, and the rule yields to them.
+  `FR-GLOB-007` rejected refusing the flag rather than the name, and
+  `FR-CLI-024` protects an agent that appends a global flag to a command line it
+  has already built. What the rule keeps is the boundary it was written to
+  draw. A command that would have to refuse a flag makes that flag local, which
+  is why `--format`, `--pretty`, `--direct` and `--no-cache` are local, per
+  `FR-GLOB-021`.
+
+  *Rejected: making `-d/--database` and `--tpl-dir` local.* Every command that
+  requires an entry or a project would then declare them, `FR-GLOB-003` would
+  list them nowhere once, and a flag appended to a command that does not
+  declare it would become a `64`.
 
 - **BR-GLOB-002**: No global flag changes what a command reads from the
   database. `--direct` and `--no-cache` change where catalogue data comes from,

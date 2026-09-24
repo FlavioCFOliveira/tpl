@@ -313,13 +313,27 @@ fn runtime() -> Result<Counted<Runtime>, Error> {
 /// server that answered. On every one of those paths no catalogue statement is
 /// issued, because no [`Session`] is produced to issue one with.
 pub(crate) fn open(target: &Target<'_>, clock: &Clock) -> Result<Session, Error> {
+    // FR-ERR-045: a hint that repoints a dsn entry names --dsn, and this is the
+    // one place that both holds the entry's form and sees every condition
+    // whose hint repoints it.
+    let marked = |error: Error| {
+        if target.by_dsn() {
+            error.of_dsn_entry()
+        } else {
+            error
+        }
+    };
+
     let runtime = runtime()?;
-    let mut connection = Counted::new(connect::open(&runtime, target, clock)?, &CONNECTIONS);
+    let mut connection = Counted::new(
+        connect::open(&runtime, target, clock).map_err(marked)?,
+        &CONNECTIONS,
+    );
 
     // FR-SRV-011: there is no condition around this call, and no caller that
     // reaches a connection without it — `connect::open` is visible to this
     // module alone.
-    let server = session::start(&runtime, &mut connection, target, clock)?;
+    let server = session::start(&runtime, &mut connection, target, clock).map_err(marked)?;
 
     Ok(Session {
         connection: Some(connection),

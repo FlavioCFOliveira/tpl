@@ -228,7 +228,55 @@ impl Environment {
             Err(reported) if fault::out_of_fuel(&reported) => Err(Error::RenderFuelExhausted {
                 fuel: self.bounds.fuel.get(),
             }),
-            Err(reported) => Err(fault::during_render(&resolved.name, &reported)),
+            Err(reported) => {
+                let mut condition = fault::during_render(&resolved.name, &reported);
+                if let Error::RenderFailed {
+                    undefined: Some(expression),
+                    reason: reason @ None,
+                    ..
+                } = &mut condition
+                {
+                    *reason = fault::unresolved(self.engine(), context, expression)
+                        .map(crate::error::RenderReason::Unresolved)
+                        .or_else(|| {
+                            fault::template_bound(self.engine(), context, expression, &reported)
+                                .or_else(|| fault::missing(context, expression))
+                                .or_else(|| fault::other_object(context, expression))
+                                .or_else(|| {
+                                    fault::unbound(context, expression, &reported, &resolved.name)
+                                })
+                                .map(crate::error::RenderReason::Missing)
+                        })
+                        .map(Box::new);
+                }
+                if let Error::RenderFailed {
+                    reason: reason @ None,
+                    ..
+                } = &mut condition
+                    && let Some(name) = fault::missing_include(&reported)
+                {
+                    // FR-TMPL-009 resolves an include literally, and the
+                    // root's own resolution completes the extension: the
+                    // second finding what the first did not is exactly the
+                    // name that lacks it.
+                    let lacks_extension =
+                        !name.ends_with(".jinja") && self.root.resolve(&name).is_ok();
+                    // Z-03: the nearest templates whether or not the include
+                    // wrote the extension; the name that only lacks it is
+                    // itself the one suggestion.
+                    let nearest = if lacks_extension {
+                        vec![format!("{name}.jinja")]
+                    } else {
+                        self.root.nearest_included(&name)
+                    };
+                    *reason = Some(Box::new(crate::error::RenderReason::IncludeNotFound {
+                        name,
+                        lacks_extension,
+                        nearest,
+                    }));
+                }
+                Err(condition)
+            }
         }
     }
 
@@ -525,6 +573,7 @@ mod tests {
             template,
             position,
             chain,
+            ..
         } = &condition
         else {
             panic!("fail is a render failure");

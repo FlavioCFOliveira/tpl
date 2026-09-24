@@ -81,8 +81,24 @@ pub(super) fn column(state: &State<'_, '_>, table: &str, name: &str) -> Value {
 ///
 /// Always. That is what it is for.
 pub(super) fn fail(message: &str) -> Result<Value, Error> {
-    Err(Error::new(ErrorKind::InvalidOperation, message.to_owned()))
+    Err(Error::new(ErrorKind::InvalidOperation, message.to_owned())
+        .with_source(Failed(message.to_owned())))
 }
+
+/// The mark `fail` attaches to the error it returns, so that the diagnostic
+/// can tell the author's own stop from an invalid operation the engine
+/// reported, and put the author's message on the `error:` line
+/// (`FR-SEM-015`).
+#[derive(Debug)]
+pub(super) struct Failed(pub(super) String);
+
+impl std::fmt::Display for Failed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Failed {}
 
 /// A lookup's answer, or the `undefined` this module's header argues for.
 fn resolved(found: Option<Value>) -> Value {

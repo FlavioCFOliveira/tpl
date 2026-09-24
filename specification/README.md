@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-two editions. All are in force;
+The specification has been written in fifty-six editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3869,6 +3869,762 @@ none is amended. `tpl cfg` validates and lists keys by reference to
 `FR-CONF-002` and needs no change. By the fifth validation rule the root
 `README.md` owes one correction, `DIV-056`, because it counts the key space;
 `CLAUDE.md` paraphrases none of the requirements amended.
+
+### Forty-third edition — help and errors a caller can act on alone
+
+The audit of sprint 21, recorded in `HELP-AUDIT.md` at the repository root as
+rmp `#259`, read every help text and every error message for what a calling
+agent learns from help, exit code and stderr alone. Nine of its findings need
+a change to this corpus, and this edition writes them for rmp `#260`. The
+other findings need none and are not touched here.
+
+**Six identifiers are assigned — `FR-HELP-031`, `FR-HELP-032`,
+`FR-HELP-033`, `FR-ENV-047`, `FR-ERR-041` and `BR-ERR-004`; none is retired
+and none is renumbered.** No term enters or leaves
+[glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The template surface carries signatures** (H-03) —
+  [template-environment.md](template-environment.md). `FR-ENV-005` now holds
+  one item object per name, and `FR-ENV-047` fixes the item: `name`,
+  `signature`, `operand`, `arguments` with type, requirement and default, and
+  a one-sentence `purpose`, for groups 1 and 2. The members of the arrays
+  change type from string to object; no release has been made, so
+  `schema_version` stays `1`, per `FR-OUT-038`.
+- **The context variables are published** (H-02) —
+  [help-and-version.md](help-and-version.md). `FR-HELP-017` adds a fifth key
+  of `data`, `context_variables`, after the last, and `FR-HELP-032` fixes it:
+  the seven top-level variables of `FR-RND-023`, each with its type, the flag
+  that binds it where one does, and its meaning. `FR-HELP-022` holds both new
+  sets of values in its typed table.
+- **The text help of `tpl render` states the same material** (H-02, H-03) —
+  `FR-HELP-033` lists the variables, every filter, test and function of groups
+  1 and 2 with its signature and purpose, and the statement that group 3 is
+  unguaranteed, inside `DESCRIPTION`. `FR-HELP-006` is unchanged.
+- **Every leaf says what it touches** (H-10) — `FR-HELP-031` ends every leaf's
+  `DESCRIPTION`, and its JSON `description`, with four statements: whether it
+  connects to a server, whether it needs a database entry, which files it
+  writes, and what it prints.
+- **Template names and project paths can be written into a hint** (H-07,
+  E-22) — [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-041`
+  governs a template name and a filesystem path of the project or of
+  `--tpl-dir` by the set `[A-Za-z0-9_./-]`, at most 1024 characters and not
+  beginning with `-`. `FR-ERR-022`, `FR-ERR-023` and `FR-SEC-019` in
+  [security.md](security.md) cite it. A nested template name can now be
+  suggested, and the example of `FR-PROJ-011` in
+  [project-and-discovery.md](project-and-discovery.md) carries the absolute
+  path.
+- **A hint must be able to succeed** — `BR-ERR-004` bars a hint that names a
+  command which cannot succeed in the state found, and requires the known
+  value instead of a placeholder, subject to the character sets. It sharpens
+  `FR-ERR-009`, which asked for a concrete, runnable command and did not say
+  it must succeed. The `hint` of `FR-CONF-011` in
+  [configuration-model.md](configuration-model.md) is amended to meet it.
+- **Two `cause` rows name the instance** (E-03, E-08) — `FR-ERR-034`. The `65`
+  row names the key path and the expected type in a `--context` document,
+  instead of citing a file of this corpus. The `78` row names the path
+  `--tpl-dir` named and that no upward search was made, and `FR-PROJ-008`
+  states the condition, the message and the hint.
+- **Two `cfg` invocations gain a stated outcome** (E-14, E-25) —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-007` makes a block key given to
+  `tpl cfg get` a `64` whose hint is `tpl cfg database show` or
+  `tpl cfg list`, and `FR-ERR-035` gains the routing row. `FR-CFG-020` makes
+  `tpl cfg database update` with no field flag a `64` whose hint lists the
+  flags of `FR-CFG-027`.
+
+`FR-HELP-006`, `FR-HELP-007`, `FR-HELP-014`, `FR-HELP-019`, `FR-HELP-029`,
+`FR-ENV-004`, `FR-ENV-016`, `FR-ENV-020`, `FR-RND-020`, `FR-RND-023`,
+`FR-CTX-026` through `FR-CTX-028`, `FR-GLOB-009`, `FR-GLOB-025`,
+`FR-PROJ-006`, `FR-CFG-016`, `FR-CONF-040`, `FR-CONF-041`, and `FR-ERR-040`
+were read against the changes and none conflicts with them, so none is
+amended. Neither root document paraphrases a requirement this edition
+amends, so the fifth validation rule owes nothing.
+
+### Forty-fourth edition — a default with two readings, and a cache written by two rules
+
+The implementation of the forty-third edition, for rmp `#261`, found one
+requirement of that edition open to two readings, silent on arguments passed
+only by name, and two requirements of the cache that could not both hold. The
+first and the last are settled by the reading the implementation took; the
+second by a signature a template can write, which the implementation must
+follow.
+
+**No identifier is assigned, none is retired and none is renumbered.** No term
+enters or leaves [glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged, and
+the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A default is carried as source text** —
+  [template-environment.md](template-environment.md). `FR-ENV-047` now makes
+  `default` a JSON string holding the default as a template's source writes it
+  — `"2"`, `"\"\""`, `"false"` — or `null` where there is none, and never the
+  JSON value that source denotes.
+- **An argument passed only by name is written by name** —
+  [template-environment.md](template-environment.md). `FR-ENV-047` now writes
+  such an argument `name=…` in `signature`, orders `arguments` as the
+  signature writes them, and lets an item describe one form of call. No field
+  is added to the argument object.
+- **A read command writes the cache** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-028` named `tpl cache load` and `tpl cache clean` as the only
+  commands that change what is stored, against the table of `FR-CACHE-015`. It
+  now names a read command of `FR-CACHE-009` writing under `FR-CACHE-015` as the
+  third, and keeps its point: nothing invalidates the cache automatically.
+
+`FR-ENV-005`, `FR-ENV-018`, `FR-HELP-022`, `FR-HELP-033`, `FR-CACHE-008`,
+`FR-CACHE-009`, `FR-CACHE-014`, `FR-CACHE-016`, `FR-CACHE-029`,
+`FR-CACHE-033`, `BR-CACHE-002`, `BR-CACHE-004`, `BR-CDOC-004` and `UC-011` were read against
+the changes and none conflicts with them, so none is amended. Neither root
+document paraphrases either requirement, so the fifth validation rule owes
+nothing.
+
+### Forty-fifth edition — a global flag that does nothing says so
+
+The re-audit of sprint 21, closed for rmp `#269`, found that `tpl init` given
+`--tpl-dir` acts on its own destination and says nothing about the flag, so a
+`73` names a `.tpl` the caller did not point at (finding R-11). No requirement
+fixed the outcome. This edition fixes it. The flag is accepted with no effect,
+as `FR-GLOB-007` already does for `-d`, and the invocation says so on stderr
+and in its help.
+
+**Two identifiers are assigned — `FR-PROJ-026` and `FR-HELP-034`; none is
+retired and none is renumbered.** No term enters or leaves
+[glossary.md](glossary.md), no entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **`tpl init` warns about `--tpl-dir`** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-026` accepts
+  the flag with no effect: the path it names is not resolved, examined or
+  checked. The requirement writes one fixed warning line to stderr, naming the
+  flag and the form `tpl init <path>` and never reproducing the value. The line
+  comes first, before any error of `FR-PROJ-014` or `FR-PROJ-015` and before the
+  warning of `FR-PROJ-016`. The exit code is the one the invocation has without
+  the flag, and `-q` suppresses the line. `UC-001` in
+  [use-cases.md](use-cases.md) gains the alternate flow and cites it.
+- **The help of `tpl init` states it** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-034` puts one sentence
+  before the four statements of `FR-HELP-031`, in the text `DESCRIPTION` and in
+  the JSON `description`: `--tpl-dir` has no effect, and the destination is
+  `PATH` or the current directory.
+- **`BR-GLOB-001` states what the corpus does** —
+  [global-flags.md](global-flags.md). The rule read that a flag one node would
+  have to ignore or reject is local, which made `-d/--database` and `--tpl-dir`
+  local under `FR-GLOB-007` and `FR-PROJ-025`. It now reads as follows. A node
+  may give a global flag no effect, and a global flag is never refused on its
+  own. A refusal is admitted only for a combination, as in `FR-RND-018`. A flag
+  some node would have to refuse on its own is local. A table names the nodes on
+  which each of the two flags has no effect.
+
+`FR-GLOB-002`, `FR-GLOB-003`, `FR-GLOB-009`, `FR-GLOB-010`, `FR-GLOB-015`,
+`FR-GLOB-021`, `FR-CLI-014`, `FR-CLI-024`, `FR-PROJ-008` through `FR-PROJ-016`,
+`FR-PROJ-022`, `FR-PROJ-025`, `FR-SEC-016`, `FR-OUT-020`, `FR-OUT-023`,
+`BR-CLI-004`, `FR-ERR-006`, `FR-HELP-019`, `FR-HELP-031`, `NFR-PERF-005` and
+`NFR-PERF-007` were read against the changes, and none conflicts with them, so
+none is amended. The trust checks of `FR-GLOB-010`, `FR-PROJ-008` and
+`FR-SEC-016` govern a folder an invocation uses as its project, and `tpl init`
+uses none. The warning is a line on stderr and not an error, so the validation
+order of `FR-ERR-006` gains no step. Neither root document paraphrases an
+amended requirement: the root `README.md` describes `--tpl-dir` under
+`FR-GLOB-009`, which is unchanged. The fifth validation rule therefore owes
+nothing.
+
+### Forty-sixth edition — every broken template, a flag that could not act, and a shortened command
+
+The second re-audit of sprint 21, closed for rmp `#274`, found three places
+where the text an agent reads promised more than the command did. `tpl
+template check` stopped at the first broken template while its help says it
+checks every one (finding S-05). `tpl render --context <file> --direct` exited
+`0` with `--direct` doing nothing (finding S-11). `tpl sch` received no
+suggestion, because a prefix is too far from the whole name by edit distance
+(finding S-14). No requirement fixed any of the three outcomes. This edition
+fixes them.
+
+**Three identifiers are assigned — `FR-TMPL-032`, `FR-RND-041` and
+`FR-ERR-042`; none is retired and none is renumbered.** No term enters or
+leaves [glossary.md](glossary.md); the entry *nearest match* is amended. No
+entry of [upstream-divergences.md](upstream-divergences.md) is raised or
+discharged, and the index of [open-questions.md](open-questions.md) stays
+empty.
+
+- **`tpl template check` reports every failure** —
+  [template-commands.md](template-commands.md). `FR-TMPL-032` checks every
+  selected template before it reports, writes one four-line message per
+  failing template in the order of checking, and exits `65`. A condition other
+  than a syntax error stops the check and is reported alone, with its own
+  code. `FR-TMPL-020` and `FR-ERR-006` carry notes: one condition met by
+  several objects is reported per object only where a requirement says so.
+- **`--direct` with `--context` is refused** —
+  [render-command.md](render-command.md). `FR-RND-041` exits `64` at argument
+  parsing, as `FR-RND-018` does for `--context` with an explicit `-d`. The
+  `cause` names both flags and why they contradict each other. The `hint`
+  names the flag to remove for each outcome and does not reproduce the path.
+  Where `-d` is also given, `FR-RND-018` is reported. `FR-RND-025` carries a
+  note.
+- **A shortened command is suggested** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-042` admits,
+  for a command token only, every child of the node reached of which the token
+  is a proper prefix, at any distance. Such candidates join those of
+  `FR-ERR-019` under its order and its cap of three. Nothing is executed, and
+  `FR-CLI-004` still makes the invocation `64`. `FR-ERR-019`, `FR-ERR-020` and
+  `FR-CLI-004` carry notes, and `UC-012` in [use-cases.md](use-cases.md) gains
+  an alternate flow.
+
+`FR-TMPL-013`, `FR-TMPL-017` through `FR-TMPL-019`, `FR-TMPL-026`,
+`FR-TMPL-027`, `FR-TMPL-031`, `FR-OUT-037`, `FR-ERR-008`, `FR-ERR-011`,
+`FR-ERR-022`, `FR-ERR-024`, `FR-ERR-033`, `FR-ERR-034`, `FR-ERR-037`,
+`FR-ERR-038`, `FR-RND-018`, `FR-RND-019`, `FR-RND-022`, `FR-CACHE-013`,
+`FR-CACHE-015`, `FR-CACHE-018`, `FR-GLOB-021`, `BR-GLOB-001`, `FR-HELP-013`,
+`FR-HELP-027` and `FR-HELP-028` were read against the changes, and none
+conflicts with them, so none is amended. `FR-HELP-013` already obliges the
+help of `--direct` and `--context` to state the new mutual exclusion. The
+finding S-02 was read against `FR-CFG-016`, `FR-CONF-040` and `FR-CONF-041`,
+which admit an entry created from one discrete flag and refuse it with `78`
+when it is used; nothing is changed for it. Neither root document paraphrases
+an amended requirement, so the fifth validation rule owes nothing.
+
+### Forty-seventh edition — a key misspelt, an array on the command line, and a hint that acts elsewhere
+
+The help refinement of sprint 21, for rmp `#276`, found four places where a
+requirement in force kept an agent from acting correctly on first reading.
+`tpl cfg get core.conect_timeout` received no suggestion, because the
+suggestion was drawn over the keys the file sets. `tpl cfg set
+database.shop.password_command '["pass","x"]'` stored the one word
+`[pass,x]` and exited `0`. A trailing backslash in the same string was dropped
+without trace. And a `hint` naming another `tpl` command did not carry the
+`--tpl-dir` or `-d` the invocation was given, so the copied command could act
+on another project or another entry; a hint naming a `--context` path tested
+it against a set no requirement named for it.
+
+**Two identifiers are assigned — `FR-CONF-046` and `FR-ERR-043`; none is
+retired and none is renumbered.** No term enters or leaves
+[glossary.md](glossary.md); the entry *nearest match* is amended. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A misspelt configuration key is suggested over the key space** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-007` draws the suggestion for
+  `tpl cfg get` over every key of `FR-CONF-002`, with the entry segment bound
+  to the entries the file declares, and the `hint` states each candidate the
+  file does not set. `FR-CFG-012` applies the same rule to `tpl cfg unset`.
+  The code stays `66`.
+- **A `password_command` string that cannot be what the caller meant is
+  refused** — [configuration-model.md](configuration-model.md).
+  `FR-CONF-046` refuses with `64`, and writes nothing, a string that yields no
+  word, leaves a quote unclosed, ends in a backslash outside any quoted run,
+  or begins with `[`. The first two rows state what the implementation already
+  refused; the last two are new. `FR-CONF-025` and `FR-CFG-046` carry notes.
+- **A `hint` command acts on the same project and entry** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-043` makes a
+  runnable `tpl` command in a `hint` carry the `--tpl-dir` and `-d` the
+  invocation was given, immediately after `tpl`, except on a node where the
+  flag has no effect and in a `hint` that exists to change or remove the flag.
+  A value either set refuses leaves a placeholder, named in words.
+  `BR-ERR-004` carries a note.
+- **The `--context` path is a governed path** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and
+  [security.md](security.md). `FR-ERR-041` names the path given to
+  `--context`, other than `-`, among the paths its set governs, and
+  `FR-SEC-019` restates it. The set is unchanged.
+
+`FR-CFG-009`, `FR-CFG-010`, `FR-CFG-011`, `FR-CONF-023`, `FR-CONF-024`,
+`FR-CONF-026`, `FR-CONF-035`, `FR-CONF-042`, `FR-ERR-009`, `FR-ERR-019`,
+`FR-ERR-022`, `FR-ERR-023`, `FR-ERR-035`, `FR-ERR-037`, `FR-ERR-040`,
+`BR-ERR-003`, `FR-GLOB-007`, `FR-GLOB-009`, `BR-GLOB-001`, `FR-RND-018`,
+`FR-PROJ-008` and `FR-PROJ-026` were read against the changes, and none
+conflicts with them, so none is amended. No security rule yields: the key
+space is a literal of `FR-ERR-022`, an entry name stays under its set, a path
+under the set of `FR-ERR-041`, and no credential enters a message. Neither
+root document paraphrases an amended requirement: the root `README.md`
+describes `password_command` as one string on the command line that `tpl`
+splits, which stays true. The fifth validation rule therefore owes nothing.
+
+### Forty-eighth edition — the folder `--tpl-dir` names, a project without `.cfg`, and a path that is not expanded
+
+The fifth re-audit of sprint 21, rmp `#263`, found three places where the
+system accepted what the caller did not mean and reported success. `tpl
+--tpl-dir ../shop cfg database list` read the directory that holds `.tpl` as
+the project, reported no entry, and a following `cfg database add` wrote a
+`.cfg` beside the real `.tpl` (finding V-01, rmp `#265`). The four `template`
+subcommands exited `0` over a malformed `.cfg` while their help listed `78`
+(finding V-02, rmp `#272`). And a `${VAR}` given to `ca_file` or `ca_path` was
+stored, never expanded, and failed at connection time with a `cause` that did
+not say why (finding V-03). This edition fixes the three outcomes.
+
+**Three identifiers are assigned — `FR-PROJ-027`, `FR-PROJ-028` and
+`FR-CONF-047`; none is retired and none is renumbered.** No term enters or
+leaves [glossary.md](glossary.md); the entry *project* is amended. No entry
+of [upstream-divergences.md](upstream-divergences.md) is raised or
+discharged, and the index of [open-questions.md](open-questions.md) stays
+empty.
+
+- **`--tpl-dir` names a `.tpl` folder, and nothing else** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-027` admits
+  a directory as the `.tpl` folder only where the last segment of its path is
+  `.tpl`, as written or after canonicalisation. Any other existing directory
+  named by `--tpl-dir` is `78` at step 2, with nothing read and nothing
+  written. Where the directory holds a `.tpl` folder, the `cause` says so and
+  the `hint` carries the corrected value and, for an invocation without
+  operands, the same command with it. `FR-PROJ-008` carries a note, and
+  `FR-SEC-016` restates the rule.
+- **A `.tpl` folder without `.cfg` is a project with an empty
+  configuration** — [project-and-discovery.md](project-and-discovery.md).
+  `FR-PROJ-028` pins what the implementation did: step 3 passes, every key
+  takes its default, and no entry is declared. It adds one check: such a
+  folder SHALL be owned by the current user, or the invocation is `78`,
+  because a planted `.tpl` without `.cfg` passed both checks of `FR-SEC-014`
+  and would receive the caller's credentials. The first `cfg` writer creates
+  the file at `0600` by the procedure of `FR-CFG-041`, which is amended to
+  say so; a `cfg` command that changes nothing creates nothing. `FR-PROJ-002`
+  and `FR-PROJ-023` carry notes, and `FR-SEC-014` is amended.
+- **The `template` subcommands validate `.cfg`** —
+  [template-commands.md](template-commands.md). `FR-TMPL-003` states that the
+  four subcommands perform step 3 of `FR-ERR-006` and exit `78` over a `.cfg`
+  that cannot be used. This was always required: `FR-ERR-006` exempts steps 2
+  and 3 only for the commands of `FR-PROJ-025`. `FR-ERR-006` carries a note.
+  Their help, which lists `78`, is correct and stays.
+- **`ca_file` and `ca_path` refuse `${`** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-015` never
+  expanded either key, and `FR-CONF-047` refuses a value holding `${`: `64`
+  on the command line, with nothing written, and `78` at step 3 in the file.
+  The `cause` states that the key is a literal path and is not expanded.
+  `FR-CONF-015` carries a note, and `FR-CFG-033` obliges the help of
+  `--ca-file` and `--ca-path` to state the refusal.
+- **The exit-code table and the path set follow** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). The `78` cell of
+  `FR-ERR-001` names the three conditions, and `FR-ERR-041` names the
+  corrected `--tpl-dir` value among the paths it governs. `UC-002` in
+  [use-cases.md](use-cases.md) gains three alternate flows.
+
+`FR-PROJ-001`, `FR-PROJ-004` through `FR-PROJ-007`, `FR-PROJ-009` through
+`FR-PROJ-011`, `FR-PROJ-014`, `FR-PROJ-017`, `FR-PROJ-022`, `FR-PROJ-025`,
+`FR-PROJ-026`, `FR-GLOB-009`, `FR-GLOB-010`, `FR-SEC-013`, `FR-CFG-010`,
+`FR-CFG-012`, `FR-CFG-027`, `FR-CFG-034`, `FR-CFG-040`, `FR-CONF-014`,
+`FR-CONF-034`, `FR-ERR-034`, `FR-ERR-043`, `FR-HELP-031` and `BR-ERR-004`
+were read against the changes, and none conflicts with them, so none is
+amended. The `78` row of `FR-ERR-034` already obliges the `cause` of a
+refused `--tpl-dir` to name the path and why it is not usable. `tpl init`
+is unchanged: it uses no `--tpl-dir`, per `FR-PROJ-026`, and still writes
+nothing to stdout, per `FR-PROJ-022`. The root `README.md` states that an
+absent `.cfg` is not a failure and reads as an empty configuration, which
+stays true: the refusal of `FR-PROJ-028` is for the folder's owner, not for
+the absence. It describes `--tpl-dir` as naming the `.tpl` folder, and
+`${VAR}` as expanded in six fields, both unchanged. The fifth validation rule
+therefore owes nothing.
+
+### Forty-ninth edition — a project inside its own folder, a suggestion with nothing in common, and values that could never work
+
+The sixth re-audit of sprint 21, recorded for rmp `#281`, found places where
+the system accepted a value that could never do what the caller meant, or
+offered a correction that shared nothing with the mistake. `tpl init
+proj/.tpl` created `proj/.tpl/.tpl` and warned about a project that did not
+exist (finding W-01). With entries `n1` and `shop`,
+`tpl cfg database remove zz` answered `did you mean 'n1'?` (finding W-02).
+`tpl cfg database show --format json` wrote every value as a string (finding
+W-03). `${VAR}` in `core.database` was stored and never expanded, and the same
+in `password_command` reached the program with nothing said (finding W-04).
+Empty hosts, schemas and entry names, and a reference named `${1X}`, were
+stored and failed later with a DNS error or a `hint` no shell accepts
+(finding W-06). And the permission message said `.cfg` was read "only at mode
+0600" while a file at `0400` was read and rewritten at `0600` (finding W-08).
+This edition fixes those outcomes. Findings W-05, W-07 and W-09 are wording
+of help and error text that no requirement fixes, and take no change here.
+
+**Six identifiers are assigned — `FR-PROJ-029`, `FR-ERR-044`, `FR-CFG-049`,
+`FR-CONF-048`, `FR-CONF-049` and `FR-CONF-050`; none is retired and none is
+renumbered.** No term enters or leaves [glossary.md](glossary.md); the entries
+*database entry* and *nearest match* are amended. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **`tpl init` refuses a `.tpl` folder as its destination** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-029` exits
+  `64`, creating nothing, where the last segment of the path as written, or
+  of the canonical path of an existing destination, is `.tpl`. The `hint`
+  carries `tpl init` with the parent directory. `FR-PROJ-016` is amended so
+  that the shadow warning names only a `.tpl` folder that existed before the
+  invocation. `FR-PROJ-012` and `FR-PROJ-026` carry notes.
+- **A suggestion must keep a character of the name** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-044` admits a
+  candidate only where its distance is also strictly less than the length of
+  the longer of the two names. `zz`, `ab` and `q` no longer suggest `n1`, and
+  every distance-one slip in a name of two characters or more is still
+  offered. No separate rule is written for the commands that delete.
+  `FR-ERR-019` and `FR-ERR-020` carry notes.
+- **The `json` values of `cfg` keep their TOML types** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-049` makes a string a string, an
+  integer a number and `password_command` an array in `tpl cfg get`,
+  `tpl cfg list` and `tpl cfg database show`. It pins what the first two do and
+  changes the third. `FR-CFG-038` carries a note.
+- **An entry name is `[A-Za-z0-9_]{1,64}`** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-048` applies the
+  rule to `cfg database add`, to the `<name>` segment of a key given to
+  `cfg set`, and to `core.database`: `64` on the command line, with nothing
+  written, and `78` at step 3 in the file. A `${` in `core.database` is
+  refused by the rule, with a `cause` that says the key is not expanded. The
+  set is the one of `FR-ERR-022`, so every entry name is printable in every
+  `hint`; the consequence note of `FR-ERR-022`, `FR-CONF-008`, `FR-CONF-040`
+  and `FR-CFG-015` follow.
+- **A reference names a variable a shell can define** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-049` fixes the
+  name of `${NAME}` as `[A-Za-z_][A-Za-z0-9_]*` in the six expanded fields:
+  `64` on the command line, where an unclosed reference is refused as well,
+  and `78` in the file when the field is expanded, as for an unclosed one.
+- **An empty host or database is no host or database** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-050` refuses an
+  empty `--host`, `--schema` or the matching key with `64`, and treats an
+  empty value in the file, as written or after expansion, as the absent key
+  that `FR-CONF-040` and `FR-CONF-041` refuse with `78`.
+- **`password_command` passes `${VAR}` through and says so** —
+  [configuration-model.md](configuration-model.md),
+  [cfg-commands.md](cfg-commands.md). `FR-CONF-017` is amended: a reference
+  in a word is passed as written and is not refused, because a program the
+  caller chose, such as `sh -c`, may expand it. `FR-CFG-033` obliges the help
+  of `--password-command` and of `tpl cfg set` to state that the command is
+  not expanded and that no `[core]` key is. `FR-CONF-015` carries a note.
+- **The mode of `.cfg`** — [project-and-discovery.md](project-and-discovery.md),
+  [cfg-commands.md](cfg-commands.md). A note on `FR-PROJ-011` states that the
+  check reads the group and other bits only, and that its `cause` does not
+  name `0600` as the only mode. `FR-CFG-034` is amended: a rewrite leaves the
+  file at `0600` whatever its mode before, and is not refused for a clear
+  owner-write bit.
+- [use-cases.md](use-cases.md): `UC-001` and `UC-002` gain alternate flows,
+  and the glossary entries above are amended.
+
+`FR-PROJ-008`, `FR-PROJ-013` through `FR-PROJ-015`, `FR-PROJ-027`,
+`FR-ERR-001`, `FR-ERR-003`, `FR-ERR-005`, `FR-ERR-006`, `FR-ERR-022`,
+`FR-ERR-023`, `FR-ERR-037`, `FR-ERR-038`, `FR-ERR-042`, `FR-GLOB-007`,
+`FR-CFG-009`, `FR-CFG-010`, `FR-CFG-036`, `FR-CFG-037`, `FR-CFG-041`,
+`FR-CONF-021`, `FR-CONF-022`, `FR-CONF-034`, `FR-CONF-046`, `FR-CONF-047`,
+`FR-SEC-014` and `FR-SEC-019` were read against the changes. Apart from the
+notes named above, none conflicts with them, so none is amended. The cells of
+`FR-ERR-001` already characterise every new condition: a value the caller
+wrote is `64`, and a `.cfg` that cannot be used is `78`. `FR-SEC-019` still
+names the entry name among the values the set governs, which stays true. The
+root `README.md` describes `tpl init` as taking an optional path, the mode of
+`.cfg` as granting no access to group and other, and `${VAR}` as expanded in
+six fields and refused when unclosed or undefined. None of those statements is
+made false by this edition, so the fifth validation rule owes nothing.
+
+### Fiftieth edition — a hint that deleted what nobody named, a flag that took the command, and a name in another case
+
+The seventh re-audit of rmp `#263`, recorded for rmp `#282`, found a chain of
+`hint` commands, each exiting `0`, that emptied an entry defined by `dsn`. The
+connection `hint` offered `--host` for that entry, the conflict `hint` then
+offered `tpl cfg unset database.ds.dsn`, and the unset removed the user, the
+database and the password reference with nothing said (finding X-01).
+`tpl -d schema tables` answered "unknown command 'tables'" (finding X-03).
+`tpl init x/.TPL` passed the `.tpl` test on a case-insensitive filesystem
+(finding X-04). `tpl cache clean --table nope` exited `0` (finding X-06). The
+command tree gave `--port` the default `["3306"]` (finding X-07). A host of
+spaces was stored (finding X-08). This edition fixes those outcomes. Findings
+X-02 and X-05, and the first part of X-08, are wording of `hint` text that no
+requirement fixes, and take no change here beyond the rationale sentence of
+`FR-CONF-049` that quoted that text.
+
+**Six identifiers are assigned — `BR-ERR-005`, `FR-ERR-045`, `FR-CFG-050`,
+`FR-CLI-026`, `FR-CACHE-040` and `FR-HELP-035`; none is retired and none is
+renumbered.** No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A `hint` deletes nothing the caller did not name** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `BR-ERR-005` bars a
+  `hint` command that deletes or overwrites a value of `.tpl/.cfg` or a cached
+  object the invocation did not name, and any command that deletes a
+  nearest-match candidate. `BR-ERR-004` carries a note.
+- **A dsn entry is changed through its dsn** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-045` makes
+  every `hint` that repoints or completes an entry defined by `dsn` carry
+  `tpl cfg database update <entry> --dsn <url>`. `FR-CONF-041` and
+  `FR-SRV-030` carry notes.
+- **The conflict `hint` keeps the form the entry uses** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-048` is amended: a table fixes
+  the `hint` for each refused pair, and the `cause` states what switching
+  between `dsn` and the discrete fields removes. `FR-CFG-050` writes a warning
+  when `tpl cfg unset` deletes `dsn`, naming the facts the dsn carried.
+- **A flag that took a command says so** — [cli-contract.md](cli-contract.md).
+  `FR-CLI-026` reports "`-d` needs a value", with `64`, where `-d` or
+  `--tpl-dir` took a command name from a separate token and the next token
+  then failed as a command. `FR-CLI-024` carries a note.
+- **The `.tpl` segment ignores ASCII case** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-027` and
+  `FR-PROJ-029` are amended.
+- **A named clean that finds nothing is `66`** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-040` refuses
+  `tpl cache clean` with an object flag whose object is not cached, with a
+  suggestion over the cached names and no clean command in the `hint`.
+  `FR-CACHE-023` carries a note.
+- **A flag default is one string** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-035` makes `default`
+  `null` or a single JSON string of the command-line text, as `FR-ENV-047`
+  does for a template argument. `FR-HELP-020` carries a note.
+- **Whitespace alone is empty** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-050` is amended:
+  a host or a database made only of the six ASCII whitespace characters is
+  empty. No other value is trimmed.
+
+`FR-CFG-011`, `FR-CFG-012`, `FR-CFG-020`, `FR-CFG-029`, `FR-CONF-006`,
+`FR-CONF-007`, `FR-CONF-040`, `FR-CLI-003`, `FR-CLI-018`, `FR-CLI-020`,
+`FR-GLOB-011`, `FR-ERR-001`, `FR-ERR-006`, `FR-ERR-009`, `FR-ERR-019`,
+`FR-ERR-043`, `FR-ERR-044`, `FR-OUT-020`, `FR-GLOB-015`, `NFR-PERF-006` and
+`FR-ENV-047` were read against the changes. Apart from the notes named above,
+none conflicts with them, so none is amended. `FR-CLI-020` bars normalising
+the case of a flag value; the path is used as written, and only the test of
+its last segment ignores case, as `FR-PROJ-027` now states. The `66` row of
+`FR-ERR-001` already covers a named object that does not exist. The root
+`README.md` makes no statement about the hints, the cache clean of an absent
+object, or the JSON help defaults that this edition makes false, so the fifth
+validation rule owes nothing.
+
+### Fifty-first edition — a global flag written for the server database
+
+The tenth re-audit of rmp `#263`, recorded for rmp `#285`, found that
+`tpl cfg database add hs4 --host h --database shop` exited `0` with an entry
+lacking its server database, and that `tpl cfg database update shop --database
+shop2` said that no field flag was given without saying why `--database` did
+not count (finding AA-02). `--database` is the long form of the global
+`-d/--database`, which has no effect on these commands, per `FR-GLOB-007` and
+`BR-GLOB-001`; the server database is written by `--schema`, per `FR-CFG-028`.
+This edition keeps that behaviour and makes it said.
+
+**One identifier is assigned — `FR-CFG-051`; none is retired and none is
+renumbered.** No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A global flag with no effect on an entry write is warned about** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-051` writes one warning line to
+  stderr when `tpl cfg database add` or `tpl cfg database update` is given
+  `-d/--database`, naming `--schema` as the flag that sets the server database.
+  The exit code is unchanged, `-q/--quiet` suppresses the line, and the value
+  is reproduced only under the set of `FR-ERR-022`. It follows the precedent of
+  `FR-PROJ-026`.
+- **The empty `update` names the flag it did not count** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-020` is amended: where the
+  invocation refused for giving no field flag was given `-d/--database`, the
+  `cause` says so and points at `--schema`.
+- **The table of flags without effect cites the new requirement** —
+  [global-flags.md](global-flags.md). The `-d/--database` row of `BR-GLOB-001`
+  adds `FR-CFG-051`.
+
+`FR-GLOB-002`, `FR-GLOB-007`, `FR-GLOB-015`, `FR-GLOB-025`, `FR-CLI-014`,
+`FR-CLI-024`, `FR-CFG-016`, `FR-CFG-027`, `FR-CFG-028`, `FR-ERR-006`,
+`FR-ERR-022`, `FR-OUT-020`, `FR-OUT-023` and `FR-PROJ-026` were read against
+the changes. None conflicts with them, so none is amended. `FR-OUT-023` keeps
+stdout empty; the line goes to stderr. The root `README.md` makes no statement
+about `-d/--database` on the `cfg` commands that this edition makes false, so
+the fifth validation rule owes nothing.
+
+### Fifty-second edition — a warning that advised the wrong flag
+
+The eleventh re-audit of rmp `#263`, recorded for rmp `#286`, found that the
+warning of `FR-CFG-051` always advised `--schema <value>` with the
+`-d/--database` value, also where `--schema` was given and where the entry is
+defined by `dsn`, in which case `--schema` is refused (finding AB-02).
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The warning names only the flag that can act** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-051` is amended: its last clause
+  names the path part of `--dsn` where the invocation uses or targets a dsn,
+  is left out where `--schema` was given, and names `--schema <value>`
+  otherwise. The line stays one line, and its value rules are unchanged. It is
+  written after step 3 of `FR-ERR-006` instead of after step 1, because the
+  dsn condition of an `update` is known only once `.tpl/.cfg` is read.
+- **The empty `update` names both ways the server database is written** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-020` is amended: where the
+  refused invocation was given `-d/--database`, the `cause` says the database
+  on the server is set with `--schema`, or is the path part of `--dsn` for an
+  entry defined by `dsn`. The refusal is decided at step 1, before `.tpl/.cfg`
+  is read, so the `cause` names both forms.
+
+`FR-GLOB-007`, `FR-GLOB-015`, `FR-CLI-014`, `FR-CFG-016`,
+`FR-CFG-028`, `FR-CFG-029`, `FR-CFG-048`, `FR-CONF-007`, `FR-CONF-009`,
+`FR-ERR-006`, `FR-ERR-022` and `FR-OUT-020` were read against the changes.
+None conflicts with them, so none is amended. The root `README.md` makes no
+statement about the warning or the `cause` that this edition makes false, so
+the fifth validation rule owes nothing.
+
+### Fifty-third edition — a cache that outlived its entry, and a warning that corrected the right flag
+
+The twelfth re-audit of rmp `#263`, recorded for rmp `#287`, found that
+`tpl cfg database remove NAME` and `tpl cfg unset database.NAME` leave
+`.tpl/.cache/NAME/` in place, that an entry added later under the same name
+reads that data with exit `0`, and that `tpl -d NAME cache clean` could not
+remove it while no entry declared the name, exiting `66` (finding AC-01). It
+also found that the warning of `FR-CFG-051` advised `--schema <value>` where
+the `-d/--database` value was the entry name itself (finding AC-02).
+
+The preferred ruling for AC-01, deleting the cache folder with the entry, is
+not adopted: `BR-CACHE-004`, `FR-CFG-004` and `FR-CACHE-011` forbid a `cfg`
+command to delete or touch cached data. The alternative the brief named is
+adopted: `tpl cache clean` may name the cache of a deleted entry, and the
+commands that delete or repoint an entry say, without reading the cache, that
+its data is kept and which command removes it.
+
+**Four identifiers are assigned — `FR-CFG-052`, `FR-CFG-053`, `FR-CACHE-041`
+and `FR-HELP-036`; none is retired and none is renumbered.** No term enters or
+leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Deleting an entry says its cache is kept** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-052` writes one warning line to
+  stderr when `tpl cfg database remove` or `tpl cfg unset` of a whole entry
+  exits `0`, naming `tpl -d <name> cache clean`, with nothing on stdout and no
+  access to the cache. `FR-CFG-011`, `FR-CFG-022` and `FR-CFG-050` carry
+  notes or a sentence that cite it.
+- **Repointing an entry says its cache is kept** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-053` writes one warning line to
+  stderr when `tpl cfg database update` is given a flag `FR-CACHE-029` names
+  and exits `0`, naming `tpl -d <name> cache clean`.
+- **The cache of a deleted entry can be cleaned** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-041` lets
+  `tpl cache clean` with no object flag remove `.tpl/.cache/<name>` for a
+  name of `FR-CONF-048` that no entry declares, ignoring ASCII case, where
+  that path exists, with exit `0` and one stderr line. `FR-CACHE-023`,
+  `BR-CACHE-003` and `BR-CACHE-004` carry notes, and `FR-ERR-005` and
+  `FR-GLOB-025` carry notes that name the exception.
+- **The help states the cache facts** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-036` makes the
+  `DESCRIPTION` of `remove`, `unset`, `add`, `update` and `cache clean` state
+  what each does to, or with, an entry's cache, each command carrying
+  `-d NAME`.
+- **The warning does not correct the entry name** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-051` is amended: a new
+  condition 3 ends the line with "the name argument already names the entry"
+  where the `-d/--database` value equals the `<name>` operand byte for byte,
+  and names neither `--schema` nor any value.
+- **The quoted clean acts on the caller's project** —
+  [cfg-commands.md](cfg-commands.md) and
+  [cache-commands.md](cache-commands.md). Amended within this edition: the
+  command in the lines of `FR-CFG-052` and `FR-CFG-053` carries the
+  invocation's explicit `--tpl-dir` as `FR-ERR-043` states for a `hint`, with
+  a placeholder stated in words where `FR-ERR-041` refuses the value. The
+  line of `FR-CACHE-041` carries no command, and names the removed folder as
+  the filesystem records it where that differs in case from the name given.
+- **The repoint use case covers removal** — [use-cases.md](use-cases.md).
+  `UC-011` gains an alternate flow for removing and adding an entry.
+
+`FR-CFG-004`, `FR-CFG-012`, `FR-CFG-020`, `FR-CFG-023`, `FR-CACHE-002`,
+`FR-CACHE-011`, `FR-CACHE-015`, `FR-CACHE-028`, `FR-CACHE-029`,
+`FR-CACHE-036`, `FR-CACHE-040`, `FR-CONF-048`, `FR-GLOB-006`, `FR-GLOB-007`,
+`FR-GLOB-015`, `BR-GLOB-001`, `FR-ERR-001`, `FR-ERR-006`, `FR-ERR-022`,
+`BR-ERR-005`, `FR-ERR-041`, `FR-ERR-043`, `FR-OUT-020`, `FR-OUT-023` and
+`FR-HELP-031` were read against
+the changes. Apart from the notes named above, none conflicts with them, so
+none is amended. The warning lines are not `hint` lines, and the cache they
+name belongs to the entry the invocation names, so `BR-ERR-005` is not
+engaged. The root `README.md` states that removing the entry `core.database`
+names clears it silently; that remains true, so the fifth validation rule
+owes nothing.
+
+### Fifty-fourth edition — a repoint through the key of a field
+
+The thirteenth re-audit of rmp `#263`, recorded for rmp `#289`, found that
+`tpl cfg set database.NAME.host` and `tpl cfg unset` of such a field change
+where an entry points with exit `0` and nothing on stderr, while
+`tpl cfg database update` given the same field warns that the entry's cache is
+kept (finding AD-01).
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Setting or unsetting a field says the cache is kept** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-053` is amended: its line is
+  also written when `tpl cfg set` or `tpl cfg unset` is given
+  `database.<name>.host`, `port`, `user`, `database`, `tls` or `dsn` and
+  exits `0`, with the same content, the same `--tpl-dir` rule and no access
+  to the cache. Item 4 places the line of `FR-CFG-050` first where both are
+  written, and a new item 7 makes the line independent of what the file held
+  before. `FR-CFG-008`, `FR-CFG-011`, `FR-CFG-050` and `FR-CFG-052` gain a
+  sentence that cites it.
+- **The help states the fact** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-036` gains a row for
+  `tpl cfg set`, and its `tpl cfg unset` row a clause for one field, each
+  carrying `tpl -d NAME cache clean`.
+- **The rule on repointing records the extension** —
+  [cache-commands.md](cache-commands.md). `BR-CACHE-003` carries a note.
+
+`FR-CFG-004`, `FR-CFG-048`, `FR-CFG-051`, `FR-CACHE-002`, `FR-CACHE-011`,
+`FR-CACHE-029`, `BR-CACHE-004`, `FR-CONF-048`, `FR-ERR-022`, `FR-OUT-020`,
+`FR-OUT-023`, `FR-GLOB-015`, `FR-HELP-031` and `UC-011` were read against the
+changes. None conflicts with them, so none is amended: the line writes to
+stderr only, reads nothing under `.tpl/.cache/` and deletes nothing, so
+`FR-CFG-004`, `FR-CACHE-011` and `BR-CACHE-004` hold. The root `README.md`
+makes no statement about what `tpl cfg set` or `tpl cfg unset` writes to
+stderr, so the fifth validation rule owes nothing.
+
+### Fifty-fifth edition — the whole database block, and a warning that states only what it knows
+
+The fourteenth re-audit of rmp `#263`, recorded for rmp `#290`, found that
+`tpl cfg unset database` deletes every entry with exit `0` and nothing on
+stderr, leaving each entry's cache to be read by an entry added later under
+the same name (finding AE-01), and that the line of `FR-CFG-053` states as
+fact a repoint and a cache the command cannot know of (finding AE-02).
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Unsetting the whole block warns for every entry** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-052` is amended: `tpl cfg unset
+  database` that exits `0` writes one line per deleted entry, in file order,
+  each with its own `tpl -d NAME cache clean` carrying the invocation's
+  `--tpl-dir`, with no access to the cache; `-q` suppresses them. Refusing
+  the command was rejected by the coordinator of rmp `#290`. `FR-CFG-011`
+  and `FR-CFG-053` gain a clause that cites it.
+- **The repoint line is true in every case** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-053` item 1 is amended: the
+  line says the entry may now point at another server and that any data
+  cached for it is kept and still served, whether the entry is new, its value
+  unchanged, or no cache exists. The command carried and every other item are
+  unchanged.
+- **The help states the fact** —
+  [help-and-version.md](help-and-version.md). The `tpl cfg unset` row of
+  `FR-HELP-036` gains a clause for the key `database`, and the rows for
+  `tpl cfg database remove`, `tpl cfg set`, `tpl cfg database add` and
+  `tpl cfg database update` say "any data cached", so that each holds where
+  no cache exists.
+- **The rule on repointing records both changes** —
+  [cache-commands.md](cache-commands.md). `BR-CACHE-003` carries a note.
+
+`FR-CFG-004`, `FR-CFG-023`, `FR-CFG-050`, `FR-CACHE-002`, `FR-CACHE-011`,
+`FR-CACHE-041`, `BR-CACHE-004`, `FR-CONF-048`, `FR-ERR-022`, `FR-ERR-043`,
+`FR-OUT-020`, `FR-OUT-023` and `FR-GLOB-015` were read against the changes.
+None conflicts with them, so none is amended: `FR-CFG-023` already clears
+`core.database` whenever the entry it names is deleted, by any command. The
+root `README.md` makes no statement about what `tpl cfg unset database`
+writes, and does not quote the line of `FR-CFG-053`, so the fifth validation
+rule owes nothing.
+
+### Fifty-sixth edition — a removal warning that asserted a cache
+
+rmp `#291` found that the line of `FR-CFG-052` states as fact that data cached
+for the deleted entry is kept, which is false where no cache exists, while the
+rows of `FR-HELP-036` and the line of `FR-CFG-053` say "any data cached".
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The removal line holds where no cache exists** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-052` item 1 and its three
+  examples say "any data cached for it under `.tpl/.cache/NAME/` is kept".
+  The facts named, the command carried and every other item are unchanged.
+
+`FR-CFG-053`, `FR-HELP-036`, `FR-CACHE-011` and `BR-CACHE-004` were read
+against the change. None conflicts with it, so none is amended. The root
+`README.md` does not quote the line of `FR-CFG-052`, so the fifth validation
+rule owes nothing.
 
 ### Still out of scope
 

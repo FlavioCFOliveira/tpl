@@ -8,8 +8,8 @@
 //!
 //! | Step | Submodule | Requirement |
 //! |---|---|---|
-//! | 2 — discovery | [`discover`] | `FR-PROJ-004` … `FR-PROJ-009` |
-//! | 2 — trust | [`trust`] | `FR-PROJ-010`, `FR-PROJ-011` |
+//! | 2 — discovery | [`discover`] | `FR-PROJ-004` … `FR-PROJ-009`, `FR-PROJ-027` |
+//! | 2 — trust | [`trust`] | `FR-PROJ-010`, `FR-PROJ-011`, `FR-PROJ-028` |
 //! | 3 — read and validate | [`config`] | `FR-CONF-001` … `FR-CONF-022`, `FR-CONF-034` … `FR-CONF-036` |
 //! | 4 — entry resolution | [`settings`] | `FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-004` … `FR-GLOB-008` |
 //!
@@ -73,12 +73,14 @@ impl Project {
     /// # Errors
     ///
     /// Returns what [`discover::locate`] and [`trust::check`] return: the `78`
-    /// of a project that is not found, of a `.cfg` owned by another user, and
-    /// of a `.cfg` that grants group or other any access.
+    /// of a project that is not found, of a `--tpl-dir` that names no `.tpl`
+    /// folder, of a `.cfg` owned by another user, of a `.cfg` that grants
+    /// group or other any access, and of a `.tpl` folder without `.cfg` owned
+    /// by another user.
     pub(crate) fn open(explicit: Option<&Path>, start: &Path) -> Result<Self, Error> {
         let root = discover::locate(explicit, start)?;
 
-        trust::check(&root.join(edit::CONFIGURATION))?;
+        trust::check(&root.join(edit::CONFIGURATION), &root)?;
 
         Ok(Self { root })
     }
@@ -196,6 +198,23 @@ mod tests {
             Project::open(Some(&named), &scratch.root()).expect_err("the mode is unsafe");
 
         assert!(matches!(condition, Error::ConfigurationUnsafeMode { .. }));
+        assert_eq!(condition.exit_code(), 78);
+    }
+
+    #[test]
+    fn fr_proj_027_a_directory_that_is_not_a_tpl_folder_is_refused_before_the_trust_checks() {
+        // FR-PROJ-027: evaluated before FR-PROJ-010 and FR-PROJ-011, so an
+        // unsafe `.cfg` inside the refused directory is never judged, and
+        // nothing is written into it.
+        let scratch = Scratch::new();
+        let project = scratch.directory("shop");
+        scratch.directory("shop/.tpl");
+        let stray = scratch.file("shop/.cfg", "[core]\n");
+        scratch.chmod(&stray, 0o644);
+
+        let condition = Project::open(Some(&project), &scratch.root()).expect_err("not .tpl");
+
+        assert!(matches!(condition, Error::ProjectDirUnusable { .. }));
         assert_eq!(condition.exit_code(), 78);
     }
 

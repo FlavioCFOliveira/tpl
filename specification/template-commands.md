@@ -1,7 +1,7 @@
 ---
 title: Template Commands (Second Arm)
 status: approved
-last-reviewed: 2026-09-10
+last-reviewed: 2026-09-24
 related: [cli-contract.md, render-command.md, project-and-discovery.md, security.md]
 ---
 
@@ -42,6 +42,25 @@ tpl template path  [<name>]             Print the template root, or one template
 
 - **FR-TMPL-003**: No `template` subcommand SHALL open a database connection,
   read the cache, or require a database entry to be selected.
+
+  Every `template` subcommand SHALL read and validate `.tpl/.cfg` at step 3 of
+  `FR-ERR-006`, as every command outside `FR-PROJ-025` does. A `.cfg` that is
+  not TOML, holds a key outside `FR-CONF-002`, or holds a value that does not
+  conform to its type SHALL end the invocation with `78` (`EX_CONFIG`), before
+  any template is resolved. WHERE `.cfg` is absent, `FR-PROJ-028` governs.
+
+  *Amended in the forty-eighth edition: the second paragraph is new,* for rmp
+  `#272`. The first paragraph keeps the subcommands away from an entry, the
+  cache and the server, and was read as keeping them away from `.cfg`. It
+  never did: `FR-ERR-006` exempts steps 2 and 3 only for the commands of
+  `FR-PROJ-025`. The four subcommands exited `0` over a malformed `.cfg` while
+  their help listed `78`, per finding V-02 of the fifth re-audit. A caller
+  that runs `tpl template list` to check a project must learn that its `.cfg`
+  cannot be used.
+
+  *Rejected: exempting the subcommands from step 3 and narrowing their help.*
+  It adds a second exemption to `FR-ERR-006`, and it defers the fault to the
+  first `schema` or `render` command, far from the file that caused it.
 
 ## What is a template
 
@@ -172,6 +191,75 @@ tpl template path  [<name>]             Print the template root, or one template
 
 - **FR-TMPL-020**: IF a checked template contains a syntax error, THEN the
   system SHALL exit `65`, naming the template, the line, and the column.
+
+  *Note added in the forty-sixth edition.* Where more than one checked
+  template contains a syntax error, `FR-TMPL-032` states how every one of them
+  is reported.
+
+- **FR-TMPL-032**: WHEN `tpl template check` finds a syntax error in one or
+  more of the templates `FR-TMPL-018` or `FR-TMPL-019` selects, the system
+  SHALL check every selected template before it reports, SHALL then write to
+  stderr one message of `FR-ERR-008` for each template that failed, and SHALL
+  exit `65` (`EX_DATAERR`). In detail:
+
+  1. Each message SHALL report the first syntax error the parser meets in its
+     template, and SHALL carry what `FR-TMPL-020` and `FR-ERR-011` oblige: the
+     template name, the line, the column, and the chain of engine errors.
+  2. The messages SHALL follow one another with no blank line, no separator
+     and no summary line, so each message begins with its own `error:` line
+     and the number of `error:` lines is the number of failing templates.
+     Every message SHALL end with the same line, `exit:  65 (EX_DATAERR)`.
+  3. The order SHALL be the order of checking: with no positional argument,
+     the order of `FR-TMPL-013`; with positional names, the order in which
+     they are written on the command line. A template named more than once
+     SHALL be checked once and reported at most once, at its first position.
+  4. stdout SHALL stay empty, per `FR-ERR-033`.
+  5. IF checking a template raises a condition other than a syntax error —
+     the file cannot be read, for example — THEN the system SHALL stop, SHALL
+     write the message of that condition alone, and SHALL exit with that
+     condition's code. The messages of templates that failed before it SHALL
+     NOT be written, so the `exit` line of every message written is the code
+     the process returns.
+
+  ```
+  error: template 't/syn' has a syntax error at line 3, column 9
+  cause: ...
+  hint:  ...
+  exit:  65 (EX_DATAERR)
+  error: template 't/syn2' has a syntax error at line 1, column 4
+  cause: ...
+  hint:  ...
+  exit:  65 (EX_DATAERR)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012` and `FR-ERR-034`. The example fixes only the shape.
+
+  *Rationale.* The help of the command says that it checks every template, and
+  a check that stops at the first failure checks one and reports one, so a
+  project with several broken templates took one invocation per template to
+  learn what one invocation could tell. A calling agent fixes all of them in
+  one pass when it is shown all of them.
+
+  *Weighed against `FR-ERR-006`.* That requirement orders conditions and
+  reports the first that fails. A syntax error in two templates is one
+  condition of one step, met by two objects, and not two conditions, so the
+  order is unchanged: template resolution, step 4, still runs first over every
+  positional name, and a name that does not resolve is reported alone, per
+  `FR-TMPL-026` and `FR-TMPL-027`, before any template is checked.
+
+  *Rejected: stopping at the first failure and saying so in the help.* It is
+  honest, and it makes the caller loop: fix, run, read the next failure, run
+  again, for a fact the command held at its first run.
+
+  *Rejected: one message carrying every failure.* `FR-ERR-008` fixes a message
+  at four labelled lines, and `FR-ERR-024` escapes the newline in every
+  interpolated value so that no value can forge a fifth. Several failures in
+  one `cause` line would be one long line that a caller has to split on a
+  separator this corpus does not fix.
+
+  *Added in the forty-sixth edition,* for rmp `#274`, from finding S-05 of the
+  second re-audit.
 
 - **BR-TMPL-001**: `tpl template check` is safe to run against a template you
   have not read. This is a guarantee, not a side effect.

@@ -41,7 +41,7 @@ use crate::error::Error;
 use crate::render::RenderBounds;
 
 /// The default of `database.<name>.port` (`FR-CONF-002`).
-const DEFAULT_PORT: u16 = 3306;
+pub(crate) const DEFAULT_PORT: u16 = 3306;
 
 /// How the entry for this invocation was chosen (`FR-GLOB-008`).
 ///
@@ -88,6 +88,7 @@ pub(crate) fn select<'a>(
             None => {
                 return Err(Error::NoDatabaseEntrySelected {
                     file: configuration.file().to_owned(),
+                    has_entries: configuration.names().len() > 0,
                 });
             }
         },
@@ -99,7 +100,7 @@ pub(crate) fn select<'a>(
     let (found, entry) = configuration
         .entries()
         .find(|(defined, _)| *defined == name)
-        .ok_or_else(|| configuration.entry_not_found(name))?;
+        .ok_or_else(|| configuration.entry_not_found(name, selection == Selection::File))?;
 
     Ok((found, entry, selection))
 }
@@ -125,6 +126,10 @@ pub(crate) struct Settings {
                   asserts both arms of it"
     )]
     selection: Selection,
+    /// Whether the entry is defined by `dsn` rather than by the discrete
+    /// fields (`FR-CONF-006`); a `hint` that repoints or completes the entry
+    /// names the flag of that form, per `FR-ERR-045`.
+    by_dsn: bool,
     /// The host, where the entry names one.
     host: Option<String>,
     /// The port, defaulted to `3306` per `FR-CONF-002`.
@@ -160,6 +165,11 @@ impl Settings {
     )]
     pub(crate) const fn selection(&self) -> Selection {
         self.selection
+    }
+
+    /// Whether the entry is defined by `dsn` (`FR-ERR-045`).
+    pub(crate) const fn by_dsn(&self) -> bool {
+        self.by_dsn
     }
 
     /// The host, where the entry names one.
@@ -269,6 +279,7 @@ where
     let mut settings = Settings {
         entry: name.to_owned(),
         selection,
+        by_dsn: entry.dsn.is_some(),
         host: None,
         port: DEFAULT_PORT,
         user: None,
@@ -298,7 +309,7 @@ where
         }
         if let Some(port) = parsed.port() {
             let expanded = expand::expand(port.raw(), lookup, &key, file)?;
-            settings.port = number(&expanded, &key, written.position, file)?;
+            settings.port = number(&expanded, port.raw(), &key, written.position, file)?;
         }
     } else {
         settings.host = expanded(
@@ -329,7 +340,7 @@ where
                 PortSetting::Fixed(fixed) => *fixed,
                 PortSetting::Written(written) => {
                     let expanded = expand::expand(written, lookup, &key, file)?;
-                    number(&expanded, &key, port.position, file)?
+                    number(&expanded, written, &key, port.position, file)?
                 }
             };
         }
@@ -347,6 +358,7 @@ where
         // FR-CONF-007 has already refused an entry carrying two password
         // sources, so the child is reached only where it is the one source.
         Some(command) => Some(password::obtain(
+            name,
             command,
             clock.bound(deadlines.of(Phase::PasswordCommand)),
         )?),
@@ -382,8 +394,13 @@ where
 }
 
 /// `value` as a TCP port, or the refusal of a value that is not one.
+///
+/// `written` is the value as the file wrote it. Where it differs from `value`
+/// a `${VAR}` produced the fault, and the refusal says so: the file holds the
+/// reference, not the number, and `tpl cfg` reads it without expanding it.
 fn number(
     value: &str,
+    written: &str,
     key: &str,
     position: crate::error::Position,
     file: &std::path::Path,
@@ -398,6 +415,7 @@ fn number(
             position,
             found: value.to_owned(),
             expected: super::config::keys::ValueType::Port.expected(),
+            expanded_from: (written != value).then(|| Box::new(written.to_owned())),
         })
 }
 

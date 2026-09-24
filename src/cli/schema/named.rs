@@ -119,6 +119,7 @@ pub(crate) fn routine_token<'t>(
             prefix: lower,
             name: name.to_owned(),
             invocation,
+            template: None,
         });
     }
 
@@ -329,12 +330,14 @@ pub(crate) fn routine_member<'m, M: RoutineMember>(
                 entry: entry.to_owned(),
                 database: database.to_owned(),
                 invocation,
+                template: None,
             },
             Sought::Document { path, database } => Error::AmbiguousRoutineInContext {
                 name: name.to_owned(),
                 path: path.to_owned(),
                 database: database.to_owned(),
                 invocation,
+                template: None,
             },
         });
     }
@@ -511,7 +514,7 @@ mod tests {
         assert!(
             rendered.contains(
                 "hint:  did you mean 'v_sale' or 'v_sales'? list the available views with: \
-                 tpl -d shop schema views"
+                 tpl schema views"
             ),
             "{rendered}"
         );

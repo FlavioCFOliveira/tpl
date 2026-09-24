@@ -76,16 +76,17 @@ const CONFIGURATION_TEMPLATE: &str = "\
 # This file is not versioned: it is per-machine access configuration and may
 # hold credentials. `.tpl/.gitignore` excludes it.
 #
-# Everything below is commented out, and every commented key is shown with the
-# value it takes when it is absent. A fresh project knows about no database
-# until one is added.
+# Everything below is commented out, and every commented key is shown with its
+# default, or with an example where it has none. A fresh project knows about no
+# database until one is added.
 #
 # The keys of [core]:
 #
 #   database            = \"shop\"     the entry every invocation uses when
 #                                    -d/--database is absent; no default
 #   connect_timeout     = 10         seconds, shared by DNS, TCP and TLS
-#   query_timeout       = 30         seconds, per catalogue query
+#   query_timeout       = 30         seconds, per query reading the database
+#                                    structure
 #   password_timeout    = 5          seconds, for password_command
 #   render_timeout      = 30         seconds, for one render
 #   render_fuel         = 100000000  evaluation steps, for one render
@@ -121,8 +122,9 @@ const EXAMPLE_TEMPLATE: &str = r#"{#
 
       tpl render example --table <table>
 
-  It walks the columns of the bound table and depends on nothing a particular
-  schema carries, so it renders against any table of any supported server.
+  It walks the columns of the table named by --table and depends on nothing
+  a particular schema carries, so it renders against any table of any
+  supported server.
 #}
 // {{ table.name | pascal }}: {{ table.columns | length }} column(s), read from
 // the database {{ database.name }}.
@@ -180,6 +182,10 @@ const TYPES_TEMPLATE: &str = r#"{#
 /// destination or any of the five artefacts could not be created
 /// (`FR-PROJ-015`).
 pub(crate) fn create(destination: &Path) -> Result<(), Error> {
+    // FR-PROJ-029, when the destination is first examined: a destination that
+    // names a `.tpl` folder is refused before anything else is asked of it.
+    refuse_tpl_folder(destination)?;
+
     let marker = destination.join(MARKER);
 
     // FR-PROJ-014, before anything is created: a destination that already holds
@@ -189,6 +195,15 @@ pub(crate) fn create(destination: &Path) -> Result<(), Error> {
         return Err(Error::ProjectAlreadyExists { path: marker });
     }
 
+    // FR-PROJ-016, as amended in the forty-ninth edition: the walk starts at
+    // the deepest directory that exists before anything is created, so a
+    // `.tpl` folder this invocation creates as a missing parent is never
+    // reported as a project above the destination. Between that directory and
+    // the destination there is nothing yet, so no pre-existing project is
+    // missed.
+    let shadowed =
+        deepest_existing(destination).and_then(|existing| discover::locate(None, existing).ok());
+
     // FR-PROJ-013, and the one exception FR-PROJ-024 enumerates: the
     // destination and its missing parents, which are directories and never a
     // file.
@@ -197,10 +212,6 @@ pub(crate) fn create(destination: &Path) -> Result<(), Error> {
         returned,
     })?;
 
-    // FR-PROJ-016: read before `.tpl` exists, so the walk finds the ancestor
-    // rather than the project about to be created.
-    let shadowed = discover::locate(None, destination).ok();
-
     write(&marker, destination)?;
 
     if let Some(above) = shadowed {
@@ -208,6 +219,78 @@ pub(crate) fn create(destination: &Path) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+/// The deepest of `destination` and its ancestors that exists, or [`None`]
+/// where none does.
+///
+/// A relative destination whose every segment is missing is resolved against
+/// the current directory, which is its implicit first ancestor.
+fn deepest_existing(destination: &Path) -> Option<&Path> {
+    destination
+        .ancestors()
+        .map(|ancestor| {
+            if ancestor.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                ancestor
+            }
+        })
+        .find(|ancestor| ancestor.is_dir())
+}
+
+/// Refuses a destination that names a `.tpl` folder (`FR-PROJ-029`).
+///
+/// Two tests, in the order the requirement gives them: the last segment of
+/// the path as written, where [`Path::file_name`] already drops trailing
+/// separators and `.` segments; and, where the destination exists, the last
+/// segment of its canonical path, which is the case of `tpl init` run inside a
+/// `.tpl` folder.
+///
+/// # Errors
+///
+/// Returns [`Error::InitDestinationIsTplFolder`] with the parent directory the
+/// hint names, or [`None`] for it where that parent is the current directory.
+fn refuse_tpl_folder(destination: &Path) -> Result<(), Error> {
+    let is_marker = discover::is_marker;
+
+    if is_marker(destination) {
+        let parent = destination
+            .parent()
+            .filter(|parent| {
+                parent
+                    .components()
+                    .any(|component| component != std::path::Component::CurDir)
+            })
+            .map(Path::to_path_buf);
+
+        return Err(Error::InitDestinationIsTplFolder {
+            written: destination.to_owned(),
+            canonical: None,
+            parent,
+        });
+    }
+
+    let Ok(canonical) = fs::canonicalize(destination) else {
+        return Ok(());
+    };
+    if !is_marker(&canonical) {
+        return Ok(());
+    }
+
+    let here = std::env::current_dir()
+        .ok()
+        .and_then(|here| fs::canonicalize(here).ok());
+    let parent = canonical
+        .parent()
+        .filter(|parent| here.as_deref() != Some(*parent))
+        .map(Path::to_path_buf);
+
+    Err(Error::InitDestinationIsTplFolder {
+        written: destination.to_owned(),
+        canonical: Some(canonical),
+        parent,
+    })
 }
 
 /// Writes the five artefacts under `marker`.

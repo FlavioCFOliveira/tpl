@@ -30,7 +30,7 @@
 use std::borrow::Cow;
 use std::path::Path;
 
-use crate::error::Error;
+use crate::error::{Error, ReferenceFault};
 
 /// The value of an environment variable, or [`None`] where it is not defined.
 ///
@@ -59,8 +59,9 @@ pub(crate) fn environment(name: &str) -> Option<String> {
 /// # Errors
 ///
 /// Returns [`Error::UnclosedExpansion`] for a `${` with no closing brace
-/// (`FR-CONF-021`), and [`Error::UndefinedVariable`] for a reference to a
-/// variable the lookup does not define (`FR-CONF-022`).
+/// (`FR-CONF-021`), [`Error::InvalidReferenceName`] for a reference whose name
+/// is not a variable name (`FR-CONF-049`), and [`Error::UndefinedVariable`]
+/// for a reference to a variable the lookup does not define (`FR-CONF-022`).
 pub(crate) fn expand<'a, L>(
     raw: &'a str,
     lookup: &L,
@@ -107,6 +108,15 @@ where
         };
 
         let name = &opened[..end];
+        // FR-CONF-049: a name no shell can define is a fault in the file, met
+        // where the field is expanded, as FR-CONF-021 is.
+        if !is_variable_name(name) {
+            return Err(Error::InvalidReferenceName {
+                key: key.to_owned(),
+                file: file.to_owned(),
+                name: name.to_owned(),
+            });
+        }
         let Some(value) = lookup(name) else {
             return Err(Error::UndefinedVariable {
                 name: name.to_owned(),
@@ -124,6 +134,52 @@ where
     expanded.push_str(rest);
 
     Ok(Cow::Owned(expanded))
+}
+
+/// Whether `name` is `[A-Za-z_][A-Za-z0-9_]*`, the portable form of a shell
+/// variable name (`FR-CONF-049`).
+pub(crate) fn is_variable_name(name: &str) -> bool {
+    let mut bytes = name.bytes();
+
+    bytes
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+/// The first fault of a reference in `raw`, read by the grammar [`expand`]
+/// applies, or [`None`] where every reference is well formed (`FR-CONF-021`,
+/// `FR-CONF-049`).
+///
+/// It is the check a value written on the command line is held to, so that a
+/// value the next expansion would refuse is refused where the caller wrote it.
+pub(crate) fn reference_fault(raw: &str) -> Option<ReferenceFault> {
+    let mut rest = raw;
+
+    while let Some(at) = rest.find('$') {
+        let after = &rest[at + 1..];
+
+        // FR-CONF-020: `$$` is a literal `$` and opens nothing.
+        if let Some(tail) = after.strip_prefix('$') {
+            rest = tail;
+            continue;
+        }
+        let Some(opened) = after.strip_prefix('{') else {
+            rest = after;
+            continue;
+        };
+        let Some(end) = opened.find('}') else {
+            return Some(ReferenceFault::Unclosed);
+        };
+
+        let name = &opened[..end];
+        if !is_variable_name(name) {
+            return Some(ReferenceFault::Name(name.to_owned()));
+        }
+        rest = &opened[end + 1..];
+    }
+
+    None
 }
 
 /// Whether `raw` is exactly one `${VAR}` reference and nothing else.
@@ -146,8 +202,9 @@ pub(crate) fn is_whole_reference(raw: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{expand, is_whole_reference};
+    use super::{expand, is_variable_name, is_whole_reference, reference_fault};
     use crate::error::Error;
+    use crate::error::ReferenceFault;
     use std::path::PathBuf;
 
     /// The file every condition below names.
@@ -283,5 +340,45 @@ mod tests {
         assert!(!is_whole_reference("${A}${B}"));
         assert!(!is_whole_reference("${}"));
         assert!(!is_whole_reference("hunter2"));
+    }
+
+    #[test]
+    fn fr_conf_049_a_reference_whose_name_no_shell_can_define_is_refused_where_it_expands() {
+        for raw in ["${1X}", "a${X-Y}b", "${}"] {
+            let condition = expand(raw, &table, "database.shop.user", &file())
+                .expect_err("the name is not a variable name");
+            assert!(
+                matches!(condition, Error::InvalidReferenceName { .. }),
+                "{raw}: {condition:?}"
+            );
+            assert_eq!(condition.exit_code(), 78);
+        }
+    }
+
+    #[test]
+    fn fr_conf_049_the_variable_name_rule_is_the_portable_shell_form() {
+        for valid in ["X", "_", "_1", "SHOP_DB_PASSWORD", "a9"] {
+            assert!(is_variable_name(valid), "{valid}");
+        }
+        for invalid in ["", "1X", "X-Y", "X.Y", "X Y", "\u{e1}"] {
+            assert!(!is_variable_name(invalid), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn fr_conf_049_the_write_check_reads_the_grammar_the_expansion_reads() {
+        assert_eq!(reference_fault("db.example.com"), None);
+        assert_eq!(reference_fault("${SHOP_HOST}"), None);
+        assert_eq!(
+            reference_fault("$${1X}"),
+            None,
+            "a doubled dollar opens nothing"
+        );
+        assert_eq!(reference_fault("a$b"), None);
+        assert_eq!(reference_fault("${SHOP"), Some(ReferenceFault::Unclosed));
+        assert_eq!(
+            reference_fault("${OK}-${1X}"),
+            Some(ReferenceFault::Name("1X".to_owned()))
+        );
     }
 }

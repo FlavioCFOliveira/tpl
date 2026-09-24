@@ -110,6 +110,79 @@ fn phase_line(phase: Phase, took: Duration) -> String {
     )
 }
 
+/// Warns that `tpl init` was given `--tpl-dir`, which has no effect on it
+/// (`FR-PROJ-026`).
+///
+/// The requirement fixes the line and forbids it to reproduce the value given
+/// to the flag, which is never examined, so the function takes no argument.
+pub(crate) fn tpl_dir_has_no_effect_on_init() {
+    if !emits(Level::Warnings) {
+        return;
+    }
+
+    write_line(TPL_DIR_ON_INIT);
+}
+
+/// The line of [`tpl_dir_has_no_effect_on_init`], as `FR-PROJ-026` fixes it.
+const TPL_DIR_ON_INIT: &str = "warning: --tpl-dir has no effect on tpl init; it takes its \
+                               destination as an operand: tpl init <path>";
+
+/// Where the database on the server of the entry an invocation writes comes
+/// from, which decides the last clause of the line of `FR-CFG-051`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ServerDatabase<'a> {
+    /// The invocation gives `--dsn`, or `update` names an entry `.tpl/.cfg`
+    /// defines by `dsn`: the database is the path part of the dsn, and
+    /// `--schema` is refused (`FR-CFG-048`).
+    Dsn,
+    /// The invocation gives `--schema`, so nothing is left to advise.
+    SchemaGiven,
+    /// The value given to `-d/--database` is byte-for-byte the `<name>`
+    /// operand: the caller used the flag to name the entry, and a `--schema`
+    /// clause would advise overwriting the server database with that name
+    /// (condition 3 of `FR-CFG-051`, the fifty-third edition).
+    NamesEntry,
+    /// Neither: the database is set with `--schema`, and the value given to
+    /// `-d/--database` is the likely one.
+    Schema(&'a str),
+}
+
+/// Warns that `tpl cfg database add` or `update` was given `-d/--database`,
+/// which has no effect on it (`FR-CFG-051`).
+///
+/// `command` is the canonical command path below `tpl`, whatever alias the
+/// invocation used. `server` chooses the last clause; the value it may carry
+/// is reproduced as the value of `--schema` only where the set of
+/// `FR-ERR-022` admits it.
+pub(crate) fn database_has_no_effect(command: &str, server: ServerDatabase<'_>) {
+    if !emits(Level::Warnings) {
+        return;
+    }
+
+    write_line(&database_line(command, server));
+}
+
+/// Composes the line of [`database_has_no_effect`], unescaped.
+fn database_line(command: &str, server: ServerDatabase<'_>) -> String {
+    let last = match server {
+        ServerDatabase::Dsn => "; the database on the server is the path part of --dsn".to_owned(),
+        ServerDatabase::SchemaGiven => String::new(),
+        ServerDatabase::NamesEntry => "; the name argument already names the entry".to_owned(),
+        ServerDatabase::Schema(given) => {
+            let schema = if super::hint::admits(given) {
+                given
+            } else {
+                "<database>"
+            };
+            format!("; the database on the server is set with --schema {schema}")
+        }
+    };
+    format!(
+        "{WARNING_TOKEN} -d/--database has no effect on tpl {command}; it selects the entry for \
+         commands that connect{last}"
+    )
+}
+
 /// Warns that a project just created shadows one in an ancestor directory.
 ///
 /// `FR-PROJ-016` obliges the warning and fixes what it says; the two paths are
@@ -131,6 +204,141 @@ fn shadow_line(created: &Path, shadowed: &Path) -> String {
     )
 }
 
+/// Warns that `tpl cfg unset` removed the `dsn` of an entry, and with it the
+/// five facts it carried (`FR-CFG-050`).
+///
+/// The line names the key and the entry and never any part of the dsn, per
+/// `BR-ERR-003`. It is written after the rewrite succeeded.
+pub(crate) fn dsn_unset(entry: &str) {
+    if !emits(Level::Warnings) {
+        return;
+    }
+
+    write_line(&dsn_unset_line(entry));
+}
+
+/// Composes the line of [`dsn_unset`], unescaped.
+fn dsn_unset_line(entry: &str) -> String {
+    format!(
+        "{WARNING_TOKEN} removed database.{entry}.dsn; entry '{entry}' no longer holds the host, \
+         port, user, password or database that dsn carried"
+    )
+}
+
+/// Warns that a `cfg` command deleted a database entry and left the data
+/// cached for it (`FR-CFG-052`).
+///
+/// It is written after the rewrite succeeded, and nothing under
+/// `.tpl/.cache/` is read to decide it: the line is the same whether or not a
+/// cache exists. `entry` was declared in `.tpl/.cfg`, so it has passed
+/// `FR-CONF-048` and is reproduced under `FR-ERR-022`. The command it carries
+/// carries the caller's `--tpl-dir`, per item 2.
+pub(crate) fn entry_removed(entry: &str) {
+    if !emits(Level::Warnings) {
+        return;
+    }
+
+    let project = super::restate::tpl_dir();
+    write_line(&entry_removed_line(
+        entry,
+        project.as_ref().map(Option::as_deref),
+    ));
+}
+
+/// Composes the line of [`entry_removed`], unescaped. `project` is the
+/// `--tpl-dir` the caller wrote, as [`clean_command`] takes it.
+fn entry_removed_line(entry: &str, project: Option<Option<&str>>) -> String {
+    let (command, placeholder) = clean_command(entry, project);
+    format!(
+        "{WARNING_TOKEN} removed entry '{entry}'; any data cached for it under \
+         .tpl/.cache/{entry}/ is kept, and an entry added later as '{entry}' reads it; clear it \
+         with: {command}{placeholder}"
+    )
+}
+
+/// Warns that `tpl cfg database update`, `tpl cfg set` or `tpl cfg unset`
+/// wrote a field that may repoint an entry, and that any data cached for it is
+/// kept (`FR-CFG-053`).
+///
+/// It is written after the rewrite succeeded, and after the line of
+/// `FR-CFG-051` or `FR-CFG-050` where the invocation writes both. Nothing under
+/// `.tpl/.cache/` is read to decide it, and no value is compared, so the line
+/// states neither a repoint nor a cache as fact (item 1). The command it
+/// carries carries the caller's `--tpl-dir`, per item 2.
+pub(crate) fn entry_repointed(entry: &str) {
+    if !emits(Level::Warnings) {
+        return;
+    }
+
+    let project = super::restate::tpl_dir();
+    write_line(&entry_repointed_line(
+        entry,
+        project.as_ref().map(Option::as_deref),
+    ));
+}
+
+/// Composes the line of [`entry_repointed`], unescaped.
+fn entry_repointed_line(entry: &str, project: Option<Option<&str>>) -> String {
+    let (command, placeholder) = clean_command(entry, project);
+    format!(
+        "{WARNING_TOKEN} entry '{entry}' may now point at another server; any data cached for \
+         it under .tpl/.cache/{entry}/ is kept and still served; clear it with: \
+         {command}{placeholder}"
+    )
+}
+
+/// The placeholder item 2 of `FR-CFG-052` writes for a `--tpl-dir` value the
+/// set of `FR-ERR-041` refuses.
+const TPL_DIR_PATH: &str = "<path>";
+
+/// `tpl -d <entry> cache clean`, led by `--tpl-dir` where the caller wrote
+/// one (item 2 of `FR-CFG-052`), and the clause that states in words what
+/// the placeholder stands for, empty where none was written.
+///
+/// `project` is [`None`] where no `--tpl-dir` was given, `Some(None)` where
+/// its value was refused, and `Some(Some(value))` otherwise.
+fn clean_command(entry: &str, project: Option<Option<&str>>) -> (String, &'static str) {
+    match project {
+        None => (format!("tpl -d {entry} cache clean"), ""),
+        Some(Some(path)) => (format!("tpl --tpl-dir {path} -d {entry} cache clean"), ""),
+        Some(None) => (
+            format!("tpl --tpl-dir {TPL_DIR_PATH} -d {entry} cache clean"),
+            ", where <path> is the --tpl-dir this invocation was given",
+        ),
+    }
+}
+
+/// Reports that `tpl cache clean` removed the data cached for a name that no
+/// entry of `.tpl/.cfg` declares (`FR-CACHE-041`).
+///
+/// `name` has passed `FR-CONF-048`, which is condition 1 of that requirement,
+/// so it is reproduced under `FR-ERR-022`. `recorded` is the name the
+/// filesystem records for the folder removed, [`None`] where it could not be
+/// read as text; it is reproduced only under the set of `FR-ERR-022`.
+pub(crate) fn orphan_cache_removed(name: &str, recorded: Option<&str>) {
+    if !emits(Level::Warnings) {
+        return;
+    }
+
+    write_line(&orphan_cache_line(name, recorded));
+}
+
+/// Composes the line of [`orphan_cache_removed`], unescaped.
+fn orphan_cache_line(name: &str, recorded: Option<&str>) -> String {
+    let removed = match recorded {
+        Some(folder) if folder == name => {
+            format!("removed the data cached for that name under .tpl/.cache/{name}/")
+        }
+        Some(folder) if super::hint::admits(folder) => {
+            format!("removed the data cached under .tpl/.cache/{folder}/")
+        }
+        _ => "removed the data cached in the folder of .tpl/.cache/ that the name resolved to, \
+              whose name differs from the name given"
+            .to_owned(),
+    };
+    format!("{WARNING_TOKEN} no entry '{name}' is declared in .tpl/.cfg; {removed}")
+}
+
 /// Escapes a composed line as a whole and writes it to stderr.
 ///
 /// The escaped line is the buffer `OD-17` asks for: one locked write, and
@@ -148,7 +356,11 @@ fn write_line(composed: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, WARNING_TOKEN, phase_line, shadow_line};
+    use super::{
+        CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, ServerDatabase, WARNING_TOKEN, database_line,
+        dsn_unset_line, entry_removed_line, entry_repointed_line, orphan_cache_line, phase_line,
+        shadow_line,
+    };
     use crate::deadline::Phase;
     use std::path::Path;
     use std::time::Duration;
@@ -215,5 +427,94 @@ mod tests {
         assert!(line.starts_with(WARNING_TOKEN), "{line}");
         assert!(line.contains("/work/app/.tpl"), "{line}");
         assert!(line.contains("/work/.tpl"), "{line}");
+    }
+
+    #[test]
+    fn fr_cfg_050_the_warning_names_the_key_the_entry_and_the_five_facts() {
+        let line = dsn_unset_line("ds");
+
+        assert_eq!(
+            line,
+            "warning: removed database.ds.dsn; entry 'ds' no longer holds the host, port, user, \
+             password or database that dsn carried"
+        );
+    }
+
+    #[test]
+    fn fr_cfg_051_a_value_equal_to_the_entry_name_names_neither_schema_nor_a_value() {
+        let line = database_line("cfg database update", ServerDatabase::NamesEntry);
+
+        assert_eq!(
+            line,
+            "warning: -d/--database has no effect on tpl cfg database update; it selects the \
+             entry for commands that connect; the name argument already names the entry"
+        );
+        assert!(!line.contains("--schema"), "{line}");
+    }
+
+    #[test]
+    fn fr_cfg_052_the_warning_names_the_entry_its_cache_and_the_clean_that_removes_it() {
+        assert_eq!(
+            entry_removed_line("shop", None),
+            "warning: removed entry 'shop'; any data cached for it under .tpl/.cache/shop/ is \
+             kept, and an entry added later as 'shop' reads it; clear it with: tpl -d shop cache \
+             clean"
+        );
+        // Item 2: the caller's --tpl-dir, before -d.
+        assert_eq!(
+            entry_removed_line("shop", Some(Some("/srv/shop/.tpl"))),
+            "warning: removed entry 'shop'; any data cached for it under .tpl/.cache/shop/ is \
+             kept, and an entry added later as 'shop' reads it; clear it with: tpl --tpl-dir \
+             /srv/shop/.tpl -d shop cache clean"
+        );
+        // A refused value is the placeholder, stated in words.
+        assert!(entry_removed_line("shop", Some(None)).ends_with(
+            "clear it with: tpl --tpl-dir <path> -d shop cache clean, where <path> is the \
+                 --tpl-dir this invocation was given"
+        ));
+    }
+
+    #[test]
+    fn fr_cfg_053_the_warning_names_the_entry_its_cache_and_the_clean_that_removes_it() {
+        assert_eq!(
+            entry_repointed_line("shop", None),
+            "warning: entry 'shop' may now point at another server; any data cached for it under \
+             .tpl/.cache/shop/ is kept and still served; clear it with: tpl -d shop cache clean"
+        );
+        // Item 1: nothing the command cannot know is stated as fact.
+        let line = entry_repointed_line("shop", None);
+        assert!(!line.contains("was repointed"), "{line}");
+        assert!(!line.contains("; data cached"), "{line}");
+        assert!(
+            entry_repointed_line("shop", Some(Some("../w/.tpl")))
+                .ends_with("clear it with: tpl --tpl-dir ../w/.tpl -d shop cache clean")
+        );
+        assert!(entry_repointed_line("shop", Some(None)).ends_with(
+            "tpl --tpl-dir <path> -d shop cache clean, where <path> is the --tpl-dir this \
+                 invocation was given"
+        ));
+    }
+
+    #[test]
+    fn fr_cache_041_the_line_names_the_folder_as_the_filesystem_records_it() {
+        assert_eq!(
+            orphan_cache_line("shop", Some("shop")),
+            "warning: no entry 'shop' is declared in .tpl/.cfg; removed the data cached for that \
+             name under .tpl/.cache/shop/"
+        );
+        assert_eq!(
+            orphan_cache_line("Shop", Some("shop")),
+            "warning: no entry 'Shop' is declared in .tpl/.cfg; removed the data cached under \
+             .tpl/.cache/shop/"
+        );
+        // A recorded name outside FR-ERR-022, or none, is not reproduced.
+        for recorded in [Some("sh\u{1b}op"), None] {
+            let line = orphan_cache_line("Shop", recorded);
+            assert!(
+                line.contains("whose name differs from the name given"),
+                "{line}"
+            );
+            assert!(!line.contains('\u{1b}'), "{line}");
+        }
     }
 }
