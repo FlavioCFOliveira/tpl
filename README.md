@@ -6,7 +6,7 @@
 curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.sh | sh
 ```
 
-The same command installs and updates `tpl`, into `/usr/local/bin` by default. It works once the first `v*` release is published; until then it reports that there is no published release. See [Installation](#installation).
+The same command installs and updates `tpl`, into `/usr/local/bin` by default. It installs the latest published release; the first is v0.0.1. See [Installation](#installation).
 
 Its interaction model is modelled on `git`: a single executable, commands with subcommands, short aliases, and read commands whose output is stable enough to pipe into something else. Templates are **plain files on disk, loaded and compiled at render time**, so changing a template never requires rebuilding `tpl`.
 
@@ -14,9 +14,9 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 
 ---
 
-> ## Status: implemented, unreleased
+> ## Status: implemented, first release v0.0.1
 >
-> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. `tpl` has never been released and no version has been tagged; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds.
+> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 is the first release of `tpl`; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds.
 >
 > | Command | State |
 > |---|---|
@@ -87,7 +87,7 @@ MySQL is not a target. A server that is not MariaDB is refused rather than read,
 
 ## Installation
 
-Releases are published on [GitHub Releases](https://github.com/FlavioCFOliveira/tpl/releases) when a `v*` tag is pushed. **None has been published yet**: until the first one is, the installer below reports that there is no published release and exits non-zero, and building from source is the only way to obtain `tpl`. How releases are built and published is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
+Releases are published on [GitHub Releases](https://github.com/FlavioCFOliveira/tpl/releases) when a `v*` tag is pushed. The first is v0.0.1. The installer below installs the latest release, and building from source remains an alternative. How releases are built and published is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
 
 ### With the install script
 

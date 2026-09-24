@@ -56,12 +56,13 @@ poll interval [`ADR-011`](../adr/adr-011-render-memory-accounting.md)
 delegates is fixed in [architecture.md](architecture.md#the-render-bounds), not
 here.
 
-**One settled entry was amended on 2026-09-24**: `OD-23` now cites
+**Two settled entries were amended on 2026-09-24**: `OD-23` now cites
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), which reverses the
 entry's refusal to prescribe continuous integration and fixes the release
 artefact. The same day, for rmp `#293`, `OD-03` was worded more precisely, and
 its decision is unchanged: its binary-version rule names Semantic Versioning
-2.0.0.
+2.0.0. For rmp `#294`, `OD-03` was amended: the binary version's value is
+`0.0.1`, the first release the user chose.
 
 **One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
 that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
@@ -381,13 +382,14 @@ and the one point that remains unverified are recorded in `ADR-007` and are
 
 **Status: settled.** Worded more precisely on 2026-09-24, for rmp `#293`: the
 binary version's rule now names the standard and its version. The decision is
-unchanged.
+unchanged. Amended on 2026-09-24, for rmp `#294`: the binary version's value is
+`0.0.1`, the first release, chosen by the user; it had been `0.1.0`.
 
 **Decision.** Four numbers, four rules.
 
 | Number | Value now | Rule |
 |---|---|---|
-| Binary version | `0.1.0` | Full [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). While below 1.0, a breaking change is a **minor** bump |
+| Binary version | `0.0.1` | Full [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). While below 1.0, a breaking change is a **minor** bump |
 | `schema_version` | `1` | Versions the document contract, independently of the binary, per `FR-OUT-011`; what breaks it is `FR-OUT-014` |
 | `cache_format` | `1` | Versions the on-disk arrangement only, independently of `schema_version`, per `FR-CDOC-002` and `FR-CDOC-005` |
 | Changelog | `CHANGELOG.md` | Keep a Changelog format |
@@ -395,9 +397,10 @@ unchanged.
 `tpl.version` and the output of `tpl version` both come from
 `CARGO_PKG_VERSION`, so the number has **one source**.
 
-**Rationale.** `FR-HELP-005` gives `tpl 0.1.0\n` as its worked case and
-`FR-CTX-027` carries the same string, so `0.1.0` is the version the corpus
-already assumes. Reading it from `CARGO_PKG_VERSION` is what makes
+**Rationale.** The user chose `0.0.1` as the first release on 2026-09-24.
+`FR-HELP-005` gives `tpl 0.1.0\n` as its worked case and `FR-CTX-027` carries
+the same string; both are illustrative examples and do not fix the value.
+Reading it from `CARGO_PKG_VERSION` is what makes
 `FR-HELP-005` and `FR-CTX-027` incapable of disagreeing: a second literal
 would be the copy that stops being true. Pre-1.0 breaking changes as minor
 bumps is the semver convention for a version below 1.0 and needs no local

@@ -29,17 +29,20 @@ workflow, before it closes.
   recorded here.** `FR-ENV-029` makes it the one entry a release may never omit,
   and it is breaking: under the pre-1.0 rule above, it moves the minor number.
   Adding a name is not breaking and is an ordinary `Added` line.
-- **Nothing has been released, so nothing is yet a fix.** Until the first
-  release, a defect corrected in work that never shipped is not a `Fixed` entry:
-  amend the `Added` line it belongs to instead.
+- **A fix is a `Fixed` entry only when the defect shipped.** A defect present
+  in a released version is recorded under `Fixed`. A defect corrected in work
+  that has not yet been released is not: amend the `Unreleased` line it belongs
+  to instead.
 
 ## Unreleased
 
-`tpl` has never been released and no version has ever been tagged, so this
-section covers **the whole of the project's history to date** — everything built
-from the first commit to the present. It carries only `Added` for that reason:
-with no previous release, there is nothing yet to change, deprecate, remove, fix
-or secure. The first release renames this heading to `0.1.0` and dates it.
+## [0.0.1] - 2026-09-24
+
+The first release of `tpl`. No earlier version was ever released or tagged, so
+this entry covers **the whole of the project's history up to the release** —
+everything built from the first commit to `0.0.1`. It carries only `Added` for
+that reason: with no previous release, there was nothing to change, deprecate,
+remove, fix or secure.
 
 ### Added
 
@@ -53,7 +56,7 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
 - **Help and version.** Help renders seven sections at a fixed width of eighty
   columns, for every node of the tree. `tpl help --format json` publishes the
   command tree, the global flags and the template surface as one JSON document.
-  `tpl version` prints `tpl 0.1.0`.
+  `tpl version` prints `tpl 0.0.1`.
 - **Projects.** `tpl init` creates a `.tpl` project. Commands find one by walking
   up from the working directory as far as the mount point; `--tpl-dir` names the
   `.tpl` folder itself and suppresses the walk, and has no effect on `init`,
