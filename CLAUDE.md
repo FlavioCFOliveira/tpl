@@ -2,84 +2,453 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+É **coordenação de agentes**: diz o que o projecto é, onde vive a verdade sobre ele, e como o trabalho é executado aqui. **Não contém requisitos funcionais.**
+
+---
+
+> # ⛔ REGRA ZERO — UM SUBAGENTE DE CADA VEZ
+>
+> **NÃO ESTÁS AUTORIZADO A CORRER MAIS DO QUE UM SUBAGENTE EM SIMULTÂNEO.**
+>
+> O padrão é **um único subagente em paralelo à conversa principal**. Usam-se **todos** os subagentes
+> que o objectivo exigir, mas **em série** — nunca em paralelo.
+>
+> **O paralelismo exige uma única condição: autorização expressa e clara do utilizador**, dada para
+> o pedido em causa. Sem ela, é proibido.
+>
+> Dada a autorização, o paralelismo é **excepção**: vale só para o pedido em causa e a autorização
+> **é sempre revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização
+> de paralelismo não abre precedente para as tarefas seguintes.
+>
+> **Antes de lançar um subagente, verificar que nenhum outro está vivo.** A verificação é por
+> **listagem dos agentes**, não pela memória do que foi lançado nem pela notificação do anterior:
+> um agente pode ficar com trabalho de fundo próprio e **retomar sozinho** depois de notificar.
+> Havendo outro vivo — **PARAR** e esperar.
+>
+> Esta regra **precede todas as outras deste ficheiro** e sobrepõe-se a qualquer heurística por
+> defeito que favoreça paralelismo. O desenvolvimento está em `Um de cada vez — nunca em paralelo`.
+
+---
+
 ## Visão Geral
 
 `tpl` é uma **aplicação de linha de comandos escrita em Rust** que lê a estrutura (DDL / schema) de bases de dados **MariaDB** e aplica **templates MiniJinja** para produzir texto ou código a partir dessa estrutura.
 
-O modelo de interacção é **inspirado no `git`**: um único executável, comandos *porcelain* para humanos, subcomandos, aliases curtos, flags longas e curtas, configuração hierárquica (global e local, com precedência bem definida) e comandos *plumbing* com saída estável, pensados para composição em pipelines.
+O modelo de interacção é **inspirado no `git`**: um único executável, subcomandos, aliases curtos, e comandos de leitura com saída estável, pensados para composição em pipelines.
 
-## Os Três Braços
+**Âmbito do produto.** O `tpl` explora a base de dados, explora os templates do projecto, e renderiza um a partir do outro. É **read-only** sobre a base de dados, e a única escrita que faz em disco é a que lhe for explicitamente pedida na linha de comando, além da gestão da própria pasta de projecto. Uma funcionalidade que não caiba nisto não pertence ao `tpl`.
 
-A aplicação organiza-se em três braços, e **todos são read-only**. Esta é a arrumação de topo do produto: todo o comando pertence a um braço, e uma funcionalidade que não caiba em nenhum deles não pertence ao `tpl`.
+**Consumidor primário: agentes de IA.** O utilizador esperado não é uma pessoa numa shell interactiva — é um agente (Claude Code, Codex e equivalentes) a invocar a ferramenta programaticamente e a ler o resultado. Um agente dispõe de três canais para perceber uma CLI, e só três: o **texto de ajuda**, o **exit code** e o **stdout/stderr**. Isto é um requisito de design de primeira ordem e é a razão de a ajuda, os exit codes, os formatos de saída e o determinismo serem tratados como contrato. **O conteúdo desse contrato é da especificação, não deste ficheiro.**
 
-| # | Braço | Comando | O que faz |
-|---|---|---|---|
-| 1 | Exploração da base de dados | `tpl schema …` | Lê e apresenta a estrutura: características da BD, tabelas, colunas, índices, chaves, vistas, rotinas |
-| 2 | Exploração dos templates | `tpl template …` | Lê e apresenta os templates disponíveis em `.tpl/templates/` |
-| 3 | Renderização | `tpl render …` | Lê a base de dados → lê o template → renderiza → **imprime o output** |
+## Fontes de Verdade
 
-O braço 3 é a composição dos dois primeiros e o único que os junta. O seu pipeline é fixo e não tem outras etapas: *ler BD → ler template → renderizar → imprimir*.
+O projecto tem quatro fontes de verdade, com âmbitos que não se sobrepõem. Confundi-las é o erro previsível:
 
-**Por defeito, o resultado de qualquer comando vai para a consola.** Isto vale para os três braços, não apenas para o `render`: `stdout` é o destino por omissão, sempre.
+| Fonte | Responde a | Dono |
+|---|---|---|
+| `/specification` | **O que** o `tpl` faz — requisitos, regras, casos de uso | subagente `specification-manager` |
+| `rmp` | **Quando e por quem** — sprints, tarefas, estado, decisões | skill `roadmap-manager` |
+| Knowledge Graph | **Onde** — que código existe, como se articula, e que requisito cada componente satisfaz | skill `knowledge-authority` |
+| `docs/spec-technical/` | **Como** o `tpl` é construído — arquitectura, interfaces, dados, segurança, operação, qualidade | subagente `technical-writer` |
 
-Guardar o resultado em disco é possível, mas **só por flag explícita** (`--output`, e no `render` também `--output-dir`). Sem essas flags o `tpl` não cria nem toca em nenhum ficheiro fora de `.tpl/`. O destino do output é, por isso, uma decisão sempre visível na linha de comando — nunca um efeito lateral implícito, o que importa quando quem invoca é um agente que não supervisiona a árvore de ficheiros.
+Uma tarefa no `rmp` implementa um requisito da especificação; não o substitui. Um facto no grafo descreve o código que existe; não legitima código que a especificação não pediu. A especificação técnica prescreve como se constrói o que a especificação funcional pede; onde discordarem, governa `/specification`. Os registos de decisão de arquitectura, em `docs/adr/`, não acrescentam uma quinta fonte: fundamentam a quarta, e nenhum é autoridade para um requisito.
 
-Fora dos três braços existe apenas a gestão do projecto (`tpl init`, `tpl database …`, `tpl config …`): é auxiliar, não é um braço, e a sua escrita limita-se à pasta `.tpl/`.
+**Este ficheiro não é fonte de verdade funcional.** Não descreve comandos, flags, formatos de saída, exit codes, variáveis de contexto, filtros, nem a estrutura da configuração. Perante qualquer pergunta sobre *o que* o `tpl` faz, ler a especificação — nunca responder a partir deste ficheiro, e nunca reintroduzir aqui o que ela já diz. Uma segunda cópia deixa de ser verdadeira sem dar sinal disso.
 
-## Consumidor Primário: Agentes de IA
+### Onde procurar cada assunto
 
-O utilizador esperado do `tpl` **não é uma pessoa numa shell interactiva — é um agente de IA** (Claude Code, Codex e equivalentes) a invocar a ferramenta programaticamente e a ler o resultado. Isto é um requisito de design com o mesmo peso dos anteriores: molda o `--help`, os exit codes, as mensagens de erro e o que se escreve em `stdout`.
+O índice completo e actual está em `specification/README.md`, e é por aí que se começa. Os assuntos que este ficheiro deixou de descrever estão distribuídos assim:
 
-Um agente dispõe de três canais para perceber uma CLI, e só três: o **texto de ajuda**, o **exit code** e o **stdout/stderr**. Os três têm de bastar, sozinhos, para descobrir como usar a ferramenta, saber se correu bem, e saber o que fazer a seguir quando não correu.
+| Assunto | Ficheiro |
+|---|---|
+| Gramática de invocação, árvore de comandos, aliases, argumentos | `specification/cli-contract.md` |
+| Flags globais, variáveis de ambiente, precedência de configuração | `specification/global-flags.md` |
+| Formas de ajuda, estrutura do texto de ajuda, árvore de comandos em JSON, versão | `specification/help-and-version.md` |
+| Exploração da base de dados | `specification/schema-commands.md` |
+| Exploração dos templates | `specification/template-commands.md` |
+| Renderização | `specification/render-command.md` |
+| Cache do catálogo | `specification/cache-commands.md`, `specification/cache-documents.md` |
+| Gestão da configuração e das entradas de base de dados | `specification/cfg-commands.md` |
+| Ficheiro de configuração do projecto: chaves, tipos, expansão, definições de ligação | `specification/configuration-model.md` |
+| A pasta do projecto, a sua descoberta e a inicialização | `specification/project-and-discovery.md` |
+| Saída em texto e em JSON, envelope, codificação, destino do output | `specification/output-formats.md` |
+| Exit codes, ordem de validação, formato das mensagens de erro, sugestões | `specification/errors-and-exit-codes.md` |
+| Regras transversais de segurança e tratamento de credenciais | `specification/security.md` |
+| O que entra no modelo a partir do catálogo, e o que fica de fora | `specification/catalogue-coverage.md` |
+| Estrutura do documento que transporta o modelo — o contexto de render | `specification/context-document.md` |
+| Filtros, testes e funções globais disponíveis ao template | `specification/template-environment.md` |
+| Semântica de render | `specification/render-semantics.md` |
+| Séries de MariaDB suportadas, diferenças entre séries, promessa de read-only | `specification/server-contract.md` |
+| Leituras incompletas por privilégios insuficientes | `specification/privileges-and-completeness.md` |
+| Propriedades de desempenho exigidas, cargas de referência, protocolo de medição | `specification/performance-requirements.md` |
+| Termos, casos de uso ponta a ponta, questões em aberto | `specification/glossary.md`, `specification/use-cases.md`, `specification/open-questions.md` |
 
-### Ajuda legível por LLM
+## Regras Inegociáveis
 
-- **Auto-suficiência.** `tpl --help` e `tpl <comando> --help` descrevem completamente o nível em que estão e enumeram os filhos. Nunca remeter para manual externo, site ou README — o agente não os vai buscar.
-- **Estrutura fixa e idêntica em todos os níveis**, sempre pela mesma ordem: `USAGE`, `DESCRIPTION`, `ARGUMENTS`, `OPTIONS`, `EXAMPLES`, `EXIT CODES`, `SEE ALSO`.
-- **Exemplos em toda a ajuda.** Todo o `--help` de comando termina com pelo menos um exemplo completo, copiável e correcto. Os agentes copiam exemplos: um exemplo vale mais do que três parágrafos de prosa.
-- **Explicitar o que habitualmente se subentende:** tipo de cada valor, valor por defeito, obrigatoriedade, valores admissíveis enumerados (`--tls <disabled|preferred|required>`), repetibilidade, e exclusões mútuas (`--dsn` é incompatível com `--host`).
-- **Ajuda em JSON.** `tpl help --format json` emite a **árvore completa de comandos** num único documento — comandos, subcomandos, aliases, argumentos, flags, tipos, defaults, enums, obrigatoriedade e exit codes. É como um agente carrega toda a superfície da CLI numa só invocação, em vez de a descobrir por tentativa e erro. Este documento é contrato e tem teste próprio.
-- **Concisão.** A ajuda ocupa janela de contexto. Frases curtas, sem prosa de marketing, sem repetir entre níveis o que já foi dito.
+Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desenvolve; a tabela existe para que nenhuma se perca por estar longe.
 
-### Nunca interactivo
+| Regra | Se estiver prestes a quebrá-la |
+|---|---|
+| Só se trabalha sobre **tarefa aberta**: no sprint `OPEN` e em `DOING` com `--commit-open` | **PARAR** e abri-la pela skill `roadmap-manager` |
+| **Nenhuma tarefa é executada directamente** — delega-se a um subagente, e a cada peça de trabalho o seu | **PARAR** e escolher o subagente |
+| **REGRA ZERO — um subagente de cada vez**, nunca em paralelo. Listar os agentes antes de cada lançamento | **PARAR** e serializar. O paralelismo exige **autorização expressa** do utilizador — única condição — e é excepção revogada no fim da tarefa |
+| A **procura de sinergia e convergência é por defeito**, nunca se espera do utilizador e **nunca é tarefa no `rmp`**; trabalho com **objectivos complementares** ou **proximidade funcional ou técnica substancial** faz-se num **único esforço**, e cada natureza de trabalho de uma só vez | **PARAR** e reagrupar. Juntar tarefas é planeamento, e exige confirmação do utilizador |
+| Escrita no Git **só** pela skill `gitflow` | **PARAR**. Nunca um `git commit` avulso, por trivial que seja |
+| Tarefas, sprints e comentários **só** pela skill `roadmap-manager` | **PARAR**. Nunca `rmp` invocado do Bash |
+| Conhecimento sobre o código **só** pela skill `knowledge-authority` | **PARAR**. Nunca `rmp graph …` directamente |
+| A **especificação precede a implementação**, e `/specification` só é escrita pelo subagente `specification-manager` | **PARAR** e formalizar o requisito primeiro |
+| `docs/spec-technical/` só é escrita pelo subagente `technical-writer`; `docs/adr/`, pelo `adr-guardian` | **PARAR** e delegar. Nenhuma se edita por iniciativa própria |
+| **Nada se lê, lista ou referencia fora da raiz do repositório** | **PARAR**. O que faltar pergunta-se ao utilizador |
+| **`unsafe` é proibido**; `#![forbid(unsafe_code)]` mantém-se no topo do crate | **PARAR** e resolver em Rust seguro |
+| O **pipeline de validação obrigatório** passa antes de o trabalho estar concluído | O trabalho **não está concluído**. Corrigir e repetir |
+| O `tpl` **nunca escreve na base de dados** | **PARAR**. A leitura do catálogo é só por `INFORMATION_SCHEMA` |
+| Templates carregam-se **em runtime**, nunca embebidos em tempo de compilação | **PARAR**. Motores compile-time estão excluídos |
+| Validação que precise de base de dados usa a **fixture do projecto**, operada pelo seu harness | **PARAR** e levantá-la pelo harness. Nunca à mão, nunca mocks nem instâncias externas |
+| **Nada se inicia que não tenha sido explicitamente pedido** | **PARAR**. Registar o achado e perguntar ao utilizador como proceder |
+| **Nenhum trabalho se entrega a meio** | O trabalho **não está concluído**. Terminar, ou dizer explicitamente o que ficou por fazer e porquê |
+| Toda a **documentação é escrita em inglês**, e toda a instrução é explícita, objectiva, fechada e concisa | **PARAR** e reescrever |
 
-O `tpl` **nunca** pede input. Sem prompts de confirmação, sem pedidos de password, sem paginador, sem leitura de `stdin` que não seja um `--context` explicitamente pedido. Um prompt bloqueia um agente indefinidamente e o timeout que se segue não lhe diz o que falhou. Perante informação em falta, o comportamento correcto é falhar de imediato, com o exit code adequado e uma mensagem que diga exactamente o que falta.
+## Antes de Começar
 
-### Sucesso é silencioso
+Correr esta verificação antes de qualquer trabalho. Um "não" em qualquer ponto interrompe o trabalho — não o autoriza a prosseguir com uma nota.
 
-Um comando bem sucedido escreve **apenas o resultado esperado** em `stdout` e termina com `0`. Nada de `OK`, `Done`, sumários, contagens, tempos decorridos, emoji, barras de progresso ou spinners. Um comando que não produza dados — `tpl init`, `tpl database add` — não escreve nada: o `0` é a mensagem.
+1. **O requisito está na especificação?** Se não estiver, ou estiver ambíguo, incompleto ou contraditório — **PARAR**. A primeira tarefa é levá-lo ao subagente `specification-manager`.
+2. **Existe tarefa no `rmp` para este trabalho?** Se não — **PARAR** e criá-la pela skill `roadmap-manager`. Não se executa trabalho sem tarefa.
+3. **A tarefa está no sprint `OPEN`?** Se está em `BACKLOG`, ou num sprint `PENDING` ou `CLOSED` — **PARAR**. Trazê-la para o sprint aberto é acção de planeamento e **exige confirmação do utilizador**.
+4. **A tarefa está em `DOING`, aberta com `--commit-open <hash>`?** Se não, abrir agora, com o hash real de `git rev-parse HEAD`.
+5. **Há sinergia ou convergência por aproveitar?** Verificar **sempre**, sem esperar que o utilizador o peça, se outras tarefas — no `rmp` ou fora dele — têm objectivos complementares ou proximidade funcional ou técnica substancial com esta. Havendo, **PARAR**: propor ao utilizador juntá-las num único esforço e esperar pela decisão. A verificação **não gera tarefa própria** — é **A procura não é tarefa**, mais abaixo.
+6. **Que subagente executa cada peça do trabalho?** Decompor a tarefa e escolher por peça, avaliando os agentes efectivamente instalados. Sem especialista óbvio, o de propósito geral — **nunca** execução directa.
+7. **O âmbito está fechado?** O briefing é o que a tarefa define — título, descrição, requisitos, comentários — e mais nada. O que se descobrir fora dele **regista-se; não se executa**.
+8. **Durante o trabalho**, escrever o log à medida: `DECISION` com as opções rejeitadas, `FINDING` com o que se descobriu, `TEST` com a verificação e o resultado.
+9. **Ao fechar**, commit primeiro pela skill `gitflow`, depois `--commit-close <hash>` com o hash real desse commit.
 
-Tudo o que não seja resultado vai para `stderr`, incluindo avisos e o output do `tracing`.
+## Sinergia e Convergência do Esforço
 
-### Determinismo
+> **Rentabilizar o esforço, entregando o máximo com o mínimo de trabalho.**
 
-A mesma invocação sobre o mesmo estado produz **output byte a byte idêntico**. Ordenações são sempre explícitas e estáveis — tabelas por nome, colunas por posição ordinal, índices por nome — nunca a ordem de chegada do servidor. Os agentes comparam outputs entre execuções, e instabilidade lê-se como mudança real.
+**A procura de sinergia e de convergência é o modo de trabalho por defeito**, é permanente, e vale em toda a forma de trabalhar neste projecto. Antes de planear, antes de decompor e antes de delegar, a pergunta é a mesma: que trabalho pode ser feito **de uma só vez**, em benefício de mais do que uma tarefa?
 
-A variável `now` do contexto de render é a única excepção conhecida e quebra a reprodutibilidade de quem a use. Documentá-la como tal no README.
+**Um objectivo atinge-se no menor número de tarefas ou de iterações possível**, maximizando os recursos internos disponíveis, para que a entrega seja mais rápida e custe menos ao utilizador.
+
+**NÃO DEVE SER NECESSÁRIO o utilizador pedir para procurar convergências e sinergias.** A procura nunca se espera dele: dar por si a executar tarefa a tarefa sem ter procurado o que as junta é motivo para **PARAR** e procurar. O que continua a exigir **confirmação do utilizador** é **juntar** as tarefas, nos termos de **Entre tarefas**, mais abaixo — procurar é por defeito, decidir é dele.
+
+### A procura não é tarefa
+
+**A procura de sinergia e de convergência NUNCA se regista como tarefa no `rmp`.** É modo de trabalho, não é trabalho: corre dentro do que já está aberto, não consome tarefa própria, não abre sprint e não precisa de autorização para acontecer. Estar prestes a criar uma tarefa para "procurar sinergias" é motivo para **PARAR**.
+
+Regista-se o **resultado**, e só havendo um: a proposta de juntar tarefas leva-se ao utilizador, e o que ele decidir regista-se pela skill `roadmap-manager` nas tarefas que o esforço junta. **Nenhum trabalho fora de uma tarefa aberta** governa o trabalho — não a procura, que o precede.
+
+### A sinergia melhora o trabalho — nunca o piora
+
+O esforço agrupado entrega trabalho **melhor** do que a execução tarefa a tarefa, e **NUNCA pior**: mais rápido **sem custar qualidade**. Agrega-se o trabalho da mesma natureza onde isso **encurta o trabalho sem prejudicar a entrega**; onde prejudicasse, não se agrega.
+
+### Entre tarefas
+
+**A convergência procura-se nos objectivos individuais de cada tarefa.** Objectivos complementares, proximidade funcional e proximidade técnica convertem-se, todos, num **único esforço optimizado**.
+
+Identificadas tarefas — no `rmp` ou fora dele — cujos **objectivos são complementares** ou cuja **proximidade funcional ou técnica é substancial**, juntam-se num **único esforço de desenvolvimento**, para que um trabalho sirva várias. Deixar tarefas próximas seguirem caminhos separados é desperdício, e é motivo para **PARAR** e reagrupar.
+
+Juntar tarefas é **acção de planeamento** e **exige confirmação do utilizador**: propõe-se, identificando as tarefas e a convergência ou proximidade que as junta, e espera-se pela decisão. Identificar sinergia **NUNCA** é autorização para começar o trabalho das outras tarefas — é **Proactividade**, mais abaixo, e vale aqui sem alteração.
+
+As condições de **Nenhum trabalho fora de uma tarefa aberta** não se dispensam: cada tarefa do esforço pertence ao sprint `OPEN` e está em `DOING`, aberta com `--commit-open <hash>`.
+
+Autorizado o esforço, o seu âmbito é a **união dos âmbitos das tarefas que o compõem**, e essa união é ela própria fechada.
+
+### Dentro da tarefa
+
+Dentro de uma tarefa a exigência é a mesma: **agrupar o trabalho por natureza e executar cada natureza de uma só vez.** Escrever **todo** o código de uma vez e testar **tudo** de uma vez, em lugar de escrever um troço, testá-lo, escrever o seguinte e testá-lo — a alternância multiplica delegações, contextos e validações sem acrescentar nada.
+
+O mesmo vale para a documentação, e para qualquer outra natureza de trabalho: trata-se **toda de uma vez**. Sendo o âmbito grande de mais para uma só passagem, **identificam-se blocos** e trata-se cada bloco por inteiro, de uma só vez — nunca peça a peça.
+
+O pipeline de validação obrigatório, definido em **Desenvolvimento**, corre sobre o esforço completo, e não depois de cada fragmento.
+
+### Sinergia não é paralelismo
+
+A sinergia ganha-se com **menos delegações e maiores** — nunca com delegações simultâneas. **Um de cada vez — nunca em paralelo**, mais abaixo, mantém-se intacto, e nada nesta secção o afrouxa.
+
+### O esforço só está concluído quando todas as suas tarefas estão
+
+Um esforço que junte várias tarefas cumpre **Completude** por inteiro: nenhuma tarefa se dá por concluída enquanto o trabalho que lhe pertence não estiver feito e validado. Cada uma fecha pelo seu próprio gate, nos termos de **Fecho: primeiro o commit, depois a tarefa**.
+
+## Execução de Tarefas por Subagentes
+
+**Nenhuma tarefa é executada directamente.** Sempre que uma tarefa começa, é delegada a um **subagente especializado**, escolhido por ser o mais adequado ao propósito dessa tarefa concreta. Dar por si a executar directamente é motivo para **PARAR** e delegar.
+
+### Escolha do subagente
+
+O conjunto de subagentes disponíveis **é avaliado no momento**, no computador onde o trabalho decorre. Não existe aqui uma lista fixa, e **NUNCA** passará a existir: os agentes instalados mudam, e uma lista escrita neste ficheiro ficaria desactualizada sem dar sinal disso. Antes de delegar, verificar **SEMPRE** quem está efectivamente disponível e escolher em função do propósito da tarefa.
+
+Se nenhum subagente for claramente o mais adequado, escolher o de propósito geral. A ausência de uma escolha óbvia **NUNCA** é autorização para executar directamente.
+
+As indicações de agente já escritas noutras secções deste ficheiro — `rust-elite-developer` para código Rust, `rust-perf-engineer` e `extreme-code-profiler` para desempenho, `security-researcher` para superfície de ataque, `specification-manager` para a especificação — são casos particulares desta regra, não excepções a ela.
+
+### A regra vale para cada peça de trabalho
+
+**A delegação não é só por tarefa — é por cada peça de trabalho dentro dela.** Aberta a tarefa, o trabalho que ela contém é **decomposto**, e para **cada peça** escolhe-se o subagente mais adequado, avaliado contra os agentes efectivamente instalados na máquina nesse momento, nos termos da secção anterior.
+
+**A decomposição é por natureza do trabalho, nunca por fragmento.** Todo o trabalho da mesma natureza vai numa **única delegação** ao mesmo subagente — nunca em delegações sucessivas sobre pedaços do mesmo problema. É o que **Sinergia e Convergência do Esforço** exige.
+
+Uma tarefa que atravesse vários tipos de trabalho — especificação, código, testes, desempenho, segurança, documentação — usa **vários subagentes**, um por tipo, cada um com **todo** o trabalho desse tipo, e **SEMPRE em série**, nos termos de **Um de cada vez — nunca em paralelo**, mais abaixo.
+
+**A escolha do subagente de cada peça é registada na tarefa**, através da skill `roadmap-manager`, para que a execução fique rastreável a quem a fez.
+
+Por peça valem, sem alteração, as duas regras de **Escolha do subagente**: avaliar os agentes efectivamente instalados no momento, e recorrer ao de propósito geral quando não houver especialista óbvio.
+
+### Âmbito fechado
+
+Cada tarefa é executada sob um **âmbito fechado, objectivo e focado exclusivamente no seu propósito**. O briefing entregue ao subagente é delimitado pelo que a tarefa define — **título, descrição, requisitos e comentários** — e por mais nada.
+
+O subagente **NUNCA** alarga o âmbito, **NUNCA** aproveita a passagem para corrigir o que encontra pelo caminho, e **NUNCA** antecipa a tarefa seguinte. O que descobrir fora do âmbito regista-se como comentário ou como nova tarefa, através da skill `roadmap-manager`; não se executa. Perante a tentação de o corrigir já, **PARAR** e registar.
+
+Um esforço que junte várias tarefas tem por âmbito a união dos âmbitos delas, fixada no momento em que o utilizador o autoriza e fechada a partir daí. **Sinergia e Convergência do Esforço** decide-se antes de executar; durante a execução **NUNCA** é porta para alargar âmbito.
+
+O que aqui se exige ao subagente, **Proactividade**, mais abaixo, exige à sessão inteira.
+
+### Um de cada vez — nunca em paralelo
+
+> Esta secção desenvolve a **REGRA ZERO**, no topo deste ficheiro. Onde parecerem divergir, governa a Regra Zero.
+
+**NUNCA correr mais do que um subagente em simultâneo.** **Devem** usar-se todos os subagentes que o objectivo exigir, mas SEMPRE **em série**: lançar um, esperar que termine, avaliar o resultado, e só então lançar o seguinte. Dar por si prestes a lançar dois — **PARAR** e serializar.
+
+#### O gate de lançamento
+
+Antes de **cada** delegação, sem excepção e por trivial que pareça:
+
+1. **Listar os agentes** e confirmar que **nenhum** está em execução.
+2. Só então lançar.
+
+**A notificação de conclusão do agente anterior não basta.** Um agente pode parar com trabalho de fundo próprio ainda a correr e **retomar sozinho** depois de ter notificado — caso em que passam a existir dois agentes activos sem que nenhuma decisão o tenha querido. Confiar na notificação é confiar num facto que pode deixar de ser verdadeiro; a listagem é o estado real, no momento.
+
+Encontrado outro agente vivo — **PARAR** e esperar que termine. **NUNCA** lançar "só mais um" enquanto se espera.
+
+Esta regra sobrepõe-se a qualquer heurística por defeito que favoreça paralelismo, incluindo o hábito de agrupar várias invocações independentes na mesma mensagem para correrem em concorrência, e a orquestração por workflows, que faz fan-out de agentes. Neste projecto o padrão é execução em série, e é o padrão que prevalece na dúvida.
+
+Só o utilizador pode autorizar execução em paralelo, e essa **autorização expressa e clara, dada para o pedido em causa, é a única condição** que levanta a proibição — é o que fixa a **REGRA ZERO**. Sem ela, a série mantém-se, seja qual for o argumento.
+
+Dada a autorização, o paralelismo é ainda **excepcional**: cumpre-se para o pedido em causa, e a autorização **é revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização de paralelismo não abre precedente para as tarefas seguintes.
+
+**Nunca invocar o custo como argumento para paralelizar.** A regra existe para proteger o custo do utilizador; usá-la ao contrário — *é mais rápido, logo mais barato* — é quebrá-la.
+
+## Linguagem
+
+A linguagem é instrumento de coordenação: o que aqui se escreve é o que outro agente vai executar. Uma frase vaga produz trabalho vago. As quatro exigências valem em tudo o que se **escreve** e em tudo o que se **interpreta** — briefings a subagentes, títulos e descrições de tarefas, comentários do log, mensagens de commit, respostas ao utilizador e documentação:
+
+| Exigência | O que impõe |
+|---|---|
+| **Explícito** | Dizer o que se pretende, por inteiro. Nada fica implícito, subentendido ou entregue à inferência de quem lê |
+| **Objectivo** | Dizer o que há a executar, em termos verificáveis. Nada de intenções genéricas nem de formulações que não se saiba se foram cumpridas |
+| **Fechado** | Delimitar o âmbito: o que entra e, quando não for evidente, o que fica de fora. Uma instrução sem fronteira é uma instrução por escrever |
+| **Conciso** | Poucas palavras. Cortar o que não acrescenta — nunca o que delimita |
+
+Estar prestes a escrever uma instrução que admita duas leituras é motivo para **PARAR** e reescrevê-la. Perante uma instrução **recebida** que admita duas leituras, **PARAR** e perguntar ao utilizador: **NUNCA** escolher uma delas por conta própria.
+
+### Língua
+
+**Toda a documentação é escrita em inglês** — o README, a especificação funcional, a especificação técnica, os registos de decisão, o CHANGELOG e os doc comments do código, sem excepção. Exige-se inglês impecável: ortografia, gramática e sintaxe sem erro, e tom profissional.
+
+As quatro exigências acima aplicam-se à documentação com o mesmo peso. Um texto em inglês correcto mas vago **não** cumpre o requisito.
+
+## Proactividade
+
+**A actuação é dirigida ao objectivo do trabalho em curso, e a nada mais.** É **proibido** iniciar por iniciativa própria qualquer trabalho que não tenha sido **explicitamente pedido**. Não há correcção pequena de mais, óbvia de mais nem oportuna de mais para escapar a esta regra.
+
+Identificada uma necessidade fora do âmbito do trabalho em execução:
+
+1. **PARAR.** Não se começa.
+2. **Registar** o achado pela skill `roadmap-manager`, como comentário na tarefa ou como tarefa nova.
+3. **Perguntar ao utilizador** como proceder, e esperar pela resposta.
+
+Retomar o trabalho em curso é o comportamento por defeito; iniciar o trabalho descoberto exige decisão do utilizador. Aproveitar a passagem para corrigir o que se encontra pelo caminho, antecipar a tarefa seguinte e acrescentar o que ninguém pediu são violações da mesma regra.
+
+**Procurar sinergia e convergência não é iniciar trabalho**, e por isso não cai nesta proibição: procura-se **sempre**, por defeito, sem esperar que o utilizador o peça. O que exige decisão dele é **juntar** as tarefas e **executar** o que se descobriu, nos termos de **Sinergia e Convergência do Esforço**.
+
+## Completude
+
+**É proibido entregar trabalho parcial.** O que se inicia executa-se na sua plenitude: **NUNCA** deixar uma tarefa a meio, **NUNCA** dar por concluído o que está por acabar.
+
+Isto impõe três coisas, e nenhuma se dispensa:
+
+- **Não se declara concluído o que não está.** O trabalho termina quando tudo o que a tarefa define está feito e o pipeline de validação obrigatório, definido em **Desenvolvimento**, passa.
+- **Não se entrega um esqueleto.** Nada de `todo!()`, `unimplemented!()`, ramos por escrever, testes por escrever ou documentação por actualizar, deixados para depois.
+- **Não se estreita o âmbito em silêncio.** Bloqueada uma parte do trabalho, executa-se **tudo** o resto e diz-se **explicitamente** o que ficou por fazer e porquê. Reduzir o âmbito é decisão do utilizador, nunca de quem executa.
+
+Um trabalho que não caiba por inteiro no âmbito da tarefa não se entrega pela metade: **PARAR** e levar a questão ao utilizador.
+
+Um esforço que junte várias tarefas só está concluído quando **todas** elas estão: **Sinergia e Convergência do Esforço** agrupa o trabalho, nunca dispensa parte dele.
+
+## Skills Obrigatórias
+
+Três domínios deste projecto **NUNCA** são operados directamente: têm uma skill dedicada que é a única via de acesso. A regra é a mesma nos três casos — **NUNCA invocar a CLI subjacente a partir do Bash**; invocar a skill, que a opera. Estar prestes a escrever uma destas CLI no Bash é motivo para **PARAR** e chamar a skill.
+
+| Domínio | Skill | CLI que a skill opera |
+|---|---|---|
+| Escrita no Git | `gitflow` | `git` (operações de escrita) |
+| Sprints, tarefas e comentários | `roadmap-manager` | `rmp`, em todos os comandos excepto `rmp graph …` |
+| Conhecimento sobre o projecto | `knowledge-authority` | `rmp graph …` |
+
+### 1. Git — skill `gitflow`
+
+**Todas as operações de escrita no Git passam pela skill `gitflow`.** Isto inclui, sem excepção: `commit`, `add`, criação e remoção de branches, `merge`, `rebase`, `tag`, `push`, `stash` e qualquer reescrita de histórico.
+
+O repositório segue o modelo **gitflow** (Vincent Driessen): abertura e fecho de sprints, registo de uma tarefa fechada como commit, criação de releases e de hotfixes — tudo isso é decisão da skill, não improviso.
+
+Leitura é livre: `git status`, `git log`, `git diff`, `git show` e equivalentes podem ser executados directamente, porque não alteram estado.
+
+**NUNCA** fazer commits directamente em `main`.
+
+### 2. Sprints, tarefas e comentários — skill `roadmap-manager`
+
+**Toda a gestão e coordenação de sprints, tarefas e comentários passa pela skill `roadmap-manager`**, que é a única operadora da CLI `rmp` (Groadmap) em **todos os comandos excepto `rmp graph …`**, esses da skill `knowledge-authority`. Isto abrange criar, listar, inspeccionar e editar tarefas; o ciclo de vida dos sprints (planear, iniciar, fechar, reabrir); transições de estado; prioridades e severidades; dependências e subtarefas; reordenação; o log de auditoria e as estatísticas; e o log tipado de comentários (`FINDING`, `HYPOTHESIS`, `TEST`, `DECISION`, `PROGRESS`, `UPDATE`, `NOTE`).
+
+O `rmp` é a **única fonte de verdade** para o planeamento e execução das tarefas deste projecto. **NUNCA** usar ficheiros ad-hoc, listas no chat, TODOs no código ou qualquer outra ferramenta como substituto.
+
+**Roadmap deste projecto:** `tpl`.
+
+#### Nenhum trabalho fora de uma tarefa aberta
+
+**Todo o trabalho é executado sobre uma tarefa aberta no `rmp`, e só sobre ela.** Começar trabalho numa tarefa que não foi aberta é uma **violação de processo**, não um atalho — e não se justifica por a alteração ser pequena, óbvia ou urgente.
+
+**Os dois conjuntos de estados não se confundem.** `OPEN` é estado de *sprint*, nunca de tarefa:
+
+| Entidade | Estados |
+|---|---|
+| Tarefa | `BACKLOG`, `SPRINT`, `DOING`, `TESTING`, `COMPLETED` |
+| Sprint | `PENDING`, `OPEN`, `CLOSED` |
+
+Uma tarefa é executável quando **ambas** as condições se verificam:
+
+1. Pertence ao sprint cujo estado é `OPEN`.
+2. Foi ela própria transitada para `DOING` com `--commit-open <hash>`.
+
+Falhar uma das duas basta para a tarefa **não** ser executável. Em concreto:
+
+- Uma tarefa em `BACKLOG` **NUNCA** se executa.
+- Uma tarefa num sprint `PENDING` ou `CLOSED` **NUNCA** se executa.
+- Trazer uma tarefa para o sprint aberto é uma **acção de planeamento** e **exige confirmação do utilizador**. **NUNCA** se faz por iniciativa própria para desbloquear trabalho.
+
+Falhando qualquer uma das duas condições, **PARAR** e regularizar a tarefa pela skill `roadmap-manager` antes de escrever a primeira linha.
+
+**Trabalho descoberto a meio que não tenha tarefa própria regista-se como tarefa ou como comentário — nunca se executa.** É **Âmbito fechado**, em *Execução de Tarefas por Subagentes*, e vale aqui sem alteração.
+
+**Esta regra governa o trabalho, não a procura.** Procurar sinergia e convergência não é trabalho, não se regista como tarefa e não passa por este gate — é **A procura não é tarefa**, em *Sinergia e Convergência do Esforço*.
+
+O ciclo de vida da tarefa **NUNCA** é excepção à regra do topo desta secção: toda a transição de estado e todo o comentário passam pela skill `roadmap-manager`.
+
+#### Fecho: primeiro o commit, depois a tarefa
+
+O gate de commit impõe a ordem, e a ordem não se inverte:
+
+1. O trabalho é **registado em commit**, através da skill `gitflow`.
+2. A tarefa é **fechada** com `--commit-close <hash>`, com o hash real desse commit.
+
+O hash vem do commit efectivamente criado. **NUNCA inventar, adivinhar ou reaproveitar um hash** para satisfazer o gate: sem commit criado, **PARAR** e criá-lo pela skill `gitflow`.
+
+Num esforço que junte várias tarefas, cada uma fecha com o hash do commit que **regista o trabalho dela**; sendo um só commit a registar o de várias, é esse hash que fecha cada uma. O que a regra proíbe é o hash de um commit que não contém o trabalho da tarefa.
+
+#### O log escreve-se durante o trabalho
+
+O log tipado de comentários é escrito **à medida que o trabalho acontece**, não reconstruído no fim:
+
+| Tipo | Quando se escreve |
+|---|---|
+| `DECISION` | Toda a escolha não óbvia, com as opções rejeitadas e a razão da rejeição |
+| `FINDING` | O que foi descoberto |
+| `TEST` | A verificação feita e o resultado que deu |
+
+Uma tarefa cujo trabalho envolveu escolhas e cujo log está vazio **não está pronta para fechar**: **PARAR** e escrever o log antes do fecho.
+
+### 3. Conhecimento do projecto — skill `knowledge-authority`
+
+**Toda a consulta e gestão de conhecimento sobre o projecto passa pela skill `knowledge-authority`**, que é a única operadora de `rmp graph …` e do grafo de conhecimento que lhe está associado.
+
+É o **primeiro sítio a consultar** perante qualquer pergunta factual sobre o código deste repositório — que ficheiro ou função implementa uma funcionalidade, que módulos, tipos, testes ou dependências existem, o que depende de quê, como se articula a arquitectura, qual o alcance e o impacto de uma alteração. Consultar **SEMPRE** o grafo **antes** de ler ficheiros, mesmo quando a resposta pareça estar a um `grep` de distância. Estar prestes a abrir um ficheiro para responder a uma pergunta factual sem ter consultado o grafo é motivo para **PARAR** e consultá-lo.
+
+Usar também para sincronizar, refrescar ou auditar o grafo após um commit ou quando os ficheiros do projecto mudarem, e para manter o `./knowledge-model.md` — ficheiro escrito exclusivamente por esta skill.
+
+### Fronteiras entre as três
+
+As três skills não se substituem umas às outras, e a confusão entre elas é o erro habitual:
+
+- A fronteira entre `roadmap-manager` e `knowledge-authority` é o subcomando: `rmp graph …` é `knowledge-authority`, todo o restante `rmp` é `roadmap-manager`.
+- Gerir tarefas e sprints é `roadmap-manager` — **nunca** `knowledge-authority`, ainda que ambas usem o binário `rmp`.
+- Consultar o grafo de conhecimento é `knowledge-authority` — **nunca** `roadmap-manager`.
+- Registar trabalho em Git é `gitflow` — **nunca** um `git commit` avulso, mesmo que a alteração seja trivial.
+
+## Especificação Funcional
+
+**Todo o trabalho assenta numa especificação.** Nenhuma funcionalidade é implementada, alterada ou removida sem estar primeiro descrita na especificação funcional do projecto, em `/specification`.
+
+A especificação é a **única fonte de verdade funcional** do `tpl`: o que lá não está não é requisito, e **NUNCA** se implementa por iniciativa própria, por analogia com outro projecto, por parecer óbvio ou por estar mencionado de passagem numa conversa. Perante um pedido que a especificação não cobre, **PARAR** e formalizá-lo primeiro.
+
+### Coordenação
+
+A coordenação da especificação é responsabilidade **exclusiva** do subagente `specification-manager`. É o único que escreve em `/specification`, e todo o trabalho sobre essa pasta passa por ele:
+
+- bootstrap da estrutura e manutenção do `README.md` de navegação;
+- criação e alteração de módulos funcionais, regras de negócio, actores, casos de uso e glossário;
+- atribuição e manutenção dos identificadores estáveis de requisito;
+- detecção de inconsistências, ambiguidades, contradições e lacunas entre ficheiros;
+- manutenção das referências cruzadas;
+- depreciação e arquivo de conteúdo obsoleto;
+- auditorias estruturadas.
+
+**Nenhum outro agente edita `/specification`** — nem sequer para corrigir uma gralha.
+
+### A especificação precede a implementação
+
+Sem excepção:
+
+1. Chega o pedido. Verificar se está **coberto pela especificação**.
+2. Se não estiver — ou se estiver de forma ambígua, incompleta ou contraditória — **PARAR**: a **primeira** tarefa é levar o subagente `specification-manager` a formalizá-lo. Só depois se implementa.
+3. Implementar exactamente o que a especificação define: nem menos, nem mais.
+4. Se durante a implementação se descobrir que a especificação está errada ou incompleta, **PARAR**. Corrigi-la através do subagente `specification-manager` e só então retomar. **NUNCA** implementar contra a especificação, e **NUNCA** deixar código e especificação a divergir.
+
+Esta é a etapa 1 do Fluxo de Trabalho, e a razão de ser a primeira.
+
+## Especificação Técnica e Registos de Decisão
+
+A especificação funcional diz **o que** o `tpl` faz; **como** é construído vive em `docs/spec-technical/`, escrita **exclusivamente** pelo subagente `technical-writer`. **Nenhum outro agente a edita** — nem para corrigir uma gralha.
+
+Nada aí é requisito: cada afirmação traça para um requisito de `/specification` ou para uma restrição explícita. Onde as duas discordarem, a divergência é um defeito a reportar — **nunca** se fecha reescrevendo a especificação funcional, e **nunca** se deixa de pé. O índice, o que cada documento responde e por onde se começa estão em `docs/spec-technical/README.md`; lê-se lá, e não se copia para aqui.
+
+### Registos de decisão de arquitectura — `docs/adr/`
+
+Os registos de decisão de arquitectura (`ADR-NNN`, em `docs/adr/`) guardam o **porquê** de uma decisão e as alternativas que foram rejeitadas — a fundamentação que a especificação técnica não carrega. Escreve-os o subagente `adr-guardian`, e mais ninguém.
+
+**Exige-se um registo** em dois casos: quando um requisito em vigor delega o facto para fora da especificação funcional, e quando a decisão é de arquitectura e as alternativas rejeitadas têm de sobreviver à escolha. Fora deles não se abre registo — a decisão fica em `docs/spec-technical/`. A admissão é estreita de propósito, e quem a fixa é a regra R4 de `docs/adr/README.md`.
+
+**O que um registo guarda não se repete em mais lado nenhum.** Este ficheiro cita `ADR-NNN` — como já fazem as linhas da **Stack** e a do perfil de release — e nunca reescreve o que o registo diz. Estar prestes a trazer para aqui uma versão, um número ou uma justificação que um registo já guarda é motivo para **PARAR** e citar.
+
+O ciclo de vida de um registo, os seus estados, a numeração, o formato e as quatro regras que o governam estão em `docs/adr/README.md`. Lê-se lá — e **não se copia para aqui**.
+
+## Fluxo de Trabalho
+
+1. **Especificar** — formalizar o requisito na especificação funcional, através do subagente `specification-manager`. Nenhuma etapa seguinte começa sem esta.
+2. **Implementar** — escrever o código que o satisfaz.
+3. **Testar** — validar contra MariaDB real quando o requisito toque no catálogo.
+4. **Documentar** — actualizar README, doc comments e CHANGELOG.
+
+As etapas correm por esta ordem e **NUNCA** se salta nenhuma. Dar por si a implementar sem a etapa 1 cumprida — **PARAR** e voltar a ela.
+
+As quatro etapas correm sobre o **esforço inteiro**, não sobre cada fragmento: especifica-se tudo o que ele exige, implementa-se tudo, testa-se tudo, documenta-se tudo. A ordem não se altera por isso.
 
 ## Âmbito de Trabalho
 
 **O âmbito deste projecto restringe-se à pasta de raiz do repositório.**
 
-Não é permitido ler, listar, pesquisar, inspeccionar ou referenciar nada fora de `tpl/`. Isto inclui directorias irmãs, outros projectos do utilizador, e qualquer caminho acima da raiz do repositório. Não há excepções para "procurar convenções", "ver como outro projecto resolveu isto" ou "confirmar um padrão".
+**NUNCA** ler, listar, pesquisar, inspeccionar ou referenciar nada fora de `tpl/`. Isto inclui directorias irmãs, outros projectos do utilizador, e qualquer caminho acima da raiz do repositório. **NUNCA** há excepções para "procurar convenções", "ver como outro projecto resolveu isto" ou "confirmar um padrão".
 
-Toda a informação necessária ao trabalho vive dentro deste repositório. Se algo não estiver aqui, pergunta-se ao utilizador — não se vai procurar lá fora.
+Toda a informação necessária ao trabalho vive dentro deste repositório. Se algo não estiver aqui, **PARAR** e perguntar ao utilizador — **NUNCA** se vai procurar lá fora.
 
-## Invariantes do Projecto
+## Invariantes de Implementação
 
-Estas duas regras têm prioridade sobre qualquer outra consideração de design ou de implementação.
+Duas restrições permanentes sobre as escolhas de implementação. Têm prioridade sobre qualquer outra consideração de design, e nenhuma se negoceia caso a caso.
 
 ### 1. Read-only absoluto
 
-O `tpl` **nunca** emite DDL, DML ou qualquer statement de escrita contra a base de dados a que se liga. Toda a ligação estabelecida deve impor o modo read-only ao nível do motor:
+O `tpl` **nunca** emite DDL, DML ou qualquer statement de escrita contra a base de dados a que se liga, e não existe flag que desligue este comportamento. A leitura do catálogo é feita através do `INFORMATION_SCHEMA` — nunca através de `mysqldump` ou de qualquer processo externo.
 
-```sql
-SET SESSION TRANSACTION READ ONLY;
-```
-
-Se a sessão read-only não puder ser estabelecida, a ligação é recusada e o processo termina com código `78`. Não existe flag para desligar este comportamento.
-
-A leitura do catálogo é feita exclusivamente através de `INFORMATION_SCHEMA` (e, quando estritamente necessário, `SHOW`). Nunca através de `mysqldump` ou de qualquer processo externo.
+O detalhe da garantia — como o modo read-only é imposto na sessão, o que acontece quando não pode ser imposto, e que statements são admissíveis — pertence a `specification/server-contract.md` e lê-se lá.
 
 ### 2. Renderização em runtime, com MiniJinja
 
@@ -87,323 +456,114 @@ Os templates são **ficheiros em disco, carregados e compilados no momento do re
 
 **Não usar Askama, Tera, Handlebars, `std::fmt`, nem qualquer outro motor.** O Askama em particular está explicitamente excluído por ser *compile-time*: obrigaria a recompilar o `tpl` sempre que um template mudasse, o que contraria a razão de ser desta ferramenta.
 
-Configuração obrigatória do `Environment` do MiniJinja:
-
-- **Loader de sistema de ficheiros** (`Environment::set_loader`) com raiz na directoria de templates resolvida, para que `{% include %}`, `{% import %}` e `{% extends %}` funcionem com caminhos relativos.
-- **`UndefinedBehavior::Strict`** — uma variável indefinida é um erro de render, nunca uma string vazia silenciosa.
-- **Auto-escape desligado por defeito** — o alvo primário é geração de código, não HTML. Activar auto-escape apenas por extensão (`.html`, `.xml`, `.htm`).
-- Erros de render devem ser reportados com **nome do template, linha e coluna**, propagando a cadeia de `minijinja::Error`.
-
-## Requisitos Não-Funcionais
-
-Estes dois requisitos são de primeira ordem: pesam nas decisões de design tanto quanto a correcção funcional. Uma implementação correcta mas lenta, ou correcta mas gastadora, **não** satisfaz o requisito.
-
-### 1. Desempenho extremo
-
-O `tpl` tem de ser muito rápido. É uma ferramenta de linha de comandos, invocada repetidamente e frequentemente dentro de loops e pipelines de build — cada milissegundo é pago muitas vezes.
-
-**Orçamentos iniciais.** São alvos de trabalho, a ratificar assim que houver medição real, e a partir daí tratados como limites:
-
-| Operação | Alvo |
-|---|---|
-| `tpl --version`, `tpl --help` | < 5 ms de wall time |
-| Arranque até ao primeiro byte de trabalho útil | < 10 ms |
-| `tpl schema dump` sobre 200 tabelas | < 500 ms, dominado pelo tempo do servidor |
-| `render --all-tables` sobre 200 tabelas | < 50 ms de CPU além da leitura do schema |
-
-**Regras que decorrem disto:**
-
-- **Round-trips à base de dados são `O(1)` por tipo de objecto, nunca `O(n)` por tabela.** Ler 200 tabelas faz um punhado de queries ao `INFORMATION_SCHEMA` com `WHERE table_schema = ?`, e junta os resultados em memória. Um `N+1` no leitor de catálogo é um bug de desempenho, não uma questão de estilo.
-- **Cada template é parseado uma única vez por processo.** O `Environment` do MiniJinja guarda o template compilado; `--all-tables` reutiliza-o para todos os objectos. Reparsear por iteração é proibido.
-- **Nada de trabalho no arranque que não seja necessário ao comando invocado.** Sem inicialização estática pesada, sem construir o `Environment` para um `--help`, sem ligar à base de dados para um comando que não a use. Inicialização preguiçosa por defeito.
-- **I/O agregado.** Escrita através de writers com buffer; nunca um syscall por linha.
-- **Sem paralelismo especulativo.** Concorrência só entra com benefício medido, em benchmark, sobre carga representativa. Paralelizar porque é possível é proibido — o custo de sincronização e de arranque de threads é real, e em cargas pequenas perde.
-
-### 2. Eficiência de recursos
-
-O `tpl` não deve consumir mais recursos do que os estritamente necessários à operação em curso — memória, CPU, ficheiros abertos, ligações, dependências e tamanho de binário.
-
-**Orçamento inicial de memória:** RSS de pico < 32 MiB para uma base de dados de 200 tabelas.
-
-**Regras que decorrem disto:**
-
-- **Alocação mínima nos caminhos quentes.** Emprestar em vez de clonar; `&str` em vez de `String`; `Cow<'_, str>` quando evita mesmo uma cópia. Um `.clone()` num caminho quente exige justificação.
-- **Pré-dimensionar colecções** cuja cardinalidade é conhecida a partir do catálogo (`with_capacity`).
-- **Streaming sempre que o comando o permita.** A memória deve escalar com o maior objecto individual, não com a base de dados inteira, em tudo o que não exija o documento completo.
-- **Uma só ligação à base de dados**, aberta o mais tarde possível e fechada assim que a leitura termina. Sem pool: o processo é efémero e faz um punhado de queries.
-- **Orçamento de dependências.** Cada crate tem de justificar a sua presença. Preferir a `std`. Antes de acrescentar uma dependência, verificar o que ela arrasta (`cargo tree`) e o que custa (`cargo bloat`, tempo de arranque). Uma dependência que só se usa para uma função trivial não entra.
-- **Perfil de release** afinado no `Cargo.toml`: `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, `opt-level = 3`.
-
-> **Decisão em aberto — driver MariaDB.** O `sqlx` é assíncrono e arrasta o runtime `tokio`, o que penaliza arranque, tamanho de binário e memória residual num processo efémero que faz meia dúzia de queries. Um driver síncrono é provavelmente a escolha certa face a estes requisitos. Resolver por medição — arranque, RSS e tamanho de binário, lado a lado — antes de escrever o leitor de catálogo, e actualizar a tabela do Stack com o resultado.
-
-### Disciplina de medição
-
-**Nenhuma afirmação de desempenho sem números, e nenhuma optimização sem medição antes e depois.** Intuição sobre o que é rápido não é evidência.
-
-| Ferramenta | Uso |
-|---|---|
-| `hyperfine` | Wall time end-to-end da CLI, incluindo arranque |
-| `criterion` | Micro-benchmarks de funções (parsing, mapeamento de tipos, render) |
-| `dhat-rs` | Perfil de alocações e pico de heap |
-| `samply` / `cargo flamegraph` | Atribuição de CPU a call sites |
-| `cargo bloat` | Contribuição de cada crate para o tamanho do binário |
-
-Os benchmarks vivem em `benches/` e correm contra o dataset do container MariaDB, para serem reproduzíveis. As baselines são registadas em `BENCHMARKS.md`; **uma regressão face à baseline reprova a alteração** e tem de ser justificada ou corrigida antes de o trabalho ser dado por concluído.
-
-Para trabalho de optimização, usar o agente `rust-perf-engineer`; para investigação de causa-efeito entre implementação e comportamento medido (RAM, CPU, código vácuo ou redundante), usar `extreme-code-profiler`.
+A configuração exigida ao `Environment` — loader, comportamento perante variáveis indefinidas, auto-escape, fronteira de resolução de caminhos e conteúdo de um erro de render — pertence a `specification/template-environment.md` e `specification/render-semantics.md`.
 
 ## Stack
 
+Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tabela é uma decisão de arquitectura e deve ser registada antes de ser implementada.
+
 | Área | Escolha | Notas |
 |---|---|---|
-| Linguagem | Rust (edition 2024, MSRV a fixar no `Cargo.toml`) | |
+| Linguagem | Rust (edition 2024) | MSRV fixado em `ADR-007`, em `docs/adr/` |
 | CLI | `clap` v4 (derive) | Árvore de comandos, aliases, `--help` por subcomando |
 | Templates | `minijinja` + `minijinja-contrib` | Runtime, sempre |
-| Acesso MariaDB | Por decidir por medição | Ver a decisão em aberto nos Requisitos Não-Funcionais |
+| Acesso MariaDB | `sqlx` + `tokio` | Versões, âmbito do runtime e candidato rejeitado: `ADR-003` e `ADR-005`, em `docs/adr/` |
 | Serialização | `serde` + `serde_json` | O contexto de render é `serde`-serializável |
-| Configuração | `toml` + `serde` | |
-| Erros | `thiserror` na biblioteca, `anyhow` no binário | |
-| Logging | `tracing` + `tracing-subscriber` | Controlado por `-v/--verbose` |
+| Configuração | `toml` + `serde` na leitura; `toml_edit` na escrita | A escrita preserva comentários e ordem; `OD-09`, em `docs/spec-technical/open-decisions.md` |
+| Erros | `thiserror` na biblioteca; o binário não carrega tipo de erro próprio | O `main.rs` lê o `exit_code` da biblioteca e devolve-o; `OD-32`, em `docs/spec-technical/open-decisions.md` |
+| Logging | Diagnósticos próprios, sem subscriber instalado | Sem `tracing` nem `tracing-subscriber`; controlado pela flag de verbosidade; `OD-17`, em `docs/spec-technical/open-decisions.md` |
+| uid do processo e grupo do helper | `rustix`, `default-features = false`, `features = ["process"]` | `getuid`, `kill_process_group` e `waitid` seguros; via `libc` exigiriam `unsafe`; `OD-24` e `OD-12`, em `docs/spec-technical/open-decisions.md` |
+| Contagem de heap | `cap` sobre `std::alloc::System`, como `#[global_allocator]` | Limite de memória do render (`FR-RND-039`), lido pelo thread do prazo; versão, política de limite rígido e alternativas rejeitadas: `ADR-011`, em `docs/adr/` |
 
-Qualquer alteração a esta tabela é uma decisão de arquitectura e deve ser registada antes de ser implementada.
+> **Decisão fechada — driver MariaDB.** A escolha, a regra que a decidiu, o candidato rejeitado e a medição que confirmou a escolha — desmentindo a suspeita que aqui estava escrita — estão em `ADR-003`, em `docs/adr/`. O âmbito do runtime está em `ADR-005`.
+
+## Plataformas Suportadas
+
+O `tpl` é uma ferramenta **Unix**. É essa a família de sistemas para que se escreve, e é a fronteira que delimita o que o código pode assumir.
+
+Os sistemas suportados e verificados são o **Linux** e o **macOS**, nas arquitecturas **arm64** (`aarch64`, incluindo Apple Silicon) e **amd64** (`x86_64`). Outros Unix — os BSD, por exemplo — devem funcionar, porque nada no `tpl` depende de um sistema em concreto para além do que a `std` já abstrai, mas **não são testados nem garantidos**: não entram na matriz, não correm em validação, e um problema que só neles se manifeste não reprova uma alteração.
+
+**O Windows está fora do âmbito.** Não é alvo, não se escreve código para o acomodar, e não se aceita uma dependência por causa dele.
+
+A matriz concreta de alvos — target triples, escolha de libc, linkagem e forma de empacotar o binário — é decisão de arquitectura em curso e **não se fixa aqui**.
+
+### Regras que decorrem disto
+
+- **Nenhum alvo é de segunda classe.** O que passa no pipeline de validação obrigatório definido em **Desenvolvimento** tem de passar em todos os alvos suportados; uma falha num deles reprova a alteração, seja qual for o alvo.
+- **Código específico de plataforma é a excepção**, e fica isolado atrás de `#[cfg(unix)]`. `#[cfg(windows)]` não tem lugar no crate. As permissões restritivas exigidas ao ficheiro de configuração dependem de `std::os::unix::fs::PermissionsExt` e são, por si só, razão bastante para a fronteira ser o Unix.
+- **Caminhos sempre por `Path` e `PathBuf`**, nunca por concatenação de strings com o separador escrito à mão.
+- **Sem assumir características do CPU.** Nada de `target-cpu=native` no perfil de release: quebraria a portabilidade e a reprodutibilidade do binário distribuído.
+- **Dependências têm de compilar e passar testes em todos os alvos.** Um crate que não suporte `aarch64` não entra — critério que acresce ao orçamento de dependências e não o substitui.
+- **Uma baseline de desempenho identifica sempre o alvo em que foi medida.** Números medidos em alvos diferentes não se comparam entre si.
 
 ## Estrutura do Projecto
 
 ```
 tpl/
 ├── Cargo.toml
+├── BENCHMARKS.md            # registo de leituras de desempenho, com o alvo em que foram medidas
+├── knowledge-model.md       # modelo do grafo — só a skill knowledge-authority escreve
 ├── src/
 │   ├── main.rs              # entrypoint: parse, dispatch, mapeamento de exit codes
 │   ├── cli/                 # árvore clap — um módulo por comando porcelain
-│   │   ├── init.rs
-│   │   ├── database.rs
-│   │   ├── schema.rs
-│   │   ├── template.rs
-│   │   ├── render.rs
-│   │   └── config.rs
-│   ├── project/             # descoberta de .tpl/, leitura do `.cfg`, store de bases de dados
+│   ├── project/             # descoberta da pasta de projecto e leitura da configuração
 │   ├── mariadb/             # leitor de INFORMATION_SCHEMA (read-only)
-│   ├── model/               # Database, Table, Column, Index, ForeignKey, View, Routine
+│   ├── model/               # o modelo lido do catálogo
 │   ├── render/              # Environment MiniJinja, loader, filtros, testes, funções
 │   └── error.rs             # tipo de erro + exit codes
-├── templates/               # templates de arranque, copiados para .tpl/templates/ pelo `tpl init`
+├── templates/               # templates de arranque
 ├── tests/                   # testes de integração (CLI end-to-end)
-├── scripts/mariadb/         # Dockerfile, setup.sql, seed.sql
+├── benches/                 # benchmarks
+├── scripts/mariadb/         # fixture MariaDB: imagens, SQL, material TLS, harness
 ├── examples/                # pipelines completos: schema → template → output
-└── specification/           # especificação funcional
+├── specification/           # especificação funcional
+└── docs/                    # especificação técnica e registos de decisão (ADR)
 ```
 
-O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o **contexto de render**. Tudo o que um template pode ver está definido aí, e as suas structs são a superfície pública documentada.
+O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o que um template vê. A sua forma não se decide no código — é a especificação que a fixa (`specification/catalogue-coverage.md` e `specification/context-document.md`); o `model/` implementa-a e as suas structs são a superfície pública documentada.
 
-## O Projecto `.tpl`
+## Convenções de Código Rust
 
-O `tpl` opera sobre **projectos**. Um projecto é qualquer directoria que contenha uma pasta `.tpl/`, exactamente como o `git` usa `.git/`. Essa pasta é a raiz do projecto e a **única** fonte de configuração e de templates.
+O código deste projecto — e a forma como está organizado — segue as **boas práticas e as convenções idiomáticas da linguagem Rust**. Não é uma preferência de estilo: é regra do projecto, e vale tanto para o que se escreve de novo como para o que se refactoriza.
 
-```
-<raiz-do-projecto>/
-└── .tpl/
-    ├── .cfg              # TOML — bases de dados disponíveis; fora do versionamento
-    ├── .gitignore        # ignora o .cfg
-    └── templates/        # templates disponíveis; versionados com o projecto
-        └── example.jinja # template de exemplo, criado pelo `tpl init`
-```
+### Organização
 
-**Descoberta.** A partir da directoria corrente, subir na árvore até encontrar uma pasta `.tpl/`. A primeira encontrada define a raiz do projecto; a subida pára aí. Se não existir nenhuma, o comando falha com código `78` e sugere `tpl init`. A variável `TPL_DIR` aponta explicitamente para uma pasta `.tpl/` e dispensa a descoberta.
+- **Módulos.** Nomes em `snake_case`, sem abreviaturas obscuras e sem repetir o nome do pai (`mariadb::reader`, nunca `mariadb::mariadb_reader`). Um módulo por conceito, alinhado com a árvore da secção anterior.
+- **Um só estilo de ficheiro-módulo.** Usar sempre a forma `foo.rs` acompanhada da directoria `foo/`; **não** usar `mod.rs`. Misturar os dois estilos na mesma árvore é proibido.
+- **Visibilidade mínima.** Por omissão tudo é privado. `pub(crate)` para o que atravessa módulos, `pub(super)` para o que só o pai precisa, e `pub` reservado ao que é genuinamente superfície pública — no essencial o `model/` e o tipo de erro.
+- **Re-exports deliberados.** O `lib.rs` re-exporta uma API coerente com `pub use`; não se re-exporta um módulo inteiro só para poupar um caminho de `use`.
+- **Biblioteca e binário separados.** A lógica vive na biblioteca e é testável sem lançar processo; o `main.rs` limita-se a fazer parse, despachar e mapear o erro para exit code.
 
-**Não existe configuração global.** Nada em `~`, nada em XDG, nada em `/etc`. Um comando que não encontre `.tpl/` não tem fallback: falha. Esta regra é deliberada — torna o comportamento do `tpl` inteiramente determinado pelo conteúdo do projecto, e portanto reproduzível entre máquinas e em CI.
+### Nomenclatura
 
-### O ficheiro `.tpl/.cfg`
+Conformidade com as [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) e a RFC 430:
 
-TOML. O nome do ficheiro é `.cfg` — um dotfile, começado por ponto, sem extensão. Declara as bases de dados disponíveis e as opções do projecto.
+- `snake_case` para funções, variáveis, campos e módulos; `UpperCamelCase` para tipos, traits e variantes; `SCREAMING_SNAKE_CASE` para constantes e estáticos.
+- Convenções de conversão, escolhidas pelo custo: `as_` (empréstimo barato), `to_` (custa, aloca), `into_` (consome o receptor).
+- Getters sem prefixo `get_`: `table.name()`, nunca `table.get_name()`.
+- Iteradores pelo trio convencional: `iter`, `iter_mut`, `into_iter`.
 
-O ponto é deliberado: o `.cfg` destina-se a **ficar fora do versionamento**. Contém a configuração de acesso de cada programador — endereços, utilizadores, credenciais — que é local à máquina e não deve viajar no repositório.
+### Tipos e erros
 
-```toml
-[core]
-database = "shop"          # base de dados usada quando -d/--database é omitido
+- **`Result` e `Option` com o operador `?`.** `unwrap`/`expect` fora de testes só com a invariante documentada na própria mensagem. O tipo de erro segue a tabela da Stack: `thiserror` na biblioteca, e o binário não carrega tipo de erro próprio.
+- **Newtypes para invariantes** — um nome de tabela já validado não é uma `String` qualquer.
+- **Genéricos ou `impl Trait`** em vez de indirecção desnecessária; `Box<dyn Trait>` só quando a heterogeneidade for real.
+- **Conversões por `From`/`TryFrom`**, e não por funções avulsas quando o trait serve.
+- **Traits da `std` implementados quando fazem sentido**: `Debug` sempre, e `Display`, `Default`, `FromStr`, `AsRef` onde o tipo o justifique.
+- **Assinaturas em tipos emprestados** — `&str`, `&[T]`, `&Path` em parâmetros, nunca `String`, `Vec<T>` ou `PathBuf`. É também o que a regra de alocação mínima exige.
 
-[database.shop]
-dsn = "mysql://alice:${SHOP_DB_PASSWORD}@db.example.com:3306/shop"
+### Expressão
 
-[database.reporting]
-host     = "10.0.1.5"
-port     = 3306
-user     = "reader"
-database = "reporting"
-password_command = "security find-generic-password -s tpl-reporting -w"
-tls      = "required"
-```
+- **Iteradores e combinadores** em vez de loops indexados com acumulador mutável, quando não custem clareza nem desempenho.
+- **Pattern matching exaustivo**, sem um `_ =>` que engula silenciosamente variantes futuras de um `enum` do próprio crate.
+- **`#[non_exhaustive]`** nos tipos públicos que se prevê virem a crescer — tipicamente o `enum` de erro e as structs do `model/`.
+- **Derives em vez de implementações manuais** sempre que sejam equivalentes.
 
-Uma entrada `[database.<nome>]` define-se **ou** por `dsn`, **ou** pelos campos discretos (`host`, `port`, `user`, `password`, `database`). Misturar as duas formas na mesma entrada é erro de configuração (`78`). O nome da entrada é uma etiqueta do projecto, não o nome da base de dados no servidor.
+### Ferramentas como árbitro
 
-### O que o `tpl init` cria
+O `rustfmt` com a configuração por defeito é a autoridade de formatação, e o `clippy` com `-D warnings` é a autoridade de idiomática. Ambos correm no pipeline de validação obrigatório definido em **Desenvolvimento**, e a sua decisão não se discute caso a caso.
 
-O `tpl init` produz um projecto **imediatamente utilizável**, não uma pasta vazia. Cria os quatro artefactos acima, e nenhum deles fica por preencher:
-
-| Artefacto | Conteúdo |
-|---|---|
-| `.tpl/.cfg` | Configuração padrão: secção `[core]` e uma entrada `[database.*]` de exemplo, comentada, com a forma exacta que uma entrada real deve ter |
-| `.tpl/.gitignore` | Uma linha, `.cfg` |
-| `.tpl/templates/` | A directoria de templates do projecto |
-| `.tpl/templates/example.jinja` | Um template de exemplo funcional |
-
-O `.cfg` gerado não tem nenhuma entrada activa: por omissão o projecto não conhece base de dados nenhuma, e o utilizador descomenta ou acrescenta a sua. O exemplo comentado existe para que a forma correcta esteja à vista, sem obrigar a consultar documentação.
-
-O `example.jinja` **tem de renderizar sem erro** contra qualquer tabela de qualquer base de dados MariaDB, e serve de demonstração viva do contexto de render: percorre colunas, usa um filtro, usa um teste, e traz no cabeçalho o comando que o executa. É verificado por um teste de integração contra o container MariaDB — um exemplo que não corre é pior do que exemplo nenhum.
-
-O `init` **recusa-se a sobrepor** uma pasta `.tpl/` existente, e falha com `73` se não conseguir criar o destino. Não fundir, não completar parcialmente, não sobrescrever.
-
-### Segredos e versionamento
-
-A pasta `.tpl/` divide-se em duas metades com destinos opostos, e essa divisão é intencional:
-
-| Caminho | Destino | Porquê |
-|---|---|---|
-| `.tpl/templates/` | **Versionado** | É o trabalho partilhado da equipa; deve viajar no repositório e ser revisto como qualquer outro código |
-| `.tpl/.cfg` | **Fora do versionamento** | É configuração de acesso local a cada máquina, e pode conter credenciais |
-
-**Um dotfile não é ignorado pelo `git` por ser dotfile** — o `.git/` é ignorado por ser o próprio repositório, não por causa do ponto. Para que a intenção se cumpra na prática, o `tpl init` escreve `.tpl/.gitignore` com o conteúdo:
-
-```gitignore
-.cfg
-```
-
-Isto torna a pasta `.tpl/` autocontida: quem a copiar para outro projecto leva consigo a regra de exclusão, sem depender do `.gitignore` da raiz.
-
-Mesmo com o `.cfg` fora do repositório, existem dois mecanismos para não escrever passwords em disco:
-
-- **`${VAR}` em qualquer valor string** é substituído pela variável de ambiente correspondente no momento em que a configuração é lida. Uma variável indefinida é erro (`78`), nunca uma substituição vazia silenciosa.
-- **`password_command`** executa o comando indicado e usa o `stdout` (trimmed) como password.
-
-O ficheiro é criado com permissões `0600`. Qualquer comando que imprima configuração — `tpl database show`, `tpl config list` — **redige sempre** passwords e o corpo de credenciais dentro de um DSN. Nunca registar credenciais em logs, mensagens de erro ou traços do `tracing`, seja qual for o nível de verbosidade.
-
-### `.tpl/templates/`
-
-Os templates disponíveis ao projecto. O nome de um template é o seu caminho relativo a `.tpl/templates/`, pelo que `rust/struct.jinja` refere `.tpl/templates/rust/struct.jinja`. A raiz do loader do MiniJinja é esta pasta, e é também a fronteira: `{% include %}`, `{% import %}` e `{% extends %}` resolvem dentro dela e **nunca** acima dela. Um caminho que escape da raiz é erro de render (`65`).
-
-## Superfície da CLI
-
-```
-tpl [flags globais] <comando> [<subcomando>] [<args>] [flags]
-```
-
-### Comandos porcelain
-
-Agrupados pelos três braços:
-
-```
-# Braço 1 — exploração da base de dados
-tpl schema info|tables|table|views|view|routines|routine|dump
-
-# Braço 2 — exploração dos templates
-tpl template list|show|check|path
-
-# Braço 3 — renderização (output para stdout)
-tpl render <template> [alvo] [flags]
-
-# Auxiliar — gestão do projecto
-tpl init                                          # cria .tpl/ com .cfg, .gitignore e um template de exemplo
-tpl database add|list|show|update|remove|test     # alias: db
-tpl config get|set|unset|list                     # opera sobre .tpl/.cfg
-tpl help [--format json]                          # árvore completa de comandos
-tpl version
-```
-
-Cada comando recebe em argumentos e flags apenas os parâmetros da operação; tudo o resto — credenciais, opções do projecto, corpo dos templates — é lido de `.tpl/`.
-
-### Flags globais
-
-| Flag | Curta | Descrição |
-|---|---|---|
-| `--database <nome>` | `-d` | Entrada `[database.<nome>]` a usar; sobrepõe-se a `TPL_DATABASE` e a `core.database` |
-| `--tpl-dir <path>` | | Pasta `.tpl/` explícita; dispensa a descoberta |
-| `--output <path>` | `-o` | Escreve o resultado neste ficheiro em vez de `stdout` |
-| `--format <text\|json>` | | Formato de saída dos comandos de leitura |
-| `--verbose` | `-v` | Repetível; controla o nível do `tracing` |
-| `--quiet` | `-q` | Suprime tudo excepto erros |
-| `--no-color` | | Desliga cor; implícito quando `stdout` não é TTY ou `NO_COLOR` está definido |
-
-Variáveis de ambiente: `TPL_DIR`, `TPL_DATABASE`, `NO_COLOR`.
-
-### Regras de design da CLI
-
-- Todo o comando de leitura suporta `--format json` com **saída estável** — é o contrato *plumbing* e não pode mudar sem versionamento.
-- `tpl schema dump` produz exactamente o mesmo JSON que o `render` recebe como contexto. `tpl render --context <ficheiro.json>` aceita-o de volta. Este round-trip tem de ser mantido: permite renderizar sem base de dados.
-- Aliases seguem o padrão do `git`: curtos, previsíveis, documentados na tabela do README. Nunca ambíguos.
-- Erros vão para `stderr`, resultado vai para `stdout`. Um comando cuja saída seja consumível por pipe nunca escreve ruído em `stdout`.
-- **Consola por defeito, ficheiro só a pedido.** Todo o comando que produza resultado escreve em `stdout`, a menos que receba `--output` (ou, no `render`, `--output-dir`). Não existe forma de configurar um destino por omissão diferente da consola: seria um efeito lateral invisível na linha de comando.
-- **Escrita atómica.** Havendo flag de destino, o conteúdo é escrito num ficheiro temporário na mesma directoria e renomeado por cima do alvo. Uma falha a meio nunca deixa um ficheiro truncado no lugar do bom.
-- **Escrever em ficheiro não altera o resto do contrato.** O `stdout` fica vazio, o exit code continua a ser `0`, e não se imprime confirmação nenhuma.
-- **Nenhum comando aceita password em `argv`.** As credenciais resolvem-se sempre a partir da entrada nomeada em `.tpl/.cfg`.
-- `tpl init`, `tpl database …` e `tpl config …` são os únicos comandos que escrevem em `.tpl/`. Todos os outros tratam a pasta como só de leitura.
-
-## Contexto de Render
-
-Variáveis de topo disponíveis em qualquer template:
-
-| Variável | Conteúdo |
-|---|---|
-| `database` | Metadados da base de dados e as colecções `tables`, `views`, `routines` |
-| `table` / `view` / `routine` | Presente apenas quando o render está limitado a um objecto |
-| `vars` | Mapa das flags `--set chave=valor` |
-| `tpl` | `{ version }` |
-| `now` | Timestamp UTC do render |
-
-Filtros, testes e funções registados no `Environment` são **superfície pública**: acrescentar é permitido, renomear ou remover é uma quebra de compatibilidade e exige entrada no CHANGELOG.
-
-- Filtros de nomenclatura: `pascal`, `camel`, `snake`, `upper_snake`, `kebab`, `plural`, `singular`
-- Filtros de SQL/código: `quote` (identificador MariaDB com crases), `sql_type`, `rust_type`, `json`, `indent`, `comment`
-- Testes: `nullable`, `primary_key`, `auto_increment`, `unique`, `numeric`, `temporal`, `textual`
-
-Qualquer filtro que dependa do motor tem de ser correcto para MariaDB e validado contra uma instância real (ver secção seguinte).
-
-## Exit Codes e Mensagens de Erro
-
-O exit code é o canal mais fiável que um agente tem para saber o que aconteceu. Por isso **cada condição distinta tem um código distinto** e accionável: o código sozinho deve bastar para escolher o passo seguinte. Convenção `sysexits.h`.
-
-| Código | Nome | Condição | O que o chamador deve fazer |
-|---|---|---|---|
-| `0` | `EX_OK` | Sucesso | Continuar |
-| `64` | `EX_USAGE` | Comando ou flag desconhecida, argumento obrigatório em falta, flags mutuamente exclusivas | Corrigir a invocação; consultar `--help` |
-| `65` | `EX_DATAERR` | Erro de sintaxe no template, falha de render, JSON de `--context` malformado | Corrigir o template ou o contexto |
-| `66` | `EX_NOINPUT` | O objecto nomeado não existe: template, tabela, vista, rotina, entrada de base de dados | Listar o que existe e escolher outro nome |
-| `69` | `EX_UNAVAILABLE` | Servidor inalcançável: DNS, ligação recusada, timeout, falha de TLS | Verificar host/rede; a operação é read-only, logo repetível |
-| `70` | `EX_SOFTWARE` | Erro interno do `tpl` — um bug | Reportar; não é corrigível pelo chamador |
-| `73` | `EX_CANTCREAT` | `tpl init` não consegue criar `.tpl/` | Verificar permissões do directório |
-| `74` | `EX_IOERR` | Falha de I/O a ler `.tpl/` ou a escrever em `stdout` | Verificar permissões e espaço |
-| `77` | `EX_NOPERM` | Autenticação recusada, ou privilégios insuficientes sobre `INFORMATION_SCHEMA` | Corrigir credenciais ou pedir `SELECT` |
-| `78` | `EX_CONFIG` | Sem `.tpl/`; `.cfg` malformado; entrada inválida; `${VAR}` indefinida; sessão read-only não imposta | Corrigir `.tpl/.cfg` ou correr `tpl init` |
-
-Estes códigos são contrato. **Cada um tem de ter um teste de integração que o exercite**, e o teste faz parte da definição de pronto da funcionalidade que o pode produzir.
-
-`EPIPE` em `stdout` — o caso de `tpl … | head` — termina o processo em silêncio com `0`. Não é erro.
-
-### Formato das mensagens de erro
-
-Uma mensagem de erro tem de responder a três perguntas, por esta ordem, e não a mais nenhuma: **o que falhou**, **porquê**, e **o que fazer a seguir**. Vai toda para `stderr`.
-
-```
-error: table 'ordrs' does not exist in database 'shop'
-cause: no row in INFORMATION_SCHEMA.TABLES matches table_schema='shop' and table_name='ordrs'
-hint: did you mean 'orders'? list the available tables with: tpl -d shop schema tables
-exit: 66 (EX_NOINPUT)
-```
-
-Regras:
-
-- **`hint` contém, sempre que possível, um comando concreto e executável.** É a linha que um agente aproveita para se auto-corrigir, e é a que mais retorno dá.
-- **Sugestão por proximidade** (distância de edição) para nomes errados de tabela, vista, rotina, template e entrada de base de dados. Um typo é a falha mais frequente de um agente e a mais barata de resolver.
-- **`cause` é factual e específico** — a query que não devolveu linhas, o erro do servidor, a linha e coluna do template. Nunca uma repetição da linha `error`.
-- **Localização exacta** em erros de template: nome, linha, coluna, e a cadeia de `minijinja::Error`.
-- **Nunca conselhos vagos** do género "verifique a sua configuração". Dizer qual chave, em que ficheiro, com que valor esperado.
-- **Nunca credenciais** em mensagens de erro, seja qual for o nível de verbosidade.
-- Com `--format json`, o erro sai igualmente em JSON, com o mesmo conteúdo:
-
-```json
-{"error":{"exit":66,"code":"EX_NOINPUT","kind":"table_not_found","message":"table 'ordrs' does not exist in database 'shop'","cause":"no row in INFORMATION_SCHEMA.TABLES matches table_schema='shop' and table_name='ordrs'","hint":"tpl -d shop schema tables","did_you_mean":["orders"]}}
-```
-
-O campo `kind` é um identificador estável e enumerado, pensado para ser comparado por código; `message` é para ser lido. Acrescentar valores a `kind` é permitido, renomeá-los é quebra de compatibilidade.
+Na dúvida, a referência é a convenção da linguagem e as Rust API Guidelines — nunca o hábito trazido de outra linguagem.
 
 ## Desenvolvimento
 
@@ -425,116 +585,85 @@ cargo test --all-features
 cargo audit
 ```
 
-Quando a alteração toque num caminho quente — leitura de catálogo, construção do contexto, render, arranque do processo — acresce a este pipeline a execução dos benchmarks e a comparação com a baseline em `BENCHMARKS.md`, conforme a disciplina de medição definida nos Requisitos Não-Funcionais.
+**Nada de desempenho acresce a este pipeline.** Uma alteração a um caminho quente — leitura de catálogo, construção do contexto, render, arranque do processo — é ocasião para tirar uma leitura e registá-la, nos termos da **Disciplina de medição**; nunca é condição para o trabalho estar concluído.
 
 `clippy` com `-D warnings` não é negociável. Um lint que se justifique suprimir exige `#[allow(...)]` local acompanhado de um comentário com a razão — nunca uma supressão ao nível do crate.
 
 ### Desenvolvimento em Rust
 
-Usar **sempre** o agente `rust-elite-developer` para tarefas de programação em Rust: criar, editar, refactorizar ou rever código. Para trabalho de performance em caminhos quentes, usar `rust-perf-engineer`. Para análise de superfície de ataque (parsing de input não confiável, credenciais, execução de `password_command`), usar `security-researcher`.
+Usar **sempre** o agente `rust-elite-developer` para tarefas de programação em Rust: criar, editar, refactorizar ou rever código. Para trabalho de performance em caminhos quentes, usar `rust-perf-engineer`. Para análise de superfície de ataque (parsing de input não confiável, credenciais, execução de comandos externos), usar `security-researcher`.
 
 `unsafe` é proibido neste projecto. Manter `#![forbid(unsafe_code)]` no topo do crate.
 
+## Desempenho e Eficiência
+
+O desempenho e a economia de recursos são exigências de **desenho e de arquitectura**: pesam em cada decisão de construção do `tpl` — o que faz no arranque, quantas vezes vai ao servidor, quanto retém em memória. O `tpl` é uma ferramenta de linha de comandos, invocada repetidamente e frequentemente dentro de loops e pipelines de build — cada milissegundo é pago muitas vezes, e é para esse uso que se constrói rápido e frugal.
+
+**Nenhum número reprova uma alteração.** Nenhuma figura da especificação, e nenhuma leitura registada em `BENCHMARKS.md`, reprova, bloqueia ou trava uma alteração, uma release ou uma peça de trabalho — é `BR-PERF-008`, em `specification/performance-requirements.md`. As regras desta secção são de construção, não de aceitação.
+
+**Os números não vivem aqui.** As propriedades exigidas, as cargas de referência, os pontos de medição e o protocolo pertencem a `specification/performance-requirements.md`; as leituras efectivamente medidas vivem em `BENCHMARKS.md`.
+
+**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes em cada `cargo test`. Quebrá-las é defeito funcional, não execução lenta.
+
+### Regras de implementação
+
+- **Os round-trips ao catálogo não escalam com o número de objectos.** Um `N+1` no leitor de catálogo é um defeito, não uma questão de estilo.
+- **Cada template é parseado uma única vez por processo.** O `Environment` do MiniJinja guarda o template compilado e reutiliza-o; reparsear por iteração é proibido.
+- **Nada de trabalho no arranque que não seja necessário ao comando invocado.** Sem inicialização estática pesada, sem construir o `Environment` para uma invocação que não renderiza, sem ligar à base de dados para um comando que não a use. Inicialização preguiçosa por defeito.
+- **I/O agregado.** Escrita através de writers com buffer; nunca um syscall por linha.
+- **Alocação mínima nos caminhos quentes.** Emprestar em vez de clonar; `&str` em vez de `String`; `Cow<'_, str>` quando evita mesmo uma cópia. Um `.clone()` num caminho quente exige justificação.
+- **Pré-dimensionar colecções** cuja cardinalidade já é conhecida (`with_capacity`).
+- **Streaming sempre que a operação o permita.** A memória deve escalar com o maior objecto individual, não com a base de dados inteira, em tudo o que não exija o documento completo.
+- **Uma só ligação à base de dados**, aberta o mais tarde possível e fechada assim que a leitura termina. Sem pool: o processo é efémero e faz um punhado de queries.
+- **Orçamento de dependências.** Cada crate tem de justificar a sua presença. Preferir a `std`. Antes de acrescentar uma dependência, verificar o que ela arrasta (`cargo tree`) e o que custa (`cargo bloat`, tempo de arranque). Uma dependência que só se usa para uma função trivial não entra.
+- **Perfil de release** afinado no `Cargo.toml`: as cinco definições, e a composição com o panic hook que satisfaz `FR-ERR-030`, estão em `ADR-004`, em `docs/adr/`.
+- **Sem paralelismo especulativo.** Concorrência só entra com benefício medido, em benchmark, sobre carga representativa. Paralelizar porque é possível é proibido — o custo de sincronização e de arranque de threads é real, e em cargas pequenas perde.
+
+### Disciplina de medição
+
+**Nenhuma afirmação de desempenho sem números, e nenhuma optimização sem medição antes e depois.** Intuição sobre o que é rápido não é evidência. Os instrumentos abaixo são informativos: respondem a perguntas, a pedido de quem as faz, e não reprovam nada.
+
+| Ferramenta | Uso |
+|---|---|
+| `hyperfine` | Wall time end-to-end da CLI, incluindo arranque |
+| `criterion` | Micro-benchmarks de funções (parsing, mapeamento de tipos, render) |
+| `dhat-rs` | Perfil de alocações e pico de heap |
+| `samply` / `cargo flamegraph` | Atribuição de CPU a call sites |
+| `cargo bloat` | Contribuição de cada crate para o tamanho do binário |
+
+Os benchmarks vivem em `benches/` e correm contra o dataset dos containers MariaDB, para serem reproduzíveis. As leituras são registadas em `BENCHMARKS.md`, identificando sempre o alvo em que foram medidas, e números medidos em alvos diferentes não se comparam entre si. **`BENCHMARKS.md` é um registo de observações** — informativo, consultado a pedido, e nunca um gate.
+
+Para trabalho de optimização, usar o agente `rust-perf-engineer`; para investigação de causa-efeito entre implementação e comportamento medido (RAM, CPU, código vácuo ou redundante), usar `extreme-code-profiler`.
+
 ## Testes contra MariaDB
 
-Testes ou validações que necessitem de uma base de dados real **têm** de usar o container definido em `scripts/mariadb/Dockerfile`. Lançar o container antes, terminá-lo depois. **Nunca** usar instâncias externas, mocks ou stubs como substituto.
+Testes ou validações que necessitem de uma base de dados real **têm** de usar a fixture definida em `scripts/mariadb/`. **Nunca** usar instâncias externas, mocks ou stubs como substituto.
+
+`scripts/mariadb/` não contém só imagens de servidor e SQL: os servidores apresentam o certificado TLS versionado em `scripts/mariadb/tls/`, e ao lado deles corre um servidor que não oferece TLS nenhum. O que lá está, como se lança e como se verifica está em `scripts/mariadb/README.md` — **lê-se lá, e não se copia para aqui**.
+
+**A fixture não se opera à mão.** Traz o seu próprio harness — um conjunto de scripts que a levanta e verifica servidor a servidor, que a termina e prova que nada ficou para trás, que responde se está de pé antes de um teste dependente de servidor correr, e que instrumenta as observações que a especificação exige que sejam feitas fora do processo. É por eles que a fixture se opera, sempre: um comando Docker escrito à mão no lugar do harness é motivo para **PARAR**. Quais são, como se invocam e o que cada um faz lê-se aí.
+
+O `tpl` suporta **mais do que uma série de MariaDB**. Quais são, e o que uma diferença entre séries obriga, pertence a `specification/server-contract.md` e **não se copia para aqui**.
 
 Sempre que for preciso confirmar o conteúdo, a estrutura ou os tipos devolvidos por uma query ao `INFORMATION_SCHEMA`:
 
-1. Lançar o container MariaDB a partir do Dockerfile.
-2. Executar a query real e observar a resposta efectiva.
+1. Levantar a fixture pelo harness, em **todas as séries suportadas**, e confirmar por ele que todas responderam.
+2. Executar a query real em cada série e observar a resposta efectiva.
 3. Confirmar o comportamento na documentação oficial do MariaDB.
 4. Documentar o código em conformidade com o que foi observado **e** confirmado.
-5. Terminar o container.
+5. Terminar a fixture pelo harness, que confirma que nada dela ficou a correr.
+
+**Uma divergência entre séries é ela própria um achado** e regista-se como tal. É a razão de o `tpl` ler mais do que uma versão, e é o que a especificação exige que seja tratado — não uma nota de rodapé.
 
 **É proibido** assumir, inferir ou documentar o comportamento do catálogo sem executar estes passos. Conhecimento genérico sobre MySQL não é suficiente: as divergências entre MariaDB e MySQL no `INFORMATION_SCHEMA` são reais e relevantes.
 
-Os scripts `scripts/mariadb/setup.sql` e `seed.sql` devem cobrir exaustivamente a superfície que o `tpl` lê: todos os tipos de dados nativos do MariaDB, chaves primárias simples e compostas, índices únicos e compostos, chaves estrangeiras com regras `ON UPDATE`/`ON DELETE` distintas, colunas geradas, vistas, procedimentos e funções, triggers e comentários. O domínio modelado deve ser realista, nunca `id=1, name='test'`.
+Os scripts `scripts/mariadb/setup.sql` e `seed.sql` devem cobrir exaustivamente a superfície de catálogo que o `tpl` lê: todos os tipos de dados nativos do MariaDB, chaves primárias simples e compostas, índices únicos e compostos, chaves estrangeiras com regras `ON UPDATE`/`ON DELETE` distintas, colunas geradas, vistas, procedimentos e funções, triggers e comentários. O domínio modelado deve ser realista, nunca `id=1, name='test'`. O DDL tem de ser aceite por **todas** as séries suportadas.
+
+A exigência de exaustividade não acaba no catálogo: vale igualmente para a superfície de transporte, e é `FR-CONF-038`, em `specification/configuration-model.md`, que fixa o que o material TLS e o servidor sem TLS têm de tornar demonstrável.
 
 ## Documentação
 
-- Toda a documentação do projecto (README, doc comments, especificação, CHANGELOG) é escrita em **inglês**, com ortografia, gramática e sintaxe impecáveis.
-- A linguagem deve ser técnica, clara e sem ambiguidades, destinada a leitores humanos.
+- A língua e as exigências de escrita são as de **Linguagem**: inglês impecável, explícito, objectivo, fechado e conciso. Lê-se lá, e não se repete aqui.
+- O registo é técnico e destina-se a leitores humanos.
 - A documentação tem de ser **fiel ao código**: nunca descrever comandos, flags, filtros ou estruturas que não estejam implementados exactamente como descritos. Enquanto a implementação não existir, o README tem de o dizer explicitamente.
 - Todo o item público (`pub`) leva doc comment. `#![warn(missing_docs)]` no crate.
-
-## Especificação Funcional
-
-Usar sempre o agente `specification-manager` para qualquer trabalho sobre a pasta `/specification`: criação, actualização, revisão ou auditoria. É o responsável exclusivo por essa pasta e pelos identificadores estáveis de requisito.
-
-## Fluxo de Trabalho
-
-1. **Especificar** — formalizar o requisito na especificação funcional.
-2. **Implementar** — escrever o código que o satisfaz.
-3. **Testar** — validar contra MariaDB real quando o requisito toque no catálogo.
-4. **Documentar** — actualizar README, doc comments e CHANGELOG.
-
-## Execução de Tarefas por Subagentes
-
-**Nenhuma tarefa é executada directamente.** Sempre que uma tarefa começa, é delegada a um **subagente especializado**, escolhido por ser o mais adequado ao propósito dessa tarefa concreta.
-
-### Escolha do subagente
-
-O conjunto de subagentes disponíveis **é avaliado no momento**, no computador onde o trabalho decorre. Não existe aqui uma lista fixa, e não deve passar a existir: os agentes instalados mudam, e uma lista escrita neste ficheiro ficaria desactualizada sem dar sinal disso. Antes de delegar, verificar quem está efectivamente disponível e escolher em função do propósito da tarefa.
-
-Se nenhum subagente for claramente o mais adequado, escolher o de propósito geral. A ausência de uma escolha óbvia **não** é autorização para executar directamente.
-
-As indicações de agente já escritas noutras secções deste ficheiro — `rust-elite-developer` para código Rust, `rust-perf-engineer` e `extreme-code-profiler` para desempenho, `security-researcher` para superfície de ataque, `specification-manager` para a especificação — são casos particulares desta regra, não excepções a ela.
-
-### Âmbito fechado
-
-Cada tarefa é executada sob um **âmbito fechado, objectivo e focado exclusivamente no seu propósito**. O briefing entregue ao subagente é delimitado pelo que a tarefa define — **título, descrição, requisitos e comentários** — e por mais nada.
-
-O subagente não alarga o âmbito, não aproveita a passagem para corrigir o que encontra pelo caminho, e não antecipa a tarefa seguinte. O que descobrir fora do âmbito regista-se como comentário ou como nova tarefa, através da skill `roadmap-manager`; não se executa.
-
-### Um de cada vez — nunca em paralelo
-
-**NUNCA correr mais do que um subagente em simultâneo.** Podem usar-se tantos quantos a tarefa exigir, mas sempre **em série**: lançar um, esperar que termine, avaliar o resultado, e só então lançar o seguinte.
-
-Esta regra sobrepõe-se a qualquer heurística por defeito que favoreça paralelismo, incluindo o hábito de agrupar várias invocações independentes na mesma mensagem para correrem em concorrência, e a orquestração por workflows, que faz fan-out de agentes. Neste projecto o padrão é execução em série, e é o padrão que prevalece na dúvida.
-
-Só o utilizador pode pedir execução em paralelo. Mesmo nesse caso é **excepcional**: cumpre-se para o pedido em causa e retoma-se de imediato o padrão em série. Um pedido de paralelismo não abre precedente para os pedidos seguintes.
-
-## Skills Obrigatórias
-
-Três domínios deste projecto **não** são operados directamente: têm uma skill dedicada que é a única via de acesso. A regra é a mesma nos três casos — **nunca invocar a CLI subjacente a partir do Bash**; invocar a skill, que a opera.
-
-| Domínio | Skill | CLI que a skill opera |
-|---|---|---|
-| Escrita no Git | `gitflow` | `git` (operações de escrita) |
-| Sprints, tarefas e comentários | `roadmap-manager` | `rmp` |
-| Conhecimento sobre o projecto | `knowledge-authority` | `rmp graph …` |
-
-### 1. Git — skill `gitflow`
-
-**Todas as operações de escrita no Git passam pela skill `gitflow`.** Isto inclui, sem excepção: `commit`, `add`, criação e remoção de branches, `merge`, `rebase`, `tag`, `push`, `stash` e qualquer reescrita de histórico.
-
-O repositório segue o modelo **gitflow** (Vincent Driessen): abertura e fecho de sprints, registo de uma tarefa fechada como commit, criação de releases e de hotfixes — tudo isso é decisão da skill, não improviso.
-
-Leitura é livre: `git status`, `git log`, `git diff`, `git show` e equivalentes podem ser executados directamente, porque não alteram estado.
-
-Não fazer commits directamente em `main`.
-
-### 2. Sprints, tarefas e comentários — skill `roadmap-manager`
-
-**Toda a gestão e coordenação de sprints, tarefas e comentários passa pela skill `roadmap-manager`**, que é a única operadora da CLI `rmp` (Groadmap). Isto abrange criar, listar, inspeccionar e editar tarefas; o ciclo de vida dos sprints (planear, iniciar, fechar, reabrir); transições de estado; prioridades e severidades; dependências e subtarefas; reordenação; o log de auditoria e as estatísticas; e o log tipado de comentários (`FINDING`, `HYPOTHESIS`, `TEST`, `DECISION`, `PROGRESS`, `UPDATE`, `NOTE`).
-
-O `rmp` é a **única fonte de verdade** para o planeamento e execução das tarefas deste projecto. Não usar ficheiros ad-hoc, listas no chat, TODOs no código ou qualquer outra ferramenta como substituto.
-
-**Roadmap deste projecto:** `tpl`.
-
-### 3. Conhecimento do projecto — skill `knowledge-authority`
-
-**Toda a consulta e gestão de conhecimento sobre o projecto passa pela skill `knowledge-authority`**, que é a única operadora de `rmp graph …` e do grafo de conhecimento que lhe está associado.
-
-É o **primeiro sítio a consultar** perante qualquer pergunta factual sobre o código deste repositório — que ficheiro ou função implementa uma funcionalidade, que módulos, tipos, testes ou dependências existem, o que depende de quê, como se articula a arquitectura, qual o alcance e o impacto de uma alteração. Consultar o grafo **antes** de ler ficheiros, mesmo quando a resposta pareça estar a um `grep` de distância.
-
-Usar também para sincronizar, refrescar ou auditar o grafo após um commit ou quando os ficheiros do projecto mudarem, e para manter o `./knowledge-model.md` — ficheiro escrito exclusivamente por esta skill.
-
-### Fronteiras entre as três
-
-As três skills não se substituem umas às outras, e a confusão entre elas é o erro habitual:
-
-- Gerir tarefas e sprints é `roadmap-manager` — **nunca** `knowledge-authority`, ainda que ambas usem o binário `rmp`.
-- Consultar o grafo de conhecimento é `knowledge-authority` — **nunca** `roadmap-manager`.
-- Registar trabalho em Git é `gitflow` — **nunca** um `git commit` avulso, mesmo que a alteração seja trivial.

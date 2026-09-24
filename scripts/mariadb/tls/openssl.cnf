@@ -1,0 +1,44 @@
+# Certificate profile for the `tpl` MariaDB test fixture.
+#
+# This file is the single declaration of what the fixture's certificate says.
+# `generate.sh` passes it to `openssl req` (for the root) and to `openssl x509`
+# (for the leaf); nothing about the certificate is decided on the command line
+# except the two distinguished names and the validity period.
+#
+# The names in [ alt_names ] are the whole point of the material: `FR-CONF-013`
+# defaults `tls` to `verify-identity`, which validates the host name, and the
+# project's tests reach the fixture over the loopback interface. All three
+# spellings of the loopback a test can write are named, so the certificate
+# matches whichever one the test uses.
+
+[ req ]
+default_bits       = 2048
+default_md         = sha256
+distinguished_name = dn
+prompt             = no
+x509_extensions    = v3_ca
+
+[ dn ]
+O  = tpl MariaDB test fixture
+CN = tpl fixture
+
+# The root. Signs the leaf below and nothing else; it is the certificate a test
+# passes as `ca_file` (FR-CONF-014).
+[ v3_ca ]
+basicConstraints       = critical, CA:TRUE, pathlen:0
+keyUsage               = critical, keyCertSign, cRLSign
+subjectKeyIdentifier   = hash
+
+# The leaf the server presents.
+[ v3_server ]
+basicConstraints       = critical, CA:FALSE
+keyUsage               = critical, digitalSignature, keyEncipherment
+extendedKeyUsage       = serverAuth
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always
+subjectAltName         = @alt_names
+
+[ alt_names ]
+DNS.1 = localhost
+IP.1  = 127.0.0.1
+IP.2  = ::1

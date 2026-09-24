@@ -1,0 +1,74 @@
+# `vendor/sqlx-core-0.9.0` is third-party source, not a workspace member: Cargo
+# would otherwise make every path inside the workspace directory one, and the
+# mandatory validation pipeline would run `-D warnings` over code this project
+# does not own. See `ADR-010`; the one-package decision of `ADR-006` is
+# unchanged by this table.
+# `examples/rust-data-layer` is the crate the Rust worked example renders. It
+# is excluded for the same reason and for one more: it is generated, it carries
+# a dependency this package does not, and `cargo build` at the root must
+# neither compile it nor fetch what it needs. Its compile gate is its own
+# script, per `FR-EX-009`.
+[workspace]
+exclude = ["vendor/sqlx-core-0.9.0", "examples/rust-data-layer"]
+
+[package]
+name = "tpl"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.94.0"
+
+# `dbg_macro` and the two `print_*` lints are in clippy's `restriction` group
+# and are off by default, so `-D warnings` does not reach them. All three write
+# straight to a standard stream, bypassing `src/diagnostics/` and the escaping
+# `FR-ERR-024` applies there; `dbg!` also writes the value's `Debug`, which is
+# how a credential leaves a type that redacts itself. A legitimate site carries
+# a local `#[allow(...)]` with its reason — never a crate-level suppression.
+# Every other `restriction` lint is its own decision and is not taken here.
+[lints.clippy]
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
+[dependencies]
+# The counting global allocator of `ADR-011`, installed by the binary; its
+# count is what the render memory limit of `FR-RND-039` bounds. No features:
+# `stats` is refused there, and `nightly` needs a nightly toolchain.
+cap = { version = "=0.1.2", default-features = false }
+clap = { version = "4.6.6", default-features = false, features = [
+    "std",
+    "help",
+    "usage",
+    "error-context",
+    "derive",
+] }
+# `fuel` bounds every render by a count of evaluation steps (`FR-RND-036`).
+minijinja = { version = "~2.24.0", features = ["fuel"] }
+minijinja-contrib = "~2.24.0"
+rustix = { version = "1.1.4", default-features = false, features = ["process"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sqlx = { version = "0.9.0", features = [
+    "mysql",
+    "runtime-tokio",
+    "tls-rustls-ring-webpki",
+] }
+thiserror = "2.0.20"
+tokio = { version = "~1.53.1", features = ["rt", "time", "net"] }
+toml = "1.1.6"
+toml_edit = "0.25.15"
+
+# `sqlx-core` 0.9.0 never calls `set_nodelay`, which costs ~40 ms on every
+# connection that negotiates TLS. The vendored copy adds the one statement
+# upstream added in PR #4336; `vendor/README.md` holds its provenance. This
+# table is deleted, with the directory it points at, on the first `sqlx`
+# release that carries the fix. See `ADR-010`; the pin of `ADR-003` is
+# unchanged.
+[patch.crates-io]
+sqlx-core = { path = "vendor/sqlx-core-0.9.0" }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

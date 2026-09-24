@@ -1,0 +1,179 @@
+---
+title: Open Questions
+status: approved
+last-reviewed: 2026-09-22
+related: [README.md, catalogue-coverage.md, context-document.md, server-contract.md]
+---
+
+# Open Questions
+
+## Overview
+
+Every entry here is a point this specification cannot yet fix. None is resolved
+by inference: an open question stays open until the user settles it or a
+measurement answers it. An entry states the question, where it came from, why
+it cannot be answered now, and what it blocks. When one is closed, the
+requirement it produces is written into the owning module and the entry moves
+to the *Closed* table below; its identifier is retired and never reused, per
+the identifier scheme of the [README](README.md#identifier-scheme).
+
+**Nothing is open. The index is empty, and the specification is complete.**
+All seventy-five entries this corpus has raised are closed. The twenty the
+sixth edition left waiting for a recorded observation were observed against
+all four series of `FR-SRV-015` on 2026-09-10 and written into their owning
+modules; `OQ-075`, the one the evidence itself opened, was settled by the
+product owner; and `OQ-042`, the last to stand, closed on the necessary
+condition of `FR-SRV-041` with its limit written into that requirement.
+
+**Complete means that no point of this specification is waiting on someone.**
+It does not mean the corpus has stopped moving. Three obligations recur and
+none of them is an open question: `FR-SRV-019` requires the supported-series
+table to be re-verified before every release, `NFR-PERF-020` requires a
+measurement point's figure to be recorded when somebody measures it, and any
+requirement resting on the fourth provenance of the
+[README](README.md#provenance) is falsifiable by a later observation. Each is
+work with an owner and a trigger, which is what distinguishes it from an entry
+here.
+
+If a point of this specification appears unsettled, it is a defect to be
+reported and corrected, or a new question to be raised with the next unused
+identifier — never an old one revived.
+
+## Index
+
+**Empty.** No question is open. An entry is added here only when this
+specification reaches a point it cannot fix, and it is added with the next
+unused `OQ` number; the last assigned was `OQ-075`.
+
+## Closed
+
+**Closed**, **dissolved** and **closed on a stated limit** are defined in
+[glossary.md](glossary.md#closed--dissolved--closed-on-a-stated-limit). Every
+entry below left this index by one of the three. Almost all are closed;
+`OQ-011` and `OQ-023` are the two dissolved, and `OQ-042` is the one closed on
+a stated limit, because an entry no achievable observation can close is not an
+open question. In every case the identifier is retired and never reused, so a
+gap in the sequence is expected rather than a defect.
+
+*Amended in the thirty-third edition: the three definitions move to the
+glossary and this passage cites them.* They were written here, and the
+thirty-second edition's rule is that a defined term has one definition and it
+lives in [glossary.md](glossary.md). All three are used away from this file —
+*dissolved* in [render-command.md](render-command.md) and
+[errors-and-exit-codes.md](errors-and-exit-codes.md), and *stated limit* in
+five, three of which carry it as the name of the note a requirement writes
+where a guarantee stops — so all three are the rule's business.
+**Nothing about how an entry closes changes**: the definitions there are these
+ones, and the table below is untouched.
+
+*Rejected: keeping the three here and citing them from the glossary.* It is
+the alternative the thirty-second edition already weighed and rejected at the
+head of that file, on the ground that a pointer beside a definition that may
+move is a cross-reference to maintain where an entry and a citation are not.
+Nothing about these three re-opens it; if anything they argue the other way,
+since *stated limit* is read in five other files whose readers have no reason
+to come here.
+
+| Id | Question | Answered by | Closed in |
+|---|---|---|---|
+| OQ-001 | Output of `tpl cfg database test` | `FR-CFG-035`, `FR-CFG-039` | Third edition |
+| OQ-008 | `--timeout` versus the per-phase keys | `FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-CONF-004` | Third edition |
+| OQ-020 | Cache format version, and the cached-versus-live field | `FR-CDOC-001` through `FR-CDOC-005`, `FR-CDOC-009` through `FR-CDOC-011` | Second edition |
+| OQ-022 | Shape of `tpl cache status` output | `FR-CACHE-034`, `FR-CACHE-035` | Third edition |
+| OQ-061 | Whether `--help` runs before project discovery | `FR-PROJ-025`, `NFR-PERF-005`, `FR-ERR-006` | Third edition |
+| OQ-062 | The `json` document shape of every read command | `FR-OUT-024` through `FR-OUT-032`, and the `data` shapes of `BR-OUT-002` | Third edition |
+| OQ-063 | The order of the collections `NFR-DET-002` did not name | `NFR-DET-002` | Third edition |
+| OQ-064 | The outcome of a read whose result set is empty | `FR-OUT-033` through `FR-OUT-037` | Third edition |
+| OQ-065 | The durability of a `.tpl/.cfg` rewrite | `FR-CFG-041`, `FR-CFG-042` | Third edition |
+| OQ-066 | `password` beside `password_command`, and either beside `dsn` | `FR-CONF-006`, `FR-CONF-007` | Third edition |
+| OQ-067 | How `70` is produced, and how it is exercised | `FR-ERR-030` through `FR-ERR-032`, `BR-ERR-001` | Third edition |
+| OQ-068 | What each registered filter and test does | `FR-ENV-030` through `FR-ENV-043`; residue in `OQ-070` through `OQ-072` | Third edition |
+| OQ-069 | The shape of the `vars`, `tpl`, and `now` context variables | `FR-CTX-026` through `FR-CTX-030` | Third edition |
+| OQ-044 | The outcome for a server below the supported window | `FR-SRV-020`, `FR-SRV-021` | Fourth edition |
+| OQ-073 | The outcome for a server newer than the supported window | `FR-SRV-031` through `FR-SRV-033`, `BR-SRV-008`, `BR-SRV-009`, `FR-CTX-034` | Fourth edition |
+| OQ-074 | Whether `tpl cfg database test` applies the version gate | `FR-SRV-002` as amended, `FR-SRV-034`, `FR-CFG-024`, `FR-CFG-039` | Fourth edition |
+| OQ-002 | Whether `tpl cfg database test` reports effective privileges | `FR-CFG-044`, `FR-CFG-045`, the `can_read_catalogue` field of `FR-CFG-039`, and the fourth step of `FR-CFG-024` | Fifth edition |
+| OQ-004 | Which query parameters a DSN may carry | `FR-CONF-011` as amended — none — and `FR-CONF-012`, now a special case of it | Fifth edition |
+| OQ-005 | The cap on `password_command` output | `FR-CONF-031` — 4096 bytes; exceeding it is `78` | Fifth edition |
+| OQ-006 | What happens to the child's stderr | `FR-CONF-032` — the null device | Fifth edition |
+| OQ-007 | What happens when `password_command` exits non-zero | `FR-CONF-033` — `78` | Fifth edition |
+| OQ-011 | Pre-scan on ambiguous `--format` forms | **Dissolved.** `FR-ERR-033` withdraws the JSON error document and with it the pre-scan of `FR-ERR-017`; no mechanism is left to specify | Fifth edition |
+| OQ-012 | Whether a mandatory password sentinel test is contract | `BR-SEC-003` | Fifth edition |
+| OQ-013 | The order of `tpl template list` | `FR-TMPL-013` | Fifth edition |
+| OQ-014 | Whether `tpl help` accepts a nested command path | `FR-HELP-026` through `FR-HELP-029` | Fifth edition |
+| OQ-015 | Where a global flag may appear on the command line | `FR-CLI-024`, with `FR-CLI-001` as amended | Fifth edition |
+| OQ-016 | Short forms for local flags | `FR-GLOB-024` — there are none | Fifth edition |
+| OQ-017 | Flags for `password_command`, `ca_file`, and `ca_path` | `FR-CFG-027` as amended, `FR-CFG-046`, `FR-CFG-047`, and `FR-CFG-033` as amended | Fifth edition |
+| OQ-018 | An unknown key in a hand-written `.cfg` | `FR-CONF-034`, `BR-CONF-004` | Fifth edition |
+| OQ-019 | `password_command` written as a TOML string in the file | `FR-CONF-035`, `BR-CONF-004` | Fifth edition |
+| OQ-021 | The outcome of a failed cache write | `FR-CACHE-036` — silent success | Fifth edition |
+| OQ-023 | Pre-scan on a command that declares no `--format` | **Dissolved.** The same mechanism, withdrawn by the same requirement; `FR-RND-027` records the ordinary outcome that remains | Fifth edition |
+| OQ-043 | Whether `referenced_by` embeds | `FR-CTX-010`, with `FR-CTX-009` as amended | Fifth edition |
+| OQ-046 | The read-back within the closed statement list | The fourth entry of `FR-SRV-006`, with `FR-SRV-012` as amended | Fifth edition |
+| OQ-047 | The shape of the `restricted` field | `FR-PRIV-016` | Fifth edition |
+| OQ-048 | Whether an incomplete object may be cached | `FR-CACHE-037` — it may not | Fifth edition |
+| OQ-049 | The pinned engine minor version | `FR-ENV-003` as amended: the pin must exist, be recorded outside this corpus, and be cited; the number never enters the corpus | Fifth edition |
+| OQ-050 | The contract group and behaviour of `escape` | `FR-ENV-007` as amended, and `FR-ENV-044` | Fifth edition |
+| OQ-051 | Budget: `tpl --version` | `NFR-PERF-014`, carrying a provisional figure under `NFR-PERF-019` and the gate of `NFR-PERF-020` | Fifth edition |
+| OQ-052 | Budget: `tpl --help` | The same | Fifth edition |
+| OQ-053 | Budget: startup to the first useful byte | The same | Fifth edition |
+| OQ-054 | Budget: `tpl schema dump` over `WL-001` | The same | Fifth edition |
+| OQ-055 | Budget: cache-served read over `WL-003` | `NFR-PERF-014` and `NFR-PERF-015`; named and unvalued, per `BR-PERF-006` | Fifth edition |
+| OQ-056 | Budget: the failure path | `NFR-PERF-014`; named and unvalued | Fifth edition |
+| OQ-057 | Budget: `tpl help --format json` | `NFR-PERF-014`; named and unvalued | Fifth edition |
+| OQ-058 | Budget: the 200-invocation loop | `NFR-PERF-014`; named and unvalued | Fifth edition |
+| OQ-059 | Budget: peak resident memory over `WL-001` | `NFR-PERF-014`, carrying a provisional figure; `FR-CTX-010` records why it is the likeliest of them to move | Fifth edition |
+| OQ-060 | The byte scalar N of `WL-002` | `WL-002` as amended: unvalued, and scheduled under `NFR-PERF-020` | Fifth edition |
+| OQ-071 | What `sql_type` does beyond `column_type` | `FR-ENV-039` — the normalised type name, which is the `data_type` of `FR-CTX-015` | Fifth edition |
+| OQ-003 | What each of the five TLS modes maps to in the chosen driver | `FR-CONF-038`, with `FR-CONF-037` and `FR-CONF-039` | Sixth edition |
+| OQ-025 | The table types reported, and whether temporary tables appear | `FR-CAT-031`, `FR-CAT-032` | Sixth edition |
+| OQ-041 | How an unreadable view is reported | `FR-PRIV-018`, and `FR-PRIV-011` as amended | Sixth edition |
+| OQ-045 | Which fields differ among the four supported series | `FR-SRV-038`, and the register of `FR-SRV-036` | Sixth edition |
+| OQ-070 | The escaping of a backtick inside an identifier | `FR-ENV-045` — doubling | Sixth edition |
+| OQ-009 | Catalogue return types for comments and defaults | `FR-CAT-039`, with `FR-CAT-036` and `FR-CTX-037` | Seventh edition |
+| OQ-010 | Field lists for routines, triggers, generated columns, and foreign-key rules | `FR-CAT-045`, `FR-CAT-048`, `FR-CAT-050`, `FR-CAT-051` — the four entries it was the umbrella over, and it had no query of its own | Seventh edition |
+| OQ-024 | The metadata fields of the `database` object | `FR-CTX-036` | Seventh edition |
+| OQ-026 | The column attribute string for auto-increment | `FR-CAT-041`, with `FR-CAT-035` | Seventh edition |
+| OQ-027 | Literal, expression, and explicit `DEFAULT NULL` | `FR-CTX-037`, with `FR-CTX-012` and `FR-CTX-013` as amended | Seventh edition |
+| OQ-028 | The textual form of `column_type` | `FR-CTX-038`, with `FR-CAT-038` | Seventh edition |
+| OQ-029 | `ENUM` member delimiting and escaping | `FR-CTX-039`, with `FR-CAT-034` | Seventh edition |
+| OQ-030 | Which type parts the catalogue populates | `FR-CTX-040` | Seventh edition |
+| OQ-031 | Per-column character set and collation | `FR-CTX-041` | Seventh edition |
+| OQ-032 | Index fields and the folding order column | `FR-CAT-042` | Seventh edition |
+| OQ-033 | How the primary key is reported | `FR-CAT-043`, with `FR-CAT-011` as amended and `FR-CAT-044` | Seventh edition |
+| OQ-034 | Foreign-key fields and the four reachable rule spellings | `FR-CAT-045`, with `FR-CAT-033` | Seventh edition |
+| OQ-035 | `CHECK` constraint fields and the remaining level values | `FR-CAT-046`, with `FR-CAT-037` and `FR-CAT-038` | Seventh edition |
+| OQ-036 | View fields beyond the definition | `FR-CAT-047` | Seventh edition |
+| OQ-037 | Routine fields | `FR-CAT-048`, with `FR-PRIV-017` | Seventh edition |
+| OQ-038 | Routine parameter fields and ordering | `FR-CAT-049` | Seventh edition |
+| OQ-039 | Trigger fields | `FR-CAT-050` | Seventh edition |
+| OQ-040 | Generated-column expression and storage kind | `FR-CAT-051` | Seventh edition |
+| OQ-042 | How MariaDB is distinguished from a server reporting a MariaDB-compatible version string | `FR-SRV-040`, and `FR-SRV-041` — the necessary condition, closed **on a stated limit**: a server determined to pass as MariaDB will pass | Seventh edition |
+| OQ-072 | The membership of the three type families | `FR-ENV-046` | Seventh edition |
+| OQ-075 | A field whose value differs because the servers' defaults differ | `FR-SRV-039`, with `BR-SRV-006` and `FR-SRV-026` as amended | Seventh edition |
+
+**Ten rows above name requirements the thirty-sixth edition withdrew or
+renamed, and each still records what closed its question.** `OQ-051` through
+`OQ-060` were closed by a number or a stated blank, and every one of them still
+has that number or that blank; what changed is the machinery around it.
+`NFR-PERF-015` is withdrawn, so `OQ-055` names a withdrawn requirement, which
+keeps its heading and a note saying what it required, per the identifier scheme
+of the [README](README.md#identifier-scheme). `NFR-PERF-019` and
+`NFR-PERF-020` are amended: what those rows call a *provisional* figure is an
+**adopted** one, and what they call a gate is a recording rule. The rows are
+left as the fifth edition wrote them, because each is a record of what answered
+a question on the day it was answered, and no answer has been withdrawn.
+
+**The thirty-seventh edition moved five of those answers and re-opened none.**
+All nine measurement points of `NFR-PERF-014` and the `WL-002` scalar were
+measured on 2026-09-22, and the five adopted figures the measurement superseded
+are removed from that requirement under `NFR-PERF-020`, which is the step that
+rule exists to oblige. The five rows whose answer was a **figure** are
+`OQ-051`, `OQ-052`, `OQ-053`, `OQ-054` and `OQ-059`, and a reader following any
+of them to `NFR-PERF-014` now finds no number in the table. That is not the
+question re-opening: what closed each of them was a figure, and the figure now
+lives in `BENCHMARKS.md`, where `BR-PERF-006` requires a measured one to live.
+The five rows whose answer was a **stated blank** — `OQ-055` through `OQ-058`,
+and `OQ-060` for the `WL-002` scalar — keep that answer unchanged, and each of
+those points has since been measured too, which is what a blank always
+anticipated.

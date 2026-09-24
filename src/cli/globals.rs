@@ -1,0 +1,168 @@
+//! The seven global flags of `FR-GLOB-001`, declared once and accepted
+//! everywhere.
+//!
+//! `FR-GLOB-002` gives every node of the tree every one of the seven, and
+//! `FR-CLI-024` frees their **position**: before the command, between a command
+//! and its subcommand, after the positional arguments, and among the local
+//! flags. The mechanism is `clap`'s `global = true`, set on each of the seven
+//! and on nothing else: a global argument is propagated to every subcommand
+//! when the parser is built, and the value it matched at any depth is
+//! propagated back up to the root, which is where this struct reads it from.
+//!
+//! The alternative — flattening this struct into every node and merging the
+//! seven copies afterwards — was rejected. It declares the same flag once per
+//! node, so `FR-GLOB-024`'s promise that a short form means one thing wherever
+//! it appears would hold by review rather than by construction, and a node
+//! whose copy was forgotten would refuse a flag `FR-GLOB-002` requires it to
+//! accept.
+//!
+//! **The three flags that carry a value are declared repeatable**, with
+//! `ArgAction::Append`, and the repetition is refused by [`super::rules`]
+//! rather than by the parser. That is `OD-08`: `ArgAction::Set` raises an
+//! `ArgumentConflict` naming the *argument* twice, where `FR-CLI-014` obliges
+//! the message to name **both values**, and only the accumulated occurrences
+//! put both in hand. A field of these three is therefore every occurrence in
+//! the order it was written, and is reduced to at most one before any command
+//! reads it.
+//!
+//! **The three flags that carry no value override themselves.** `FR-CLI-025`
+//! makes a repeated valueless flag **idempotent** — `tpl -q -q version` is
+//! `tpl -q version` — and `ArgAction::SetTrue` raises an `ArgumentConflict` on
+//! a second occurrence unless the argument is declared as overriding itself.
+//! The declaration is therefore `overrides_with` naming the flag's own
+//! identifier, which is the parser expressing the requirement rather than a
+//! rule of [`super::rules`] refusing it: there is nothing to refuse, and a
+//! rule that accepted the repetition after the parser had already rejected it
+//! would be a rule with no invocation to run on.
+//!
+//! What is deliberately **not** here: the refusal of `-q` together with `-v`
+//! (`FR-CLI-015`), the refusal of the repetition of a flag that carries a value
+//! (`FR-CLI-014`), and the saturation of `FR-CLI-016`. All three are parsing
+//! rules, owned by [`super::rules`], and a `conflicts_with` written here would
+//! decide one of them in the parser's words rather than in the four labelled
+//! lines of `FR-ERR-008`.
+
+use std::num::NonZeroU64;
+use std::path::PathBuf;
+
+use clap::{ArgAction, Args};
+
+/// The seven flags every node accepts, in any position.
+///
+/// Each field carries the flag as `FR-GLOB-001` declares it, with the short
+/// form that table gives it and no other: `FR-GLOB-024` makes `-d`, `-v`, `-q`,
+/// `-h` and `-V` the complete short-flag set of the tool, and `--tpl-dir` and
+/// `--timeout` have none.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub(crate) struct Globals {
+    /// The `[database.<name>]` entry of `.tpl/.cfg` this invocation uses
+    /// (`FR-GLOB-004`).
+    ///
+    /// Absent, the entry named by `core.database` applies (`FR-GLOB-005`), and
+    /// `FR-GLOB-008` requires the two to stay distinguishable — which is what
+    /// an empty vector carries here, rather than a resolved name.
+    ///
+    /// Every occurrence, in the order written: `FR-CLI-014` refuses a second
+    /// one, per this module's own note, so the field holds at most one entry
+    /// once [`super::rules::refuse_repetition`] has run.
+    #[arg(
+        short = 'd',
+        long = "database",
+        value_name = "NAME",
+        action = ArgAction::Append,
+        global = true
+    )]
+    pub(crate) database: Vec<String>,
+
+    /// The `.tpl` folder to use, naming it explicitly and suppressing
+    /// discovery (`FR-GLOB-009`).
+    ///
+    /// Every occurrence, for the reason [`Globals::database`] states.
+    #[arg(
+        long = "tpl-dir",
+        value_name = "PATH",
+        action = ArgAction::Append,
+        global = true
+    )]
+    pub(crate) tpl_dir: Vec<PathBuf>,
+
+    /// The overall wall-clock budget for the invocation, in seconds
+    /// (`FR-GLOB-011`).
+    ///
+    /// It has no default: absent, the invocation carries no overall budget and
+    /// is bounded only by the per-phase deadlines of `FR-CONF-005`. The type is
+    /// [`NonZeroU64`] because the requirement's value is a **positive**
+    /// integer, so a budget of zero seconds is refused where it is written
+    /// rather than where it would expire.
+    ///
+    /// Every occurrence, for the reason [`Globals::database`] states.
+    #[arg(
+        long = "timeout",
+        value_name = "SECONDS",
+        action = ArgAction::Append,
+        global = true
+    )]
+    pub(crate) timeout: Vec<NonZeroU64>,
+
+    /// How many times `-v/--verbose` was given (`FR-GLOB-014`).
+    ///
+    /// One occurrence is `INFO`, two `DEBUG`, three `TRACE`. The count is
+    /// carried raw: `FR-CLI-016` saturates it above three, and that is a
+    /// parsing rule rather than a property of the flag.
+    ///
+    /// The count is the one repetition the tree admits, so the flag is not
+    /// declared with `ArgAction::Append` like the three above. `ArgAction::Count`
+    /// accumulates into this [`u8`] and **saturates** at its maximum rather
+    /// than overflowing or refusing, which is what lets `FR-CLI-016` saturate
+    /// "without error" past the two hundred and fifty-sixth occurrence as well
+    /// as past the third. That is a property of the parser and not of this
+    /// declaration, so it is asserted by a test rather than assumed.
+    #[arg(short = 'v', long = "verbose", action = ArgAction::Count, global = true)]
+    pub(crate) verbose: u8,
+
+    /// Whether `-q/--quiet` was given, lowering the diagnostic level to errors
+    /// only (`FR-GLOB-015`).
+    ///
+    /// It overrides itself, per `FR-CLI-025`: the flag carries no value, so a
+    /// second occurrence has the effect of the first.
+    #[arg(
+        short = 'q',
+        long = "quiet",
+        action = ArgAction::SetTrue,
+        overrides_with = "quiet",
+        global = true
+    )]
+    pub(crate) quiet: bool,
+
+    /// Whether `-h/--help` was given, at whichever node it appeared
+    /// (`FR-GLOB-019`).
+    ///
+    /// It is a flag of this tree and not the parser's own: `OD-07` renders all
+    /// seven sections of `FR-HELP-006` in `tpl`, so `disable_help_flag` is set
+    /// on every node and this is the only `--help` the tree declares.
+    ///
+    /// It overrides itself, per `FR-CLI-025`, which names this flag as the one
+    /// the case is sharpest for: `-h/--help` is what a caller reaches for **to
+    /// recover from a failure**, so refusing `tpl -h -h` refuses the recovery
+    /// path itself.
+    #[arg(
+        short = 'h',
+        long = "help",
+        action = ArgAction::SetTrue,
+        overrides_with = "help",
+        global = true
+    )]
+    pub(crate) help: bool,
+
+    /// Whether `-V/--version` was given (`FR-GLOB-020`).
+    ///
+    /// It overrides itself, per `FR-CLI-025`.
+    #[arg(
+        short = 'V',
+        long = "version",
+        action = ArgAction::SetTrue,
+        overrides_with = "version",
+        global = true
+    )]
+    pub(crate) version: bool,
+}

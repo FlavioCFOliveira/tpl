@@ -1,0 +1,3 @@
+# Python writes this directory whenever the scanner is imported rather than
+# run. It is a build artefact of the interpreter and never part of the layer.
+__pycache__/
