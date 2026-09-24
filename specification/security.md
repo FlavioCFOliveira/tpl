@@ -180,6 +180,18 @@ module, `BR-SEC-003` excepted.
 - **FR-SEC-016**: `--tpl-dir` SHALL be subject to the same checks, without
   exemption. See `FR-PROJ-008`.
 
+- **FR-SEC-027**: `tpl` SHALL read `.tpl/.cfg` and every template only from a
+  regular file, and SHALL establish the type without following a link,
+  without waiting for a writer, and on the file it then reads. A `.cfg` of
+  another kind is `78`; a template entry of another kind is not a template.
+  See `FR-PROJ-030` and `FR-TMPL-033`.
+
+  *Threat closed.* A FIFO or a device in the place of `.tpl/.cfg` or of a
+  template must not hang the invocation with no deadline, nor feed it
+  unbounded data.
+
+  *Added in the sixty-third edition,* for rmp `#307`.
+
   *Note added in the forty-eighth edition.* `--tpl-dir` SHALL name a directory
   whose last segment is `.tpl`, per `FR-PROJ-027`, so that the flag names no
   folder the walk would not find.

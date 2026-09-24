@@ -395,7 +395,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
     };
     let held =
         |collection: Collection, kind: CatalogueObjectKind, name: &str, file: Option<PathBuf>| {
-            if Store::holds(file.as_deref()) {
+            if cache.holds(file.as_deref()) {
                 cache.clean_one(collection, file)
             } else {
                 Err(absent(collection, kind, name, None, None))
@@ -418,7 +418,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
         ),
         Wanted::Routine(named::Wanted::Qualified(kind, name)) => {
             let file = cache.routine_file(&kind, name);
-            if Store::holds(file.as_deref()) {
+            if cache.holds(file.as_deref()) {
                 return cache.clean_one(Collection::Routines, file);
             }
             // Y-05 of the eighth re-audit of rmp `#263`: a routine of the
@@ -438,7 +438,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
                 _ => (None, None, None),
             };
             let held_as = other
-                .filter(|other| Store::holds(cache.routine_file(other, name).as_deref()))
+                .filter(|other| cache.holds(cache.routine_file(other, name).as_deref()))
                 .and(other_kind);
             Err(absent(
                 Collection::Routines,
@@ -456,7 +456,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
             // namespaces is refused rather than resolved in favour of either.
             // The population here is what the store holds, because that is
             // what the command acts on.
-            if Store::holds(procedure.as_deref()) && Store::holds(function.as_deref()) {
+            if cache.holds(procedure.as_deref()) && cache.holds(function.as_deref()) {
                 return Err(Error::AmbiguousRoutineName {
                     name: name.to_owned(),
                     entry: entry.to_owned(),
@@ -470,7 +470,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
                 });
             }
 
-            let file = if Store::holds(procedure.as_deref()) {
+            let file = if cache.holds(procedure.as_deref()) {
                 procedure
             } else {
                 function

@@ -282,12 +282,13 @@ Four entries of the tree need no project and perform no discovery at all: `tpl i
 
 ### `.tpl/.cfg` must be yours alone
 
-The file decides which host is contacted, which credential is used and which child process is run, so `tpl` refuses to read it unless two things hold, and it checks both **before** opening it:
+The file decides which host is contacted, which credential is used and which child process is run, so `tpl` refuses to read it unless three things hold, and it checks all three, in this order, **before** reading it:
 
-- it is owned by the invoking user, and
+- it is a regular file — not a symbolic link, a directory, a FIFO, a socket or a device;
+- it is owned by the invoking user; and
 - it grants no access to group and none to other — mode `0600`, as `tpl init` creates it.
 
-Either failure exits `78`, naming what was found. A symbolic link is checked at its target, not at the link. An **absent** `.cfg` is not a failure: the `.tpl` folder must then be owned by the invoking user, or the invocation exits `78`, and the project reads as one with an empty configuration, which `tpl cfg set` can write again.
+Any failure exits `78`, naming what was found — for the first, the kind of file — and nothing is read from the file. To keep the configuration outside the project, name that project's `.tpl` folder with `--tpl-dir` rather than linking `.cfg`. An **absent** `.cfg` is not a failure: the `.tpl` folder must then be owned by the invoking user, or the invocation exits `78`, and the project reads as one with an empty configuration, which `tpl cfg set` can write again.
 
 ### What to version, and what not to
 

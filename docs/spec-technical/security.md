@@ -294,6 +294,7 @@ the reasons that entry records.
 | The template root is the boundary of every lookup | The one resolution function | `FR-TMPL-023` |
 | A symbolic link is refused at **every component of the name below the canonical root**, not at the final component alone, each read from the entry's own metadata rather than by following it | The same function | `FR-SEC-017`, `FR-TMPL-024`, [`OD-15`](open-decisions.md#od-15--the-template-loader) |
 | The path that was checked is the path that is opened: one canonical form is compared with the root's, and nothing else is opened afterwards | The same function | `FR-SEC-017`, `FR-TMPL-025`, `FR-TMPL-026` |
+| A template is read only from a regular file. It is opened relative to the canonical root, one component at a time following none, with `O_NONBLOCK`, and its type is read from the descriptor it is then read through, so a FIFO swapped in after resolution neither blocks nor is read. An entry of another kind is not listed, is `66` when named, and fails a render with `65` when an include, import or extends names it | `Root::read` in `render/root.rs`, through `src/at.rs` | `FR-TMPL-033`, `FR-SEC-027`, [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | Syntax analysis is reachable without evaluation: no expression evaluated, no function called, no connection opened | `render/`, on the check path | `FR-SEC-018`, `FR-TMPL-017`, `BR-TMPL-001` |
 
 The second row was the final component alone until 2026-09-21. What the narrow

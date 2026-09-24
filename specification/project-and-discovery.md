@@ -67,6 +67,11 @@ maintain it.
   current directory until it finds a `.tpl` folder. The first one found is the
   project root, and the walk stops there.
 
+  *Note added in the sixty-third edition.* The walk tests each candidate by
+  its metadata and opens none, so no candidate can block it. A `.tpl` that
+  is not a directory, and is not a symbolic link to one, is not a `.tpl`
+  folder, and the walk continues above it. This requirement is unchanged.
+
 - **FR-PROJ-005**: The upward walk SHALL stop at the mount point of the
   filesystem that contains the directory the walk starts from. A `.tpl` folder
   above that boundary SHALL NOT be considered. The boundary SHALL be
@@ -386,6 +391,60 @@ maintain it.
   command that rewrites the file leaves it at `0600`, per `FR-CFG-034`. The
   message stated "only at mode 0600" while a file at `0400` was read, per
   finding W-08 of the sixth re-audit, recorded for rmp `#281`.
+
+- **FR-PROJ-030**: WHERE `.tpl/.cfg` exists, it SHALL be a regular file. IF
+  it is anything else — a symbolic link, a directory, a FIFO, a socket, or a
+  character or block device — THEN the system SHALL exit `78` (`EX_CONFIG`)
+  at step 2 of `FR-ERR-006`, SHALL read nothing from it, and SHALL NOT block
+  on it.
+
+  1. **How the type is established.** The type SHALL be tested without
+     following a symbolic link and without waiting for a writer, on the file
+     that is then read, so that no other file can take its place between the
+     test and the read. The test SHALL precede the checks of `FR-PROJ-010`
+     and `FR-PROJ-011`, which are then made on the same file.
+  2. **The message.** The `cause` SHALL name the file by its canonical path,
+     per `FR-PROJ-009`, SHALL name the kind of file found, and SHALL state
+     that `tpl` reads its configuration only from a regular file. The `hint`
+     SHALL state that the file is to be replaced by a regular file, and SHALL
+     carry no command that deletes it, per `BR-ERR-005`.
+  3. **Not an absence.** A `.cfg` refused here is not the absent `.cfg` of
+     `FR-PROJ-028`, and the project is not used with an empty configuration.
+
+  ```
+  error: .tpl/.cfg is not a regular file
+  cause: /home/ana/shop/.tpl/.cfg is a FIFO; tpl reads its configuration only from a regular file
+  hint:  replace /home/ana/shop/.tpl/.cfg with a regular file holding the configuration
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code.
+
+  *No size bound.* The unbounded reads — a FIFO that never closes, a device
+  such as `/dev/zero` — are closed by the type. A regular file has a size
+  fixed when it is opened, set by its owner, and `FR-PROJ-010` makes that
+  owner the caller. `FR-CDOC-017` bounds the cache records because `tpl`
+  writes them and knows their scale; it cannot know the scale of a file a
+  person writes, and any bound would refuse a legitimate one.
+
+  *Rationale.* A `.cfg` that is a FIFO owned by the caller at mode `0600`
+  passed `FR-PROJ-010` and `FR-PROJ-011`, and its read blocked with no
+  deadline, because no phase of `FR-CONF-005` covers it and `--timeout`
+  bounds only those phases, per `FR-GLOB-026`. `78` is the code of the two
+  checks it stands beside, and the caller repairs the project, not the
+  invocation. This is rmp `#307`.
+
+  *Consequence, stated plainly.* A `.cfg` that is a symbolic link to a
+  regular file is refused. A `cfg` command that rewrites the file already
+  replaces a link with a regular file, per `FR-CFG-041`, so a linked `.cfg`
+  did not survive its first write; a caller who keeps the configuration
+  elsewhere names that project with `--tpl-dir`, per `FR-PROJ-008`.
+
+  *Rejected: `74`.* It tells the caller to check permissions and free space,
+  and neither is at fault. *Rejected: a size bound*, above.
+
+  *Added in the sixty-third edition,* for rmp `#307`.
 
 - **FR-PROJ-028**: WHERE the project's `.tpl` folder holds no `.cfg`, the
   system SHALL use the project with an empty configuration, and SHALL NOT

@@ -200,6 +200,10 @@ pub enum RenderReason {
         /// extension an include writes, at most three, in the order of
         /// `FR-ERR-019` (finding Z-03 of the ninth re-audit of rmp `#263`).
         nearest: Vec<String>,
+        /// Where the name is an entry of the template root that is a FIFO, a
+        /// socket or a device, its kind, as the `cause` names it
+        /// (`FR-TMPL-033`, item 3); [`None`] where no such entry exists.
+        not_regular: Option<&'static str>,
     },
 }
 
@@ -1310,6 +1314,22 @@ pub enum Error {
         nearest: Vec<String>,
     },
 
+    /// A named template whose entry exists under the template root and is not
+    /// a regular file: a FIFO, a socket or a device (`FR-TMPL-033`, item 2).
+    ///
+    /// It is the `66` of `FR-TMPL-027`, with the fact that the entry exists
+    /// and its kind, so that it does not read as a name that is absent.
+    #[error("template '{name}' does not exist")]
+    TemplateNotRegular {
+        /// The name, as the caller named it.
+        name: String,
+        /// The entry below the template root, with its extension:
+        /// `header.jinja`.
+        file: String,
+        /// The kind found, as the `cause` names it: "a FIFO".
+        kind: &'static str,
+    },
+
     /// A named template that does not exist under the template root
     /// (`FR-TMPL-027`, `FR-RND-029`).
     #[error("template '{name}' does not exist")]
@@ -1706,6 +1726,17 @@ pub enum Error {
         owner: u32,
         /// The owner expected — the invoking user.
         expected: u32,
+    },
+
+    /// `.tpl/.cfg` is not a regular file: a symbolic link, a directory, a FIFO,
+    /// a socket or a device (`FR-PROJ-030`).
+    #[error(".tpl/.cfg is not a regular file")]
+    ConfigurationNotRegular {
+        /// The file, by its canonical path (`FR-PROJ-009`).
+        path: PathBuf,
+        /// The kind found, as the `cause` names it: "a FIFO", "a symbolic
+        /// link".
+        kind: &'static str,
     },
 
     /// `.tpl/.cfg` grants access to group or other (`FR-PROJ-011`).
@@ -2522,6 +2553,7 @@ impl Error {
             | Self::CatalogueObjectNotFound { .. }
             | Self::ContextObjectNotFound { .. }
             | Self::TemplateNotFound { .. }
+            | Self::TemplateNotRegular { .. }
             | Self::DatabaseEntryNotFound { .. }
             | Self::ConfigurationKeyNotFound { .. }
             | Self::DefaultEntryUndeclared { .. } => 66,
@@ -2556,6 +2588,7 @@ impl Error {
             | Self::ConfigurationPathReference { .. }
             | Self::ConfigurationNotOwned { .. }
             | Self::ConfigurationUnsafeMode { .. }
+            | Self::ConfigurationNotRegular { .. }
             | Self::CachePathLinked { .. }
             | Self::ConfigurationMalformed { .. }
             | Self::ConfigurationKeyOutsideSpace { .. }
@@ -2597,7 +2630,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 90;
+    const VARIANT_COUNT: usize = 92;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2960,6 +2993,14 @@ mod tests {
                 66,
             ),
             (
+                Error::TemplateNotRegular {
+                    name: "header".to_owned(),
+                    file: "header.jinja".to_owned(),
+                    kind: "a FIFO",
+                },
+                66,
+            ),
+            (
                 Error::TemplateNotFound {
                     name: "missing.jinja".to_owned(),
                     root: PathBuf::from(".tpl/templates"),
@@ -3140,6 +3181,13 @@ mod tests {
                 Error::ConfigurationUnsafeMode {
                     path: path(),
                     mode: 0o644,
+                },
+                78,
+            ),
+            (
+                Error::ConfigurationNotRegular {
+                    path: PathBuf::from("/home/ana/shop/.tpl/.cfg"),
+                    kind: "a FIFO",
                 },
                 78,
             ),
@@ -3369,6 +3417,7 @@ mod tests {
             Error::NothingCachedNamed { .. } => "NothingCachedNamed",
             Error::ContextObjectNotFound { .. } => "ContextObjectNotFound",
             Error::TemplateNotFound { .. } => "TemplateNotFound",
+            Error::TemplateNotRegular { .. } => "TemplateNotRegular",
             Error::DatabaseEntryNotFound { .. } => "DatabaseEntryNotFound",
             Error::DefaultEntryUndeclared { .. } => "DefaultEntryUndeclared",
             Error::ConfigurationKeyNotFound { .. } => "ConfigurationKeyNotFound",
@@ -3390,6 +3439,7 @@ mod tests {
             Error::ProjectFolderNotOwned { .. } => "ProjectFolderNotOwned",
             Error::ConfigurationPathReference { .. } => "ConfigurationPathReference",
             Error::ConfigurationUnsafeMode { .. } => "ConfigurationUnsafeMode",
+            Error::ConfigurationNotRegular { .. } => "ConfigurationNotRegular",
             Error::CachePathLinked { .. } => "CachePathLinked",
             Error::ConfigurationMalformed { .. } => "ConfigurationMalformed",
             Error::ConfigurationKeyOutsideSpace { .. } => "ConfigurationKeyOutsideSpace",

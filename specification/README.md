@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-two editions. All are in force;
+The specification has been written in sixty-three editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4853,6 +4853,38 @@ and the index of [open-questions.md](open-questions.md) stays empty.
 changes. None conflicts with them, so none is amended. The root `README.md`
 does not state what `NFR-PERF-007` reaches, so the fifth validation rule owes
 nothing.
+
+### Sixty-third edition — files that are not regular files
+
+rmp `#307` found that a `.tpl/.cfg` or a template that is a FIFO, a socket or a
+device passes every trust check and makes `tpl` block with no deadline or read
+unbounded data.
+
+**Three identifiers are assigned: `FR-PROJ-030`, `FR-TMPL-033` and
+`FR-SEC-027`.** None is retired and none is renumbered. No term enters or
+leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **`.tpl/.cfg` is a regular file** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-030` refuses
+  any other kind with `78` at step 2, before the ownership and mode checks,
+  with the type tested on the file then read. No size bound applies.
+  `FR-PROJ-004` carries a note: the walk opens no candidate.
+- **A template is a regular file** — [template-commands.md](template-commands.md).
+  `FR-TMPL-033` keeps any other kind unlisted and unchecked, answers its name
+  on the command line with `66` and inside a template with `65`, and opens it
+  for no read. No size bound applies.
+- **The security module points at both** — [security.md](security.md),
+  `FR-SEC-027`.
+
+`FR-PROJ-008` through `FR-PROJ-011`, `FR-PROJ-028`, `FR-CFG-041`,
+`FR-CONF-005`, `FR-GLOB-026`, `FR-TMPL-004`, `FR-TMPL-005`, `FR-TMPL-009`,
+`FR-TMPL-024` through `FR-TMPL-027`, `FR-CDOC-017`, `FR-ERR-006`,
+`BR-ERR-005` and `FR-RND-036` through `FR-RND-039` were read against the
+changes. None conflicts with them, so none is amended. The root `README.md`
+does not state what kind of file `.cfg` or a template must be, so the fifth
+validation rule owes nothing.
 
 ### Still out of scope
 

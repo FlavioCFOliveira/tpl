@@ -40,6 +40,7 @@ pub(crate) mod redact;
 
 use std::collections::BTreeMap;
 use std::fmt;
+#[cfg(test)]
 use std::io;
 use std::num::NonZeroU64;
 use std::ops::Range;
@@ -361,6 +362,11 @@ fn nearest(supplied: &str, population: &[String], class: Population) -> Vec<Stri
 /// space of `FR-CONF-034`, the declared types of `FR-CONF-002`, the coherence
 /// of `FR-CONF-007`, or the DSN grammar of `FR-CONF-009` through
 /// `FR-CONF-012`.
+///
+/// Production reads the file once, in the trust checks, and parses what they
+/// read through [`from_text`]; this path-based read serves the tests that
+/// build a configuration from a file they wrote.
+#[cfg(test)]
 pub(crate) fn load(file: &Path) -> Result<Configuration, Error> {
     let text = match std::fs::read_to_string(file) {
         Ok(text) => text,
@@ -373,6 +379,20 @@ pub(crate) fn load(file: &Path) -> Result<Configuration, Error> {
         }
     };
 
+    from_text(file, text)
+}
+
+/// The configuration `text` spells, as read from `file` by the trust checks
+/// of [`crate::project`], which open the file once and judge the descriptor
+/// they read (`FR-PROJ-030`).
+///
+/// # Errors
+///
+/// Returns the `78` condition of the step that refuses: the parse, the key
+/// space of `FR-CONF-034`, the declared types of `FR-CONF-002`, the coherence
+/// of `FR-CONF-007`, or the DSN grammar of `FR-CONF-009` through
+/// `FR-CONF-012`.
+pub(crate) fn from_text(file: &Path, text: String) -> Result<Configuration, Error> {
     let document = read(&text, file)?;
 
     Ok(Configuration {

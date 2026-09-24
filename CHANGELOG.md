@@ -70,9 +70,25 @@ workflow, before it closes.
   `table_named(name)`, `view_named(name)` and `routine_named(name)`; `column`
   is unchanged. A template that calls an old name fails with `65`. Under the
   pre-1.0 rule, this moves the minor number of the next release.
+- **`.tpl/.cfg` must be a regular file.** A `.cfg` that is a symbolic link, a
+  directory, a FIFO, a socket or a device is refused with `78`, naming the
+  kind found and reading nothing, so a FIFO no longer makes `tpl` block. **A
+  `.cfg` kept as a symbolic link, which was checked at its target, is now
+  refused:** replace it with a regular file, or keep the project elsewhere and
+  name its `.tpl` folder with `--tpl-dir`.
 
 ### Fixed
 
+- **A template that is not a regular file is never opened.** A `.jinja` entry
+  of `.tpl/templates/` that is a FIFO, a socket or a device is not listed or
+  checked, is refused with `66` when named on the command line, and fails a
+  render with `65` when an `include`, `import` or `extends` names it; a FIFO
+  no longer makes `tpl` block.
+- **Cache operations do not follow a `.tpl/.cache` swapped for a link
+  mid-operation.** Every cache path is resolved relative to the directory
+  already opened, so a component replaced by a symbolic link between two steps
+  fails the next step instead of redirecting a read, write or removal outside
+  the project.
 - **`table`, `view` and `routine` are undefined without an object flag.** A
   `tpl render` given no `--table`, `--view` or `--routine` no longer sees them
   as defined: they resolved to the lookup functions of the same names.

@@ -70,7 +70,14 @@ sixty-second edition that `NFR-PERF-007` reaches exactly the six requirements of
 form, and that `NFR-PERF-008` is verified against the server's statement
 record; `quality-attributes.md`, `operations.md` and `traceability.md` state
 that verification, and `verification.md`'s register names the test that makes
-it.
+it. For rmp `#306` and `#307`, `open-decisions.md` amends `OD-24` with
+`rustix`'s `fs` feature, reverses `OD-10`'s rejection of `O_NOFOLLOW`, and
+records the correction owed to `CLAUDE.md`; `technology-stack.md` lists the four
+`fs` calls, and `data-model.md` prescribes the cache's path operations as
+directory-relative. With the two tasks implemented in `src/at.rs`,
+`data-model.md` and `technology-stack.md` describe those operations as built,
+with the one listing residual and the swap evidence; `data-model.md` adds how
+`.tpl/.cfg` is opened, and `security.md` and `OD-15` how a template is read.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree

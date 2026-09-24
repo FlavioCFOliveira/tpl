@@ -294,12 +294,7 @@ fn list<W: Write>(
 /// returns, [`Error::ProjectFileUnreadable`] where the file could not be read,
 /// and the write conditions of [`output`].
 fn show<W: Write>(out: &mut W, environment: &Environment, name: &str) -> Result<(), Error> {
-    let located = environment.resolve(name)?;
-    let source =
-        std::fs::read_to_string(&located).map_err(|returned| Error::ProjectFileUnreadable {
-            path: located,
-            returned,
-        })?;
+    let source = environment.source(name)?;
 
     output::emit_verbatim(out, &source)
 }

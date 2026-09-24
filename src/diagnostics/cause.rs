@@ -510,6 +510,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                  render; the template engine reports: {}",
                 joined(chain)
             )),
+            // FR-TMPL-033 item 3: the entry the include names is not a
+            // regular file, and the line says so and what it is.
+            (
+                _,
+                Some(RenderReason::IncludeNotFound {
+                    name,
+                    not_regular: Some(kind),
+                    ..
+                }),
+            ) => Cow::Owned(format!(
+                "'{template}' at {position} names '{name}', which exists under the template \
+                 folder and is {kind}; a template is a regular file"
+            )),
             (_, Some(RenderReason::IncludeNotFound { .. }))
             | (None, None | Some(RenderReason::Unresolved(_) | RenderReason::Missing(_))) => {
                 Cow::Owned(format!(
@@ -635,6 +648,11 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "the --context document {} describes database '{database}' and carries no {kind} \
              named '{name}'",
             path.display()
+        )),
+        // FR-TMPL-033 item 2: the entry exists, and its kind is named, so the
+        // line does not read as a name that is absent.
+        Error::TemplateNotRegular { file, kind, .. } => Cow::Owned(format!(
+            ".tpl/templates/{file} exists and is {kind}; a template is a regular file"
         )),
         Error::TemplateNotFound { name, root, .. } => Cow::Owned(format!(
             "no template named '{name}' exists under the template folder {}",
@@ -881,6 +899,12 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         } => Cow::Owned(format!(
             "{} is owned by uid {owner}; tpl reads it only when it is owned by the invoking user, \
              uid {expected}",
+            path.display()
+        )),
+        // FR-PROJ-030: the canonical path, the kind found, and that the
+        // configuration is read only from a regular file.
+        Error::ConfigurationNotRegular { path, kind } => Cow::Owned(format!(
+            "{} is {kind}; tpl reads its configuration only from a regular file",
             path.display()
         )),
         Error::ConfigurationUnsafeMode { path, mode } => Cow::Owned(format!(

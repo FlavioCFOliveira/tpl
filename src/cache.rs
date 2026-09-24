@@ -57,8 +57,17 @@
 //!   server that was never asked. The file-naming arrangement is unchanged.
 //! - `FR-CACHE-033`, `FR-CACHE-030` — an object file that is a symbolic link
 //!   (hardening observation H-2). It is never read through, whatever it points
-//!   at; the rewrite that follows the miss replaces the link, which
-//!   [`write_through`]'s rename already does.
+//!   at; the rewrite that follows the miss replaces the link, which the
+//!   rename of every write already does.
+//!
+//! # No path is resolved through a link
+//!
+//! Every file of the cache is reached relative to the canonical `.tpl` of
+//! `FR-PROJ-009`, one component at a time, following none (`FR-SEC-026`,
+//! `OD-24`): [`at`] holds the operations. A component swapped for a link
+//! between one operation and the next makes the next fail rather than follow
+//! it, so a read is a miss, a write is skipped, and a clean is the `78` of
+//! `FR-CACHE-042`.
 //!
 //! The one operation that does report is [`Cache::clean`], and it reports
 //! because removing is the whole of what the caller asked for: a `tpl cache
@@ -90,13 +99,16 @@ pub(crate) mod paths;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::fs;
-use std::io::Write as _;
-use std::os::unix::fs::OpenOptionsExt as _;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use rustix::fd::OwnedFd;
+use rustix::fs::Mode;
 
 use serde::{Deserialize, Serialize};
 
+use crate::at::{self, Fault};
 use crate::error::Error;
 use crate::model::ToStatic as _;
 use crate::model::document::DatabaseDocument;
@@ -106,14 +118,19 @@ use crate::model::routine::{Routine, RoutineKind};
 use crate::model::server::Server;
 use crate::model::view::View;
 use meta::Meta;
-use paths::{Collection, Layout};
+use paths::{Collection, DATABASE, Layout, META};
 
-/// The mode every file of the cache is created with.
+/// The mode every file of the cache is created with, `0o600`, and the mode a
+/// file left in place must carry.
 ///
 /// It is the mode `FR-SEC-004` fixes for `.tpl/.cfg` and it is applied here for
 /// a weaker but real reason: a cached catalogue is the structure of a database
 /// this user was granted sight of, and `.tpl/` is a per-machine directory, so
 /// the cache is written no wider than the configuration that reached it.
+const FILE_MODE: Mode = Mode::RUSR.union(Mode::WUSR);
+
+/// [`FILE_MODE`] as the integer a test compares a file's permissions with.
+#[cfg(test)]
 const MODE: u32 = 0o600;
 
 /// The prefix of the temporary file of `FR-CACHE-030`.
@@ -348,6 +365,8 @@ pub(crate) struct Shelf {
     kind: Option<RoutineKind<'static>>,
     /// The object file.
     file: PathBuf,
+    /// The `.tpl` folder the file is reached from, one component at a time.
+    anchor: Arc<Path>,
 }
 
 impl Shelf {
@@ -361,7 +380,7 @@ impl Shelf {
     /// (`FR-CACHE-033`): absent — removed since the listing was read, which
     /// `FR-CACHE-039` names — a symbolic link, unreadable, or not UTF-8.
     pub(crate) fn read(&self) -> Option<String> {
-        read_object(&self.file)
+        at::read(&self.anchor, &self.file, None)
     }
 
     /// The table `bytes` hold, or [`None`] on a miss.
@@ -665,28 +684,26 @@ pub(crate) struct Recorded {
     pub(crate) name: Option<String>,
 }
 
-/// The name `.tpl/.cache/` lists for `path`, whose metadata, read without
-/// following a link, is `found`.
+/// The name `.tpl/.cache/` — the folder `root`, opened as `descriptor` —
+/// lists for its member `given`, whose metadata, read without following a
+/// link, is `found`.
 ///
-/// The member equal to the last component byte for byte wins; otherwise the
-/// member with the same device and inode, which is the one a filesystem that
-/// ignores case resolved the path to.
-fn recorded_name(path: &Path, found: &fs::Metadata) -> Option<String> {
-    use std::os::unix::fs::MetadataExt as _;
-
-    let given = path.file_name()?;
-    let members = fs::read_dir(path.parent()?).ok()?;
+/// The member equal to `given` byte for byte wins; otherwise the member with
+/// the same device and inode, which is the one a filesystem that ignores case
+/// resolved the name to.
+fn recorded_name(
+    root: &Path,
+    descriptor: &OwnedFd,
+    given: &OsStr,
+    found: &rustix::fs::Stat,
+) -> Option<String> {
     let mut resolved = None;
 
-    for member in members.flatten() {
-        let name = member.file_name();
+    for (name, metadata) in at::list(root, descriptor)? {
         if name == given {
             return name.into_string().ok();
         }
-        if resolved.is_none()
-            && let Ok(metadata) = fs::symlink_metadata(member.path())
-            && metadata.dev() == found.dev()
-            && metadata.ino() == found.ino()
+        if resolved.is_none() && metadata.st_dev == found.st_dev && metadata.st_ino == found.st_ino
         {
             resolved = Some(name);
         }
@@ -735,10 +752,10 @@ impl Cache {
         }
 
         Some(Loaded {
-            metadata: read(&layout.database())?,
-            tables: members(&layout.collection(Collection::Tables))?,
-            views: members(&layout.collection(Collection::Views))?,
-            routines: members(&layout.collection(Collection::Routines))?,
+            metadata: read(layout, &layout.database())?,
+            tables: members(layout, &layout.collection(Collection::Tables))?,
+            views: members(layout, &layout.collection(Collection::Views))?,
+            routines: members(layout, &layout.collection(Collection::Routines))?,
             requested: None,
         })
     }
@@ -765,7 +782,7 @@ impl Cache {
         }
 
         Some(Shelved {
-            metadata: read(&layout.database())?,
+            metadata: read(layout, &layout.database())?,
             tables: shelve(layout, Collection::Tables)?,
             views: shelve(layout, Collection::Views)?,
             routines: shelve(layout, Collection::Routines)?,
@@ -813,11 +830,11 @@ impl Cache {
         }
 
         Some(Summarised {
-            metadata: read(&layout.database())?,
+            metadata: read(layout, &layout.database())?,
             counts: [
-                count(&layout.collection(Collection::Tables))?,
-                count(&layout.collection(Collection::Views))?,
-                count(&layout.collection(Collection::Routines))?,
+                count(layout, &layout.collection(Collection::Tables))?,
+                count(layout, &layout.collection(Collection::Views))?,
+                count(layout, &layout.collection(Collection::Routines))?,
             ],
         })
     }
@@ -845,7 +862,7 @@ impl Cache {
             return None;
         }
 
-        let read = members(&layout.collection(collection))?;
+        let read = members(layout, &layout.collection(collection))?;
 
         Some(self.one(collection, read_metadata(layout)?, read, None))
     }
@@ -902,7 +919,7 @@ impl Cache {
         // collection is.
         self.meta()?;
 
-        let bytes = read_object(&file)?;
+        let bytes = at::read(layout.tpl(), &file, None)?;
         let requested = Requested {
             collection,
             name: name.to_owned(),
@@ -947,7 +964,7 @@ impl Cache {
     /// unreadable, or written under a version this binary does not know.
     fn meta(&self) -> Option<Meta> {
         let layout = self.layout.as_ref()?;
-        let meta: Meta = serde_json::from_str(&read(&layout.meta())?).ok()?;
+        let meta: Meta = serde_json::from_str(&read(layout, &layout.meta())?).ok()?;
 
         meta.usable().then_some(meta)
     }
@@ -972,9 +989,11 @@ impl Cache {
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
-        if fs::create_dir_all(layout.folder()).is_err() {
+        // FR-SEC-026: the folders are reached and created relative to the
+        // canonical `.tpl`, following no link.
+        let Ok(folder) = at::make_directories(layout.tpl(), layout.folder()) else {
             return;
-        }
+        };
 
         let metadata = Metadata {
             name: document.name.clone(),
@@ -983,7 +1002,7 @@ impl Cache {
             server: document.server.clone(),
         };
         let mut buffers = Buffers::default();
-        if !store_object(&layout.database(), &metadata, &mut buffers) {
+        if !store_object_in(&folder, OsStr::new(DATABASE), &metadata, &mut buffers) {
             return;
         }
 
@@ -1015,7 +1034,7 @@ impl Cache {
                     ),
                 ];
 
-                let _ = store(&layout.meta(), &Meta::new(whole));
+                let _ = store_in(&folder, OsStr::new(META), &Meta::new(whole));
             }
             Covered::One(_) => {
                 for table in &document.tables {
@@ -1037,7 +1056,7 @@ impl Cache {
                     |previous| previous.refreshed(),
                 );
 
-                let _ = store(&layout.meta(), &record);
+                let _ = store_in(&folder, OsStr::new(META), &record);
             }
         }
     }
@@ -1048,54 +1067,48 @@ impl Cache {
     /// `.tpl/.cache`, then at the entry's folder, then at the folder of each
     /// of `collections` (`FR-CACHE-042`, `FR-CACHE-044`, `FR-SEC-026`).
     ///
-    /// Each component is examined with `symlink_metadata`, so none is
-    /// followed. The walk stops, answering [`None`], at the first component
-    /// that is absent, is not a directory, or cannot be examined: nothing
-    /// below it can be reached through a link, and a read or write that meets
-    /// it fails as it did before, silently for a read under `FR-CACHE-033`
-    /// and `FR-CACHE-036`, and with `74` for a clean.
+    /// Each component is opened relative to its parent's descriptor with
+    /// `O_NOFOLLOW` and `O_DIRECTORY`, so none is followed and a link is found
+    /// by the open failing on it. The walk stops, answering [`None`], at the
+    /// first component that is absent, is not a directory, or cannot be
+    /// opened: nothing below it can be reached through a link, and a read or
+    /// write that meets it fails as it did before, silently for a read under
+    /// `FR-CACHE-033` and `FR-CACHE-036`, and with `74` for a clean.
     ///
     /// `with_entry` is `false` for a clean with no object flag, which removes
     /// the entry's folder: `FR-CACHE-042` item 2 removes a link there as a
     /// link, so only `.tpl/.cache` is refused.
     ///
-    /// *Residual race.* The components are examined and then used by path. A
-    /// process that replaces one of them with a link between the two can
-    /// still redirect the read, the write or the removal. Closing it needs
-    /// every step opened relative to a directory handle without following a
-    /// link (`openat` with `O_NOFOLLOW`), which the standard library does not
-    /// offer and the `rustix` features of the Stack do not include. Such a
-    /// process already writes inside `.tpl`.
+    /// A link swapped in after this answers is not followed either: every
+    /// later operation of the cache opens its components the same way and
+    /// fails on the link, which a clean reports as the same `78`
+    /// ([`linked`]) and a read or a write treats as a miss or a skipped
+    /// write.
     pub(crate) fn link_on_path(
         &self,
         with_entry: bool,
         collections: &[Collection],
     ) -> Option<Linked> {
         let layout = self.layout.as_ref()?;
-        let linked = |path: PathBuf| {
-            let within = path
-                .strip_prefix(layout.tpl())
-                .map_or_else(|_| path.clone(), Path::to_path_buf);
-            Linked { path, within }
+        let reached = |directory: &Path| match at::directory(layout.tpl(), directory) {
+            Ok(_) => Ok(()),
+            Err(Fault::Linked(path)) => Err(Some(within(layout, path))),
+            Err(_) => Err(None),
         };
 
-        match examine(layout.root()) {
-            Examined::Link => return Some(linked(layout.root().to_owned())),
-            Examined::Directory if with_entry => {}
-            Examined::Directory | Examined::Stop => return None,
+        if let Err(found) = reached(layout.root()) {
+            return found;
         }
-
-        match examine(layout.folder()) {
-            Examined::Link => return Some(linked(layout.folder().to_owned())),
-            Examined::Directory => {}
-            Examined::Stop => return None,
+        if !with_entry {
+            return None;
+        }
+        if let Err(found) = reached(layout.folder()) {
+            return found;
         }
 
         collections
             .iter()
-            .map(|collection| layout.collection(*collection))
-            .find(|folder| matches!(examine(folder), Examined::Link))
-            .map(linked)
+            .find_map(|collection| reached(&layout.collection(*collection)).err().flatten())
     }
 
     /// Refuses the command where [`Cache::link_on_path`] finds a link, with
@@ -1134,17 +1147,21 @@ impl Cache {
         let Some(layout) = self.layout.as_ref() else {
             return Ok(());
         };
+        let unwritable = |returned: std::io::Error| Error::ProjectFileUnwritable {
+            path: layout.folder().to_owned(),
+            returned,
+        };
 
-        match fs::remove_dir_all(layout.folder()) {
-            Ok(()) => Ok(()),
+        match at::parent(layout.tpl(), layout.folder()) {
+            // FR-CACHE-042 items 2 and 3: the entry's folder is removed as a
+            // link where it is one, and nothing beneath it is followed.
+            Ok((root, name)) => at::remove_in(&root, name, layout.folder()).map_err(unwritable),
             // Nothing stored is the state the caller asked for, per the
             // reading FR-CACHE-026 applies to an empty cache: empty is a state,
             // not a failure.
-            Err(returned) if returned.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(returned) => Err(Error::ProjectFileUnwritable {
-                path: layout.folder().to_owned(),
-                returned,
-            }),
+            Err(Fault::Absent) => Ok(()),
+            Err(Fault::Linked(path)) => Err(linked(layout, path)),
+            Err(other) => Err(unwritable(other.into_io())),
         }
     }
 
@@ -1154,11 +1171,12 @@ impl Cache {
     ///
     /// The caller has already established conditions 1 and 2 of that
     /// requirement; this is condition 3 and the removal. The path is examined
-    /// with `symlink_metadata`, so a symbolic link at `.tpl/.cache/<name>` is
-    /// removed itself and never followed, and a directory is removed with
-    /// [`fs::remove_dir_all`], which removes a link beneath it rather than
-    /// what it points at. Anything else there — a file, a socket — is
-    /// removed as one file, because the condition is "exists, as a file of
+    /// relative to the descriptor of `.tpl/.cache`, without following it, so a
+    /// symbolic link at `.tpl/.cache/<name>` is removed itself and never
+    /// followed, and a directory is removed with [`at::remove_in`], which
+    /// reaches each child with `O_NOFOLLOW` and removes a link beneath it
+    /// rather than what it points at. Anything else there — a file, a socket —
+    /// is removed as one file, because the condition is "exists, as a file of
     /// any kind".
     ///
     /// The recorded name is read before the removal, per item 2: on a
@@ -1178,29 +1196,24 @@ impl Cache {
             returned,
         };
 
-        let found = match fs::symlink_metadata(folder) {
-            Ok(found) => found,
-            Err(returned) if returned.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(returned) => return Err(refused(returned)),
+        let (root, name) = match at::parent(layout.tpl(), folder) {
+            Ok(opened) => opened,
+            Err(Fault::Absent) => return Ok(None),
+            Err(Fault::Linked(path)) => return Err(linked(layout, path)),
+            Err(other) => return Err(refused(other.into_io())),
         };
-        let kind = found.file_type();
+        let Some(found) = at::examine(&root, name) else {
+            return Ok(None);
+        };
         let recorded = Recorded {
-            name: recorded_name(folder, &found),
+            name: recorded_name(layout.root(), &root, name, &found),
         };
 
-        let removed = if kind.is_dir() {
-            fs::remove_dir_all(folder)
-        } else {
-            fs::remove_file(folder)
-        };
+        // Gone between the two calls is the state the caller asked for, and
+        // `remove_in` answers it as removed.
+        at::remove_in(&root, name, folder).map_err(refused)?;
 
-        match removed {
-            // Gone between the two calls: the state the caller asked for.
-            Err(returned) if returned.kind() != std::io::ErrorKind::NotFound => {
-                Err(refused(returned))
-            }
-            _ => Ok(Some(recorded)),
-        }
+        Ok(Some(recorded))
     }
 
     /// Removes one cached object, and records that its collection is no longer
@@ -1227,10 +1240,16 @@ impl Cache {
         };
 
         // An object that is not there is the state the caller asked for, by
-        // the reading `FR-CACHE-026` applies to an empty cache.
-        if let Err(returned) = fs::remove_file(&file)
-            && returned.kind() != std::io::ErrorKind::NotFound
-        {
+        // the reading `FR-CACHE-026` applies to an empty cache. The file is
+        // removed relative to its folder's descriptor, as a link where it is
+        // one (FR-CACHE-042 item 2).
+        let removed = match at::parent(layout.tpl(), &file) {
+            Ok((folder, name)) => at::unlink(&folder, name, rustix::fs::AtFlags::empty()),
+            Err(Fault::Absent) => Ok(()),
+            Err(Fault::Linked(path)) => return Err(linked(layout, path)),
+            Err(other) => Err(other.into_io()),
+        };
+        if let Err(returned) = removed {
             return Err(Error::ProjectFileUnwritable {
                 path: file,
                 returned,
@@ -1246,7 +1265,7 @@ impl Cache {
             .meta()
             .and_then(|previous| previous.without_whole(collection))
         {
-            let _ = store(&layout.meta(), &record);
+            let _ = store(layout.tpl(), &layout.meta(), &record);
         }
 
         Ok(())
@@ -1279,9 +1298,15 @@ impl Cache {
     ///
     /// The file is examined without following a link: a link there is held,
     /// and is what the clean removes, as a link, per `FR-CACHE-042` item 2.
-    pub(crate) fn holds(file: Option<&Path>) -> bool {
-        file.and_then(|file| fs::symlink_metadata(file).ok())
-            .is_some_and(|found| found.is_file() || found.file_type().is_symlink())
+    pub(crate) fn holds(&self, file: Option<&Path>) -> bool {
+        let (Some(layout), Some(file)) = (self.layout.as_ref(), file) else {
+            return false;
+        };
+
+        at::examine_path(layout.tpl(), file).is_some_and(|found| {
+            let kind = at::kind(&found);
+            kind.is_file() || kind.is_symlink()
+        })
     }
 
     /// The names of the objects `collection` holds, in the order of
@@ -1340,7 +1365,8 @@ impl Cache {
         let Some(layout) = self.layout.as_ref() else {
             return empty;
         };
-        let counted = |collection: Collection| count(&layout.collection(collection)).unwrap_or(0);
+        let counted =
+            |collection: Collection| count(layout, &layout.collection(collection)).unwrap_or(0);
 
         if let Some(meta) = self.meta() {
             return Status {
@@ -1367,7 +1393,7 @@ impl Cache {
         // A record that is present but unusable is reported, even over no
         // object file: it is something the cache holds. It is examined
         // without following a link.
-        let recorded = fs::symlink_metadata(layout.meta()).is_ok();
+        let recorded = at::examine_path(layout.tpl(), &layout.meta()).is_some();
 
         if !recorded && collections.iter().all(|held| held.count == 0) {
             return empty;
@@ -1390,23 +1416,25 @@ pub(crate) struct Linked {
     pub(crate) within: PathBuf,
 }
 
-/// What one component of a cache path is, examined without following it.
-enum Examined {
-    /// A symbolic link.
-    Link,
-    /// A directory, so the walk goes on beneath it.
-    Directory,
-    /// Absent, another kind of file, or not examinable: nothing beneath it is
-    /// reached through a link.
-    Stop,
+/// `path`, a link below the canonical `.tpl`, as [`Linked`] reports it.
+fn within(layout: &Layout, path: PathBuf) -> Linked {
+    let within = path
+        .strip_prefix(layout.tpl())
+        .map_or_else(|_| path.clone(), Path::to_path_buf);
+
+    Linked { path, within }
 }
 
-/// Examines `path` with `symlink_metadata`, which does not follow a link.
-fn examine(path: &Path) -> Examined {
-    match fs::symlink_metadata(path) {
-        Ok(found) if found.file_type().is_symlink() => Examined::Link,
-        Ok(found) if found.is_dir() => Examined::Directory,
-        _ => Examined::Stop,
+/// The `78` of `FR-CACHE-042` item 1 for a clean that met the link at `path`:
+/// found by [`Cache::refuse_links`] before the removal, or by the removal
+/// itself where the link was swapped in after that check.
+fn linked(layout: &Layout, path: PathBuf) -> Error {
+    let Linked { path, within } = within(layout, path);
+
+    Error::CachePathLinked {
+        path,
+        within,
+        removal: true,
     }
 }
 
@@ -1427,83 +1455,17 @@ const RECORD_CAP: u64 = 1024 * 1024;
 /// unreadable, refused by the operating system, not valid UTF-8, not a regular
 /// file, a symbolic link, or longer than [`RECORD_CAP`] are all a miss — an
 /// unusable record — and none of them is reported. The file is read through
-/// the guard [`read_object`] applies, so a link is never read through
-/// (`FR-SEC-026`): pointed at another file it would forge the record, at a
-/// FIFO it would block, and at `/dev/zero` it would never end.
-fn read(file: &Path) -> Option<String> {
-    read_regular(file, Some(RECORD_CAP))
+/// [`at::read`], which opens it without following a link and without waiting
+/// for a writer, and tests the type and the size on the descriptor it reads
+/// (`FR-SEC-026`, `FR-CDOC-017`): a link pointed at another file would forge
+/// the record, a FIFO would block, and `/dev/zero` would never end.
+fn read(layout: &Layout, file: &Path) -> Option<String> {
+    at::read(layout.tpl(), file, Some(RECORD_CAP))
 }
 
 /// The contents of `database.json`, or [`None`] on a miss.
 fn read_metadata(layout: &Layout) -> Option<String> {
-    read(&layout.database())
-}
-
-/// The contents of the object file `file`, or [`None`] on a miss
-/// (`FR-CACHE-033`).
-///
-/// It is [`read`] with the guard `FR-CACHE-033` adds for an object file, which
-/// is the guard [`holds`] applies on the write: a file that is not a regular
-/// file — a symbolic link above all, whatever it points at — is a miss, and is
-/// never read through. The file opened must be the one inspected, by device
-/// and inode, so a regular file replaced by a link between the inspection and
-/// the open is not read either: the open would follow the link, and what it
-/// opened is not what was inspected.
-///
-/// *Rejected: `O_NOFOLLOW` on the open.* It is one system call rather than
-/// two, but the flag's value differs between the supported targets and the
-/// crate carries it only through a further feature of `rustix`; and an open
-/// that follows no link still opens a FIFO, which blocks, where the inspection
-/// first refuses it. The inspection costs one `lstat` per object file read.
-fn read_object(file: &Path) -> Option<String> {
-    read_regular(file, None)
-}
-
-/// The contents of `file` where it is a regular file, examined without
-/// following a link, and the file opened is the one examined; at most `cap`
-/// bytes, where one is given, and [`None`] for a longer file.
-///
-/// *Residual race.* A regular file replaced by a FIFO between the examination
-/// and the open makes the open block until a writer appears; the device and
-/// inode check that follows refuses what was opened, but only once the open
-/// returns. Closing it needs `O_NONBLOCK` on the open, whose value differs
-/// between the supported targets, for the reason [`read_object`] gives for
-/// `O_NOFOLLOW`.
-fn read_regular(file: &Path, cap: Option<u64>) -> Option<String> {
-    use std::io::Read as _;
-    use std::os::unix::fs::MetadataExt as _;
-
-    let inspected = fs::symlink_metadata(file).ok()?;
-    if !inspected.file_type().is_file() || cap.is_some_and(|cap| inspected.len() > cap) {
-        return None;
-    }
-
-    let handle = fs::File::open(file).ok()?;
-    let opened = handle.metadata().ok()?;
-    if opened.dev() != inspected.dev() || opened.ino() != inspected.ino() {
-        return None;
-    }
-
-    let mut text = String::with_capacity(usize::try_from(opened.len()).unwrap_or(0));
-    match cap {
-        // One byte past the cap is asked for, so a file that grew after it was
-        // examined is refused rather than read short.
-        Some(cap) => {
-            handle
-                .take(cap.saturating_add(1))
-                .read_to_string(&mut text)
-                .ok()?;
-            if u64::try_from(text.len()).unwrap_or(u64::MAX) > cap {
-                return None;
-            }
-        }
-        None => {
-            let mut handle = handle;
-            handle.read_to_string(&mut text).ok()?;
-        }
-    }
-
-    Some(text)
+    read(layout, &layout.database())
 }
 
 /// The contents of every object file of `directory`, or [`None`] where the
@@ -1514,14 +1476,13 @@ fn read_regular(file: &Path, cap: Option<u64>) -> Option<String> {
 /// object and cannot be read, or is a symbolic link, makes the whole collection
 /// a miss: serving the rest would be a listing short one member, which
 /// `BR-CDOC-002` refuses.
-fn members(directory: &Path) -> Option<Vec<String>> {
+fn members(layout: &Layout, directory: &Path) -> Option<Vec<String>> {
+    let descriptor = at::directory(layout.tpl(), directory).ok()?;
     let mut held = Vec::new();
 
-    for entry in fs::read_dir(directory).ok()? {
-        let path = entry.ok()?.path();
-
-        if paths::is_object(&path) {
-            held.push(read_object(&path)?);
+    for (name, _) in at::list(directory, &descriptor)? {
+        if paths::is_object(&directory.join(&name)) {
+            held.push(at::read_in(&descriptor, &name, None)?);
         }
     }
 
@@ -1537,16 +1498,24 @@ fn members(directory: &Path) -> Option<Vec<String>> {
 /// walk's own order, so two members of one name keep the order an up-front
 /// read would have kept them in.
 fn shelve(layout: &Layout, collection: Collection) -> Option<Vec<Shelf>> {
+    let directory = layout.collection(collection);
+    let descriptor = at::directory(layout.tpl(), &directory).ok()?;
+    let anchor: Arc<Path> = Arc::from(layout.tpl());
     let mut held = Vec::new();
 
-    for entry in fs::read_dir(layout.collection(collection)).ok()? {
-        let file = entry.ok()?.path();
+    for (name, _) in at::list(&directory, &descriptor)? {
+        let file = directory.join(&name);
 
         if paths::is_object(&file) {
             let (kind, name) = paths::member_of(collection, &file)?;
             let name = name.to_owned();
 
-            held.push(Shelf { name, kind, file });
+            held.push(Shelf {
+                name,
+                kind,
+                file,
+                anchor: Arc::clone(&anchor),
+            });
         }
     }
 
@@ -1573,16 +1542,15 @@ fn shelve(layout: &Layout, collection: Collection) -> Option<Vec<Shelf>> {
 /// *Rejected: reading every file to count it.* It read 3.2 MB for `WL-001` and
 /// was 93.3% of the command's samples (`BENCHMARKS.md`, 2026-09-22), for bytes
 /// that were dropped unread.
-fn count(directory: &Path) -> Option<usize> {
-    let mut held = 0;
+fn count(layout: &Layout, directory: &Path) -> Option<usize> {
+    let descriptor = at::directory(layout.tpl(), directory).ok()?;
 
-    for entry in fs::read_dir(directory).ok()? {
-        if paths::is_object(&entry.ok()?.path()) {
-            held += 1;
-        }
-    }
-
-    Some(held)
+    Some(
+        at::list(directory, &descriptor)?
+            .iter()
+            .filter(|(name, _)| paths::is_object(&directory.join(name)))
+            .count(),
+    )
 }
 
 /// Writes `value` to `file`, through a temporary file in the same directory
@@ -1594,8 +1562,25 @@ fn count(directory: &Path) -> Option<usize> {
 ///
 /// Answers whether the file is now stored. Every failure answers `false` and
 /// reports nothing, per `FR-CACHE-036`.
-fn store<T: Serialize>(file: &Path, value: &T) -> bool {
-    write_through(file, |handle| serialise(handle, value))
+fn store<T: Serialize>(anchor: &Path, file: &Path, value: &T) -> bool {
+    at::parent(anchor, file).is_ok_and(|(folder, name)| store_in(&folder, name, value))
+}
+
+/// [`store`] of `name` in the folder already opened as `folder`.
+fn store_in<T: Serialize>(folder: &OwnedFd, name: &OsStr, value: &T) -> bool {
+    let mut encoded = Vec::new();
+
+    encode(&mut encoded, value).is_ok()
+        && at::write_in(folder, name, &temporary(), FILE_MODE, &encoded)
+}
+
+/// The name of the temporary file of `FR-CACHE-030` for this process.
+///
+/// The process id keeps two processes writing the same object from writing
+/// one temporary; they race only on the rename, which the operating system
+/// makes atomic.
+fn temporary() -> OsString {
+    OsString::from(format!("{TEMPORARY}.{}.tmp", std::process::id()))
 }
 
 /// The two buffers a write of the cache reuses from one object to the next.
@@ -1610,9 +1595,10 @@ struct Buffers {
     held: Vec<u8>,
 }
 
-/// Stores one cached object in `file`: leaves the file in place where it
-/// already holds exactly the bytes the write would produce, and otherwise
-/// writes it through [`write_through`] (`FR-CACHE-030`).
+/// Stores one cached object as `name` in the folder opened as `folder`: leaves
+/// the file in place where it already holds exactly the bytes the write would
+/// produce, and otherwise writes it through a temporary renamed over it
+/// (`FR-CACHE-030`).
 ///
 /// Both paths leave a whole file, so `FR-CACHE-031` holds on either: a file left
 /// in place was whole, and a file renamed over is whole. A target that cannot
@@ -1621,7 +1607,12 @@ struct Buffers {
 ///
 /// Answers whether the object is now stored. Every failure answers `false` and
 /// reports nothing, per `FR-CACHE-036`.
-fn store_object<T: Serialize>(file: &Path, value: &T, buffers: &mut Buffers) -> bool {
+fn store_object_in<T: Serialize>(
+    folder: &OwnedFd,
+    name: &OsStr,
+    value: &T,
+    buffers: &mut Buffers,
+) -> bool {
     buffers.encoded.clear();
     if encode(&mut buffers.encoded, value).is_err() {
         return false;
@@ -1630,124 +1621,40 @@ fn store_object<T: Serialize>(file: &Path, value: &T, buffers: &mut Buffers) -> 
     // PERF: rewriting an object whose file already holds the same bytes cost
     // 114 µs per file in the open of the temporary, its write and close, and
     // the rename, and was half of a `WL-001` `cache load` (`BENCHMARKS.md`,
-    // 2026-09-23, `#243` row 2). The comparison costs a `lstat` where the
-    // lengths differ, and a read where they match.
-    if holds(file, &buffers.encoded, &mut buffers.held) {
+    // 2026-09-23, `#243` row 2). The comparison costs an open and an `fstat`
+    // where the lengths differ, and a read where they match.
+    //
+    // A target that is a regular file of this cache's mode holding exactly
+    // these bytes is left; anything short of certainty is written — absent,
+    // unreadable, not a regular file, a link, another mode, another length or
+    // another byte. The mode is compared because a rename would have replaced
+    // the file with one of [`FILE_MODE`], and a file left in place must be no wider
+    // than one written.
+    if at::holds_bytes(folder, name, FILE_MODE, &buffers.encoded, &mut buffers.held) {
         return true;
     }
 
-    let encoded = &buffers.encoded;
-    write_through(file, |mut handle| handle.write_all(encoded))
+    at::write_in(folder, name, &temporary(), FILE_MODE, &buffers.encoded)
 }
 
-/// Whether `file` is a regular file of this cache's [`MODE`] that holds exactly
-/// `encoded`, read into `held`.
-///
-/// Anything short of certainty answers `false`, and the caller then writes the
-/// file: a target that is absent, cannot be read, is not a regular file, is a
-/// symbolic link, carries another mode, or differs in length or in any byte. The
-/// mode is compared because a rename would have replaced the file with one of
-/// [`MODE`], and a file left in place must be no wider than one written. The
-/// file opened must be the one inspected, by device and inode, and one byte
-/// past the expected length is asked for, so a file replaced or grown between
-/// the inspection and the read is not taken for identical.
-fn holds(file: &Path, encoded: &[u8], held: &mut Vec<u8>) -> bool {
-    use std::io::Read as _;
-    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
-
-    let Ok(inspected) = fs::symlink_metadata(file) else {
-        return false;
-    };
-    let Ok(length) = u64::try_from(encoded.len()) else {
-        return false;
-    };
-    if !inspected.file_type().is_file()
-        || inspected.permissions().mode() & 0o7777 != MODE
-        || inspected.len() != length
-    {
-        return false;
-    }
-
-    let Ok(handle) = fs::File::open(file) else {
-        return false;
-    };
-    match handle.metadata() {
-        Ok(opened) if opened.dev() == inspected.dev() && opened.ino() == inspected.ino() => {}
-        _ => return false,
-    }
-
-    held.clear();
-    held.reserve(encoded.len().saturating_add(1));
-
-    handle
-        .take(length.saturating_add(1))
-        .read_to_end(held)
-        .is_ok()
-        && held.as_slice() == encoded
+/// [`store_object_in`] of `file`, reached from `anchor` one component at a
+/// time.
+#[cfg(test)]
+fn store_object<T: Serialize>(
+    anchor: &Path,
+    file: &Path,
+    value: &T,
+    buffers: &mut Buffers,
+) -> bool {
+    at::parent(anchor, file)
+        .is_ok_and(|(folder, name)| store_object_in(&folder, name, value, buffers))
 }
 
-/// Writes a file through a temporary file in the same directory renamed over
-/// `file` (`FR-CACHE-030`), with `fill` writing the bytes into the temporary.
+/// Appends `value` to `sink` as one line of compact JSON.
 ///
-/// The rename is what makes a concurrent reader see one whole version of the
-/// file or the other, per `FR-CACHE-031`, and it is why no lock is taken. The
-/// temporary carries the process id in its name, so two processes writing the
-/// same object write two temporaries and race only on the rename — which the
-/// operating system makes atomic.
-///
-/// **The file is not synced to disk before the rename, and nothing requires
-/// it.** No requirement asks the cache for durability across a crash or a
-/// power loss: `FR-CACHE-030` and `FR-CACHE-031` ask for atomicity against
-/// concurrent writers, which the rename gives, and a file that a crash leaves
-/// empty or torn does not decode — which `FR-CACHE-033` already makes a miss,
-/// read from the server and rewritten, with nothing reported. Every read of
-/// the store answers [`None`] for such a file: [`Cache::meta`],
-/// [`Loaded::document`] and [`Cache::database`] all decode what they read, and
-/// an empty or truncated JSON text does not decode.
-///
-/// Answers whether the file is now stored. Every failure answers `false`,
-/// leaves the target untouched and reports nothing, per `FR-CACHE-036`.
-fn write_through<F>(file: &Path, fill: F) -> bool
-where
-    F: FnOnce(fs::File) -> std::io::Result<()>,
-{
-    let Some(directory) = file.parent() else {
-        return false;
-    };
-    let temporary = directory.join(format!("{TEMPORARY}.{}.tmp", std::process::id()));
-
-    let written = || -> std::io::Result<()> {
-        // FR-SEC-026: whatever stands at the temporary's name is removed
-        // first — a link planted there is removed as a link — and the file is
-        // then created exclusively. `create_new` is `O_CREAT | O_EXCL`, which
-        // fails on any existing name, a symbolic link included, dangling or
-        // not, so the write never opens through a link. Where the create
-        // fails the write fails, silently, per FR-CACHE-036.
-        let _ = fs::remove_file(&temporary);
-        let handle = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(MODE)
-            .open(&temporary)?;
-
-        // The handle is consumed, so the file is closed before the rename.
-        fill(handle)?;
-
-        fs::rename(&temporary, file)
-    }();
-
-    if written.is_err() {
-        // The target is untouched by a failed write, per FR-CACHE-036, and the
-        // temporary is not left behind to be walked over.
-        let _ = fs::remove_file(&temporary);
-        return false;
-    }
-
-    true
-}
-
-/// Appends `value` to `sink` as one line of compact JSON: the bytes
-/// [`serialise`] writes, into memory.
+/// The whole file is encoded in memory and handed to one write: `serde_json`
+/// writes one token at a time, and writing each token to the file cost one
+/// `write` syscall per token (`BENCHMARKS.md`, 2026-09-22).
 ///
 /// # Errors
 ///
@@ -1758,31 +1665,6 @@ fn encode<T: Serialize>(sink: &mut Vec<u8>, value: &T) -> serde_json::Result<()>
     Ok(())
 }
 
-/// Writes `value` to `sink` as one line of compact JSON, through a buffer, and
-/// flushes it.
-///
-/// It is separate from [`store`] so that a sink refusing the bytes is
-/// observable from a test without a filesystem that refuses them.
-///
-/// # Errors
-///
-/// Returns the first error the serialisation, the write or the flush met.
-fn serialise<W: std::io::Write, T: Serialize>(sink: W, value: &T) -> std::io::Result<()> {
-    // PERF: `serde_json` writes one token at a time, so an unbuffered `File`
-    // costs one `write` syscall per token. Those syscalls and the per-file
-    // sync `store` no longer makes were 97.4% of a `WL-001` cache write
-    // (`BENCHMARKS.md`, 2026-09-22). The buffer turns a file into a handful of
-    // writes; the bytes are identical.
-    let mut buffered = std::io::BufWriter::new(sink);
-    serde_json::to_writer(&mut buffered, value).map_err(std::io::Error::from)?;
-    buffered.write_all(b"\n")?;
-
-    // Explicit, so that a failure is reported here: the drop of a `BufWriter`
-    // swallows it, and the rename that follows would then store an object
-    // whose last bytes were never written.
-    buffered.flush()
-}
-
 /// Removes every object file of `directory` that `written` does not name, and
 /// answers how many object files remain.
 ///
@@ -1790,14 +1672,14 @@ fn serialise<W: std::io::Write, T: Serialize>(sink: W, value: &T) -> std::io::Re
 /// may be recorded whole: on a case-insensitive filesystem two names that
 /// differ only in case are one file, and the difference between the paths
 /// written and the files that exist is the only way to find out.
-fn prune(directory: &Path, written: &BTreeSet<PathBuf>) -> usize {
-    let Ok(entries) = fs::read_dir(directory) else {
+fn prune(directory: &Path, folder: &OwnedFd, written: &BTreeSet<PathBuf>) -> usize {
+    let Some(entries) = at::list(directory, folder) else {
         return usize::MAX;
     };
     let mut held = 0;
 
-    for entry in entries.flatten() {
-        let path = entry.path();
+    for (name, _) in entries {
+        let path = directory.join(&name);
 
         if !paths::is_object(&path) {
             continue;
@@ -1805,7 +1687,7 @@ fn prune(directory: &Path, written: &BTreeSet<PathBuf>) -> usize {
 
         if written.contains(&path) {
             held += 1;
-        } else if fs::remove_file(&path).is_err() {
+        } else if at::unlink(folder, &name, rustix::fs::AtFlags::empty()).is_err() {
             // A stale object that cannot be removed would be served in every
             // later listing, so the collection is not whole while it is there.
             held += 1;
@@ -1870,23 +1752,27 @@ where
     F: Fn(&Layout, &T) -> Option<PathBuf>,
 {
     let directory = layout.collection(collection);
-    if fs::create_dir_all(&directory).is_err() {
+    let Ok(folder) = at::make_directories(layout.tpl(), &directory) else {
         return false;
-    }
+    };
 
     let mut written: BTreeSet<PathBuf> = BTreeSet::new();
     let mut complete = true;
 
     for member in members {
         match file_of(layout, member) {
-            Some(file) if store_object(&file, member, buffers) => {
+            Some(file)
+                if file
+                    .file_name()
+                    .is_some_and(|name| store_object_in(&folder, name, member, buffers)) =>
+            {
                 written.insert(file);
             }
             _ => complete = false,
         }
     }
 
-    complete && prune(&directory, &written) == members.len()
+    complete && prune(&directory, &folder, &written) == members.len()
 }
 
 /// Writes one named member, or leaves the cache as it was.
@@ -1896,39 +1782,28 @@ where
     F: Fn(&Layout, &T) -> Option<PathBuf>,
 {
     if let Some(file) = file_of(layout, member)
-        && let Some(parent) = file.parent()
-        && fs::create_dir_all(parent).is_ok()
+        && let (Some(parent), Some(name)) = (file.parent(), file.file_name())
+        && let Ok(folder) = at::make_directories(layout.tpl(), parent)
     {
-        let _ = store_object(&file, member, buffers);
+        let _ = store_object_in(&folder, name, member, buffers);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Buffers, Cache, Collection, Layout, Listed, MODE, Meta, Summary, TEMPORARY, count,
-        serialise, store, store_object,
+        Buffers, Cache, Collection, Layout, Listed, MODE, Meta, Summary, TEMPORARY, count, store,
+        store_object,
     };
     use crate::project::scratch::Scratch;
-    use std::io::{Error, ErrorKind, Write};
     use std::path::Path;
 
-    /// A sink that refuses every byte it is handed.
-    struct Refusing;
-
-    impl Write for Refusing {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            Err(Error::new(ErrorKind::StorageFull, "refused"))
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
     /// The layout of the entry `shop`, under a `.tpl` folder in `scratch`.
+    ///
+    /// The `.tpl` folder is created, as discovery finds it in production:
+    /// every operation of the cache is reached from it.
     fn layout(scratch: &Scratch) -> Layout {
-        Layout::of(&scratch.path(".tpl"), "shop").expect("shop is a path component")
+        Layout::of(&scratch.directory(".tpl"), "shop").expect("shop is a path component")
     }
 
     /// Whether `directory` holds a temporary file of `FR-CACHE-030`.
@@ -1940,22 +1815,12 @@ mod tests {
     }
 
     #[test]
-    fn a_failure_the_buffer_meets_only_at_the_flush_is_reported() {
-        // The value is far smaller than the buffer, so no byte reaches the
-        // sink before the flush: the refusal surfaces there or nowhere, and a
-        // flush left to the drop of the buffer would swallow it.
-        let returned = serialise(Refusing, &"a value").expect_err("the sink refused the bytes");
-
-        assert_eq!(returned.kind(), ErrorKind::StorageFull);
-    }
-
-    #[test]
     fn fr_cache_030_a_stored_object_is_one_line_of_compact_json() {
         let scratch = Scratch::new();
         let file = scratch.directory("store").join("object.json");
         let value = serde_json::json!({"name": "orders", "columns": [1, 2, 3]});
 
-        assert!(store(&file, &value));
+        assert!(store(&scratch.root(), &file, &value));
 
         let mut expected = serde_json::to_vec(&value).expect("the value serialises");
         expected.push(b'\n');
@@ -1980,8 +1845,13 @@ mod tests {
         let directory = scratch.directory("store");
         let value = serde_json::json!({"name": "orders", "comment": "é \u{1f600}"});
 
-        assert!(store(&directory.join("streamed.json"), &value));
+        assert!(store(
+            &scratch.root(),
+            &directory.join("streamed.json"),
+            &value
+        ));
         assert!(store_object(
+            &scratch.root(),
             &directory.join("encoded.json"),
             &value,
             &mut Buffers::default()
@@ -2002,11 +1872,11 @@ mod tests {
         let value = serde_json::json!({"name": "orders", "columns": [1, 2, 3]});
         let mut buffers = Buffers::default();
 
-        assert!(store_object(&file, &value, &mut buffers));
+        assert!(store_object(&scratch.root(), &file, &value, &mut buffers));
         let first = inode(&file);
         let bytes = std::fs::read(&file).expect("stored");
 
-        assert!(store_object(&file, &value, &mut buffers));
+        assert!(store_object(&scratch.root(), &file, &value, &mut buffers));
 
         assert_eq!(inode(&file), first, "an identical object was rewritten");
         assert_eq!(std::fs::read(&file).expect("stored"), bytes);
@@ -2067,13 +1937,16 @@ mod tests {
             let scratch = Scratch::new();
             let file = scratch.directory("store").join("object.json");
             let mut buffers = Buffers::default();
-            assert!(store_object(&file, &value, &mut buffers));
+            assert!(store_object(&scratch.root(), &file, &value, &mut buffers));
             prepare(&file, &expected, &flipped, &grown);
             let before = std::fs::symlink_metadata(&file)
                 .ok()
                 .map(|found| std::os::unix::fs::MetadataExt::ino(&found));
 
-            assert!(store_object(&file, &value, &mut buffers), "{case}");
+            assert!(
+                store_object(&scratch.root(), &file, &value, &mut buffers),
+                "{case}"
+            );
 
             let written = std::fs::symlink_metadata(&file).expect("stored");
             assert!(written.file_type().is_file(), "{case}: not a regular file");
@@ -2092,7 +1965,7 @@ mod tests {
         let target = scratch.directory("store/object.json");
         scratch.file("store/object.json/held", "untouched");
 
-        assert!(!store(&target, &"a value"));
+        assert!(!store(&scratch.root(), &target, &"a value"));
 
         assert!(target.is_dir());
         assert_eq!(
@@ -2118,8 +1991,8 @@ mod tests {
         std::fs::write(tables.join(format!("{TEMPORARY}.1.tmp")), "{").expect("writable");
         std::fs::write(tables.join("notes.txt"), "by hand").expect("writable");
 
-        assert_eq!(count(&tables), Some(3));
-        assert_eq!(count(&layout.collection(Collection::Views)), None);
+        assert_eq!(count(&layout, &tables), Some(3));
+        assert_eq!(count(&layout, &layout.collection(Collection::Views)), None);
     }
 
     /// The temporary [`store`] writes `file` through, for this process.
@@ -2139,7 +2012,11 @@ mod tests {
         let victim = scratch.file("outside/victim.txt", "must survive\n");
         scratch.link(&victim, &temporary_of(&layout.meta()));
 
-        assert!(store(&layout.meta(), &Meta::new([true, true, true])));
+        assert!(store(
+            layout.tpl(),
+            &layout.meta(),
+            &Meta::new([true, true, true])
+        ));
 
         assert_eq!(
             std::fs::read_to_string(&victim).expect("the victim is there"),
@@ -2167,7 +2044,11 @@ mod tests {
             .expect("the scratch directory is writable");
         std::fs::write(layout.meta(), "kept\n").expect("writable");
 
-        assert!(!store(&layout.meta(), &Meta::new([true, true, true])));
+        assert!(!store(
+            layout.tpl(),
+            &layout.meta(),
+            &Meta::new([true, true, true])
+        ));
         assert_eq!(
             std::fs::read_to_string(layout.meta()).expect("the record is kept"),
             "kept\n"
@@ -2185,7 +2066,7 @@ mod tests {
         std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
         let valid = serde_json::to_string(&Meta::new([true, true, true])).expect("serialises");
         let elsewhere = scratch.file("outside/meta.json", &valid);
-        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+        let cache = Cache::of(&scratch.directory(".tpl"), "shop");
 
         std::fs::write(layout.meta(), &valid).expect("writable");
         assert!(cache.status().loaded_at.is_some(), "the control is usable");
@@ -2224,11 +2105,15 @@ mod tests {
         let layout = layout(&scratch);
         let tables = layout.collection(Collection::Tables);
         std::fs::create_dir_all(&tables).expect("the scratch directory is writable");
-        assert!(store(&layout.meta(), &Meta::new([true, false, false])));
+        assert!(store(
+            layout.tpl(),
+            &layout.meta(),
+            &Meta::new([true, false, false])
+        ));
         std::fs::write(tables.join("orders.json"), "{}\n").expect("writable");
         std::fs::write(tables.join("lines.json"), "").expect("writable");
 
-        let status = Cache::of(&scratch.path(".tpl"), "shop").status();
+        let status = Cache::of(&scratch.directory(".tpl"), "shop").status();
 
         assert!(status.loaded_at.is_some());
         let counted: Vec<(&str, usize, bool)> = status
@@ -2250,7 +2135,7 @@ mod tests {
     fn stored(scratch: &Scratch) -> Cache {
         let model = crate::model::document::fixture::database();
         let document = crate::model::document::context(&model).expect("the fixture builds");
-        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+        let cache = Cache::of(&scratch.directory(".tpl"), "shop");
         cache.write(&document, super::Covered::Everything);
         cache
     }
@@ -2300,6 +2185,7 @@ mod tests {
         let scratch = Scratch::new();
         let cache = stored(&scratch);
         assert!(store(
+            layout(&scratch).tpl(),
             &layout(&scratch).meta(),
             &Meta::new([true, true, true])
         ));
@@ -2319,6 +2205,7 @@ mod tests {
         let scratch = Scratch::new();
         let cache = stored(&scratch);
         assert!(store(
+            layout(&scratch).tpl(),
             &layout(&scratch).meta(),
             &Meta::new([true, false, true])
         ));
@@ -2328,6 +2215,7 @@ mod tests {
 
         std::fs::remove_file(layout(&scratch).database()).expect("the metadata was stored");
         assert!(store(
+            layout(&scratch).tpl(),
             &layout(&scratch).meta(),
             &Meta::new([true, true, true])
         ));
@@ -2346,7 +2234,11 @@ mod tests {
         let scratch = Scratch::new();
         let layout = layout(&scratch);
         std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
-        assert!(store(&layout.meta(), &Meta::new([true, true, true])));
+        assert!(store(
+            layout.tpl(),
+            &layout.meta(),
+            &Meta::new([true, true, true])
+        ));
         let whole = std::fs::read(layout.meta()).expect("the record was stored");
 
         for torn in [
@@ -2356,7 +2248,7 @@ mod tests {
         ] {
             std::fs::write(layout.meta(), torn).expect("writable");
 
-            let cache = Cache::of(&scratch.path(".tpl"), "shop");
+            let cache = Cache::of(&scratch.directory(".tpl"), "shop");
             let status = cache.status();
 
             assert_eq!(status.loaded_at, None);
@@ -2381,7 +2273,7 @@ mod tests {
     fn whole(scratch: &Scratch) -> Cache {
         let model = crate::model::document::fixture::whole();
         let document = crate::model::document::context(&model).expect("the fixture builds");
-        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+        let cache = Cache::of(&scratch.directory(".tpl"), "shop");
         cache.write(&document, super::Covered::Everything);
         cache
     }

@@ -914,6 +914,9 @@ fn bare(error: &Error) -> Cow<'static, str> {
             admits_template,
             "list the project's templates with: tpl template list",
         ),
+        Error::TemplateNotRegular { .. } => {
+            Cow::Borrowed("list the project's templates with: tpl template list")
+        }
         // FR-GLOB-007 obliges the nearest-match half over the entry names the
         // file defines. An entry name is a value this corpus does not fix, so
         // FR-ERR-022 governs it by the character set and FR-ERR-023 drops a
@@ -1273,6 +1276,12 @@ fn bare(error: &Error) -> Cow<'static, str> {
         Error::ConfigurationUnsafeMode { path, .. } => {
             Cow::Owned(format!("chmod 600 {}", configuration_file(path)))
         }
+        // FR-PROJ-030 item 2: the file is to be replaced, and no command that
+        // deletes it is carried, per BR-ERR-005.
+        Error::ConfigurationNotRegular { path, .. } => Cow::Owned(format!(
+            "replace {} with a regular file holding the configuration",
+            configuration_file(path)
+        )),
         // FR-CACHE-042 item 1 and FR-CACHE-044: the command that removes the
         // link alone, since `rm` given a link removes the link and not its
         // target. The path is absolute, built under FR-ERR-041, or the
