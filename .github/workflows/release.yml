@@ -216,6 +216,17 @@ jobs:
           merge-multiple: true
           path: dist
 
+      # The skill/ tree at the tagged commit, its contents at the archive root
+      # (./SKILL.md, ./references/...). Sorted names, root ownership, the
+      # commit's time and gzip -n keep it close to reproducible.
+      - name: Package the skill
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mtime="$(git log -1 --format=%ct)"
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${mtime}" \
+            -C "$GITHUB_WORKSPACE/skill" -cf - . | gzip -n > "dist/tpl-skill-${TAG}.tar.gz"
+
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

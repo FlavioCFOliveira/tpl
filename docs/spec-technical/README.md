@@ -52,7 +52,10 @@ set the binary version to `0.0.1`, the first release the user chose. For rmp
 `#267`, `operations.md` cites `ADR-012` Decision 10: measurement tests are
 ignored by the pipeline and run on demand with `--ignored`. For rmp `#299`,
 `operations.md` records that both workflows start by `workflow_dispatch` only,
-and the release sequence that follows from it.
+and the release sequence that follows from it. For rmp `#303`, `operations.md`
+cites `ADR-012` Decisions 4 and 11 for the skill archive and `install-skill.sh`,
+and records that the skill archive is built on Linux, outside the Darwin `tar`
+flags.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree

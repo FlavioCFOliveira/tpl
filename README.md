@@ -8,6 +8,12 @@ curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.s
 
 The same command installs and updates `tpl`, into `/usr/local/bin` by default. It installs the latest published release; the first is v0.0.1. See [Installation](#installation).
 
+```sh
+curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh
+```
+
+This command installs or updates the Claude Code skill in your personal skills folder, `~/.claude/skills/tpl` by default. It works from the first release that ships the skill archive; v0.0.1 does not, so today it reports that the release has no skill archive. See [Claude Code skill](#claude-code-skill).
+
 Its interaction model is modelled on `git`: a single executable, commands with subcommands, short aliases, and read commands whose output is stable enough to pipe into something else. Templates are **plain files on disk, loaded and compiled at render time**, so changing a template never requires rebuilding `tpl`.
 
 The intended caller is an AI coding agent rather than a person at a prompt. Such a caller has three channels for understanding a command-line tool — its help text, its exit code, and what it prints — so all three are treated as contract.
@@ -41,6 +47,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 - [What `tpl` is for](#what-tpl-is-for)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Claude Code skill](#claude-code-skill)
 - [Quick start](#quick-start)
 - [Worked examples](#worked-examples)
 - [The `.tpl` project](#the-tpl-project)
@@ -109,7 +116,7 @@ The script supports four targets, `x86_64-unknown-linux-musl`, `aarch64-unknown-
 
 ### By hand
 
-Each release carries one archive per target, `tpl-<tag>-<triple>.tar.gz`, holding the `tpl` binary, `README.md`, `LICENSE` and `CHANGELOG.md`, and one `SHA256SUMS` file covering the four. Download the archive for your target and `SHA256SUMS`, verify, and extract:
+Each release carries one archive per target, `tpl-<tag>-<triple>.tar.gz`, holding the `tpl` binary, `README.md`, `LICENSE` and `CHANGELOG.md`, and one `SHA256SUMS` file. In v0.0.1 it covers those four archives; every release from the first that ships the skill archive, `tpl-skill-<tag>.tar.gz`, also carries that archive, and its `SHA256SUMS` covers all five. Download the archive for your target and `SHA256SUMS`, verify, and extract:
 
 ```sh
 tag=vX.Y.Z                    # the release's tag
@@ -132,6 +139,33 @@ cargo build --release
 ```
 
 The binary is produced at `target/release/tpl`.
+
+---
+
+## Claude Code skill
+
+[`skill/`](skill/README.md) is a Claude Code skill that makes Claude the sole operator of `tpl` for Claude Code agents: every `tpl` task goes through the `tpl` binary, never through a reimplementation of it. The skill needs `tpl` on `PATH`.
+
+Install or update it with one command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh
+```
+
+The script downloads `tpl-skill-<tag>.tar.gz` from the latest release, verifies it against the release's `SHA256SUMS`, and installs it into `$CLAUDE_CONFIG_DIR/skills/tpl`, where `CLAUDE_CONFIG_DIR` defaults to `~/.claude`. `TPL_SKILL_DIR` names another destination; both variables are read by the script, not by `tpl`. An existing skill at the destination is replaced; if it is a symbolic link, only the link is removed, never its target. The script never uses `sudo`. It works from the first release that ships the skill archive: v0.0.1 does not, so today it reports that the release has no skill archive.
+
+For development, install from a clone instead. From its root, link the folder, so that `git pull` updates the skill:
+
+```sh
+mkdir -p ~/.claude/skills
+ln -s "$PWD/skill" ~/.claude/skills/tpl
+```
+
+Or copy it, which gives a snapshot you must replace to update: `rm -rf ~/.claude/skills/tpl && cp -R skill ~/.claude/skills/tpl`.
+
+Claude Code picks up changes to its skills directory in the current session. Only a skills directory created after the session started needs Claude Code to be restarted.
+
+[`skill/README.md`](skill/README.md) describes what the skill holds, and how to run `skill/scripts/check-coverage.sh`, which checks that the skill's command map names every command and alias the installed `tpl` publishes. How the skill is released and installed is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
 
 ---
 
