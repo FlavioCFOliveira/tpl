@@ -1942,6 +1942,93 @@ fn t_02_an_undefined_operand_of_a_filter_names_the_flag_that_defines_it() {
     );
 }
 
+/// One table, `orders`, with one column, as a `--context` document holds it.
+const ORDERS: &str = r#"[{"name":"orders","table_type":"BASE TABLE","engine":"InnoDB","collation":null,"comment":"","columns":[{"name":"id","table_name":"orders","position":1,"column_type":"int(11)","nullable":false,"default":null,"comment":"","auto_increment":true,"invisible":false,"generated":null,"on_update":null}],"indexes":[],"foreign_keys":[],"referenced_by":[],"triggers":[],"check_constraints":[]}]"#;
+
+#[test]
+fn y_01_an_undefined_member_of_a_bound_object_points_at_the_template_and_not_the_flag() {
+    // Finding Y-01 of the eighth re-audit of rmp #263: with --table given, a
+    // misspelt attribute or an index past the end asked for --table.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(
+        CONTEXT,
+        &EMPTY_CONTEXT
+            .replace(r#""tables":[]"#, &format!(r#""tables":{ORDERS}"#))
+            .replace(
+                r#""routines":[]"#,
+                &format!(
+                    r#""routines":{}"#,
+                    TWO_ROUTINES.replace(r#""kind":"procedure""#, r#""kind":"PROCEDURE""#)
+                ),
+            ),
+    );
+    sandbox.write(".tpl/templates/nme.jinja", "{{ table.nme }}\n");
+    sandbox.write(
+        ".tpl/templates/index.jinja",
+        "{{ table.columns[5].name }}\n",
+    );
+    sandbox.write(".tpl/templates/deep.jinja", "{{ table.columns[0].nam }}\n");
+    sandbox.write(".tpl/templates/body.jinja", "{{ routine.qqqqqqqq }}\n");
+
+    let table = ["--context", CONTEXT, "--table", "orders"];
+    let routine = ["--context", CONTEXT, "--routine", "procedure:r"];
+    for (template, flags, cause, hint) in [
+        (
+            "nme",
+            &table,
+            "reads 'table.nme', and 'table' has no attribute 'nme'",
+            "did you mean 'name'? 'table' has no attribute 'nme'; its attributes are name, \
+             table_type, engine, collation, comment, columns, indexes, primary_key, foreign_keys, \
+             referenced_by, triggers, check_constraints; correct the template, then print the \
+             template's source with: tpl template show nme.jinja",
+        ),
+        (
+            "index",
+            &table,
+            "reads 'table.columns[5].name', and 'table.columns' has 1 item, so it has no item [5]",
+            "'table.columns' has 1 item, at index 0, so [5] reads nothing; correct the template, \
+             then print the template's source with: tpl template show index.jinja",
+        ),
+        (
+            "deep",
+            &table,
+            "reads 'table.columns[0].nam', and 'table.columns[0]' has no attribute 'nam'",
+            "did you mean 'name'? 'table.columns[0]' has no attribute 'nam'",
+        ),
+        (
+            "body",
+            &routine,
+            "reads 'routine.qqqqqqqq', and 'routine' has no attribute 'qqqqqqqq'",
+            "'routine' has no attribute 'qqqqqqqq'; its attributes are name, kind",
+        ),
+    ] {
+        let mut arguments = vec!["render", template];
+        arguments.extend_from_slice(flags);
+        let written = refused(&sandbox, &arguments, 65);
+        assert!(line(&written, LABELS[1]).contains(cause), "{written}");
+        let given = line(&written, LABELS[2]);
+        assert!(given.starts_with(hint), "{written}");
+        assert!(!given.contains("add --"), "{written}");
+
+        // The command the hint ends with prints the template.
+        let (_, command) = given
+            .rsplit_once(": ")
+            .expect("the hint ends with a command");
+        let words: Vec<&str> = command.split_whitespace().skip(1).collect();
+        assert_eq!(words[..2], ["template", "show"], "{given}");
+        succeeds(&sandbox, &words);
+    }
+
+    // Without --table, the flag is still what the hint asks for.
+    let written = refused(&sandbox, &["render", "nme", "--context", CONTEXT], 65);
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "'table' exists only when the render names one: add --table <name> to the tpl render \
+         command"
+    );
+}
+
 #[test]
 fn t_07_a_parse_position_is_one_based_at_the_start_of_a_line() {
     // The decoder reports column 0 for an end of input that begins a line.

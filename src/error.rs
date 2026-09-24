@@ -180,6 +180,11 @@ pub enum RenderReason {
     Failed(String),
     /// The undefined expression begins with a lookup call that found nothing.
     Unresolved(Unresolved),
+    /// The undefined expression begins with `table`, `view` or `routine`, and
+    /// the render bound that variable: the flag that binds it was given, and
+    /// what is undefined is a step of the expression after it (finding Y-01
+    /// of the eighth re-audit of rmp `#263`).
+    Missing(Missing),
     /// An `{% include %}` named a template the loader does not hold
     /// (`FR-TMPL-009`).
     IncludeNotFound {
@@ -209,6 +214,56 @@ pub struct Unresolved {
     /// names a lookup could have found are then that document's, and no `tpl`
     /// command lists them.
     pub document: Option<std::path::PathBuf>,
+}
+
+/// The step of an expression rooted at a bound object variable that found
+/// nothing.
+///
+/// `owner` is the part of the expression before that step, as the template
+/// wrote it. It is built only from names and decimal indexes, so every
+/// character of it is in `[A-Za-z0-9_.\[\]-]`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Missing {
+    /// `owner` holds no attribute `name`.
+    Attribute {
+        /// The part of the expression before the attribute.
+        owner: String,
+        /// The attribute the template read.
+        name: String,
+        /// What `owner` is, in words: `an object`, `a list`, `a string`.
+        kind: &'static str,
+        /// The attributes `owner` holds, in the order it holds them, WHERE it
+        /// is an object.
+        attributes: Vec<String>,
+        /// The attributes nearest to `name`, at most three, in the order of
+        /// `FR-ERR-019`.
+        nearest: Vec<String>,
+    },
+    /// `owner` is a list with no item at `index`.
+    Index {
+        /// The part of the expression before the index.
+        owner: String,
+        /// The index the template read.
+        index: i64,
+        /// The number of items `owner` holds.
+        length: usize,
+    },
+    /// `owner` is not a list, and holds no item at `index`.
+    NotList {
+        /// The part of the expression before the index.
+        owner: String,
+        /// The index the template read.
+        index: i64,
+        /// What `owner` is, in words.
+        kind: &'static str,
+    },
+    /// The variable is bound, and the step that found nothing could not be
+    /// located: the expression calls a function, a filter or a method.
+    Elsewhere {
+        /// The bound variable: `table`, `view` or `routine`.
+        root: &'static str,
+    },
 }
 
 /// How a `--context` document failed the contract of `FR-RND-020`.
@@ -559,6 +614,11 @@ pub enum Error {
         /// selected by `FR-ERR-019` and ordered as it fixes. Empty where
         /// nothing qualified, per `FR-ERR-020`.
         nearest: Vec<String>,
+        /// The command path of the command that declares the flag, WHERE the
+        /// flag was written before that command's name: only a global flag
+        /// may come before its command (`FR-CLI-024`), and the hint moves the
+        /// flag after it (finding Y-02 of the eighth re-audit of rmp `#263`).
+        belongs_to: Option<String>,
     },
 
     /// A token supplied where the invoked command takes no further argument
@@ -1138,6 +1198,13 @@ pub enum Error {
         /// selected by `FR-ERR-019` and `FR-ERR-044`; empty where nothing
         /// qualified.
         nearest: Vec<String>,
+        /// The routine kind the name was qualified with — `procedure` or
+        /// `function` — WHERE `--routine` wrote one.
+        qualified: Option<&'static str>,
+        /// The other routine kind, WHERE the cache holds a routine of that
+        /// kind under the same name (finding Y-05 of the eighth re-audit of
+        /// rmp `#263`).
+        held_as: Option<&'static str>,
     },
 
     /// A table, view or routine that the `--context` document does not carry
@@ -2110,7 +2177,12 @@ fn render_failed(template: &str, position: &Position, reason: Option<&RenderReas
         Some(RenderReason::Failed(message)) => {
             format!("template '{template}' called fail() at {position}: {message}")
         }
-        Some(RenderReason::Unresolved(_) | RenderReason::IncludeNotFound { .. }) | None => {
+        Some(
+            RenderReason::Unresolved(_)
+            | RenderReason::Missing(_)
+            | RenderReason::IncludeNotFound { .. },
+        )
+        | None => {
             format!("rendering template '{template}' failed at {position}")
         }
     }
@@ -2462,6 +2534,7 @@ mod tests {
                     command: String::new(),
                     token: "--data".to_owned(),
                     nearest: vec!["--database".to_owned()],
+                    belongs_to: None,
                 },
                 64,
             ),
@@ -2744,6 +2817,8 @@ mod tests {
                     name: "ordrs".to_owned(),
                     entry: "shop".to_owned(),
                     nearest: vec!["orders".to_owned()],
+                    qualified: None,
+                    held_as: None,
                 },
                 66,
             ),

@@ -22,8 +22,8 @@ use std::borrow::Cow;
 
 use crate::error::{
     ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    KeyAbsence, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RenderReason, TlsFault,
-    TplDirFault, Unresolved, context_name, password_pair,
+    KeyAbsence, Missing, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RenderReason,
+    TlsFault, TplDirFault, Unresolved, context_name, password_pair,
 };
 
 /// The separator between two links of a template-engine error chain.
@@ -104,6 +104,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         {
             Cow::Borrowed("schema dump always writes JSON and takes no --format")
         }
+        // Y-02 of the eighth re-audit of rmp `#263`: the flag is the
+        // command's, written before it, where FR-CLI-024 admits only a global
+        // flag.
+        Error::UnknownFlag {
+            token,
+            belongs_to: Some(path),
+            ..
+        } => Cow::Owned(format!(
+            "'{token}' is a flag of '{}' and was written before that command; only the global \
+             flags ({}) may come before a command",
+            invoked(path),
+            global_flags()
+        )),
         Error::UnknownFlag { token, command, .. } => Cow::Owned(format!(
             "'{token}' is not a flag of '{}' or a global flag (flags are matched in full, never \
              by a prefix)",
@@ -446,6 +459,14 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 unresolved.call,
                 sought(unresolved)
             )),
+            // Y-01: the variable is bound, so the cause names the step of the
+            // expression that found nothing.
+            (Some(expression), Some(RenderReason::Missing(missing))) => Cow::Owned(format!(
+                "'{template}' at {position} reads '{expression}', and {}; the template engine \
+                 reports: {}",
+                missing_step(missing),
+                joined(chain)
+            )),
             // T-07: the chain FR-ERR-011 carries is introduced as what the
             // engine reported, so its bare "undefined value" does not read as
             // a dangling label of this sentence.
@@ -455,10 +476,12 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 joined(chain)
             )),
             (_, Some(RenderReason::IncludeNotFound { .. }))
-            | (None, None | Some(RenderReason::Unresolved(_))) => Cow::Owned(format!(
-                "'{template}' failed while being evaluated, at {position}: {}",
-                joined(chain)
-            )),
+            | (None, None | Some(RenderReason::Unresolved(_) | RenderReason::Missing(_))) => {
+                Cow::Owned(format!(
+                    "'{template}' failed while being evaluated, at {position}: {}",
+                    joined(chain)
+                ))
+            }
         },
         Error::TemplateOutsideRoot { name, root } => Cow::Owned(format!(
             "'{name}' resolves to a path outside the template folder {}, and tpl reads no template \
@@ -527,11 +550,26 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // The row obliges the identifier, the kind it was sought as, and the
         // population it was sought in.
         // FR-CACHE-040: the population is what the cache holds.
+        // Y-05 of the eighth re-audit of rmp `#263`: a qualified routine is
+        // named by its kind, and a routine of the other kind under that name
+        // is named too.
         Error::NothingCachedNamed {
-            kind, name, entry, ..
-        } => Cow::Owned(format!(
-            "the cache of entry '{entry}' holds no {kind} named '{name}'"
-        )),
+            kind,
+            name,
+            entry,
+            qualified,
+            held_as,
+            ..
+        } => {
+            let sought = qualified.map_or_else(|| kind.to_string(), str::to_owned);
+            Cow::Owned(match held_as {
+                Some(other) => format!(
+                    "the cache of entry '{entry}' holds no {sought} named '{name}'; it holds a \
+                     {other} of that name"
+                ),
+                None => format!("the cache of entry '{entry}' holds no {sought} named '{name}'"),
+            })
+        }
         Error::CatalogueObjectNotFound {
             kind,
             name,
@@ -1281,6 +1319,55 @@ pub(super) fn is_whole_dsn_reference(parameter: &str, value: &str) -> bool {
 /// string: the flag of `FR-CFG-046`, or the key of `FR-CONF-002`.
 pub(super) fn is_password_command(parameter: &str) -> bool {
     parameter == "--password-command" || parameter.ends_with(".password_command")
+}
+
+/// What the step of an expression rooted at a bound variable found
+/// (finding Y-01 of the eighth re-audit of rmp `#263`).
+fn missing_step(missing: &Missing) -> String {
+    match missing {
+        Missing::Attribute {
+            owner, name, kind, ..
+        } => {
+            if *kind == "an object" {
+                format!("'{owner}' has no attribute '{name}'")
+            } else {
+                format!("'{owner}' is {kind}, which has no attribute '{name}'")
+            }
+        }
+        Missing::Index {
+            owner,
+            index,
+            length,
+        } => {
+            let items = if *length == 1 { "item" } else { "items" };
+            format!("'{owner}' has {length} {items}, so it has no item [{index}]")
+        }
+        Missing::NotList { owner, index, kind } => {
+            format!("'{owner}' is {kind}, which has no item [{index}]")
+        }
+        Missing::Elsewhere { root } => format!(
+            "'{root}' is defined, because --{root} names one, but a later step of the expression \
+             is not"
+        ),
+    }
+}
+
+/// The global flags the root declares, as they are written: `-d/--database`.
+fn global_flags() -> String {
+    let tree = crate::cli::tree();
+    let flags: Vec<String> = tree
+        .get_arguments()
+        .filter(|argument| !argument.is_positional())
+        .map(
+            |argument| match (argument.get_short(), argument.get_long()) {
+                (Some(short), Some(long)) => format!("-{short}/--{long}"),
+                (Some(short), None) => format!("-{short}"),
+                (None, Some(long)) => format!("--{long}"),
+                (None, None) => argument.get_id().as_str().to_owned(),
+            },
+        )
+        .collect();
+    flags.join(", ")
 }
 
 #[cfg(test)]

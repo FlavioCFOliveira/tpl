@@ -1103,6 +1103,8 @@ mod tests {
                 name: HOSTILE.to_owned(),
                 entry: HOSTILE.to_owned(),
                 nearest: vec![HOSTILE.to_owned()],
+                qualified: None,
+                held_as: None,
             },
             Error::CatalogueObjectNotFound {
                 kind: CatalogueObjectKind::Table,
@@ -1174,6 +1176,7 @@ mod tests {
                 command: String::new(),
                 token: hostile(),
                 nearest: vec![hostile()],
+                belongs_to: Some(hostile()),
             },
             Error::UnexpectedArgument {
                 command: hostile(),
@@ -1323,6 +1326,8 @@ mod tests {
                 name: hostile(),
                 entry: hostile(),
                 nearest: vec![hostile()],
+                qualified: Some("procedure"),
+                held_as: Some("function"),
             },
             Error::ConfigurationKeyNotFound {
                 key: hostile(),

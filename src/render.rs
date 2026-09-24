@@ -237,7 +237,12 @@ impl Environment {
                 } = &mut condition
                 {
                     *reason = fault::unresolved(self.engine(), context, expression)
-                        .map(|found| Box::new(crate::error::RenderReason::Unresolved(found)));
+                        .map(crate::error::RenderReason::Unresolved)
+                        .or_else(|| {
+                            fault::missing(context, expression)
+                                .map(crate::error::RenderReason::Missing)
+                        })
+                        .map(Box::new);
                 }
                 if let Error::RenderFailed {
                     reason: reason @ None,

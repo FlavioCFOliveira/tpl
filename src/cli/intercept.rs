@@ -260,12 +260,49 @@ fn unknown_argument(
             let nearest = nearest_flag(tree, reached.node, &token);
             Error::UnknownFlag {
                 positional: slot_open(tree, reached, written, &token),
+                belongs_to: written_before(tree, written, &token),
                 token,
                 command: reached.path.clone(),
                 nearest,
             }
         }
     }
+}
+
+/// The command path of the command that declares the flag `token`, WHERE the
+/// vector writes it before that command's name (finding Y-02 of the eighth
+/// re-audit of rmp `#263`); [`None`] otherwise.
+///
+/// The command is the one the vector names when every flag is set aside, so
+/// `tpl --format json schema tables` is read as `schema tables`, whose
+/// `--format` the parser refused at the root.
+fn written_before(tree: &clap::Command, written: &[Cow<'_, str>], token: &str) -> Option<String> {
+    let words: Vec<Option<&str>> = written
+        .iter()
+        .skip(1)
+        .map(|word| Some(word.as_ref()))
+        .collect();
+    let (path, end) = crate::diagnostics::destination(tree, &words);
+    let target = path.last()?;
+    let name = token.split('=').next().unwrap_or(token);
+
+    let before = words[..end]
+        .iter()
+        .any(|word| word.is_some_and(|word| word.split('=').next() == Some(name)));
+    let declares = target.get_arguments().any(|argument| {
+        name.strip_prefix(TERMINATOR).map_or_else(
+            || name.len() == 2 && name[1..].chars().next() == argument.get_short(),
+            |long| argument.get_long() == Some(long),
+        )
+    });
+
+    (path.len() > 1 && before && declares).then(|| {
+        path.iter()
+            .skip(1)
+            .map(|node| node.get_name())
+            .collect::<Vec<_>>()
+            .join(" ")
+    })
 }
 
 /// A value the parser did not accept for the flag it was written after.

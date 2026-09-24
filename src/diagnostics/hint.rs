@@ -38,7 +38,8 @@ use super::restate::{self, Edit, Replacement};
 use super::suggest;
 use crate::error::{
     CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    LookupKind, NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, TplDirFault, Unresolved,
+    LookupKind, Missing, NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, TplDirFault,
+    Unresolved,
 };
 use crate::project::config::keys::ValueType;
 
@@ -66,6 +67,13 @@ pub(super) const SOFTWARE_DEFECT: &str = "this is a defect in tpl and is not cor
 /// caller's `--tpl-dir` and `-d/--database` carried into every runnable `tpl`
 /// command it writes (`FR-ERR-043`).
 pub(super) fn hint(error: &Error) -> Cow<'static, str> {
+    // FR-CLI-026: the hint is the invocation as given, with the placeholder
+    // after the flag, and carrying rewrites it: a node on which -d has no
+    // effect would lose the `-d <entry>` the hint exists to show (finding Y-04
+    // of the eighth re-audit of rmp `#263`).
+    if matches!(error, Error::FlagTookCommand { .. }) {
+        return bare(error);
+    }
     restate::carried(bare(error), carried(error))
 }
 
@@ -119,11 +127,26 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // the tree.
         // X-05 of the seventh re-audit: the words may end in the command's
         // own arguments, as in 'show x'.
+        // Y-03 of the eighth re-audit: every other token of the invocation
+        // is kept, each under its set, and where the vector cannot be
+        // restated the line says what to give again.
         Error::UnknownCommand { token, node, .. } if split_invocation(node, token).is_some() => {
-            Cow::Owned(format!(
-                "give each word as its own argument: tpl {}",
-                split_invocation(node, token).unwrap_or_default()
-            ))
+            match restate::split(token) {
+                Some(restated) => Cow::Owned(format!(
+                    "give each word as its own argument: {}{}",
+                    restated.command,
+                    restated.replacing()
+                )),
+                None if restate::follows(token) => Cow::Owned(format!(
+                    "give each word as its own argument: tpl {}, then give the remaining \
+                     arguments and flags again",
+                    split_invocation(node, token).unwrap_or_default()
+                )),
+                None => Cow::Owned(format!(
+                    "give each word as its own argument: tpl {}",
+                    split_invocation(node, token).unwrap_or_default()
+                )),
+            }
         }
         Error::UnknownCommandPathSegment { segment, node, .. }
             if split_command(node, segment).is_some() =>
@@ -149,11 +172,33 @@ fn bare(error: &Error) -> Cow<'static, str> {
         Error::UnknownFlag { token, command, .. } if is_format_on_dump(command, token) => {
             Cow::Borrowed("remove --format and its value: tpl schema dump")
         }
+        // Y-02 of the eighth re-audit of rmp `#263`: the caller's command with
+        // the flag after the command that declares it.
+        Error::UnknownFlag {
+            token,
+            belongs_to: Some(path),
+            ..
+        } => match restate::relocated() {
+            Some(restated) => Cow::Owned(format!(
+                "write the flag after the command: {}{}",
+                restated.command,
+                restated.replacing()
+            )),
+            None if admits_flag(token) && admits_path(path) => Cow::Owned(format!(
+                "write {token}, with its value if it takes one, after '{path}' and not before \
+                 it; list the flags of that command with: tpl help {path}"
+            )),
+            None => Cow::Borrowed(
+                "write the flag after the command it belongs to and not before it; list the \
+                 flags of a command with: tpl help <command>",
+            ),
+        },
         Error::UnknownFlag {
             token,
             command,
             positional,
             nearest,
+            belongs_to: None,
         } => {
             let admitted = admitted(nearest, admits_flag);
             let generic = format!("list the flags of this command with: {}", help_of(command));
@@ -689,6 +734,9 @@ fn bare(error: &Error) -> Cow<'static, str> {
                     name,
                     lacks_extension,
                 }) => return include_of(name, *lacks_extension),
+                // Y-01: the object flag was given, so the fault is the
+                // template's and the hint never asks for the flag.
+                Some(RenderReason::Missing(missing)) => return missing_step(missing, template),
                 Some(RenderReason::Failed(_)) | None => {}
             }
 
@@ -768,6 +816,20 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // FR-CACHE-040: the nearest cached names, and no clean command — not
         // of a candidate, which the invocation did not name, and not of the
         // whole cache (BR-ERR-005).
+        Error::NothingCachedNamed {
+            name,
+            held_as: Some(other),
+            ..
+        } if admits(name) => Cow::Owned(format!(
+            "did you mean '{other}:{name}'? the cache holds a {other} named '{name}'; nothing was \
+             removed"
+        )),
+        Error::NothingCachedNamed {
+            held_as: Some(other),
+            ..
+        } => Cow::Owned(format!(
+            "the cache holds a {other} of that name; nothing was removed"
+        )),
         Error::NothingCachedNamed { nearest, .. } => {
             let admitted = admitted(nearest, admits);
             if admitted.is_empty() {
@@ -1871,6 +1933,90 @@ fn listing_in_document(unresolved: &Unresolved, document: &Path) -> Cow<'static,
             "name one the --context document lists under data.database.{member}"
         )),
     }
+}
+
+/// The most attributes a hint lists by name.
+const MAX_ATTRIBUTES: usize = 24;
+
+/// The hint for an undefined expression rooted at a bound `table`, `view` or
+/// `routine` (finding Y-01 of the eighth re-audit of rmp `#263`).
+///
+/// The flag that binds the variable was given, so the correction is in the
+/// template: the hint says what the step that found nothing reads, what the
+/// value before it holds, and prints the template's source. An attribute name
+/// reaches the line only where the set of `FR-ERR-022` admits it.
+fn missing_step(missing: &Missing, template: &str) -> Cow<'static, str> {
+    let show = if admits_template(template) {
+        format!("print the template's source with: tpl template show {template}")
+    } else {
+        "print the template's source with: tpl template show <template>".to_owned()
+    };
+
+    let line = match missing {
+        Missing::Attribute {
+            owner,
+            name,
+            kind,
+            attributes,
+            nearest,
+        } => {
+            let named: Vec<&str> = attributes
+                .iter()
+                .map(String::as_str)
+                .filter(|attribute| admits(attribute))
+                .collect();
+            let generic = if named.is_empty() {
+                format!(
+                    "'{owner}' is {kind} with no attribute '{name}'; correct the template, then {show}"
+                )
+            } else {
+                let listed = named
+                    .iter()
+                    .take(MAX_ATTRIBUTES)
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let more = named.len().saturating_sub(MAX_ATTRIBUTES);
+                let tail = if more > 0 {
+                    format!(" and {more} more")
+                } else {
+                    String::new()
+                };
+                format!(
+                    "'{owner}' has no attribute '{name}'; its attributes are {listed}{tail}; \
+                     correct the template, then {show}"
+                )
+            };
+            suggest::hint_line(admitted(nearest, admits).into_iter(), &generic).into_owned()
+        }
+        Missing::Index {
+            owner,
+            index,
+            length,
+        } => match length {
+            0 => format!(
+                "'{owner}' is an empty list, so [{index}] reads nothing; correct the template, \
+                 then {show}"
+            ),
+            1 => format!(
+                "'{owner}' has 1 item, at index 0, so [{index}] reads nothing; correct the \
+                 template, then {show}"
+            ),
+            _ => format!(
+                "'{owner}' has {length} items, at indexes 0 to {}, so [{index}] reads nothing; \
+                 correct the template, then {show}",
+                length - 1
+            ),
+        },
+        Missing::NotList { owner, index, kind } => format!(
+            "'{owner}' is {kind}, which has no item [{index}]; correct the template, then {show}"
+        ),
+        Missing::Elsewhere { root } => format!(
+            "'{root}' is defined, because --{root} names one, so the fault is in the \
+             expression; correct the template, then {show}"
+        ),
+    };
+    Cow::Owned(line)
 }
 
 /// The hint for an undefined expression whose first segment is a variable a

@@ -3826,3 +3826,199 @@ fn fr_cache_040_a_named_clean_of_nothing_cached_is_66_and_deletes_nothing() {
     let everything = sandbox.run(&["-d", "shop", "cache", "clean"]);
     assert_eq!(code(&everything), 0, "{}", stderr(&everything));
 }
+
+/// The command a hint ends with — the text after its last `": "` up to the
+/// first `;` or `,` — without `tpl`, and with each placeholder replaced.
+fn hinted(hint: &str, placeholders: &[(&str, &str)]) -> Vec<String> {
+    let (_, command) = hint
+        .rsplit_once(": ")
+        .expect("the hint ends with a command");
+    let command = command.split([';', ',']).next().unwrap_or(command);
+    let mut words = command.split_whitespace();
+    assert_eq!(words.next(), Some("tpl"), "{hint}");
+    words
+        .map(|word| {
+            placeholders
+                .iter()
+                .find(|(placeholder, _)| *placeholder == word)
+                .map_or_else(|| word.to_owned(), |(_, value)| (*value).to_owned())
+        })
+        .collect()
+}
+
+/// Runs the command `hint` carries in `sandbox`.
+fn run_hinted(sandbox: &Sandbox, hint: &str, placeholders: &[(&str, &str)]) -> Output {
+    let words = hinted(hint, placeholders);
+    let arguments: Vec<&str> = words.iter().map(String::as_str).collect();
+    sandbox.run(&arguments)
+}
+
+/// An entry whose server refuses every connection: a command that parses and
+/// reaches it ends with `69`, never `64`.
+const REFUSING: &str =
+    "[database.shop]\nhost = \"127.0.0.1\"\nport = 1\ndatabase = \"s\"\ntls = \"disabled\"\n";
+
+#[test]
+fn y_02_a_command_flag_written_before_its_command_is_moved_after_it() {
+    let sandbox = Sandbox::new();
+    sandbox.project(REFUSING);
+    sandbox.write(".tpl/templates/example.jinja", "x\n");
+
+    for (arguments, flag, command, hint, then) in [
+        (
+            vec!["-d", "shop", "--direct", "schema", "tables"],
+            "--direct",
+            "tpl schema tables",
+            "write the flag after the command: tpl -d shop schema tables --direct",
+            69,
+        ),
+        (
+            vec!["schema", "--direct", "tables"],
+            "--direct",
+            "tpl schema tables",
+            "write the flag after the command: tpl schema tables --direct",
+            // No entry is named and core.database is unset.
+            78,
+        ),
+        (
+            vec!["-d", "shop", "--format", "json", "schema", "tables"],
+            "--format",
+            "tpl schema tables",
+            "write the flag after the command: tpl -d shop schema tables --format json",
+            69,
+        ),
+        (
+            vec!["-d", "shop", "--table", "orders", "render", "example"],
+            "--table",
+            "tpl render",
+            "write the flag after the command: tpl -d shop render --table orders example",
+            69,
+        ),
+    ] {
+        let printed = sandbox.run(&arguments);
+        let written = assert_refused(&printed, 64, &arguments.join(" "));
+        assert_eq!(line(&written, "error: "), format!("unknown flag '{flag}'"));
+        assert_eq!(
+            line(&written, "cause: "),
+            format!(
+                "'{flag}' is a flag of '{command}' and was written before that command; only the \
+                 global flags (-d/--database, --tpl-dir, --timeout, -v/--verbose, -q/--quiet, \
+                 -h/--help, -V/--version) may come before a command"
+            )
+        );
+        let given = line(&written, "hint:  ");
+        assert_eq!(given, hint);
+
+        // The hint parses: what stops it is the entry or the server.
+        let rerun = run_hinted(&sandbox, &given, &[]);
+        assert_eq!(code(&rerun), then, "{given}: {}", stderr(&rerun));
+        assert!(
+            !stderr(&rerun).contains("unknown flag"),
+            "{given}: {}",
+            stderr(&rerun)
+        );
+    }
+
+    // A flag no command of the invocation declares keeps the unknown-flag
+    // cause.
+    let printed = sandbox.run(&["--nosuch", "schema", "tables"]);
+    let written = assert_refused(&printed, 64, "--nosuch");
+    assert!(
+        line(&written, "cause: ").contains("is not a flag of"),
+        "{written}"
+    );
+}
+
+#[test]
+fn y_03_a_command_given_as_one_argument_keeps_every_other_token() {
+    let sandbox = Sandbox::new();
+    sandbox.project(REFUSING);
+    sandbox.write(".tpl/templates/example.jinja", "x\n");
+
+    for (arguments, hint, then) in [
+        (
+            vec![
+                "--tpl-dir",
+                ".tpl",
+                "-d",
+                "shop",
+                "schema tables",
+                "--format",
+                "json",
+                "--pattern",
+                "o",
+            ],
+            "give each word as its own argument: tpl --tpl-dir .tpl -d shop schema tables \
+             --format json --pattern o",
+            69,
+        ),
+        (
+            vec![
+                "--tpl-dir",
+                ".tpl",
+                "-d",
+                "shop",
+                "render example",
+                "--table",
+                "orders",
+                "--set",
+                "a=b",
+            ],
+            "give each word as its own argument: tpl --tpl-dir .tpl -d shop render example \
+             --table orders --set a=b",
+            69,
+        ),
+        (
+            vec!["cfg", "database show", "shop", "--format", "json"],
+            "give each word as its own argument: tpl cfg database show shop --format json",
+            0,
+        ),
+    ] {
+        let printed = sandbox.run(&arguments);
+        let written = assert_refused(&printed, 64, &arguments.join(" "));
+        let given = line(&written, "hint:  ");
+        assert_eq!(given, hint);
+
+        let rerun = run_hinted(&sandbox, &given, &[]);
+        assert_eq!(code(&rerun), then, "{given}: {}", stderr(&rerun));
+    }
+
+    // A token its set refuses is a placeholder, and the line says what it
+    // stands for.
+    let printed = sandbox.run(&["template show", "a b"]);
+    let written = assert_refused(&printed, 64, "'template show' 'a b'");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give each word as its own argument: tpl template show <name>; replace <name> with the \
+         name you gave"
+    );
+}
+
+#[test]
+fn y_04_a_flag_that_took_a_command_shows_the_placeholder_whatever_the_command() {
+    let sandbox = Sandbox::new();
+    sandbox.project(REFUSING);
+
+    for (arguments, hint) in [
+        (
+            vec!["-d", "cfg", "database", "list"],
+            "give the entry name after -d: tpl -d <entry> cfg database list",
+        ),
+        (
+            vec!["-d", "template", "list", "--format", "json"],
+            "give the entry name after -d: tpl -d <entry> template list --format json",
+        ),
+        (
+            vec!["--database", "cfg", "list"],
+            "give the entry name after --database: tpl --database <entry> cfg list",
+        ),
+    ] {
+        let printed = sandbox.run(&arguments);
+        let written = assert_refused(&printed, 64, &arguments.join(" "));
+        let given = line(&written, "hint:  ");
+        assert_eq!(given, hint);
+
+        let rerun = run_hinted(&sandbox, &given, &[("<entry>", "shop")]);
+        assert_eq!(code(&rerun), 0, "{given}: {}", stderr(&rerun));
+    }
+}

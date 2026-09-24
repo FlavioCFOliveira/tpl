@@ -321,7 +321,11 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
 
     // FR-CACHE-040: an object flag that names nothing the cache holds deletes
     // nothing and is 66, with the nearest cached names of that kind.
-    let absent = |collection: Collection, kind: CatalogueObjectKind, name: &str| {
+    let absent = |collection: Collection,
+                  kind: CatalogueObjectKind,
+                  name: &str,
+                  qualified: Option<&'static str>,
+                  held_as: Option<&'static str>| {
         let names = cache.names(collection);
         let nearest =
             suggest::suggestions(name, names.iter().map(String::as_str), Population::Names)
@@ -333,6 +337,8 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
             name: name.to_owned(),
             entry: entry.to_owned(),
             nearest,
+            qualified,
+            held_as,
         }
     };
     let held =
@@ -340,7 +346,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
             if Store::holds(file.as_deref()) {
                 cache.clean_one(collection, file)
             } else {
-                Err(absent(collection, kind, name))
+                Err(absent(collection, kind, name, None, None))
             }
         };
 
@@ -358,12 +364,38 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
             name,
             cache.view_file(name),
         ),
-        Wanted::Routine(named::Wanted::Qualified(kind, name)) => held(
-            Collection::Routines,
-            CatalogueObjectKind::Routine,
-            name,
-            cache.routine_file(&kind, name),
-        ),
+        Wanted::Routine(named::Wanted::Qualified(kind, name)) => {
+            let file = cache.routine_file(&kind, name);
+            if Store::holds(file.as_deref()) {
+                return cache.clean_one(Collection::Routines, file);
+            }
+            // Y-05 of the eighth re-audit of rmp `#263`: a routine of the
+            // other kind under the same name is cached, and the lines say so
+            // rather than that no routine of that name is.
+            let (qualified, other, other_kind) = match kind {
+                RoutineKind::Procedure => (
+                    Some("procedure"),
+                    Some(RoutineKind::Function),
+                    Some("function"),
+                ),
+                RoutineKind::Function => (
+                    Some("function"),
+                    Some(RoutineKind::Procedure),
+                    Some("procedure"),
+                ),
+                _ => (None, None, None),
+            };
+            let held_as = other
+                .filter(|other| Store::holds(cache.routine_file(other, name).as_deref()))
+                .and(other_kind);
+            Err(absent(
+                Collection::Routines,
+                CatalogueObjectKind::Routine,
+                name,
+                qualified,
+                held_as,
+            ))
+        }
         Wanted::Routine(named::Wanted::Bare(name)) => {
             let procedure = cache.routine_file(&RoutineKind::Procedure, name);
             let function = cache.routine_file(&RoutineKind::Function, name);

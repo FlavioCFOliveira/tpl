@@ -123,6 +123,165 @@ pub(super) fn restated(edits: &[Edit<'_>]) -> Option<Restated> {
     restate(&crate::cli::tree(), &words, edits)
 }
 
+/// The node an invocation names when every flag is set aside wherever it is
+/// written, and the index in `words` just after the word that names it.
+///
+/// `words` is the vector without `argv[0]`. A flag the path reached so far
+/// does not declare is stepped over, with the next word as its value where
+/// some node on or below the path declares it as taking one and that word
+/// names no child: `tpl --format json schema tables` names `schema tables`,
+/// although the parser refused `--format` at the root (finding Y-02 of the
+/// eighth re-audit of rmp `#263`).
+pub(crate) fn destination<'t>(
+    tree: &'t clap::Command,
+    words: &[Option<&str>],
+) -> (Vec<&'t clap::Command>, usize) {
+    let mut path: Vec<&clap::Command> = vec![tree];
+    let mut end = 0_usize;
+    let mut index = 0_usize;
+
+    while let Some(&Some(text)) = words.get(index) {
+        if text == "--" {
+            break;
+        }
+        let node = path.last().copied().unwrap_or(tree);
+        index += 1;
+        if text.len() > 1 && text.starts_with('-') {
+            let next = words.get(index).copied().flatten();
+            let consumes = next
+                .is_some_and(|next| !next.starts_with('-') && node.find_subcommand(next).is_none())
+                && takes_the_next(&path, text);
+            index += usize::from(consumes);
+            continue;
+        }
+        let Some(child) = node.find_subcommand(text) else {
+            break;
+        };
+        path.push(child);
+        end = index;
+    }
+
+    (path, end)
+}
+
+/// Whether the flag `text` takes the next word as its value, where a node of
+/// `path`, or a node below its last, declares it.
+fn takes_the_next(path: &[&clap::Command], text: &str) -> bool {
+    fn below(node: &clap::Command, matches: &impl Fn(&clap::Arg) -> bool) -> bool {
+        node.get_arguments()
+            .any(|argument| matches(argument) && takes_value(argument))
+            || node.get_subcommands().any(|child| below(child, matches))
+    }
+    let anywhere = |matches: &dyn Fn(&clap::Arg) -> bool| {
+        path.iter().any(|node| {
+            node.get_arguments()
+                .any(|argument| matches(argument) && takes_value(argument))
+        }) || path
+            .last()
+            .is_some_and(|node| below(node, &|argument| matches(argument)))
+    };
+
+    if text.contains('=') {
+        return false;
+    }
+    if let Some(long) = text.strip_prefix("--") {
+        return anywhere(&|argument| argument.get_long() == Some(long));
+    }
+    // A cluster: the first element that takes a value takes the rest of the
+    // word, and the next word only where it is the last element.
+    let cluster = &text[1..];
+    for (at, short) in cluster.char_indices() {
+        if anywhere(&|argument| argument.get_short() == Some(short)) {
+            return at + short.len_utf8() == cluster.len();
+        }
+    }
+    false
+}
+
+/// The recorded command with every flag written before the command that
+/// declares it moved to just after that command's path, each with its value
+/// (finding Y-02 of the eighth re-audit of rmp `#263`); [`None`] where no
+/// vector was recorded or the restatement fails.
+pub(super) fn relocated() -> Option<Restated> {
+    let argv = RECORDED.get()?;
+    let words: Vec<Option<&str>> = argv.iter().skip(1).map(|word| word.to_str()).collect();
+    let tree = crate::cli::tree();
+    let reordered = relocate(&tree, &words)?;
+    restate(&tree, &reordered, &[])
+}
+
+/// The words of [`relocated`], reordered.
+fn relocate<'w>(tree: &clap::Command, words: &[Option<&'w str>]) -> Option<Vec<Option<&'w str>>> {
+    let (target, end) = destination(tree, words);
+    let mut path: Vec<&clap::Command> = vec![tree];
+    let mut kept: Vec<Option<&str>> = Vec::with_capacity(words.len());
+    let mut moved: Vec<Option<&str>> = Vec::new();
+    let mut index = 0_usize;
+
+    while index < end {
+        let text = words[index]?;
+        index += 1;
+        if text.len() > 1 && text.starts_with('-') {
+            let name = text.split('=').next().unwrap_or(text);
+            let here = if let Some(long) = name.strip_prefix("--") {
+                declared(&path, |argument| argument.get_long() == Some(long)).is_some()
+            } else {
+                let short = name[1..].chars().next()?;
+                declared(&path, |argument| argument.get_short() == Some(short)).is_some()
+            };
+            let next = words.get(index).copied().flatten();
+            let consumes = next.is_some_and(|next| {
+                !next.starts_with('-')
+                    && path
+                        .last()
+                        .is_some_and(|node| node.find_subcommand(next).is_none())
+            }) && takes_the_next(&path, text);
+            let bucket = if here { &mut kept } else { &mut moved };
+            bucket.push(Some(text));
+            if consumes {
+                bucket.push(words[index]);
+                index += 1;
+            }
+            continue;
+        }
+        let child = path.last()?.find_subcommand(text)?;
+        path.push(child);
+        kept.push(Some(text));
+    }
+
+    if moved.is_empty() || path.len() != target.len() {
+        return None;
+    }
+    kept.extend(moved);
+    kept.extend_from_slice(&words[end..]);
+    Some(kept)
+}
+
+/// The recorded command with the one argument `token` written as its words,
+/// each its own argument, and every other argument and flag kept (finding
+/// Y-03 of the eighth re-audit of rmp `#263`); [`None`] where no vector was
+/// recorded, `token` is not in it, or the restatement fails.
+pub(super) fn split(token: &str) -> Option<Restated> {
+    let argv = RECORDED.get()?;
+    let words: Vec<Option<&str>> = argv.iter().skip(1).map(|word| word.to_str()).collect();
+    let at = words.iter().position(|word| *word == Some(token))?;
+    let mut spread: Vec<Option<&str>> = Vec::with_capacity(words.len() + 4);
+    spread.extend_from_slice(&words[..at]);
+    spread.extend(token.split_whitespace().map(Some));
+    spread.extend_from_slice(&words[at + 1..]);
+    restate(&crate::cli::tree(), &spread, &[])
+}
+
+/// Whether the recorded vector holds a word after `token`.
+pub(super) fn follows(token: &str) -> bool {
+    RECORDED.get().is_some_and(|argv| {
+        argv.iter()
+            .skip(1)
+            .position(|word| word.to_str() == Some(token))
+            .is_some_and(|at| argv.len() > at + 2)
+    })
+}
+
 /// The command path of the recorded invocation and whether it carried an
 /// operand.
 #[derive(Debug, Clone, PartialEq, Eq)]

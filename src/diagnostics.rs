@@ -47,6 +47,7 @@ pub(crate) mod panic;
 pub(crate) mod suggest;
 pub(crate) mod verbosity;
 
+pub(crate) use restate::destination;
 pub(crate) use restate::record as record_invocation;
 
 pub(crate) use cause::invoked;

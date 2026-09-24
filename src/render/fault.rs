@@ -38,7 +38,10 @@ use std::error::Error as _;
 use std::path::Path;
 
 use super::function::Failed;
-use crate::error::{Error, LookupKind, Position, RenderReason, Unresolved};
+use minijinja::value::ValueKind;
+
+use crate::diagnostics::suggest::{self, Population};
+use crate::error::{Error, LookupKind, Missing, Position, RenderReason, Unresolved};
 
 /// The condition a failed compile is (`FR-TMPL-020`, `FR-RND-030`).
 pub(super) fn during_compile(root: &Path, name: &str, reported: &minijinja::Error) -> Error {
@@ -155,6 +158,168 @@ pub(super) fn unresolved(
             table: None,
             document: None,
         }),
+    }
+}
+
+/// The step that found nothing in an undefined expression rooted at `table`,
+/// `view` or `routine`, WHERE the render bound that variable; [`None`] where
+/// the expression has another root, or the variable is not bound.
+///
+/// `FR-RND-023` binds each of the three only when its flag is given, so a
+/// bound root means the flag was given, and the hint that asks for it would
+/// be false (finding Y-01 of the eighth re-audit of rmp `#263`). The walk
+/// reads the context itself, step by step, over the attributes and decimal
+/// indexes the expression begins with, and stops at the first step that
+/// finds nothing.
+pub(super) fn missing(context: &minijinja::Value, expression: &str) -> Option<Missing> {
+    let (root, mut rest) = identifier(expression)?;
+    let root: &'static str = match root {
+        "table" => "table",
+        "view" => "view",
+        "routine" => "routine",
+        _ => return None,
+    };
+    let mut current = context
+        .get_attr(root)
+        .ok()
+        .filter(|value| !value.is_undefined())?;
+    let mut consumed = root.len();
+
+    loop {
+        let owner = &expression[..consumed];
+        if let Some(after) = rest.strip_prefix('.') {
+            let Some((name, tail)) = identifier(after) else {
+                break;
+            };
+            let found = current
+                .get_attr(name)
+                .ok()
+                .filter(|value| !value.is_undefined());
+            let Some(found) = found else {
+                return Some(attribute(owner, name, &current));
+            };
+            current = found;
+            consumed += 1 + name.len();
+            rest = tail;
+        } else if let Some(after) = rest.strip_prefix('[') {
+            let Some((index, length)) = decimal(after) else {
+                break;
+            };
+            // The engine indexes more than lists — a string by character —
+            // so a value of another kind is asked itself before it is called
+            // not a list.
+            if current.kind() != ValueKind::Seq {
+                let Some(found) = current
+                    .get_item(&minijinja::Value::from(index))
+                    .ok()
+                    .filter(|value| !value.is_undefined())
+                else {
+                    return Some(Missing::NotList {
+                        owner: owner.to_owned(),
+                        index,
+                        kind: kind_of(&current),
+                    });
+                };
+                current = found;
+                consumed += 1 + length;
+                rest = &after[length..];
+                continue;
+            }
+            let items = current.len().unwrap_or(0);
+            let position = if index < 0 {
+                usize::try_from(index.unsigned_abs())
+                    .ok()
+                    .and_then(|back| items.checked_sub(back))
+            } else {
+                usize::try_from(index).ok().filter(|&at| at < items)
+            };
+            let found = position
+                .and_then(|at| current.get_item(&minijinja::Value::from(at)).ok())
+                .filter(|value| !value.is_undefined());
+            let Some(found) = found else {
+                return Some(Missing::Index {
+                    owner: owner.to_owned(),
+                    index,
+                    length: items,
+                });
+            };
+            current = found;
+            consumed += 1 + length;
+            rest = &after[length..];
+        } else {
+            break;
+        }
+    }
+
+    Some(Missing::Elsewhere { root })
+}
+
+/// The name an expression fragment begins with, and what follows it.
+fn identifier(fragment: &str) -> Option<(&str, &str)> {
+    let end = fragment
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(fragment.len());
+    let name = &fragment[..end];
+    name.bytes()
+        .next()
+        .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+        .then(|| (name, &fragment[end..]))
+}
+
+/// The decimal index an expression fragment begins with, read from just after
+/// its `[`, and the length up to and including the `]`.
+fn decimal(fragment: &str) -> Option<(i64, usize)> {
+    let close = fragment.find(']')?;
+    let digits = &fragment[..close];
+    let unsigned = digits.strip_prefix('-').unwrap_or(digits);
+    if unsigned.is_empty() || !unsigned.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    Some((digits.parse().ok()?, close + 1))
+}
+
+/// The missing attribute `name` of `owner`, with the attributes it holds.
+fn attribute(owner: &str, name: &str, value: &minijinja::Value) -> Missing {
+    let attributes: Vec<String> = if value.kind() == ValueKind::Map {
+        value
+            .try_iter()
+            .map(|keys| {
+                keys.filter_map(|key| key.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let nearest = suggest::suggestions(
+        name,
+        attributes.iter().map(String::as_str),
+        Population::Names,
+    )
+    .names()
+    .map(str::to_owned)
+    .collect();
+
+    Missing::Attribute {
+        owner: owner.to_owned(),
+        name: name.to_owned(),
+        kind: kind_of(value),
+        attributes,
+        nearest,
+    }
+}
+
+/// What a value is, in words.
+fn kind_of(value: &minijinja::Value) -> &'static str {
+    match value.kind() {
+        ValueKind::None => "null",
+        ValueKind::Bool => "a boolean",
+        ValueKind::Number => "a number",
+        ValueKind::String => "a string",
+        ValueKind::Bytes => "a byte string",
+        ValueKind::Seq => "a list",
+        ValueKind::Map | ValueKind::Plain => "an object",
+        _ => "a value",
     }
 }
 
@@ -737,6 +902,50 @@ mod tests {
         assert!(
             chain.iter().all(|line| !line.contains("(in t.jinja")),
             "{chain:?}"
+        );
+    }
+
+    /// Finding Y-01 of the eighth re-audit of rmp `#263`: the walk names the
+    /// step that found nothing, and only for a bound object variable.
+    #[test]
+    fn the_walk_names_the_step_of_a_bound_variable_that_found_nothing() {
+        use crate::error::Missing;
+
+        let context = minijinja::Value::from_serialize(serde_json::json!({
+            "table": {"name": "orders", "columns": [{"name": "id"}]},
+        }));
+
+        assert_eq!(super::missing(&context, "view.name"), None);
+        assert_eq!(super::missing(&context, "database.x"), None);
+        assert_eq!(
+            super::missing(&context, "table.columns[-2].name"),
+            Some(Missing::Index {
+                owner: "table.columns".to_owned(),
+                index: -2,
+                length: 1,
+            })
+        );
+        assert_eq!(
+            super::missing(&context, "table.columns[-1].nme"),
+            Some(Missing::Attribute {
+                owner: "table.columns[-1]".to_owned(),
+                name: "nme".to_owned(),
+                kind: "an object",
+                attributes: vec!["name".to_owned()],
+                nearest: vec!["name".to_owned()],
+            })
+        );
+        assert_eq!(
+            super::missing(&context, "table.columns[0].name[9]"),
+            Some(Missing::NotList {
+                owner: "table.columns[0].name".to_owned(),
+                index: 9,
+                kind: "a string",
+            })
+        );
+        assert_eq!(
+            super::missing(&context, "table.name|upper"),
+            Some(Missing::Elsewhere { root: "table" })
         );
     }
 }

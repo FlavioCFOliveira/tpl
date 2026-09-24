@@ -1446,6 +1446,34 @@ fn fr_cache_024_the_cache_arm_names_a_routine_by_the_same_rules_the_schema_arm_d
     );
     assert!(!routines.join(format!("procedure.{FUNCTION}.json")).exists());
     assert!(routines.join(format!("function.{FUNCTION}.json")).exists());
+
+    // Y-05 of the eighth re-audit of rmp #263: the procedure is gone and the
+    // function stays, so the lines name the kind asked for and the one held.
+    let other = run(
+        &sandbox,
+        &[
+            "cache",
+            "clean",
+            "--routine",
+            &format!("procedure:{FUNCTION}"),
+        ],
+    );
+    assert_eq!(other.code, Some(66), "{}", other.err);
+    assert!(
+        line(&other.err, "cause:").ends_with(&format!(
+            "holds no procedure named '{FUNCTION}'; it holds a function of that name"
+        )),
+        "{}",
+        other.err
+    );
+    assert_eq!(
+        line(&other.err, "hint:"),
+        format!(
+            "did you mean 'function:{FUNCTION}'? the cache holds a function named '{FUNCTION}'; \
+             nothing was removed"
+        )
+    );
+    assert!(routines.join(format!("function.{FUNCTION}.json")).exists());
 }
 
 // ------------------------------------------------- the reduction of info ---
