@@ -1861,8 +1861,9 @@ fn entry_after_update<'a>(arguments: &[&'a str]) -> &'a str {
 /// The line of `FR-CFG-052` for the deleted entry `name`.
 fn entry_removed(name: &str) -> String {
     format!(
-        "warning: removed entry '{name}'; data cached for it under .tpl/.cache/{name}/ is kept, \
-         and an entry added later as '{name}' reads it; clear it with: tpl -d {name} cache clean"
+        "warning: removed entry '{name}'; any data cached for it under .tpl/.cache/{name}/ is \
+         kept, and an entry added later as '{name}' reads it; clear it with: tpl -d {name} cache \
+         clean"
     )
 }
 

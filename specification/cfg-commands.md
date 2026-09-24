@@ -710,13 +710,13 @@ tpl cfg database test   <name>
 
   ```
   tpl cfg database remove shop
-  warning: removed entry 'shop'; data cached for it under .tpl/.cache/shop/ is kept, and an entry added later as 'shop' reads it; clear it with: tpl -d shop cache clean
+  warning: removed entry 'shop'; any data cached for it under .tpl/.cache/shop/ is kept, and an entry added later as 'shop' reads it; clear it with: tpl -d shop cache clean
   ```
 
-  1. **Content.** The line SHALL name the entry, SHALL state that data cached
-     for it under `.tpl/.cache/<name>/` is kept, SHALL state that an entry
-     added later under the same name reads that data, and SHALL carry the
-     command `tpl -d <name> cache clean`, with the entry name in place of
+  1. **Content.** The line SHALL name the entry, SHALL state that any data
+     cached for it under `.tpl/.cache/<name>/` is kept, SHALL state that an
+     entry added later under the same name reads that data, and SHALL carry
+     the command `tpl -d <name> cache clean`, with the entry name in place of
      `<name>`. The entry was declared in `.tpl/.cfg`, so its name has passed
      `FR-CONF-048` at step 3 of `FR-ERR-006` and is reproduced under
      `FR-ERR-022`. `FR-CACHE-041` makes that command succeed once the entry
@@ -732,7 +732,7 @@ tpl cfg database test   <name>
 
      ```
      tpl --tpl-dir /srv/shop/.tpl cfg database remove shop
-     warning: removed entry 'shop'; data cached for it under .tpl/.cache/shop/ is kept, and an entry added later as 'shop' reads it; clear it with: tpl --tpl-dir /srv/shop/.tpl -d shop cache clean
+     warning: removed entry 'shop'; any data cached for it under .tpl/.cache/shop/ is kept, and an entry added later as 'shop' reads it; clear it with: tpl --tpl-dir /srv/shop/.tpl -d shop cache clean
      ```
   3. **No cache access.** The system SHALL NOT read, list, test for or delete
      anything under `.tpl/.cache/` to decide whether to write the line, per
@@ -750,8 +750,8 @@ tpl cfg database test   <name>
 
      ```
      tpl cfg unset database
-     warning: removed entry 'shop'; data cached for it under .tpl/.cache/shop/ is kept, and an entry added later as 'shop' reads it; clear it with: tpl -d shop cache clean
-     warning: removed entry 's2'; data cached for it under .tpl/.cache/s2/ is kept, and an entry added later as 's2' reads it; clear it with: tpl -d s2 cache clean
+     warning: removed entry 'shop'; any data cached for it under .tpl/.cache/shop/ is kept, and an entry added later as 'shop' reads it; clear it with: tpl -d shop cache clean
+     warning: removed entry 's2'; any data cached for it under .tpl/.cache/s2/ is kept, and an entry added later as 's2' reads it; clear it with: tpl -d s2 cache clean
      ```
 
   `FR-CFG-023` clears `core.database` in the same rewrite where it names the
@@ -810,6 +810,13 @@ tpl cfg database test   <name>
   the coordinator of rmp `#290` ruled for the warning. *Rejected: one line
   naming every entry.* One line per entry keeps the line of item 1
   unchanged and gives each entry a command a caller can copy whole.
+
+  *Amended in the fifty-sixth edition: item 1 says "any data cached".* The
+  line stated as fact that data cached for the entry is kept, which is false
+  where no cache exists, and item 3 bars the system from knowing which case
+  holds. The wording now matches the rows of `FR-HELP-036` and item 1 of
+  `FR-CFG-053`. The facts named, the command carried and every other item
+  are unchanged. This is rmp `#291`.
 
 - **FR-CFG-024**: `tpl cfg database test <name>` SHALL perform exactly the
   following four steps, in this order, and SHALL report the outcome of each:

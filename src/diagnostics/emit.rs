@@ -250,9 +250,9 @@ pub(crate) fn entry_removed(entry: &str) {
 fn entry_removed_line(entry: &str, project: Option<Option<&str>>) -> String {
     let (command, placeholder) = clean_command(entry, project);
     format!(
-        "{WARNING_TOKEN} removed entry '{entry}'; data cached for it under .tpl/.cache/{entry}/ \
-         is kept, and an entry added later as '{entry}' reads it; clear it with: \
-         {command}{placeholder}"
+        "{WARNING_TOKEN} removed entry '{entry}'; any data cached for it under \
+         .tpl/.cache/{entry}/ is kept, and an entry added later as '{entry}' reads it; clear it \
+         with: {command}{placeholder}"
     )
 }
 
@@ -456,14 +456,15 @@ mod tests {
     fn fr_cfg_052_the_warning_names_the_entry_its_cache_and_the_clean_that_removes_it() {
         assert_eq!(
             entry_removed_line("shop", None),
-            "warning: removed entry 'shop'; data cached for it under .tpl/.cache/shop/ is kept, \
-             and an entry added later as 'shop' reads it; clear it with: tpl -d shop cache clean"
+            "warning: removed entry 'shop'; any data cached for it under .tpl/.cache/shop/ is \
+             kept, and an entry added later as 'shop' reads it; clear it with: tpl -d shop cache \
+             clean"
         );
         // Item 2: the caller's --tpl-dir, before -d.
         assert_eq!(
             entry_removed_line("shop", Some(Some("/srv/shop/.tpl"))),
-            "warning: removed entry 'shop'; data cached for it under .tpl/.cache/shop/ is kept, \
-             and an entry added later as 'shop' reads it; clear it with: tpl --tpl-dir \
+            "warning: removed entry 'shop'; any data cached for it under .tpl/.cache/shop/ is \
+             kept, and an entry added later as 'shop' reads it; clear it with: tpl --tpl-dir \
              /srv/shop/.tpl -d shop cache clean"
         );
         // A refused value is the placeholder, stated in words.

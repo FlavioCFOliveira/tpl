@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-five editions. All are in force;
+The specification has been written in fifty-six editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4603,6 +4603,27 @@ None conflicts with them, so none is amended: `FR-CFG-023` already clears
 `core.database` whenever the entry it names is deleted, by any command. The
 root `README.md` makes no statement about what `tpl cfg unset database`
 writes, and does not quote the line of `FR-CFG-053`, so the fifth validation
+rule owes nothing.
+
+### Fifty-sixth edition — a removal warning that asserted a cache
+
+rmp `#291` found that the line of `FR-CFG-052` states as fact that data cached
+for the deleted entry is kept, which is false where no cache exists, while the
+rows of `FR-HELP-036` and the line of `FR-CFG-053` say "any data cached".
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The removal line holds where no cache exists** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-052` item 1 and its three
+  examples say "any data cached for it under `.tpl/.cache/NAME/` is kept".
+  The facts named, the command carried and every other item are unchanged.
+
+`FR-CFG-053`, `FR-HELP-036`, `FR-CACHE-011` and `BR-CACHE-004` were read
+against the change. None conflicts with it, so none is amended. The root
+`README.md` does not quote the line of `FR-CFG-052`, so the fifth validation
 rule owes nothing.
 
 ### Still out of scope
