@@ -1,13 +1,14 @@
-# Publishes a GitHub Release for a pushed v* tag (ADR-012). The gate job
-# enforces the four provenance gates; each target then runs the five-command
+# Publishes a GitHub Release for an already pushed v* tag (ADR-012). Started by
+# hand only, against that tag:
+#   gh workflow run release.yml --ref vX.Y.Z
+# The gate job refuses any ref that is not a tag, then enforces the four
+# provenance gates; each target then runs the five-command
 # validation by its ADR-008 path and packages the release binary it built; the
 # release is created only if everything passes.
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -53,11 +54,16 @@ jobs:
       - id: gate
         env:
           TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           fail() {
             echo "::error::$*"
             exit 1
           }
+
+          # 0. The run was dispatched against a tag.
+          [[ "$REF_TYPE" == tag ]] ||
+            fail "release.yml must be dispatched against a tag, not a $REF_TYPE ($TAG): gh workflow run release.yml --ref vX.Y.Z"
 
           # 1. The tagged commit is on main.
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main ||

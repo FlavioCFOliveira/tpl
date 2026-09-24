@@ -87,7 +87,7 @@ MySQL is not a target. A server that is not MariaDB is refused rather than read,
 
 ## Installation
 
-Releases are published on [GitHub Releases](https://github.com/FlavioCFOliveira/tpl/releases) when a `v*` tag is pushed. The first is v0.0.1. The installer below installs the latest release, and building from source remains an alternative. How releases are built and published is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
+Releases are published on [GitHub Releases](https://github.com/FlavioCFOliveira/tpl/releases), each by a release workflow started by hand against an already pushed `v*` tag. The first is v0.0.1. The installer below installs the latest release, and building from source remains an alternative. How releases are built and published is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
 
 ### With the install script
 
@@ -467,7 +467,7 @@ cargo test --all-features
 cargo audit
 ```
 
-CI runs these five commands on the four targets on every push and pull request (`.github/workflows/ci.yml`). Pushing a `v*` tag runs `.github/workflows/release.yml`, which publishes a release only when the tag is annotated, points at a commit reachable from `main`, is `v` followed by a Semantic Versioning 2.0.0 version equal to `version` in `Cargo.toml`, and has exactly one `release-notes/<tag>-<YYYYMMDD>.md`, which becomes the release body — and only if the same validation then passes on the four targets. A tag with a pre-release identifier, such as `v0.2.0-rc.1`, publishes a GitHub pre-release; the expected order is the `gitflow` procedure's: merge to `main`, create the annotated tag, push `main`, then push the tag. See [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
+Both workflows run only when started by hand, through `workflow_dispatch`; nothing runs on a push or a tag. `gh workflow run ci.yml --ref <ref>` runs these five commands on the four targets against the chosen ref (`.github/workflows/ci.yml`). A release is cut by pushing `main`, then the annotated `v` tag, then running `gh workflow run release.yml --ref vX.Y.Z` (`.github/workflows/release.yml`), which refuses a ref that is not a tag and publishes only when the tag is annotated, points at a commit reachable from `main`, is `v` followed by a Semantic Versioning 2.0.0 version equal to `version` in `Cargo.toml`, and has exactly one `release-notes/<tag>-<YYYYMMDD>.md`, which becomes the release body — and only if the same validation then passes on the four targets. A tag with a pre-release identifier, such as `v0.2.0-rc.1`, publishes a GitHub pre-release. See [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
 
 `unsafe` is forbidden; `#![forbid(unsafe_code)]` stays at the top of the crate.
 
