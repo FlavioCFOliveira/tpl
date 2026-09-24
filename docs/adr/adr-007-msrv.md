@@ -3,7 +3,7 @@ id: ADR-007
 title: The minimum supported Rust version
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-24
 requirements: []
 supersedes: []
 superseded-by: null
@@ -110,8 +110,9 @@ two floors — does not change when the number does, and only its parameter move
 - **Downgrading the driver to lower the floor.** Refused. The driver was
   disqualified-and-chosen against `FR-CONF-036` at the version `ADR-003` pins,
   and every figure in `BENCHMARKS.md` was taken on that artefact; a different
-  version is a different artefact, which `NFR-PERF-012` makes incomparable with
-  every recorded figure. Buying a lower floor with a re-measurement of four
+  version builds a different artefact, and a figure is comparable only with
+  another taken from the same build, so no recorded figure could be read
+  against a later one. Buying a lower floor with a re-measurement of four
   targets, and a re-verification of the five-mode mapping of `ADR-002`, is a
   trade nothing in the corpus asks for: no requirement names a toolchain
   version at all.

@@ -65,7 +65,12 @@ Against the fifty-eighth edition's amendment of `FR-PROJ-023`, `data-model.md`,
 `tpl cache clean`. For rmp `#257`, `interfaces.md` gains
 [The library entry points](interfaces.md#the-library-entry-points), over
 `run_from`, and `open-decisions.md` gains `OD-34`, which holds its rejected
-options.
+options. For rmp `#230`, `verification.md` records as settled by the
+sixty-second edition that `NFR-PERF-007` reaches exactly the six requirements of
+form, and that `NFR-PERF-008` is verified against the server's statement
+record; `quality-attributes.md`, `operations.md` and `traceability.md` state
+that verification, and `verification.md`'s register names the test that makes
+it.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree

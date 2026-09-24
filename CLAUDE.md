@@ -603,7 +603,7 @@ O desempenho e a economia de recursos são exigências de **desenho e de arquite
 
 **Os números não vivem aqui.** As propriedades exigidas, as cargas de referência, os pontos de medição e o protocolo pertencem a `specification/performance-requirements.md`; as leituras efectivamente medidas vivem em `BENCHMARKS.md`.
 
-**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes em cada `cargo test`. Quebrá-las é defeito funcional, não execução lenta.
+**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes onde o instrumento de que cada asserção precisa está ao alcance da execução: as que se observam do lado do servidor exigem a fixture de pé, e a forma em syscalls das cláusulas de descoberta e de configuração exige um host que permita o trace, o que nenhum dos alvos Darwin permite — é `NFR-PERF-007` e a secção *What an assertion needs in order to run*, em `specification/performance-requirements.md`. Uma asserção saltada não é um requisito enfraquecido: cada cláusula vale nos quatro alvos e é verificada nos quatro, e uma execução que não alcança o instrumento salta a asserção declarando a razão, e nunca a dá por passada em silêncio. Quebrá-las é defeito funcional, não execução lenta.
 
 ### Regras de implementação
 

@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -263,6 +263,7 @@ and for the same reason.
 | The discovery clause of `NFR-PERF-005` | A differential run, with its inversion | All four targets: it needs no server |
 | The configuration clause of `NFR-PERF-005` | A differential run, with its inversion | All four targets |
 | The two clauses above, **as syscalls** | A syscall trace | **Written, and run on neither Darwin target.** The body skips, with a printed notice, on a host that is not Linux or that has no `strace` |
+| `NFR-PERF-008`, outside the six | The `FR-GLOB-017` lines on stderr of `schema dump --direct --no-cache -v`, counted and compared with the catalogue statements the server's statement record shows for the same invocation | Every series of `FR-SRV-015`, in `fr_glob_017_one_diagnostic_line_per_catalogue_query_and_none_at_the_default_level` (`tests/schema_and_cache.rs`), gated on the fixture |
 
 The trace is written and does not run on either Darwin target, and that is the
 requirement's arrangement rather than a gap in the suite: `NFR-PERF-005` forbids
@@ -475,14 +476,18 @@ side. One observation of the connections a server accepts discharges both. The
 nine is a count of requirements, and the instruments are four, so neither number
 counts the observations a run makes.
 
-**Recorded reading — which requirements `NFR-PERF-007` reaches.** It reads
-*"each requirement of this section"*, and the section it sits in also contains
-`NFR-PERF-007` itself, `NFR-PERF-008` and `BR-PERF-001`, none of which is a
-property of the running system that an outside observation could reach. The six
-above are the ones it can reach, which is the reading
-[quality-attributes.md](quality-attributes.md#the-six-requirements-of-form)
-already takes. The wording is the functional owner's to settle; nothing in the
-built system differs between the readings.
+**Settled — which requirements `NFR-PERF-007` reaches.** Exactly the six
+requirements of form, `NFR-PERF-001` through `NFR-PERF-006`: the sixty-second
+edition of `specification/performance-requirements.md` amended `NFR-PERF-007`
+to name them, which is the reading this document and
+[quality-attributes.md](quality-attributes.md#the-six-requirements-of-form) had
+recorded. `NFR-PERF-007` itself and `BR-PERF-001` are not properties of the
+running system. `NFR-PERF-008` is one, and since the same edition it carries its
+own verification: an invocation that reads the catalogue is run at `-v`, the
+`FR-GLOB-017` lines on its stderr are counted, and the count must equal the
+catalogue queries the server's statement record shows for that invocation. It
+needs the fixture standing, and a run without it skips the assertion with a
+stated reason.
 
 ## The invocation surface, observed on the process
 

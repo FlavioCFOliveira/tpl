@@ -3,8 +3,8 @@ id: ADR-003
 title: The database driver
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-22
-requirements: [FR-CONF-013, FR-CONF-036, FR-CONF-038, FR-SEC-021, NFR-PERF-004, NFR-PERF-012]
+last-reviewed: 2026-09-24
+requirements: [FR-CONF-013, FR-CONF-036, FR-CONF-038, FR-SEC-021, NFR-PERF-004]
 supersedes: []
 superseded-by: null
 ---
@@ -123,11 +123,12 @@ with a new `decided` date, and it carries two obligations that nothing else will
 raise: re-checking the five-variant mapping of `ADR-002`, and re-checking the
 toolchain floor of `ADR-007`.
 
-**A version move is also a measurement move.** `NFR-PERF-012` makes a recorded
-measurement meaningful only against the artefact and target it was taken on. A
-driver version other than the one pinned here is a different artefact from the
-one every recorded figure was taken on, so the figures either side of the move
-are not readings of the same thing. Nothing follows from that by rule —
+**A version move is also a measurement move.** A figure is comparable only with
+another taken from the same build. A driver version other than the one pinned
+here builds a different artefact from the one every recorded figure was taken
+on, so the figures either side of the move are not readings of the same thing.
+This is a design ground, not a requirement: `NFR-PERF-012` requires the target
+and the server series, and names no artefact. Nothing follows from that by rule —
 `BR-PERF-008` gives no figure the power to refuse a change — but a reader who
 compares them without knowing is reading two things as one.
 
@@ -169,5 +170,6 @@ for the composition it records.
 | A blocking cost inside connection establishment, recorded on 2026-09-10 as unexplained and specific to `musl` over raw loopback. **That account is superseded**: task `#8` established a TLS connect stall in `sqlx-core` 0.9.0, on every supported series and over both network paths measured, and `ADR-010` holds the response | `BENCHMARKS.md`, "The musl anomaly — resolved on 2026-09-11" and "2026-09-11 — The TLS connect stall on Linux loopback" | 2026-09-11 |
 | `sqlx` 0.9.0 is the maximum stable release of the crate, published 2026-05-21 | crates.io crate index, `sqlx`, version 0.9.0 | 2026-09-11 |
 | The five modes are normative over the driver; a driver that cannot express all five distinctly is disqualified; the choice may not be settled by reducing the mode set | `specification/configuration-model.md`, `FR-CONF-036` | 2026-09-11 |
+| A recorded measurement names its target and, where it reaches a server, its series, and names no artefact | `specification/performance-requirements.md`, `NFR-PERF-012` | 2026-09-24 |
 | The corpus names no driver and states that which one is chosen is an architecture decision | `specification/README.md`, *Still out of scope* | 2026-09-11 |
 | The two costs of a C-library binding — static linkage for the `musl` targets, and an ORM's query surface against the dependency budget | **Reasoned, not measured.** No figure in this repository separates a C-library candidate from either measured one | — |

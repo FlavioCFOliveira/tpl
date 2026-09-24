@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-one editions. All are in force;
+The specification has been written in sixty-two editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4825,6 +4825,33 @@ and the index of [open-questions.md](open-questions.md) stays empty.
 `FR-SEC-022`, `FR-RND-022`, `FR-RND-033` and `FR-ERR-001` were read against
 the change. None conflicts with it, so none is amended. The root `README.md`
 does not state what `--timeout` bounds, so the fifth validation rule owes
+nothing.
+
+### Sixty-second edition — what the instruments reach
+
+Two tasks of sprint 25 on [performance-requirements.md](performance-requirements.md).
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Ratifying the measured budgets (rmp `#219`)** — no change. The task
+  predates the thirty-sixth edition, which withdrew ratification with
+  `NFR-PERF-015` through `NFR-PERF-017` and made `NFR-PERF-020` a recording
+  rule under `BR-PERF-008`; the thirty-seventh edition removed the last
+  adopted figure from `NFR-PERF-014`. Nothing the task asks for exists to be
+  done.
+- **What `NFR-PERF-007` reaches (rmp `#230`)** — `NFR-PERF-007` now names the
+  six requirements of form it governs, and `NFR-PERF-008` states its own
+  verification: the lines of `FR-GLOB-017` counted at `-v` against the
+  server's statement record.
+
+`NFR-PERF-001` through `NFR-PERF-006`, `NFR-PERF-012`, `NFR-PERF-014`,
+`NFR-PERF-018` through `NFR-PERF-020`, `BR-PERF-001`, `BR-PERF-006`,
+`BR-PERF-008`, `FR-GLOB-017` and `NFR-DET-001` were read against the
+changes. None conflicts with them, so none is amended. The root `README.md`
+does not state what `NFR-PERF-007` reaches, so the fifth validation rule owes
 nothing.
 
 ### Still out of scope
