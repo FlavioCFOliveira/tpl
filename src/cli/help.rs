@@ -593,7 +593,8 @@ const PASSWORD_COMMAND: Documented = Documented {
               into words as a shell would (quotes group words, and every quote must be closed) \
               and stores them in the file as an array, [\"pass\", \"db/shop\"]. A value that \
               starts with an unquoted [, or ends in a backslash outside quotes, is refused. The \
-              command runs without a shell, and no password is stored in the file.",
+              command runs without a shell, and no password is stored in the file. ${VAR} is not \
+              expanded in it: its words are passed to the program as written.",
     excludes: &[],
 };
 /// `--ca-file`, as every node that declares it states it.
@@ -772,7 +773,8 @@ const CFG_UNSET_KEY: Documented = Documented {
 /// `NAME`, as the node that declares it states it.
 const ENTRY_ADD_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names the new database entry; -d NAME selects it afterwards.",
+    purpose: "Names the new database entry, in 1 to 64 letters, digits or underscores; -d NAME \
+              selects it afterwards.",
     excludes: &[],
 };
 /// `NAME`, as the node that declares it states it.
@@ -802,8 +804,8 @@ const ENTRY_TEST_NAME: Documented = Documented {
 /// `PATH`, as the node that declares it states it.
 const INIT_PATH: Documented = Documented {
     name: "PATH",
-    purpose: "Names the directory to create the project in; with none, the current directory is \
-              used.",
+    purpose: "Names the directory to create the project in, never the .tpl folder itself; with \
+              none, the current directory is used.",
     excludes: &[],
 };
 /// `COMMAND_PATH`, as the node that declares it states it.
@@ -1652,8 +1654,10 @@ const CFG_SET: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag, a flag given twice, a missing KEY or VALUE, a KEY that is not one of \
-         the keys listed under DESCRIPTION, a VALUE of the wrong type for its key, or a VALUE \
-         that cannot stand beside a key the entry already holds, such as a dsn beside a host. On \
+         the keys listed under DESCRIPTION, an entry name in KEY or in core.database that is not 1 \
+         to 64 letters, digits or underscores, a VALUE of the wrong type for its key, an empty \
+         host or database, a ${ never closed or naming no valid variable, or a VALUE that cannot \
+         stand beside a key the entry already holds, such as a dsn beside a host. On \
          any command, also -v with -q, or a global flag given a value it does not take, such as \
          --timeout 0.",
     ),
@@ -1711,9 +1715,11 @@ const CFG_DATABASE_ADD: &[Outcome] = &[
         Code::Usage,
         "An unknown flag, a missing NAME, or a flag given twice; no connection flag was given; \
          --dsn was given with --host, --port, --user or --schema; a --dsn, --port, --tls or \
-         --password-command value is malformed, or a --ca-file or --ca-path value contains ${; the \
-         password given twice, as a password inside --dsn and as --password-command; or NAME is \
-         already taken. On any command, also -v with -q, or a \
+         --password-command value is malformed, or a --ca-file or --ca-path value contains ${; \
+         --host or --schema is empty; a ${ in --dsn, --host, --user or --schema is never closed \
+         or its name is not a variable name; the password given twice, as a password inside \
+         --dsn and as --password-command; or NAME is not 1 to 64 letters, digits or underscores, \
+         or is already taken. On any command, also -v with -q, or a \
          global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
@@ -1752,7 +1758,8 @@ const CFG_DATABASE_UPDATE: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag, a missing NAME, or a flag given twice; no field flag; --dsn given with \
-         --host, --port, --user or --schema; a malformed flag value; the password given twice, as \
+         --host, --port, --user or --schema; a malformed flag value, including an empty --host \
+         or --schema and a ${ never closed or naming no valid variable; the password given twice, as \
          a password inside the dsn or password and as --password-command; or a change that would \
          leave the entry with both a dsn and host, port, user, password or database. On any \
          command, also -v with -q, or a global flag given a value it does not take, such as \
@@ -1828,8 +1835,10 @@ const INIT: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "An unknown flag, a flag given twice, or more than one PATH. On any command, also -v with \
-         -q, or a global flag given a value it does not take, such as --timeout 0.",
+        "An unknown flag, a flag given twice, or more than one PATH; or PATH names a .tpl folder, \
+         such as proj/.tpl, in which case nothing was created and the project goes in the \
+         directory that holds it: tpl init proj. On any command, also -v with -q, or a global \
+         flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(
         Code::CantCreate,
@@ -2719,7 +2728,8 @@ const ENTRIES: [Entry; 35] = [
                 rows: &[
                     row(
                         "core.database",
-                        "The entry used when -d is not given. No default.",
+                        "The entry used when -d is not given: an entry name, never a ${VAR}. \
+                         No default.",
                     ),
                     row(
                         "core.connect_timeout",
@@ -2772,7 +2782,8 @@ const ENTRIES: [Entry; 35] = [
                          words as a shell would (quotes group words, and every quote must be \
                          closed); stored in the file as an array, [\"pass\", \"db/shop\"]. A \
                          value that starts with an unquoted [, or ends in a backslash outside \
-                         quotes, is refused.",
+                         quotes, is refused. ${VAR} is not expanded in it: its words are passed \
+                         to the program as written.",
                     ),
                     row(
                         "database.<name>.database",
@@ -2798,8 +2809,12 @@ const ENTRIES: [Entry; 35] = [
             Block::Prose(
                 "A value given here is visible to other users in the process list while tpl \
                  runs. For a secret, write a reference such as '${SHOP_PASSWORD}', in single \
-                 quotes, and tpl reads that environment variable when it connects; a \
-                 reference is expanded in dsn, host, port, user, password and database only. \
+                 quotes, and tpl reads that environment variable when it connects. A \
+                 reference is expanded in database.<name>.dsn, host, port, user, password and \
+                 database only; no key under [core] is expanded, nor tls, password_command, \
+                 ca_file or ca_path. It is written ${NAME}, where NAME starts with a letter or \
+                 an underscore and holds only letters, digits and underscores; any other name, \
+                 or a ${ never closed, is refused. \
                  tpl cfg set takes a reference as the value of host, user, password or \
                  database, and as one part of a dsn, never as the whole dsn; a reference for \
                  port is accepted only when written in .tpl/.cfg by editing the file, as port \
@@ -2907,8 +2922,9 @@ const ENTRIES: [Entry; 35] = [
             ),
             Block::Prose(
                 "A value given here is visible to other users in the process list while tpl \
-                 runs, so give a password through --password-command, or as a reference such \
-                 as '${SHOP_PASSWORD}' inside --dsn.",
+                 runs, so give a password through --password-command, as a reference such as \
+                 '${SHOP_PASSWORD}' inside --dsn, or afterwards with tpl cfg set \
+                 database.NAME.password '${SHOP_PASSWORD}'.",
             ),
         ],
         touches: Some(local_only(
@@ -3027,7 +3043,12 @@ const ENTRIES: [Entry; 35] = [
                       other field keeps its value, and at least one flag is required. The cache is \
                       not cleared: after pointing an entry at another server, run tpl -d NAME \
                       cache clean.",
-        blocks: &[],
+        blocks: &[Block::Prose(
+            "A value given here is visible to other users in the process list while tpl runs, \
+             so give a password through --password-command, as a reference such as \
+             '${SHOP_PASSWORD}' inside --dsn, or with tpl cfg set database.NAME.password \
+             '${SHOP_PASSWORD}'.",
+        )],
         touches: Some(local_only(
             "Needs the entry that NAME names; -d and core.database are not used.",
             "Writes .tpl/.cfg; the cache is left as it was.",

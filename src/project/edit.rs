@@ -33,7 +33,7 @@ use std::path::{Path, PathBuf};
 use toml_edit::{Array, DocumentMut, Item, Table, Value, value};
 
 use super::config::entry::{PasswordCommand, TlsMode};
-use super::config::keys::{Key, Target, ValueType};
+use super::config::keys::{EntryKey, Key, Target, ValueType};
 use crate::error::{Error, Position};
 use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
 
@@ -293,10 +293,44 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
         expected: expects.expected(),
     };
 
+    if let Key::Entry { field, .. } = key {
+        // FR-CONF-049: a value the next expansion would refuse is refused
+        // where the caller wrote it. The port keeps its own refusal, since
+        // this command takes it as a number only.
+        if matches!(
+            field,
+            EntryKey::Dsn
+                | EntryKey::Host
+                | EntryKey::User
+                | EntryKey::Password
+                | EntryKey::Database
+        ) && let Some(fault) = super::config::expand::reference_fault(supplied)
+        {
+            return Err(Error::InvalidReference {
+                parameter: key.to_string(),
+                command: "cfg set".to_owned(),
+                fault,
+            });
+        }
+
+        // FR-CONF-050: an empty string names no host and no database.
+        if matches!(field, EntryKey::Host | EntryKey::Database) && supplied.is_empty() {
+            return Err(Error::EmptyValue {
+                parameter: key.to_string(),
+                command: "cfg set".to_owned(),
+            });
+        }
+    }
+
     let item = match expects {
+        // FR-CONF-048: core.database names an entry, and ${VAR} is not
+        // expanded in it.
         ValueType::EntryName => {
-            if supplied.is_empty() {
-                return Err(refused());
+            if !super::config::keys::is_entry_name(supplied) {
+                return Err(Error::InvalidEntryName {
+                    given: crate::error::EntryNameGiven::CoreDatabase,
+                    name: supplied.to_owned(),
+                });
             }
             value(supplied)
         }
@@ -597,13 +631,71 @@ mod tests {
     }
 
     #[test]
+    fn fr_conf_048_core_database_takes_an_entry_name_and_nothing_else() {
+        // FR-CONF-048: the empty name, a character outside the set, a name
+        // longer than 64 characters, and a ${VAR}, which is not expanded here.
+        let long = "a".repeat(65);
+        for supplied in ["", "a b", "x.y", "shop-db", long.as_str(), "${DB}"] {
+            let condition = assign(&key("core.database"), supplied)
+                .expect_err("the value is not an entry name");
+
+            assert!(
+                matches!(condition, Error::InvalidEntryName { .. }),
+                "{supplied:?}: {condition:?}"
+            );
+            assert_eq!(condition.exit_code(), 64);
+        }
+        assign(&key("core.database"), &"a".repeat(64)).expect("64 characters are admitted");
+        assign(&key("core.database"), "shop_2").expect("letters, digits and underscores");
+    }
+
+    #[test]
+    fn fr_conf_049_a_reference_no_expansion_could_satisfy_is_refused_on_write() {
+        // FR-CONF-049, in the five fields the command line can write a
+        // reference into.
+        for (spelling, supplied) in [
+            ("database.shop.user", "${1X}"),
+            ("database.shop.host", "db-${X.Y}"),
+            ("database.shop.password", "${SHOP"),
+            ("database.shop.database", "${}"),
+            ("database.shop.dsn", "mysql://${1U}@db/shop"),
+        ] {
+            let condition =
+                assign(&key(spelling), supplied).expect_err("the reference is malformed");
+
+            assert!(
+                matches!(condition, Error::InvalidReference { .. }),
+                "{spelling} = {supplied:?}: {condition:?}"
+            );
+            assert_eq!(condition.exit_code(), 64);
+        }
+        assign(&key("database.shop.user"), "${SHOP_USER}").expect("a valid reference");
+        assign(&key("database.shop.password"), "$${1X}").expect("a doubled dollar");
+        assign(&key("database.shop.password_command"), "echo ${PW}")
+            .expect("FR-CONF-017: password_command passes a reference through");
+    }
+
+    #[test]
+    fn fr_conf_050_an_empty_host_or_database_is_refused_on_write() {
+        for spelling in ["database.shop.host", "database.shop.database"] {
+            let condition = assign(&key(spelling), "").expect_err("the value is empty");
+
+            assert!(
+                matches!(condition, Error::EmptyValue { .. }),
+                "{spelling}: {condition:?}"
+            );
+            assert_eq!(condition.exit_code(), 64);
+        }
+        assign(&key("database.shop.user"), "").expect("FR-CONF-050 names host and database");
+    }
+
+    #[test]
     fn fr_cfg_010_a_value_is_validated_against_the_type_the_key_declares() {
         // FR-CFG-010: a value that does not conform is 64.
         for (spelling, supplied) in [
             ("core.connect_timeout", "soon"),
             ("core.connect_timeout", "0"),
             ("core.connect_timeout", "-3"),
-            ("core.database", ""),
             ("database.shop.port", "70000"),
             ("database.shop.port", "0"),
             ("database.shop.tls", "off"),

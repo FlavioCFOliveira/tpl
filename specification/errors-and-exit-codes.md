@@ -916,6 +916,62 @@ Out of scope: the wording of any individual message.
   The cap of three and this order govern the candidates of both rules
   together.
 
+  *Note added in the forty-ninth edition.* `FR-ERR-044` bounds the distance
+  further by the length of the names compared.
+
+- **FR-ERR-044**: A candidate SHALL be admitted by the edit distance of
+  `FR-ERR-019` only WHERE that distance is also strictly less than the length
+  of the longer of the two names, the supplied name and the candidate,
+  counted in characters as `FR-ERR-039` counts them. The bound applies to
+  every population of `FR-ERR-021` and to no candidate `FR-ERR-042` admits by
+  prefix.
+
+  | Supplied | Candidate | Distance | Longer length | Admitted |
+  |---|---|---|---|---|
+  | `zz` | `n1` | 2 | 2 | no |
+  | `q` | `n1` | 2 | 2 | no |
+  | `a` | `b` | 1 | 1 | no |
+  | `t1` | `t2` | 1 | 2 | yes |
+  | `shp` | `shop` | 1 | 4 | yes |
+  | `ordres` | `orders` | 1 | 6 | yes |
+
+  *What the bound means.* No two names are further apart than the length of
+  the longer, which is the cost of substituting or inserting every one of its
+  characters. A distance below that length is reached only by an alignment
+  that keeps at least one character, unchanged or transposed with its
+  neighbour. A candidate that keeps no character of the supplied name is not
+  offered.
+
+  *Rationale.* A distance of two covers every pair of names of two
+  characters or fewer, so `FR-ERR-019` alone offered any short name for any
+  other: with entries `n1` and `shop`, `tpl cfg database remove zz`, `ab` and
+  `q` each answered `did you mean 'n1'?`, and a caller that follows the hint
+  deletes an entry it never named. This is finding W-02 of the sixth
+  re-audit, recorded for rmp `#281`. The bound removes every suggestion of
+  that shape and none of the slips the threshold exists for, which keep
+  nearly every character in place.
+
+  *Why no rule of its own for a command that deletes.* The suggestion is a
+  question on every command alike, and nothing runs until the caller runs
+  it. The harm observed came from a candidate with nothing in common with the
+  name supplied, and the bound removes that candidate from every command at
+  once. Where two candidates remain, `FR-ERR-037` writes them as a choice.
+
+  *Rejected: a threshold that scales with the length, such as
+  `min(2, ⌊len/3⌋)`.* It withdraws distance-one suggestions from every name of
+  three to five characters, `shp` for `shop` among them, which are the slips
+  the threshold exists for. Also rejected: withholding every suggestion on
+  `tpl cfg database remove` and `tpl cfg unset`. It removes the useful
+  suggestions there along with the harmful ones.
+
+  *Accepted cost.* A one-character name is never offered for another
+  one-character name, and a two-character name is never offered for one that
+  keeps no character of it. The generic `hint`, the listing
+  command, still leads to the name in one further invocation.
+
+  *Added in the forty-ninth edition,* for rmp `#281`, from finding W-02 of the
+  sixth re-audit.
+
 - **FR-ERR-039**: The edit distance of `FR-ERR-019` SHALL be the **restricted**
   Damerau-Levenshtein distance — optimal string alignment — in which the
   insertion, the deletion and the substitution of one character, and the
@@ -986,6 +1042,10 @@ Out of scope: the wording of any individual message.
   *Note added in the forty-sixth edition.* For a command, a candidate is also
   one `FR-ERR-042` admits by prefix. A suggestion is omitted only where neither
   rule admits a candidate.
+
+  *Note added in the forty-ninth edition.* A candidate within the distance of
+  `FR-ERR-019` and outside the bound of `FR-ERR-044` is not within that
+  distance for this requirement.
 
 - **FR-ERR-042**: WHERE the supplied name is a command token — a first
   non-flag token that is not a command, per `FR-CLI-003`; a token after a group
@@ -1112,6 +1172,11 @@ Out of scope: the wording of any individual message.
   `database.reporting.host` may be built into a runnable command and a key
   naming an entry outside the set is dropped by `FR-ERR-023`, exactly as that
   entry name would be dropped as a candidate in its own right.
+
+  *Amended in the forty-ninth edition: the consequence above no longer
+  drops anything.* `FR-CONF-048` restricts an entry name to the set of this
+  requirement, so every entry name, and every `database.<name>` key, is
+  admissible in a runnable command.
 
   *Amended in the thirty-first edition: one population is named that this
   requirement governs and could not admit.* *Every other value is subject to

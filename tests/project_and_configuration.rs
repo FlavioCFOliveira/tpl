@@ -3048,3 +3048,330 @@ fn v_08_the_outcome_rows_of_cfg_get_and_cfg_database_add_are_complete() {
             .contains("a --dsn, --port, --tls or --password-command value is malformed")
     );
 }
+
+// ----------------------------------------------- W-01 .. W-09, rmp #281 ---
+
+#[test]
+fn fr_proj_029_init_refuses_a_tpl_folder_as_its_destination_and_creates_nothing() {
+    let sandbox = Sandbox::new();
+
+    for (operand, hint) in [
+        (
+            "proj/.tpl",
+            "create the project in the parent directory: tpl init proj",
+        ),
+        (
+            "proj/.tpl/",
+            "create the project in the parent directory: tpl init proj",
+        ),
+        (
+            ".tpl",
+            "create the project in the parent directory: tpl init",
+        ),
+        (
+            "./.tpl/.",
+            "create the project in the parent directory: tpl init",
+        ),
+    ] {
+        let before = snapshot(sandbox.root());
+        let printed = sandbox.run(&["init", operand]);
+        let written = assert_refused(&printed, 64, operand);
+
+        assert_eq!(line(&written, "hint:  "), hint, "{operand}");
+        assert!(line(&written, "cause: ").contains(operand), "{written}");
+        assert_eq!(
+            snapshot(sandbox.root()),
+            before,
+            "{operand} created something"
+        );
+    }
+
+    // The canonical case: `tpl init` run inside a `.tpl` folder.
+    let project = sandbox.project("[core]\n");
+    let printed = sandbox.run_from(&project, &[], &["init"]);
+    let written = assert_refused(&printed, 64, "init inside .tpl");
+    assert!(
+        line(&written, "cause: ").starts_with("the path . is the folder "),
+        "{written}"
+    );
+    assert!(!project.join(".tpl").exists());
+}
+
+#[test]
+fn fr_proj_016_the_shadow_warning_names_only_a_tpl_folder_that_existed_before() {
+    let sandbox = Sandbox::new();
+
+    // A `.tpl` this invocation creates as a missing parent is no project.
+    let printed = sandbox.run(&["init", "a/.tpl/b"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(stderr(&printed), "", "no project existed above a/.tpl/b");
+
+    // One that existed before still engages the warning.
+    let printed = sandbox.run(&["init", "a/.tpl/b/c"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(
+        stderr(&printed).starts_with("warning: "),
+        "{}",
+        stderr(&printed)
+    );
+}
+
+#[test]
+fn fr_err_044_a_suggestion_that_keeps_no_character_of_the_name_is_not_offered() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.n1]\nhost = \"h\"\n\n[database.shop]\nhost = \"h\"\n");
+
+    for supplied in ["zz", "ab", "q"] {
+        let printed = sandbox.run(&["cfg", "database", "remove", supplied]);
+        let written = assert_refused(&printed, 66, supplied);
+        assert_eq!(
+            line(&written, "hint:  "),
+            "list the entries with: tpl cfg database list",
+            "{supplied}"
+        );
+    }
+
+    let printed = sandbox.run(&["cfg", "database", "remove", "shp"]);
+    let written = assert_refused(&printed, 66, "shp");
+    assert!(
+        line(&written, "hint:  ").starts_with("did you mean 'shop'?"),
+        "{written}"
+    );
+}
+
+#[test]
+fn fr_cfg_049_the_three_json_documents_type_a_value_alike() {
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[database.shop]\nhost = \"h\"\nport = 3307\npassword_command = [\"echo\", \"${PW}\"]\n",
+    );
+
+    let shown = stdout(&sandbox.run(&["cfg", "database", "show", "shop", "--format", "json"]));
+    assert_eq!(
+        shown,
+        "{\"schema_version\":1,\"source\":\"project\",\"data\":{\"entry\":{\"host\":\"h\",\
+         \"password_command\":[\"echo\",\"${PW}\"],\"port\":3307}}}\n"
+    );
+
+    let listed = stdout(&sandbox.run(&["cfg", "list", "--format", "json"]));
+    assert!(listed.contains("\"port\":3307"), "{listed}");
+    assert!(
+        listed.contains("\"password_command\":[\"echo\",\"${PW}\"]"),
+        "{listed}"
+    );
+
+    let read = stdout(&sandbox.run(&["cfg", "get", "database.shop.port", "--format", "json"]));
+    assert!(read.contains("\"value\":3307"), "{read}");
+}
+
+#[test]
+fn fr_conf_048_049_050_a_value_that_could_never_work_is_refused_on_write() {
+    let sandbox = Sandbox::new();
+    let before = "[database.n1]\nhost = \"h\"\ndatabase = \"s\"\n";
+    sandbox.project(before);
+
+    let refusals: [&[&str]; 13] = [
+        &["cfg", "database", "add", "", "--host", "h", "--schema", "s"],
+        &[
+            "cfg", "database", "add", "a b", "--host", "h", "--schema", "s",
+        ],
+        &[
+            "cfg", "database", "add", "x.y", "--host", "h", "--schema", "s",
+        ],
+        &[
+            "cfg", "database", "add", "e1", "--host", "", "--schema", "s",
+        ],
+        &[
+            "cfg", "database", "add", "e1", "--host", "h", "--schema", "",
+        ],
+        &[
+            "cfg", "database", "add", "e1", "--host", "${1X}", "--schema", "s",
+        ],
+        &["cfg", "database", "add", "e1", "--dsn", "mysql://${U@h/s"],
+        &["cfg", "database", "update", "n1", "--schema", ""],
+        &["cfg", "set", "core.database", "${DB}"],
+        &["cfg", "set", "database.x.y.host", "h"],
+        &["cfg", "set", "database.n1.user", "${1X}"],
+        &["cfg", "set", "database.n1.password", "${PW"],
+        &["cfg", "set", "database.n1.host", ""],
+    ];
+    for arguments in refusals {
+        let printed = sandbox.run(arguments);
+        assert_refused(&printed, 64, &arguments.join(" "));
+        assert_eq!(sandbox.configuration(), before.as_bytes(), "{arguments:?}");
+    }
+
+    let printed = sandbox.run(&["cfg", "set", "core.database", "${DB}"]);
+    let written = assert_refused(&printed, 64, "core.database ${DB}");
+    assert!(
+        line(&written, "cause: ").contains("does not expand ${VAR}"),
+        "{written}"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give the entry name itself: tpl cfg set core.database <entry>"
+    );
+
+    // FR-CONF-017: a reference in password_command is passed through.
+    let printed = sandbox.run(&["cfg", "set", "database.n1.password_command", "echo ${PW}"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+}
+
+#[test]
+fn fr_conf_048_an_entry_name_outside_the_rule_in_the_file_is_78() {
+    let sandbox = Sandbox::new();
+
+    for text in [
+        "[database.\"x.y\"]\nhost = \"h\"\n",
+        "[database.shop-db]\nhost = \"h\"\n",
+        "[core]\ndatabase = \"${DB}\"\n",
+    ] {
+        sandbox.project(text);
+        let printed = sandbox.run(&["cfg", "list"]);
+        let written = assert_refused(&printed, 78, text);
+        assert!(
+            line(&written, "cause: ").contains("an entry name is 1 to 64 letters"),
+            "{written}"
+        );
+    }
+}
+
+#[test]
+fn fr_conf_049_050_the_file_is_refused_at_entry_resolution_before_any_connection() {
+    let sandbox = Sandbox::new();
+
+    for (text, environment, spelled) in [
+        (
+            "host = \"\"\ndatabase = \"s\"\n",
+            vec![],
+            "the empty string",
+        ),
+        (
+            "host = \"${H}\"\ndatabase = \"s\"\n",
+            vec![("H", "")],
+            "expands to the empty string",
+        ),
+        (
+            "host = \"h\"\ndatabase = \"\"\n",
+            vec![],
+            "the empty string",
+        ),
+        (
+            "host = \"h\"\nuser = \"${1X}\"\ndatabase = \"s\"\n",
+            vec![],
+            "is not a valid reference",
+        ),
+    ] {
+        sandbox.project(&format!("[database.e1]\ntls = \"disabled\"\n{text}"));
+        let printed = sandbox.run_from(
+            sandbox.root(),
+            &environment,
+            &["-d", "e1", "schema", "info"],
+        );
+        let written = assert_refused(&printed, 78, text);
+        assert!(
+            line(&written, "cause: ").contains(spelled),
+            "{text}: {written}"
+        );
+    }
+}
+
+#[test]
+fn w_05_a_command_given_as_one_argument_says_so_in_both_forms() {
+    let sandbox = Sandbox::new();
+
+    let printed = sandbox.run(&["template list"]);
+    let written = assert_refused(&printed, 64, "'template list'");
+    assert_eq!(
+        line(&written, "error: "),
+        "unknown command 'template list' under 'tpl'"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give each word as its own argument: tpl template list"
+    );
+
+    let printed = sandbox.run(&["help", "cfg database"]);
+    let written = assert_refused(&printed, 64, "help 'cfg database'");
+    assert_eq!(
+        line(&written, "error: "),
+        "unknown command 'cfg database' under 'tpl'"
+    );
+    assert!(
+        line(&written, "cause: ").contains("was given as one argument"),
+        "{written}"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give each word as its own argument: tpl help cfg database"
+    );
+}
+
+#[test]
+fn w_07_the_refusals_name_the_command_that_was_asked_for() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let printed = sandbox.run(&["schema", "dump", "--format", "json"]);
+    let written = assert_refused(&printed, 64, "schema dump --format json");
+    assert_eq!(
+        line(&written, "cause: "),
+        "schema dump always writes JSON and takes no --format"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "remove --format and its value: tpl schema dump"
+    );
+
+    let printed = sandbox.run(&["cache", "load", "--no-cache", "--table", "orders"]);
+    let written = assert_refused(&printed, 64, "cache load --no-cache --table");
+    assert!(
+        line(&written, "hint:  ").ends_with("tpl schema table orders --direct --no-cache instead"),
+        "{written}"
+    );
+}
+
+#[test]
+fn w_08_the_mode_cause_does_not_name_0600_as_the_only_mode() {
+    let sandbox = Sandbox::new();
+    let project = sandbox.project("[core]\n");
+    chmod(&project.join(".cfg"), 0o644);
+
+    let printed = sandbox.run(&["cfg", "list"]);
+    let written = assert_refused(&printed, 78, "cfg list at 0644");
+    assert!(
+        line(&written, "cause: ")
+            .ends_with("only when group and other have no access, as at mode 0600"),
+        "{written}"
+    );
+}
+
+#[test]
+fn w_04_w_09_the_help_says_what_is_expanded_and_how_to_set_a_password() {
+    let sandbox = Sandbox::new();
+    let flat = |arguments: &[&str]| {
+        stdout(&sandbox.run(arguments))
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+
+    let set = flat(&["help", "cfg", "set"]);
+    assert!(set.contains("no key under [core] is expanded"), "{set}");
+    assert!(
+        set.contains(
+            "${VAR} is not expanded in it: its words are passed to the program as written"
+        )
+    );
+
+    for path in [["cfg", "database", "add"], ["cfg", "database", "update"]] {
+        let help = flat(&["help", path[0], path[1], path[2]]);
+        assert!(
+            help.contains("tpl cfg set database.NAME.password '${SHOP_PASSWORD}'"),
+            "{help}"
+        );
+    }
+
+    let init = flat(&["help", "init"]);
+    assert!(init.contains("PATH names a .tpl folder"), "{init}");
+}

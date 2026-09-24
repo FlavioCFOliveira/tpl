@@ -267,7 +267,10 @@ not the model accommodates it, is recorded separately under `FR-SRV-038`.
 A `[database.<name>]` block in `.tpl/.cfg` describing how to reach one server
 and which database on it to read. The entry name is a label local to the
 project; it need not match the database name on the server. Selected with
-`-d/--database`.
+`-d/--database`. An entry name is one to sixty-four ASCII letters, digits and
+underscores, per `FR-CONF-048`.
+
+*Amended in the forty-ninth edition.* The last sentence is new.
 
 ## discovery
 
@@ -324,7 +327,11 @@ cached read, or a `--context` document — and is defined by
 A suggestion offered when a supplied name does not exist, computed by edit
 distance over the names that do exist — for a configuration key, over the key
 space of `FR-CONF-002`, per `FR-CFG-007` and `FR-CFG-009` — and for a command
-also by prefix. See `FR-ERR-019` and `FR-ERR-042`.
+also by prefix. A candidate is offered only where its distance is also below
+the length of the longer of the two names, per `FR-ERR-044`. See `FR-ERR-019`
+and `FR-ERR-042`.
+
+*Amended in the forty-ninth edition.* The length bound is new.
 
 *Amended in the forty-seventh edition.* The configuration-key clause is new:
 `FR-CFG-007` draws the suggestion for `tpl cfg get` and `tpl cfg unset` over

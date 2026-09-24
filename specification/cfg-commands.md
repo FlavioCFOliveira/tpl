@@ -194,6 +194,10 @@ tpl cfg database test   <name>
 - **FR-CFG-015**: `tpl cfg database add <name>` SHALL create a
   `[database.<name>]` block from the flags supplied.
 
+  *Note added in the forty-ninth edition.* `FR-CONF-048` states which names
+  the command accepts, and `FR-CONF-050` refuses an empty `--host` or
+  `--schema`.
+
 - **FR-CFG-016**: `tpl cfg database add` SHALL require either `--dsn` or at
   least one of the discrete connection flags. The two groups are mutually
   exclusive, and at least one is required. IF neither is supplied, THEN the
@@ -604,6 +608,17 @@ tpl cfg database test   <name>
   `--ca-path` SHALL also state that the value is read as a literal path and
   that a value containing `${` is refused, per `FR-CONF-047`.
 
+  *Amended in the forty-ninth edition.* The help of `--password-command`, and
+  the row of `database.<name>.password_command` in the help of
+  `tpl cfg set`, SHALL also state that `${VAR}` is not expanded in the
+  command and that its words are passed to the program as written, per
+  `FR-CONF-017`. The help of `tpl cfg set` SHALL state that the fields
+  `FR-CONF-015` expands are fields of a database entry, and that no key under
+  `[core]` is expanded. A `${DB}` written into `core.database`, and an
+  `echo ${PW}` written into `password_command`, were both accepted and never
+  expanded, and nothing said so, per finding W-04 of the sixth re-audit,
+  recorded for rmp `#281`.
+
 - **BR-CFG-003**: `tpl` warns; it does not prevent. Putting a secret in the
   argument vector is the caller's decision. What `tpl` guarantees is that no
   flag named `password` exists, and that the two remaining paths are documented
@@ -615,6 +630,25 @@ tpl cfg database test   <name>
   *Rationale.* `FR-PROJ-019` creates the file at `0600` and `FR-PROJ-011`
   refuses to read it at any looser mode; a command that loosened it would break
   the next invocation.
+
+  *Amended in the forty-ninth edition: the rewritten file is at `0600`
+  whatever mode the file had before.* `FR-PROJ-011` reads a file at any mode
+  that grants group and other no access, `0400` included, and the procedure of
+  `FR-CFG-041` writes a new file at `0600` and renames it over the old one. A
+  file at `0400` or `0700` is therefore at `0600` after the write. The system
+  SHALL NOT refuse the write because the owner-write bit is clear, and SHALL
+  NOT carry the previous mode over. This pins what the implementation does,
+  per finding W-08 of the sixth re-audit, recorded for rmp `#281`.
+
+  *Rejected: keeping the previous mode.* It would carry an execute bit, or a
+  mode the owner cannot read, into every later rewrite, and the one mode this
+  corpus names for the file is `0600`. Also rejected: refusing to rewrite a
+  file whose owner-write bit is clear. A rename replaces a file whatever that
+  bit says, so the bit does not protect the file from any writer, and the
+  refusal would add a condition and a code to five commands.
+
+  *Accepted cost.* A caller that sets `.tpl/.cfg` to `0400` to mark it as
+  read-only finds that a `cfg` command rewrites it and restores owner write.
 
   *Moved in the fifth edition.* This rationale stood under `FR-CFG-042`, where
   it argued for a mode rather than for the absence of a lock. It is the
@@ -721,6 +755,43 @@ tpl cfg database test   <name>
   carrying `name`. The `data` of `tpl cfg database show` SHALL carry one key,
   `entry`, per `FR-OUT-031`, whose value is that entry with the redaction of
   `FR-CFG-021` applied.
+
+  *Note added in the forty-ninth edition.* `FR-CFG-049` fixes the JSON type
+  of each value in `entry`.
+
+- **FR-CFG-049**: In the `json` output of `tpl cfg get`, `tpl cfg list` and
+  `tpl cfg database show`, each value SHALL be the JSON counterpart of the
+  TOML value `.tpl/.cfg` holds, and SHALL NOT be the text of that value:
+
+  | TOML value in `.tpl/.cfg` | JSON value |
+  |---|---|
+  | string | string |
+  | integer | number |
+  | array of strings, as `password_command` holds | array of strings, in order |
+
+  A value the redaction of `FR-CFG-021` replaces SHALL be the string `***`,
+  or, for a DSN carrying a password, the DSN string with `***` in its place.
+  A value that holds `${VAR}` is a TOML string, so it SHALL be a JSON string
+  carrying the reference as written, whatever key holds it.
+
+  ```json
+  {"schema_version":1,"source":"project","data":{"entry":{"host":"db.example.com","port":3307,"database":"shop","password_command":["pass","db/shop"]}}}
+  ```
+
+  *Rationale.* The help of every command that declares `--format` offers
+  `json` as the stable document a program reads. `tpl cfg get` and
+  `tpl cfg list` already emitted typed values, and `tpl cfg database show`
+  emitted `"port":"3307"` and `password_command` as the text of a TOML array,
+  which a program cannot pass back to `tpl cfg set`: a value that begins with
+  `[` is refused, per `FR-CONF-046`. One key then had two JSON types across
+  three commands. This is finding W-03 of the sixth re-audit, recorded for
+  rmp `#281`. For `get` and `list` the requirement pins what the
+  implementation does, and for `show` it changes it.
+
+  *Rejected: stating the value types in each of the three requirements.* One
+  rule over the three documents cannot drift apart, which is the defect.
+
+  *Added in the forty-ninth edition,* for rmp `#281`.
 
 - **FR-CFG-039**: The `data` of `tpl cfg database test` SHALL carry `entry`,
   `connected`, `read_only_session`, `server`, and `can_read_catalogue`, in that

@@ -78,7 +78,7 @@ use std::path::Path;
 use crate::cache::paths::Collection;
 use crate::cache::{Cache, Covered, Listed, Look, Summary};
 use crate::deadline::{Clock, Deadlines, Seconds};
-use crate::error::Error;
+use crate::error::{Error, KeyAbsence};
 use crate::mariadb::{self, Target, catalogue};
 use crate::model::document::{self, DatabaseDocument};
 use crate::output::Source;
@@ -314,7 +314,7 @@ impl<'a> Reader<'a> {
             &expand::environment,
         )?;
 
-        connection_keys(&settings, configuration.file())?;
+        connection_keys(&settings, &configuration)?;
 
         let cache = Cache::of(project.root(), settings.entry());
 
@@ -350,6 +350,7 @@ impl<'a> Reader<'a> {
             file: file.to_owned(),
             flag,
             placeholder,
+            absence: KeyAbsence::Absent,
         };
 
         let Some(target) = Target::of(settings) else {
@@ -634,23 +635,62 @@ pub(super) fn project(tpl_dir: Option<&Path>) -> Result<(Project, Configuration)
 ///
 /// Returns [`Error::EntryKeyMissing`] naming whichever of the two keys the
 /// entry does not carry.
-pub(super) fn connection_keys(settings: &Settings, file: &Path) -> Result<(), Error> {
-    let missing = |key: EntryKey, flag, placeholder| Error::EntryKeyMissing {
-        entry: settings.entry().to_owned(),
-        key: format!("database.{}.{key}", settings.entry()),
-        file: file.to_owned(),
-        flag,
-        placeholder,
+pub(super) fn connection_keys(
+    settings: &Settings,
+    configuration: &Configuration,
+) -> Result<(), Error> {
+    let raw = configuration.entry(settings.entry());
+    let missing = |key: EntryKey, flag, placeholder, value: Option<&str>| {
+        // FR-CONF-050: an empty value, as written or after expansion, is an
+        // absent key, and the cause says which of the three it is.
+        let written = raw.and_then(|entry| match (&entry.dsn, key) {
+            (Some(dsn), _) => Some(dsn.value.as_str()),
+            (None, EntryKey::Host) => entry.host.as_deref(),
+            (None, _) => entry.database.as_deref(),
+        });
+        let absence = match (value, written) {
+            (None, _) => KeyAbsence::Absent,
+            (Some(_), Some(written)) if written.contains("${") => KeyAbsence::ExpandsToEmpty,
+            (Some(_), _) => KeyAbsence::Empty,
+        };
+
+        Error::EntryKeyMissing {
+            entry: settings.entry().to_owned(),
+            key: format!("database.{}.{key}", settings.entry()),
+            file: configuration.file().to_owned(),
+            flag,
+            placeholder,
+            absence,
+        }
     };
 
-    if settings.host().is_none() {
-        return Err(missing(EntryKey::Host, HOST_FLAG, HOST_PLACEHOLDER));
+    match settings.host() {
+        None => return Err(missing(EntryKey::Host, HOST_FLAG, HOST_PLACEHOLDER, None)),
+        Some("") => {
+            return Err(missing(
+                EntryKey::Host,
+                HOST_FLAG,
+                HOST_PLACEHOLDER,
+                Some(""),
+            ));
+        }
+        Some(_) => {}
     }
-    if settings.database().is_none() {
-        return Err(missing(EntryKey::Database, SCHEMA_FLAG, SCHEMA_PLACEHOLDER));
+    match settings.database() {
+        None => Err(missing(
+            EntryKey::Database,
+            SCHEMA_FLAG,
+            SCHEMA_PLACEHOLDER,
+            None,
+        )),
+        Some("") => Err(missing(
+            EntryKey::Database,
+            SCHEMA_FLAG,
+            SCHEMA_PLACEHOLDER,
+            Some(""),
+        )),
+        Some(_) => Ok(()),
     }
-
-    Ok(())
 }
 
 /// The entry such an invocation selects (`FR-GLOB-004` … `FR-GLOB-008`).

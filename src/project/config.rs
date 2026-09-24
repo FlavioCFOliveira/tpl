@@ -461,8 +461,19 @@ fn check_key_space(
             }
             DATABASE => {
                 let table = expect_table(value, DATABASE, text, file)?;
-                for (entry, block) in table.iter() {
-                    let entry = entry.get_ref().as_ref();
+                for (spelled, block) in table.iter() {
+                    let entry = spelled.get_ref().as_ref();
+
+                    // FR-CONF-048, at step 3: the name is part of the key.
+                    if !keys::is_entry_name(entry) {
+                        return Err(Error::ConfigurationEntryName {
+                            file: file.to_owned(),
+                            name: entry.to_owned(),
+                            core: false,
+                            position: position(text, spelled.span().start),
+                        });
+                    }
+
                     let qualified = format!("{DATABASE}.{entry}");
                     let block = expect_table(block, &qualified, text, file)?;
 
@@ -553,7 +564,19 @@ fn read_core(root: &DeTable<'_>, text: &str, file: &Path) -> Result<Core, Error>
 
         match key {
             CoreKey::Database => {
-                core.database = Some(string(value, text, &qualified, key.expects(), file)?);
+                let name = string(value, text, &qualified, key.expects(), file)?;
+
+                // FR-CONF-048: a value outside the type of `core.database` is
+                // the same fault as a name outside it, at step 3.
+                if !keys::is_entry_name(&name) {
+                    return Err(Error::ConfigurationEntryName {
+                        file: file.to_owned(),
+                        name,
+                        core: true,
+                        position: at(text, value),
+                    });
+                }
+                core.database = Some(name);
             }
             CoreKey::ConnectTimeout => {
                 core.connect_timeout = Some(seconds(value, text, &qualified, file)?);

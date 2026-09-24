@@ -37,11 +37,11 @@ use serde::Serialize;
 
 use super::super::local::Format;
 use super::{Supplied, coherence, form, project};
-use crate::error::Error;
+use crate::error::{EntryNameGiven, Error};
 use crate::output::{self, Document, Source};
 use crate::project::config::Configuration;
 use crate::project::config::entry::Written;
-use crate::project::config::keys::{CoreKey, EntryKey, Key, Target};
+use crate::project::config::keys::{CoreKey, EntryKey, Key, Target, is_entry_name};
 use crate::project::config::redact;
 use crate::project::edit;
 
@@ -84,7 +84,7 @@ struct Listing<'a> {
 /// carries no map, per `FR-OUT-013`.
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
-enum Printed<'a> {
+pub(super) enum Printed<'a> {
     /// A string, redacted or the file's own.
     Text(Cow<'a, str>),
     /// A TOML integer.
@@ -165,6 +165,16 @@ pub(crate) fn set(supplied: &Supplied<'_>, key: &str, value: &str) -> Result<(),
             nearest: configuration.nearest_key_in_space(key),
         });
     };
+
+    // FR-CONF-048: the `<name>` segment of the key is an entry name.
+    if let Key::Entry { entry, field } = &parsed
+        && !is_entry_name(entry)
+    {
+        return Err(Error::InvalidEntryName {
+            given: EntryNameGiven::Key(field.leaf()),
+            name: entry.clone(),
+        });
+    }
 
     let item = edit::assign(&parsed, value)?;
 
@@ -280,12 +290,13 @@ fn listing(configuration: &Configuration) -> Listing<'_> {
     Listing { core, database }
 }
 
-/// `value` as `FR-CFG-021` prints it, for a document that carries it as JSON.
+/// `value` as `FR-CFG-021` prints it, for a document that carries it as JSON,
+/// in the TOML type the file holds it in (`FR-CFG-049`).
 ///
 /// A key the rule reaches is always printed as a string, because `***` is one
 /// and so is a DSN with `***` in it; a value the rule leaves alone keeps the
 /// shape the file wrote it in, so a port stays a number.
-fn printed(field: EntryKey, value: Written<'_>) -> Printed<'_> {
+pub(super) fn printed(field: EntryKey, value: Written<'_>) -> Printed<'_> {
     match field {
         EntryKey::Password | EntryKey::Dsn => Printed::Text(redact::value(field, value)),
         _ => match value {

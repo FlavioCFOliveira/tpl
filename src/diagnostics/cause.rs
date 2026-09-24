@@ -21,8 +21,9 @@
 use std::borrow::Cow;
 
 use crate::error::{
-    ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, PasswordCommandFault,
-    ReadOnlyFault, RenderReason, TlsFault, TplDirFault, Unresolved, context_name, password_pair,
+    ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
+    KeyAbsence, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RenderReason, TlsFault,
+    TplDirFault, Unresolved, context_name, password_pair,
 };
 
 /// The separator between two links of a template-engine error chain.
@@ -47,6 +48,13 @@ const NO_PERMITTED_VALUE: &str = "no value at all";
 /// The program name, which is the whole of the command path at the root.
 const PROGRAM: &str = "tpl";
 
+/// The rule of `FR-CONF-048`, in the words every `cause` that applies it uses.
+const ENTRY_NAME_RULE: &str = "an entry name is 1 to 64 letters, digits or underscores";
+
+/// The rule of `FR-CONF-049`, in the words every `cause` that applies it uses.
+const VARIABLE_NAME_RULE: &str = "a variable name starts with a letter or an underscore and \
+                                  holds only letters, digits and underscores";
+
 /// What the `cause` line says when the supported window arrives empty.
 const EMPTY_WINDOW: &str = "no series";
 
@@ -59,6 +67,16 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
     match error {
         // ------------------------------------------------------------ 64 ---
         // The row obliges the token as written, and why it was rejected.
+        // W-05 of the sixth re-audit of rmp `#263`: the words of a command
+        // given as one argument, where they form a command path.
+        Error::UnknownCommand { token, node, .. }
+        | Error::UnknownCommandPathSegment {
+            segment: token,
+            node,
+            ..
+        } if super::hint::split_command(node, token).is_some() => Cow::Owned(format!(
+            "'{token}' was given as one argument; each word of a command is its own argument"
+        )),
         Error::UnknownCommand { token, node, .. } => Cow::Owned(format!(
             "'{token}' is not a subcommand of '{}' (commands are matched in full, never by a \
              prefix)",
@@ -75,6 +93,11 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              prefix)",
             invoked(node)
         )),
+        Error::UnknownFlag { token, command, .. }
+            if super::hint::is_format_on_dump(command, token) =>
+        {
+            Cow::Borrowed("schema dump always writes JSON and takes no --format")
+        }
         Error::UnknownFlag { token, command, .. } => Cow::Owned(format!(
             "'{token}' is not a flag of '{}' or a global flag (flags are matched in full, never \
              by a prefix)",
@@ -162,7 +185,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         )),
         // FR-CACHE-019: the flag is declared by the command and contradicts
         // what the command does.
-        Error::LoadWithoutStoring => Cow::Borrowed(
+        Error::LoadWithoutStoring { .. } => Cow::Borrowed(
             "'tpl cache load' reads the server in order to store what it read, so an invocation \
              that forbids the store asks the command to do nothing",
         ),
@@ -213,6 +236,60 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             ..
         } => Cow::Owned(format!(
             "'{value}' was supplied for '{parameter}', which takes {expected}"
+        )),
+        // FR-PROJ-029: the path as written and why it cannot be a destination.
+        Error::InitDestinationIsTplFolder {
+            written, canonical, ..
+        } => match canonical {
+            None => Cow::Owned(format!(
+                "the path {} ends in .tpl, so a project there would be nested inside that folder",
+                written.display()
+            )),
+            Some(canonical) => Cow::Owned(format!(
+                "the path {} is the folder {}, whose last segment is .tpl, so a project there \
+                 would be nested inside that folder",
+                written.display(),
+                canonical.display()
+            )),
+        },
+        // FR-CONF-048: the rule, and the value described rather than
+        // reproduced, since a refused name is outside the set of FR-ERR-022.
+        Error::InvalidEntryName { given, name } => {
+            let described = entry_name_fault(name);
+            match given {
+                EntryNameGiven::CoreDatabase if name.contains("${") => Cow::Owned(format!(
+                    "core.database names a database entry and does not expand ${{VAR}}; \
+                     {ENTRY_NAME_RULE}"
+                )),
+                EntryNameGiven::CoreDatabase => Cow::Owned(format!(
+                    "core.database names a database entry and {described}; {ENTRY_NAME_RULE}"
+                )),
+                EntryNameGiven::Add | EntryNameGiven::Key(_) => {
+                    Cow::Owned(format!("the entry name {described}; {ENTRY_NAME_RULE}"))
+                }
+            }
+        }
+        // FR-CONF-049: the key or the flag, and the rule for a variable name.
+        Error::InvalidReference {
+            parameter, fault, ..
+        } => match fault {
+            ReferenceFault::Unclosed => Cow::Owned(format!(
+                "the value of {parameter} opens a ${{ reference that is never closed; a \
+                 reference is written ${{NAME}}"
+            )),
+            ReferenceFault::Name(name) => Cow::Owned(format!(
+                "{} in the value of {parameter} is not a valid reference; {VARIABLE_NAME_RULE}",
+                reference_named(name)
+            )),
+        },
+        // FR-CONF-050: the flag or the key, and that the value is empty.
+        Error::EmptyValue { parameter, .. } => Cow::Owned(format!(
+            "{parameter} is empty; an entry must name {}",
+            if parameter.ends_with("host") {
+                "a host"
+            } else {
+                "a database"
+            }
         )),
         Error::UnknownConfigurationKey { key, .. } => Cow::Owned(format!(
             "'{key}' is not a configuration key; tpl cfg set writes only the keys tpl knows"
@@ -684,7 +761,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             path.display()
         )),
         Error::ConfigurationUnsafeMode { path, mode } => Cow::Owned(format!(
-            "mode {mode:04o} grants access to group or other; tpl reads {} only at mode 0600",
+            "mode {mode:04o} grants access to group or other; tpl reads {} only when group and \
+             other have no access, as at mode 0600",
             path.display()
         )),
         Error::ConfigurationMalformed {
@@ -790,6 +868,38 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              ${{VAR}} and ends at its brace",
             file.display()
         )),
+        // FR-CONF-049: met where the field is expanded, as FR-CONF-021 is.
+        Error::InvalidReferenceName { key, file, name } => Cow::Owned(format!(
+            "{key} in {} holds {}, which is not a valid reference; {VARIABLE_NAME_RULE}",
+            file.display(),
+            reference_named(name)
+        )),
+        // FR-CONF-048: the rule, and the value described where it is outside
+        // the set of FR-ERR-022, which a refused name always is.
+        Error::ConfigurationEntryName {
+            file,
+            name,
+            core,
+            position,
+        } => {
+            let what = if *core {
+                "the value of core.database"
+            } else {
+                "the name of a [database.<name>] block"
+            };
+            let reference = if *core && name.contains("${") {
+                "; core.database names an entry and ${VAR} is not expanded in it"
+            } else {
+                ""
+            };
+            Cow::Owned(format!(
+                "{what} at line {}, column {} of {} {}{reference}; {ENTRY_NAME_RULE}",
+                position.line,
+                position.column,
+                file.display(),
+                entry_name_fault(name)
+            ))
+        }
         Error::DsnQueryParameter { key, file } => Cow::Owned(format!(
             "{key} in {} carries a '?' query parameter; a DSN takes none, and every connection \
              option is a key of its own",
@@ -888,12 +998,31 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // FR-CONF-040 and FR-CONF-041: the cause names the file, the entry and
         // the key the entry does not carry.
         Error::EntryKeyMissing {
-            entry, key, file, ..
-        } => Cow::Owned(format!(
-            "{} declares database entry '{entry}' without '{key}', and this command cannot be run \
-             without it",
-            file.display()
-        )),
+            entry,
+            key,
+            file,
+            absence,
+            ..
+        } => match absence {
+            KeyAbsence::Absent => Cow::Owned(format!(
+                "{} declares database entry '{entry}' without '{key}', and this command cannot be \
+                 run without it",
+                file.display()
+            )),
+            // FR-CONF-050: an empty value is an absent key, and the line says
+            // which it is.
+            KeyAbsence::Empty => Cow::Owned(format!(
+                "{} sets '{key}' of database entry '{entry}' to the empty string, which names \
+                 nothing, and this command cannot be run without it",
+                file.display()
+            )),
+            KeyAbsence::ExpandsToEmpty => Cow::Owned(format!(
+                "'{key}' of database entry '{entry}' in {} references an environment variable \
+                 that expands to the empty string, which names nothing, and this command cannot \
+                 be run without it",
+                file.display()
+            )),
+        },
         Error::NoDatabaseEntrySelected { file, .. } => Cow::Owned(format!(
             "neither -d/--database nor core.database in {} names an entry, and this command needs \
              one to know which database to use",
@@ -1017,6 +1146,31 @@ pub(crate) fn is_path_reference(parameter: &str, value: &str) -> bool {
         || parameter.ends_with(".ca_file")
         || parameter.ends_with(".ca_path"))
         && value.contains("${")
+}
+
+/// What is wrong with an entry name `FR-CONF-048` refuses, described rather
+/// than reproduced: a refused name is outside the set of `FR-ERR-022`.
+fn entry_name_fault(name: &str) -> &'static str {
+    if name.is_empty() {
+        "is empty"
+    } else if name.chars().count() > 64 {
+        "is longer than 64 characters"
+    } else {
+        "holds a character other than a letter, a digit or an underscore"
+    }
+}
+
+/// The reference a `cause` names: `${NAME}` where the set of `FR-ERR-022`
+/// admits the name, and a description otherwise (`FR-CONF-049`).
+fn reference_named(name: &str) -> String {
+    if name.is_empty() {
+        "${}".to_owned()
+    } else if super::hint::admits(name) {
+        format!("${{{name}}}")
+    } else {
+        "a reference whose name holds a character other than a letter, a digit or an underscore"
+            .to_owned()
+    }
 }
 
 /// The words that say which reference a refused path holds: the first

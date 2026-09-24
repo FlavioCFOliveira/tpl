@@ -1008,7 +1008,8 @@ mod tests {
             rendered,
             "error: /home/ana/shop/.tpl/.cfg has unsafe permissions\n\
              cause: mode 0644 grants access to group or other; tpl reads \
-             /home/ana/shop/.tpl/.cfg only at mode 0600\n\
+             /home/ana/shop/.tpl/.cfg only when group and other have no access, as at mode \
+             0600\n\
              hint:  chmod 600 /home/ana/shop/.tpl/.cfg\n\
              exit:  78 (EX_CONFIG)\n"
         );
@@ -1196,6 +1197,35 @@ mod tests {
                 written: hostile(),
                 conflicting: hostile(),
                 repair: EntryRepair::Restate(hostile()),
+            },
+            Error::InitDestinationIsTplFolder {
+                written: hostile_path(),
+                canonical: Some(hostile_path()),
+                parent: Some(hostile_path()),
+            },
+            Error::InvalidEntryName {
+                given: crate::error::EntryNameGiven::Key("host"),
+                name: hostile(),
+            },
+            Error::InvalidReference {
+                parameter: hostile(),
+                command: hostile(),
+                fault: crate::error::ReferenceFault::Name(hostile()),
+            },
+            Error::EmptyValue {
+                parameter: hostile(),
+                command: hostile(),
+            },
+            Error::InvalidReferenceName {
+                key: hostile(),
+                file: hostile_path(),
+                name: hostile(),
+            },
+            Error::ConfigurationEntryName {
+                file: hostile_path(),
+                name: hostile(),
+                core: true,
+                position: crate::error::Position { line: 1, column: 1 },
             },
             Error::TemplateSyntax {
                 template: hostile(),
@@ -1494,7 +1524,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 76, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 82, "every variant of Error is sampled");
     }
 
     #[test]

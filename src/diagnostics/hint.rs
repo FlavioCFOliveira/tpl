@@ -37,8 +37,8 @@ use std::path::Path;
 use super::restate::{self, Edit, Replacement};
 use super::suggest;
 use crate::error::{
-    CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, LookupKind,
-    NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, TplDirFault, Unresolved,
+    CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
+    LookupKind, NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, TplDirFault, Unresolved,
 };
 use crate::project::config::keys::ValueType;
 
@@ -83,8 +83,13 @@ fn carried(error: &Error) -> restate::Carry {
             Error::ProjectNotFound { .. }
                 | Error::ProjectDirUnusable { .. }
                 | Error::ProjectFolderNotOwned { .. }
+                | Error::InitDestinationIsTplFolder { .. }
         ),
-        database: !matches!(error, Error::DatabaseEntryNotFound { .. }),
+        // FR-PROJ-029: the hint of `tpl init` carries no flag.
+        database: !matches!(
+            error,
+            Error::DatabaseEntryNotFound { .. } | Error::InitDestinationIsTplFolder { .. }
+        ),
     }
 }
 
@@ -104,6 +109,23 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // qualified, per FR-ERR-020. The generic half lists the children of
         // the node the token was written under, which is the population the
         // suggestion was drawn from.
+        // W-05 of the sixth re-audit of rmp `#263`: the command path the
+        // words form, each word its own argument. Every word is a literal of
+        // the tree.
+        Error::UnknownCommand { token, node, .. } if split_command(node, token).is_some() => {
+            Cow::Owned(format!(
+                "give each word as its own argument: tpl {}",
+                split_command(node, token).unwrap_or_default()
+            ))
+        }
+        Error::UnknownCommandPathSegment { segment, node, .. }
+            if split_command(node, segment).is_some() =>
+        {
+            Cow::Owned(format!(
+                "give each word as its own argument: tpl help {}",
+                split_command(node, segment).unwrap_or_default()
+            ))
+        }
         Error::UnknownCommand { node, nearest, .. }
         | Error::UnknownCommandPathSegment { node, nearest, .. } => {
             let admitted = admitted(nearest, admits_path);
@@ -115,6 +137,11 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // was given to, which the variant carries. FR-CLI-017 accepts a value
         // beginning with `-` after `--`, and a node that takes a positional
         // argument is where a caller can have meant one.
+        // W-07 of the sixth re-audit of rmp `#263`: the one command that
+        // writes JSON and nothing else is given no --format.
+        Error::UnknownFlag { token, command, .. } if is_format_on_dump(command, token) => {
+            Cow::Borrowed("remove --format and its value: tpl schema dump")
+        }
         Error::UnknownFlag {
             token,
             command,
@@ -399,10 +426,25 @@ fn bare(error: &Error) -> Cow<'static, str> {
         }
         // FR-CACHE-018 accepts `--direct` on this command and ignores it, so
         // the line names the invocation that does what the caller asked for.
-        Error::LoadWithoutStoring => Cow::Borrowed(
+        // W-07 of the sixth re-audit of rmp `#263`: with an object named, the
+        // read that matches it is that object's own `schema` subcommand.
+        Error::LoadWithoutStoring { object: None } => Cow::Borrowed(
             "remove --no-cache from the command; to read from the server without storing, use \
              tpl schema dump --direct --no-cache instead",
         ),
+        Error::LoadWithoutStoring {
+            object: Some((kind, name)),
+        } => {
+            let name = if admits(name) {
+                name.as_str()
+            } else {
+                "<name>"
+            };
+            Cow::Owned(format!(
+                "remove --no-cache from the command; to read from the server without storing, \
+                 use tpl schema {kind} {name} --direct --no-cache instead"
+            ))
+        }
         // FR-CFG-031: the `cause` carries the form expected, and the hint the
         // worked value. The example carries no user, so that no `@` reaches a
         // hint line: the assertion over every hint looks for that character
@@ -534,6 +576,25 @@ fn bare(error: &Error) -> Cow<'static, str> {
             )),
         },
 
+        // FR-PROJ-029: `tpl init` with the parent directory, and no flag.
+        Error::InitDestinationIsTplFolder { parent, .. } => match parent {
+            None => Cow::Borrowed("create the project in the parent directory: tpl init"),
+            Some(parent) if admits_file(parent) => Cow::Owned(format!(
+                "create the project in the parent directory: tpl init {}",
+                parent.display()
+            )),
+            Some(_) => Cow::Borrowed(
+                "create the project in the parent directory: tpl init <path>; replace <path> \
+                 with the directory that holds the .tpl folder named above",
+            ),
+        },
+        // FR-CONF-048: the form, with a placeholder for the name.
+        Error::InvalidEntryName { given, .. } => invalid_entry_name(*given),
+        // FR-CONF-049: the reference in the form ${NAME}, with a placeholder
+        // for the name.
+        Error::InvalidReference { parameter, .. } => invalid_reference(parameter),
+        // FR-CONF-050: the flag or the key with a placeholder.
+        Error::EmptyValue { parameter, .. } => empty_value(parameter),
         // ------------------------------------------------------------ 65 ---
         // The template is the one the parser stopped in, and `tpl template
         // check` is syntax analysis alone, so it is the command that confirms
@@ -1122,6 +1183,47 @@ fn bare(error: &Error) -> Cow<'static, str> {
                 ))
             }
         }
+        // FR-CONF-049: the reference with a valid name. The file is valid, so
+        // `tpl cfg set` rewrites a field it carries.
+        Error::InvalidReferenceName { key, file, .. } => {
+            if admits_key(key) && matches!(leaf(key), "host" | "user" | "password" | "database") {
+                Cow::Owned(format!(
+                    "write the reference with a valid name, e.g.: tpl cfg set {key} '${{<NAME>}}', \
+                     where <NAME> starts with a letter or an underscore and holds only letters, \
+                     digits and underscores"
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "edit {}: write each reference in {} as ${{NAME}}, where NAME starts with a \
+                     letter or an underscore and holds only letters, digits and underscores",
+                    configuration_file(file),
+                    key_or_placeholder(key)
+                ))
+            }
+        }
+        // FR-CONF-048: no `tpl cfg` command runs while the file fails step 3.
+        Error::ConfigurationEntryName {
+            file,
+            core,
+            position,
+            ..
+        } => {
+            if *core {
+                Cow::Owned(format!(
+                    "edit {} at line {} and set core.database to the name of an entry, as in \
+                     database = \"shop\"; {NO_CFG_COMMAND}",
+                    configuration_file(file),
+                    position.line
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "edit {} at line {} and rename the entry with letters, digits and \
+                     underscores only, as in [database.shop]; {NO_CFG_COMMAND}",
+                    configuration_file(file),
+                    position.line
+                ))
+            }
+        }
         // FR-CONF-035 obliges the hint to show the array form, and states this
         // example itself.
         Error::PasswordCommandNotAnArray {
@@ -1365,6 +1467,135 @@ fn holds_tpl_folder(path: &Path) -> Cow<'static, str> {
             "name the .tpl folder itself: run the same command again with --tpl-dir \
              {corrected}{replacing}"
         )),
+    }
+}
+
+/// The hint of an entry name `FR-CONF-048` refuses: the caller's command with
+/// a placeholder for the name, or the form it takes.
+fn invalid_entry_name(given: EntryNameGiven) -> Cow<'static, str> {
+    const PREFIX: &str = "give the entry a name of 1 to 64 letters, digits or underscores";
+    const MEANING: &str = "a name of 1 to 64 letters, digits or underscores";
+
+    match given {
+        EntryNameGiven::CoreDatabase => {
+            Cow::Borrowed("give the entry name itself: tpl cfg set core.database <entry>")
+        }
+        EntryNameGiven::Add => {
+            let edit = Edit::Value {
+                ids: &["name"],
+                to: Replacement::Placeholder {
+                    text: "<name>",
+                    meaning: MEANING,
+                },
+            };
+            match restate::restated(&[edit]) {
+                Some(restated) => Cow::Owned(format!(
+                    "rename the entry: {}{}",
+                    restated.command,
+                    restated.replacing()
+                )),
+                None => Cow::Owned(format!(
+                    "{PREFIX}: tpl cfg database add <name> --host <host> --schema <database>"
+                )),
+            }
+        }
+        EntryNameGiven::Key(field) => {
+            let key = format!("database.<name>.{field}");
+            let edit = Edit::Value {
+                ids: &["key"],
+                to: Replacement::Placeholder {
+                    text: &key,
+                    meaning: MEANING,
+                },
+            };
+            match restate::restated(&[edit]) {
+                Some(restated) => Cow::Owned(format!(
+                    "rename the entry: {}{}",
+                    restated.command,
+                    restated
+                        .replacing()
+                        .replacen(&format!("replace {key}"), "replace <name>", 1)
+                )),
+                None => Cow::Owned(format!("{PREFIX}: tpl cfg set {key} <value>")),
+            }
+        }
+    }
+}
+
+/// The hint of a malformed reference given on the command line
+/// (`FR-CONF-049`): the caller's command with the reference written as
+/// `${<NAME>}`. A DSN is shown as a URL with a reference for one part, since
+/// a reference never stands for the whole of it.
+fn invalid_reference(parameter: &str) -> Cow<'static, str> {
+    const RULE: &str =
+        "write each reference as ${NAME}, where NAME starts with a letter or an underscore";
+    let dsn = parameter == "--dsn" || parameter.ends_with(".dsn");
+    let example = if dsn {
+        "'mysql://db.example.com/${<NAME>}'"
+    } else {
+        "'${<NAME>}'"
+    };
+
+    if admits_key(parameter) {
+        return Cow::Owned(format!("{RULE}, e.g.: tpl cfg set {parameter} {example}"));
+    }
+    if !admits_flag(parameter) {
+        return Cow::Borrowed(RULE);
+    }
+
+    let ids = [parameter.trim_start_matches('-')];
+    let edit = Edit::Value {
+        ids: &ids,
+        to: Replacement::Literal(example),
+    };
+    match restate::restated(&[edit]) {
+        Some(restated) => Cow::Owned(format!(
+            "{RULE}, e.g.: {}{}",
+            restated.command,
+            restated.replacing()
+        )),
+        None => Cow::Owned(format!("{RULE}, e.g.: {parameter} {example}")),
+    }
+}
+
+/// The hint of an empty host or database given on the command line
+/// (`FR-CONF-050`): the flag or the key with a placeholder.
+fn empty_value(parameter: &str) -> Cow<'static, str> {
+    let (what, placeholder, meaning, ids): (&str, &str, &str, &[&str]) =
+        if parameter.ends_with("host") {
+            ("host", "<host>", "the host of the server", &["host"])
+        } else {
+            (
+                "database",
+                "<database>",
+                "the database on the server",
+                &["schema"],
+            )
+        };
+
+    if admits_key(parameter) {
+        return Cow::Owned(format!(
+            "give the {what}: tpl cfg set {parameter} {placeholder}"
+        ));
+    }
+
+    let edit = Edit::Value {
+        ids,
+        to: Replacement::Placeholder {
+            text: placeholder,
+            meaning,
+        },
+    };
+    match restate::restated(&[edit]) {
+        Some(restated) => Cow::Owned(format!(
+            "give the {what}: {}{}",
+            restated.command,
+            restated.replacing()
+        )),
+        None if admits_flag(parameter) => {
+            Cow::Owned(format!("give the {what}: {parameter} {placeholder}"))
+        }
+        None => Cow::Owned(format!("give the {what} in place of the empty value")),
     }
 }
 
@@ -1615,6 +1846,35 @@ fn suggested(
 /// module applies to every such value, and the root's empty path falls to the
 /// bare `tpl help` rather than to a placeholder, because that command lists
 /// exactly the children the root has.
+/// Whether `token`, refused as a flag of `command`, is `--format` given to
+/// `tpl schema dump`, which always writes JSON.
+pub(super) fn is_format_on_dump(command: &str, token: &str) -> bool {
+    command == "schema dump" && (token == "--format" || token.starts_with("--format="))
+}
+
+/// The canonical command path, without the program name, that the words of
+/// `token` form under the node `node` names, or [`None`] where `token` holds
+/// no whitespace or its words do not all name commands.
+///
+/// It reads the command tree, so every segment it returns is a literal of
+/// `FR-ERR-022`.
+pub(super) fn split_command(node: &str, token: &str) -> Option<String> {
+    if !token.contains(char::is_whitespace) {
+        return None;
+    }
+
+    let tree = crate::cli::tree();
+    let mut reached = &tree;
+    let mut canonical: Vec<String> = Vec::new();
+
+    for word in node.split_whitespace().chain(token.split_whitespace()) {
+        reached = reached.find_subcommand(word)?;
+        canonical.push(reached.get_name().to_owned());
+    }
+
+    (!canonical.is_empty()).then(|| canonical.join(" "))
+}
+
 fn children_of(node: &str) -> Cow<'static, str> {
     if node.is_empty() {
         Cow::Borrowed("list the commands with: tpl help")

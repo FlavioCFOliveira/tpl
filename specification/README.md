@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-eight editions. All are in force;
+The specification has been written in forty-nine editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4211,6 +4211,100 @@ stays true: the refusal of `FR-PROJ-028` is for the folder's owner, not for
 the absence. It describes `--tpl-dir` as naming the `.tpl` folder, and
 `${VAR}` as expanded in six fields, both unchanged. The fifth validation rule
 therefore owes nothing.
+
+### Forty-ninth edition — a project inside its own folder, a suggestion with nothing in common, and values that could never work
+
+The sixth re-audit of sprint 21, recorded for rmp `#281`, found places where
+the system accepted a value that could never do what the caller meant, or
+offered a correction that shared nothing with the mistake. `tpl init
+proj/.tpl` created `proj/.tpl/.tpl` and warned about a project that did not
+exist (finding W-01). With entries `n1` and `shop`,
+`tpl cfg database remove zz` answered `did you mean 'n1'?` (finding W-02).
+`tpl cfg database show --format json` wrote every value as a string (finding
+W-03). `${VAR}` in `core.database` was stored and never expanded, and the same
+in `password_command` reached the program with nothing said (finding W-04).
+Empty hosts, schemas and entry names, and a reference named `${1X}`, were
+stored and failed later with a DNS error or a `hint` no shell accepts
+(finding W-06). And the permission message said `.cfg` was read "only at mode
+0600" while a file at `0400` was read and rewritten at `0600` (finding W-08).
+This edition fixes those outcomes. Findings W-05, W-07 and W-09 are wording
+of help and error text that no requirement fixes, and take no change here.
+
+**Six identifiers are assigned — `FR-PROJ-029`, `FR-ERR-044`, `FR-CFG-049`,
+`FR-CONF-048`, `FR-CONF-049` and `FR-CONF-050`; none is retired and none is
+renumbered.** No term enters or leaves [glossary.md](glossary.md); the entries
+*database entry* and *nearest match* are amended. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **`tpl init` refuses a `.tpl` folder as its destination** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-029` exits
+  `64`, creating nothing, where the last segment of the path as written, or
+  of the canonical path of an existing destination, is `.tpl`. The `hint`
+  carries `tpl init` with the parent directory. `FR-PROJ-016` is amended so
+  that the shadow warning names only a `.tpl` folder that existed before the
+  invocation. `FR-PROJ-012` and `FR-PROJ-026` carry notes.
+- **A suggestion must keep a character of the name** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-044` admits a
+  candidate only where its distance is also strictly less than the length of
+  the longer of the two names. `zz`, `ab` and `q` no longer suggest `n1`, and
+  every distance-one slip in a name of two characters or more is still
+  offered. No separate rule is written for the commands that delete.
+  `FR-ERR-019` and `FR-ERR-020` carry notes.
+- **The `json` values of `cfg` keep their TOML types** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-049` makes a string a string, an
+  integer a number and `password_command` an array in `tpl cfg get`,
+  `tpl cfg list` and `tpl cfg database show`. It pins what the first two do and
+  changes the third. `FR-CFG-038` carries a note.
+- **An entry name is `[A-Za-z0-9_]{1,64}`** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-048` applies the
+  rule to `cfg database add`, to the `<name>` segment of a key given to
+  `cfg set`, and to `core.database`: `64` on the command line, with nothing
+  written, and `78` at step 3 in the file. A `${` in `core.database` is
+  refused by the rule, with a `cause` that says the key is not expanded. The
+  set is the one of `FR-ERR-022`, so every entry name is printable in every
+  `hint`; the consequence note of `FR-ERR-022`, `FR-CONF-008`, `FR-CONF-040`
+  and `FR-CFG-015` follow.
+- **A reference names a variable a shell can define** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-049` fixes the
+  name of `${NAME}` as `[A-Za-z_][A-Za-z0-9_]*` in the six expanded fields:
+  `64` on the command line, where an unclosed reference is refused as well,
+  and `78` in the file when the field is expanded, as for an unclosed one.
+- **An empty host or database is no host or database** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-050` refuses an
+  empty `--host`, `--schema` or the matching key with `64`, and treats an
+  empty value in the file, as written or after expansion, as the absent key
+  that `FR-CONF-040` and `FR-CONF-041` refuse with `78`.
+- **`password_command` passes `${VAR}` through and says so** —
+  [configuration-model.md](configuration-model.md),
+  [cfg-commands.md](cfg-commands.md). `FR-CONF-017` is amended: a reference
+  in a word is passed as written and is not refused, because a program the
+  caller chose, such as `sh -c`, may expand it. `FR-CFG-033` obliges the help
+  of `--password-command` and of `tpl cfg set` to state that the command is
+  not expanded and that no `[core]` key is. `FR-CONF-015` carries a note.
+- **The mode of `.cfg`** — [project-and-discovery.md](project-and-discovery.md),
+  [cfg-commands.md](cfg-commands.md). A note on `FR-PROJ-011` states that the
+  check reads the group and other bits only, and that its `cause` does not
+  name `0600` as the only mode. `FR-CFG-034` is amended: a rewrite leaves the
+  file at `0600` whatever its mode before, and is not refused for a clear
+  owner-write bit.
+- [use-cases.md](use-cases.md): `UC-001` and `UC-002` gain alternate flows,
+  and the glossary entries above are amended.
+
+`FR-PROJ-008`, `FR-PROJ-013` through `FR-PROJ-015`, `FR-PROJ-027`,
+`FR-ERR-001`, `FR-ERR-003`, `FR-ERR-005`, `FR-ERR-006`, `FR-ERR-022`,
+`FR-ERR-023`, `FR-ERR-037`, `FR-ERR-038`, `FR-ERR-042`, `FR-GLOB-007`,
+`FR-CFG-009`, `FR-CFG-010`, `FR-CFG-036`, `FR-CFG-037`, `FR-CFG-041`,
+`FR-CONF-021`, `FR-CONF-022`, `FR-CONF-034`, `FR-CONF-046`, `FR-CONF-047`,
+`FR-SEC-014` and `FR-SEC-019` were read against the changes. Apart from the
+notes named above, none conflicts with them, so none is amended. The cells of
+`FR-ERR-001` already characterise every new condition: a value the caller
+wrote is `64`, and a `.cfg` that cannot be used is `78`. `FR-SEC-019` still
+names the entry name among the values the set governs, which stays true. The
+root `README.md` describes `tpl init` as taking an optional path, the mode of
+`.cfg` as granting no access to group and other, and `${VAR}` as expanded in
+six fields and refused when unclosed or undefined. None of those statements is
+made false by this edition, so the fifth validation rule owes nothing.
 
 ### Still out of scope
 

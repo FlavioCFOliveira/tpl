@@ -168,7 +168,8 @@ impl<'a> Suggestions<'a> {
 /// candidate it refuses is dropped before it is measured, so it occupies none
 /// of the three places and reaches no line of the output, which is
 /// `FR-ERR-023`. What survives is measured against `supplied` and kept where it
-/// lies within `MAX_DISTANCE` — or, for a command, where `supplied` is a
+/// lies within `MAX_DISTANCE` and below the length of the longer of the two
+/// names (`FR-ERR-044`) — or, for a command, where `supplied` is a
 /// proper prefix of it (`FR-ERR-042`) — ordered by distance and then by name.
 ///
 /// **A candidate equal to `supplied` is refused before it is measured**, over
@@ -205,7 +206,15 @@ where
             continue;
         }
 
-        if let Some(distance) = matrix.distance(candidate, MAX_DISTANCE) {
+        // FR-ERR-044: a distance is admitted only where it is strictly less
+        // than the length of the longer name, so a candidate that keeps no
+        // character of the supplied name is never offered. The prefix rule of
+        // FR-ERR-042 below is not bounded by it.
+        let admitted = matrix
+            .distance(candidate, MAX_DISTANCE)
+            .filter(|&distance| distance < matrix.longer(candidate));
+
+        if let Some(distance) = admitted {
             kept.offer(distance, candidate);
         } else if matches!(population, Population::Commands)
             && !supplied.is_empty()
@@ -392,6 +401,12 @@ impl Matrix {
         // The last `advance` moved the final row into `one_back`.
         let measured = self.one_back[columns];
         (measured <= ceiling).then_some(measured)
+    }
+
+    /// The length, in characters, of the longer of the supplied name and
+    /// `candidate` (`FR-ERR-044`, counted as `FR-ERR-039` counts).
+    fn longer(&self, candidate: &str) -> usize {
+        self.supplied.len().max(candidate.chars().count())
     }
 
     /// Advances the window by one row: `i` becomes `i - 1`, and `i - 1`
@@ -637,6 +652,33 @@ mod tests {
             ["aorders", "orderz", "border"],
             "distance orders first and the name breaks the tie"
         );
+    }
+
+    #[test]
+    fn fr_err_044_a_candidate_that_keeps_no_character_of_the_name_is_not_offered() {
+        // FR-ERR-044, the table of the requirement, over every population.
+        for (population, _) in EVERY_POPULATION {
+            assert!(kept("zz", &["n1"], population).is_empty(), "{population:?}");
+            assert!(kept("q", &["n1"], population).is_empty(), "{population:?}");
+            assert!(kept("a", &["b"], population).is_empty(), "{population:?}");
+            assert_eq!(kept("t1", &["t2"], population), ["t2"], "{population:?}");
+            assert_eq!(
+                kept("shp", &["shop"], population),
+                ["shop"],
+                "{population:?}"
+            );
+            assert_eq!(
+                kept("ordres", &["orders"], population),
+                ["orders"],
+                "{population:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_err_044_the_bound_does_not_reach_a_command_admitted_by_prefix() {
+        // FR-ERR-044 excludes the candidates FR-ERR-042 admits by prefix.
+        assert_eq!(kept("c", &["cfg"], Population::Commands), ["cfg"]);
     }
 
     #[test]

@@ -152,7 +152,7 @@ pub(crate) fn test<W: Write>(
     // `core.database`.
     let settings = settings::resolve(&configuration, Some(name), &clock, &expand::environment)?;
 
-    source::connection_keys(&settings, configuration.file())?;
+    source::connection_keys(&settings, &configuration)?;
 
     // FR-CONF-040 has just refused an entry that names no host, so the arm
     // below is this type's own totality rather than a reachable condition.
@@ -162,6 +162,7 @@ pub(crate) fn test<W: Write>(
         file: configuration.file().to_owned(),
         flag: HOST_FLAG,
         placeholder: HOST_PLACEHOLDER,
+        absence: crate::error::KeyAbsence::Absent,
     })?;
     // FR-CONF-041 has just refused an entry that names no database, on the same
     // terms.

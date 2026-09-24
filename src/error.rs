@@ -382,6 +382,41 @@ pub enum TlsFault {
     CertificateRejected,
 }
 
+/// Where an entry name the rule of `FR-CONF-048` refuses was given on the
+/// command line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryNameGiven {
+    /// The operand of `tpl cfg database add`.
+    Add,
+    /// The `<name>` segment of a `database.<name>.<field>` key given to
+    /// `tpl cfg set`, with the leaf of that key.
+    Key(&'static str),
+    /// The value given to `tpl cfg set core.database`.
+    CoreDatabase,
+}
+
+/// What is wrong with a `${NAME}` reference (`FR-CONF-021`, `FR-CONF-049`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReferenceFault {
+    /// A `${` with no closing brace.
+    Unclosed,
+    /// A reference whose name is not `[A-Za-z_][A-Za-z0-9_]*`, carrying the
+    /// name as written.
+    Name(String),
+}
+
+/// Why a selected entry does not carry a key it needs (`FR-CONF-040`,
+/// `FR-CONF-041`, `FR-CONF-050`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyAbsence {
+    /// The entry does not declare the key.
+    Absent,
+    /// The entry declares the key as the empty string.
+    Empty,
+    /// The key holds a `${VAR}` reference that expands to the empty string.
+    ExpandsToEmpty,
+}
+
 /// Why the path `--tpl-dir` named cannot be used as the project
 /// (`FR-PROJ-008`, `FR-PROJ-027`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -794,7 +829,12 @@ pub enum Error {
     /// report the contradiction as an unknown flag, which says the wrong
     /// thing.
     #[error("'--no-cache' cannot be given to 'tpl cache load'")]
-    LoadWithoutStoring,
+    LoadWithoutStoring {
+        /// The object the invocation named, as the `schema` subcommand that
+        /// reads it (`table`, `view` or `routine`) and the name given, where
+        /// it named one.
+        object: Option<(&'static str, String)>,
+    },
 
     /// A value that does not conform to the type its parameter declares: a
     /// flag value (`FR-ERR-001`, the `64` row) or a `tpl cfg set` value
@@ -867,6 +907,56 @@ pub enum Error {
         conflicting: String,
         /// Which runnable command makes the write legal.
         repair: EntryRepair,
+    },
+
+    /// The destination of `tpl init` names a `.tpl` folder (`FR-PROJ-029`).
+    /// Nothing is created.
+    #[error("tpl init takes the directory that will hold .tpl, not the .tpl folder")]
+    InitDestinationIsTplFolder {
+        /// The path as written, or `.` where no operand was given.
+        written: PathBuf,
+        /// The canonical path, where it is the canonical form whose last
+        /// segment is `.tpl` rather than the path as written.
+        canonical: Option<PathBuf>,
+        /// The directory that holds the folder named, or [`None`] where it is
+        /// the current directory.
+        parent: Option<PathBuf>,
+    },
+
+    /// An entry name given on the command line is outside
+    /// `[A-Za-z0-9_]{1,64}` (`FR-CONF-048`). Nothing is written.
+    ///
+    /// The same name in the file is
+    /// [`ConfigurationEntryName`](Error::ConfigurationEntryName) and `78`.
+    #[error("{}", invalid_entry_name(*given))]
+    InvalidEntryName {
+        /// Where the name was given.
+        given: EntryNameGiven,
+        /// The name as written.
+        name: String,
+    },
+
+    /// A value given on the command line for a field `FR-CONF-015` expands
+    /// holds a reference left unclosed or whose name is not a variable name
+    /// (`FR-CONF-049`). Nothing is written.
+    #[error("invalid value for {parameter}")]
+    InvalidReference {
+        /// The flag or the fully qualified key the value was given for.
+        parameter: String,
+        /// The command path the value was given to, without the program name.
+        command: String,
+        /// What is wrong with the reference.
+        fault: ReferenceFault,
+    },
+
+    /// An empty value given on the command line for a host or a database
+    /// (`FR-CONF-050`). Nothing is written.
+    #[error("invalid value for {parameter}")]
+    EmptyValue {
+        /// The flag or the fully qualified key the value was given for.
+        parameter: String,
+        /// The command path the value was given to, without the program name.
+        command: String,
     },
 
     // ---------------------------------------------------------------- 65 ---
@@ -1497,6 +1587,33 @@ pub enum Error {
         file: PathBuf,
     },
 
+    /// A `${NAME}` whose name is not `[A-Za-z_][A-Za-z0-9_]*`, met where the
+    /// field is expanded (`FR-CONF-049`).
+    #[error("{key} carries a ${{VAR}} reference whose name is not a variable name")]
+    InvalidReferenceName {
+        /// The fully qualified key whose value carries it.
+        key: String,
+        /// The file that declares it.
+        file: PathBuf,
+        /// The name as written between the braces.
+        name: String,
+    },
+
+    /// `.tpl/.cfg` declares a `[database.<name>]` block, or a `core.database`
+    /// value, outside `[A-Za-z0-9_]{1,64}` (`FR-CONF-048`).
+    #[error("{}", configuration_entry_name(.file, *core))]
+    ConfigurationEntryName {
+        /// The file that declares it.
+        file: PathBuf,
+        /// The name as written.
+        name: String,
+        /// Whether it is the value of `core.database` rather than the name of
+        /// a block.
+        core: bool,
+        /// Where the file writes it.
+        position: Position,
+    },
+
     /// `password_command` is stored as something other than an array of
     /// strings (`FR-CONF-035`).
     #[error("{}", password_command_not_an_array(key, found, *element))]
@@ -1681,6 +1798,9 @@ pub enum Error {
         flag: &'static str,
         /// The placeholder the hint writes after that flag, as a literal.
         placeholder: &'static str,
+        /// Whether the key is absent, empty, or expands to the empty string
+        /// (`FR-CONF-050`).
+        absence: KeyAbsence,
     },
 
     /// The command requires a database entry and none is selected — neither
@@ -1730,7 +1850,10 @@ pub enum Error {
 /// The `error:` line of [`Error::UnknownCommand`]: the token, and the group it
 /// was sought under where that is not the root.
 fn unknown_command(token: &str, node: &str) -> String {
-    if node.is_empty() {
+    // W-05 of the sixth re-audit of rmp `#263`: a token holding a space is a
+    // command path given as one argument, and the line reads as the one
+    // `tpl help` writes for the same token, which names the node.
+    if node.is_empty() && !token.contains(char::is_whitespace) {
         format!("unknown command '{token}'")
     } else {
         format!(
@@ -1949,6 +2072,30 @@ fn password_command_not_an_array(key: &str, found: &str, element: Option<usize>)
     }
 }
 
+/// The `error:` line of [`Error::InvalidEntryName`].
+fn invalid_entry_name(given: EntryNameGiven) -> &'static str {
+    match given {
+        EntryNameGiven::Add => "invalid entry name for tpl cfg database add",
+        EntryNameGiven::Key(_) => "invalid entry name in the key given to tpl cfg set",
+        EntryNameGiven::CoreDatabase => "invalid value for core.database",
+    }
+}
+
+/// The `error:` line of [`Error::ConfigurationEntryName`].
+fn configuration_entry_name(file: &std::path::Path, core: bool) -> String {
+    if core {
+        format!(
+            "{} sets core.database to a value that is not an entry name",
+            file.display()
+        )
+    } else {
+        format!(
+            "{} declares a database entry with an invalid name",
+            file.display()
+        )
+    }
+}
+
 /// The `error:` line of [`Error::EntryKeyMissing`].
 ///
 /// `database.<name>.database` names the word three times over, which is how the
@@ -2075,11 +2222,15 @@ impl Error {
             | Self::AmbiguousRoutineName { .. }
             | Self::AmbiguousRoutineInContext { .. }
             | Self::RepeatedSetKey { .. }
-            | Self::LoadWithoutStoring
+            | Self::LoadWithoutStoring { .. }
             | Self::MalformedValue { .. }
             | Self::UnknownConfigurationKey { .. }
             | Self::DatabaseEntryAlreadyExists { .. }
-            | Self::IncoherentEntryWrite { .. } => 64,
+            | Self::IncoherentEntryWrite { .. }
+            | Self::InitDestinationIsTplFolder { .. }
+            | Self::InvalidEntryName { .. }
+            | Self::InvalidReference { .. }
+            | Self::EmptyValue { .. } => 64,
 
             // 65 EX_DATAERR
             Self::TemplateSyntax { .. }
@@ -2133,6 +2284,8 @@ impl Error {
             | Self::ConfigurationValueMalformed { .. }
             | Self::DsnMalformed { .. }
             | Self::UnclosedExpansion { .. }
+            | Self::InvalidReferenceName { .. }
+            | Self::ConfigurationEntryName { .. }
             | Self::PasswordCommandNotAnArray { .. }
             | Self::ConflictingEntryKeys { .. }
             | Self::DsnQueryParameter { .. }
@@ -2154,9 +2307,9 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
-        NetworkPhase, PasswordCommandFault, Position, ReadOnlyFault, ensure_invariant,
-        trigger_internal_invariant,
+        CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven,
+        EntryRepair, Error, KeyAbsence, NetworkPhase, PasswordCommandFault, Position,
+        ReadOnlyFault, ReferenceFault, ensure_invariant, trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -2166,7 +2319,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 79;
+    const VARIANT_COUNT: usize = 85;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2319,7 +2472,7 @@ mod tests {
                 },
                 64,
             ),
-            (Error::LoadWithoutStoring, 64),
+            (Error::LoadWithoutStoring { object: None }, 64),
             (
                 Error::PrettyWithoutJson {
                     command: "template list".to_owned(),
@@ -2398,6 +2551,36 @@ mod tests {
                     written: "database.shop.dsn".to_owned(),
                     conflicting: "database.shop.host".to_owned(),
                     repair: EntryRepair::Unset,
+                },
+                64,
+            ),
+            (
+                Error::InitDestinationIsTplFolder {
+                    written: PathBuf::from("proj/.tpl"),
+                    canonical: None,
+                    parent: Some(PathBuf::from("proj")),
+                },
+                64,
+            ),
+            (
+                Error::InvalidEntryName {
+                    given: EntryNameGiven::Add,
+                    name: "a b".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::InvalidReference {
+                    parameter: "database.shop.user".to_owned(),
+                    command: "cfg set".to_owned(),
+                    fault: ReferenceFault::Name("1X".to_owned()),
+                },
+                64,
+            ),
+            (
+                Error::EmptyValue {
+                    parameter: "--host".to_owned(),
+                    command: "cfg database add".to_owned(),
                 },
                 64,
             ),
@@ -2676,6 +2859,23 @@ mod tests {
                 78,
             ),
             (
+                Error::InvalidReferenceName {
+                    key: "database.shop.user".to_owned(),
+                    file: path(),
+                    name: "1X".to_owned(),
+                },
+                78,
+            ),
+            (
+                Error::ConfigurationEntryName {
+                    file: path(),
+                    name: "x.y".to_owned(),
+                    core: false,
+                    position: position(),
+                },
+                78,
+            ),
+            (
                 Error::PasswordCommandNotAnArray {
                     key: "database.shop.password_command".to_owned(),
                     file: path(),
@@ -2764,6 +2964,7 @@ mod tests {
                     file: path(),
                     flag: "--host",
                     placeholder: "<host>",
+                    absence: KeyAbsence::Absent,
                 },
                 78,
             ),
@@ -2814,11 +3015,15 @@ mod tests {
             Error::AmbiguousRoutineName { .. } => "AmbiguousRoutineName",
             Error::AmbiguousRoutineInContext { .. } => "AmbiguousRoutineInContext",
             Error::RepeatedSetKey { .. } => "RepeatedSetKey",
-            Error::LoadWithoutStoring => "LoadWithoutStoring",
+            Error::LoadWithoutStoring { .. } => "LoadWithoutStoring",
             Error::MalformedValue { .. } => "MalformedValue",
             Error::UnknownConfigurationKey { .. } => "UnknownConfigurationKey",
             Error::DatabaseEntryAlreadyExists { .. } => "DatabaseEntryAlreadyExists",
             Error::IncoherentEntryWrite { .. } => "IncoherentEntryWrite",
+            Error::InitDestinationIsTplFolder { .. } => "InitDestinationIsTplFolder",
+            Error::InvalidEntryName { .. } => "InvalidEntryName",
+            Error::InvalidReference { .. } => "InvalidReference",
+            Error::EmptyValue { .. } => "EmptyValue",
             Error::TemplateSyntax { .. } => "TemplateSyntax",
             Error::RenderFailed { .. } => "RenderFailed",
             Error::TemplateOutsideRoot { .. } => "TemplateOutsideRoot",
@@ -2855,6 +3060,8 @@ mod tests {
             Error::ConfigurationValueMalformed { .. } => "ConfigurationValueMalformed",
             Error::DsnMalformed { .. } => "DsnMalformed",
             Error::UnclosedExpansion { .. } => "UnclosedExpansion",
+            Error::InvalidReferenceName { .. } => "InvalidReferenceName",
+            Error::ConfigurationEntryName { .. } => "ConfigurationEntryName",
             Error::PasswordCommandNotAnArray { .. } => "PasswordCommandNotAnArray",
             Error::ConflictingEntryKeys { .. } => "ConflictingEntryKeys",
             Error::DsnQueryParameter { .. } => "DsnQueryParameter",

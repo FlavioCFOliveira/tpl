@@ -375,6 +375,16 @@ maintain it.
   *Accepted cost.* A `.cfg` shared across a team through a unix group stops
   working.
 
+  *Note added in the forty-ninth edition.* This check reads the group and
+  other bits only. Every mode that clears all six passes it, whatever the
+  owner bits: `0600`, `0400` and `0700` alike. A file the owner cannot read
+  then fails its read with `74` (`EX_IOERR`), per `FR-ERR-001`. The `cause`
+  SHALL name the mode found and SHALL state that group and other must have no
+  access. It SHALL NOT state that `0600` is the only mode accepted. A `cfg`
+  command that rewrites the file leaves it at `0600`, per `FR-CFG-034`. The
+  message stated "only at mode 0600" while a file at `0400` was read, per
+  finding W-08 of the sixth re-audit, recorded for rmp `#281`.
+
 - **FR-PROJ-028**: WHERE the project's `.tpl` folder holds no `.cfg`, the
   system SHALL use the project with an empty configuration, and SHALL NOT
   refuse it for the absence:
@@ -440,6 +450,87 @@ tpl init [<path>]
 - **FR-PROJ-012**: `tpl init` SHALL take an optional positional path, defaulting
   to the current directory.
 
+  *Note added in the forty-ninth edition.* The path names the directory that
+  will hold `.tpl`, never the `.tpl` folder itself. `FR-PROJ-029` refuses a
+  path that names a `.tpl` folder.
+
+- **FR-PROJ-029**: IF the destination of `tpl init` names a `.tpl` folder,
+  THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL create, change and
+  delete nothing. The destination names a `.tpl` folder in either of two
+  cases:
+
+  1. **As written.** The last segment of the path as written, after any
+     trailing separators and any trailing `.` segments are dropped, is `.tpl`.
+  2. **Canonical.** The destination exists, and the last segment of its
+     canonical path is `.tpl`. This is the case of `tpl init` with no operand,
+     run inside a `.tpl` folder.
+
+  The message SHALL be as follows:
+
+  1. **`error`** SHALL state that `tpl init` takes the directory that will
+     hold `.tpl`, not the `.tpl` folder.
+  2. **`cause`** SHALL name the path as written, or `.` where no operand was
+     given, and SHALL state that its last segment is `.tpl`.
+  3. **`hint`** SHALL carry `tpl init` followed by the parent directory of the
+     folder named: the path as written with its last segment removed, in the
+     first case, and the canonical parent, in the second. WHERE that parent is
+     the current directory, the `hint` SHALL carry `tpl init` with no operand.
+     The parent is built under `FR-ERR-041`. IF that set refuses it, THEN the
+     `hint` SHALL carry `tpl init <path>` and SHALL state in words that
+     `<path>` stands for the directory that holds the folder named. The `hint`
+     SHALL carry no flag.
+
+  ```
+  tpl init proj/.tpl
+  error: tpl init takes the directory that will hold .tpl, not the .tpl folder
+  cause: the path proj/.tpl ends in .tpl, so a project there would be nested inside that folder
+  hint:  create the project in the parent directory: tpl init proj
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  The condition is evaluated when the destination is first examined: before
+  the check of `FR-PROJ-014`, before any directory is created under
+  `FR-PROJ-013`, and after the warning of `FR-PROJ-026`, where that warning
+  is written.
+
+  *Rationale.* `FR-PROJ-008`, `FR-PROJ-027` and every `hint` that names a
+  project teach the form `<project>/.tpl`, so `tpl init <project>/.tpl` is
+  the next mistake a caller makes. Before this requirement it exited `0` and
+  created `<project>/.tpl/.tpl`. Discovery from `<project>` then found the
+  outer folder, which held no `.cfg` and no templates: `tpl template list`
+  listed nothing, `tpl cfg database add` wrote `.cfg` into the outer folder,
+  and `tpl render example` exited `66`. The warning of `FR-PROJ-016` also
+  named a project that did not exist, because `tpl init` had created the
+  outer folder itself as a missing parent. This is finding W-01 of the sixth
+  re-audit, recorded for rmp `#281`.
+
+  *Why the name, as in `FR-PROJ-027`.* A `.tpl` folder is recognised by its
+  name, by discovery and by `--tpl-dir` alike. The same test here refuses
+  exactly the paths at which a project would be created inside what every
+  other command reads as a `.tpl` folder.
+
+  *Why `64`.* The operand is a value the caller wrote and can rewrite, and the
+  destination could be created. `73` sends the caller to check permissions or
+  to choose another destination, per its row of `FR-ERR-001`, and the fault
+  is in neither. `FR-ERR-003` is unchanged: `73` is still produced only by
+  `tpl init`.
+
+  *Rejected: creating the project in the parent directory.* It gives the
+  operand two meanings, and a caller that meant a directory literally named
+  `.tpl` would receive a project it did not name. Also rejected: refusing any
+  path with a `.tpl` segment anywhere in it. No finding reached that case, and
+  `FR-PROJ-016` governs a destination beneath an existing project.
+
+  *Accepted cost.* A project cannot be created in a directory whose own name
+  is `.tpl`. The caller renames the directory or chooses another.
+
+  *Added in the forty-ninth edition,* for rmp `#281`, from finding W-01 of the
+  sixth re-audit.
+
 - **FR-PROJ-013**: `tpl init` SHALL create the destination directory, including
   any missing parent directories.
 
@@ -457,6 +548,15 @@ tpl init [<path>]
 
   *Accepted cost.* A caller checking only the exit code will not see the
   warning.
+
+  *Amended in the forty-ninth edition.* A `.tpl` folder in an ancestor
+  directory engages this requirement only WHERE it existed before the
+  invocation. A `.tpl` folder that the same `tpl init` created as a missing
+  parent, under `FR-PROJ-013`, is not a project above the destination, and
+  the system SHALL NOT write the warning for it. The warning named a project
+  that did not exist, per finding W-01 of the sixth re-audit, recorded for
+  rmp `#281`. `FR-PROJ-029` refuses the commonest path that produced it; this
+  amendment covers the paths that remain, such as `tpl init a/.tpl/b`.
 
   *Checked in the thirty-first edition against the two requirements that
   contradicted it, and unchanged.* This requirement obliges a look at the
@@ -512,6 +612,10 @@ tpl init [<path>]
      `--tpl-dir` returns: `0`, or `73` per `FR-PROJ-014` and `FR-PROJ-015`.
   5. **Verbosity.** The line is a warning, so `-q/--quiet` suppresses it, per
      `FR-GLOB-015`. `-v/--verbose` does not change it.
+
+  *Note added in the forty-ninth edition.* The line also precedes the message
+  of `FR-PROJ-029`, and the exit code of item 4 may also be `64`, per that
+  requirement.
 
   ```
   tpl init --tpl-dir /srv/shop/.tpl       warning, then 0 or 73 for ./.tpl

@@ -32,10 +32,13 @@ here introduces behaviour of its own.
   - `--tpl-dir` is given: it has no effect, a warning naming the form
     `tpl init <path>` goes to stderr, and the flow continues at the
     destination the invocation would have without the flag.
+  - The path names a `.tpl` folder, as in `tpl init proj/.tpl`: exit `64`,
+    nothing created, and the `hint` carries `tpl init proj`.
 - **Postconditions**: the project is usable; no database is known to it, so
   `tpl cfg database list` answers with an empty listing and exit `0`, per
   `FR-CFG-040`
-- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`, `FR-PROJ-025`, `FR-PROJ-026`
+- **Requirements**: `FR-PROJ-012` … `FR-PROJ-022`, `FR-PROJ-025`, `FR-PROJ-026`,
+  `FR-PROJ-029`
 
 ## UC-002 — Register a database entry
 
@@ -59,9 +62,12 @@ here introduces behaviour of its own.
     exit `78`, nothing written, and the `hint` carries the corrected
     `--tpl-dir`.
   - `--ca-file` or `--ca-path` holds `${VAR}`: exit `64`, nothing written.
+  - The entry name is empty or holds a character other than a letter, a
+    digit or an underscore, or `--host` or `--schema` is empty: exit `64`,
+    nothing written.
 - **Postconditions**: `-d shop` resolves
 - **Requirements**: `FR-CFG-015` … `FR-CFG-017`, `FR-CFG-027`, `FR-PROJ-027`,
-  `FR-PROJ-028`, `FR-CONF-047`
+  `FR-PROJ-028`, `FR-CONF-047`, `FR-CONF-048`, `FR-CONF-050`
 
 ## UC-003 — Keep the password out of the file
 

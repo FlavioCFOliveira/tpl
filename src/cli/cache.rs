@@ -246,7 +246,13 @@ fn load(
     // command declares and what the command does is decided from the
     // invocation alone, before anything is discovered or opened.
     if caching.no_cache {
-        return Err(Error::LoadWithoutStoring);
+        let named =
+            |kind: &'static str, names: &[String]| names.first().map(|name| (kind, name.clone()));
+        return Err(Error::LoadWithoutStoring {
+            object: named("table", &object.table)
+                .or_else(|| named("view", &object.view))
+                .or_else(|| named("routine", &object.routine)),
+        });
     }
 
     let wanted = Wanted::of(object, LOAD)?;

@@ -31,10 +31,10 @@ use toml_edit::{Item, value};
 
 use super::super::local::Format;
 use super::{Supplied, coherence, form, project};
-use crate::error::Error;
+use crate::error::{EntryNameGiven, Error};
 use crate::output::{self, Collection, Document, Order, Source, Table};
 use crate::project::config::entry::{Entry as Block, PasswordCommand};
-use crate::project::config::keys::{EntryKey, Key};
+use crate::project::config::keys::{EntryKey, Key, is_entry_name};
 use crate::project::config::redact;
 use crate::project::edit::{self, Editor};
 
@@ -65,11 +65,13 @@ struct Named<'a> {
 /// The `data` of `tpl cfg database show` (`FR-CFG-038`, `FR-OUT-031`).
 ///
 /// One key, named for the kind in the singular, whose value is that entry with
-/// the redaction of `FR-CFG-021` applied.
+/// the redaction of `FR-CFG-021` applied, each value in the TOML type the file
+/// holds it in (`FR-CFG-049`): a port is a number and a `password_command` an
+/// array, as `tpl cfg get` and `tpl cfg list` print them.
 #[derive(Debug, Serialize)]
 struct Shown<'a> {
     /// The entry.
-    entry: BTreeMap<&'a str, Cow<'a, str>>,
+    entry: BTreeMap<&'static str, super::keys::Printed<'a>>,
 }
 
 /// `tpl cfg database add <name>` (`FR-CFG-015` … `FR-CFG-017`).
@@ -87,6 +89,15 @@ struct Shown<'a> {
 /// flags describe is a combination `FR-CONF-007` refuses (`FR-CFG-048`), and
 /// [`Error::ProjectFileUnwritable`] where the rewrite failed.
 pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Result<(), Error> {
+    // FR-CONF-048: the name is written into every `hint` that names the
+    // entry, so it is held to the set that governs it there.
+    if !is_entry_name(name) {
+        return Err(Error::InvalidEntryName {
+            given: EntryNameGiven::Add,
+            name: name.to_owned(),
+        });
+    }
+
     flags.exclusive()?;
 
     if !flags.connects() {
@@ -241,15 +252,19 @@ pub(crate) fn show<W: Write>(
         return Err(configuration.entry_not_found(name, false));
     };
 
-    let fields = redacted(block);
-
     match supplied.format() {
         Format::Json => output::emit_to(
             out,
-            &Document::new(Source::Project, Shown { entry: fields }),
+            &Document::new(
+                Source::Project,
+                Shown {
+                    entry: typed(block),
+                },
+            ),
             form(supplied),
         ),
         Format::Text => {
+            let fields = redacted(block);
             let rows: Vec<[Cow<'_, str>; 2]> = fields
                 .into_iter()
                 .map(|(key, value)| [Cow::Borrowed(key), value])
@@ -273,6 +288,19 @@ fn redacted(block: &Block) -> BTreeMap<&'static str, Cow<'_, str>> {
     }
 
     fields
+}
+
+/// The entry's keys and values for the `json` document, typed per
+/// `FR-CFG-049` and redacted per `FR-CFG-021`.
+fn typed(block: &Block) -> BTreeMap<&'static str, super::keys::Printed<'_>> {
+    EntryKey::ALL
+        .iter()
+        .filter_map(|&field| {
+            block
+                .written(field)
+                .map(|value| (field.leaf(), super::keys::printed(field, value)))
+        })
+        .collect()
 }
 
 /// Writes the flags of `FR-CFG-027` into the entry `name`.
@@ -305,6 +333,17 @@ fn at(refused: Error, command: &str) -> Error {
             command: command.to_owned(),
             value,
             expected,
+        },
+        Error::InvalidReference {
+            parameter, fault, ..
+        } => Error::InvalidReference {
+            parameter,
+            command: command.to_owned(),
+            fault,
+        },
+        Error::EmptyValue { parameter, .. } => Error::EmptyValue {
+            parameter,
+            command: command.to_owned(),
         },
         other => other,
     }
@@ -421,19 +460,19 @@ impl Flags<'_> {
         let mut written: Vec<(EntryKey, Result<Item, Error>)> = Vec::with_capacity(9);
 
         if let Some(dsn) = self.dsn {
-            written.push((EntryKey::Dsn, dsn_item(dsn)));
+            written.push((EntryKey::Dsn, referenced(DSN, dsn).and_then(dsn_item)));
         }
         if let Some(host) = self.host {
-            written.push((EntryKey::Host, Ok(value(host))));
+            written.push((EntryKey::Host, nonempty("--host", host)));
         }
         if let Some(port) = self.port {
             written.push((EntryKey::Port, Ok(value(i64::from(port)))));
         }
         if let Some(user) = self.user {
-            written.push((EntryKey::User, Ok(value(user))));
+            written.push((EntryKey::User, referenced("--user", user).map(value)));
         }
         if let Some(schema) = self.schema {
-            written.push((EntryKey::Database, Ok(value(schema))));
+            written.push((EntryKey::Database, nonempty("--schema", schema)));
         }
         if let Some(command) = self.password_command {
             written.push((EntryKey::PasswordCommand, command_item(command)));
@@ -450,6 +489,33 @@ impl Flags<'_> {
 
         written
     }
+}
+
+/// `written`, where every `${NAME}` it holds is well formed (`FR-CONF-049`).
+///
+/// The command is filled in by the caller, as for every refused flag value.
+fn referenced<'v>(flag: &str, written: &'v str) -> Result<&'v str, Error> {
+    match crate::project::config::expand::reference_fault(written) {
+        Some(fault) => Err(Error::InvalidReference {
+            parameter: flag.to_owned(),
+            command: String::new(),
+            fault,
+        }),
+        None => Ok(written),
+    }
+}
+
+/// The item `--host` or `--schema` writes: not empty (`FR-CONF-050`), and with
+/// every reference well formed (`FR-CONF-049`).
+fn nonempty(flag: &str, written: &str) -> Result<Item, Error> {
+    if written.is_empty() {
+        return Err(Error::EmptyValue {
+            parameter: flag.to_owned(),
+            command: String::new(),
+        });
+    }
+
+    referenced(flag, written).map(value)
 }
 
 /// The `dsn` item a `--dsn` writes, verbatim, once the grammar has accepted it.
@@ -820,6 +886,35 @@ mod tests {
         assert_eq!(
             document,
             "{\"schema_version\":1,\"source\":\"project\",\"data\":{\"entry\":{\"host\":\"db\",\"password\":\"***\"}}}\n"
+        );
+    }
+
+    #[test]
+    fn fr_cfg_049_show_writes_each_value_in_the_toml_type_the_file_holds() {
+        // FR-CFG-049: a port is a number, a password_command an array, a
+        // redacted value the string `***`, and a reference a string.
+        let harness = Harness::new(concat!(
+            "[database.shop]\n",
+            "host = \"${SHOP_HOST}\"\n",
+            "port = 3307\n",
+            "database = \"shop\"\n",
+            "password_command = [\"echo\", \"${PW}\"]\n",
+            "[database.other]\n",
+            "host = \"h\"\n",
+            "password = \"hunter2\"\n",
+        ));
+
+        assert_eq!(
+            harness.show_json("shop"),
+            concat!(
+                "{\"schema_version\":1,\"source\":\"project\",\"data\":{\"entry\":{",
+                "\"database\":\"shop\",\"host\":\"${SHOP_HOST}\",",
+                "\"password_command\":[\"echo\",\"${PW}\"],\"port\":3307}}}\n",
+            )
+        );
+        assert_eq!(
+            harness.show_json("other"),
+            "{\"schema_version\":1,\"source\":\"project\",\"data\":{\"entry\":{\"host\":\"h\",\"password\":\"***\"}}}\n"
         );
     }
 

@@ -267,6 +267,18 @@ impl fmt::Display for EntryKey {
     }
 }
 
+/// Whether `name` is an entry name: one to sixty-four ASCII letters, digits
+/// and underscores (`FR-CONF-048`).
+///
+/// It is the set of `FR-ERR-022`, so every entry name is printable in every
+/// `hint` that names it.
+pub(crate) fn is_entry_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
 /// One key of the space of `FR-CONF-002`, fully qualified.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Key {
@@ -285,9 +297,9 @@ pub(crate) enum Key {
 impl Key {
     /// The key a dotted name spells, or [`None`] where the space has none.
     ///
-    /// A `database.<name>.<field>` key is split at its **last** dot, so an
-    /// entry whose name carries one — which `FR-CONF-008` does not forbid —
-    /// still round-trips between the file and the command line.
+    /// A `database.<name>.<field>` key is split at its **last** dot, so a
+    /// name that carries one still parses, and `tpl cfg set` can refuse it
+    /// under `FR-CONF-048` as a name rather than as an unknown key.
     pub(crate) fn parse(text: &str) -> Option<Self> {
         if let Some(leaf) = text
             .strip_prefix(CORE)
