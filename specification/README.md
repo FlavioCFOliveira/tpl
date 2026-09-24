@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-six editions. All are in force;
+The specification has been written in fifty-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4628,6 +4628,34 @@ and the index of [open-questions.md](open-questions.md) stays empty.
 against the change. None conflicts with it, so none is amended. The root
 `README.md` does not quote the line of `FR-CFG-052`, so the fifth validation
 rule owes nothing.
+
+### Fifty-seventh edition — the line that opens every help
+
+The user decided on 2026-09-24, for rmp `#304`, that every text help opens with
+one line naming the binary, its version and its purpose, followed by one empty
+line.
+
+**One identifier is assigned: `FR-HELP-037`.** None is retired and none is
+renumbered. No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The opening line** — [help-and-version.md](help-and-version.md).
+  `FR-HELP-037` fixes the line
+  `tpl v<version> - Code Generation based on database schema` and the empty
+  line after it, before `USAGE`, in every form of text help at every node.
+  The JSON command tree and the three version forms are unchanged.
+  `FR-HELP-006` carries a note: `USAGE` is still the first section and is no
+  longer the first line. The module's Scope names the line.
+
+`FR-HELP-002`, `FR-HELP-005`, `FR-HELP-007`, `FR-HELP-008`, `FR-HELP-009`,
+`FR-HELP-015`, `FR-HELP-016`, `FR-HELP-025`, `BR-HELP-001`, `BR-HELP-002`,
+`FR-GLOB-019`, `FR-GLOB-020`, `BR-CLI-005` and `FR-CLI-007` were read against
+the change. None conflicts with it, so none is amended: the equivalences and
+the snapshot tests carry the line because they compare whole outputs, and no
+file of this corpus reproduces a complete help text that would need it. The
+root `README.md` and `CLAUDE.md` do not reproduce the help layout, so the
+fifth validation rule owes nothing.
 
 ### Still out of scope
 

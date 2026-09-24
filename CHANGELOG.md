@@ -55,6 +55,10 @@ workflow, before it closes.
   itself: `release.yml` is started with
   `gh workflow run release.yml --ref vX.Y.Z`, and it refuses a ref that is not
   a tag.
+- **Help banner.** Every text help — `tpl help`, `tpl help <path>` and
+  `-h`/`--help` at every node — now opens with
+  `tpl v<version> - Code Generation based on database schema` and one empty
+  line. `tpl help --format json` and `tpl version` are unchanged.
 
 ## [0.0.1] - 2026-09-24
 

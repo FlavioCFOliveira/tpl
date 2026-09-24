@@ -32,6 +32,18 @@ use std::process::{Command, Output};
 /// and not one of its instances.
 const VERSION_LINE: &str = concat!("tpl ", env!("CARGO_PKG_VERSION"), "\n");
 
+/// The opening line of `FR-HELP-037`, for the version this binary was built
+/// at, without its newline.
+///
+/// At version 0.1.0 it is exactly `tpl v0.1.0 - Code Generation based on
+/// database schema`. The version is read from the package, the same source
+/// [`VERSION_LINE`] reads.
+const OPENING: &str = concat!(
+    "tpl v",
+    env!("CARGO_PKG_VERSION"),
+    " - Code Generation based on database schema"
+);
+
 /// The seven sections of `FR-HELP-006`, in the one order it fixes.
 const SECTIONS: [&str; 7] = [
     "USAGE",
@@ -435,6 +447,90 @@ fn fr_help_025_a_group_node_with_no_child_prints_what_its_help_form_prints() {
             "{} bare and tpl help {} differ",
             written(path),
             path.join(" ")
+        );
+    }
+}
+
+#[test]
+fn fr_help_037_every_text_help_opens_with_the_line_and_one_empty_line_at_every_node() {
+    // FR-HELP-037: every form of text help — `tpl help <path>`, `<path>
+    // --help`, `<path> -h`, and a group node invoked with no child per
+    // FR-HELP-025 — opens with the line, one empty line, and then USAGE. The
+    // nodes are read from the document, so the root and every depth are
+    // covered.
+    let paths = node_paths();
+    let expected = format!("{OPENING}\n\nUSAGE\n");
+
+    for path in &paths {
+        let is_group = paths
+            .iter()
+            .any(|other| other.len() == path.len() + 1 && other.starts_with(path));
+
+        let mut forms = vec![
+            with(&["help".to_owned()], &borrowed(path)),
+            with(path, &["--help"]),
+            with(path, &["-h"]),
+        ];
+        if is_group {
+            forms.push(path.clone());
+        }
+
+        for form in forms {
+            let printed = String::from_utf8(succeeds(&borrowed(&form))).expect("UTF-8");
+            let mut lines = printed.lines();
+
+            assert_eq!(
+                lines.next(),
+                Some(OPENING),
+                "{} does not open with the line",
+                written(&form)
+            );
+            assert_eq!(
+                lines.next(),
+                Some(""),
+                "{} does not follow the line with one empty line",
+                written(&form)
+            );
+            assert!(
+                printed.starts_with(&expected),
+                "{} does not reach USAGE after the empty line",
+                written(&form)
+            );
+        }
+    }
+}
+
+#[test]
+fn fr_help_037_the_line_reaches_neither_the_json_tree_nor_the_version_forms() {
+    // FR-HELP-037: the JSON command tree of FR-HELP-016, whole and for every
+    // subtree, carries no part of the line, and the three version forms still
+    // write exactly the line of FR-HELP-005.
+    for path in node_paths() {
+        let printed = succeeds(&borrowed(&with(
+            &with(&["help".to_owned()], &borrowed(&path)),
+            &["--format", "json"],
+        )));
+        let text = String::from_utf8(printed).expect("UTF-8");
+
+        assert!(
+            !text.contains("Code Generation based on database schema"),
+            "tpl help {} --format json carries the line",
+            path.join(" ")
+        );
+        assert!(
+            !text.contains(concat!("tpl v", env!("CARGO_PKG_VERSION"))),
+            "tpl help {} --format json carries the line",
+            path.join(" ")
+        );
+        serde_json::from_str::<serde_json::Value>(&text).expect("the output is one JSON document");
+    }
+
+    for form in [&["version"][..], &["--version"][..], &["-V"][..]] {
+        assert_eq!(
+            String::from_utf8(succeeds(form)).expect("UTF-8"),
+            VERSION_LINE,
+            "tpl {} changed",
+            form.join(" ")
         );
     }
 }

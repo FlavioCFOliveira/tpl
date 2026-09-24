@@ -1,5 +1,6 @@
 //! The renderer of `FR-HELP-006`: seven sections, in one order, laid out at the
-//! fixed width of `FR-HELP-009`.
+//! fixed width of `FR-HELP-009`, after the opening line of `FR-HELP-037` and one
+//! empty line.
 //!
 //! `OD-07` settles that `tpl` renders help itself and that the parser's own
 //! renderer is never invoked. This module is that renderer. It reads two
@@ -185,8 +186,20 @@ fn walk<'a>(tree: &'a Command, path: &[&str]) -> Option<(&'a Command, Vec<&'a st
     Some((node, canonical))
 }
 
-/// The seven sections of `FR-HELP-006`, in that order, with the empty ones
-/// omitted per `FR-HELP-007`.
+/// The line every text help opens with, per `FR-HELP-037`.
+///
+/// The version is the package's own, read at compile time: the same source as
+/// the line `FR-HELP-005` prints, so the two cannot disagree. The line is the
+/// same at every node, and it is not a section.
+const BANNER: &str = concat!(
+    "tpl v",
+    env!("CARGO_PKG_VERSION"),
+    " - Code Generation based on database schema"
+);
+
+/// The opening line of `FR-HELP-037` and one empty line, then the seven
+/// sections of `FR-HELP-006`, in that order, with the empty ones omitted per
+/// `FR-HELP-007`.
 fn compose(node: &Command, path: &[&str], found: &Entry) -> String {
     let sections = [
         ("USAGE", usage(node, path)),
@@ -199,15 +212,17 @@ fn compose(node: &Command, path: &[&str], found: &Entry) -> String {
     ];
 
     let mut rendered = String::new();
+    rendered.push_str(BANNER);
+    rendered.push('\n');
 
     for (title, lines) in sections {
         if lines.is_empty() {
             continue;
         }
 
-        if !rendered.is_empty() {
-            rendered.push('\n');
-        }
+        // FR-HELP-037 puts one empty line after the opening line, and
+        // FR-HELP-006 one between two sections: either way, one empty line.
+        rendered.push('\n');
 
         rendered.push_str(title);
         rendered.push('\n');
@@ -982,6 +997,14 @@ mod tests {
             .join(" ")
     }
 
+    /// The opening line of `FR-HELP-037` and the empty line after it, written
+    /// out here rather than read from the renderer.
+    const OPENING: &str = concat!(
+        "tpl v",
+        env!("CARGO_PKG_VERSION"),
+        " - Code Generation based on database schema\n\n"
+    );
+
     /// The help of every node, by the path it is reached by.
     fn every_help() -> Vec<(Vec<String>, String)> {
         node_paths()
@@ -1004,9 +1027,13 @@ mod tests {
     /// The headings of a rendered help text, in the order it carries them.
     ///
     /// A heading is a line that begins in column 0, which is what separates a
-    /// section from its body: every line of a body is indented.
+    /// section from its body: every line of a body is indented. The opening
+    /// line of `FR-HELP-037` also begins in column 0 and is not a section, so
+    /// the text is read from after it.
     fn headings(help: &str) -> Vec<&str> {
-        help.lines()
+        help.strip_prefix(OPENING)
+            .expect("every help opens with the line of FR-HELP-037")
+            .lines()
             .filter(|line| !line.is_empty() && !line.starts_with(' '))
             .collect()
     }
@@ -1480,7 +1507,12 @@ mod tests {
         // and so no ARGUMENTS and no OPTIONS.
         assert_eq!(
             rendered(&["version"]),
-            "\
+            concat!(
+                "tpl v",
+                env!("CARGO_PKG_VERSION"),
+                " - Code Generation based on database schema\n",
+                "\n",
+                "\
 USAGE
   tpl version [options]
 
@@ -1505,6 +1537,7 @@ EXIT CODES
 SEE ALSO
   tpl help
 "
+            )
         );
     }
 
@@ -1541,7 +1574,7 @@ SEE ALSO
             let segments: Vec<&str> = path.iter().map(String::as_str).collect();
 
             assert!(
-                help.starts_with(&format!("USAGE\n  {}", spelled(&segments))),
+                help.starts_with(&format!("{OPENING}USAGE\n  {}", spelled(&segments))),
                 "{path:?} does not open with its own path"
             );
         }

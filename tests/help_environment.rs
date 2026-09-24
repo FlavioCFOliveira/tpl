@@ -100,7 +100,15 @@ fn fr_cli_007_the_help_of_a_group_node_is_written_to_stdout_at_exit_zero() {
         let text = String::from_utf8(printed.stdout).expect("the renderer writes UTF-8");
 
         assert!(
-            text.starts_with(&format!("USAGE\n  {}", spelled(path))),
+            text.starts_with(&format!(
+                "{}USAGE\n  {}",
+                concat!(
+                    "tpl v",
+                    env!("CARGO_PKG_VERSION"),
+                    " - Code Generation based on database schema\n\n"
+                ),
+                spelled(path)
+            )),
             "{} did not print its own help",
             spelled(path)
         );

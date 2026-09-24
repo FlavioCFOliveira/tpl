@@ -1590,7 +1590,15 @@ mod tests {
 
             assert_eq!(written, expected, "{path:?}");
             assert!(
-                written.starts_with(&format!("USAGE\n  {}", node_path(path))),
+                written.starts_with(&format!(
+                    "{}USAGE\n  {}",
+                    concat!(
+                        "tpl v",
+                        env!("CARGO_PKG_VERSION"),
+                        " - Code Generation based on database schema\n\n"
+                    ),
+                    node_path(path)
+                )),
                 "{path:?} did not print its own help"
             );
         }

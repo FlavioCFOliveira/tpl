@@ -17,7 +17,8 @@ at every level, and available as a single machine-readable document.
 ## Scope
 
 In scope: the six help and version forms and their equivalences, the nested
-command path, the fixed help layout, the content obligations of each section,
+command path, the fixed help layout and the line that opens it, the content
+obligations of each section,
 and the JSON command tree — its envelope, the keys of its `data`, the shape of
 `data.commands`, and how a subtree of it is selected.
 
@@ -72,9 +73,43 @@ alongside the command it documents.
 
 ## Help layout
 
+- **FR-HELP-037**: Every text help SHALL open with exactly the following line,
+  followed by one empty line, before its first section:
+
+  ```
+  tpl v<version> - Code Generation based on database schema
+  ```
+
+  `<version>` SHALL be the version `FR-HELP-005` prints. `v` SHALL be a
+  literal lower-case `v` with no space after it, and the separator SHALL be
+  one ASCII hyphen-minus (`U+002D`) with exactly one space on each side. For
+  version 0.1.0 the help text therefore begins with exactly the bytes
+  `tpl v0.1.0 - Code Generation based on database schema\n\nUSAGE`.
+
+  The line SHALL appear in every form of text help: `tpl help`,
+  `tpl help <command path>`, and `-h` or `--help` at every node, at every
+  depth, and in the text `FR-HELP-025` prints for a group node invoked with no
+  child. The equivalences of `FR-HELP-002` therefore include it. It SHALL NOT
+  appear in the JSON command tree of `FR-HELP-016`, and it SHALL NOT change
+  the output of `tpl version`, `tpl --version` or `tpl -V`, which remains
+  exactly what `FR-HELP-005` fixes.
+
+  The line is not a section: `FR-HELP-006` and `FR-HELP-007` govern what
+  follows the empty line, and the line is the same at every node. Its wording
+  is fixed here, so `BR-HELP-002` does not reach it. The line SHALL NOT be
+  broken; at 48 characters plus the version, it fits the 80 columns of
+  `FR-HELP-009` for any version of up to 32 characters.
+
+  *Added in the fifty-seventh edition, by the decision of the user of
+  2026-09-24, recorded for rmp `#304`.*
+
 - **FR-HELP-006**: Every help text SHALL contain the following sections, in this
   order and no other: `USAGE`, `DESCRIPTION`, `ARGUMENTS`, `OPTIONS`,
   `EXAMPLES`, `EXIT CODES`, `SEE ALSO`.
+
+  *Amended in the fifty-seventh edition.* The sections follow the opening line
+  of `FR-HELP-037` and the empty line after it. `USAGE` remains the first
+  section, and it is no longer the first line of the text.
 
 - **FR-HELP-007**: The system SHALL omit an empty section, except `USAGE`,
   `DESCRIPTION`, `EXAMPLES`, and `EXIT CODES`, which SHALL always appear.
