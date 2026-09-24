@@ -288,10 +288,22 @@ impl<'a> Reader<'a> {
     /// # Errors
     ///
     /// Returns what [`project`] and [`Reader::open_from`] return.
-    pub(super) fn open(&self) -> Result<Opened, Error> {
+    pub(super) fn open(&self, touched: &[Collection]) -> Result<Opened, Error> {
         let (project, configuration) = project(self.tpl_dir)?;
 
-        self.open_from(&project, configuration)
+        self.open_from(&project, configuration, touched)
+    }
+
+    /// The collections an invocation that looks up `looked` would read or
+    /// write: every collection where a miss may write the whole catalogue,
+    /// and only `looked` under `--no-cache`, which writes nothing
+    /// (`FR-CACHE-007`, `FR-CACHE-014`, `FR-CACHE-044`).
+    pub(super) fn touched<'c>(&self, looked: &'c [Collection]) -> &'c [Collection] {
+        if self.no_cache {
+            looked
+        } else {
+            &Collection::ALL
+        }
     }
 
     /// Step 5 of `FR-ERR-006` over a project already discovered: the entry is
@@ -306,13 +318,16 @@ impl<'a> Reader<'a> {
     ///
     /// # Errors
     ///
-    /// Returns what [`settings::resolve`] returns, and
+    /// Returns what [`settings::resolve`] returns,
     /// [`Error::EntryKeyMissing`] where the entry names no host or no
-    /// database, per `FR-CONF-040` and `FR-CONF-041`.
+    /// database, per `FR-CONF-040` and `FR-CONF-041`, and
+    /// [`Error::CachePathLinked`] where `.tpl/.cache`, the entry's folder or
+    /// the folder of one of `touched` is a symbolic link, per `FR-CACHE-044`.
     pub(super) fn open_from(
         &self,
         project: &Project,
         configuration: Configuration,
+        touched: &[Collection],
     ) -> Result<Opened, Error> {
         let settings = settings::resolve(
             &configuration,
@@ -324,6 +339,13 @@ impl<'a> Reader<'a> {
         connection_keys(&settings, &configuration)?;
 
         let cache = Cache::of(project.root(), settings.entry());
+
+        // FR-CACHE-044, at step 6 of FR-ERR-006: before the cache is consulted
+        // and before any connection, so a hit is refused as a miss is.
+        // `--direct --no-cache` touches no cache, per FR-CACHE-016.
+        if !(self.direct && self.no_cache) {
+            cache.refuse_links(true, touched, false)?;
+        }
 
         Ok(Opened {
             cache,
@@ -416,7 +438,7 @@ impl<'a> Reader<'a> {
     where
         P: FnOnce(&DatabaseDocument<'_>, Source, &str) -> Result<T, Error>,
     {
-        let opened = self.open()?;
+        let opened = self.open(self.touched(look.collections()))?;
 
         self.serve_from(&opened, look, |served, source, entry| {
             present(&served, source, entry)
@@ -495,7 +517,7 @@ impl<'a> Reader<'a> {
     where
         P: FnOnce(&Summary<'_>, Source) -> Result<T, Error>,
     {
-        let opened = self.open()?;
+        let opened = self.open(&Collection::ALL)?;
 
         if !self.direct
             && let Some(held) = opened.cache.summary()
@@ -526,7 +548,7 @@ impl<'a> Reader<'a> {
     where
         P: FnOnce(&[Listed<'_>], Source) -> Result<T, Error>,
     {
-        let opened = self.open()?;
+        let opened = self.open(self.touched(&[Collection::Tables]))?;
 
         if !self.direct
             && let Some(loaded) = opened.cache.collection(Collection::Tables)

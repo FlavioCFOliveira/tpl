@@ -577,8 +577,13 @@ fn from_catalogue<W: std::io::Write>(
     // connection of NFR-PERF-004, the catalogue read and the store write.
     environment.resolve(supplied.template)?;
 
-    // Steps 5 and 6.
-    let opened = reader.open_from(&project, configuration)?;
+    // Steps 5 and 6. A render reads every collection before it starts, per
+    // FR-CACHE-038, so all three are checked for a link under FR-CACHE-044.
+    let opened = reader.open_from(
+        &project,
+        configuration,
+        &crate::cache::paths::Collection::ALL,
+    )?;
     let render_timeout = opened.deadlines().of(Phase::Render);
     let mut assembly = Assembly {
         environment: &environment,

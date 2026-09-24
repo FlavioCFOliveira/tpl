@@ -876,6 +876,15 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              other have no access, as at mode 0600",
             path.display()
         )),
+        Error::CachePathLinked { path, removal, .. } => Cow::Owned(format!(
+            "{} is a symbolic link, and {}",
+            path.display(),
+            if *removal {
+                "tpl cache clean removes nothing through a link"
+            } else {
+                "tpl reads and writes no cache through a link"
+            }
+        )),
         Error::ConfigurationMalformed {
             path,
             position,

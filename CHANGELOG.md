@@ -60,6 +60,29 @@ workflow, before it closes.
   `tpl v<version> - Code Generation based on database schema` and one empty
   line. `tpl help --format json` and `tpl version` are unchanged.
 
+### Fixed
+
+- **`tpl cache clean` removes nothing through a symbolic link.** In every
+  form, a linked `.tpl/.cache`, and for `--table`, `--view` or `--routine` a
+  linked `.tpl/.cache/<name>` or collection folder, is refused with `78`,
+  nothing removed, and a `hint` that removes the link alone; a link that is
+  itself the folder or file removed is removed as a link, and no link beneath
+  a removed folder is followed.
+- **A partial `tpl cache clean` keeps `loaded_at`.** With `--table`, `--view`
+  or `--routine`, it only marks the object's collection as not loaded whole in
+  `meta.json`, and leaves an absent or unusable `meta.json` as it found it.
+- **No cache path is read or written through a symbolic link.** The eight
+  `schema` subcommands, `tpl render` without `--context`, `tpl cache load` and
+  `tpl cache status` refuse a linked `.tpl/.cache`, entry folder or collection
+  folder with `78`, reading, writing and connecting to nothing;
+  `--direct --no-cache` still reads the server. `meta.json` and
+  `database.json` are read only as regular files within a size bound, and a
+  full write replaces a link there rather than following it.
+- **`tpl cache status` no longer calls a cache with objects empty.** With
+  `meta.json` absent or unusable beside cached objects, it reports
+  `loaded_at` `null` and all three collections with their counts and `whole`
+  `false`.
+
 ## [0.0.1] - 2026-09-24
 
 The first release of `tpl`. No earlier version was ever released or tagged, so

@@ -1693,6 +1693,24 @@ pub enum Error {
         mode: u32,
     },
 
+    /// A component of a cache path is a symbolic link, so the command reads,
+    /// writes and removes nothing (`FR-CACHE-042`, `FR-CACHE-044`,
+    /// `FR-SEC-026`).
+    #[error(
+        ".tpl/{} is a symbolic link; nothing was {}",
+        .within.display(),
+        if *.removal { "removed" } else { "read or written" }
+    )]
+    CachePathLinked {
+        /// The link, under the canonical `.tpl` of `FR-PROJ-009`.
+        path: PathBuf,
+        /// The link relative to the `.tpl` folder, such as `.cache/shop`.
+        within: PathBuf,
+        /// Whether the refused command is `tpl cache clean`, which removes,
+        /// rather than one that reads or writes.
+        removal: bool,
+    },
+
     /// `.tpl/.cfg` is not valid TOML (`FR-ERR-001`, the `78` row).
     #[error("{} is not valid TOML", .path.display())]
     ConfigurationMalformed {
@@ -2512,6 +2530,7 @@ impl Error {
             | Self::ConfigurationPathReference { .. }
             | Self::ConfigurationNotOwned { .. }
             | Self::ConfigurationUnsafeMode { .. }
+            | Self::CachePathLinked { .. }
             | Self::ConfigurationMalformed { .. }
             | Self::ConfigurationKeyOutsideSpace { .. }
             | Self::ConfigurationValueMalformed { .. }
@@ -2552,7 +2571,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 87;
+    const VARIANT_COUNT: usize = 88;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -3060,6 +3079,14 @@ mod tests {
                 78,
             ),
             (
+                Error::CachePathLinked {
+                    path: PathBuf::from("/home/ana/shop/.tpl/.cache"),
+                    within: PathBuf::from(".cache"),
+                    removal: true,
+                },
+                78,
+            ),
+            (
                 Error::ConfigurationPathReference {
                     key: "database.shop.ca_file".to_owned(),
                     file: path(),
@@ -3320,6 +3347,7 @@ mod tests {
             Error::ProjectFolderNotOwned { .. } => "ProjectFolderNotOwned",
             Error::ConfigurationPathReference { .. } => "ConfigurationPathReference",
             Error::ConfigurationUnsafeMode { .. } => "ConfigurationUnsafeMode",
+            Error::CachePathLinked { .. } => "CachePathLinked",
             Error::ConfigurationMalformed { .. } => "ConfigurationMalformed",
             Error::ConfigurationKeyOutsideSpace { .. } => "ConfigurationKeyOutsideSpace",
             Error::ConfigurationValueMalformed { .. } => "ConfigurationValueMalformed",

@@ -55,7 +55,14 @@ ignored by the pipeline and run on demand with `--ignored`. For rmp `#299`,
 and the release sequence that follows from it. For rmp `#303`, `operations.md`
 cites `ADR-012` Decisions 4 and 11 for the skill archive and `install-skill.sh`,
 and records that the skill archive is built on Linux, outside the Darwin `tar`
-flags.
+flags. For rmp `#288`, `#302` and `#305`, `data-model.md` records the 1 MiB
+bound `FR-CDOC-017` leaves to this folder, and `security.md` adds the two cache
+records and the `78` refusal of a link on the path to the cache to `cache/`'s
+disposition of a symbolic link, and completes its recorded gap on the cache;
+`data-model.md` adds that refusal and scopes its write row to object files.
+Against the fifty-eighth edition's amendment of `FR-PROJ-023`, `data-model.md`,
+`traceability.md` and this file count five writers inside `.tpl`, adding
+`tpl cache clean`.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree
@@ -295,7 +302,7 @@ ordered classification. The `database` object. The four treatments of a
 cross-series difference. `.tpl/.cfg`: format, key space, mode, rewrite
 discipline. `.tpl/.cache/`: layout, keying, encoding, filenames, atomic write.
 `meta.json` and its two independent versions. Migration. What a cached document
-does not promise. The four writers inside `.tpl`.
+does not promise. The five writers inside `.tpl`.
 
 **Must not contain.** The JSON document contract, which
 `specification/context-document.md` owns and this file cites.

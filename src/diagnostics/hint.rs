@@ -1206,6 +1206,17 @@ fn bare(error: &Error) -> Cow<'static, str> {
         Error::ConfigurationUnsafeMode { path, .. } => {
             Cow::Owned(format!("chmod 600 {}", configuration_file(path)))
         }
+        // FR-CACHE-042 item 1 and FR-CACHE-044: the command that removes the
+        // link alone, since `rm` given a link removes the link and not its
+        // target. The path is absolute, built under FR-ERR-041, or the
+        // placeholder where that set refuses it.
+        Error::CachePathLinked { path, within, .. } => {
+            if path.is_absolute() && admits_file(path) {
+                Cow::Owned(format!("rm {}", path.display()))
+            } else {
+                Cow::Owned(format!("rm <project>/.tpl/{}", within.display()))
+            }
+        }
         // BR-ERR-004: no `tpl cfg` command runs while `.tpl/.cfg` fails step 3
         // of FR-ERR-006, so every hint of a fault in the file names the file,
         // the position where the variant carries one, and the edit.

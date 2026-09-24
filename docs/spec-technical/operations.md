@@ -458,7 +458,7 @@ change and no test reads it
 
 `FR-PROJ-017` fixes exactly five artefacts and `FR-PROJ-013` the one write
 outside `.tpl` — the destination directory and its missing parents. The five
-are enumerated in [data-model.md](data-model.md#tpl-on-disk-and-its-four-writers)
+are enumerated in [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)
 and in the requirement; what belongs here is that **two of the five are shipped
 content** and therefore travel with the binary.
 

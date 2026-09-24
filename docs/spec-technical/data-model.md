@@ -225,7 +225,7 @@ accessors, and `#[non_exhaustive]` are four of the five shape questions
 `DIV-032` hands to architecture; they are `interfaces.md`'s and are not decided
 here.
 
-## `.tpl` on disk, and its four writers
+## `.tpl` on disk, and its five writers
 
 `FR-PROJ-001` makes any directory containing `.tpl` a project;
 `FR-PROJ-002` fixes what `.tpl` holds; `FR-PROJ-003` divides it into what is
@@ -233,7 +233,7 @@ versioned and what is not. Two of the three parts are local to the machine and
 are dotfiles; the one part that travels with the repository is not
 (`FR-CACHE-001`).
 
-`FR-PROJ-023` names four writers and no others, and `FR-PROJ-024` admits one
+`FR-PROJ-023` names five writers and no others, and `FR-PROJ-024` admits one
 exception outside `.tpl`:
 
 | Writer | What it writes |
@@ -242,6 +242,7 @@ exception outside `.tpl`:
 | `tpl cfg …` | `.tpl/.cfg` |
 | `tpl cache load` | `.tpl/.cache/` |
 | Any cached read command, on a miss | `.tpl/.cache/` |
+| `tpl cache clean` | Removes from `.tpl/.cache/` what `FR-CACHE-023` and `FR-CACHE-041` name, and rewrites `meta.json` under `FR-CACHE-043` |
 
 The fourth writer is why `BR-PROJ-002` denies that a read command is read-only
 with respect to the filesystem unless it is invoked with `--direct --no-cache`.
@@ -324,10 +325,21 @@ Credential handling, `${VAR}` expansion and the child process are
 | Creation | On the first read that populates it, never by `tpl init`; excluded from version control by the generated `.gitignore` | `FR-CACHE-003`, `FR-PROJ-020`, `FR-CACHE-004` |
 | Filenames | The object kind plus the literal object name: `tables/<name>.json`, `views/<name>.json`, `routines/<kind>.<name>.json`. No encoding layer and no hash | `FR-CDOC-014`, with [`OD-10`](open-decisions.md#od-10--cache-filenames-and-the-case-collision) |
 | Encoding | JSON, UTF-8, compact, no trailing newline, written by the serialiser of [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | The `.json` suffix of `FR-CDOC-001` and `FR-CDOC-014`; `BR-CACHE-001` keeps the form outside the contract |
-| Write | One file per object, through a temporary file in the same directory, renamed over the target; **no lock**. A symbolic link at the target is replaced by the rename, never followed and never left in place | `FR-CACHE-030`, `FR-CACHE-031` |
+| Write of an object file | One file per object, through a temporary file in the same directory, renamed over the target; **no lock**. A symbolic link at the target is replaced by the rename, never followed and never left in place. `meta.json` differs in one case: a clean given an object flag does not write an unusable `meta.json`, a link among them, and leaves it in place | `FR-CACHE-030`, `FR-CACHE-031`; `FR-CACHE-043` for `meta.json` |
+| A link on the path to the cache | `.tpl` is canonicalised first; every component below it is examined without being followed. A symbolic link at `.tpl/.cache`, at the selected entry's folder, or at a collection folder the invocation would read, write or clean beneath it is refused with `78` before anything is read, written, removed or connected. A link that is itself the thing a clean removes, or that lies beneath a folder it removes, is removed as a link and never followed | `FR-CACHE-042`, `FR-CACHE-044`, `FR-SEC-026` |
 | Read of an object file | `lstat` first: anything but a regular file — a symbolic link or a FIFO among them — is a miss. The file is then opened and its device and inode compared with the inspected ones, so a file swapped between the two calls is a miss too | `FR-CACHE-033` |
+| Read of `meta.json` or `database.json` | The object-file guard above, plus a size bound of **1 MiB** (`RECORD_CAP` in `src/cache.rs`), checked on the inspected length and again on the bytes read, so a file that grows after inspection is refused rather than read short. A record that is a link, is not a regular file, or exceeds the bound is unusable: a miss for a read, and not written by a clean given an object flag | `FR-CDOC-017`, `FR-SEC-026`, `FR-CACHE-043` |
 | Read of one named object | A hit only where the file holds exactly that object: the same name byte for byte and, for a routine, the same kind. Checked over the member already decoded, so it costs a comparison and no second parse | `FR-CACHE-033`, `FR-CDOC-008` |
 | Never written | Any object marked `restricted`; a collection holding one is never recorded whole | `FR-CACHE-037` |
+
+**Why the record bound is 1 MiB.** `FR-CDOC-017` requires a bound no record
+`tpl` writes reaches, and leaves its value to this folder. Neither record grows
+with the catalogue: `meta.json` holds two versions, a timestamp and three
+completeness flags, and `database.json` three identifiers and the `server`
+object, so each is under 1 KiB (the committed caches under `examples/` hold
+records of 158 to 183 bytes, measured on 2026-09-24). 1 MiB is over a thousand
+times that, and it keeps the read of a planted file far below the 8 MiB lower
+bound `FR-CONF-002` sets for the render memory limit.
 
 Compact rather than indented, because nothing reads these files but `tpl`:
 `BR-CACHE-001` makes `tpl cache status` the supported way to learn the cache's

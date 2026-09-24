@@ -642,6 +642,19 @@ pub(crate) enum Look<'a> {
     Routine(RoutineKind<'a>, &'a str),
 }
 
+impl Look<'_> {
+    /// The collections a lookup of this kind reads, which `FR-CACHE-044`
+    /// checks for a link before the lookup runs.
+    pub(crate) const fn collections(&self) -> &'static [Collection] {
+        match self {
+            Self::Everything => &Collection::ALL,
+            Self::Collection(Collection::Tables) | Self::Table(_) => &[Collection::Tables],
+            Self::Collection(Collection::Views) | Self::View(_) => &[Collection::Views],
+            Self::Collection(Collection::Routines) | Self::Routine(..) => &[Collection::Routines],
+        }
+    }
+}
+
 /// What `.tpl/.cache/` recorded for the path [`Cache::clean_orphan`]
 /// removed (`FR-CACHE-041`, item 2).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1029,6 +1042,84 @@ impl Cache {
         }
     }
 
+    // ------------------------------------------------------ containment ---
+
+    /// The first symbolic link on the path to this entry's cache: at
+    /// `.tpl/.cache`, then at the entry's folder, then at the folder of each
+    /// of `collections` (`FR-CACHE-042`, `FR-CACHE-044`, `FR-SEC-026`).
+    ///
+    /// Each component is examined with `symlink_metadata`, so none is
+    /// followed. The walk stops, answering [`None`], at the first component
+    /// that is absent, is not a directory, or cannot be examined: nothing
+    /// below it can be reached through a link, and a read or write that meets
+    /// it fails as it did before, silently for a read under `FR-CACHE-033`
+    /// and `FR-CACHE-036`, and with `74` for a clean.
+    ///
+    /// `with_entry` is `false` for a clean with no object flag, which removes
+    /// the entry's folder: `FR-CACHE-042` item 2 removes a link there as a
+    /// link, so only `.tpl/.cache` is refused.
+    ///
+    /// *Residual race.* The components are examined and then used by path. A
+    /// process that replaces one of them with a link between the two can
+    /// still redirect the read, the write or the removal. Closing it needs
+    /// every step opened relative to a directory handle without following a
+    /// link (`openat` with `O_NOFOLLOW`), which the standard library does not
+    /// offer and the `rustix` features of the Stack do not include. Such a
+    /// process already writes inside `.tpl`.
+    pub(crate) fn link_on_path(
+        &self,
+        with_entry: bool,
+        collections: &[Collection],
+    ) -> Option<Linked> {
+        let layout = self.layout.as_ref()?;
+        let linked = |path: PathBuf| {
+            let within = path
+                .strip_prefix(layout.tpl())
+                .map_or_else(|_| path.clone(), Path::to_path_buf);
+            Linked { path, within }
+        };
+
+        match examine(layout.root()) {
+            Examined::Link => return Some(linked(layout.root().to_owned())),
+            Examined::Directory if with_entry => {}
+            Examined::Directory | Examined::Stop => return None,
+        }
+
+        match examine(layout.folder()) {
+            Examined::Link => return Some(linked(layout.folder().to_owned())),
+            Examined::Directory => {}
+            Examined::Stop => return None,
+        }
+
+        collections
+            .iter()
+            .map(|collection| layout.collection(*collection))
+            .find(|folder| matches!(examine(folder), Examined::Link))
+            .map(linked)
+    }
+
+    /// Refuses the command where [`Cache::link_on_path`] finds a link, with
+    /// the `78` of `FR-CACHE-042` item 1 (`removal`) or of `FR-CACHE-044`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::CachePathLinked`] naming the first link found.
+    pub(crate) fn refuse_links(
+        &self,
+        with_entry: bool,
+        collections: &[Collection],
+        removal: bool,
+    ) -> Result<(), Error> {
+        match self.link_on_path(with_entry, collections) {
+            Some(Linked { path, within }) => Err(Error::CachePathLinked {
+                path,
+                within,
+                removal,
+            }),
+            None => Ok(()),
+        }
+    }
+
     // ---------------------------------------------------------- removal ---
 
     /// Removes everything stored for this entry (`FR-CACHE-023`).
@@ -1146,13 +1237,15 @@ impl Cache {
             });
         }
 
-        if let Some(previous) = self.meta() {
-            let mut record = previous.refreshed();
-            for recorded in &mut record.collections {
-                if recorded.name == collection.name() {
-                    recorded.whole = false;
-                }
-            }
+        // FR-CACHE-043: the one change is the collection's flag. An absent or
+        // unusable record is not written — a link at `meta.json` is one, since
+        // `read` never reads through a link (FR-SEC-026) — and one that
+        // already says the collection is not whole has nothing to change. The
+        // write goes through a temporary file renamed over `meta.json`.
+        if let Some(record) = self
+            .meta()
+            .and_then(|previous| previous.without_whole(collection))
+        {
             let _ = store(&layout.meta(), &record);
         }
 
@@ -1183,8 +1276,12 @@ impl Cache {
     /// and functions occupy distinct namespaces, so a bare name may reach two
     /// files, and the command must know which of them exist before it removes
     /// one or refuses both.
+    ///
+    /// The file is examined without following a link: a link there is held,
+    /// and is what the clean removes, as a link, per `FR-CACHE-042` item 2.
     pub(crate) fn holds(file: Option<&Path>) -> bool {
-        file.is_some_and(Path::is_file)
+        file.and_then(|file| fs::symlink_metadata(file).ok())
+            .is_some_and(|found| found.is_file() || found.file_type().is_symlink())
     }
 
     /// The names of the objects `collection` holds, in the order of
@@ -1223,38 +1320,118 @@ impl Cache {
     /// What this entry's cache holds (`FR-CACHE-025`, `FR-CACHE-034`,
     /// `FR-CACHE-035`).
     ///
-    /// An empty cache — one with no usable record — reports `loaded_at` absent
-    /// and no collections, and that is a success: `FR-CACHE-026` makes empty a
-    /// state rather than a failure, and `FR-OUT-033` generalises it.
+    /// Three cases, each a success, per `FR-CACHE-026` and `FR-OUT-033`:
+    ///
+    /// - **A usable record**: its `loaded_at`, and per collection the object
+    ///   files present and the flag the record carries.
+    /// - **No usable record beside a cache that holds something** — the record
+    ///   is absent while object files are present, or it is present and
+    ///   unusable under `FR-CDOC-004` or `FR-CDOC-017`: `loaded_at` absent,
+    ///   and all three collections with their counts and none whole
+    ///   (`FR-CACHE-034`). The record is never read through: [`Cache::meta`]
+    ///   refuses a link, and nothing here reads it any other way.
+    /// - **The empty cache of `FR-CACHE-035`**: no record at all and no
+    ///   object file in any collection. `loaded_at` absent and no collections.
     pub(crate) fn status(&self) -> Status {
-        let (Some(layout), Some(meta)) = (self.layout.as_ref(), self.meta()) else {
-            return Status {
-                loaded_at: None,
-                collections: Vec::new(),
-            };
+        let empty = Status {
+            loaded_at: None,
+            collections: Vec::new(),
         };
+        let Some(layout) = self.layout.as_ref() else {
+            return empty;
+        };
+        let counted = |collection: Collection| count(&layout.collection(collection)).unwrap_or(0);
+
+        if let Some(meta) = self.meta() {
+            return Status {
+                loaded_at: Some(meta.loaded_at.clone()),
+                collections: Collection::ALL
+                    .iter()
+                    .map(|collection| Held {
+                        name: collection.name(),
+                        count: counted(*collection),
+                        whole: meta.whole(*collection),
+                    })
+                    .collect(),
+            };
+        }
+
+        let collections: Vec<Held> = Collection::ALL
+            .iter()
+            .map(|collection| Held {
+                name: collection.name(),
+                count: counted(*collection),
+                whole: false,
+            })
+            .collect();
+        // A record that is present but unusable is reported, even over no
+        // object file: it is something the cache holds. It is examined
+        // without following a link.
+        let recorded = fs::symlink_metadata(layout.meta()).is_ok();
+
+        if !recorded && collections.iter().all(|held| held.count == 0) {
+            return empty;
+        }
 
         Status {
-            loaded_at: Some(meta.loaded_at.clone()),
-            collections: Collection::ALL
-                .iter()
-                .map(|collection| Held {
-                    name: collection.name(),
-                    count: count(&layout.collection(*collection)).unwrap_or(0),
-                    whole: meta.whole(*collection),
-                })
-                .collect(),
+            loaded_at: None,
+            collections,
         }
     }
 }
 
-/// The contents of `file`, or [`None`] where it could not be read.
+/// A component of a cache path that is a symbolic link, as
+/// [`Cache::link_on_path`] found it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Linked {
+    /// The link, under the canonical `.tpl` of `FR-PROJ-009`.
+    pub(crate) path: PathBuf,
+    /// The same path relative to the `.tpl` folder, such as `.cache/shop`.
+    pub(crate) within: PathBuf,
+}
+
+/// What one component of a cache path is, examined without following it.
+enum Examined {
+    /// A symbolic link.
+    Link,
+    /// A directory, so the walk goes on beneath it.
+    Directory,
+    /// Absent, another kind of file, or not examinable: nothing beneath it is
+    /// reached through a link.
+    Stop,
+}
+
+/// Examines `path` with `symlink_metadata`, which does not follow a link.
+fn examine(path: &Path) -> Examined {
+    match fs::symlink_metadata(path) {
+        Ok(found) if found.file_type().is_symlink() => Examined::Link,
+        Ok(found) if found.is_dir() => Examined::Directory,
+        _ => Examined::Stop,
+    }
+}
+
+/// The most bytes [`read`] takes from `meta.json` or `database.json`.
 ///
-/// Every failure is one answer, per `FR-CACHE-033`: absent, unreadable,
-/// refused by the operating system, or not valid UTF-8 are all a miss, and none
-/// of them is reported.
+/// Neither file grows with the catalogue: `meta.json` holds two numbers, a
+/// timestamp and three flags, and `database.json` three identifiers and the
+/// `server` object, so each is well under a kilobyte. 1 MiB is over a
+/// thousand times that, so no file this binary wrote reaches it, and it keeps
+/// a read of a planted file far below the 8 MiB floor `FR-CONF-045` gives the
+/// render memory limit.
+const RECORD_CAP: u64 = 1024 * 1024;
+
+/// The contents of `meta.json` or `database.json` at `file`, or [`None`]
+/// where it could not be read.
+///
+/// Every failure is one answer, per `FR-CACHE-033` and `FR-CDOC-004`: absent,
+/// unreadable, refused by the operating system, not valid UTF-8, not a regular
+/// file, a symbolic link, or longer than [`RECORD_CAP`] are all a miss — an
+/// unusable record — and none of them is reported. The file is read through
+/// the guard [`read_object`] applies, so a link is never read through
+/// (`FR-SEC-026`): pointed at another file it would forge the record, at a
+/// FIFO it would block, and at `/dev/zero` it would never end.
 fn read(file: &Path) -> Option<String> {
-    fs::read_to_string(file).ok()
+    read_regular(file, Some(RECORD_CAP))
 }
 
 /// The contents of `database.json`, or [`None`] on a miss.
@@ -1279,22 +1456,52 @@ fn read_metadata(layout: &Layout) -> Option<String> {
 /// that follows no link still opens a FIFO, which blocks, where the inspection
 /// first refuses it. The inspection costs one `lstat` per object file read.
 fn read_object(file: &Path) -> Option<String> {
+    read_regular(file, None)
+}
+
+/// The contents of `file` where it is a regular file, examined without
+/// following a link, and the file opened is the one examined; at most `cap`
+/// bytes, where one is given, and [`None`] for a longer file.
+///
+/// *Residual race.* A regular file replaced by a FIFO between the examination
+/// and the open makes the open block until a writer appears; the device and
+/// inode check that follows refuses what was opened, but only once the open
+/// returns. Closing it needs `O_NONBLOCK` on the open, whose value differs
+/// between the supported targets, for the reason [`read_object`] gives for
+/// `O_NOFOLLOW`.
+fn read_regular(file: &Path, cap: Option<u64>) -> Option<String> {
     use std::io::Read as _;
     use std::os::unix::fs::MetadataExt as _;
 
     let inspected = fs::symlink_metadata(file).ok()?;
-    if !inspected.file_type().is_file() {
+    if !inspected.file_type().is_file() || cap.is_some_and(|cap| inspected.len() > cap) {
         return None;
     }
 
-    let mut handle = fs::File::open(file).ok()?;
+    let handle = fs::File::open(file).ok()?;
     let opened = handle.metadata().ok()?;
     if opened.dev() != inspected.dev() || opened.ino() != inspected.ino() {
         return None;
     }
 
     let mut text = String::with_capacity(usize::try_from(opened.len()).unwrap_or(0));
-    handle.read_to_string(&mut text).ok()?;
+    match cap {
+        // One byte past the cap is asked for, so a file that grew after it was
+        // examined is refused rather than read short.
+        Some(cap) => {
+            handle
+                .take(cap.saturating_add(1))
+                .read_to_string(&mut text)
+                .ok()?;
+            if u64::try_from(text.len()).unwrap_or(u64::MAX) > cap {
+                return None;
+            }
+        }
+        None => {
+            let mut handle = handle;
+            handle.read_to_string(&mut text).ok()?;
+        }
+    }
 
     Some(text)
 }
@@ -1510,10 +1717,16 @@ where
     let temporary = directory.join(format!("{TEMPORARY}.{}.tmp", std::process::id()));
 
     let written = || -> std::io::Result<()> {
+        // FR-SEC-026: whatever stands at the temporary's name is removed
+        // first — a link planted there is removed as a link — and the file is
+        // then created exclusively. `create_new` is `O_CREAT | O_EXCL`, which
+        // fails on any existing name, a symbolic link included, dangling or
+        // not, so the write never opens through a link. Where the create
+        // fails the write fails, silently, per FR-CACHE-036.
+        let _ = fs::remove_file(&temporary);
         let handle = fs::OpenOptions::new()
             .write(true)
-            .create(true)
-            .truncate(true)
+            .create_new(true)
             .mode(MODE)
             .open(&temporary)?;
 
@@ -1909,6 +2122,102 @@ mod tests {
         assert_eq!(count(&layout.collection(Collection::Views)), None);
     }
 
+    /// The temporary [`store`] writes `file` through, for this process.
+    fn temporary_of(file: &Path) -> std::path::PathBuf {
+        file.with_file_name(format!("{TEMPORARY}.{}.tmp", std::process::id()))
+    }
+
+    #[test]
+    fn fr_sec_026_a_link_planted_at_the_temporary_is_not_written_through() {
+        // Finding F1: the temporary's name is known — it carries the process
+        // id — so a link planted there must be removed as a link, never
+        // opened. The link's target keeps its bytes, and the record lands as
+        // a regular file.
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
+        let victim = scratch.file("outside/victim.txt", "must survive\n");
+        scratch.link(&victim, &temporary_of(&layout.meta()));
+
+        assert!(store(&layout.meta(), &Meta::new([true, true, true])));
+
+        assert_eq!(
+            std::fs::read_to_string(&victim).expect("the victim is there"),
+            "must survive\n"
+        );
+        let written = std::fs::symlink_metadata(layout.meta()).expect("the record is there");
+        assert!(
+            written.file_type().is_file(),
+            "meta.json is not a regular file"
+        );
+        assert!(
+            std::fs::symlink_metadata(temporary_of(&layout.meta())).is_err(),
+            "the temporary was left behind"
+        );
+    }
+
+    #[test]
+    fn fr_cache_036_a_temporary_that_cannot_be_created_fails_the_write_silently() {
+        // A directory at the temporary's name is removed by nothing, so the
+        // exclusive create fails: the write answers `false` and the target is
+        // left as it was.
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        std::fs::create_dir_all(temporary_of(&layout.meta()))
+            .expect("the scratch directory is writable");
+        std::fs::write(layout.meta(), "kept\n").expect("writable");
+
+        assert!(!store(&layout.meta(), &Meta::new([true, true, true])));
+        assert_eq!(
+            std::fs::read_to_string(layout.meta()).expect("the record is kept"),
+            "kept\n"
+        );
+    }
+
+    #[test]
+    fn fr_sec_026_a_record_that_is_a_link_not_regular_or_oversized_is_unusable() {
+        // Finding F2: `meta.json` and `database.json` are read through the
+        // guard of an object file. A link to a valid record elsewhere, a link
+        // to `/dev/zero` — which must not be read — and a regular file past
+        // the cap are each an unusable record, and the store reports empty.
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
+        let valid = serde_json::to_string(&Meta::new([true, true, true])).expect("serialises");
+        let elsewhere = scratch.file("outside/meta.json", &valid);
+        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+
+        std::fs::write(layout.meta(), &valid).expect("writable");
+        assert!(cache.status().loaded_at.is_some(), "the control is usable");
+
+        for target in [elsewhere.as_path(), Path::new("/dev/zero")] {
+            std::fs::remove_file(layout.meta()).expect("the record is ours");
+            scratch.link(target, &layout.meta());
+            assert_eq!(cache.status().loaded_at, None, "{}", target.display());
+        }
+
+        std::fs::remove_file(layout.meta()).expect("the record is ours");
+        let padded = format!("{valid}{}", " ".repeat(1024 * 1024));
+        std::fs::write(layout.meta(), padded).expect("writable");
+        assert_eq!(cache.status().loaded_at, None, "an oversized record");
+
+        std::fs::write(layout.meta(), &valid).expect("writable");
+        std::fs::write(
+            elsewhere.with_file_name("database.json"),
+            r#"{"name":"forged","charset":"c","collation":"c","server":{"version":"11.4.13-MariaDB","series":"11.4","standing":"supported"}}"#,
+        )
+        .expect("writable");
+        scratch.link(
+            &elsewhere.with_file_name("database.json"),
+            &layout.database(),
+        );
+        assert_eq!(
+            cache.database(),
+            None,
+            "database.json was read through a link"
+        );
+    }
+
     #[test]
     fn fr_cache_034_status_counts_a_corrupted_object_beside_the_record() {
         let scratch = Scratch::new();
@@ -2027,10 +2336,13 @@ mod tests {
     }
 
     #[test]
-    fn fr_cache_033_an_empty_or_truncated_record_is_an_empty_cache() {
+    fn fr_cache_033_an_empty_or_truncated_record_is_unusable_and_reported_as_such() {
         // A crash after the rename and before the data reached the disk can
         // leave `meta.json` empty or torn, and no sync guards against it: the
-        // record must then read as absent, which is the miss of FR-CACHE-033.
+        // record must then be unusable, which is the miss of FR-CACHE-033. The
+        // status report says no load is recorded and still lists the three
+        // collections, none whole, per FR-CACHE-034: the record is present,
+        // so the cache is not the empty one of FR-CACHE-035.
         let scratch = Scratch::new();
         let layout = layout(&scratch);
         std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
@@ -2048,7 +2360,19 @@ mod tests {
             let status = cache.status();
 
             assert_eq!(status.loaded_at, None);
-            assert!(status.collections.is_empty());
+            let reported: Vec<(&str, usize, bool)> = status
+                .collections
+                .iter()
+                .map(|held| (held.name, held.count, held.whole))
+                .collect();
+            assert_eq!(
+                reported,
+                [
+                    ("tables", 0, false),
+                    ("views", 0, false),
+                    ("routines", 0, false)
+                ]
+            );
             assert!(cache.everything().is_none());
         }
     }

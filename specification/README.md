@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-seven editions. All are in force;
+The specification has been written in fifty-eight editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4655,6 +4655,76 @@ the change. None conflicts with it, so none is amended: the equivalences and
 the snapshot tests carry the line because they compare whole outputs, and no
 file of this corpus reproduces a complete help text that would need it. The
 root `README.md` and `CLAUDE.md` do not reproduce the help layout, so the
+fifth validation rule owes nothing.
+
+### Fifty-eighth edition — a cache reached through a link, and a clean that moved the load time
+
+rmp `#288` found that `tpl cache clean` resolves its paths through
+`.tpl/.cache` when that folder is a symbolic link, so a planted link makes it
+delete folders outside the project. rmp `#302` found that a clean given an
+object flag rewrites `loaded_at` to the time of the clean, while the corpus
+said nothing of what that clean writes to `meta.json`. rmp `#305`, joined to
+the same effort, found the write side of `#288`: `tpl cache load` and every
+read that fills the cache write through the same link.
+
+**Five identifiers are assigned: `FR-CACHE-042`, `FR-CACHE-043`,
+`FR-CACHE-044`, `FR-CDOC-017` and `FR-SEC-026`.** None is retired and none is renumbered. No term enters or
+leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **No clean removes through a link** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-042` refuses, with `78`, every clean where `.tpl/.cache` is a
+  link, and every clean given an object flag where the entry folder or the
+  collection folder is one; nothing is removed and the `hint` removes the
+  link alone. A link that is itself the thing removed is removed as a link.
+  `FR-CACHE-023` and `FR-CACHE-041` carry notes that cite it.
+- **No read or write goes through a link** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-044` refuses with `78`,
+  before the cache is consulted or a connection opened, every `schema`
+  subcommand, `tpl render` without `--context`, `tpl cache load` and
+  `tpl cache status` where `.tpl/.cache`, the entry folder or a collection
+  folder it would use is a link, whether the read would hit or miss.
+  `--direct --no-cache` touches no cache and is not refused. Serving from the
+  server and skipping the write was rejected. `FR-CACHE-030` and
+  `FR-CACHE-036` carry notes.
+- **A partial clean keeps the load time** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-043` fixes the one change
+  such a clean makes to `meta.json`: the collection is recorded as not whole,
+  per `BR-CDOC-002`. `loaded_at`, both versions and every other collection
+  are unchanged. `FR-CDOC-013` in [cache-documents.md](cache-documents.md)
+  carries a note.
+- **The two records are read only as regular files** —
+  [cache-documents.md](cache-documents.md). A security review found
+  `meta.json` and `database.json` read through links. `FR-CDOC-017` makes a
+  record that is a link, is not a regular file, or exceeds an implementation
+  bound unusable: never read through, a miss for a read, left in place by a
+  partial clean, and replaced without being followed by a full write. The
+  value of the bound lives in the technical specification. `FR-CACHE-043`
+  drops its sentence on replacing a link, which could never apply, and
+  `FR-CACHE-044` cites the new rule. `FR-CACHE-034` gains a clause: where
+  `meta.json` is absent or unusable, `tpl cache status` reports `loaded_at`
+  `null` and all three collections with their counts and `whole` `false`. `FR-CACHE-035`
+  now defines the empty cache: nothing at `meta.json` and no object file, so
+  the two requirements never both apply.
+- **The list of writers is whole again** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-023` gains a
+  row for `tpl cache clean`, which removes files in `.tpl/.cache/` and, under
+  `FR-CACHE-043`, rewrites `meta.json`.
+- **The security module points at the rules** — [security.md](security.md).
+  `FR-SEC-026`, under a new section *Cache containment*, covers the paths
+  and the records.
+
+`FR-ERR-001`, `FR-ERR-006`, `FR-ERR-041`, `FR-PROJ-009`, `FR-PROJ-010`,
+`FR-PROJ-011`, `FR-PROJ-028`, `FR-SEC-015`, `FR-SEC-017`, `FR-TMPL-024`,
+`FR-TMPL-026`, `FR-CACHE-009`, `FR-CACHE-015`, `FR-CACHE-016`,
+`FR-CACHE-030`, `FR-CACHE-033`, `FR-CACHE-036`, `FR-CACHE-040`, `FR-CDOC-006`,
+`FR-CDOC-007`,
+`FR-HELP-011` and `FR-HELP-036` were read against the changes. None conflicts
+with them, so none is amended: the cells of `FR-ERR-001` characterise classes
+and `78` already holds the project trust checks, step 6 of `FR-ERR-006`
+already carries `78`, and every command refused could already exit `78`. The
+root `README.md` does not describe how the cache is reached, so the
 fifth validation rule owes nothing.
 
 ### Still out of scope

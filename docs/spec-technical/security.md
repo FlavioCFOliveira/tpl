@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -54,7 +54,10 @@ among the untrusted inputs, and neither does this document. `FR-CACHE-033` and
 `FR-CDOC-004` fix the treatment of a file that cannot be read or carries an
 unknown version — a silent miss — and, since the forty-second edition, of an
 object file that is a symbolic link or holds an object other than the one
-asked for, both misses too
+asked for, both misses too. `FR-CDOC-017` makes a `meta.json` or
+`database.json` that is a link, is not a regular file, or exceeds its bound an
+unusable record, and `FR-CACHE-044` refuses with `78` a link on the path to the
+cache; `FR-SEC-026` collects both
 ([data-model.md](data-model.md#tplcache)). No requirement subjects a cached document
 that **does** parse to the structural validation `FR-RND-020` requires of a
 supplied one, although the assembled-model invariant of `FR-CAT-044` is checked
@@ -382,11 +385,14 @@ is the fourth row above, stated where a reader would otherwise assume more.
 **A symbolic link has four dispositions in this crate, and no component decides
 for another.** `render/` refuses one at every component below the template root,
 `project/` canonicalises before either file check, `mariadb/` resolves a
-`ca_path` entry and judges what it resolves to, and `cache/` never reads through
-one at an object file — a miss — and replaces one at a write target — the first
+`ca_path` entry and judges what it resolves to, and `cache/` refuses one on the
+path to the cache with `78`, never reads through one at an object file — a
+miss — or at `meta.json` or `database.json` — an unusable record — and
+replaces one at a write target — the first
 two are the tables of *Template containment* and *Project discovery* above, the
 third is the fifth row of this one, and the fourth is
-[data-model.md](data-model.md#tplcache)'s (`FR-CACHE-030`, `FR-CACHE-033`). There is no shared path-policy helper: each disposition is written
+[data-model.md](data-model.md#tplcache)'s (`FR-CACHE-030`, `FR-CACHE-033`,
+`FR-CACHE-042`, `FR-CACHE-044`, `FR-CDOC-017`, `FR-SEC-026`). There is no shared path-policy helper: each disposition is written
 where its own requirement applies, and a single helper would have to carry the
 difference as a parameter. Why each requirement disposes as it does is
 `FR-CONF-014`'s weighing; which entries of a `ca_path` contribute is

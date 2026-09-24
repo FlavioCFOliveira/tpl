@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -874,7 +874,7 @@ nothing, reports a failure the filesystem returns with `73`, writes nothing to
 stdout, and warns on stderr at `0` when the new project nests inside an existing
 one (`FR-PROJ-012` … `FR-PROJ-016`, `FR-PROJ-022`). What it ships is
 `operations.md`; where its five artefacts land is
-[data-model.md](data-model.md#tpl-on-disk-and-its-four-writers).
+[data-model.md](data-model.md#tpl-on-disk-and-its-five-writers).
 
 ## The `password_command` child
 

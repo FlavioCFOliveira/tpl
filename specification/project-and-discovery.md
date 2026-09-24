@@ -722,9 +722,17 @@ tpl init [<path>]
   | `tpl cfg …` | `.tpl/.cfg`, created at mode `0600` where it is absent, per `FR-PROJ-028` |
   | `tpl cache load` | `.tpl/.cache/` |
   | any cached read command, on a miss | `.tpl/.cache/` |
+  | `tpl cache clean` | Removes from `.tpl/.cache/` what `FR-CACHE-023` and `FR-CACHE-041` name, and rewrites `meta.json` under `FR-CACHE-043` |
 
   *Amended in the forty-eighth edition.* The `tpl cfg …` row states that the
   file is created where it is absent, per `FR-PROJ-028`.
+
+  *Amended within the fifty-eighth edition.* The `tpl cache clean` row is
+  new. The command has always removed files inside `.tpl`, and `FR-CACHE-043`
+  gives it a write to `meta.json`, so a list that claims to hold every writer
+  and left it out was false. The contradiction was reported by the technical
+  specification. Writing is read here as creating, modifying or deleting, the
+  sense `FR-PROJ-024` gives it outside `.tpl`.
 
 - **FR-PROJ-024**: The system SHALL NOT create, modify, or delete any file
   outside `.tpl`, with exactly one exception: the destination directory of

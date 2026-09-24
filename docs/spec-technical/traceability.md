@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, open-decisions.md]
 ---
 
@@ -352,7 +352,7 @@ that honours it.
 | `tpl init` creates five artefacts, `.cfg` at `0600`, missing parents included, and refuses an existing `.tpl` with `73` changing nothing | `FR-PROJ-013` … `FR-PROJ-019` | `interfaces`, `operations` |
 | Two artefacts are **shipped content**: `example.jinja` and `rust/_types.jinja`; the example must render against any table of any supported series and use at least one filter and one test | `FR-PROJ-017`, `FR-PROJ-021`, `FR-ENV-011` | `operations`, `verification` |
 | The generated `.cfg` carries a **commented-out** example entry — the file must survive later rewrites with its comments | `FR-PROJ-017`, `FR-PROJ-018` | `data-model` (`OD-09`) |
-| Exactly four writers inside `.tpl`, and exactly one file-system exception outside it | `FR-PROJ-023`, `FR-PROJ-024` | `architecture`, `security` |
+| Exactly five writers inside `.tpl`, and exactly one file-system exception outside it | `FR-PROJ-023`, `FR-PROJ-024` | `architecture`, `security` |
 | A nested project warns on stderr and exits `0` | `FR-PROJ-016` | `interfaces` |
 | An **absent** `.cfg` passes the trust checks and reads as an empty configuration: there is nothing to own and nothing to grant, the project is the folder, and the write surface may create the file again | `FR-PROJ-001`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-004` | `architecture`, `security` |
 | Ownership is judged **before** the mode, because a file belonging to another user is refused whatever its mode says | `FR-PROJ-010`, `FR-PROJ-011` | `architecture` |
