@@ -79,6 +79,8 @@ pub(crate) struct Target<'a> {
     /// The database entry these settings came from, which every condition of
     /// `FR-SRV-010`, `FR-SRV-003` and `FR-SRV-030` names.
     entry: &'a str,
+    /// Whether that entry is defined by `dsn` (`FR-ERR-045`).
+    by_dsn: bool,
     /// The host, with an IPv6 literal's brackets removed.
     host: &'a str,
     /// The port, defaulted to `3306` by `FR-CONF-002` before it reaches here.
@@ -104,6 +106,7 @@ impl<'a> Target<'a> {
     pub(crate) fn of(settings: &'a Settings) -> Option<Self> {
         Some(Self {
             entry: settings.entry(),
+            by_dsn: settings.by_dsn(),
             // The driver's tokio path connects through `(&str, u16)`, which
             // parses an address literal and otherwise resolves a name; a
             // bracketed IPv6 literal is neither, and would be looked up as a
@@ -159,6 +162,11 @@ impl<'a> Target<'a> {
     /// The database entry these settings came from.
     pub(crate) const fn entry(&self) -> &'a str {
         self.entry
+    }
+
+    /// Whether the entry is defined by `dsn` (`FR-ERR-045`).
+    pub(crate) const fn by_dsn(&self) -> bool {
+        self.by_dsn
     }
 
     /// The host the connection is made to.
@@ -509,6 +517,7 @@ pub(super) fn open(
         // of this phase.
         if !resolved.is_ok_and(|mut addresses| addresses.next().is_some()) {
             return Err(Error::NameNotResolved {
+                by_dsn: false,
                 entry: target.entry.to_owned(),
                 host: host.to_owned(),
                 port,

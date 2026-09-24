@@ -558,7 +558,7 @@ impl Combination {
     /// Whether the combination declares `field`.
     ///
     /// A field the rule does not read is never declared, per [`declare`](Self::declare).
-    const fn declares(self, field: EntryKey) -> bool {
+    pub(crate) const fn declares(self, field: EntryKey) -> bool {
         match field {
             EntryKey::Dsn => self.dsn,
             EntryKey::Host => self.host,

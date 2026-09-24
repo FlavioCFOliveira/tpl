@@ -1415,6 +1415,46 @@ Out of scope: the wording of any individual message.
   together, and it is recorded as an item in the
   [README](README.md#maintenance-debt) rather than settled from one side of it.
 
+- **FR-ERR-045**: WHERE a `hint` carries a command that changes the host, the
+  port, the user, the password or the database of an entry defined by `dsn`,
+  the command SHALL be `tpl cfg database update <entry> --dsn <url>`, with
+  the entry name filled in. The `hint` SHALL state in words that the field is
+  changed inside the dsn, and that `<url>` stands for the whole connection URL
+  with that field changed. It SHALL NOT carry the stored dsn or any part of
+  it, per `BR-ERR-003`, and SHALL NOT carry `--host`, `--port`, `--user`,
+  `--schema`, or `tpl cfg set` of one of those fields for that entry.
+
+  This governs every `hint` that repoints or completes an entry: the
+  connection `hint` of a `69` for DNS resolution, a refused connection or a
+  connect deadline; the `hint` of `FR-SRV-030`; the `hint` of `FR-CONF-041`
+  for a dsn with no `/database` segment; and the `hint` of `FR-CFG-048`. An
+  entry defined by the discrete fields keeps the flags those requirements
+  name.
+
+  ```
+  PW=x tpl -d ds schema info
+  error: cannot connect to 127.0.0.1:1 for database entry 'ds'
+  cause: TCP connect to 127.0.0.1:1 was refused
+  hint:  check that the server is running and listening on port 1, or change the address inside the dsn: tpl cfg database update ds --dsn <url>, where <url> is the whole connection URL with the new host or port
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the command carried and the code.
+
+  *Rationale.* `FR-CONF-006` makes `dsn` and the discrete fields exclusive in
+  one entry, and `FR-CFG-048` refuses a write that would join them. A `hint`
+  naming `--host` for a dsn entry is therefore a command that cannot succeed,
+  which `BR-ERR-004` forbids, and its own conflict `hint` then led to the loss
+  `BR-ERR-005` describes. `tpl cfg database update <entry> --dsn <url>`
+  exits `0` and keeps every other field. This is finding X-01 of the seventh
+  re-audit of rmp `#263`, recorded for rmp `#282`.
+
+  *Why a placeholder.* The new URL is a value only the caller knows, and the
+  stored one may carry a password, which `BR-ERR-003` bars from every message.
+
+  *Added in the fiftieth edition,* for rmp `#282`.
+
 ## `EPIPE`
 
 **In flight** is defined in [glossary.md](glossary.md#in-flight). The two
@@ -1587,6 +1627,48 @@ no requirement of this file is amended.
   include the global flags a copied command needs to act on the same project
   and entry. `FR-ERR-043` states that a `hint` command carries `--tpl-dir` and
   `-d/--database` as the invocation was given them.
+
+  *Note added in the fiftieth edition.* A command that repoints an entry
+  defined by `dsn` with `--host`, `--port`, `--user` or `--schema` cannot
+  succeed: `FR-CFG-048` refuses it with `64`. `FR-ERR-045` states the command
+  such a `hint` carries instead.
+
+- **BR-ERR-005**: A `hint` SHALL NOT name a command that deletes or overwrites
+  stored state the invocation did not name: a value of `.tpl/.cfg`, or an
+  object of `.tpl/.cache/`. The invocation names a value it writes or deletes,
+  and a value whose information its own write supplies anew: the password of
+  an entry, where the invocation writes `password`, `password_command`, or a
+  `dsn` that carries a password. WHERE the only command that would make the
+  invocation succeed deletes or overwrites such state, the `hint` SHALL name
+  instead a command that makes the change the invocation asked for and deletes
+  nothing else. `FR-ERR-045` and `FR-CFG-048` state that command for a
+  database entry, and `FR-CACHE-040` states the `hint` of a clean that names
+  nothing cached.
+
+  A nearest-match candidate stands for the name the invocation gave. A `hint`
+  MAY carry a command that writes the invocation's own value under the
+  candidate, and SHALL NOT carry a command that deletes the candidate: the
+  caller may have meant another name, and the next command does not undo a
+  deletion.
+
+  *What this adds to `BR-ERR-004`.* That rule asks whether the command can
+  succeed. A command can succeed and still cost the caller configuration it
+  never named. For an entry added with
+  `--dsn 'mysql://reader:${PW}@127.0.0.1:1/shop'`, the conflict `hint` of
+  `tpl cfg database update ds --host 127.0.0.1` read
+  `tpl cfg unset database.ds.dsn, then run the command again`. Both commands
+  exited `0`. The user `reader`, the database `shop` and the `${PW}` reference
+  were gone, no message said so, and the next read logged in with no user.
+  Every step was a `hint` copied as written. This is finding X-01 of the
+  seventh re-audit of rmp `#263`, recorded for rmp `#282`.
+
+  *Rejected: naming the deleting command beside a statement of what it
+  deletes.* A caller that copies the command runs it, and a weak reader acts
+  on the command and not on the sentence around it. Switching an entry from
+  one form of connection to the other is the caller's decision; the `cause`
+  of `FR-CFG-048` states what that switch removes, and no `hint` performs it.
+
+  *Added in the fiftieth edition,* for rmp `#282`.
 
 ## Dependencies
 

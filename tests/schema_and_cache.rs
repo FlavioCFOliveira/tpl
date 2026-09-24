@@ -1242,6 +1242,45 @@ fn fr_cache_023_clean_removes_everything_or_the_one_object_it_was_given() {
 }
 
 #[test]
+fn fr_cache_040_a_clean_that_names_nothing_cached_is_66_suggests_and_deletes_nothing() {
+    // FR-CACHE-040: the population is what the cache holds, the hint carries
+    // no clean command, and nothing is removed.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_cache_040_a_clean_that_names_nothing_cached_is_66_suggests_and_deletes_nothing",
+    ) else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+    let sandbox = project(server, ROOT);
+
+    succeeds(&sandbox, &["cache", "load"]);
+    let held = store(&sandbox).join("tables").join(format!("{TABLE}.json"));
+    let before = std::fs::read(&held).expect("the table is cached");
+
+    let typo = format!("{TABLE}x");
+    let outcome = run(&sandbox, &["cache", "clean", "--table", &typo]);
+    assert_eq!(outcome.code, Some(66), "{}", outcome.err);
+    assert_eq!(
+        line(&outcome.err, "hint:"),
+        format!("did you mean '{TABLE}'? nothing was removed")
+    );
+    assert_eq!(std::fs::read(&held).expect("still cached"), before);
+
+    // A second clean of the same object finds it gone.
+    succeeds(&sandbox, &["cache", "clean", "--table", TABLE]);
+    let again = run(&sandbox, &["cache", "clean", "--table", TABLE]);
+    assert_eq!(again.code, Some(66), "{}", again.err);
+    assert!(
+        !line(&again.err, "hint:").contains("cache clean"),
+        "{}",
+        again.err
+    );
+}
+
+#[test]
 fn fr_cache_029_repointing_an_entry_invalidates_nothing() {
     // FR-CACHE-029 and BR-CACHE-003, stated plainly because the consequence is
     // accepted: after repointing an entry, a read serves the previous server's

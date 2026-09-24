@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md]
 ---
 
@@ -351,6 +351,10 @@ tpl -d shop cache status
 - **FR-CACHE-023**: `tpl cache clean` SHALL remove cached data for the selected
   entry. With no object flag it SHALL remove all of it.
 
+  *Note added in the fiftieth edition.* `FR-CACHE-040` states what a clean
+  that names an object the cache does not hold produces. A clean with no
+  object flag of a cache that is already empty still exits `0`.
+
 - **FR-CACHE-024**: `tpl cache load` and `tpl cache clean` SHALL name an
   individual object with `--table <name>`, `--view <name>`, or
   `--routine <name>` — the same flag spellings `tpl render` uses. `--routine`
@@ -359,6 +363,51 @@ tpl -d shop cache status
 
   *Accepted cost.* The cache names an object by flag while `schema` names it
   positionally: two grammars for the same thing in one tree.
+
+- **FR-CACHE-040**: IF `tpl cache clean` is given `--table`, `--view` or
+  `--routine`, and the cache of the selected entry holds no object of that
+  kind under that name, THEN the system SHALL exit `66` (`EX_NOINPUT`), SHALL
+  delete nothing, and SHALL open no connection. The cache that holds nothing
+  at all for the entry is one case of this condition.
+
+  The `cause` SHALL name the kind, the name and the entry, and SHALL state
+  that nothing of that kind is cached under that name. The `hint` SHALL offer
+  the nearest matches among the names of that kind the cache holds for the
+  entry, per `FR-ERR-019` and `FR-ERR-044`. WHERE none is admitted, the
+  `hint` SHALL state that nothing of that name is cached, so nothing cached is
+  stale for it. The `hint` SHALL carry no `tpl cache clean` command: not the
+  clean of a candidate, which the invocation did not name, and not a clean
+  without an object flag, which removes everything, per `BR-ERR-005`.
+
+  ```
+  tpl -d shop cache clean --table ordrs
+  error: nothing cached for table 'ordrs' in database entry 'shop'
+  cause: the cache of entry 'shop' holds no table named 'ordrs'
+  hint:  did you mean 'orders'? nothing was removed
+  exit:  66 (EX_NOINPUT)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the candidate and
+  the code.
+
+  *Rationale.* `tpl -d shop cache clean --table nope` exited `0` with no
+  output, and the help's `0` row read "The cached data was deleted". A slip
+  such as `--table ordrs` left the stale copy of `orders` in place, and the
+  next render read it without saying so. `66` is what `FR-CFG-012` returns
+  for a `tpl cfg unset` of an absent key: a deletion that names something
+  absent. This is finding X-06 of the seventh re-audit of rmp `#263`,
+  recorded for rmp `#282`.
+
+  *Rejected: `0` with a statement that nothing of that name is cached any
+  more.* It is honest, and a caller that reads only the exit code still
+  learns nothing of the slip, per `BR-ERR-002`.
+
+  *Why the cache and not the server.* The command requires no catalogue
+  data and opens no connection, per `NFR-PERF-006`, so the population is what
+  the cache holds.
+
+  *Added in the fiftieth edition,* for rmp `#282`.
 
 - **FR-CACHE-025**: `tpl cache status` SHALL report the database entry, when the
   cache was loaded, and the object counts it holds.

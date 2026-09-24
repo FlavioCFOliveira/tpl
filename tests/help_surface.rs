@@ -1128,7 +1128,7 @@ fn fr_help_013_a_default_the_configuration_applies_is_stated_where_the_flag_is()
         .find(|flag| flag["long"] == "--port")
         .expect("--port");
 
-    assert_eq!(port["default"], serde_json::json!(["3306"]));
+    assert_eq!(port["default"], serde_json::json!("3306"));
 }
 
 /// Every string the JSON command tree carries, in document order.
@@ -1455,4 +1455,36 @@ fn u_04_no_example_names_a_missing_template_unannounced_or_truncates_a_file_it_r
         ),
         "tpl help render"
     );
+}
+
+#[test]
+fn fr_help_035_every_flag_and_argument_default_is_null_or_one_string() {
+    let document = document();
+    let mut flags: Vec<serde_json::Value> = document["data"]["global_flags"]
+        .as_array()
+        .expect("an array")
+        .clone();
+    for entry in document["data"]["commands"].as_array().expect("an array") {
+        flags.extend(
+            entry["options"]
+                .as_array()
+                .expect("an array")
+                .iter()
+                .cloned(),
+        );
+    }
+
+    assert!(!flags.is_empty());
+    for flag in &flags {
+        let default = &flag["default"];
+        assert!(
+            default.is_null() || default.is_string(),
+            "{}: {default}",
+            if flag["long"].is_null() {
+                &flag["name"]
+            } else {
+                &flag["long"]
+            }
+        );
+    }
 }

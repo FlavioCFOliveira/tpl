@@ -491,6 +491,10 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   empty string, as written or after expansion, names none for this
   requirement, per `FR-CONF-050`.
 
+  *Note added in the fiftieth edition.* WHERE the entry is defined by a `dsn`
+  with no `/database` segment, the `hint` SHALL carry
+  `tpl cfg database update <entry> --dsn <url>` instead, per `FR-ERR-045`.
+
   *What it reaches.* Every `schema` subcommand, which cannot select a database
   without it; every read `tpl render` makes against a live or cached source;
   `tpl cache load`; and the privilege probe of `FR-CFG-044`, which is a
@@ -530,7 +534,12 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   key for the value, and what was missing was the rule that the key is the
   answer.
 
-- **FR-CONF-050**: An empty string SHALL NOT name a host or a database:
+- **FR-CONF-050**: An empty string SHALL NOT name a host or a database. For
+  this requirement a value is empty WHERE it has no character, or WHERE every
+  character it has is a space, a horizontal tab, a line feed, a vertical tab,
+  a form feed or a carriage return (`U+0009` through `U+000D`, and `U+0020`).
+  A value that holds any other character is not empty, and the system SHALL
+  NOT trim it:
 
   1. **On the command line.** IF the value given to `--host` or `--schema`
      under `FR-CFG-027`, or to `tpl cfg set database.<name>.host` or
@@ -575,6 +584,17 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   caller's next step is the one `FR-CONF-040` names.
 
   *Added in the forty-ninth edition,* for rmp `#281`.
+
+  *Amended in the fiftieth edition,* for rmp `#282`. `--host '   '` was
+  stored with exit `0`, and the next read exited `69` with "host '   ' could
+  not be resolved", per finding X-08 of the seventh re-audit of rmp `#263`.
+  A value of whitespace alone names no host and no database, and the caller's
+  next step is the one for an empty value, so both take the same path. The
+  `cause` SHALL state that the value is empty or holds only whitespace.
+  *Rejected: trimming every value.* It changes a value the caller wrote, and
+  it would store a host other than the one given. *Accepted cost.* A database whose name is whitespace alone
+  cannot be named in an entry. A host name holds no whitespace, and no finding
+  reached a database named that way.
 
 ## DSN
 
@@ -1178,9 +1198,14 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   connection then failed with `hint: define it with: export 1X=<value>`, which
   a shell refuses. A name that no shell can define can never be satisfied, so
   the reference is a fault the moment it is written. This is finding W-06 of
-  the sixth re-audit, recorded for rmp `#281`. With this rule, the
-  `export NAME=<value>` that the `hint` for an undefined variable carries is
-  always a command a shell accepts.
+  the sixth re-audit, recorded for rmp `#281`. With this rule, the variable
+  that the `hint` for an undefined variable tells the caller to define always
+  has a name a shell accepts.
+
+  *Amended in the fiftieth edition.* The sentence above named the text of
+  that `hint`, `export NAME=<value>`, which no requirement fixes and which
+  finding X-02 of the seventh re-audit of rmp `#263` asks to change. It now
+  states the property this rule guarantees, whatever the wording.
 
   *Why the unclosed reference is refused on the command line as well.* It is
   the same fault in the same grammar. `FR-CONF-021` refuses it in the file,

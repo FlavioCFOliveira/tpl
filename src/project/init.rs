@@ -252,7 +252,7 @@ fn deepest_existing(destination: &Path) -> Option<&Path> {
 /// Returns [`Error::InitDestinationIsTplFolder`] with the parent directory the
 /// hint names, or [`None`] for it where that parent is the current directory.
 fn refuse_tpl_folder(destination: &Path) -> Result<(), Error> {
-    let is_marker = |path: &Path| path.file_name() == Some(std::ffi::OsStr::new(MARKER));
+    let is_marker = discover::is_marker;
 
     if is_marker(destination) {
         let parent = destination

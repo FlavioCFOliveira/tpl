@@ -348,6 +348,64 @@ tpl
   nearest-match suggestion, and `FR-CLI-018` already refuses a separate-token
   flag value beginning with `-`.
 
+  *Note added in the fiftieth edition.* The code stays `64`, and `FR-CLI-026`
+  now fixes the message: it reports the value `-d` took, not the unknown
+  command.
+
+- **FR-CLI-026**: IF `-d/--database` or `--tpl-dir` takes its value from a
+  separate token that is the name or an alias of a child of the node the
+  parse has reached where the flag is written, and step 1 of `FR-ERR-006`
+  then fails because the next non-flag token names no child of that node,
+  THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL report the value of
+  the flag in place of the unknown command:
+
+  1. **`error`** SHALL name the flag and SHALL state that it needs a value.
+  2. **`cause`** SHALL name the token the flag took as its value, SHALL
+     state that it is a command, and SHALL name the token that was then read
+     as the command.
+  3. **`hint`** SHALL carry the invocation as given, with a placeholder
+     inserted after the flag: `<entry>` for `-d/--database` and `<path>` for
+     `--tpl-dir`. Each other token SHALL be built under the set that governs
+     it, per `FR-ERR-022`, `FR-ERR-040` and `FR-ERR-041`. IF a set refuses a
+     token, THEN the `hint` SHALL carry `tpl`, the flag and its placeholder,
+     and the command path alone, and SHALL state in words that the remaining
+     arguments and flags are to be given again.
+
+  ```
+  tpl -d schema tables
+  error: -d needs a value
+  cause: -d took 'schema' as its value, which is a command, so 'tables' was read as the command
+  hint:  give the entry name after -d: tpl -d <entry> schema tables
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  The rule applies only to a value in a separate token. A value written as
+  `--database=schema` or `--tpl-dir=schema` is explicit, and an
+  invocation carrying one is reported by `FR-CLI-003` as before. An
+  invocation that parses is never refused by this rule, whatever value the
+  flag took.
+
+  *Rationale.* `tpl -d schema tables` answered "unknown command 'tables'"
+  with a `hint` to list the commands, and that list contains
+  `schema tables`. The caller's mistake was the missing entry name, and the
+  message named a valid word. This is finding X-03 of the seventh re-audit of
+  rmp `#263`, recorded for rmp `#282`.
+
+  *Why only these two flags.* They are the global flags whose value is free
+  text. `--timeout` takes a positive integer, so a command name given as its
+  value is refused as a malformed value that names the flag.
+
+  *Rejected: refusing a flag value equal to a command name.* An entry may be
+  named `schema`, and `tpl -d schema schema tables` is a legal invocation.
+  The rule changes the message of a `64` the invocation already produces and
+  refuses nothing that parses.
+
+  *Added in the fiftieth edition,* for rmp `#282`.
+
 ## Configuration surface
 
 - **FR-CLI-021**: The system SHALL NOT read any environment variable to

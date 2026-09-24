@@ -1573,7 +1573,11 @@ const CACHE_LOAD: &[Outcome] = &[
 
 /// The outcomes of `cache clean`, which reads no server.
 const CACHE_CLEAN: &[Outcome] = &[
-    outcome(Code::Ok, "The cached data was deleted from .tpl/.cache/."),
+    outcome(
+        Code::Ok,
+        "The cached data was deleted from .tpl/.cache/. Without --table, --view or --routine, \
+         this includes a cache that already held nothing.",
+    ),
     outcome(
         Code::Usage,
         "An unknown flag (--direct and --no-cache included), a flag given twice, or more than one \
@@ -1582,7 +1586,8 @@ const CACHE_CLEAN: &[Outcome] = &[
     ),
     outcome(
         Code::NoInput,
-        "The entry that -d/--database names is not in .tpl/.cfg.",
+        "The entry that -d/--database names is not in .tpl/.cfg, or --table, --view or --routine \
+         names an object the cache does not hold; nothing is deleted.",
     ),
     outcome(
         Code::IoError,

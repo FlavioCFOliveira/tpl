@@ -85,7 +85,7 @@ use crate::output::Source;
 use crate::project::Project;
 use crate::project::config::Configuration;
 use crate::project::config::expand;
-use crate::project::config::keys::EntryKey;
+use crate::project::config::keys::{EntryKey, is_blank};
 use crate::project::settings::{self, Settings};
 
 use super::Ending;
@@ -103,6 +103,13 @@ const SCHEMA_FLAG: &str = "--schema";
 
 /// The placeholder the hint of `FR-CONF-041` writes after it.
 const SCHEMA_PLACEHOLDER: &str = "<database>";
+
+/// The flag of `FR-CFG-027` that writes `database.<name>.dsn`, which the hint
+/// of an entry defined by dsn carries instead (`FR-ERR-045`).
+const DSN_FLAG: &str = "--dsn";
+
+/// The placeholder the hint writes after it.
+const DSN_PLACEHOLDER: &str = "<url>";
 
 /// What one invocation supplies to a read: the project, the entry, the budget,
 /// the two cache flags, and whether the process exits when the command
@@ -640,7 +647,7 @@ pub(super) fn connection_keys(
     configuration: &Configuration,
 ) -> Result<(), Error> {
     let raw = configuration.entry(settings.entry());
-    let missing = |key: EntryKey, flag, placeholder, value: Option<&str>| {
+    let missing = |key: EntryKey, value: Option<&str>| {
         // FR-CONF-050: an empty value, as written or after expansion, is an
         // absent key, and the cause says which of the three it is.
         let written = raw.and_then(|entry| match (&entry.dsn, key) {
@@ -652,6 +659,12 @@ pub(super) fn connection_keys(
             (None, _) => KeyAbsence::Absent,
             (Some(_), Some(written)) if written.contains("${") => KeyAbsence::ExpandsToEmpty,
             (Some(_), _) => KeyAbsence::Empty,
+        };
+        // FR-ERR-045: an entry defined by dsn is completed inside its dsn.
+        let (flag, placeholder) = match (settings.by_dsn(), key) {
+            (true, _) => (DSN_FLAG, DSN_PLACEHOLDER),
+            (false, EntryKey::Host) => (HOST_FLAG, HOST_PLACEHOLDER),
+            (false, _) => (SCHEMA_FLAG, SCHEMA_PLACEHOLDER),
         };
 
         Error::EntryKeyMissing {
@@ -665,30 +678,13 @@ pub(super) fn connection_keys(
     };
 
     match settings.host() {
-        None => return Err(missing(EntryKey::Host, HOST_FLAG, HOST_PLACEHOLDER, None)),
-        Some("") => {
-            return Err(missing(
-                EntryKey::Host,
-                HOST_FLAG,
-                HOST_PLACEHOLDER,
-                Some(""),
-            ));
-        }
+        None => return Err(missing(EntryKey::Host, None)),
+        Some(host) if is_blank(host) => return Err(missing(EntryKey::Host, Some(host))),
         Some(_) => {}
     }
     match settings.database() {
-        None => Err(missing(
-            EntryKey::Database,
-            SCHEMA_FLAG,
-            SCHEMA_PLACEHOLDER,
-            None,
-        )),
-        Some("") => Err(missing(
-            EntryKey::Database,
-            SCHEMA_FLAG,
-            SCHEMA_PLACEHOLDER,
-            Some(""),
-        )),
+        None => Err(missing(EntryKey::Database, None)),
+        Some(database) if is_blank(database) => Err(missing(EntryKey::Database, Some(database))),
         Some(_) => Ok(()),
     }
 }

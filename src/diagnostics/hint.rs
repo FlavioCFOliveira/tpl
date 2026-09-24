@@ -84,11 +84,16 @@ fn carried(error: &Error) -> restate::Carry {
                 | Error::ProjectDirUnusable { .. }
                 | Error::ProjectFolderNotOwned { .. }
                 | Error::InitDestinationIsTplFolder { .. }
+                | Error::FlagTookCommand { .. }
         ),
-        // FR-PROJ-029: the hint of `tpl init` carries no flag.
+        // FR-PROJ-029: the hint of `tpl init` carries no flag. FR-CLI-026:
+        // the hint is the invocation as given, flags included, and the value
+        // the parser read for -d or --tpl-dir is the command it swallowed.
         database: !matches!(
             error,
-            Error::DatabaseEntryNotFound { .. } | Error::InitDestinationIsTplFolder { .. }
+            Error::DatabaseEntryNotFound { .. }
+                | Error::InitDestinationIsTplFolder { .. }
+                | Error::FlagTookCommand { .. }
         ),
     }
 }
@@ -112,10 +117,12 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // W-05 of the sixth re-audit of rmp `#263`: the command path the
         // words form, each word its own argument. Every word is a literal of
         // the tree.
-        Error::UnknownCommand { token, node, .. } if split_command(node, token).is_some() => {
+        // X-05 of the seventh re-audit: the words may end in the command's
+        // own arguments, as in 'show x'.
+        Error::UnknownCommand { token, node, .. } if split_invocation(node, token).is_some() => {
             Cow::Owned(format!(
                 "give each word as its own argument: tpl {}",
-                split_command(node, token).unwrap_or_default()
+                split_invocation(node, token).unwrap_or_default()
             ))
         }
         Error::UnknownCommandPathSegment { segment, node, .. }
@@ -166,6 +173,39 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // The flag is a spelling this corpus enumerates and is therefore a
         // literal, per FR-ERR-022; the test beside it is the defensive
         // assertion this module applies to every such value.
+        // FR-CLI-026: the invocation as given, with a placeholder after the
+        // flag; the command path alone where a token is refused by its set.
+        Error::FlagTookCommand {
+            flag,
+            rebuilt,
+            path,
+            ..
+        } => {
+            let (flag, what, placeholder) = if flag == "--tpl-dir" {
+                ("--tpl-dir", "the path of the .tpl folder", "<path>")
+            } else if flag == "--database" {
+                ("--database", "the entry name", "<entry>")
+            } else {
+                ("-d", "the entry name", "<entry>")
+            };
+            match rebuilt {
+                Some(rebuilt)
+                    if rebuilt.split(' ').all(|token| {
+                        token == placeholder || admits_flag(token) || admits_template(token)
+                    }) =>
+                {
+                    Cow::Owned(format!("give {what} after {flag}: tpl {rebuilt}"))
+                }
+                _ if admits_path(path) => Cow::Owned(format!(
+                    "give {what} after {flag}: tpl {flag} {placeholder} {path}, then give the \
+                     remaining arguments and flags again"
+                )),
+                _ => Cow::Owned(format!(
+                    "give {what} after {flag}: tpl {flag} {placeholder} <command>, then give the \
+                     remaining arguments and flags again"
+                )),
+            }
+        }
         Error::RepeatedValueFlag { flag, .. } => {
             if admits_flag(flag) {
                 Cow::Owned(format!("give '{flag}' once, with the value you intend"))
@@ -551,30 +591,45 @@ fn bare(error: &Error) -> Cow<'static, str> {
                 None => Cow::Owned(format!("change it instead with: {}", update_entry(name))),
             }
         }
-        // FR-CFG-048 obliges a runnable command that makes the write legal, and
-        // the three are the three shapes such a command takes. Which one is
-        // decided where the refusal is raised, because only the writer knows
-        // whether the conflicting key is one the file carries, one of several,
-        // or one the same invocation supplied.
+        // FR-CFG-048 obliges a runnable command that makes the change the
+        // invocation asked for and deletes nothing it did not name
+        // (BR-ERR-005), and its table fixes that command for each refused
+        // pair. Which row applies is decided where the refusal is raised,
+        // because only the writer knows where each member came from.
         Error::IncoherentEntryWrite {
             entry,
-            written,
             conflicting,
             repair,
-        } => match repair {
-            EntryRepair::Unset => Cow::Owned(format!(
-                "remove the key it conflicts with: {}, then run the command again",
-                unset_key(conflicting)
-            )),
-            EntryRepair::Rewrite { unset, command } => Cow::Owned(format!(
-                "remove the keys it conflicts with, then write it again: {}",
-                rewrite_entry(entry, written, unset, command)
-            )),
-            EntryRepair::Restate(command) => Cow::Owned(format!(
-                "write a DSN that carries no password: {}",
-                restate_entry(command, entry)
-            )),
-        },
+            ..
+        } => {
+            let named = if admits(entry) {
+                entry.as_str()
+            } else {
+                "<entry>"
+            };
+            match repair {
+                EntryRepair::Unset => Cow::Owned(format!(
+                    "remove the key it conflicts with: {}, then run the command again",
+                    unset_key(conflicting)
+                )),
+                // FR-ERR-045: the field is changed inside the dsn.
+                EntryRepair::InsideDsn { fields } => Cow::Owned(format!(
+                    "write the whole connection as a new dsn: tpl cfg database update {named} \
+                     --dsn <url>, where <url> is the connection URL with the new {}",
+                    super::cause::conjoined(fields)
+                )),
+                EntryRepair::DsnWithoutPassword => Cow::Owned(format!(
+                    "write the dsn again without its password: tpl cfg database update {named} \
+                     --dsn <url>, where <url> is the connection URL with no password in it, \
+                     then run the command again"
+                )),
+                EntryRepair::Discrete { changed, .. } => Cow::Owned(discrete_entry(named, changed)),
+                EntryRepair::Restate(command) => Cow::Owned(format!(
+                    "write a DSN that carries no password: {}",
+                    restate_entry(command, entry)
+                )),
+            }
+        }
 
         // FR-PROJ-029: `tpl init` with the parent directory, and no flag.
         Error::InitDestinationIsTplFolder { parent, .. } => match parent {
@@ -710,6 +765,23 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // line is composed here from what the variant carries, and an object
         // name is a value this corpus does not fix, so FR-ERR-022 governs it
         // by the character set and FR-ERR-023 drops a candidate outside it.
+        // FR-CACHE-040: the nearest cached names, and no clean command — not
+        // of a candidate, which the invocation did not name, and not of the
+        // whole cache (BR-ERR-005).
+        Error::NothingCachedNamed { nearest, .. } => {
+            let admitted = admitted(nearest, admits);
+            if admitted.is_empty() {
+                Cow::Borrowed(
+                    "nothing of that name is cached, so nothing cached is stale for it; nothing \
+                     was removed",
+                )
+            } else {
+                Cow::Owned(
+                    suggest::hint_line(admitted.iter().copied(), "nothing was removed")
+                        .into_owned(),
+                )
+            }
+        }
         Error::CatalogueObjectNotFound { kind, nearest, .. } => {
             let generic = match listing(*kind) {
                 // FR-ERR-043: the entry is written only where the caller gave
@@ -844,9 +916,28 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // BR-ERR-004: the entry is the one the connection was opened for, and
         // it is written into the command rather than left as a placeholder.
         // The new host and port are values only the caller knows.
+        // FR-ERR-045: an entry defined by dsn is repointed through its dsn.
+        Error::NameNotResolved {
+            entry,
+            by_dsn: true,
+            ..
+        } => Cow::Owned(format!(
+            "check the host name, or change it inside the dsn: {}",
+            inside_dsn(entry, "host")
+        )),
         Error::NameNotResolved { entry, .. } => Cow::Owned(format!(
             "check the host name, or change it with: tpl cfg database update {} --host <host>",
             entry_or_placeholder(entry)
+        )),
+        Error::ConnectionRefused {
+            entry,
+            port,
+            by_dsn: true,
+            ..
+        } => Cow::Owned(format!(
+            "check that the server is running and listening on port {port}, or change the \
+             address inside the dsn: {}",
+            inside_dsn(entry, "host or port")
         )),
         Error::ConnectionRefused { entry, port, .. } => Cow::Owned(format!(
             "check that the server is running and listening on port {port}, or change the \
@@ -880,12 +971,19 @@ fn bare(error: &Error) -> Cow<'static, str> {
             entry,
             phase: NetworkPhase::TcpConnect,
             bound,
+            by_dsn,
             ..
         } => Cow::Owned(format!(
             "check that the host and port named above are the server's address and that it is \
-             reachable from here, or change them with: tpl cfg database update {} --host <host> \
-             --port <port>; to wait longer, {}",
-            entry_or_placeholder(entry),
+             reachable from here, or change them {}; to wait longer, {}",
+            if *by_dsn {
+                format!("inside the dsn: {}", inside_dsn(entry, "host or port"))
+            } else {
+                format!(
+                    "with: tpl cfg database update {} --host <host> --port <port>",
+                    entry_or_placeholder(entry)
+                )
+            },
             match bound {
                 DeadlineBound::Phase =>
                     "raise the deadline with: tpl cfg set core.connect_timeout \
@@ -1078,15 +1176,17 @@ fn bare(error: &Error) -> Cow<'static, str> {
         Error::TrustDirectoryEmpty { entry, .. } => {
             let key = format!("database.{entry}.ca_path");
 
+            // BR-ERR-005: the invocation did not name ca_path, so the hint
+            // does not offer to delete it.
             if admits_key(&key) {
                 Cow::Owned(format!(
                     "point it at a directory holding certificate files with: tpl cfg set {key} \
-                     <path>, or remove it with: tpl cfg unset {key}"
+                     <path>"
                 ))
             } else {
                 Cow::Borrowed(
-                    "point the key at a directory holding certificate files, or remove it with: \
-                     tpl cfg unset database.<entry>.ca_path",
+                    "point the key at a directory holding certificate files with: tpl cfg set \
+                     database.<entry>.ca_path <path>",
                 )
             }
         }
@@ -1112,7 +1212,8 @@ fn bare(error: &Error) -> Cow<'static, str> {
                         "<value>"
                     };
                     Cow::Owned(format!(
-                        "set {name} to {expected}, e.g.: export {name}={example}"
+                        "set {name} to {expected} in the environment tpl runs in, e.g.: {}",
+                        in_environment(name, example)
                     ))
                 }
                 None => Cow::Owned(format!(
@@ -1245,6 +1346,8 @@ fn bare(error: &Error) -> Cow<'static, str> {
                 "an array"
             }
         )),
+        // BR-ERR-005 and the spirit of FR-CFG-048: the edit says which key to
+        // keep, and what deleting dsn would lose, never "delete either".
         Error::ConflictingEntryKeys {
             entry,
             file,
@@ -1252,20 +1355,37 @@ fn bare(error: &Error) -> Cow<'static, str> {
             second,
         } => {
             let (first, second) = (leaf(first), leaf(second));
-
-            if admits(entry) && admits(first) && admits(second) {
-                Cow::Owned(format!(
-                    "edit {}: under [database.{entry}], delete either {first} or {second}; \
-                     {NO_CFG_COMMAND}",
-                    configuration_file(file)
-                ))
+            let block = if admits(entry) {
+                Cow::Owned(format!("under [database.{entry}]"))
             } else {
-                Cow::Owned(format!(
-                    "edit {}: keep one of the two keys named above and delete the other; \
-                     {NO_CFG_COMMAND}",
-                    configuration_file(file)
-                ))
-            }
+                Cow::Borrowed("in the entry named above")
+            };
+            let edit: String = match (first, second) {
+                ("dsn", "password_command") | ("password_command", "dsn") => format!(
+                    "{block}, keep password_command and remove the password from inside dsn: \
+                     delete it and the colon before it from the user part, and keep the rest of \
+                     dsn as it is"
+                ),
+                ("password", "password_command") | ("password_command", "password") => {
+                    format!(
+                        "{block}, keep password_command and delete password, so that no password \
+                         is stored in the file"
+                    )
+                }
+                ("dsn", _) | (_, "dsn") => format!(
+                    "{block}, keep dsn and delete every separate connection key the block also \
+                     carries (host, port, user, password, database); deleting dsn instead would \
+                     also remove the host, port, user, password and database it carries"
+                ),
+                _ => format!(
+                    "{block}, keep the first of the two keys named above and delete the other"
+                ),
+            };
+
+            Cow::Owned(format!(
+                "edit {}: {edit}; {NO_CFG_COMMAND}",
+                configuration_file(file)
+            ))
         }
         // FR-CONF-011 fixes this hint: the file, the entry's dsn key, and the
         // edit that removes the query. The character is named in words, so
@@ -1278,7 +1398,10 @@ fn bare(error: &Error) -> Cow<'static, str> {
         )),
         Error::UndefinedVariable { name, .. } => {
             if admits(name) {
-                Cow::Owned(format!("define it with: export {name}=<value>"))
+                Cow::Owned(format!(
+                    "define it in the environment tpl runs in, e.g.: {}",
+                    in_environment(name, "<value>")
+                ))
             } else {
                 Cow::Borrowed(
                     "define the environment variable named above, then run the command again",
@@ -1320,14 +1443,18 @@ fn bare(error: &Error) -> Cow<'static, str> {
             "tpl discards the command's standard error, so run the command directly to see why \
              it failed",
         ),
-        Error::ReadOnlySessionNotEnforced { entry, fault } => {
+        Error::ReadOnlySessionNotEnforced {
+            entry,
+            fault,
+            by_dsn,
+        } => {
             let remedy = match fault {
                 ReadOnlyFault::NotApplied => "accepts a read-only session",
                 ReadOnlyFault::ReadBackDisagreed => "reports the read-only session it accepted",
             };
             Cow::Owned(format!(
                 "repoint the entry at a server that {remedy}: {}",
-                update_entry(entry)
+                repoint(entry, *by_dsn)
             ))
         }
         // FR-CONF-040 and FR-CONF-041 each fix this line: the flag of
@@ -1335,6 +1462,20 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // command that updates the entry. The entry name is a value this
         // corpus does not fix, so it is filled in only where `FR-ERR-022`
         // admits it and the placeholder stands otherwise, per `FR-ERR-023`.
+        // FR-ERR-045: an entry defined by dsn is completed inside its dsn.
+        Error::EntryKeyMissing {
+            entry, key, flag, ..
+        } if *flag == "--dsn" => Cow::Owned(format!(
+            "set it inside the dsn: {}",
+            inside_dsn(
+                entry,
+                if key.ends_with(".host") {
+                    "host"
+                } else {
+                    "database"
+                }
+            )
+        )),
         Error::EntryKeyMissing {
             entry,
             flag,
@@ -1355,15 +1496,15 @@ fn bare(error: &Error) -> Cow<'static, str> {
             "select an entry with -d <entry>, or set a default with: tpl cfg set core.database \
              <entry>; list the entries with: tpl cfg database list",
         ),
-        Error::ServerNotMariaDb { entry, .. } => Cow::Owned(format!(
+        Error::ServerNotMariaDb { entry, by_dsn, .. } => Cow::Owned(format!(
             "repoint the entry at a MariaDB server: {}",
-            update_entry(entry)
+            repoint(entry, *by_dsn)
         )),
         // FR-SRV-030 obliges this hint to carry `tpl cfg database update` with
-        // the entry name filled in.
-        Error::SeriesNotSupported { entry, .. } => Cow::Owned(format!(
+        // the entry name filled in, and FR-ERR-045 its --dsn for a dsn entry.
+        Error::SeriesNotSupported { entry, by_dsn, .. } => Cow::Owned(format!(
             "repoint the entry at a supported server: {}",
-            update_entry(entry)
+            repoint(entry, *by_dsn)
         )),
     }
 }
@@ -1875,6 +2016,51 @@ pub(super) fn split_command(node: &str, token: &str) -> Option<String> {
     (!canonical.is_empty()).then(|| canonical.join(" "))
 }
 
+/// The invocation, without the program name, that the words of `token` form
+/// under the node `node` names: a command path, optionally followed by the
+/// arguments of the command it reaches. [`None`] where `token` holds no
+/// whitespace, its first word names no child of `node`, the command reached
+/// takes no argument or has subcommands, or an argument word is outside the
+/// set of `FR-ERR-041`.
+///
+/// The command path is read from the tree, so every segment is a literal of
+/// `FR-ERR-022`; each argument word is tested before it is written.
+pub(super) fn split_invocation(node: &str, token: &str) -> Option<String> {
+    if let Some(path) = split_command(node, token) {
+        return Some(path);
+    }
+    if !token.contains(char::is_whitespace) {
+        return None;
+    }
+
+    let tree = crate::cli::tree();
+    let mut reached = &tree;
+    let mut canonical: Vec<&str> = Vec::new();
+    for word in node.split_whitespace() {
+        reached = reached.find_subcommand(word)?;
+        canonical.push(reached.get_name());
+    }
+
+    let mut words = token.split_whitespace();
+    reached = reached.find_subcommand(words.next()?)?;
+    canonical.push(reached.get_name());
+
+    let mut arguments: Vec<&str> = Vec::new();
+    for word in words {
+        match reached.find_subcommand(word) {
+            Some(child) if arguments.is_empty() => {
+                reached = child;
+                canonical.push(reached.get_name());
+            }
+            _ => arguments.push(word),
+        }
+    }
+
+    let takes_arguments = !reached.has_subcommands() && reached.get_positionals().next().is_some();
+    (takes_arguments && arguments.iter().all(|word| admits_template(word)))
+        .then(|| format!("{} {}", canonical.join(" "), arguments.join(" ")))
+}
+
 fn children_of(node: &str) -> Cow<'static, str> {
     if node.is_empty() {
         Cow::Borrowed("list the commands with: tpl help")
@@ -1897,6 +2083,51 @@ fn update_entry(entry: &str) -> Cow<'static, str> {
     }
 }
 
+/// The `tpl cfg database update` that repoints an entry in the form it is
+/// defined by: `--host` for the discrete fields, `--dsn` for a dsn
+/// (`FR-ERR-045`).
+fn repoint(entry: &str, by_dsn: bool) -> Cow<'static, str> {
+    if by_dsn {
+        Cow::Owned(inside_dsn(entry, "host"))
+    } else {
+        update_entry(entry)
+    }
+}
+
+/// The command `FR-ERR-045` fixes for a field of an entry defined by `dsn`,
+/// with the words that say what `<url>` stands for.
+///
+/// `field` names the field that changes, as the words say it. The stored dsn
+/// is never reproduced, per `BR-ERR-003`: `<url>` is a placeholder.
+fn inside_dsn(entry: &str, field: &str) -> String {
+    format!(
+        "tpl cfg database update {} --dsn <url>, where <url> is the whole connection URL with \
+         the new {field}",
+        entry_or_placeholder(entry)
+    )
+}
+
+/// The caller's own command with `name` defined for it alone, then the
+/// `export` that defines it for the rest of one shell (finding X-02 of the
+/// seventh re-audit of rmp `#263`).
+///
+/// An agent's shell often keeps no variable from one call to the next, so an
+/// `export` alone, run in one call, leaves the next call without it. `name` is
+/// admitted by the caller; `value` is a literal or a placeholder.
+fn in_environment(name: &str, value: &str) -> String {
+    match restate::restated(&[]) {
+        Some(again) => format!(
+            "{name}={value} {}, or export {name}={value} in the same shell before running tpl{}",
+            again.command,
+            again.replacing()
+        ),
+        None => format!(
+            "{name}={value} tpl <command>, or export {name}={value} in the same shell before \
+             running tpl"
+        ),
+    }
+}
+
 /// The `tpl cfg unset` that removes one key of one entry (`FR-CFG-048`).
 ///
 /// The key arrives fully qualified, so every segment but the entry name is a
@@ -1910,81 +2141,34 @@ fn unset_key(key: &str) -> Cow<'static, str> {
     }
 }
 
-/// The unsets that make the write legal, then the write again (`FR-CFG-048`).
+/// The update that writes, with their own flags, the fields a refused dsn
+/// would have changed (row two of the `FR-CFG-048` table).
 ///
-/// This is the repair where no single `tpl cfg unset` would do: one unset per
-/// key the write conflicts with, and nothing else. `tpl cfg database remove`
-/// followed by `add` would also make the write legal, but it clears
-/// `core.database` when that names the entry and drops every key the write
-/// does not touch, so the caller would have to rebuild what it never asked to
-/// change.
-///
-/// The value written is a placeholder, never the caller's own: `BR-ERR-003`
-/// bars a DSN from every message.
-fn rewrite_entry(entry: &str, written: &str, unset: &[String], command: &str) -> String {
-    // T-01: the write again is the caller's own command, whole; the removals
-    // before it run against the same project, and FR-ERR-043 carries its
-    // --tpl-dir into them where the whole line is composed.
-    let again = restate::restated(&[]);
-    let mut commands: Vec<Cow<'static, str>> = unset.iter().map(|key| unset_key(key)).collect();
-    let replacing = match again {
-        Some(again) => {
-            let replacing = again.replacing();
-            commands.push(Cow::Owned(again.command));
-            replacing
-        }
-        None => {
-            commands.push(write_again(entry, written, command));
-            String::new()
-        }
-    };
-
-    let last = commands.len() - 1;
-    let mut line = String::new();
-    for (index, one) in commands.iter().enumerate() {
-        if index == last && index > 0 {
-            line.push_str("; then ");
-        } else if index > 0 {
-            line.push_str("; ");
-        }
-        line.push_str(one);
+/// Each value is a placeholder, never the caller's own: `BR-ERR-003` bars a
+/// DSN, and every part of it, from every message. The password has no flag of
+/// `FR-CFG-027`, so where the dsn carries one the line says how to set it.
+fn discrete_entry(named: &str, changed: &[&'static str]) -> String {
+    let flags: Vec<&str> = changed
+        .iter()
+        .filter_map(|field| match *field {
+            "host" => Some("--host <host>"),
+            "port" => Some("--port <port>"),
+            "user" => Some("--user <user>"),
+            "database" => Some("--schema <database>"),
+            _ => None,
+        })
+        .collect();
+    let mut line = format!(
+        "write each field with its own flag: tpl cfg database update {named} {}",
+        flags.join(" ")
+    );
+    if changed.contains(&"password") {
+        line.push_str(&format!(
+            "; the password has no flag, so set it with: tpl cfg set database.{named}.password \
+             <password>"
+        ));
     }
-    line.push_str(&replacing);
     line
-}
-
-/// The write `FR-CFG-048` refused, as a runnable command with its value left as
-/// a placeholder.
-///
-/// `written` is a fully qualified key; the flag of `tpl cfg database update`
-/// that writes it is the key's last segment, except `database`, which the flag
-/// `--schema` writes.
-fn write_again(entry: &str, written: &str, command: &str) -> Cow<'static, str> {
-    let field = written.rsplit('.').next().unwrap_or_default();
-    let value = match field {
-        "dsn" => "<url>",
-        "password_command" => "<command>",
-        _ => "<value>",
-    };
-
-    if command == "cfg set" {
-        return if admits_key(written) {
-            Cow::Owned(format!("tpl cfg set {written} {value}"))
-        } else {
-            Cow::Owned(format!("tpl cfg set <key> {value}"))
-        };
-    }
-
-    let flag = match field {
-        "database" => "schema".to_owned(),
-        other => other.replace('_', "-"),
-    };
-    let named = if admits(entry) { entry } else { "<entry>" };
-    if admits_path(command) && admits(&flag.replace('-', "_")) {
-        Cow::Owned(format!("tpl {command} {named} --{flag} {value}"))
-    } else {
-        Cow::Owned(format!("tpl cfg database update {named} --dsn <url>"))
-    }
 }
 
 /// The same command written with the password in one place only

@@ -1,7 +1,7 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-09-20
+last-reviewed: 2026-09-24
 related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md]
 ---
 
@@ -509,6 +509,10 @@ record has not been observed, and SHALL NOT be written down.
   first is what makes the code readable without a second invocation. It matters
   most for `tpl cfg database test`, whose whole purpose is to answer which of
   the three has gone wrong.
+
+  *Note added in the fiftieth edition.* WHERE the entry is defined by `dsn`,
+  the `hint` SHALL carry `tpl cfg database update <entry> --dsn <url>`
+  instead of `--host <host>`, per `FR-ERR-045`.
 
   *Rationale for the `hint`.* `FR-ERR-009` asks for a runnable command wherever
   one exists, and exactly one does: `tpl cfg database update` repoints the entry

@@ -277,29 +277,48 @@ pub enum DsnFault {
 
 /// How a write `FR-CFG-048` refuses is made legal.
 ///
-/// That requirement obliges the `hint` to carry a runnable command, and which
-/// command that is depends on where each member of the refused pair came from.
-/// Only the writer knows that, so the distinction is made where the refusal is
+/// That requirement obliges the `hint` to carry a runnable command that makes
+/// the change the invocation asked for and deletes nothing it did not name
+/// (`BR-ERR-005`), and its table fixes that command for each refused pair.
+/// Which row applies depends on where each member of the pair came from, and
+/// only the writer knows that, so the distinction is made where the refusal is
 /// raised rather than where the line is composed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntryRepair {
-    /// `.tpl/.cfg` carries the conflicting key, and removing that one key makes
-    /// the write legal: one `tpl cfg unset`.
+    /// The entry carries one source of the password and the invocation writes
+    /// the other: one `tpl cfg unset` of the source the entry carries, then the
+    /// same write again (rows three and four of the `FR-CFG-048` table).
+    ///
+    /// The password is information the invocation's own write supplies anew,
+    /// so removing the source it replaces deletes nothing the caller did not
+    /// name, per `BR-ERR-005`.
     Unset,
 
-    /// The entry carries more than one key the write conflicts with, so no
-    /// single removal makes it legal: one `tpl cfg unset` per conflicting key,
-    /// then the same write again.
-    ///
-    /// Removing the whole entry would also clear `core.database` and every
-    /// key the write does not conflict with, so the repair names the
-    /// conflicting keys and nothing else.
-    Rewrite {
-        /// The fully qualified keys to unset, in the order they are removed.
-        /// A boxed slice, so that the variant leaves [`Error`] no larger.
-        unset: Box<[String]>,
-        /// The command path below `tpl` that performs the write.
-        command: &'static str,
+    /// The entry is defined by `dsn` and the invocation writes discrete
+    /// connection fields (row one of the table, `FR-ERR-045`): the field is
+    /// changed inside the dsn, with `tpl cfg database update <entry> --dsn
+    /// <url>`.
+    InsideDsn {
+        /// The leaf names of the discrete connection fields the invocation
+        /// writes, in the order `FR-CONF-002` states them.
+        fields: Box<[&'static str]>,
+    },
+
+    /// The entry's dsn carries a password and the invocation writes
+    /// `password_command` (row five of the table): the dsn is written again
+    /// without its password, then the same write again.
+    DsnWithoutPassword,
+
+    /// The entry is described by discrete connection fields and the
+    /// invocation writes a `dsn` (row two of the table): the fields the new
+    /// value changes are written with their own flags instead.
+    Discrete {
+        /// The leaf names of the discrete connection fields the entry carries,
+        /// which the `cause` names.
+        carried: Box<[&'static str]>,
+        /// The leaf names of the fields the dsn written states, whose flags
+        /// the `hint` carries.
+        changed: Box<[&'static str]>,
     },
 
     /// The invocation itself supplies both members, so nothing in the file has
@@ -584,6 +603,29 @@ pub enum Error {
     RepeatedFlag {
         /// The flag, in the long form the tree declares it under.
         flag: String,
+    },
+
+    /// `-d/--database` or `--tpl-dir` took a command name from a separate
+    /// token as its value, and the token after it then named no command
+    /// (`FR-CLI-026`).
+    #[error("{flag} needs a value")]
+    FlagTookCommand {
+        /// The flag as written.
+        flag: String,
+        /// The command name it took as its value.
+        value: String,
+        /// The token that was then read as the command.
+        token: String,
+        /// The invocation after `tpl` with the flag's placeholder inserted
+        /// after it, where every other token is admitted into a hint
+        /// (`FR-ERR-022`, `FR-ERR-040`, `FR-ERR-041`); [`None`] otherwise.
+        ///
+        /// Boxed, with `path`, so that the variant leaves [`Error`] within
+        /// the size `clippy::result_large_err` admits.
+        rebuilt: Option<Box<str>>,
+        /// The command path the invocation names once the flag has its
+        /// value, which the hint carries alone where `rebuilt` is [`None`].
+        path: Box<str>,
     },
 
     /// A flag that carries a value was given without one.
@@ -1082,6 +1124,22 @@ pub enum Error {
         nearest: Vec<String>,
     },
 
+    /// `tpl cache clean` named an object the cache of the entry does not hold
+    /// (`FR-CACHE-040`). Nothing was deleted and no connection was opened.
+    #[error("nothing cached for {kind} '{name}' in database entry '{entry}'")]
+    NothingCachedNamed {
+        /// The kind the object flag named.
+        kind: CatalogueObjectKind,
+        /// The name it gave.
+        name: String,
+        /// The database entry whose cache was consulted.
+        entry: String,
+        /// The nearest matches among the names of that kind the cache holds,
+        /// selected by `FR-ERR-019` and `FR-ERR-044`; empty where nothing
+        /// qualified.
+        nearest: Vec<String>,
+    },
+
     /// A table, view or routine that the `--context` document does not carry
     /// (`FR-RND-032`).
     ///
@@ -1194,6 +1252,9 @@ pub enum Error {
     NameNotResolved {
         /// The database entry the connection was opened for.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The host attempted.
         host: String,
         /// The port attempted.
@@ -1205,6 +1266,9 @@ pub enum Error {
     ConnectionRefused {
         /// The database entry the connection was opened for.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The host attempted.
         host: String,
         /// The port attempted.
@@ -1236,6 +1300,9 @@ pub enum Error {
     NetworkDeadlineExceeded {
         /// The database entry the connection was opened for.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The phase that was in progress.
         phase: NetworkPhase,
         /// The host attempted.
@@ -1770,6 +1837,9 @@ pub enum Error {
     ReadOnlySessionNotEnforced {
         /// The entry whose connection it was.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// Which of the two conditions of `FR-SRV-010` arose.
         fault: ReadOnlyFault,
     },
@@ -1821,6 +1891,9 @@ pub enum Error {
     ServerNotMariaDb {
         /// The entry that reached it.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The product the server reported.
         product: String,
     },
@@ -1831,6 +1904,9 @@ pub enum Error {
     SeriesNotSupported {
         /// The entry that reached it.
         entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        by_dsn: bool,
         /// The series found, as the server reported it.
         series: String,
         /// The series that are supported, as the caller that raised this
@@ -2172,6 +2248,26 @@ pub(crate) fn trigger_internal_invariant() -> Result<(), Error> {
 }
 
 impl Error {
+    /// The same condition, marked as raised for an entry defined by `dsn`
+    /// where it is one whose `hint` repoints the entry (`FR-ERR-045`).
+    ///
+    /// The conditions are raised below the layer that knows the entry's form,
+    /// so the one function that opens a connection marks what it returns. Any
+    /// other condition is returned unchanged.
+    #[must_use]
+    pub(crate) fn of_dsn_entry(mut self) -> Self {
+        match &mut self {
+            Self::NameNotResolved { by_dsn, .. }
+            | Self::ConnectionRefused { by_dsn, .. }
+            | Self::NetworkDeadlineExceeded { by_dsn, .. }
+            | Self::ReadOnlySessionNotEnforced { by_dsn, .. }
+            | Self::ServerNotMariaDb { by_dsn, .. }
+            | Self::SeriesNotSupported { by_dsn, .. } => *by_dsn = true,
+            _ => {}
+        }
+        self
+    }
+
     /// The process exit status this condition produces, per `FR-ERR-001`.
     ///
     /// The match is exhaustive and carries no wildcard arm, which is what makes
@@ -2208,6 +2304,7 @@ impl Error {
             | Self::RepeatedValueFlag { .. }
             | Self::RepeatedFlag { .. }
             | Self::FlagValueMissing { .. }
+            | Self::FlagTookCommand { .. }
             | Self::SeparateTokenValue { .. }
             | Self::ValueOutsideEnumeration { .. }
             | Self::InvocationRejected { .. }
@@ -2243,7 +2340,8 @@ impl Error {
             | Self::RenderMemoryLimitExceeded { .. } => 65,
 
             // 66 EX_NOINPUT
-            Self::CatalogueObjectNotFound { .. }
+            Self::NothingCachedNamed { .. }
+            | Self::CatalogueObjectNotFound { .. }
             | Self::ContextObjectNotFound { .. }
             | Self::TemplateNotFound { .. }
             | Self::DatabaseEntryNotFound { .. }
@@ -2319,7 +2417,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 85;
+    const VARIANT_COUNT: usize = 87;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2379,6 +2477,16 @@ mod tests {
                     flag: "--database".to_owned(),
                     first: "a".to_owned(),
                     second: "b".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::FlagTookCommand {
+                    flag: "-d".to_owned(),
+                    value: "schema".to_owned(),
+                    token: "tables".to_owned(),
+                    rebuilt: Some("-d <entry> schema tables".into()),
+                    path: "schema tables".into(),
                 },
                 64,
             ),
@@ -2631,6 +2739,15 @@ mod tests {
             (Error::RenderMemoryLimitExceeded { limit: 134_217_728 }, 65),
             // 66 EX_NOINPUT
             (
+                Error::NothingCachedNamed {
+                    kind: CatalogueObjectKind::Table,
+                    name: "ordrs".to_owned(),
+                    entry: "shop".to_owned(),
+                    nearest: vec!["orders".to_owned()],
+                },
+                66,
+            ),
+            (
                 Error::CatalogueObjectNotFound {
                     kind: CatalogueObjectKind::Table,
                     name: "ordrs".to_owned(),
@@ -2681,6 +2798,7 @@ mod tests {
             // 69 EX_UNAVAILABLE
             (
                 Error::NameNotResolved {
+                    by_dsn: false,
                     entry: String::from("shop"),
                     host: "db.example.com".to_owned(),
                     port: 3306,
@@ -2689,6 +2807,7 @@ mod tests {
             ),
             (
                 Error::ConnectionRefused {
+                    by_dsn: false,
                     entry: String::from("shop"),
                     host: "127.0.0.1".to_owned(),
                     port: 3306,
@@ -2706,6 +2825,7 @@ mod tests {
             ),
             (
                 Error::NetworkDeadlineExceeded {
+                    by_dsn: false,
                     entry: String::from("shop"),
                     phase: NetworkPhase::CatalogueQuery,
                     host: "db.example.com".to_owned(),
@@ -2952,6 +3072,7 @@ mod tests {
             ),
             (
                 Error::ReadOnlySessionNotEnforced {
+                    by_dsn: false,
                     entry: "shop".to_owned(),
                     fault: ReadOnlyFault::ReadBackDisagreed,
                 },
@@ -2977,6 +3098,7 @@ mod tests {
             ),
             (
                 Error::ServerNotMariaDb {
+                    by_dsn: false,
                     entry: "shop".to_owned(),
                     product: "MySQL".to_owned(),
                 },
@@ -2984,6 +3106,7 @@ mod tests {
             ),
             (
                 Error::SeriesNotSupported {
+                    by_dsn: false,
                     entry: "shop".to_owned(),
                     series: "10.6".to_owned(),
                     supported: WINDOW,
@@ -3005,6 +3128,7 @@ mod tests {
             Error::RepeatedValueFlag { .. } => "RepeatedValueFlag",
             Error::RepeatedFlag { .. } => "RepeatedFlag",
             Error::FlagValueMissing { .. } => "FlagValueMissing",
+            Error::FlagTookCommand { .. } => "FlagTookCommand",
             Error::SeparateTokenValue { .. } => "SeparateTokenValue",
             Error::ValueOutsideEnumeration { .. } => "ValueOutsideEnumeration",
             Error::InvocationRejected { .. } => "InvocationRejected",
@@ -3033,6 +3157,7 @@ mod tests {
             Error::RenderOutputLimitExceeded { .. } => "RenderOutputLimitExceeded",
             Error::RenderMemoryLimitExceeded { .. } => "RenderMemoryLimitExceeded",
             Error::CatalogueObjectNotFound { .. } => "CatalogueObjectNotFound",
+            Error::NothingCachedNamed { .. } => "NothingCachedNamed",
             Error::ContextObjectNotFound { .. } => "ContextObjectNotFound",
             Error::TemplateNotFound { .. } => "TemplateNotFound",
             Error::DatabaseEntryNotFound { .. } => "DatabaseEntryNotFound",
@@ -3227,6 +3352,7 @@ mod tests {
         // FR-SRV-030's own example.
         assert_eq!(
             Error::SeriesNotSupported {
+                by_dsn: false,
                 entry: "shop".to_owned(),
                 series: "10.6".to_owned(),
                 supported: WINDOW,

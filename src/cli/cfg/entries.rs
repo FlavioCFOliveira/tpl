@@ -508,7 +508,7 @@ fn referenced<'v>(flag: &str, written: &'v str) -> Result<&'v str, Error> {
 /// The item `--host` or `--schema` writes: not empty (`FR-CONF-050`), and with
 /// every reference well formed (`FR-CONF-049`).
 fn nonempty(flag: &str, written: &str) -> Result<Item, Error> {
-    if written.is_empty() {
+    if crate::project::config::keys::is_blank(written) {
         return Err(Error::EmptyValue {
             parameter: flag.to_owned(),
             command: String::new(),
@@ -1088,17 +1088,24 @@ mod tests {
             } => {
                 assert_eq!(written, "database.shop.host");
                 assert_eq!(conflicting, "database.shop.dsn");
-                assert_eq!(*repair, EntryRepair::Unset);
+                // FR-CFG-048 row one, FR-ERR-045: changed inside the dsn,
+                // never by unsetting it.
+                assert_eq!(
+                    *repair,
+                    EntryRepair::InsideDsn {
+                        fields: vec!["host"].into()
+                    }
+                );
             }
             other => panic!("expected an incoherent write, got {other:?}"),
         }
     }
 
     #[test]
-    fn fr_cfg_048_an_entry_with_more_than_one_conflicting_field_is_repaired_by_a_rewrite() {
-        // FR-CFG-048: the hint carries a command that makes the write legal,
-        // and no single `tpl cfg unset` does where three discrete fields stand
-        // against the DSN.
+    fn fr_cfg_048_a_dsn_written_over_discrete_fields_is_repaired_by_their_own_flags() {
+        // FR-CFG-048 row two and BR-ERR-005: the hint writes the fields the
+        // new dsn changes with their own flags and unsets nothing; the cause
+        // names the fields a switch to dsn would have to unset.
         let harness = Harness::new(
             "[database.shop]\nhost = \"db\"\nuser = \"alice\"\npassword = \"hunter2\"\n",
         );
@@ -1115,17 +1122,11 @@ mod tests {
 
         match condition {
             Error::IncoherentEntryWrite { ref repair, .. } => {
-                // S-03: every conflicting key is unset, and nothing else.
                 assert_eq!(
                     *repair,
-                    EntryRepair::Rewrite {
-                        unset: vec![
-                            "database.shop.host".to_owned(),
-                            "database.shop.user".to_owned(),
-                            "database.shop.password".to_owned(),
-                        ]
-                        .into(),
-                        command: "cfg database update",
+                    EntryRepair::Discrete {
+                        carried: vec!["host", "user", "password"].into(),
+                        changed: vec!["host", "user", "database"].into(),
                     }
                 );
             }

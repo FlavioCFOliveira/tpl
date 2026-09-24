@@ -487,6 +487,43 @@ alongside the command it documents.
   that command declares, including `--format`, `--pretty`, `--direct`, and
   `--no-cache` where declared.
 
+  *Note added in the fiftieth edition.* `FR-HELP-035` fixes the value of
+  `default` in each object of this array and of `data.global_flags`.
+
+- **FR-HELP-035**: In every object of `data.global_flags` and of each
+  `options` array, `default` SHALL be `null` WHERE the flag has no default,
+  and otherwise a single JSON string holding the default exactly as a caller
+  writes it on the command line — `"3306"`, `"verify-identity"`, `"text"`. It
+  SHALL NOT be an array, and SHALL NOT be the JSON value the text denotes,
+  whatever type the flag declares.
+
+  ```
+  --port    "default":"3306"
+  --ca-file "default":null
+  ```
+
+  The example shows only the member this requirement governs. It does not
+  fix the name or the order of the other members of the object.
+
+  *Rationale.* `tpl help --format json` gave `"default":["3306"]` for
+  `--port`, typed `integer`, and the same one-member array for `--tls` and
+  `--format`, none of which is repeatable. A program building a call from the
+  tree met a list where it expected one value. This is finding X-07 of the
+  seventh re-audit of rmp `#263`, recorded for rmp `#282`.
+
+  *Why a string and not a typed value.* `FR-ENV-047` carries the default of a
+  template argument as its source text, and a flag default is the same kind
+  of fact: what the caller writes. A caller builds an argument vector, which
+  holds strings, and the declared type stays stated beside it. A typed value
+  would need a JSON form for every value type the tree declares, including a
+  path and a mode name.
+
+  *Rejected: a list of strings, documented as such.* No flag of the tree
+  carries more than one default value, so the list holds one member in every
+  case and states a shape nothing uses.
+
+  *Added in the fiftieth edition,* for rmp `#282`.
+
 - **FR-HELP-021**: The system SHALL derive the document at runtime by
   introspecting the command tree it actually parses with.
 

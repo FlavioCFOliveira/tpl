@@ -267,6 +267,18 @@ impl fmt::Display for EntryKey {
     }
 }
 
+/// Whether `value` names no host and no database (`FR-CONF-050`): it has no
+/// character, or only the six ASCII whitespace characters `U+0009` through
+/// `U+000D` and `U+0020`.
+///
+/// The set is spelled out because [`u8::is_ascii_whitespace`] leaves out the
+/// vertical tab, which the requirement names. The value is never trimmed.
+pub(crate) fn is_blank(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| matches!(byte, b'\t'..=b'\r' | b' '))
+}
+
 /// Whether `name` is an entry name: one to sixty-four ASCII letters, digits
 /// and underscores (`FR-CONF-048`).
 ///
@@ -489,7 +501,7 @@ fn entry_named_by(supplied: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CoreKey, EntryKey, Key, Target, ValueType, candidates};
+    use super::{CoreKey, EntryKey, Key, Target, ValueType, candidates, is_blank};
 
     #[test]
     fn fr_conf_002_the_space_is_exactly_the_eighteen_forms_the_table_declares() {
@@ -678,5 +690,24 @@ mod tests {
             .count();
 
         assert_eq!(hosts, 1);
+    }
+
+    #[test]
+    fn fr_conf_050_the_six_ascii_whitespace_characters_alone_are_blank() {
+        for blank in [
+            "",
+            " ",
+            "\t",
+            "\n",
+            "\u{b}",
+            "\u{c}",
+            "\r",
+            " \t\u{b}\u{c}\r\n",
+        ] {
+            assert!(is_blank(blank), "{blank:?}");
+        }
+        for named in ["h", " h ", "\u{a0}", "\u{85}", "\u{2003}"] {
+            assert!(!is_blank(named), "{named:?}");
+        }
     }
 }

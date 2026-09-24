@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-nine editions. All are in force;
+The specification has been written in fifty editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4305,6 +4305,77 @@ root `README.md` describes `tpl init` as taking an optional path, the mode of
 `.cfg` as granting no access to group and other, and `${VAR}` as expanded in
 six fields and refused when unclosed or undefined. None of those statements is
 made false by this edition, so the fifth validation rule owes nothing.
+
+### Fiftieth edition — a hint that deleted what nobody named, a flag that took the command, and a name in another case
+
+The seventh re-audit of rmp `#263`, recorded for rmp `#282`, found a chain of
+`hint` commands, each exiting `0`, that emptied an entry defined by `dsn`. The
+connection `hint` offered `--host` for that entry, the conflict `hint` then
+offered `tpl cfg unset database.ds.dsn`, and the unset removed the user, the
+database and the password reference with nothing said (finding X-01).
+`tpl -d schema tables` answered "unknown command 'tables'" (finding X-03).
+`tpl init x/.TPL` passed the `.tpl` test on a case-insensitive filesystem
+(finding X-04). `tpl cache clean --table nope` exited `0` (finding X-06). The
+command tree gave `--port` the default `["3306"]` (finding X-07). A host of
+spaces was stored (finding X-08). This edition fixes those outcomes. Findings
+X-02 and X-05, and the first part of X-08, are wording of `hint` text that no
+requirement fixes, and take no change here beyond the rationale sentence of
+`FR-CONF-049` that quoted that text.
+
+**Six identifiers are assigned — `BR-ERR-005`, `FR-ERR-045`, `FR-CFG-050`,
+`FR-CLI-026`, `FR-CACHE-040` and `FR-HELP-035`; none is retired and none is
+renumbered.** No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **A `hint` deletes nothing the caller did not name** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `BR-ERR-005` bars a
+  `hint` command that deletes or overwrites a value of `.tpl/.cfg` or a cached
+  object the invocation did not name, and any command that deletes a
+  nearest-match candidate. `BR-ERR-004` carries a note.
+- **A dsn entry is changed through its dsn** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-045` makes
+  every `hint` that repoints or completes an entry defined by `dsn` carry
+  `tpl cfg database update <entry> --dsn <url>`. `FR-CONF-041` and
+  `FR-SRV-030` carry notes.
+- **The conflict `hint` keeps the form the entry uses** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-048` is amended: a table fixes
+  the `hint` for each refused pair, and the `cause` states what switching
+  between `dsn` and the discrete fields removes. `FR-CFG-050` writes a warning
+  when `tpl cfg unset` deletes `dsn`, naming the facts the dsn carried.
+- **A flag that took a command says so** — [cli-contract.md](cli-contract.md).
+  `FR-CLI-026` reports "`-d` needs a value", with `64`, where `-d` or
+  `--tpl-dir` took a command name from a separate token and the next token
+  then failed as a command. `FR-CLI-024` carries a note.
+- **The `.tpl` segment ignores ASCII case** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-027` and
+  `FR-PROJ-029` are amended.
+- **A named clean that finds nothing is `66`** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-040` refuses
+  `tpl cache clean` with an object flag whose object is not cached, with a
+  suggestion over the cached names and no clean command in the `hint`.
+  `FR-CACHE-023` carries a note.
+- **A flag default is one string** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-035` makes `default`
+  `null` or a single JSON string of the command-line text, as `FR-ENV-047`
+  does for a template argument. `FR-HELP-020` carries a note.
+- **Whitespace alone is empty** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-050` is amended:
+  a host or a database made only of the six ASCII whitespace characters is
+  empty. No other value is trimmed.
+
+`FR-CFG-011`, `FR-CFG-012`, `FR-CFG-020`, `FR-CFG-029`, `FR-CONF-006`,
+`FR-CONF-007`, `FR-CONF-040`, `FR-CLI-003`, `FR-CLI-018`, `FR-CLI-020`,
+`FR-GLOB-011`, `FR-ERR-001`, `FR-ERR-006`, `FR-ERR-009`, `FR-ERR-019`,
+`FR-ERR-043`, `FR-ERR-044`, `FR-OUT-020`, `FR-GLOB-015`, `NFR-PERF-006` and
+`FR-ENV-047` were read against the changes. Apart from the notes named above,
+none conflicts with them, so none is amended. `FR-CLI-020` bars normalising
+the case of a flag value; the path is used as written, and only the test of
+its last segment ignores case, as `FR-PROJ-027` now states. The `66` row of
+`FR-ERR-001` already covers a named object that does not exist. The root
+`README.md` makes no statement about the hints, the cache clean of an absent
+object, or the JSON help defaults that this edition makes false, so the fifth
+validation rule owes nothing.
 
 ### Still out of scope
 

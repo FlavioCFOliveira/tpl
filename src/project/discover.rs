@@ -104,9 +104,16 @@ fn named_folder(named: &Path) -> Result<PathBuf, Error> {
     }))
 }
 
-/// Whether the last segment of `path` is `.tpl` (`FR-PROJ-027`).
-fn is_marker(path: &Path) -> bool {
-    path.file_name() == Some(std::ffi::OsStr::new(MARKER))
+/// Whether the last segment of `path` is `.tpl`, without regard to the case
+/// of ASCII letters (`FR-PROJ-027`, `FR-PROJ-029`).
+///
+/// A case-insensitive filesystem finds `.TPL` when the walk looks for `.tpl`,
+/// so one rule on every host keeps the test in step with discovery. The path
+/// itself is never changed (`FR-CLI-020`); only this test ignores case.
+pub(crate) fn is_marker(path: &Path) -> bool {
+    path.file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|name| name.eq_ignore_ascii_case(MARKER))
 }
 
 /// Climbs from `start` to the boundary, returning the first `.tpl` it finds.
@@ -175,7 +182,7 @@ fn is_mount_point(directory: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{MARKER, locate};
+    use super::{MARKER, is_marker, locate};
     use crate::error::{Error, TplDirFault};
     use crate::project::scratch::Scratch;
 
@@ -342,5 +349,17 @@ mod tests {
         let condition = locate(None, &project).expect_err("a file is not a project");
 
         assert!(matches!(condition, Error::ProjectNotFound { .. }));
+    }
+
+    #[test]
+    fn fr_proj_027_the_last_segment_is_compared_without_ascii_case() {
+        use std::path::Path;
+
+        for marked in [".tpl", "x/.TPL", "x/.Tpl/", "./.tPl"] {
+            assert!(is_marker(Path::new(marked)), "{marked}");
+        }
+        for unmarked in ["x", "x/.tpl/y", "x/tpl", "x/.tpl2"] {
+            assert!(!is_marker(Path::new(unmarked)), "{unmarked}");
+        }
     }
 }

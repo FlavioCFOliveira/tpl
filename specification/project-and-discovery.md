@@ -263,7 +263,9 @@ maintain it.
 
 - **FR-PROJ-027**: A directory SHALL be usable as the `.tpl` folder of a
   project only WHERE the last segment of its path is `.tpl`, either as the
-  path is written or after the canonicalisation of `FR-PROJ-009`. The walk of
+  path is written or after the canonicalisation of `FR-PROJ-009`. The segment
+  SHALL be compared with `.tpl` without regard to the case of ASCII letters,
+  so `.TPL` and `.Tpl` match. The walk of
   `FR-PROJ-004` finds only such directories, so this requirement is observable
   only through `--tpl-dir`.
 
@@ -441,6 +443,20 @@ maintain it.
 
   *Added in the forty-eighth edition,* for rmp `#265`.
 
+  *Amended in the fiftieth edition,* for rmp `#282`. The comparison ignores
+  ASCII case, as `FR-PROJ-029` does. On a case-insensitive filesystem the
+  walk of `FR-PROJ-004` finds a folder named `.TPL` when it looks for `.tpl`,
+  so a case-sensitive test here refused a folder that discovery accepts. One
+  rule on every host keeps the two requirements in step without testing the
+  filesystem. *Accepted cost.* On a case-sensitive filesystem, `--tpl-dir`
+  accepts a folder named `.TPL` that the walk would not find. The caller
+  named it, and every trust check still applies.
+
+  *Read against `FR-CLI-020`, and unchanged.* That requirement bars
+  normalising the case of a flag value. The path is still used as written,
+  and its case is never changed; only the test of its last segment ignores
+  case.
+
 ## `tpl init`
 
 ```
@@ -464,6 +480,9 @@ tpl init [<path>]
   2. **Canonical.** The destination exists, and the last segment of its
      canonical path is `.tpl`. This is the case of `tpl init` with no operand,
      run inside a `.tpl` folder.
+
+  In both cases the segment SHALL be compared with `.tpl` without regard to
+  the case of ASCII letters, per `FR-PROJ-027`.
 
   The message SHALL be as follows:
 
@@ -530,6 +549,16 @@ tpl init [<path>]
 
   *Added in the forty-ninth edition,* for rmp `#281`, from finding W-01 of the
   sixth re-audit.
+
+  *Amended in the fiftieth edition,* for rmp `#282`. On a case-insensitive
+  filesystem, `tpl init x/.TPL` passed the test, created `x/.TPL/.tpl`, and
+  discovery from `x` then took `x/.TPL` as the project, which is the outcome
+  of finding W-01 with no message. This is finding X-04 of the seventh
+  re-audit of rmp `#263`. The segment is now compared without regard to ASCII
+  case. *Rejected: comparing only the canonical path.* A destination that
+  does not exist yet has no canonical path, and `x/.TPL` is created by the
+  same invocation. *Accepted cost.* On a case-sensitive filesystem, a project
+  cannot be created in a directory named `.TPL` in any case.
 
 - **FR-PROJ-013**: `tpl init` SHALL create the destination directory, including
   any missing parent directories.

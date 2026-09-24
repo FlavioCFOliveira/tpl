@@ -126,6 +126,10 @@ pub(crate) struct Settings {
                   asserts both arms of it"
     )]
     selection: Selection,
+    /// Whether the entry is defined by `dsn` rather than by the discrete
+    /// fields (`FR-CONF-006`); a `hint` that repoints or completes the entry
+    /// names the flag of that form, per `FR-ERR-045`.
+    by_dsn: bool,
     /// The host, where the entry names one.
     host: Option<String>,
     /// The port, defaulted to `3306` per `FR-CONF-002`.
@@ -161,6 +165,11 @@ impl Settings {
     )]
     pub(crate) const fn selection(&self) -> Selection {
         self.selection
+    }
+
+    /// Whether the entry is defined by `dsn` (`FR-ERR-045`).
+    pub(crate) const fn by_dsn(&self) -> bool {
+        self.by_dsn
     }
 
     /// The host, where the entry names one.
@@ -270,6 +279,7 @@ where
     let mut settings = Settings {
         entry: name.to_owned(),
         selection,
+        by_dsn: entry.dsn.is_some(),
         host: None,
         port: DEFAULT_PORT,
         user: None,

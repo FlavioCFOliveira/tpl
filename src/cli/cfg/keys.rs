@@ -223,7 +223,19 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
         editor.remove(&Target::Key(Key::Core(CoreKey::Database)));
     }
 
-    editor.save()
+    editor.save()?;
+
+    // FR-CFG-050: the one key that holds five facts. The block of the entry
+    // writes no such line: the caller named the whole entry.
+    if let Target::Key(Key::Entry {
+        entry,
+        field: EntryKey::Dsn,
+    }) = &target
+    {
+        crate::diagnostics::emit::dsn_unset(entry);
+    }
+
+    Ok(())
 }
 
 /// Whether `target` deletes the entry `core.database` names (`FR-CFG-023`).

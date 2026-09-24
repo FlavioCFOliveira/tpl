@@ -1304,21 +1304,22 @@ fn fr_cfg_048_set_refuses_a_write_the_entry_cannot_hold_and_the_hint_repairs_it(
     assert!(cause.contains("database.shop.dsn"), "{written}");
     assert_eq!(sandbox.configuration(), before.as_bytes());
 
+    // FR-CFG-048 row one, FR-ERR-045, BR-ERR-005: the host is changed inside
+    // the dsn, and the dsn is never unset by the hint.
     let hint = line(&written, "hint:  ");
-    let repair = hint
-        .rsplit_once(": ")
-        .expect("the hint carries a command")
-        .1
-        .strip_suffix(", then run the command again")
-        .expect("V-07: the hint says to run the refused command again");
-    assert_eq!(repair, "tpl cfg unset database.shop.dsn");
+    assert_eq!(
+        hint,
+        "write the whole connection as a new dsn: tpl cfg database update shop --dsn <url>, \
+         where <url> is the connection URL with the new host"
+    );
 
-    let arguments: Vec<&str> = repair.split(' ').skip(1).collect();
+    let arguments = hint_command(&hint, &[("<url>", "mysql://alice@10.0.1.5/shop")]);
+    let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
     assert_eq!(code(&sandbox.run(&arguments)), 0, "the hint did not run");
     assert_eq!(
-        code(&sandbox.run(&["cfg", "set", "database.shop.host", "10.0.1.5"])),
-        0,
-        "the hint did not make the write legal"
+        sandbox.configuration(),
+        b"[database.shop]\ndsn = \"mysql://alice@10.0.1.5/shop\"\n",
+        "the hint made the change and kept the user and the database"
     );
 }
 
@@ -1409,14 +1410,15 @@ fn fr_cfg_048_update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alon
     assert_eq!(sandbox.configuration(), before.as_bytes());
 
     let hint = line(&written, "hint:  ");
+    // FR-CFG-048 row two: the fields the dsn changes, each with its own flag;
+    // nothing is unset.
     assert_eq!(
         hint,
-        "remove the keys it conflicts with, then write it again: tpl cfg unset \
-         database.shop.host; tpl cfg unset database.shop.user; tpl cfg unset \
-         database.shop.password; then tpl cfg database update shop --dsn <dsn>; replace <dsn> \
-         with the value you gave --dsn",
+        "write each field with its own flag: tpl cfg database update shop --host <host> --user \
+         <user> --schema <database>",
         "{written}"
     );
+    assert!(!hint.contains("unset"), "{written}");
     assert!(!hint.contains("remove shop"), "{written}");
 
     for key in [
@@ -1804,10 +1806,17 @@ fn br_err_004_a_fault_in_the_file_is_repaired_by_an_edit_and_never_by_tpl_cfg() 
     sandbox.project("[core]\n\n[database.x]\ndsn = \"mysql://h/d\"\nhost = \"h\"\n");
     let written = assert_refused(&sandbox.run(&["cfg", "list"]), 78, "dsn beside host");
 
+    // BR-ERR-005: the hint says which key to keep and what deleting dsn loses.
+    let hint = line(&written, "hint:  ");
     assert!(
-        line(&written, "hint:  ").contains("under [database.x], delete either dsn or host"),
+        hint.contains(
+            "under [database.x], keep dsn and delete every separate connection key the block \
+             also carries (host, port, user, password, database); deleting dsn instead would \
+             also remove the host, port, user, password and database it carries"
+        ),
         "{written}"
     );
+    assert!(!hint.contains("either"), "{written}");
 }
 
 #[test]
@@ -2316,7 +2325,8 @@ fn t_04_a_port_a_variable_expanded_badly_blames_the_variable() {
     );
     assert_eq!(
         line(&written, "hint:  "),
-        "set P to a TCP port between 1 and 65535, e.g.: export P=3306"
+        "set P to a TCP port between 1 and 65535 in the environment tpl runs in, e.g.: P=3306 \
+         tpl -d x schema tables, or export P=3306 in the same shell before running tpl"
     );
 }
 
@@ -3374,4 +3384,445 @@ fn w_04_w_09_the_help_says_what_is_expanded_and_how_to_set_a_password() {
 
     let init = flat(&["help", "init"]);
     assert!(init.contains("PATH names a .tpl folder"), "{init}");
+}
+
+// -------------------------------------------- the seventh re-audit, #282 ---
+
+/// The runnable command a hint line carries after `tpl`, as its words, with
+/// each placeholder named in `values` replaced by its value.
+///
+/// The command runs from the first `tpl ` to the first `, where`, `;` or the
+/// end of the line.
+fn hint_command(hint: &str, values: &[(&str, &str)]) -> Vec<String> {
+    let at = hint
+        .find("tpl ")
+        .unwrap_or_else(|| panic!("no command in {hint:?}"));
+    let command = &hint[at + "tpl ".len()..];
+    let end = [", where", ";"]
+        .iter()
+        .filter_map(|stop| command.find(stop))
+        .min()
+        .unwrap_or(command.len());
+
+    command[..end]
+        .split_whitespace()
+        .map(|word| {
+            values
+                .iter()
+                .find(|(placeholder, _)| *placeholder == word)
+                .map_or_else(|| word.to_owned(), |(_, value)| (*value).to_owned())
+        })
+        .collect()
+}
+
+/// The fields of one entry, as `tpl cfg database show --format json` gives
+/// them.
+fn shown(sandbox: &Sandbox, entry: &str) -> serde_json::Value {
+    let printed = sandbox.run(&["cfg", "database", "show", entry, "--format", "json"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    let document: serde_json::Value =
+        serde_json::from_slice(&printed.stdout).expect("the document is JSON");
+    document["data"]["entry"].clone()
+}
+
+#[test]
+fn x_01_every_hint_of_the_dsn_chain_succeeds_and_loses_no_field() {
+    // FR-ERR-045, FR-CFG-048, BR-ERR-005: every hint that repoints an entry
+    // defined by dsn carries --dsn <url>, and following each one as written
+    // keeps the user, the database and the password reference.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let added = sandbox.run(&[
+        "cfg",
+        "database",
+        "add",
+        "ds",
+        "--dsn",
+        "mysql://reader:${PW}@127.0.0.1:1/shop",
+        "--tls",
+        "disabled",
+    ]);
+    assert_eq!(code(&added), 0, "{}", stderr(&added));
+
+    let keeps_every_field = |port: &str| {
+        let data = shown(&sandbox, "ds").to_string();
+        assert!(
+            data.contains(&format!("mysql://reader:${{PW}}@127.0.0.1:{port}/shop")),
+            "{data}"
+        );
+        assert!(!data.contains("\"host\""), "{data}");
+    };
+
+    // 1. The connection hint of a refused connection.
+    let refused = sandbox.run_from(
+        sandbox.root(),
+        &[("PW", "x")],
+        &["-d", "ds", "schema", "info"],
+    );
+    let written = assert_refused(&refused, 69, "schema info");
+    let hint = line(&written, "hint:  ");
+    assert!(
+        hint.contains("tpl -d ds cfg database update ds --dsn <url>")
+            || hint.contains("tpl cfg database update ds --dsn <url>"),
+        "{hint}"
+    );
+    assert!(!hint.contains("--host"), "{hint}");
+    let followed = hint_command(&hint, &[("<url>", "mysql://reader:${PW}@127.0.0.1:2/shop")]);
+    let words: Vec<&str> = followed.iter().map(String::as_str).collect();
+    let printed = sandbox.run(&words);
+    assert_eq!(code(&printed), 0, "{words:?}: {}", stderr(&printed));
+    keeps_every_field("2");
+
+    // 2. The conflict hint of --host and --port on a dsn entry.
+    for (arguments, field) in [
+        (
+            vec![
+                "cfg",
+                "database",
+                "update",
+                "ds",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "3306",
+            ],
+            "host and port",
+        ),
+        (
+            vec!["cfg", "database", "update", "ds", "--user", "bob"],
+            "user",
+        ),
+        (
+            vec!["cfg", "set", "database.ds.password", "${P}"],
+            "password",
+        ),
+    ] {
+        let printed = sandbox.run(&arguments);
+        let written = assert_refused(&printed, 64, &arguments.join(" "));
+        let hint = line(&written, "hint:  ");
+        assert!(!hint.contains("unset"), "{hint}");
+        assert!(!hint.contains("remove"), "{hint}");
+        assert!(hint.contains(&format!("with the new {field}")), "{hint}");
+        assert!(
+            line(&written, "cause: ").contains(
+                "would also remove the host, port, user, password and database it carries"
+            ),
+            "{written}"
+        );
+
+        let followed = hint_command(
+            &hint,
+            &[("<url>", "mysql://reader:${PW}@127.0.0.1:3306/shop")],
+        );
+        let words: Vec<&str> = followed.iter().map(String::as_str).collect();
+        let printed = sandbox.run(&words);
+        assert_eq!(code(&printed), 0, "{words:?}: {}", stderr(&printed));
+        keeps_every_field("3306");
+    }
+
+    // 3. The password_command conflict: the dsn again, without its password,
+    // then the invocation again.
+    let printed = sandbox.run(&[
+        "cfg",
+        "database",
+        "update",
+        "ds",
+        "--password-command",
+        "pass x",
+    ]);
+    let written = assert_refused(&printed, 64, "update --password-command");
+    let hint = line(&written, "hint:  ");
+    assert!(hint.contains("--dsn <url>"), "{hint}");
+    assert!(!hint.contains("unset"), "{hint}");
+    let followed = hint_command(&hint, &[("<url>", "mysql://reader@127.0.0.1:3306/shop")]);
+    let words: Vec<&str> = followed.iter().map(String::as_str).collect();
+    assert_eq!(code(&sandbox.run(&words)), 0);
+    let again = sandbox.run(&[
+        "cfg",
+        "database",
+        "update",
+        "ds",
+        "--password-command",
+        "pass x",
+    ]);
+    assert_eq!(code(&again), 0, "{}", stderr(&again));
+    let data = shown(&sandbox, "ds").to_string();
+    assert!(
+        data.contains("mysql://reader@127.0.0.1:3306/shop"),
+        "{data}"
+    );
+    assert!(data.contains("password_command"), "{data}");
+}
+
+#[test]
+fn x_01_a_dsn_written_over_discrete_fields_is_answered_with_their_own_flags() {
+    // FR-CFG-048 row two: the fields the new dsn changes, each with its own
+    // flag; nothing is unset, and the cause names what a switch would unset.
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.dd]\nhost = \"h\"\nuser = \"u\"\ndatabase = \"s\"\n");
+
+    let printed = sandbox.run(&["cfg", "set", "database.dd.dsn", "mysql://h2:3307/db2"]);
+    let written = assert_refused(&printed, 64, "cfg set dsn");
+    assert!(
+        line(&written, "cause: ").contains(
+            "Describing the entry by dsn requires unsetting database.dd.host, database.dd.user \
+             and database.dd.database"
+        ),
+        "{written}"
+    );
+    let hint = line(&written, "hint:  ");
+    assert_eq!(
+        hint,
+        "write each field with its own flag: tpl cfg database update dd --host <host> --port \
+         <port> --schema <database>"
+    );
+
+    let followed = hint_command(
+        &hint,
+        &[("<host>", "h2"), ("<port>", "3307"), ("<database>", "db2")],
+    );
+    let words: Vec<&str> = followed.iter().map(String::as_str).collect();
+    assert_eq!(code(&sandbox.run(&words)), 0);
+    let data = shown(&sandbox, "dd");
+    assert_eq!(data["host"], "h2");
+    assert_eq!(data["port"], 3307);
+    assert_eq!(
+        data["user"], "u",
+        "the user the invocation did not name is kept"
+    );
+    assert_eq!(data["database"], "db2");
+}
+
+#[test]
+fn fr_cfg_050_unsetting_dsn_warns_of_what_it_carried_and_q_silences_it() {
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[database.ds]\ndsn = \"mysql://reader:hunter2@db/shop\"\n\n[database.d2]\ndsn = \
+         \"mysql://r@db/shop\"\n",
+    );
+
+    let printed = sandbox.run(&["cfg", "unset", "database.ds.dsn"]);
+    assert_eq!(code(&printed), 0);
+    assert!(printed.stdout.is_empty());
+    let written = stderr(&printed);
+    assert_eq!(
+        written,
+        "warning: removed database.ds.dsn; entry 'ds' no longer holds the host, port, user, \
+         password or database that dsn carried\n"
+    );
+    assert!(!written.contains("hunter2") && !written.contains("reader"));
+
+    let quiet = sandbox.run(&["-q", "cfg", "unset", "database.d2.dsn"]);
+    assert_eq!(code(&quiet), 0);
+    assert!(quiet.stderr.is_empty(), "{}", stderr(&quiet));
+
+    // The whole block names the entry, and writes no such line.
+    sandbox.project("[database.ds]\ndsn = \"mysql://r@db/shop\"\n");
+    let block = sandbox.run(&["cfg", "unset", "database.ds"]);
+    assert_eq!(code(&block), 0);
+    assert!(block.stderr.is_empty(), "{}", stderr(&block));
+}
+
+#[test]
+fn fr_conf_041_a_dsn_entry_without_a_database_is_completed_inside_its_dsn() {
+    // FR-CONF-041 note, FR-ERR-045.
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.d4]\ndsn = \"mysql://u@127.0.0.1:1/${DB}\"\ntls = \"disabled\"\n");
+
+    let printed = sandbox.run_from(
+        sandbox.root(),
+        &[("DB", " ")],
+        &["-d", "d4", "schema", "info"],
+    );
+    let written = assert_refused(&printed, 78, "dsn with a blank database");
+    let cause = line(&written, "cause: ");
+    assert!(
+        cause.starts_with("the /database part of database.d4.dsn in "),
+        "{cause}"
+    );
+    assert!(cause.contains("has no 'database.d4.database'"), "{cause}");
+    let hint = line(&written, "hint:  ");
+    assert!(
+        hint.contains("cfg database update d4 --dsn <url>"),
+        "{hint}"
+    );
+    assert!(!hint.contains("--schema"), "{hint}");
+}
+
+#[test]
+fn x_02_an_undefined_variable_is_defined_for_the_call_itself() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.e]\nhost = \"127.0.0.1\"\nport = 1\ndatabase = \"s\"\npassword = \"${SHOP_PW}\"\ntls = \"disabled\"\n");
+
+    let printed = sandbox.run(&["-d", "e", "schema", "tables"]);
+    let written = assert_refused(&printed, 78, "undefined variable");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "define it in the environment tpl runs in, e.g.: SHOP_PW=<value> tpl -d e schema tables, \
+         or export SHOP_PW=<value> in the same shell before running tpl"
+    );
+
+    // The inline form gets past it: the next refusal is the connection.
+    let inline = sandbox.run_from(
+        sandbox.root(),
+        &[("SHOP_PW", "x")],
+        &["-d", "e", "schema", "tables"],
+    );
+    assert_eq!(code(&inline), 69, "{}", stderr(&inline));
+}
+
+#[test]
+fn fr_cli_026_a_flag_that_took_a_command_says_it_needs_a_value() {
+    let sandbox = Sandbox::new();
+
+    for (arguments, error, cause, hint) in [
+        (
+            vec!["-d", "schema", "tables"],
+            "-d needs a value",
+            "-d took 'schema' as its value, which is a command, so 'tables' was read as the command",
+            "give the entry name after -d: tpl -d <entry> schema tables",
+        ),
+        (
+            vec!["--tpl-dir", "cfg", "list"],
+            "--tpl-dir needs a value",
+            "--tpl-dir took 'cfg' as its value, which is a command, so 'list' was read as the command",
+            "give the path of the .tpl folder after --tpl-dir: tpl --tpl-dir <path> cfg list",
+        ),
+        (
+            vec!["-d", "render", "example", "--set", "a=b c"],
+            "-d needs a value",
+            "-d took 'render' as its value, which is a command, so 'example' was read as the command",
+            "give the entry name after -d: tpl -d <entry> render, then give the remaining \
+             arguments and flags again",
+        ),
+    ] {
+        let printed = sandbox.run(&arguments);
+        let written = assert_refused(&printed, 64, &arguments.join(" "));
+        assert_eq!(line(&written, "error: "), error);
+        assert_eq!(line(&written, "cause: "), cause);
+        assert_eq!(line(&written, "hint:  "), hint);
+    }
+
+    // An invocation that parses is never refused by the rule.
+    let parses = sandbox.run(&["-d", "schema", "schema", "tables"]);
+    assert!(
+        !stderr(&parses).contains("needs a value"),
+        "{}",
+        stderr(&parses)
+    );
+    // Nor is a value written with `=`.
+    let explicit = sandbox.run(&["--database=schema", "tables"]);
+    assert!(!stderr(&explicit).contains("needs a value"));
+}
+
+#[test]
+fn x_05_a_subcommand_and_its_argument_in_one_token_are_split() {
+    let sandbox = Sandbox::new();
+
+    let printed = sandbox.run(&["template", "show x"]);
+    let written = assert_refused(&printed, 64, "template 'show x'");
+    assert!(
+        line(&written, "cause: ").contains("was given as one argument"),
+        "{written}"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give each word as its own argument: tpl template show x"
+    );
+
+    // A command that takes no argument keeps the prefix answer.
+    let printed = sandbox.run(&["template", "list x"]);
+    let written = assert_refused(&printed, 64, "template 'list x'");
+    assert!(
+        line(&written, "cause: ").contains("never by a prefix"),
+        "{written}"
+    );
+}
+
+#[test]
+fn fr_proj_027_029_the_tpl_segment_ignores_ascii_case() {
+    let sandbox = Sandbox::new();
+
+    for destination in ["x/.TPL", "x/.Tpl/"] {
+        let printed = sandbox.run(&["init", destination]);
+        let written = assert_refused(&printed, 64, destination);
+        assert_eq!(
+            line(&written, "hint:  "),
+            "create the project in the parent directory: tpl init x"
+        );
+    }
+    assert!(!sandbox.path("x").exists(), "nothing is created");
+
+    // --tpl-dir accepts a folder named in another case, and uses the path as
+    // written.
+    sandbox.directory("p/.TPL");
+    let listed = sandbox.run(&["--tpl-dir", "p/.TPL", "cfg", "list"]);
+    assert_eq!(code(&listed), 0, "{}", stderr(&listed));
+}
+
+#[test]
+fn fr_conf_050_whitespace_alone_is_empty_and_the_both_empty_hint_names_both() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let printed = sandbox.run(&[
+        "cfg", "database", "add", "e2", "--host", "   ", "--schema", "s",
+    ]);
+    let written = assert_refused(&printed, 64, "--host of spaces");
+    assert!(
+        line(&written, "cause: ").contains("is empty or holds only whitespace"),
+        "{written}"
+    );
+
+    let printed = sandbox.run(&["cfg", "set", "database.e3.database", " \t\u{b}\u{c}\r\n"]);
+    assert_refused(&printed, 64, "database of the six whitespace characters");
+
+    let printed = sandbox.run(&["cfg", "database", "add", "e1", "--host", "", "--schema", ""]);
+    let written = assert_refused(&printed, 64, "both empty");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give the host: tpl cfg database add e1 --host <host> --schema <database>; replace \
+         <host> with the host of the server, and <database> with the name of the database on \
+         the server"
+    );
+    assert_eq!(sandbox.configuration(), b"[core]\n");
+
+    // A value holding any other character is not trimmed and not refused.
+    let kept = sandbox.run(&[
+        "cfg", "database", "add", "e4", "--host", " h ", "--schema", "s",
+    ]);
+    assert_eq!(code(&kept), 0, "{}", stderr(&kept));
+
+    // In the file, a blank host is an absent one, refused at resolution.
+    sandbox.project("[database.e5]\nhost = \" \\t\"\ndatabase = \"s\"\ntls = \"disabled\"\n");
+    let printed = sandbox.run(&["-d", "e5", "schema", "info"]);
+    let written = assert_refused(&printed, 78, "a blank host in the file");
+    assert!(
+        line(&written, "cause: ").contains("whitespace only"),
+        "{written}"
+    );
+}
+
+#[test]
+fn fr_cache_040_a_named_clean_of_nothing_cached_is_66_and_deletes_nothing() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.shop]\nhost = \"127.0.0.1\"\nport = 1\ndatabase = \"s\"\n");
+
+    let printed = sandbox.run(&["-d", "shop", "cache", "clean", "--table", "nope"]);
+    let written = assert_refused(&printed, 66, "clean --table nope");
+    assert_eq!(
+        line(&written, "error: "),
+        "nothing cached for table 'nope' in database entry 'shop'"
+    );
+    assert_eq!(
+        line(&written, "cause: "),
+        "the cache of entry 'shop' holds no table named 'nope'"
+    );
+    let hint = line(&written, "hint:  ");
+    assert!(!hint.contains("cache clean"), "{hint}");
+
+    // With no object flag an empty cache is still a success.
+    let everything = sandbox.run(&["-d", "shop", "cache", "clean"]);
+    assert_eq!(code(&everything), 0, "{}", stderr(&everything));
 }

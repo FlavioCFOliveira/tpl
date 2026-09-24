@@ -640,6 +640,7 @@ mod tests {
         // FR-ERR-034, the 69 row. What the phase returned is the
         // classification `mariadb/` made of it: OD-06 drops the driver value.
         let rendered = render(&Error::ConnectionRefused {
+            by_dsn: false,
             entry: String::from("shop"),
             host: "db.example.com".to_owned(),
             port: 3306,
@@ -660,6 +661,7 @@ mod tests {
     #[test]
     fn fr_err_034_code_69_names_the_phase_when_a_deadline_expires() {
         let rendered = render(&Error::NetworkDeadlineExceeded {
+            by_dsn: false,
             entry: String::from("shop"),
             phase: NetworkPhase::CatalogueQuery,
             host: "db.example.com".to_owned(),
@@ -968,12 +970,15 @@ mod tests {
             file: path(),
         });
         assert!(line(&variable, Label::Cause).contains("'SHOP_PW'"));
+        // X-02: the variable defined for the one call, then the export.
         assert_eq!(
             line(&variable, Label::Hint),
-            "define it with: export SHOP_PW=<value>"
+            "define it in the environment tpl runs in, e.g.: SHOP_PW=<value> tpl <command>, or \
+             export SHOP_PW=<value> in the same shell before running tpl"
         );
 
         let series = render(&Error::SeriesNotSupported {
+            by_dsn: false,
             entry: "shop".to_owned(),
             series: "10.6".to_owned(),
             supported: WINDOW,
@@ -991,6 +996,29 @@ mod tests {
         assert_eq!(
             line(&series, Label::Hint),
             "repoint the entry at a supported server: tpl cfg database update shop --host <host>"
+        );
+
+        // FR-ERR-045: an entry defined by dsn is repointed inside its dsn.
+        let series = render(&Error::SeriesNotSupported {
+            by_dsn: true,
+            entry: "shop".to_owned(),
+            series: "10.6".to_owned(),
+            supported: WINDOW,
+        });
+        assert_eq!(
+            line(&series, Label::Hint),
+            "repoint the entry at a supported server: tpl cfg database update shop --dsn <url>, \
+             where <url> is the whole connection URL with the new host"
+        );
+        let unresolved = render(&Error::NameNotResolved {
+            by_dsn: true,
+            entry: "shop".to_owned(),
+            host: "db.example.com".to_owned(),
+            port: 3306,
+        });
+        assert!(
+            !line(&unresolved, Label::Hint).contains("--host"),
+            "{unresolved}"
         );
     }
 
@@ -1069,6 +1097,12 @@ mod tests {
             Error::MissingArgument {
                 command: HOSTILE.to_owned(),
                 argument: HOSTILE.to_owned(),
+            },
+            Error::NothingCachedNamed {
+                kind: CatalogueObjectKind::Table,
+                name: HOSTILE.to_owned(),
+                entry: HOSTILE.to_owned(),
+                nearest: vec![HOSTILE.to_owned()],
             },
             Error::CatalogueObjectNotFound {
                 kind: CatalogueObjectKind::Table,
@@ -1151,6 +1185,13 @@ mod tests {
                 second: hostile(),
             },
             Error::RepeatedFlag { flag: hostile() },
+            Error::FlagTookCommand {
+                flag: hostile(),
+                value: hostile(),
+                token: hostile(),
+                rebuilt: Some(hostile().into()),
+                path: hostile().into(),
+            },
             Error::FlagValueMissing {
                 flag: hostile(),
                 permitted: vec![hostile()],
@@ -1277,6 +1318,12 @@ mod tests {
                 nearest: vec![hostile()],
                 by_default: true,
             },
+            Error::NothingCachedNamed {
+                kind: CatalogueObjectKind::Table,
+                name: hostile(),
+                entry: hostile(),
+                nearest: vec![hostile()],
+            },
             Error::ConfigurationKeyNotFound {
                 key: hostile(),
                 known: false,
@@ -1286,11 +1333,13 @@ mod tests {
                 nearest: vec![(hostile(), false)],
             },
             Error::NameNotResolved {
+                by_dsn: false,
                 entry: String::from("shop"),
                 host: hostile(),
                 port: 3306,
             },
             Error::ConnectionRefused {
+                by_dsn: false,
                 entry: String::from("shop"),
                 host: hostile(),
                 port: 3306,
@@ -1302,6 +1351,7 @@ mod tests {
                 port: 3306,
             },
             Error::NetworkDeadlineExceeded {
+                by_dsn: false,
                 entry: String::from("shop"),
                 phase: NetworkPhase::DnsResolution,
                 host: hostile(),
@@ -1497,6 +1547,7 @@ mod tests {
                 path: hostile_path(),
             },
             Error::ReadOnlySessionNotEnforced {
+                by_dsn: false,
                 entry: hostile(),
                 fault: ReadOnlyFault::NotApplied,
             },
@@ -1505,10 +1556,12 @@ mod tests {
                 has_entries: true,
             },
             Error::ServerNotMariaDb {
+                by_dsn: false,
                 entry: hostile(),
                 product: hostile(),
             },
             Error::SeriesNotSupported {
+                by_dsn: false,
                 entry: hostile(),
                 series: hostile(),
                 supported: &[HOSTILE],
@@ -1524,7 +1577,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 82, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 84, "every variant of Error is sampled");
     }
 
     #[test]
@@ -1680,6 +1733,7 @@ mod tests {
     #[test]
     fn v_04_a_tcp_connect_that_times_out_names_the_address_before_the_deadline() {
         let timed_out = |bound| Error::NetworkDeadlineExceeded {
+            by_dsn: false,
             entry: String::from("far"),
             phase: NetworkPhase::TcpConnect,
             host: "10.255.255.1".to_owned(),
@@ -1773,6 +1827,7 @@ mod tests {
         );
         assert_eq!(
             hint_of(&Error::NameNotResolved {
+                by_dsn: false,
                 entry: "shop".to_owned(),
                 host: "db".to_owned(),
                 port: 3306,
@@ -1855,13 +1910,9 @@ mod tests {
             entry: "shop".to_owned(),
             written: "database.shop.dsn".to_owned(),
             conflicting: "database.shop.host".to_owned(),
-            repair: EntryRepair::Rewrite {
-                unset: vec![
-                    "database.shop.host".to_owned(),
-                    "database.shop.user".to_owned(),
-                ]
-                .into(),
-                command: "cfg database update",
+            repair: EntryRepair::Discrete {
+                carried: vec!["host", "user"].into(),
+                changed: vec!["host", "database"].into(),
             },
         });
         assert_eq!(
@@ -1875,24 +1926,69 @@ mod tests {
     }
 
     #[test]
-    fn s_03_several_conflicting_keys_are_unset_one_by_one_and_the_entry_is_never_removed() {
-        let rendered = render(&Error::IncoherentEntryWrite {
+    fn br_err_005_no_conflict_hint_unsets_what_the_invocation_did_not_name() {
+        // FR-CFG-048 rows one and two: the hint carries the form the entry
+        // uses, and the cause states what a switch would remove.
+        let inside = render(&Error::IncoherentEntryWrite {
+            entry: "ds".to_owned(),
+            written: "database.ds.host".to_owned(),
+            conflicting: "database.ds.dsn".to_owned(),
+            repair: EntryRepair::InsideDsn {
+                fields: vec!["host", "port"].into(),
+            },
+        });
+        assert_eq!(
+            line(&inside, Label::Hint),
+            "write the whole connection as a new dsn: tpl cfg database update ds --dsn <url>, \
+             where <url> is the connection URL with the new host and port"
+        );
+        assert!(
+            line(&inside, Label::Cause).contains(
+                "Unsetting database.ds.dsn would also remove the host, port, user, password and \
+                 database it carries"
+            ),
+            "{inside}"
+        );
+
+        let discrete = render(&Error::IncoherentEntryWrite {
             entry: "f".to_owned(),
             written: "database.f.dsn".to_owned(),
             conflicting: "database.f.host".to_owned(),
-            repair: EntryRepair::Rewrite {
-                unset: vec!["database.f.host".to_owned(), "database.f.port".to_owned()].into(),
-                command: "cfg set",
+            repair: EntryRepair::Discrete {
+                carried: vec!["host", "port"].into(),
+                changed: vec!["host", "port", "user", "password", "database"].into(),
             },
         });
-
         assert_eq!(
-            line(&rendered, Label::Hint),
-            "remove the keys it conflicts with, then write it again: tpl cfg unset \
-             database.f.host; tpl cfg unset database.f.port; then tpl cfg set database.f.dsn \
-             <url>"
+            line(&discrete, Label::Hint),
+            "write each field with its own flag: tpl cfg database update f --host <host> --port \
+             <port> --user <user> --schema <database>; the password has no flag, so set it with: \
+             tpl cfg set database.f.password <password>"
         );
-        assert!(!rendered.contains("database remove"), "{rendered}");
+        assert!(
+            line(&discrete, Label::Cause)
+                .contains("requires unsetting database.f.host and database.f.port"),
+            "{discrete}"
+        );
+
+        let without = render(&Error::IncoherentEntryWrite {
+            entry: "ds".to_owned(),
+            written: "database.ds.password_command".to_owned(),
+            conflicting: "database.ds.dsn".to_owned(),
+            repair: EntryRepair::DsnWithoutPassword,
+        });
+        assert!(
+            line(&without, Label::Hint).starts_with(
+                "write the dsn again without its password: tpl cfg database update ds --dsn <url>"
+            ),
+            "{without}"
+        );
+
+        for rendered in [&inside, &discrete, &without] {
+            let hint = line(rendered, Label::Hint);
+            assert!(!hint.contains("cfg unset"), "{rendered}");
+            assert!(!hint.contains("database remove"), "{rendered}");
+        }
     }
 
     #[test]
@@ -2123,10 +2219,33 @@ mod tests {
             "{rendered}"
         );
 
+        assert!(
+            line(&rendered, Label::Hint)
+                .contains("under [database.z], keep password_command and delete password"),
+            "{rendered}"
+        );
+
+        let rendered = render(&conflict("dsn", "password_command"));
+        assert!(
+            line(&rendered, Label::Hint)
+                .contains("keep password_command and remove the password from inside dsn"),
+            "{rendered}"
+        );
+
         let rendered = render(&conflict("dsn", "host"));
         assert_eq!(
             line(&rendered, Label::Error),
             "database entry 'z' declares both dsn and host"
+        );
+        assert!(
+            line(&rendered, Label::Hint).contains(
+                "keep dsn and delete every separate connection key the block also carries"
+            ),
+            "{rendered}"
+        );
+        assert!(
+            !line(&rendered, Label::Hint).contains("either"),
+            "{rendered}"
         );
         assert!(
             !line(&rendered, Label::Cause).contains("takes its password"),

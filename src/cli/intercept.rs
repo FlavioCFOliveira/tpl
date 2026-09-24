@@ -97,14 +97,14 @@ pub(super) fn intercepted(refused: &clap::Error, tree: &clap::Command, argv: &[O
         // the node it was written at. BR-CLI-001 routes a mistyped alias here
         // too, which is why an alias is a candidate beside a canonical name.
         ErrorKind::InvalidSubcommand => match one(refused, ContextKind::InvalidSubcommand) {
-            Some(token) => {
+            Some(token) => took_command(tree, &written, &token).unwrap_or_else(|| {
                 let nearest = nearest_command(reached.node, &token);
                 Error::UnknownCommand {
                     token,
                     node: reached.path.clone(),
                     nearest,
                 }
-            }
+            }),
             None => rejected(refused, &reached),
         },
 
@@ -145,6 +145,94 @@ pub(super) fn intercepted(refused: &clap::Error, tree: &clap::Command, argv: &[O
         // obliges. It produces `64` and never another code.
         _ => rejected(refused, &reached),
     }
+}
+
+/// The refusal of `FR-CLI-026`, where `-d/--database` or `--tpl-dir` took a
+/// command name from a separate token and `refused` is the next non-flag token,
+/// which names no command; [`None`] for every other unknown command.
+///
+/// The walk is the one [`reached`] makes, and it remembers the last of the two
+/// flags whose value names a child of the node it was written at. Descending
+/// into a child forgets it: the value is then a value the invocation used.
+fn took_command(tree: &clap::Command, written: &[Cow<'_, str>], refused: &str) -> Option<Error> {
+    let mut node = tree;
+    let mut path: Vec<&str> = Vec::new();
+    let mut took: Option<(usize, &clap::Command, Vec<&str>)> = None;
+    let mut index = 1;
+
+    while let Some(token) = written.get(index) {
+        if token == TERMINATOR {
+            return None;
+        }
+
+        if token.starts_with('-') {
+            let next = written.get(index + 1);
+            let carries = carries_the_next(tree, node, token, next);
+            let names_a_child =
+                next.is_some_and(|next| node.find_subcommand(next.as_ref()).is_some());
+            if carries
+                && names_a_child
+                && matches!(token.as_ref(), "-d" | "--database" | "--tpl-dir")
+            {
+                took = Some((index, node, path.clone()));
+            }
+            index += 1 + usize::from(carries);
+            continue;
+        }
+
+        let Some(child) = node.find_subcommand(token.as_ref()) else {
+            break;
+        };
+        path.push(child.get_name());
+        node = child;
+        took = None;
+        index += 1;
+    }
+
+    let (at, at_node, mut command) = took?;
+    if written.get(index).map(AsRef::as_ref) != Some(refused) {
+        return None;
+    }
+
+    let flag = written.get(at)?.to_string();
+    let value = written.get(at + 1)?.to_string();
+
+    // The command path the invocation names once the flag has its value: the
+    // value, and each token after it that names a child in turn.
+    let mut reached = at_node;
+    for word in written.iter().skip(at + 1) {
+        if word.starts_with('-') {
+            break;
+        }
+        let Some(child) = reached.find_subcommand(word.as_ref()) else {
+            break;
+        };
+        command.push(child.get_name());
+        reached = child;
+    }
+
+    let placeholder = if flag == "--tpl-dir" {
+        "<path>"
+    } else {
+        "<entry>"
+    };
+    let mut tokens: Vec<&str> = Vec::with_capacity(written.len());
+    let mut whole = true;
+    for (position, word) in written.iter().enumerate().skip(1) {
+        whole &= !word.is_empty() && !word.contains(char::is_whitespace);
+        tokens.push(word.as_ref());
+        if position == at {
+            tokens.push(placeholder);
+        }
+    }
+
+    Some(Error::FlagTookCommand {
+        flag,
+        value,
+        token: refused.to_owned(),
+        rebuilt: whole.then(|| tokens.join(" ").into()),
+        path: command.join(" ").into(),
+    })
 }
 
 /// A token the parser did not accept as a flag of the node it was written at.

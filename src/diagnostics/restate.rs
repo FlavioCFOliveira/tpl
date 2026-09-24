@@ -858,6 +858,26 @@ fn valued(argument: &clap::Arg, text: Option<&str>) -> Piece {
         return refused();
     };
 
+    // FR-CONF-050: an empty host or database is refused, so "the value you
+    // gave" would stand for nothing; the placeholder says what to write.
+    match id {
+        "host" if crate::project::config::keys::is_blank(text) => {
+            return placeholder(
+                Some(id),
+                "<host>".to_owned(),
+                "the host of the server".to_owned(),
+            );
+        }
+        "schema" if crate::project::config::keys::is_blank(text) => {
+            return placeholder(
+                Some(id),
+                "<database>".to_owned(),
+                "the name of the database on the server".to_owned(),
+            );
+        }
+        _ => {}
+    }
+
     let admitted = match id {
         // BR-ERR-003 bars a DSN from every message, and a value of `cfg set`
         // may be a password; neither is written back whatever it holds.

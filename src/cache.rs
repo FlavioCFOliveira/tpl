@@ -1092,6 +1092,22 @@ impl Cache {
         file.is_some_and(Path::is_file)
     }
 
+    /// The names of the objects `collection` holds, in the order of
+    /// `order::sort_by_name`, and none where the store holds nothing.
+    ///
+    /// It is the population of the nearest-match suggestion `FR-CACHE-040`
+    /// obliges for a clean that names nothing cached. The directory is listed
+    /// and no file is opened.
+    pub(crate) fn names(&self, collection: Collection) -> Vec<String> {
+        self.layout
+            .as_ref()
+            .and_then(|layout| shelve(layout, collection))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|shelf| shelf.name)
+            .collect()
+    }
+
     /// The file one table is held in, for [`Cache::clean_one`].
     pub(crate) fn table_file(&self, name: &str) -> Option<PathBuf> {
         self.layout.as_ref()?.table(name)

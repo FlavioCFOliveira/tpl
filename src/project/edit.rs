@@ -314,7 +314,9 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
         }
 
         // FR-CONF-050: an empty string names no host and no database.
-        if matches!(field, EntryKey::Host | EntryKey::Database) && supplied.is_empty() {
+        if matches!(field, EntryKey::Host | EntryKey::Database)
+            && super::config::keys::is_blank(supplied)
+        {
             return Err(Error::EmptyValue {
                 parameter: key.to_string(),
                 command: "cfg set".to_owned(),

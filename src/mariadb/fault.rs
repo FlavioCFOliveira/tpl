@@ -217,6 +217,7 @@ pub(crate) fn speaking(entry: &str, error: &sqlx::Error, host: &str, port: u16) 
     }
 
     Error::ConnectionRefused {
+        by_dsn: false,
         entry: entry.to_owned(),
         host: host.to_owned(),
         port,
@@ -263,6 +264,7 @@ pub(crate) fn expired(
     bound: Bound,
 ) -> Error {
     Error::NetworkDeadlineExceeded {
+        by_dsn: false,
         entry: entry.to_owned(),
         phase,
         host: host.to_owned(),

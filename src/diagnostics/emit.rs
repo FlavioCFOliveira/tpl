@@ -148,6 +148,27 @@ fn shadow_line(created: &Path, shadowed: &Path) -> String {
     )
 }
 
+/// Warns that `tpl cfg unset` removed the `dsn` of an entry, and with it the
+/// five facts it carried (`FR-CFG-050`).
+///
+/// The line names the key and the entry and never any part of the dsn, per
+/// `BR-ERR-003`. It is written after the rewrite succeeded.
+pub(crate) fn dsn_unset(entry: &str) {
+    if !emits(Level::Warnings) {
+        return;
+    }
+
+    write_line(&dsn_unset_line(entry));
+}
+
+/// Composes the line of [`dsn_unset`], unescaped.
+fn dsn_unset_line(entry: &str) -> String {
+    format!(
+        "{WARNING_TOKEN} removed database.{entry}.dsn; entry '{entry}' no longer holds the host, \
+         port, user, password or database that dsn carried"
+    )
+}
+
 /// Escapes a composed line as a whole and writes it to stderr.
 ///
 /// The escaped line is the buffer `OD-17` asks for: one locked write, and
@@ -165,7 +186,9 @@ fn write_line(composed: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, WARNING_TOKEN, phase_line, shadow_line};
+    use super::{
+        CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, WARNING_TOKEN, dsn_unset_line, phase_line, shadow_line,
+    };
     use crate::deadline::Phase;
     use std::path::Path;
     use std::time::Duration;
@@ -232,5 +255,16 @@ mod tests {
         assert!(line.starts_with(WARNING_TOKEN), "{line}");
         assert!(line.contains("/work/app/.tpl"), "{line}");
         assert!(line.contains("/work/.tpl"), "{line}");
+    }
+
+    #[test]
+    fn fr_cfg_050_the_warning_names_the_key_the_entry_and_the_five_facts() {
+        let line = dsn_unset_line("ds");
+
+        assert_eq!(
+            line,
+            "warning: removed database.ds.dsn; entry 'ds' no longer holds the host, port, user, \
+             password or database that dsn carried"
+        );
     }
 }

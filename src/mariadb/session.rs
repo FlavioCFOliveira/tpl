@@ -156,6 +156,7 @@ fn unenforced(attempt: Attempt, entry: &str, fault: ReadOnlyFault) -> Error {
     match attempt {
         Attempt::Expired(expired) => expired,
         Attempt::Driver(_) => Error::ReadOnlySessionNotEnforced {
+            by_dsn: false,
             entry: entry.to_owned(),
             fault,
         },
@@ -199,6 +200,7 @@ fn enforce(
     .map_err(|attempt| unenforced(attempt, entry, ReadOnlyFault::NotApplied))?;
 
     let disagreed = || Error::ReadOnlySessionNotEnforced {
+        by_dsn: false,
         entry: entry.to_owned(),
         fault: ReadOnlyFault::ReadBackDisagreed,
     };
@@ -314,6 +316,7 @@ fn resolve(target: &Target<'_>, version: String) -> Result<Server<'static>, Erro
 
     let Some(standing) = window::standing(series) else {
         return Err(Error::SeriesNotSupported {
+            by_dsn: false,
             entry: target.entry().to_owned(),
             series: identifier,
             supported: &window::SUPPORTED,
@@ -325,6 +328,7 @@ fn resolve(target: &Target<'_>, version: String) -> Result<Server<'static>, Erro
         // It is written as a condition rather than as an `expect` so that the
         // module carries no panic.
         Error::ServerNotMariaDb {
+            by_dsn: false,
             entry: target.entry().to_owned(),
             product: String::new(),
         }
@@ -335,6 +339,7 @@ fn resolve(target: &Target<'_>, version: String) -> Result<Server<'static>, Erro
 /// the product it reported.
 fn not_mariadb(target: &Target<'_>, product: String) -> Error {
     Error::ServerNotMariaDb {
+        by_dsn: false,
         entry: target.entry().to_owned(),
         product,
     }
@@ -556,6 +561,7 @@ mod tests {
                 entry,
                 series,
                 supported,
+                ..
             } => {
                 assert_eq!(entry, "shop");
                 assert_eq!(series, "10.6");
@@ -580,7 +586,7 @@ mod tests {
         let scratch = Scratch::new();
 
         match verdict(&scratch, "8.4.0").expect_err("the marker is absent") {
-            Error::ServerNotMariaDb { entry, product } => {
+            Error::ServerNotMariaDb { entry, product, .. } => {
                 assert_eq!(entry, "shop");
                 assert_eq!(product, "8.4.0");
             }
@@ -763,7 +769,9 @@ mod tests {
         // half **this read-back** decides, and it is distinct from the half a
         // statement the server refuses would produce.
         match condition {
-            Error::ReadOnlySessionNotEnforced { ref entry, fault } => {
+            Error::ReadOnlySessionNotEnforced {
+                ref entry, fault, ..
+            } => {
                 assert_eq!(entry, FIXTURE_ENTRY, "{name}");
                 assert_eq!(fault, ReadOnlyFault::ReadBackDisagreed, "{name}");
                 assert_ne!(fault, ReadOnlyFault::NotApplied, "{name}");

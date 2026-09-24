@@ -34,6 +34,7 @@
 
 use std::borrow::Cow;
 use std::io::Write;
+use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 use serde::Serialize;
@@ -46,7 +47,8 @@ use super::schema::named;
 use super::source::{self, Opened, Reader};
 use crate::cache::paths::Collection;
 use crate::cache::{Cache as Store, Covered, Held, Status};
-use crate::error::Error;
+use crate::diagnostics::suggest::{self, Population};
+use crate::error::{CatalogueObjectKind, Error};
 use crate::model::document::shape::TableDocument;
 use crate::model::document::{self, DatabaseDocument};
 use crate::model::routine::{Routine, RoutineKind};
@@ -317,13 +319,51 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
     let entry = source::entry_of(&configuration, reader.requested())?;
     let cache = Store::of(project.root(), entry);
 
+    // FR-CACHE-040: an object flag that names nothing the cache holds deletes
+    // nothing and is 66, with the nearest cached names of that kind.
+    let absent = |collection: Collection, kind: CatalogueObjectKind, name: &str| {
+        let names = cache.names(collection);
+        let nearest =
+            suggest::suggestions(name, names.iter().map(String::as_str), Population::Names)
+                .names()
+                .map(str::to_owned)
+                .collect();
+        Error::NothingCachedNamed {
+            kind,
+            name: name.to_owned(),
+            entry: entry.to_owned(),
+            nearest,
+        }
+    };
+    let held =
+        |collection: Collection, kind: CatalogueObjectKind, name: &str, file: Option<PathBuf>| {
+            if Store::holds(file.as_deref()) {
+                cache.clean_one(collection, file)
+            } else {
+                Err(absent(collection, kind, name))
+            }
+        };
+
     match wanted {
         Wanted::Everything => cache.clean(),
-        Wanted::Table(name) => cache.clean_one(Collection::Tables, cache.table_file(name)),
-        Wanted::View(name) => cache.clean_one(Collection::Views, cache.view_file(name)),
-        Wanted::Routine(named::Wanted::Qualified(kind, name)) => {
-            cache.clean_one(Collection::Routines, cache.routine_file(&kind, name))
-        }
+        Wanted::Table(name) => held(
+            Collection::Tables,
+            CatalogueObjectKind::Table,
+            name,
+            cache.table_file(name),
+        ),
+        Wanted::View(name) => held(
+            Collection::Views,
+            CatalogueObjectKind::View,
+            name,
+            cache.view_file(name),
+        ),
+        Wanted::Routine(named::Wanted::Qualified(kind, name)) => held(
+            Collection::Routines,
+            CatalogueObjectKind::Routine,
+            name,
+            cache.routine_file(&kind, name),
+        ),
         Wanted::Routine(named::Wanted::Bare(name)) => {
             let procedure = cache.routine_file(&RoutineKind::Procedure, name);
             let function = cache.routine_file(&RoutineKind::Function, name);
@@ -346,13 +386,18 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
                 });
             }
 
-            let held = if Store::holds(procedure.as_deref()) {
+            let file = if Store::holds(procedure.as_deref()) {
                 procedure
             } else {
                 function
             };
 
-            cache.clean_one(Collection::Routines, held)
+            held(
+                Collection::Routines,
+                CatalogueObjectKind::Routine,
+                name,
+                file,
+            )
         }
     }
 }

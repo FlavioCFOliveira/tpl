@@ -70,7 +70,13 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // W-05 of the sixth re-audit of rmp `#263`: the words of a command
         // given as one argument, where they form a command path.
         Error::UnknownCommand { token, node, .. }
-        | Error::UnknownCommandPathSegment {
+            if super::hint::split_invocation(node, token).is_some() =>
+        {
+            Cow::Owned(format!(
+                "'{token}' was given as one argument; each word of a command is its own argument"
+            ))
+        }
+        Error::UnknownCommandPathSegment {
             segment: token,
             node,
             ..
@@ -284,7 +290,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         },
         // FR-CONF-050: the flag or the key, and that the value is empty.
         Error::EmptyValue { parameter, .. } => Cow::Owned(format!(
-            "{parameter} is empty; an entry must name {}",
+            "{parameter} is empty or holds only whitespace; an entry must name {}",
             if parameter.ends_with("host") {
                 "a host"
             } else {
@@ -322,7 +328,25 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                     "the invocation writes both {written} and {conflicting} to database entry \
                      '{entry}'; {rule}; nothing was written"
                 ),
-                EntryRepair::Unset | EntryRepair::Rewrite { .. } => format!(
+                // FR-CFG-048: what switching the entry to the other form
+                // removes, stated and never performed by the hint.
+                EntryRepair::InsideDsn { .. } => format!(
+                    "the invocation writes {written} and database entry '{entry}' is defined by \
+                     {conflicting}; {rule}; nothing was written. Unsetting {conflicting} would \
+                     also remove the host, port, user, password and database it carries"
+                ),
+                EntryRepair::Discrete { carried, .. } => format!(
+                    "the invocation writes {written} and database entry '{entry}' already \
+                     declares {conflicting}; {rule}; nothing was written. Describing the entry \
+                     by dsn requires unsetting {}",
+                    conjoined(
+                        &carried
+                            .iter()
+                            .map(|field| format!("database.{entry}.{field}"))
+                            .collect::<Vec<_>>()
+                    )
+                ),
+                EntryRepair::Unset | EntryRepair::DsnWithoutPassword => format!(
                     "the invocation writes {written} and database entry '{entry}' already \
                      declares {conflicting}; {rule}; nothing was written"
                 ),
@@ -341,6 +365,14 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             second,
         } => Cow::Owned(format!(
             "'{flag}' takes one value and was given two, '{first}' and then '{second}'"
+        )),
+        // FR-CLI-026: the value the flag took, and the token read as the
+        // command because of it.
+        Error::FlagTookCommand {
+            flag, value, token, ..
+        } => Cow::Owned(format!(
+            "{flag} took '{value}' as its value, which is a command, so '{token}' was read as the \
+             command"
         )),
         Error::RepeatedFlag { flag } => Cow::Owned(format!(
             "'{flag}' carries no value, so a second occurrence of it states nothing the first did \
@@ -494,6 +526,12 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // ------------------------------------------------------------ 66 ---
         // The row obliges the identifier, the kind it was sought as, and the
         // population it was sought in.
+        // FR-CACHE-040: the population is what the cache holds.
+        Error::NothingCachedNamed {
+            kind, name, entry, ..
+        } => Cow::Owned(format!(
+            "the cache of entry '{entry}' holds no {kind} named '{name}'"
+        )),
         Error::CatalogueObjectNotFound {
             kind,
             name,
@@ -985,7 +1023,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              trusts",
             path.display()
         )),
-        Error::ReadOnlySessionNotEnforced { entry, fault } => match fault {
+        Error::ReadOnlySessionNotEnforced { entry, fault, .. } => match fault {
             ReadOnlyFault::NotApplied => Cow::Owned(format!(
                 "the session opened for database entry '{entry}' did not accept the read-only \
                  setting, so tpl cannot guarantee that the session issues no write"
@@ -997,6 +1035,34 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         },
         // FR-CONF-040 and FR-CONF-041: the cause names the file, the entry and
         // the key the entry does not carry.
+        // FR-CONF-041 names the key; an entry defined by dsn carries it in its
+        // dsn, so the line names the part of the dsn that holds nothing.
+        Error::EntryKeyMissing {
+            entry,
+            key,
+            file,
+            flag,
+            absence,
+            ..
+        } if *flag == "--dsn" => {
+            let part = if key.ends_with(".host") {
+                "host part"
+            } else {
+                "/database part"
+            };
+            let why = match absence {
+                KeyAbsence::ExpandsToEmpty => {
+                    "references an environment variable that expands to the empty string or to \
+                     whitespace only"
+                }
+                KeyAbsence::Absent | KeyAbsence::Empty => "is empty or holds only whitespace",
+            };
+            Cow::Owned(format!(
+                "the {part} of database.{entry}.dsn in {} {why}, so database entry '{entry}' \
+                 has no '{key}', and this command cannot be run without it",
+                file.display()
+            ))
+        }
         Error::EntryKeyMissing {
             entry,
             key,
@@ -1012,14 +1078,14 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             // FR-CONF-050: an empty value is an absent key, and the line says
             // which it is.
             KeyAbsence::Empty => Cow::Owned(format!(
-                "{} sets '{key}' of database entry '{entry}' to the empty string, which names \
-                 nothing, and this command cannot be run without it",
+                "{} sets '{key}' of database entry '{entry}' to the empty string or to \
+                 whitespace only, which names nothing, and this command cannot be run without it",
                 file.display()
             )),
             KeyAbsence::ExpandsToEmpty => Cow::Owned(format!(
                 "'{key}' of database entry '{entry}' in {} references an environment variable \
-                 that expands to the empty string, which names nothing, and this command cannot \
-                 be run without it",
+                 that expands to the empty string or to whitespace only, which names nothing, and \
+                 this command cannot be run without it",
                 file.display()
             )),
         },
@@ -1028,7 +1094,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              one to know which database to use",
             file.display()
         )),
-        Error::ServerNotMariaDb { entry, product } => Cow::Owned(format!(
+        Error::ServerNotMariaDb { entry, product, .. } => Cow::Owned(format!(
             "database entry '{entry}' reached a server that connected and authenticated and \
              reports '{product}'; tpl reads only MariaDB servers"
         )),
@@ -1036,6 +1102,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             entry,
             series,
             supported,
+            ..
         } => Cow::Owned(format!(
             "database entry '{entry}' connected and authenticated, and the server reports series \
              '{series}', which is outside the supported window; tpl supports {}",
@@ -1098,6 +1165,20 @@ pub(crate) fn invoked(command: &str) -> Cow<'_, str> {
     } else {
         Cow::Owned(format!("{PROGRAM} {command}"))
     }
+}
+
+/// Joins names into one list, the last two with "and".
+pub(super) fn conjoined<S: AsRef<str>>(names: &[S]) -> String {
+    let mut line = String::new();
+    for (index, name) in names.iter().enumerate() {
+        if index + 1 == names.len() && index > 0 {
+            line.push_str(LIST_CONJUNCTION);
+        } else if index > 0 {
+            line.push_str(LIST_SEPARATOR);
+        }
+        line.push_str(name.as_ref());
+    }
+    line
 }
 
 /// Joins the values a flag enumerates into the choice they are.

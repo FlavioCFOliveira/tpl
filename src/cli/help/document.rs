@@ -210,9 +210,10 @@ struct Argument<'a> {
     /// The values the argument enumerates, or `null` where it enumerates none.
     permitted: Option<Vec<String>>,
 
-    /// What the argument is worth when it is not given, or `null` where it has
-    /// no default.
-    default: Option<Vec<String>>,
+    /// What the argument is worth when it is not given, as one string written
+    /// as a caller writes it, or `null` where it has no default — the shape
+    /// `FR-HELP-035` gives a flag.
+    default: Option<String>,
 
     /// Whether the invocation must supply it.
     required: bool,
@@ -253,9 +254,10 @@ struct Flag<'a> {
     /// The values the flag enumerates, or `null` where it enumerates none.
     permitted: Option<Vec<String>>,
 
-    /// What the flag is worth when it is not given, or `null` where it has no
-    /// default.
-    default: Option<Vec<String>>,
+    /// What the flag is worth when it is not given, as one string written as
+    /// a caller writes it on the command line, or `null` where it has no
+    /// default (`FR-HELP-035`).
+    default: Option<String>,
 
     /// Whether the invocation must supply it.
     required: bool,
@@ -537,7 +539,7 @@ fn argument<'a>(declared: &'a Arg, path: &[&str]) -> Argument<'a> {
         purpose,
         value_type: render::type_name(declared),
         permitted: permitted(declared),
-        default: default(declared),
+        default: default_of(declared),
         required: declared.is_required_set(),
         repeatable: rules::repeats(declared),
         excludes,
@@ -558,8 +560,8 @@ fn flag<'a>(declared: &'a Arg, path: &[&str]) -> Flag<'a> {
     );
     let (purpose, excludes) = stated(path, &long);
     let default = super::implied(path, &long)
-        .map(|implied| vec![implied.to_owned()])
-        .or_else(|| default(declared));
+        .map(str::to_owned)
+        .or_else(|| default_of(declared));
 
     Flag {
         long,
@@ -592,17 +594,17 @@ fn permitted(declared: &Arg) -> Option<Vec<String>> {
     })
 }
 
-/// What an argument is worth when it is not given, or [`None`] where it has no
-/// default.
-fn default(declared: &Arg) -> Option<Vec<String>> {
-    let values = declared.get_default_values();
-
-    (!values.is_empty()).then(|| {
-        values
-            .iter()
-            .map(|value| value.to_string_lossy().into_owned())
-            .collect()
-    })
+/// What a flag or an argument is worth when it is not given, as the one
+/// string a caller writes, or [`None`] where it has no default
+/// (`FR-HELP-035`).
+///
+/// No flag of the tree declares more than one default value, which a test
+/// pins, so the first is the whole of it.
+fn default_of(declared: &Arg) -> Option<String> {
+    declared
+        .get_default_values()
+        .first()
+        .map(|value| value.to_string_lossy().into_owned())
 }
 
 /// One example, as the typed table carries it.
@@ -1112,5 +1114,21 @@ mod tests {
         {
             assert_ne!(argument.value_type, "value", "{argument:?}");
         }
+    }
+
+    #[test]
+    fn fr_help_035_no_flag_of_the_tree_declares_more_than_one_default() {
+        fn walk(node: &clap::Command) {
+            for argument in node.get_arguments() {
+                assert!(
+                    argument.get_default_values().len() <= 1,
+                    "{} declares more than one default",
+                    argument.get_id()
+                );
+            }
+            node.get_subcommands().for_each(walk);
+        }
+
+        walk(&crate::cli::tree());
     }
 }

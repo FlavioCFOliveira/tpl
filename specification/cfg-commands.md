@@ -167,6 +167,38 @@ tpl cfg database test   <name>
   delete what it is given. `FR-CFG-023` states the one further change a
   deletion makes.
 
+- **FR-CFG-050**: WHEN `tpl cfg unset` deletes the key
+  `database.<name>.dsn`, the system SHALL write exactly one warning line to
+  stderr, per `FR-OUT-020`, after the rewrite succeeds, and SHALL exit `0`.
+  The line SHALL name the key and the entry, SHALL state that the host, port,
+  user, password and database the dsn carried are no longer in the entry, and
+  SHALL NOT reproduce any part of the dsn, per `BR-ERR-003`. The line is a
+  warning, so `-q/--quiet` suppresses it, per `FR-GLOB-015`. `tpl cfg unset`
+  given the block `database.<name>` writes no such line: the caller named the
+  whole entry.
+
+  ```
+  tpl cfg unset database.ds.dsn
+  warning: removed database.ds.dsn; entry 'ds' no longer holds the host, port, user, password or database that dsn carried
+  ```
+
+  The wording of the line is the implementation's. The example fixes the
+  facts named.
+
+  *Rationale.* `dsn` is the one key that holds five facts. `FR-CFG-011`
+  deletes what it is given, and a caller who unsets `dsn` as a step towards
+  changing one of them learns of the others' loss only from a later `78` or
+  `77`. This is finding X-01 of the seventh re-audit of rmp `#263`, recorded
+  for rmp `#282`.
+
+  *Rejected: refusing the unset.* It contradicts `FR-CFG-011`, and it departs
+  from the precedent of `BR-CFG-003`, under which `tpl` warns about a legal
+  write and does not prevent it. *Rejected: no
+  line.* The deletion is legal and named, but its reach is not visible in the
+  key the caller typed.
+
+  *Added in the fiftieth edition,* for rmp `#282`.
+
 - **FR-CFG-012**: IF the key or block supplied to `tpl cfg unset` is absent,
   THEN the system SHALL exit `66`. For a key, the nearest-match suggestion and
   its `hint` SHALL follow `FR-CFG-007`.
@@ -259,9 +291,54 @@ tpl cfg database test   <name>
 
   The `cause` SHALL name both members of the pair — the key the invocation
   writes and the key the entry already carries — per the `64` row of
-  `FR-ERR-034`. The `hint` SHALL carry a runnable command that makes the write
-  legal, per `FR-ERR-009`: the `tpl cfg unset` of the field that conflicts, or
-  `tpl cfg database remove` followed by `tpl cfg database add`.
+  `FR-ERR-034`. The `hint` SHALL carry a runnable command that makes the
+  change the invocation asked for and deletes nothing the invocation did not
+  name, per `FR-ERR-009` and `BR-ERR-005`:
+
+  | The entry carries | The invocation writes | The `hint` carries |
+  |---|---|---|
+  | `dsn` | a discrete connection field | `tpl cfg database update <entry> --dsn <url>`, per `FR-ERR-045` |
+  | discrete connection fields | `dsn` | `tpl cfg database update <entry>` with the flag of `FR-CFG-027` for each field the new value changes, each with a placeholder |
+  | `password` | `password_command` | `tpl cfg unset database.<entry>.password`, then the invocation again |
+  | `password_command` | `password`, or a `dsn` carrying a password | `tpl cfg unset database.<entry>.password_command`, then the invocation again |
+  | a `dsn` carrying a password | `password_command` | `tpl cfg database update <entry> --dsn <url>`, where `<url>` stands for the dsn without its password, then the invocation again |
+
+  For `tpl cfg database add`, which writes into no existing entry, the one
+  refusal is the third row of `FR-CONF-007`, reached within the invocation.
+  Its `hint` SHALL carry the same `add` with `--dsn <url>`, where `<url>`
+  stands for the dsn without its password, and with `--password-command`
+  kept.
+
+  WHERE the pair is `dsn` and a discrete connection field, the `cause` SHALL
+  also state what switching the entry to the other form removes. WHERE the
+  entry carries `dsn`, it SHALL state that unsetting `dsn` removes the host,
+  port, user, password and database it carries. WHERE the entry carries
+  discrete connection fields, it SHALL name each of them and state that
+  describing the entry by `dsn` requires unsetting them. The `hint` SHALL NOT
+  carry either switch, per `BR-ERR-005`.
+
+  ```
+  tpl cfg database update ds --host 127.0.0.1 --port 3306
+  error: cannot declare both database.ds.host and database.ds.dsn
+  cause: entry 'ds' is defined by dsn; the host is changed inside the dsn. Unsetting dsn would also remove the port, user, password and database it carries
+  hint:  write the whole connection as a new dsn: tpl cfg database update ds --dsn <url>, where <url> is the connection URL with the new host and port
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  *Amended in the fiftieth edition,* for rmp `#282`. The `hint` named "the
+  `tpl cfg unset` of the field that conflicts, or `tpl cfg database remove`
+  followed by `tpl cfg database add`". For a dsn entry the first is
+  `tpl cfg unset database.<entry>.dsn`, which removes the user, the database
+  and the password the caller never named, and the second removes the whole
+  entry. Both were followed as written, per finding X-01 of the seventh
+  re-audit of rmp `#263`. *Rejected: keeping the unset and warning in the
+  `hint`.* `BR-ERR-005` states why a warning beside a deleting command does
+  not protect a caller that copies the command. `FR-CFG-050` warns when a
+  caller unsets `dsn` by its own choice.
 
   *What was missing.* `FR-CFG-016` and `FR-CFG-029` make the two ways of
   describing a connection mutually exclusive **in one invocation**, and
