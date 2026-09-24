@@ -55,6 +55,16 @@ pub(super) enum Edit<'a> {
     FormatJson,
     /// Append these literal words at the end of the command.
     Append(&'a [&'a str]),
+    /// Write the command word `to` in place of the command word `from`: the
+    /// caller's `cfg database add`, whole, as the `update` that changes the
+    /// entry it could not create (finding U-07 of the fourth re-audit of rmp
+    /// `#263`). Both words are literals of `FR-ERR-022`.
+    Command {
+        /// The command word written.
+        from: &'a str,
+        /// The command word written in its place.
+        to: &'a str,
+    },
 }
 
 /// What an [`Edit::Value`] writes.
@@ -677,6 +687,12 @@ fn apply(pieces: &mut Vec<Piece>, edit: Edit<'_>) -> Option<()> {
             }
         }
         Edit::Append(words) => pieces.extend(words.iter().map(|word| Piece::literal(word))),
+        Edit::Command { from, to } => {
+            let piece = pieces.iter_mut().find(|piece| {
+                piece.value_of.is_none() && piece.glued.is_none() && piece.text == from
+            })?;
+            to.clone_into(&mut piece.text);
+        }
     }
     Some(())
 }

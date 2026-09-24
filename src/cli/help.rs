@@ -1630,7 +1630,9 @@ const CFG_GET: &[Outcome] = &[
     ),
     outcome(
         Code::NoInput,
-        "KEY is not set in .tpl/.cfg; close key names are suggested when there are any.",
+        "KEY is not set in .tpl/.cfg, or names a database entry the file does not have. A KEY \
+         that is a key is reported with its default; a KEY that is not gets close key names \
+         when there are any.",
     ),
     outcome(
         Code::IoError,
@@ -1668,7 +1670,10 @@ const CFG_UNSET: &[Outcome] = &[
         "An unknown flag, a flag given twice, or a missing KEY. On any command, also -v with -q, \
          or a global flag given a value it does not take, such as --timeout 0.",
     ),
-    outcome(Code::NoInput, "KEY is not set in .tpl/.cfg."),
+    outcome(
+        Code::NoInput,
+        "KEY is not set in .tpl/.cfg, or names a database entry the file does not have.",
+    ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
         Code::Configuration,
@@ -1887,12 +1892,26 @@ const WRITES_CFG: &str = "Writes .tpl/.cfg.";
 /// A command that prints nothing on success.
 const PRINTS_NOTHING: &str = "Prints nothing.";
 
+/// The no-expiry rule of the cache, in the same words wherever a command reads
+/// it or the help defines it (finding U-02 of the fourth re-audit of rmp
+/// `#263`): after an `ALTER TABLE`, a read through the cache exits `0` with the
+/// old structure, and the caller must be told how to refresh it.
+macro_rules! no_expiry {
+    () => {
+        "Nothing in the cache expires: after the database structure changes, run tpl cache \
+         load or add --direct."
+    };
+}
+
 /// The four statements of a `schema` leaf, which reads through the cache per
 /// `FR-CACHE-015`: only its output differs from one leaf to the next.
 const fn reads_catalogue(stdout: &'static str) -> Touches {
     Touches {
-        server: "Connects to the server only when .tpl/.cache/ does not already hold the data, \
-                 and always with --direct.",
+        server: concat!(
+            "Connects to the server only when .tpl/.cache/ does not already hold the data, and \
+             always with --direct. ",
+            no_expiry!()
+        ),
         entry: NEEDS_ENTRY,
         files: "Stores what it read in the entry's folder under .tpl/.cache/, unless --no-cache \
                 is given.",
@@ -1934,13 +1953,17 @@ const ENTRIES: [Entry; 35] = [
                     ),
                     row(
                         "cache",
-                        "Copies of what tpl read from the server, kept under .tpl/.cache/ so \
-                         that later commands need no connection.",
+                        concat!(
+                            "Copies of what tpl read from the server, kept under .tpl/.cache/ \
+                             so that later commands need no connection. ",
+                            no_expiry!()
+                        ),
                     ),
                     row(
                         "template",
                         "A MiniJinja file under .tpl/templates/, named without its .jinja \
-                         extension, such as rust/struct.",
+                         extension: .tpl/templates/rust/struct.jinja is rust/struct. tpl init \
+                         creates example and rust/_types.",
                     ),
                 ],
             },
@@ -2071,8 +2094,10 @@ const ENTRIES: [Entry; 35] = [
                 ])],
             },
             Example {
-                caption: "Render one file per table, which is how a caller iterates; this needs \
-                          jq, an external JSON tool.",
+                caption: "Render one file per table, which is how a caller iterates; \
+                          rust/struct stands for a template of your own, and each file is \
+                          written through a temporary one because a redirect empties its file \
+                          before tpl runs; this needs jq, an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -2081,6 +2106,7 @@ const ENTRIES: [Entry; 35] = [
                     ),
                     shell("  jq -r '.data.tables[].name' |"),
                     shell("  while read -r table; do"),
+                    shell("    f=\"src/models/$table.rs\""),
                     run_in(
                         "    ",
                         &[
@@ -2092,8 +2118,9 @@ const ENTRIES: [Entry; 35] = [
                             "--table",
                             "\"$table\"",
                         ],
-                        " > \"src/models/$table.rs\"",
+                        " > \"$f.tmp\" &&",
                     ),
+                    shell("      mv \"$f.tmp\" \"$f\""),
                     shell("  done"),
                 ],
             },
@@ -2251,7 +2278,8 @@ const ENTRIES: [Entry; 35] = [
                 )],
             },
             Example {
-                caption: "Render from a dump; the render itself contacts no server.",
+                caption: "Render from a dump; the render itself contacts no server. rust/struct \
+                          stands for a template of your own.",
                 lines: &[
                     run_in("", &["tpl", "-d", "shop", "schema", "dump"], " |"),
                     run_in(
@@ -2332,11 +2360,11 @@ const ENTRIES: [Entry; 35] = [
         examples: &[
             Example {
                 caption: "Print a template's source.",
-                lines: &[run(&["tpl", "template", "show", "rust/struct"])],
+                lines: &[run(&["tpl", "template", "show", "example"])],
             },
             Example {
                 caption: "The extension is optional, and names the same template.",
-                lines: &[run(&["tpl", "template", "show", "rust/struct.jinja"])],
+                lines: &[run(&["tpl", "template", "show", "example.jinja"])],
             },
         ],
         exit_codes: TEMPLATE_NAMED,
@@ -2361,13 +2389,7 @@ const ENTRIES: [Entry; 35] = [
             },
             Example {
                 caption: "Check two named templates.",
-                lines: &[run(&[
-                    "tpl",
-                    "template",
-                    "check",
-                    "rust/struct",
-                    "docs/table.md",
-                ])],
+                lines: &[run(&["tpl", "template", "check", "example", "rust/_types"])],
             },
         ],
         exit_codes: TEMPLATE_CHECK,
@@ -2386,7 +2408,7 @@ const ENTRIES: [Entry; 35] = [
             },
             Example {
                 caption: "Print where one template lives.",
-                lines: &[run(&["tpl", "template", "path", "rust/struct"])],
+                lines: &[run(&["tpl", "template", "path", "example"])],
             },
         ],
         exit_codes: TEMPLATE_PATH,
@@ -2403,13 +2425,18 @@ const ENTRIES: [Entry; 35] = [
         blocks: &[
             Block::Surface,
             Block::Prose(
-                "tpl init writes a worked example template; print it with tpl template show \
-                 example.",
+                "tpl init creates two templates: example, a worked example, and rust/_types; \
+                 print one with tpl template show example. The examples below use rust/struct \
+                 and docs/table.md as stand-ins for templates of your own, which must exist \
+                 before they render.",
             ),
         ],
         touches: Some(Touches {
-            server: "Connects to the server only when .tpl/.cache/ does not already hold what \
-                     the template reads, always with --direct, and never with --context.",
+            server: concat!(
+                "Connects to the server only when .tpl/.cache/ does not already hold what the \
+                 template reads, always with --direct, and never with --context. ",
+                no_expiry!()
+            ),
             entry: "Needs a database entry (-d or core.database), except with --context, which \
                      takes none.",
             files: "Stores what it read under .tpl/.cache/, unless --no-cache or --context is \
@@ -2430,20 +2457,24 @@ const ENTRIES: [Entry; 35] = [
                 ])],
             },
             Example {
-                caption: "Write the result to a file.",
-                lines: &[run_in(
-                    "",
-                    &[
-                        "tpl",
-                        "-d",
-                        "shop",
-                        "render",
-                        "rust/struct",
-                        "--table",
-                        "orders",
-                    ],
-                    " > src/models/orders.rs",
-                )],
+                caption: "Write the result to a file, through a temporary one: a redirect empties \
+                          its file before tpl runs, and a failed render prints nothing.",
+                lines: &[
+                    run_in(
+                        "",
+                        &[
+                            "tpl",
+                            "-d",
+                            "shop",
+                            "render",
+                            "rust/struct",
+                            "--table",
+                            "orders",
+                        ],
+                        " > src/models/orders.rs.tmp &&",
+                    ),
+                    shell("  mv src/models/orders.rs.tmp src/models/orders.rs"),
+                ],
             },
             Example {
                 caption: "Pass two template variables, read as vars.title and vars.author.",
@@ -2462,8 +2493,9 @@ const ENTRIES: [Entry; 35] = [
                 ])],
             },
             Example {
-                caption: "Render one file per table, which is how a caller iterates; this needs \
-                          jq, an external JSON tool.",
+                caption: "Render one file per table, which is how a caller iterates; each file \
+                          is written through a temporary one because a redirect empties its file \
+                          before tpl runs; this needs jq, an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -2472,6 +2504,7 @@ const ENTRIES: [Entry; 35] = [
                     ),
                     shell("  jq -r '.data.tables[].name' |"),
                     shell("  while read -r table; do"),
+                    shell("    f=\"src/models/$table.rs\""),
                     run_in(
                         "    ",
                         &[
@@ -2483,8 +2516,9 @@ const ENTRIES: [Entry; 35] = [
                             "--table",
                             "\"$table\"",
                         ],
-                        " > \"src/models/$table.rs\"",
+                        " > \"$f.tmp\" &&",
                     ),
+                    shell("      mv \"$f.tmp\" \"$f\""),
                     shell("  done"),
                 ],
             },
@@ -2760,7 +2794,11 @@ const ENTRIES: [Entry; 35] = [
                 "A value given here is visible to other users in the process list while tpl \
                  runs. For a secret, write a reference such as '${SHOP_PASSWORD}', in single \
                  quotes, and tpl reads that environment variable when it connects; a \
-                 reference is expanded in dsn, host, port, user, password and database only.",
+                 reference is expanded in dsn, host, port, user, password and database only. \
+                 tpl cfg set takes a reference as the value of host, user, password or \
+                 database, and as one part of a dsn, never as the whole dsn; a reference for \
+                 port is accepted only when written in .tpl/.cfg by editing the file, as port \
+                 = \"${SHOP_PORT}\".",
             ),
         ],
         touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),

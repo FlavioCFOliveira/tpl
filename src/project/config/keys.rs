@@ -431,10 +431,21 @@ pub(crate) fn candidates<'a, N>(defined: N, supplied: &str) -> Vec<String>
 where
     N: IntoIterator<Item = &'a str>,
 {
-    let entries: Vec<String> = match entry_named_by(supplied) {
-        Some(named) => vec![named.to_owned()],
-        None => defined.into_iter().map(str::to_owned).collect(),
-    };
+    match entry_named_by(supplied) {
+        Some(named) => space([named]),
+        None => space(defined),
+    }
+}
+
+/// The enumerated space of `FR-CONF-002`, written out with the `<name>`
+/// segment bound to each of `entries`: the population `FR-CFG-007` suggests
+/// over for `tpl cfg get` and `tpl cfg unset`, whose key names an entry the
+/// file must already declare.
+pub(crate) fn space<'a, N>(entries: N) -> Vec<String>
+where
+    N: IntoIterator<Item = &'a str>,
+{
+    let entries: Vec<&str> = entries.into_iter().collect();
 
     let mut population: Vec<String> = CoreKey::ALL
         .iter()

@@ -250,29 +250,77 @@ impl Configuration {
         nearest(supplied, &names, Population::Names)
     }
 
-    /// The condition `FR-CFG-007` and `FR-CFG-012` raise for a key this file
-    /// does not set.
+    /// The condition `FR-CFG-007` and `FR-CFG-012` raise for a key or block
+    /// this file does not set.
     ///
-    /// The suggestion is drawn over the whole key space, as `tpl cfg set`
-    /// draws it (`FR-CFG-009`), and each candidate the file does not set is
-    /// recorded as such, because the `hint` must say so: a `tpl cfg get` or a
-    /// `tpl cfg unset` of that candidate is itself a `66`.
+    /// The population is the key space of `FR-CONF-002` with the `<name>`
+    /// segment bound to every entry the file declares (`FR-CFG-007`). A key of
+    /// that population exists, so `FR-ERR-019` offers it no suggestion: the
+    /// caller spelt it right and the file does not set it, which the `error`
+    /// line says with the key's default (finding U-01 of the fourth re-audit of
+    /// rmp `#263`). Only a name outside the population is offered candidates,
+    /// and each candidate the file does not set is recorded as such, because
+    /// the `hint` must say so: a `tpl cfg get` or a `tpl cfg unset` of that
+    /// candidate is itself a `66`.
+    ///
+    /// A key or block that names an entry the file does not declare records
+    /// the entry, so that the diagnostic reports the missing entry rather than
+    /// a missing key (finding U-05).
     pub(crate) fn key_not_found(&self, key: &str) -> Error {
         let parsed = keys::Key::parse(key);
+        let named = match (&parsed, keys::Target::parse(key)) {
+            (Some(keys::Key::Entry { entry, .. }), _) => Some(entry.clone()),
+            (_, Some(keys::Target::Entry(entry))) => Some(entry),
+            _ => None,
+        };
+        let missing_entry = named.filter(|entry| self.entry(entry).is_none());
+
         let set = self.keys();
-        let nearest = self
-            .nearest_key_in_space(key)
-            .into_iter()
-            .map(|candidate| {
-                let carried = set.contains(&candidate);
-                (candidate, carried)
-            })
-            .collect();
+        let unset_or_not = |candidate: String| {
+            let carried = set.contains(&candidate);
+            (candidate, carried)
+        };
+        let section = matches!(
+            keys::Target::parse(key),
+            Some(keys::Target::Core | keys::Target::Databases)
+        );
+        let nearest = match (&parsed, &missing_entry) {
+            // FR-ERR-019: the name exists in the population; nothing is
+            // offered. A section of the space exists too.
+            (Some(_), None) => Vec::new(),
+            _ if section => Vec::new(),
+            // A block of an entry the file does not declare: the blocks it
+            // does, each of which the file carries.
+            (None, Some(entry)) => self
+                .nearest_entry(entry)
+                .into_iter()
+                .map(|name| (format!("{DATABASE}.{name}"), true))
+                .collect(),
+            // A key of an undeclared entry: the declared population alone,
+            // without the same-leaf fallback, which would offer another
+            // entry's key for no likeness of name.
+            (Some(_), Some(_)) => {
+                let population = keys::space(self.names());
+                nearest(key, &population, Population::ConfigurationKeys)
+                    .into_iter()
+                    .map(unset_or_not)
+                    .collect()
+            }
+            (None, None) => {
+                let population = keys::space(self.names());
+                let suggested = nearest(key, &population, Population::ConfigurationKeys);
+                misplaced(key, &population, suggested)
+                    .into_iter()
+                    .map(unset_or_not)
+                    .collect()
+            }
+        };
         Error::ConfigurationKeyNotFound {
             key: key.to_owned(),
             known: parsed.is_some(),
             default: parsed.as_ref().and_then(keys::Key::default_value),
             file: self.file.clone(),
+            entry_missing: missing_entry.is_some(),
             nearest,
         }
     }
@@ -403,10 +451,11 @@ fn check_key_space(
         match section {
             CORE => {
                 let table = expect_table(value, CORE, text, file)?;
-                for leaf in table.keys() {
-                    let leaf = leaf.get_ref().as_ref();
+                for spelled in table.keys() {
+                    let leaf = spelled.get_ref().as_ref();
                     if CoreKey::from_leaf(leaf).is_none() {
-                        return Err(outside_space(&format!("{CORE}.{leaf}"), known, file));
+                        let at = position(text, spelled.span().start);
+                        return Err(outside_space(&format!("{CORE}.{leaf}"), known, file, at));
                     }
                 }
             }
@@ -417,15 +466,20 @@ fn check_key_space(
                     let qualified = format!("{DATABASE}.{entry}");
                     let block = expect_table(block, &qualified, text, file)?;
 
-                    for leaf in block.keys() {
-                        let leaf = leaf.get_ref().as_ref();
+                    for spelled in block.keys() {
+                        let leaf = spelled.get_ref().as_ref();
                         if EntryKey::from_leaf(leaf).is_none() {
-                            return Err(outside_space(&format!("{qualified}.{leaf}"), known, file));
+                            let at = position(text, spelled.span().start);
+                            let key = format!("{qualified}.{leaf}");
+                            return Err(outside_space(&key, known, file, at));
                         }
                     }
                 }
             }
-            other => return Err(outside_space(other, known, file)),
+            other => {
+                let at = position(text, name.span().start);
+                return Err(outside_space(other, known, file, at));
+            }
         }
     }
 
@@ -433,7 +487,7 @@ fn check_key_space(
 }
 
 /// The refusal of `FR-CONF-034`, with the nearest-match suggestion it obliges.
-fn outside_space(key: &str, known: &[&str], file: &Path) -> Error {
+fn outside_space(key: &str, known: &[&str], file: &Path, position: Position) -> Error {
     let population = keys::candidates(known.iter().copied(), key);
     let suggested = nearest(key, &population, Population::ConfigurationKeys);
     let suggested = misplaced(key, &population, suggested);
@@ -441,6 +495,7 @@ fn outside_space(key: &str, known: &[&str], file: &Path) -> Error {
     Error::ConfigurationKeyOutsideSpace {
         key: key.to_owned(),
         file: file.to_owned(),
+        position,
         nearest: suggested,
     }
 }

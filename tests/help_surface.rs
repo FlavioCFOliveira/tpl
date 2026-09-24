@@ -1391,3 +1391,68 @@ fn rmp_274_the_help_states_what_the_second_re_audit_found_it_left_out() {
     );
     assert!(root.contains("tpl schema tables --format json"), "{root}");
 }
+
+#[test]
+fn u_02_every_help_that_reads_the_cache_says_it_never_expires_in_the_same_words() {
+    // Finding U-02 of the fourth re-audit of rmp #263.
+    const RULE: &str = "Nothing in the cache expires: after the database structure changes, run \
+                        tpl cache load or add --direct.";
+    let mut paths: Vec<Vec<&str>> = vec![vec![], vec!["render"]];
+    for leaf in [
+        "tables", "table", "views", "view", "routines", "routine", "info", "dump",
+    ] {
+        paths.push(vec!["schema", leaf]);
+    }
+
+    for path in &paths {
+        let text = prose(path);
+        assert_eq!(text.matches(RULE).count(), 1, "tpl help {path:?}: {text}");
+    }
+}
+
+#[test]
+fn u_04_no_example_names_a_missing_template_unannounced_or_truncates_a_file_it_renders_into() {
+    // Finding U-04 of the fourth re-audit of rmp #263: the template commands
+    // name the templates tpl init creates, and a render into a file goes
+    // through a temporary one.
+    let tree = document();
+    let commands = tree["data"]["commands"]
+        .as_array()
+        .expect("the tree lists its commands");
+
+    for command in commands {
+        let path: Vec<&str> = command["path"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+            .collect();
+        let path = path.join(" ");
+        for example in command["examples"].as_array().into_iter().flatten() {
+            let lines: Vec<&str> = example["lines"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|line| line["text"].as_str())
+                .collect();
+            let joined = lines.join("\n");
+            if path.starts_with("template ") {
+                assert!(!joined.contains("rust/struct"), "{path}: {joined}");
+                assert!(!joined.contains("docs/table.md"), "{path}: {joined}");
+            }
+            if joined.contains(" render ") && joined.contains(" > ") {
+                for line in lines.iter().filter(|line| line.contains(" > ")) {
+                    assert!(line.contains(".tmp"), "{path}: {line}");
+                }
+                assert!(joined.contains("mv "), "{path}: {joined}");
+            }
+        }
+    }
+    assert!(
+        prose(&["render"]).contains(
+            "The examples below use rust/struct and docs/table.md as stand-ins for templates of \
+             your own, which must exist before they render."
+        ),
+        "tpl help render"
+    );
+}

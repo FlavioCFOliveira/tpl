@@ -93,8 +93,16 @@ const PAIR: &str = "a <key>=<value> pair";
 
 /// What a `--set` argument whose key is not an identifier was expected to be
 /// (`FR-RND-012`, `FR-RND-013`).
-const IDENTIFIER: &str = "a key matching [A-Za-z_][A-Za-z0-9_]*, then '=', then the value; a dotted key is refused \
-     rather than split";
+///
+/// The set is said in words rather than as a character class (finding U-08 of
+/// the fourth re-audit of rmp `#263`); the clause on a dot is added only for a
+/// key that carries one, by [`DOTTED`].
+const IDENTIFIER: &str =
+    "a key of letters, digits and _, not starting with a digit, then '=', then the value";
+
+/// [`IDENTIFIER`] for a key that carries a dot (`FR-RND-013`).
+const DOTTED: &str = "a key of letters, digits and _, not starting with a digit, then '=', then \
+                      the value; a dotted key is refused rather than split";
 
 /// Seconds in one day, for the civil conversion of [`stamp`].
 const SECONDS_PER_DAY: u64 = 86_400;
@@ -143,7 +151,12 @@ pub(super) fn vars(set: &[String]) -> Result<BTreeMap<&str, &str>, Error> {
 
         // FR-RND-012 and FR-RND-013.
         if !identifier(key) {
-            return Err(malformed(written, IDENTIFIER));
+            let expected = if key.contains('.') {
+                DOTTED
+            } else {
+                IDENTIFIER
+            };
+            return Err(malformed(written, expected));
         }
 
         // FR-RND-014: last-wins would let a script emitting the same key twice

@@ -262,8 +262,7 @@ impl SplitFault {
         match self {
             Self::NoWord => "the value holds no word, so it names no program to execute",
             Self::UnclosedQuote => {
-                "the value leaves a quote unclosed, which the POSIX quoting rules tpl splits by \
-                 do not admit"
+                "the value leaves a quote unclosed, which shell quoting does not admit"
             }
             Self::TrailingBackslash => {
                 "the value ends in a backslash outside quotes, which escapes no character and \

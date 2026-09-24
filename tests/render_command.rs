@@ -1579,7 +1579,8 @@ fn fr_err_034_a_context_document_that_breaks_the_contract_names_the_key_path() {
     assert!(!cause.contains(".md"), "{cause}");
     assert_eq!(
         line(&written, LABELS[2]),
-        "write a document that matches, with: tpl -d <entry> schema dump > shape.json"
+        "write a document that matches to a new file with: tpl -d <entry> schema dump > \
+         context.json, then render with --context context.json"
     );
 }
 
@@ -1660,7 +1661,11 @@ fn r_06_a_structural_fault_is_said_in_the_words_of_json_and_not_of_the_decoder()
         line(&written, LABELS[1]),
         "standard input is empty, and a context document is one JSON object"
     );
-    assert!(line(&written, LABELS[2]).ends_with("> <file>"), "{written}");
+    assert!(
+        line(&written, LABELS[2])
+            .ends_with("> context.json, then render with --context context.json"),
+        "{written}"
+    );
 }
 
 #[test]
@@ -1814,7 +1819,7 @@ fn s_12_and_s_13_fail_drops_the_engine_label_and_a_default_entry_needs_no_d_in_t
         65,
     );
     assert!(
-        line(&written, LABELS[2]).ends_with("with: tpl schema dump > bad.json"),
+        line(&written, LABELS[2]).contains("with: tpl schema dump > context.json"),
         "{written}"
     );
 
@@ -1826,7 +1831,7 @@ fn s_12_and_s_13_fail_drops_the_engine_label_and_a_default_entry_needs_no_d_in_t
         65,
     );
     assert!(
-        line(&written, LABELS[2]).ends_with("with: tpl -d <entry> schema dump > bad.json"),
+        line(&written, LABELS[2]).contains("with: tpl -d <entry> schema dump > context.json"),
         "{written}"
     );
 }
@@ -1950,5 +1955,63 @@ fn t_07_a_parse_position_is_one_based_at_the_start_of_a_line() {
     assert!(
         line(&written, LABELS[1]).ends_with("the parser stopped at line 2, column 1"),
         "{written}"
+    );
+}
+
+#[test]
+fn u_08_and_u_09_render_refusals_speak_plainly_and_never_overwrite_the_callers_file() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\ndatabase = \"shop\"\n");
+    sandbox.write(".tpl/templates/resolves.jinja", "fine\n");
+
+    // U-08: the key set in words, and the dotted clause only for a dot.
+    let written = refused(
+        &sandbox,
+        &["render", "resolves", "--context", "x.json", "--set", "1a=b"],
+        64,
+    );
+    let cause = line(&written, LABELS[1]);
+    assert!(
+        cause.ends_with(
+            "a key of letters, digits and _, not starting with a digit, then '=', then the value"
+        ),
+        "{cause}"
+    );
+    let written = refused(
+        &sandbox,
+        &[
+            "render",
+            "resolves",
+            "--context",
+            "x.json",
+            "--set",
+            "a.b=c",
+        ],
+        64,
+    );
+    assert!(
+        line(&written, LABELS[1]).ends_with("a dotted key is refused rather than split"),
+        "{written}"
+    );
+
+    // U-08: what the filesystem returned, without the OS error number.
+    let written = refused(
+        &sandbox,
+        &["render", "resolves", "--context", "absent.json"],
+        74,
+    );
+    assert!(!written.contains("(os error"), "{written}");
+
+    // U-09: the dump goes to a new file, and never to the one given.
+    sandbox.write("context.json", "{}");
+    let written = refused(
+        &sandbox,
+        &["render", "resolves", "--context", "context.json"],
+        65,
+    );
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "write a document that matches to a new file with: tpl schema dump > context.new.json, \
+         then render with --context context.new.json"
     );
 }

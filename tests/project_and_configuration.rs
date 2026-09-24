@@ -2097,9 +2097,8 @@ fn t_03_and_t_08_a_password_command_is_one_string_with_every_quote_closed() {
     );
     assert_eq!(
         line(&written, "hint:  "),
-        "write the command as one command line: tpl cfg set database.new.password_command \
-         '<command line>', where '<command line>' stands for the command, written as one command \
-         line, as in 'pass db/shop'"
+        "write the command as one command line, e.g.: tpl cfg set \
+         database.new.password_command 'pass db/shop'"
     );
 
     // A shell refuses an unclosed quote, and so does the split.
@@ -2167,7 +2166,8 @@ fn fr_conf_046_a_trailing_backslash_and_a_leading_bracket_are_refused_and_write_
             "{arguments:?}: {written}"
         );
         assert!(
-            line(&written, "hint:  ").starts_with("write the command as one command line: tpl "),
+            line(&written, "hint:  ")
+                .starts_with("write the command as one command line, e.g.: tpl "),
             "{arguments:?}: {written}"
         );
         assert_eq!(sandbox.configuration(), file.as_bytes(), "{arguments:?}");
@@ -2340,7 +2340,8 @@ fn t_05_cfg_get_tells_an_unknown_name_from_an_unset_key_and_gives_the_default() 
     );
     assert_eq!(
         line(&written, "error: "),
-        "configuration key 'core.connect_timeout' is not set; tpl uses its default, 10"
+        "'core.connect_timeout' is a configuration key that .tpl/.cfg does not set; tpl uses \
+         its default, 10"
     );
 
     let written = assert_refused(
@@ -2350,7 +2351,8 @@ fn t_05_cfg_get_tells_an_unknown_name_from_an_unset_key_and_gives_the_default() 
     );
     assert_eq!(
         line(&written, "error: "),
-        "configuration key 'core.database' is not set, and it has no default"
+        "'core.database' is a configuration key that .tpl/.cfg does not set, and it has no \
+         default"
     );
 }
 
@@ -2370,4 +2372,272 @@ fn t_07_and_t_10_the_generated_configuration_says_what_its_commented_values_are(
         "{written}"
     );
     assert!(!written.contains("catalogue"), "{written}");
+}
+
+#[test]
+fn u_01_a_key_of_the_space_the_file_does_not_set_is_offered_no_other_key() {
+    // Finding U-01 of the fourth re-audit of rmp #263: the caller spelt the
+    // key right, so no "did you mean" names another one (FR-ERR-019).
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.shop]\nhost = \"h\"\ndatabase = \"shop\"\n");
+
+    for arguments in [
+        &["cfg", "get", "core.database"][..],
+        &["cfg", "get", "database.shop.port"][..],
+        &["cfg", "unset", "database.shop.port"][..],
+    ] {
+        let written = assert_refused(&sandbox.run(arguments), 66, &arguments.join(" "));
+        assert!(!written.contains("did you mean"), "{written}");
+        assert!(
+            line(&written, "error: ")
+                .contains("is a configuration key that .tpl/.cfg does not set"),
+            "{written}"
+        );
+        assert_eq!(
+            line(&written, "hint:  "),
+            "list the keys that are set with: tpl cfg list"
+        );
+    }
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "get", "database.shop.port"]),
+        66,
+        "an unset port",
+    );
+    assert!(
+        line(&written, "error: ").ends_with("tpl uses its default, 3306"),
+        "{written}"
+    );
+
+    // A name that is not a key is still offered the key it resembles.
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "get", "database.shop.hots"]),
+        66,
+        "a misspelt key",
+    );
+    assert!(
+        line(&written, "hint:  ").starts_with("did you mean 'database.shop.host'?"),
+        "{written}"
+    );
+}
+
+#[test]
+fn u_05_a_key_or_block_of_an_entry_the_file_does_not_declare_names_the_missing_entry() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.shop]\nhost = \"h\"\ndatabase = \"shop\"\n");
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "unset", "database.nope"]),
+        66,
+        "a missing block",
+    );
+    assert_eq!(
+        line(&written, "error: "),
+        "database entry 'nope' does not exist, so .tpl/.cfg holds no 'database.nope'"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "list the entries with: tpl cfg database list"
+    );
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "get", "database.nope.host"]),
+        66,
+        "a key of a missing entry",
+    );
+    assert_eq!(
+        line(&written, "error: "),
+        "database entry 'nope' does not exist, so .tpl/.cfg holds no 'database.nope.host'"
+    );
+    assert!(!written.contains("database.nope.port"), "{written}");
+
+    // A slip in the entry name is offered the entry the file declares.
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "get", "database.shp.host"]),
+        66,
+        "a misspelt entry",
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "did you mean 'database.shop.host'? list the entries with: tpl cfg database list"
+    );
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "unset", "database.shp"]),
+        66,
+        "a misspelt block",
+    );
+    assert!(
+        line(&written, "hint:  ").starts_with("did you mean 'database.shop'?"),
+        "{written}"
+    );
+}
+
+#[test]
+fn u_03_a_port_reference_is_refused_by_the_write_paths_with_where_it_is_accepted() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.x]\nhost = \"h\"\n");
+
+    for arguments in [
+        &["cfg", "set", "database.x.port", "${P}"][..],
+        &[
+            "cfg", "database", "add", "q", "--host", "h", "--port", "${P}",
+        ][..],
+    ] {
+        let written = assert_refused(&sandbox.run(arguments), 64, &arguments.join(" "));
+        assert!(
+            line(&written, "cause: ").ends_with(
+                "a ${VAR} reference for a port is accepted only when written in .tpl/.cfg"
+            ),
+            "{written}"
+        );
+        assert_eq!(
+            line(&written, "hint:  "),
+            "give the port as a number, e.g. 3306; to take it from the environment, edit \
+             .tpl/.cfg and write port = \"${VAR}\" in the entry's block"
+        );
+    }
+}
+
+#[test]
+fn u_06_an_unclosed_expansion_does_not_claim_that_no_cfg_command_runs() {
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[database.x]\nhost = \"127.0.0.1\"\ndatabase = \"d\"\ntls = \"disabled\"\npassword = \
+         \"${NOPE\"\n\n[database.y]\nhost = \"127.0.0.1\"\nport = \"${P\"\ndatabase = \"d\"\ntls \
+         = \"disabled\"\n",
+    );
+
+    let written = assert_refused(
+        &sandbox.run(&["-d", "x", "schema", "tables", "--direct"]),
+        78,
+        "an unclosed password reference",
+    );
+    let hint = line(&written, "hint:  ");
+    assert!(!hint.contains("no tpl cfg command runs"), "{written}");
+    assert!(
+        hint.ends_with(
+            "e.g.: tpl cfg set database.x.password '${VAR}', where VAR is the variable you meant"
+        ),
+        "{written}"
+    );
+
+    // tpl cfg set accepts no reference for a port, so the file is edited.
+    let written = assert_refused(
+        &sandbox.run(&["-d", "y", "schema", "tables", "--direct"]),
+        78,
+        "an unclosed port reference",
+    );
+    let hint = line(&written, "hint:  ");
+    assert!(hint.starts_with("edit "), "{written}");
+    assert!(!hint.contains("no tpl cfg command runs"), "{written}");
+
+    // And the claim would have been false: a cfg command still runs.
+    assert_eq!(code(&sandbox.run(&["cfg", "list"])), 0);
+}
+
+#[test]
+fn u_07_an_add_of_an_existing_entry_is_answered_with_the_callers_own_values() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.x]\nhost = \"a\"\n");
+
+    let written = assert_refused(
+        &sandbox.run(&[
+            "cfg", "database", "add", "x", "--host", "h", "--schema", "s",
+        ]),
+        64,
+        "an existing entry",
+    );
+    assert!(
+        line(&written, "hint:  ")
+            .starts_with("change it instead with: tpl cfg database update x --host h --schema s"),
+        "{written}"
+    );
+}
+
+#[test]
+fn u_08_os_wording_is_dropped_and_an_unknown_key_in_the_file_names_its_line() {
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[database.p]\nhost = \"127.0.0.1\"\nport = 1\ndatabase = \"d\"\ntls = \
+         \"disabled\"\npassword_command = [\"/nonexistent/tpl-no-such-program\"]\n",
+    );
+    let written = assert_refused(
+        &sandbox.run(&["-d", "p", "schema", "tables", "--direct"]),
+        78,
+        "a password_command that cannot start",
+    );
+    assert!(!written.contains("(os error"), "{written}");
+    assert!(
+        line(&written, "cause: ").ends_with("could not be started: No such file or directory"),
+        "{written}"
+    );
+    assert!(
+        line(&written, "hint:  ")
+            .ends_with("tpl cfg set database.p.password_command '<program> <argument>'"),
+        "{written}"
+    );
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "set", "database.new.password_command", "pass 'a b"]),
+        64,
+        "an unclosed quote",
+    );
+    assert!(!written.contains("POSIX"), "{written}");
+    assert!(
+        written.contains("shell quoting does not admit"),
+        "{written}"
+    );
+
+    sandbox.project("[core]\ndatabase = \"shop\"\nfoo = 1\n");
+    let written = assert_refused(&sandbox.run(&["cfg", "list"]), 78, "an unknown key");
+    assert!(
+        line(&written, "hint:  ").contains(" at line 3; tpl help cfg set lists every key"),
+        "{written}"
+    );
+}
+
+#[test]
+fn rmp_279_a_block_that_is_absent_is_reported_as_absent() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.shop]\nhost = \"h\"\n");
+
+    // FR-CFG-007 keeps a block given to cfg get at 64, with tpl cfg list as
+    // the hint where the entry does not exist; the line says it does not.
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "get", "database.nope"]),
+        64,
+        "a block of an entry that does not exist",
+    );
+    assert_eq!(
+        line(&written, "error: "),
+        "'database.nope' names a whole entry, not one value, and database entry 'nope' does \
+         not exist"
+    );
+    assert!(!written.contains("section"), "{written}");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "show every key and its value with: tpl cfg list"
+    );
+
+    // FR-CFG-012: a section the file lacks is absent, and nothing is removed.
+    let written = assert_refused(&sandbox.run(&["cfg", "unset", "core"]), 66, "no [core]");
+    assert_eq!(
+        line(&written, "error: "),
+        "'core' names the [core] section, and .tpl/.cfg has none, so there is nothing to remove"
+    );
+    assert!(!written.contains("not a configuration key"), "{written}");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "show every key and its value with: tpl cfg list"
+    );
+
+    sandbox.project("[core]\n");
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "unset", "database"]),
+        66,
+        "no [database]",
+    );
+    assert!(
+        line(&written, "error: ").ends_with("so there is nothing to remove"),
+        "{written}"
+    );
 }

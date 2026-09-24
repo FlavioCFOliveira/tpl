@@ -1060,12 +1060,20 @@ pub enum Error {
     /// the line says which of the two it is (finding T-05 of the third
     /// re-audit of rmp `#263`): "not set" of a name that is no key reads as
     /// though setting it would help.
-    #[error("{}", key_not_found(.key, .default.as_deref(), *.known))]
+    #[error("{}", key_not_found(.key, .default.as_deref(), *.known, *.entry_missing))]
     ConfigurationKeyNotFound {
         /// The key that was not found.
         key: String,
         /// Whether the key is one of the space of `FR-CONF-002`.
         known: bool,
+        /// Whether the key is a `database.<name>.<field>` key, or the block a
+        /// `database.<name>` form names, of an entry the file does not
+        /// declare. The line then reports the missing entry, which the
+        /// renderers read out of the key, not a missing key (finding
+        /// U-05 of the fourth re-audit of rmp `#263`). A flag rather than the
+        /// name keeps [`Error`] within the size `clippy::result_large_err`
+        /// admits.
+        entry_missing: bool,
         /// The value the configuration gives the key where the file sets
         /// none; [`None`] where it has no default or is not a key.
         default: Option<String>,
@@ -1376,6 +1384,10 @@ pub enum Error {
         key: String,
         /// The file that declares it.
         file: PathBuf,
+        /// Where the file writes the key, so that the `hint` names the line to
+        /// delete, as the TOML errors do (finding U-08 of the fourth re-audit
+        /// of rmp `#263`).
+        position: Position,
         /// The nearest matches among the enumerated key space of
         /// `FR-CONF-002`, selected by `FR-ERR-019` and ordered as it fixes.
         /// Empty where nothing qualified, per `FR-ERR-020`. `FR-CONF-034`
@@ -1685,27 +1697,73 @@ fn unknown_command(token: &str, node: &str) -> String {
     }
 }
 
-/// The `error:` line of [`Error::BlockKeyGiven`], in the words `FR-CFG-007`
-/// shows: a `database.<name>` form that names an existing entry is a whole
-/// entry, and every other block form is a section.
 /// The `error:` line of [`Error::ConfigurationKeyNotFound`]: a key of the
 /// space the file does not set, with its default where it has one, or a name
 /// that is no key at all.
-fn key_not_found(key: &str, default: Option<&str>, known: bool) -> String {
-    match (known, default) {
-        (false, _) => format!("'{key}' is not a configuration key"),
-        (true, Some(default)) => {
-            format!("configuration key '{key}' is not set; tpl uses its default, {default}")
-        }
-        (true, None) => format!("configuration key '{key}' is not set, and it has no default"),
+///
+/// A key of the space is said to be one, so that a caller who spelt it right
+/// is not left wondering whether it did (finding U-01 of the fourth re-audit of
+/// rmp `#263`); a name that reaches an entry the file does not declare says
+/// that the entry is what is missing (finding U-05).
+///
+/// `core` and `database` reach it only from `tpl cfg unset`, where the file
+/// has no such section: the line says there is nothing to remove, rather than
+/// that a block of the space is no key (`FR-CFG-012`).
+fn key_not_found(key: &str, default: Option<&str>, known: bool, entry_missing: bool) -> String {
+    if let Some(section) = section_named(key) {
+        return format!("{section}, and .tpl/.cfg has none, so there is nothing to remove");
+    }
+    match (entry_missing, known, default) {
+        (true, _, _) => format!(
+            "database entry '{}' does not exist, so .tpl/.cfg holds no '{key}'",
+            named_entry(key)
+        ),
+        (false, false, _) => format!("'{key}' is not a configuration key"),
+        (false, true, Some(default)) => format!(
+            "'{key}' is a configuration key that .tpl/.cfg does not set; tpl uses its default, \
+             {default}"
+        ),
+        (false, true, None) => format!(
+            "'{key}' is a configuration key that .tpl/.cfg does not set, and it has no default"
+        ),
     }
 }
 
+/// The entry a `database.<name>.<field>` key or a `database.<name>` block
+/// names: the segment between `database.` and the field, or everything after
+/// `database.` for a block.
+pub(crate) fn named_entry(key: &str) -> &str {
+    let rest = key.strip_prefix("database.").unwrap_or(key);
+    if crate::project::config::keys::Key::parse(key).is_some() {
+        rest.rsplit_once('.').map_or(rest, |(entry, _)| entry)
+    } else {
+        rest
+    }
+}
+
+/// What `core` or `database` names, as the lines of a block say it, or
+/// [`None`] for any other key.
+pub(crate) fn section_named(key: &str) -> Option<&'static str> {
+    match key {
+        "core" => Some("'core' names the [core] section"),
+        "database" => Some("'database' names every [database.<name>] block"),
+        _ => None,
+    }
+}
+
+/// The `error:` line of [`Error::BlockKeyGiven`], in the words `FR-CFG-007`
+/// shows: a `database.<name>` form is a whole entry, said not to exist where
+/// the file does not declare it, and `core` and `database` are sections.
 fn block_key(key: &str, entry: bool) -> String {
     if entry {
-        format!("'{key}' names a whole entry, not one value")
-    } else {
-        format!("'{key}' names a whole section, not one value")
+        return format!("'{key}' names a whole entry, not one value");
+    }
+    match key.strip_prefix("database.") {
+        Some(name) => format!(
+            "'{key}' names a whole entry, not one value, and database entry '{name}' does not \
+             exist"
+        ),
+        None => format!("'{key}' names a whole section, not one value"),
     }
 }
 
@@ -2382,6 +2440,7 @@ mod tests {
                     key: "core.database".to_owned(),
                     known: true,
                     default: None,
+                    entry_missing: false,
                     file: path(),
                     nearest: Vec::new(),
                 },
@@ -2519,6 +2578,7 @@ mod tests {
                 Error::ConfigurationKeyOutsideSpace {
                     key: "core.databse".to_owned(),
                     file: path(),
+                    position: position(),
                     nearest: vec!["core.database".to_owned()],
                 },
                 78,

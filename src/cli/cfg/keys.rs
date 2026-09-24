@@ -97,9 +97,9 @@ enum Printed<'a> {
 ///
 /// # Errors
 ///
-/// Returns what opening the project returns, and
-/// key — with a nearest-match suggestion over the whole key space.
-/// key — with a nearest-match suggestion over the keys that do exist.
+/// Returns what opening the project returns, [`Error::BlockKeyGiven`] where
+/// the key names a whole block, and [`Error::ConfigurationKeyNotFound`] where
+/// the file does not set the key.
 pub(crate) fn get<W: Write>(out: &mut W, supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
     let configuration = project(supplied)?.configuration()?;
 
@@ -404,6 +404,40 @@ mod tests {
             ),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn fr_err_019_a_key_of_the_population_is_offered_no_candidate() {
+        // U-01: the population is the key space bound to the entries the file
+        // declares, and a name in it exists, so nothing is suggested; U-05: a
+        // key of an undeclared entry records the entry.
+        let harness =
+            Harness::new("[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n");
+
+        match harness.get_refused("database.shop.port") {
+            Error::ConfigurationKeyNotFound {
+                nearest,
+                known,
+                entry_missing,
+                ..
+            } => {
+                assert!(nearest.is_empty(), "{nearest:?}");
+                assert!(known);
+                assert!(!entry_missing);
+            }
+            other => panic!("expected a missing key, got {other:?}"),
+        }
+        match harness.get_refused("database.nope.host") {
+            Error::ConfigurationKeyNotFound {
+                ref key,
+                entry_missing,
+                ..
+            } => {
+                assert!(entry_missing);
+                assert_eq!(crate::error::named_entry(key), "nope");
+            }
+            other => panic!("expected a missing key, got {other:?}"),
+        }
     }
 
     #[test]

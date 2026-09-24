@@ -391,20 +391,26 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // hint line: the assertion over every hint looks for that character
         // to prove no value reached one ungated.
         Error::MalformedValue {
-            parameter, command, ..
+            parameter,
+            command,
+            value,
+            ..
         } => match (parameter.as_str(), command.as_str()) {
+            (parameter, _) if super::cause::is_port_reference(parameter, value) => Cow::Borrowed(
+                "give the port as a number, e.g. 3306; to take it from the environment, \
+                     edit .tpl/.cfg and write port = \"${VAR}\" in the entry's block",
+            ),
             ("--dsn", _) => Cow::Borrowed(
                 "write the URL as scheme://host/database, e.g.: --dsn \
                  mysql://db.example.com:3306/shop",
             ),
-            // T-03, FR-CONF-046: the caller's own command with a placeholder
-            // in place of the value, quoted as the one string the value is, and
-            // an example command line after it, which says the form by showing
-            // it. The placeholder stands for a command only the caller knows.
+            // T-03, FR-CONF-046: the caller's own command with an example
+            // command line in place of the value, quoted as the one string the
+            // value is, which says the form by showing it. U-07: the example
+            // is the whole of it; a placeholder explained in the same words
+            // said the form twice.
             (parameter, _) if super::cause::is_password_command(parameter) => {
-                const LINE: &str = "'<command line>'";
-                const MEANING: &str = "where '<command line>' stands for the command, written as \
-                                       one command line, as in 'pass db/shop'";
+                const LINE: &str = "'pass db/shop'";
                 let ids: &[&str] = if parameter == "--password-command" {
                     &["password_command"]
                 } else {
@@ -416,17 +422,16 @@ fn bare(error: &Error) -> Cow<'static, str> {
                 };
                 match restate::restated(&[example]) {
                     Some(restated) => Cow::Owned(format!(
-                        "write the command as one command line: {}, {MEANING}{}",
+                        "write the command as one command line, e.g.: {}{}",
                         restated.command,
                         restated.replacing()
                     )),
                     None if admits_key(parameter) => Cow::Owned(format!(
-                        "write the command as one command line: tpl cfg set {parameter} {LINE}, \
-                         {MEANING}"
+                        "write the command as one command line, e.g.: tpl cfg set {parameter} \
+                         {LINE}"
                     )),
                     None => Cow::Owned(format!(
-                        "write the command as one command line: --password-command {LINE}, \
-                         {MEANING}"
+                        "write the command as one command line, e.g.: --password-command {LINE}"
                     )),
                 }
             }
@@ -447,8 +452,21 @@ fn bare(error: &Error) -> Cow<'static, str> {
             )
         }
         // FR-CFG-017 obliges this hint to point at `tpl cfg database update`.
+        // U-07: the caller's own command, whole, with add made update, so that
+        // the values it gave are not replaced by placeholders.
         Error::DatabaseEntryAlreadyExists { name, .. } => {
-            Cow::Owned(format!("change it instead with: {}", update_entry(name)))
+            let edit = Edit::Command {
+                from: "add",
+                to: "update",
+            };
+            match restate::restated(&[edit]) {
+                Some(restated) => Cow::Owned(format!(
+                    "change it instead with: {}{}",
+                    restated.command,
+                    restated.replacing()
+                )),
+                None => Cow::Owned(format!("change it instead with: {}", update_entry(name))),
+            }
         }
         // FR-CFG-048 obliges a runnable command that makes the write legal, and
         // the three are the three shapes such a command takes. Which one is
@@ -534,31 +552,31 @@ fn bare(error: &Error) -> Cow<'static, str> {
         }
         // The document came from the caller, and `--context` excludes `-d`, so
         // the entry that would produce a valid one is a value only the caller
-        // knows, and a placeholder stands for it. The file is known, and is
-        // named; standard input is not a file a dump can be redirected to.
+        // knows, and a placeholder stands for it. U-09: the dump goes to a new
+        // file, never to the one the caller gave, which a redirect would empty
+        // and which may hold the caller's own edits.
         Error::ContextDocumentMalformed {
             path,
             fault,
             default_entry,
         } => {
-            // FR-ERR-041 admits the path or puts the placeholder in its
-            // place; `-` begins with `-` and is refused, and is no file.
-            let target = if admits_file(path) {
-                path.to_string_lossy()
+            let target = if path.file_name() == Some(std::ffi::OsStr::new(NEW_CONTEXT)) {
+                OTHER_CONTEXT
             } else {
-                Cow::Borrowed("<file>")
+                NEW_CONTEXT
             };
             let lead = match fault {
                 ContextFault::NotJson(_) | ContextFault::Empty => "write a well-formed document",
                 ContextFault::Structure { .. } | ContextFault::DanglingReference { .. } => {
-                    "write a document that matches,"
+                    "write a document that matches"
                 }
             };
             // With core.database set, the dump reads that entry and needs
             // no -d; without it, the entry is a value only the caller knows.
             let selection = if *default_entry { "" } else { "-d <entry> " };
             Cow::Owned(format!(
-                "{lead} with: tpl {selection}schema dump > {target}"
+                "{lead} to a new file with: tpl {selection}schema dump > {target}, then render \
+                 with --context {target}"
             ))
         }
         Error::RenderFuelExhausted { .. } => Cow::Borrowed(
@@ -666,7 +684,18 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // FR-CFG-007 obliges the nearest-match half over the whole key space,
         // and BR-ERR-004 the statement that the file does not set a
         // candidate: `tpl cfg get` or `tpl cfg unset` of it is a 66 again.
-        Error::ConfigurationKeyNotFound { nearest, known, .. } => {
+        // FR-CFG-012: a section the file lacks; nothing is misspelt.
+        Error::ConfigurationKeyNotFound { key, .. }
+            if crate::error::section_named(key).is_some() =>
+        {
+            Cow::Borrowed("show every key and its value with: tpl cfg list")
+        }
+        Error::ConfigurationKeyNotFound {
+            nearest,
+            known,
+            entry_missing,
+            ..
+        } => {
             let kept: Vec<&(String, bool)> = nearest
                 .iter()
                 .filter(|(candidate, _)| admits_key(candidate))
@@ -677,7 +706,12 @@ fn bare(error: &Error) -> Cow<'static, str> {
                 .filter(|(_, set)| !set)
                 .map(|(key, _)| key.as_str())
                 .collect();
-            let generic = if *known && unset.is_empty() {
+            // U-01: a key of the space the file does not set is offered no
+            // candidate, so the next step is the listing of what is set.
+            // U-05: a missing entry is recovered from the list of entries.
+            let generic = if *entry_missing {
+                "list the entries with: tpl cfg database list"
+            } else if *known && unset.is_empty() {
                 "list the keys that are set with: tpl cfg list"
             } else {
                 "list every key, its type and its default with: tpl help cfg set"
@@ -851,7 +885,10 @@ fn bare(error: &Error) -> Cow<'static, str> {
         )),
         // FR-CONF-034 obliges the nearest-match half over the known keys.
         Error::ConfigurationKeyOutsideSpace {
-            key, file, nearest, ..
+            key,
+            file,
+            position,
+            nearest,
         } => {
             let admitted = admitted(nearest, admits_key);
             let named = if admits_key(key) {
@@ -860,8 +897,10 @@ fn bare(error: &Error) -> Cow<'static, str> {
                 Cow::Borrowed("the key named above")
             };
             let generic = format!(
-                "or delete {named} from {}; tpl help cfg set lists every key the file may hold",
-                configuration_file(file)
+                "or delete {named} from {} at line {}; tpl help cfg set lists every key the \
+                 file may hold",
+                configuration_file(file),
+                position.line
             );
 
             if admitted.is_empty() {
@@ -961,12 +1000,27 @@ fn bare(error: &Error) -> Cow<'static, str> {
         }
         // FR-CONF-020 makes `$$` the literal dollar, so a value that meant one
         // is corrected by doubling it rather than by closing a brace.
-        Error::UnclosedExpansion { key, file } => Cow::Owned(format!(
-            "edit {}: close the expansion in {} as ${{VAR}}, or write $$ for a literal dollar \
-             sign; {NO_CFG_COMMAND}",
-            configuration_file(file),
-            key_or_placeholder(key)
-        )),
+        //
+        // U-06: the file is read and the expansion is attempted only on the
+        // way to a connection, so every tpl cfg command still runs, and
+        // `NO_CFG_COMMAND` would be false here. A key tpl cfg set accepts a
+        // whole reference for is given that command; a dsn or a port, for
+        // which it accepts none, is edited in the file.
+        Error::UnclosedExpansion { key, file } => {
+            let named = key_or_placeholder(key);
+            if admits_key(key) && matches!(leaf(key), "host" | "user" | "password" | "database") {
+                Cow::Owned(format!(
+                    "close the expansion as ${{VAR}}, or write $$ for a literal dollar sign, e.g.: \
+                     tpl cfg set {named} '${{VAR}}', where VAR is the variable you meant"
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "edit {}: close the expansion in {named} as ${{VAR}}, or write $$ for a \
+                     literal dollar sign",
+                    configuration_file(file)
+                ))
+            }
+        }
         // FR-CONF-035 obliges the hint to show the array form, and states this
         // example itself.
         Error::PasswordCommandNotAnArray {
@@ -1040,7 +1094,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
         Error::PasswordCommandNotExecutable { entry, .. } if admits(entry) => Cow::Owned(format!(
             "make the first word of database.{entry}.password_command an executable program on \
              PATH or its full path, e.g.: tpl cfg set database.{entry}.password_command \
-             \"<program> <argument>\""
+             '<program> <argument>'"
         )),
         Error::PasswordCommandNotExecutable { .. } => Cow::Borrowed(
             "check that the first element of password_command is the path of an executable \
@@ -1110,6 +1164,14 @@ fn bare(error: &Error) -> Cow<'static, str> {
         )),
     }
 }
+
+/// The file a malformed `--context` document is replaced by (finding U-09 of
+/// the fourth re-audit of rmp `#263`), and the one used where the caller's own
+/// file already carries that name.
+const NEW_CONTEXT: &str = "context.json";
+
+/// See [`NEW_CONTEXT`].
+const OTHER_CONTEXT: &str = "context.new.json";
 
 /// The clause every hint of a fault in `.tpl/.cfg` ends with.
 ///

@@ -1251,6 +1251,7 @@ mod tests {
                 key: hostile(),
                 known: false,
                 default: None,
+                entry_missing: true,
                 file: hostile_path(),
                 nearest: vec![(hostile(), false)],
             },
@@ -1355,6 +1356,7 @@ mod tests {
             Error::ConfigurationKeyOutsideSpace {
                 key: hostile(),
                 file: hostile_path(),
+                position: position(),
                 nearest: vec![hostile()],
             },
             Error::ConfigurationValueMalformed {
@@ -1719,8 +1721,8 @@ mod tests {
         assert_eq!(
             line(&rendered, Label::Hint),
             "make the first word of database.shop.password_command an executable program on PATH \
-             or its full path, e.g.: tpl cfg set database.shop.password_command \"<program> \
-             <argument>\""
+             or its full path, e.g.: tpl cfg set database.shop.password_command '<program> \
+             <argument>'"
         );
     }
 
@@ -1939,9 +1941,8 @@ mod tests {
         );
         assert_eq!(
             line(&rendered, Label::Hint),
-            "write the command as one command line: tpl cfg set database.shop.password_command \
-             '<command line>', where '<command line>' stands for the command, written as one \
-             command line, as in 'pass db/shop'"
+            "write the command as one command line, e.g.: tpl cfg set \
+             database.shop.password_command 'pass db/shop'"
         );
         assert!(rendered.ends_with("exit:  64 (EX_USAGE)\n"), "{rendered}");
 

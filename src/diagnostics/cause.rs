@@ -101,9 +101,15 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             Some(entry) => Cow::Owned(format!(
                 "tpl cfg get reads one key; {key} is the block of entry '{entry}'"
             )),
-            None => Cow::Owned(format!(
-                "tpl cfg get reads one key; {key} is a block of keys, not a key"
-            )),
+            None => match key.strip_prefix("database.") {
+                Some(name) => Cow::Owned(format!(
+                    "tpl cfg get reads one key; {key} is the block of entry '{name}', which \
+                     .tpl/.cfg does not declare"
+                )),
+                None => Cow::Owned(format!(
+                    "tpl cfg get reads one key; {key} is a block of keys, not a key"
+                )),
+            },
         },
         // FR-RND-041 fixes both lines: why the two contradict each other.
         Error::DirectWithContext => Cow::Borrowed(
@@ -169,6 +175,17 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         } if is_password_command(parameter) => Cow::Owned(format!(
             "{expected}; {parameter} takes one command line written as one string, which tpl \
              splits into words"
+        )),
+        // U-03: the file expands a reference in a port, and the write paths
+        // do not; the line says where the reference is accepted.
+        Error::MalformedValue {
+            parameter,
+            value,
+            expected,
+            ..
+        } if is_port_reference(parameter, value) => Cow::Owned(format!(
+            "'{value}' was supplied for '{parameter}', which takes {expected}; a ${{VAR}} \
+             reference for a port is accepted only when written in .tpl/.cfg"
         )),
         Error::MalformedValue {
             parameter,
@@ -430,6 +447,28 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // spelling `tpl cfg get` was given and `.tpl/.cfg` does not carry.
         // T-05: a name outside the space is said to be one, because "sets no
         // value" of it reads as though setting it would help.
+        // FR-CFG-012: `tpl cfg unset core` or `database` where the file has no
+        // such section.
+        Error::ConfigurationKeyNotFound { key, file, .. }
+            if crate::error::section_named(key).is_some() =>
+        {
+            Cow::Owned(format!(
+                "{} has no [{key}] section, so tpl cfg unset has nothing to delete",
+                file.display()
+            ))
+        }
+        // U-05: a key or block of an entry the file does not declare names
+        // the missing entry; the key is not what the caller got wrong.
+        Error::ConfigurationKeyNotFound {
+            key,
+            file,
+            entry_missing: true,
+            ..
+        } => Cow::Owned(format!(
+            "{} declares no [database.{}] block",
+            file.display(),
+            crate::error::named_entry(key)
+        )),
         Error::ConfigurationKeyNotFound {
             key,
             file,
@@ -508,32 +547,38 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             path.display()
         )),
         Error::ProjectNotCreated { path, returned } => Cow::Owned(format!(
-            "the filesystem refused to create {}: {returned}",
-            path.display()
+            "the filesystem refused to create {}: {}",
+            path.display(),
+            os(returned)
         )),
 
         // ------------------------------------------------------------ 74 ---
         // The row obliges the path or stream, the operation attempted on it,
         // and what the filesystem or the stream returned.
         Error::ProjectFileUnreadable { path, returned } => Cow::Owned(format!(
-            "the read of {} returned: {returned}",
-            path.display()
+            "the read of {} returned: {}",
+            path.display(),
+            os(returned)
         )),
         Error::ContextDocumentUnreadable { path, returned } => Cow::Owned(format!(
-            "the read of the file --context named, {}, returned: {returned}",
-            path.display()
+            "the read of the file --context named, {}, returned: {}",
+            path.display(),
+            os(returned)
         )),
         Error::TrustMaterialUnreadable { path, returned, .. } => Cow::Owned(format!(
-            "the read of {} returned: {returned}; the connection was not attempted",
-            path.display()
+            "the read of {} returned: {}; the connection was not attempted",
+            path.display(),
+            os(returned)
         )),
         Error::ProjectFileUnwritable { path, returned } => Cow::Owned(format!(
-            "the write of {} returned: {returned}; the previous file is still in place, unchanged",
-            path.display()
+            "the write of {} returned: {}; the previous file is still in place, unchanged",
+            path.display(),
+            os(returned)
         )),
-        Error::StdoutUnwritable { returned } => {
-            Cow::Owned(format!("the write to standard output returned: {returned}"))
-        }
+        Error::StdoutUnwritable { returned } => Cow::Owned(format!(
+            "the write to standard output returned: {}",
+            os(returned)
+        )),
         Error::StdoutClosedMidDocument => Cow::Borrowed(
             "the consumer closed standard output while a JSON document was still being written, so \
              the write returned a broken pipe and the document that arrived is truncated",
@@ -735,11 +780,13 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             ..
         } => match fault {
             PasswordCommandFault::NotStarted => Cow::Owned(format!(
-                "password_command {command:?} could not be started: {returned}"
+                "password_command {command:?} could not be started: {}",
+                os(returned)
             )),
             PasswordCommandFault::StatusUnreadable => Cow::Owned(format!(
                 "password_command {command:?} was started and tpl could not read the status it \
-                 ended with: {returned}"
+                 ended with: {}",
+                os(returned)
             )),
         },
         // FR-CONF-033 for the exit and FR-CONF-043 for the signal. The signal
@@ -888,6 +935,24 @@ fn joined(chain: &[String]) -> Cow<'_, str> {
         [only] => Cow::Borrowed(only.as_str()),
         _ => Cow::Owned(chain.join(CHAIN_SEPARATOR)),
     }
+}
+
+/// What the operating system returned, without the ` (os error N)` suffix
+/// `std` appends to its own message: the number says nothing a reader of the
+/// message can act on (finding U-08 of the fourth re-audit of rmp `#263`).
+fn os(returned: &std::io::Error) -> String {
+    let text = returned.to_string();
+    match text.rsplit_once(" (os error ") {
+        Some((message, code)) if code.ends_with(')') => message.to_owned(),
+        _ => text,
+    }
+}
+
+/// Whether `value`, given for a port, is a `${VAR}` reference: `FR-CONF-015`
+/// expands one in the file, while `tpl cfg set` and `--port` take a number
+/// (finding U-03 of the fourth re-audit of rmp `#263`).
+pub(super) fn is_port_reference(parameter: &str, value: &str) -> bool {
+    (parameter == "--port" || parameter.ends_with(".port")) && value.contains("${")
 }
 
 /// Whether `parameter` is one that takes a `password_command` supplied as one
