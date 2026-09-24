@@ -910,6 +910,10 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 - **FR-CONF-015**: The system SHALL expand `${VAR}` only in the following
   fields: `dsn`, `host`, `port`, `user`, `password`, and `database`.
 
+  *Note added in the forty-eighth edition.* A field outside this list is not
+  expanded. For `ca_file` and `ca_path` a reference is also refused, per
+  `FR-CONF-047`.
+
 - **FR-CONF-016**: The system SHALL NOT expand `${VAR}` in `tls`.
 
   *Rationale.* An injected `TLS_MODE=disabled` must not be able to turn off
@@ -918,6 +922,57 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 - **FR-CONF-017**: The system SHALL NOT expand `${VAR}` in `password_command`.
 
   *Rationale.* The environment must not be able to alter the command executed.
+
+- **FR-CONF-047**: The system SHALL NOT expand `${VAR}` in `ca_file` or
+  `ca_path`, and SHALL refuse a value of either key that contains `${`:
+
+  1. **On the command line.** IF the value given to
+     `tpl cfg set database.<name>.ca_file` or
+     `tpl cfg set database.<name>.ca_path`, or to `--ca-file` or `--ca-path`
+     under `FR-CFG-027`, contains `${`, THEN the system SHALL exit `64`
+     (`EX_USAGE`), as `FR-CFG-010` does for a value that does not conform to
+     its type, and SHALL write nothing to `.tpl/.cfg`.
+  2. **In the file.** IF `.tpl/.cfg` declares `ca_file` or `ca_path` with a
+     value that contains `${`, in any entry, THEN the system SHALL exit `78`
+     (`EX_CONFIG`) at step 3 of `FR-ERR-006`.
+
+  In both cases the `cause` SHALL name the key or the flag, and SHALL state
+  that the key is read as a literal path and that `${VAR}` is not expanded in
+  it. The `hint` SHALL show the key set to the path itself, with a placeholder
+  where the path stands.
+
+  ```
+  tpl cfg set database.shop.ca_file '${SHOP_CA}'
+  error: invalid value for database.shop.ca_file
+  cause: ca_file is read as a literal path, and ${VAR} is not expanded in it; the value holds ${SHOP_CA}
+  hint:  give the path itself: tpl cfg set database.shop.ca_file <path>
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code. The
+  variable name enters the `cause` only under the set of `FR-ERR-022`.
+
+  *Rationale.* `FR-CONF-015` omits both keys from the fields it expands, so a
+  reference written into either was stored and then read as a file named
+  `${SHOP_CA}`. The failure appeared only at connection time, as the `74` of
+  `FR-CONF-014`, with a `cause` that did not say the reference was not
+  expanded. A caller that exported the variable and retried failed the same
+  way. This is finding V-03 of the fifth re-audit, rmp `#263`.
+
+  *Why not expand.* The trust material decides which authority a
+  `verify-ca` or `verify-identity` connection accepts. An injected variable
+  would choose it, which is the ground `FR-CONF-016` states for `tls`.
+
+  *Why `${` and not a whole reference.* A value holding `${` is either a
+  reference or a fragment of one, and the caller meant neither as a path.
+  The escape `$$` of `FR-CONF-020` belongs to expansion, and neither key is
+  expanded, so the test is on the two characters as written.
+
+  *Accepted cost.* A path whose name contains `${` cannot be named by either
+  key. The caller names it through a link.
+
+  *Added in the forty-eighth edition,* from finding V-03 of rmp `#263`.
 
 - **FR-CONF-018**: WHEN expanding inside a `dsn`, the system SHALL parse the URL
   first, SHALL expand within the already-delimited field, and SHALL then

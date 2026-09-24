@@ -206,17 +206,20 @@ pub(crate) fn run<W: Write>(
 /// It is steps 2 and 3 of `FR-ERR-006` and then nothing:
 /// [`Environment::new`](crate::render::Environment::new) composes the template
 /// root and reads no file, so a subcommand that resolves a path has built no
-/// engine. The configuration is **not** loaded — `FR-TMPL-003` requires no
-/// database entry to be selected, and a key none of the four reads is a key
-/// none of the four fails on.
+/// engine. The configuration is read and validated, and then dropped:
+/// `FR-TMPL-003` requires no database entry to be selected, yet a `.cfg` that
+/// is not TOML, holds an unknown key or a value of the wrong type ends the
+/// invocation with `78` before any template is resolved, as for every command
+/// outside `FR-PROJ-025`.
 ///
 /// # Errors
 ///
-/// Returns what [`Project::current`] returns: the `78` of a project that is
-/// not found, of a `.cfg` owned by another user, and of a `.cfg` that grants
-/// group or other any access.
+/// Returns what [`Project::current`] and [`Project::configuration`] return:
+/// the `78` of a project that is not found or not trusted, and of a `.cfg`
+/// that fails validation.
 fn environment(globals: &Globals) -> Result<Environment, Error> {
     let project = Project::current(globals.tpl_dir.first().map(PathBuf::as_path))?;
+    project.configuration()?;
 
     Ok(Environment::new(project.root()))
 }

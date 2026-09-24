@@ -53,8 +53,15 @@ here introduces behaviour of its own.
   - Neither `--dsn` nor any discrete flag is given: exit `64`.
   - The entry already exists: exit `64`, with a hint pointing at
     `tpl cfg database update`.
+  - The project is a clone and `.tpl` holds no `.cfg`: the command creates
+    `.tpl/.cfg` at mode `0600`, writes the block, and exits `0`.
+  - `--tpl-dir` names the directory that holds `.tpl`, not `.tpl` itself:
+    exit `78`, nothing written, and the `hint` carries the corrected
+    `--tpl-dir`.
+  - `--ca-file` or `--ca-path` holds `${VAR}`: exit `64`, nothing written.
 - **Postconditions**: `-d shop` resolves
-- **Requirements**: `FR-CFG-015` … `FR-CFG-017`, `FR-CFG-027`
+- **Requirements**: `FR-CFG-015` … `FR-CFG-017`, `FR-CFG-027`, `FR-PROJ-027`,
+  `FR-PROJ-028`, `FR-CONF-047`
 
 ## UC-003 — Keep the password out of the file
 

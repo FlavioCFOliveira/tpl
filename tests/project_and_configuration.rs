@@ -1308,7 +1308,9 @@ fn fr_cfg_048_set_refuses_a_write_the_entry_cannot_hold_and_the_hint_repairs_it(
     let repair = hint
         .rsplit_once(": ")
         .expect("the hint carries a command")
-        .1;
+        .1
+        .strip_suffix(", then run the command again")
+        .expect("V-07: the hint says to run the refused command again");
     assert_eq!(repair, "tpl cfg unset database.shop.dsn");
 
     let arguments: Vec<&str> = repair.split(' ').skip(1).collect();
@@ -2639,5 +2641,410 @@ fn rmp_279_a_block_that_is_absent_is_reported_as_absent() {
     assert!(
         line(&written, "error: ").ends_with("so there is nothing to remove"),
         "{written}"
+    );
+}
+
+// ------------------------------------------------------------ FR-PROJ-027 ---
+
+#[test]
+fn fr_proj_027_a_tpl_dir_naming_the_project_directory_is_78_and_names_the_tpl_folder() {
+    // FR-PROJ-027, V-01: the directory that holds `.tpl` is refused, the
+    // cause says it holds one, and the hint's command, run as written,
+    // succeeds.
+    let sandbox = Sandbox::new();
+    sandbox.project_at("shop", "[database.a]\nhost = \"h\"\ndatabase = \"s\"\n");
+
+    let printed = sandbox.run(&["--tpl-dir", "shop", "cfg", "database", "list"]);
+    let written = assert_refused(&printed, 78, "--tpl-dir on the project directory");
+
+    assert_eq!(
+        line(&written, "error: "),
+        "--tpl-dir names shop, which is not a .tpl folder"
+    );
+    let cause = line(&written, "cause: ");
+    assert!(cause.contains("disabled the upward search"), "{written}");
+    assert!(cause.contains("shop holds a .tpl folder"), "{written}");
+    let hint = line(&written, "hint:  ");
+    assert_eq!(
+        hint,
+        "name the .tpl folder itself: tpl --tpl-dir shop/.tpl cfg database list"
+    );
+
+    let repair = hint.rsplit_once(": ").expect("a command").1;
+    let arguments: Vec<&str> = repair.split(' ').skip(1).collect();
+    let repaired = sandbox.run(&arguments);
+    assert_eq!(code(&repaired), 0, "{}", stderr(&repaired));
+    assert!(stdout(&repaired).contains('a'), "{}", stdout(&repaired));
+}
+
+#[test]
+fn fr_proj_027_the_hint_carries_d_and_no_other_flag() {
+    // FR-PROJ-027 item 3: the command path, with -d carried under FR-ERR-043.
+    let sandbox = Sandbox::new();
+    sandbox.project_at("shop", "[core]\n");
+
+    let printed = sandbox.run(&[
+        "--tpl-dir",
+        "shop",
+        "-d",
+        "a",
+        "schema",
+        "tables",
+        "--format",
+        "json",
+    ]);
+    let written = assert_refused(&printed, 78, "--tpl-dir with -d");
+
+    assert_eq!(
+        line(&written, "hint:  "),
+        "name the .tpl folder itself: tpl --tpl-dir shop/.tpl -d a schema tables"
+    );
+}
+
+#[test]
+fn fr_proj_027_an_invocation_with_an_operand_is_told_to_run_again_and_nothing_is_written() {
+    // FR-PROJ-027: the operand is not reproduced, and the refused directory
+    // receives no `.cfg` (the stray file of V-01).
+    let sandbox = Sandbox::new();
+    sandbox.project_at("shop", "[core]\n");
+    let before = snapshot(sandbox.root());
+
+    for arguments in [
+        &[
+            "--tpl-dir",
+            "shop",
+            "cfg",
+            "database",
+            "add",
+            "zz",
+            "--host",
+            "h",
+        ][..],
+        &["--tpl-dir", "shop", "cfg", "set", "core.database", "zz"][..],
+        &["--tpl-dir", "shop", "template", "show", "example"][..],
+    ] {
+        let printed = sandbox.run(arguments);
+        let written = assert_refused(&printed, 78, &arguments.join(" "));
+        let hint = line(&written, "hint:  ");
+
+        assert_eq!(
+            hint,
+            "name the .tpl folder itself: run the same command again with --tpl-dir shop/.tpl"
+        );
+        assert!(!hint.contains("zz") && !hint.contains("example"), "{hint}");
+    }
+
+    assert_eq!(
+        snapshot(sandbox.root()),
+        before,
+        "a refused --tpl-dir wrote"
+    );
+}
+
+#[test]
+fn fr_proj_027_a_directory_holding_no_tpl_folder_is_78_without_tpl_init() {
+    // FR-PROJ-027 item 4: an empty directory, and a folder inside a project
+    // that is not its `.tpl` folder.
+    let sandbox = Sandbox::new();
+    sandbox.directory("empty");
+    sandbox.project_at("shop", "[core]\n");
+    sandbox.directory("shop/.tpl/templates");
+
+    for named in ["empty", "shop/.tpl/templates"] {
+        for command in [&["cfg", "list"][..], &["template", "list"][..]] {
+            let mut arguments = vec!["--tpl-dir", named];
+            arguments.extend_from_slice(command);
+            let printed = sandbox.run(&arguments);
+            let written = assert_refused(&printed, 78, &arguments.join(" "));
+
+            assert!(
+                line(&written, "cause: ").contains("not the directory that holds it"),
+                "{written}"
+            );
+            let hint = line(&written, "hint:  ");
+            assert!(hint.contains("--tpl-dir <project>/.tpl"), "{hint}");
+            assert!(!hint.contains("tpl init"), "{hint}");
+        }
+    }
+}
+
+#[test]
+fn fr_proj_027_a_corrected_value_outside_the_path_set_is_a_placeholder() {
+    // FR-PROJ-027 item 3, FR-ERR-041 and FR-ERR-043: a space is outside the
+    // set, so the corrected value is not written.
+    let sandbox = Sandbox::new();
+    sandbox.project_at("w 2", "[core]\n");
+
+    let printed = sandbox.run(&["--tpl-dir", "w 2", "cfg", "list"]);
+    let written = assert_refused(&printed, 78, "--tpl-dir with a space");
+
+    assert_eq!(
+        line(&written, "hint:  "),
+        "name the .tpl folder itself: tpl --tpl-dir <tpl-dir>/.tpl cfg list; replace \
+         <tpl-dir> with the value you gave --tpl-dir"
+    );
+}
+
+#[test]
+fn fr_proj_027_a_link_to_a_tpl_folder_is_accepted_under_any_name() {
+    // FR-PROJ-027: the canonical form admits a link whose target is `.tpl`.
+    let sandbox = Sandbox::new();
+    let tpl = sandbox.project_at("shop", "[core]\ndatabase = \"a\"\n");
+    std::os::unix::fs::symlink(&tpl, sandbox.path("alias")).expect("the link is made");
+
+    let printed = sandbox.run(&["--tpl-dir", "alias", "cfg", "get", "core.database"]);
+
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(stdout(&printed), "a\n");
+}
+
+// ------------------------------------------------------------ FR-PROJ-028 ---
+
+#[test]
+fn fr_proj_028_a_tpl_folder_without_cfg_is_an_empty_project_and_the_first_write_creates_it() {
+    // FR-PROJ-028: reading passes with an empty configuration; a `cfg`
+    // command that changes nothing creates nothing; the first writer creates
+    // `.cfg` at 0600 holding only what it set. The ownership refusal of a
+    // folder owned by another user is judged by the unit tests of `trust`,
+    // because a test process cannot give a folder away.
+    let sandbox = Sandbox::new();
+    sandbox.directory(".tpl/templates");
+    let file = sandbox.path(".tpl/.cfg");
+
+    for arguments in [&["cfg", "list"][..], &["template", "list"][..]] {
+        let printed = sandbox.run(arguments);
+        assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    }
+    for arguments in [
+        &["cfg", "unset", "core.database"][..],
+        &["cfg", "database", "update", "x", "--host", "h"][..],
+        &["cfg", "database", "remove", "x"][..],
+    ] {
+        let printed = sandbox.run(arguments);
+        assert_ne!(code(&printed), 0, "{}", arguments.join(" "));
+        assert!(!file.exists(), "{} created .cfg", arguments.join(" "));
+    }
+
+    let printed = sandbox.run(&[
+        "cfg", "database", "add", "a", "--host", "h", "--schema", "s",
+    ]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(mode_of(&file), MODE);
+    assert_eq!(
+        String::from_utf8(sandbox.configuration()).expect("UTF-8"),
+        "[database.a]\nhost = \"h\"\ndatabase = \"s\"\n"
+    );
+    let leftovers: Vec<_> = std::fs::read_dir(sandbox.path(".tpl"))
+        .expect("the folder is there")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+        .collect();
+    assert!(leftovers.is_empty(), "the temporary file was left behind");
+}
+
+// ------------------------------------------------------------ FR-TMPL-003 ---
+
+#[test]
+fn fr_tmpl_003_the_template_commands_validate_cfg_before_resolving_a_template() {
+    // FR-TMPL-003, V-02: invalid TOML, an unknown key and a wrong type are
+    // each 78 on all four subcommands.
+    let sandbox = Sandbox::new();
+    let tpl = sandbox.project("[core]\n");
+    sandbox.write(".tpl/templates/example", "{{ 1 }}\n");
+
+    for broken in [
+        "[core\n",
+        "[core]\nfoo = 1\n",
+        "[core]\nconnect_timeout = \"10\"\n",
+    ] {
+        sandbox.write(".tpl/.cfg", broken);
+        chmod(&tpl.join(".cfg"), MODE);
+
+        for arguments in [
+            &["template", "list"][..],
+            &["template", "show", "example"][..],
+            &["template", "check", "example"][..],
+            &["template", "path", "example"][..],
+        ] {
+            let printed = sandbox.run(arguments);
+            assert_refused(
+                &printed,
+                78,
+                &format!("{} over {broken:?}", arguments.join(" ")),
+            );
+        }
+    }
+}
+
+// ------------------------------------------------------------ FR-CONF-047 ---
+
+#[test]
+fn fr_conf_047_a_reference_given_for_ca_file_or_ca_path_is_64_and_writes_nothing() {
+    // FR-CONF-047 item 1, V-03.
+    let sandbox = Sandbox::new();
+    let before = "[database.shop]\nhost = \"h\"\ndatabase = \"s\"\n";
+    sandbox.project(before);
+
+    let printed = sandbox.run(&["cfg", "set", "database.shop.ca_file", "${SHOP_CA}"]);
+    let written = assert_refused(&printed, 64, "cfg set ca_file ${SHOP_CA}");
+    let cause = line(&written, "cause: ");
+    assert!(
+        cause.contains("ca_file is read as a literal path"),
+        "{written}"
+    );
+    assert!(cause.contains("not expanded"), "{written}");
+    assert!(cause.contains("${SHOP_CA}"), "{written}");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "give the path itself: tpl cfg set database.shop.ca_file <path>; replace <path> with \
+         the path of the trust material itself"
+    );
+
+    for arguments in [
+        &["cfg", "set", "database.shop.ca_path", "/etc/${X}/certs"][..],
+        &[
+            "cfg",
+            "database",
+            "add",
+            "b",
+            "--host",
+            "h",
+            "--ca-file",
+            "${CA}",
+        ][..],
+        &["cfg", "database", "update", "shop", "--ca-path", "${CA}"][..],
+    ] {
+        let printed = sandbox.run(arguments);
+        let written = assert_refused(&printed, 64, &arguments.join(" "));
+        assert!(
+            line(&written, "cause: ").contains("is read as a literal path"),
+            "{written}"
+        );
+        assert!(line(&written, "hint:  ").contains("<path>"), "{written}");
+    }
+
+    assert_eq!(sandbox.configuration(), before.as_bytes());
+}
+
+#[test]
+fn fr_conf_047_a_reference_written_into_ca_file_in_the_file_is_78() {
+    // FR-CONF-047 item 2: at step 3, whatever command reads the file.
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.shop]\nhost = \"h\"\ndatabase = \"s\"\nca_file = \"${CA}\"\n");
+
+    for arguments in [&["cfg", "list"][..], &["template", "list"][..]] {
+        let printed = sandbox.run(arguments);
+        let written = assert_refused(&printed, 78, &arguments.join(" "));
+        let cause = line(&written, "cause: ");
+        assert!(cause.contains("database.shop.ca_file"), "{written}");
+        assert!(cause.contains("not expanded"), "{written}");
+        let hint = line(&written, "hint:  ");
+        assert!(hint.contains("at line 4"), "{hint}");
+        assert!(hint.contains("ca_file = \"<path>\""), "{hint}");
+    }
+}
+
+#[test]
+fn fr_cfg_033_the_help_of_the_trust_flags_states_the_refusal() {
+    // FR-CFG-033 as amended in the forty-eighth edition.
+    let sandbox = Sandbox::new();
+
+    let printed = sandbox.run(&["help", "cfg", "database", "add"]);
+    assert_eq!(code(&printed), 0);
+    let help = stdout(&printed)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(
+        help.matches("a value containing ${ is refused").count(),
+        2,
+        "{help}"
+    );
+}
+
+// ----------------------------------------------- V-05 .. V-08, rmp #280 ---
+
+#[test]
+fn v_05_the_no_cache_hint_of_cache_load_reads_from_the_server() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let printed = sandbox.run(&["cache", "load", "--no-cache"]);
+    let written = assert_refused(&printed, 64, "cache load --no-cache");
+
+    assert!(
+        line(&written, "hint:  ").contains("tpl schema dump --direct --no-cache"),
+        "{written}"
+    );
+}
+
+#[test]
+fn v_06_a_whole_dsn_reference_says_why_and_shows_a_reference_for_one_part() {
+    let sandbox = Sandbox::new();
+    let before = "[core]\n";
+    sandbox.project(before);
+
+    let printed = sandbox.run(&["cfg", "set", "database.z.dsn", "${D}"]);
+    let written = assert_refused(&printed, 64, "cfg set dsn ${D}");
+    assert!(
+        line(&written, "cause: ").ends_with("never for the whole of it"),
+        "{written}"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "write the URL itself, with a ${VAR} for one part at most, e.g.: tpl cfg set \
+         database.z.dsn 'mysql://db.example.com/${SHOP_DB}'"
+    );
+
+    let printed = sandbox.run(&["cfg", "database", "add", "z", "--dsn", "${D}"]);
+    let written = assert_refused(&printed, 64, "database add --dsn ${D}");
+    assert!(
+        line(&written, "cause: ").ends_with("never for the whole of it"),
+        "{written}"
+    );
+    assert_eq!(sandbox.configuration(), before.as_bytes());
+}
+
+#[test]
+fn v_08_d_given_to_a_cfg_database_command_that_needs_name_is_told_to_give_name() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.shop]\nhost = \"h\"\ndatabase = \"s\"\n");
+
+    let printed = sandbox.run(&["-d", "shop", "cfg", "database", "remove"]);
+    let written = assert_refused(&printed, 64, "-d shop cfg database remove");
+    let hint = line(&written, "hint:  ");
+    assert_eq!(
+        hint,
+        "-d is not used here; give the entry as NAME: tpl cfg database remove shop"
+    );
+
+    let arguments: Vec<&str> = hint
+        .rsplit_once(": ")
+        .expect("a command")
+        .1
+        .split(' ')
+        .skip(1)
+        .collect();
+    let repaired = sandbox.run(&arguments);
+    assert_eq!(code(&repaired), 0, "{}", stderr(&repaired));
+}
+
+#[test]
+fn v_08_the_outcome_rows_of_cfg_get_and_cfg_database_add_are_complete() {
+    let sandbox = Sandbox::new();
+    let flat = |arguments: &[&str]| {
+        stdout(&sandbox.run(arguments))
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+
+    assert!(
+        flat(&["help", "cfg", "get"])
+            .contains("A known key that the file does not set is reported with its default")
+    );
+    assert!(
+        flat(&["help", "cfg", "database", "add"])
+            .contains("a --dsn, --port, --tls or --password-command value is malformed")
     );
 }

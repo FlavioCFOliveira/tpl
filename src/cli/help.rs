@@ -600,14 +600,16 @@ const PASSWORD_COMMAND: Documented = Documented {
 const CA_FILE: Documented = Documented {
     name: "--ca-file",
     purpose: "Names a file of CA certificates that verify-ca and verify-identity trust in addition \
-              to the certificates the system already trusts.",
+              to the certificates the system already trusts. The path is read as written: \
+              ${VAR} is not expanded in it, and a value containing ${ is refused.",
     excludes: &[],
 };
 /// `--ca-path`, as every node that declares it states it.
 const CA_PATH: Documented = Documented {
     name: "--ca-path",
     purpose: "Names a directory of CA certificate files that verify-ca and verify-identity trust \
-              in addition to the certificates the system already trusts.",
+              in addition to the certificates the system already trusts. The path is read as \
+              written: ${VAR} is not expanded in it, and a value containing ${ is refused.",
     excludes: &[],
 };
 
@@ -1630,9 +1632,9 @@ const CFG_GET: &[Outcome] = &[
     ),
     outcome(
         Code::NoInput,
-        "KEY is not set in .tpl/.cfg, or names a database entry the file does not have. A KEY \
-         that is a key is reported with its default; a KEY that is not gets close key names \
-         when there are any.",
+        "KEY is not set in .tpl/.cfg, or names a database entry the file does not have. A known \
+         key that the file does not set is reported with its default; an unknown key gets close \
+         key names when there are any.",
     ),
     outcome(
         Code::IoError,
@@ -1708,9 +1710,10 @@ const CFG_DATABASE_ADD: &[Outcome] = &[
     outcome(
         Code::Usage,
         "An unknown flag, a missing NAME, or a flag given twice; no connection flag was given; \
-         --dsn was given with --host, --port, --user or --schema; a --dsn, --port or --tls value \
-         is malformed; the password given twice, as a password inside --dsn and as \
-         --password-command; or NAME is already taken. On any command, also -v with -q, or a \
+         --dsn was given with --host, --port, --user or --schema; a --dsn, --port, --tls or \
+         --password-command value is malformed, or a --ca-file or --ca-path value contains ${; the \
+         password given twice, as a password inside --dsn and as --password-command; or NAME is \
+         already taken. On any command, also -v with -q, or a \
          global flag given a value it does not take, such as --timeout 0.",
     ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
@@ -2782,11 +2785,13 @@ const ENTRIES: [Entry; 35] = [
                     ),
                     row(
                         "database.<name>.ca_file",
-                        "A file of extra CA certificates to trust.",
+                        "A file of extra CA certificates to trust. Read as written; a value \
+                         containing ${ is refused.",
                     ),
                     row(
                         "database.<name>.ca_path",
-                        "A directory of extra CA certificate files to trust.",
+                        "A directory of extra CA certificate files to trust. Read as written; a \
+                         value containing ${ is refused.",
                     ),
                 ],
             },

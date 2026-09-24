@@ -383,13 +383,21 @@ pub enum TlsFault {
 }
 
 /// Why the path `--tpl-dir` named cannot be used as the project
-/// (`FR-PROJ-008`).
+/// (`FR-PROJ-008`, `FR-PROJ-027`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TplDirFault {
     /// Nothing exists at the path.
     Missing,
     /// Something exists at the path, and it is not a directory.
     NotDirectory,
+    /// The path is a directory whose last segment is `.tpl` in neither its
+    /// written nor its canonical form, and it holds a directory named `.tpl`:
+    /// the caller named the project directory instead of its `.tpl` folder
+    /// (`FR-PROJ-027`).
+    HoldsTplFolder,
+    /// The path is a directory whose last segment is `.tpl` in neither form,
+    /// and it holds no directory named `.tpl` (`FR-PROJ-027`).
+    NotTplFolder,
 }
 
 /// Every condition `tpl` reports as a failure.
@@ -1343,6 +1351,41 @@ pub enum Error {
         fault: TplDirFault,
     },
 
+    /// The project's `.tpl` folder holds no `.cfg`, and the folder is owned by
+    /// another user (`FR-PROJ-028`, `FR-SEC-014`).
+    ///
+    /// With no file, [`ConfigurationNotOwned`](Error::ConfigurationNotOwned)
+    /// has nothing to check, and a planted folder would otherwise supply
+    /// templates and receive the `.cfg` the caller's next `tpl cfg` writes.
+    #[error("the .tpl folder at {} cannot be used as a project", .path.display())]
+    ProjectFolderNotOwned {
+        /// The `.tpl` folder, canonical per `FR-PROJ-009`.
+        path: PathBuf,
+        /// The owner found.
+        owner: u32,
+        /// The owner expected — the invoking user.
+        expected: u32,
+    },
+
+    /// `.tpl/.cfg` declares `ca_file` or `ca_path` with a value that contains
+    /// `${` (`FR-CONF-047`).
+    ///
+    /// Neither key is expanded, so the value would be read as a file named
+    /// after the reference. The same value supplied to a command is
+    /// [`MalformedValue`](Error::MalformedValue) and `64`.
+    #[error("{key} holds a ${{VAR}} reference, which tpl does not expand in this key")]
+    ConfigurationPathReference {
+        /// The fully qualified key, `database.<name>.ca_file` or
+        /// `database.<name>.ca_path`.
+        key: String,
+        /// The file that declares it.
+        file: PathBuf,
+        /// Where the value begins.
+        position: Position,
+        /// The value as written.
+        value: String,
+    },
+
     /// `.tpl/.cfg` is not owned by the current user (`FR-PROJ-010`).
     #[error("{} is not owned by the current user", .path.display())]
     ConfigurationNotOwned {
@@ -1779,6 +1822,10 @@ fn tpl_dir_unusable(path: &std::path::Path, fault: TplDirFault) -> String {
             "the path named by --tpl-dir is not a folder: {}",
             path.display()
         ),
+        TplDirFault::HoldsTplFolder | TplDirFault::NotTplFolder => format!(
+            "--tpl-dir names {}, which is not a .tpl folder",
+            path.display()
+        ),
     }
 }
 
@@ -2077,6 +2124,8 @@ impl Error {
             // 78 EX_CONFIG
             Self::ProjectNotFound { .. }
             | Self::ProjectDirUnusable { .. }
+            | Self::ProjectFolderNotOwned { .. }
+            | Self::ConfigurationPathReference { .. }
             | Self::ConfigurationNotOwned { .. }
             | Self::ConfigurationUnsafeMode { .. }
             | Self::ConfigurationMalformed { .. }
@@ -2117,7 +2166,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 77;
+    const VARIANT_COUNT: usize = 79;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2560,6 +2609,23 @@ mod tests {
                 78,
             ),
             (
+                Error::ProjectFolderNotOwned {
+                    path: PathBuf::from("/tmp/.tpl"),
+                    owner: 0,
+                    expected: 501,
+                },
+                78,
+            ),
+            (
+                Error::ConfigurationPathReference {
+                    key: "database.shop.ca_file".to_owned(),
+                    file: path(),
+                    position: position(),
+                    value: "${SHOP_CA}".to_owned(),
+                },
+                78,
+            ),
+            (
                 Error::ConfigurationUnsafeMode {
                     path: path(),
                     mode: 0o644,
@@ -2781,6 +2847,8 @@ mod tests {
             Error::PropertyNotReadable { .. } => "PropertyNotReadable",
             Error::ProjectNotFound { .. } => "ProjectNotFound",
             Error::ConfigurationNotOwned { .. } => "ConfigurationNotOwned",
+            Error::ProjectFolderNotOwned { .. } => "ProjectFolderNotOwned",
+            Error::ConfigurationPathReference { .. } => "ConfigurationPathReference",
             Error::ConfigurationUnsafeMode { .. } => "ConfigurationUnsafeMode",
             Error::ConfigurationMalformed { .. } => "ConfigurationMalformed",
             Error::ConfigurationKeyOutsideSpace { .. } => "ConfigurationKeyOutsideSpace",

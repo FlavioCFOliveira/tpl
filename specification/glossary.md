@@ -374,6 +374,11 @@ explicitly not a contract. See `FR-OUT-004`.
 
 Any directory containing a `.tpl` folder. The `.tpl` folder is the project root
 and the only source of configuration and templates. Fixed by `FR-PROJ-001`.
+`--tpl-dir` names the `.tpl` folder, never the directory that holds it, per
+`FR-PROJ-027`. A `.tpl` folder without `.cfg` is a project with an empty
+configuration, per `FR-PROJ-028`.
+
+*Amended in the forty-eighth edition.* The last two sentences are new.
 
 ## qualified routine name
 

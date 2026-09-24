@@ -51,7 +51,7 @@ Out of scope: the wording of any individual message.
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
   | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space |
   | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue | Fix the credentials, or request read access |
-  | `78` | `EX_CONFIG` | No `.tpl` found; unsafe `.cfg` ownership or mode; malformed `.cfg`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
+  | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
 
   The codes are a closed set and the *Condition* column is not. *And no
   others* above fixes the list of codes; each *Condition* cell characterises
@@ -126,6 +126,14 @@ Out of scope: the wording of any individual message.
   The cell named the deadline and would otherwise have characterised the class
   as bounded in time alone. The code set is unchanged and the column still
   characterises rather than enumerates.
+
+  *Amended in the forty-eighth edition: the `78` cell names three conditions
+  the class already held.* `FR-PROJ-027` refuses a `--tpl-dir` that names a
+  directory which is not a `.tpl` folder, `FR-PROJ-028` refuses a `.tpl`
+  folder without `.cfg` that another user owns, and `FR-CONF-047` refuses a
+  `${VAR}` written into `ca_file` or `ca_path`. Each is the project or its
+  configuration failing to be usable, which is what `78` means. The code set
+  is unchanged and the column still characterises rather than enumerates.
 
   *Amended in the fifth edition.* The `78` row gains five conditions, all of
   them from decisions written into
@@ -618,6 +626,12 @@ Out of scope: the wording of any individual message.
   and one does: `FR-TMPL-032` reports every template `tpl template check`
   finds with a syntax error, one message each, all with `65`. The order of the
   steps, and which code wins between two conditions, are unchanged.
+
+  *Note added in the forty-eighth edition.* Steps 2 and 3 run for the four
+  `template` subcommands, which require a project and are not named by
+  `FR-PROJ-025`; `FR-TMPL-003` states it. `FR-PROJ-027` and `FR-PROJ-028` are
+  conditions of step 2, and a project without `.cfg` passes step 3 with an
+  empty configuration, per `FR-PROJ-028`.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
@@ -1242,8 +1256,8 @@ Out of scope: the wording of any individual message.
   over the whole value, which SHALL be at most 1024 characters long and SHALL
   NOT begin with `-`. The paths this requirement governs are the path of the
   project's `.tpl` folder or of a file inside it, as resolved under
-  `FR-PROJ-009`; the path a caller named with `--tpl-dir`, or its parent
-  directory; and the path a caller gave to `--context`, other than `-`, which
+  `FR-PROJ-009`; the path a caller named with `--tpl-dir`, its parent
+  directory, or that path followed by `/.tpl`, per `FR-PROJ-027`; and the path a caller gave to `--context`, other than `-`, which
   names standard input and is not a path.
 
   IF a template name that is a nearest-match candidate falls outside the set,
@@ -1296,6 +1310,11 @@ Out of scope: the wording of any individual message.
   `--tpl-dir`. A path written into a `hint` and named by no set falls to the
   closing clause of `FR-ERR-022`, whose set admits no `/`, so the list now
   names what the implementation already does. The set is unchanged.
+
+  *Amended in the forty-eighth edition: the corrected `--tpl-dir` value is
+  named,* for rmp `#265`. `FR-PROJ-027` writes the path given to `--tpl-dir`
+  followed by `/.tpl` into its `hint`. The set is unchanged, and the suffix
+  holds only characters of it.
 
 - **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, and every C0 control
   character in every value it interpolates into a message — catalogue names,

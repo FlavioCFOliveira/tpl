@@ -166,11 +166,23 @@ module, `BR-SEC-003` excepted.
   *Threat closed.* A `.cfg` writable by anyone else can no longer choose the
   `password_command` that runs with the caller's privileges.
 
+  WHERE the `.tpl` folder holds no `.cfg`, the folder itself SHALL be owned by
+  the current user. See `FR-PROJ-028`.
+
+  *Amended in the forty-eighth edition.* The paragraph above is new. A `.tpl`
+  planted without `.cfg` passed both checks, so the claim of `FR-SEC-013` that
+  a planted `.tpl` is refused held only for one that carried a `.cfg`. It now
+  holds for both.
+
 - **FR-SEC-015**: Paths SHALL be canonicalised before being checked, so that a
   symlinked `.tpl` is verified at its real target. See `FR-PROJ-009`.
 
 - **FR-SEC-016**: `--tpl-dir` SHALL be subject to the same checks, without
   exemption. See `FR-PROJ-008`.
+
+  *Note added in the forty-eighth edition.* `--tpl-dir` SHALL name a directory
+  whose last segment is `.tpl`, per `FR-PROJ-027`, so that the flag names no
+  folder the walk would not find.
 
 ## Template containment
 

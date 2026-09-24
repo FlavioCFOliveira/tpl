@@ -50,6 +50,10 @@ maintain it.
   populates it, and `templates/` holds the project's own templates alongside
   the two `tpl init` writes, per `FR-TMPL-004`.
 
+  *Note added in the forty-eighth edition.* `.cfg` may also be absent, which
+  is the state of every clone under `FR-PROJ-003`. `FR-PROJ-028` states what
+  such a project is.
+
 - **FR-PROJ-003**: `.tpl/templates/` SHALL be versioned with the repository, and
   `.tpl/.cfg` and `.tpl/.cache/` SHALL NOT be.
 
@@ -253,6 +257,92 @@ maintain it.
   failed walk, and this clause governs the case with no walk. The code is
   unchanged: `78`, as for a project that is not found.
 
+  *Note added in the forty-eighth edition.* A path that exists and is a
+  directory is not thereby a `.tpl` folder. `FR-PROJ-027` states which
+  directories are, and what a `--tpl-dir` naming any other one produces.
+
+- **FR-PROJ-027**: A directory SHALL be usable as the `.tpl` folder of a
+  project only WHERE the last segment of its path is `.tpl`, either as the
+  path is written or after the canonicalisation of `FR-PROJ-009`. The walk of
+  `FR-PROJ-004` finds only such directories, so this requirement is observable
+  only through `--tpl-dir`.
+
+  IF a command that requires a project is given a `--tpl-dir` path that names
+  an existing directory whose last segment is `.tpl` in neither form, THEN the
+  system SHALL exit `78` (`EX_CONFIG`), and SHALL read no configuration and no
+  template from that directory and write nothing into it. The message SHALL
+  be as follows:
+
+  1. **`error`** SHALL name the path as written, and SHALL state that it is
+     not a `.tpl` folder.
+  2. **`cause`** SHALL state that `--tpl-dir` disabled the upward search, per
+     the `78` row of `FR-ERR-034`, and SHALL state one of two facts. WHERE the
+     directory holds a directory named `.tpl`, it SHALL state that it does.
+     Otherwise it SHALL state that `--tpl-dir` names the `.tpl` folder of a
+     project, not the directory that holds it.
+  3. **`hint`**, WHERE the directory holds a directory named `.tpl`, SHALL
+     name the corrected value: the path as written, followed by `/.tpl`. WHERE
+     the invocation carried no positional operand, the `hint` SHALL carry the
+     command `tpl --tpl-dir <corrected value>` followed by the command path of
+     the invocation, the nodes from `tpl` to the leaf, with `-d` carried under
+     `FR-ERR-043` and no other flag. WHERE it carried an operand, the `hint`
+     SHALL state in words that the same invocation is to be run again with the
+     corrected value, and SHALL NOT reproduce the operand. The corrected value
+     is built under `FR-ERR-041`; IF that set refuses it, THEN the placeholder
+     rule of `FR-ERR-043` applies.
+  4. **`hint`**, otherwise, SHALL name `--tpl-dir` as the value to correct and
+     SHALL show the form `--tpl-dir <project>/.tpl`. It SHALL NOT suggest
+     `tpl init`, per `FR-PROJ-008`.
+
+  ```
+  tpl --tpl-dir ../shop cfg database list
+  error: --tpl-dir names ../shop, which is not a .tpl folder
+  cause: --tpl-dir disabled the upward search; ../shop holds a .tpl folder, and --tpl-dir must name that folder
+  hint:  name the .tpl folder itself: tpl --tpl-dir ../shop/.tpl cfg database list
+  exit:  78 (EX_CONFIG)
+
+  tpl --tpl-dir /tmp/empty template list
+  error: --tpl-dir names /tmp/empty, which is not a .tpl folder
+  cause: --tpl-dir disabled the upward search; --tpl-dir names the .tpl folder of a project, not the directory that holds it, and /tmp/empty holds none
+  hint:  correct --tpl-dir to name a project's .tpl folder, as in --tpl-dir <project>/.tpl
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The examples fix the facts named, the command carried
+  and the code.
+
+  The condition is evaluated at step 2 of `FR-ERR-006`, after the checks of
+  `FR-PROJ-008` and the canonicalisation of `FR-PROJ-009`, and before the
+  ownership and mode checks of `FR-PROJ-010`, `FR-PROJ-011` and `FR-PROJ-028`.
+
+  *Rationale.* Naming the project directory instead of its `.tpl` folder is
+  the most likely mistake with this flag. Before this requirement the system
+  accepted any existing directory: `tpl cfg database list` and
+  `tpl template list` reported an empty project and exited `0`, and
+  `tpl cfg database add` wrote a `.cfg` beside the real `.tpl`, where no later
+  command reads it. This is finding V-01 of the fifth re-audit, recorded for
+  rmp `#265`.
+
+  *Why the name, and not the contents.* A `.tpl` folder need not hold `.cfg`,
+  per `FR-PROJ-028`, and need not hold `templates/`, so no child identifies
+  it. Its name is what the walk looks for, and a test on the name makes
+  `--tpl-dir` accept exactly what discovery accepts. The canonical form is
+  admitted so that a symbolic link to a `.tpl` folder is accepted; the written
+  form is admitted so that a `.tpl` that is itself a link is accepted, as the
+  walk accepts it.
+
+  *Rejected: finding a `.tpl` folder inside the named directory and using
+  it.* It gives the flag two meanings, and a caller that named the wrong
+  directory by mistake would act on a project it did not name. Also rejected:
+  testing for `.cfg`, which refuses every clone.
+
+  *Accepted cost.* A `.tpl` folder reached through a link whose name and
+  target name are both something other than `.tpl` is refused. The caller
+  names the target instead.
+
+  *Added in the forty-eighth edition,* for rmp `#265`.
+
 ## Trust checks
 
 - **FR-PROJ-009**: The system SHALL canonicalise the resolved `.tpl` path before
@@ -284,6 +374,62 @@ maintain it.
 
   *Accepted cost.* A `.cfg` shared across a team through a unix group stops
   working.
+
+- **FR-PROJ-028**: WHERE the project's `.tpl` folder holds no `.cfg`, the
+  system SHALL use the project with an empty configuration, and SHALL NOT
+  refuse it for the absence:
+
+  1. **Reading.** Step 3 of `FR-ERR-006` SHALL pass. Every key of
+     `FR-CONF-002` takes its default, and no database entry is declared, so a
+     command that requires an entry fails at step 5 as it does for a `.cfg`
+     that declares none.
+  2. **Trust.** `FR-PROJ-010` and `FR-PROJ-011` have no file to check. The
+     `.tpl` folder itself SHALL instead be owned by the current user, checked
+     at its canonical path. IF it is not, THEN the system SHALL exit `78`
+     (`EX_CONFIG`). The `cause` SHALL name the folder, state that it holds no
+     `.cfg`, and state that it is owned by another user. The `hint` SHALL name
+     `--tpl-dir` as the way to name the caller's own project.
+  3. **Writing.** A `cfg` command that writes `.tpl/.cfg`, per `FR-PROJ-023`,
+     SHALL create the file at mode `0600` by the procedure of `FR-CFG-041`,
+     and SHALL write only what the command sets. A `cfg` command that names a
+     key or an entry the absent file cannot hold — `tpl cfg unset`,
+     `tpl cfg database update` or `tpl cfg database remove` — SHALL end as it
+     ends for a `.cfg` that does not hold it, and SHALL create nothing.
+
+  ```
+  error: the .tpl folder at /tmp/.tpl cannot be used as a project
+  cause: /tmp/.tpl holds no .cfg, and the folder is owned by another user
+  hint:  name your own project's .tpl folder with: tpl --tpl-dir <project>/.tpl <command>
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code.
+
+  *Rationale.* `FR-PROJ-003` keeps `.cfg` out of version control, so every
+  clone of a repository holds a `.tpl` folder with `templates/` and no `.cfg`.
+  `tpl init` refuses such a folder with `73`, per `FR-PROJ-014`. Refusing the
+  project for the absence would leave the caller no `tpl` command that makes
+  it usable. With an empty configuration, the templates are listed, shown and
+  checked at once, `tpl render --context` renders, and the first
+  `tpl cfg database add` creates the file. This pins the behaviour observed by
+  finding V-01 of the fifth re-audit, recorded for rmp `#265`.
+
+  *Why the folder's owner.* `FR-SEC-013` states that a `.tpl` planted in a
+  world-writable ancestor such as `/tmp` is refused by the checks on `.cfg`. A
+  planted folder without `.cfg` passes both of them, and would then supply
+  templates to the caller and receive the `.cfg` that the caller's next
+  `tpl cfg` command writes, credentials included. The owner check restores
+  the refusal for exactly the case the two checks cannot reach. A clone is
+  owned by the user who made it, so the check refuses none.
+
+  *Rejected: exiting `78` for an absent `.cfg`.* It refuses every clone, and
+  its `hint` could name only a shell command. Also rejected: letting
+  `tpl init` complete a `.tpl` folder without `.cfg`, which `FR-PROJ-014`
+  forbids. Also rejected: checking the owner of the folder for every project,
+  which adds a refusal where `FR-PROJ-010` already establishes trust.
+
+  *Added in the forty-eighth edition,* for rmp `#265`.
 
 ## `tpl init`
 
@@ -440,9 +586,12 @@ tpl init [<path>]
   | Writer | What it writes |
   |---|---|
   | `tpl init` | The five artefacts of `FR-PROJ-017`, and the destination directory and its missing parents, per `FR-PROJ-013` |
-  | `tpl cfg …` | `.tpl/.cfg` |
+  | `tpl cfg …` | `.tpl/.cfg`, created at mode `0600` where it is absent, per `FR-PROJ-028` |
   | `tpl cache load` | `.tpl/.cache/` |
   | any cached read command, on a miss | `.tpl/.cache/` |
+
+  *Amended in the forty-eighth edition.* The `tpl cfg …` row states that the
+  file is created where it is absent, per `FR-PROJ-028`.
 
 - **FR-PROJ-024**: The system SHALL NOT create, modify, or delete any file
   outside `.tpl`, with exactly one exception: the destination directory of

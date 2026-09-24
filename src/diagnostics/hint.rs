@@ -38,7 +38,7 @@ use super::restate::{self, Edit, Replacement};
 use super::suggest;
 use crate::error::{
     CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error, LookupKind,
-    NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, Unresolved,
+    NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, TplDirFault, Unresolved,
 };
 use crate::project::config::keys::ValueType;
 
@@ -80,7 +80,9 @@ fn carried(error: &Error) -> restate::Carry {
     restate::Carry {
         tpl_dir: !matches!(
             error,
-            Error::ProjectNotFound { .. } | Error::ProjectDirUnusable { .. }
+            Error::ProjectNotFound { .. }
+                | Error::ProjectDirUnusable { .. }
+                | Error::ProjectFolderNotOwned { .. }
         ),
         database: !matches!(error, Error::DatabaseEntryNotFound { .. }),
     }
@@ -212,8 +214,23 @@ fn bare(error: &Error) -> Cow<'static, str> {
         Error::InvocationRejected { command, .. } => {
             Cow::Owned(format!("show what it accepts with: {}", help_of(command)))
         }
-        Error::MissingArgument { command, .. } => {
-            Cow::Owned(format!("show the usage with: {}", help_of(command)))
+        // V-08: `-d` selects an entry for a command that reads a catalogue,
+        // and a `cfg database` command takes the entry as NAME instead.
+        Error::MissingArgument { command, argument } => {
+            let named = (argument == "<NAME>" && command.starts_with("cfg database "))
+                .then(restate::database)
+                .flatten();
+            let restated = named.as_deref().and_then(|entry| {
+                restate::restated(&[Edit::Remove(&["database"]), Edit::Append(&[entry])])
+            });
+            match restated {
+                Some(restated) => Cow::Owned(format!(
+                    "-d is not used here; give the entry as NAME: {}{}",
+                    restated.command,
+                    restated.replacing()
+                )),
+                None => Cow::Owned(format!("show the usage with: {}", help_of(command))),
+            }
         }
         // Neither flag enters a runnable command, so FR-ERR-022 is not engaged
         // and both are named as prose, escaped on the way out. The pair is
@@ -383,8 +400,8 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // FR-CACHE-018 accepts `--direct` on this command and ignores it, so
         // the line names the invocation that does what the caller asked for.
         Error::LoadWithoutStoring => Cow::Borrowed(
-            "remove --no-cache from the command; to read without storing, use tpl schema dump \
-             --no-cache instead",
+            "remove --no-cache from the command; to read from the server without storing, use \
+             tpl schema dump --direct --no-cache instead",
         ),
         // FR-CFG-031: the `cause` carries the form expected, and the hint the
         // worked value. The example carries no user, so that no `@` reaches a
@@ -396,6 +413,30 @@ fn bare(error: &Error) -> Cow<'static, str> {
             value,
             ..
         } => match (parameter.as_str(), command.as_str()) {
+            // FR-CONF-047: the caller's own command with the path in place of
+            // the reference.
+            (parameter, _) if super::cause::is_path_reference(parameter, value) => {
+                path_itself(parameter)
+            }
+            // V-06: an example whose reference stands for one part only.
+            (parameter, _) if super::cause::is_whole_dsn_reference(parameter, value) => {
+                const URL: &str = "'mysql://db.example.com/${SHOP_DB}'";
+                if parameter == "--dsn" {
+                    Cow::Owned(format!(
+                        "write the URL itself, with a ${{VAR}} for one part at most, e.g.: \
+                         --dsn {URL}"
+                    ))
+                } else if admits_key(parameter) {
+                    Cow::Owned(format!(
+                        "write the URL itself, with a ${{VAR}} for one part at most, e.g.: tpl \
+                         cfg set {parameter} {URL}"
+                    ))
+                } else {
+                    Cow::Owned(format!(
+                        "write the URL itself, with a ${{VAR}} for one part at most, e.g.: {URL}"
+                    ))
+                }
+            }
             (parameter, _) if super::cause::is_port_reference(parameter, value) => Cow::Borrowed(
                 "give the port as a number, e.g. 3306; to take it from the environment, \
                      edit .tpl/.cfg and write port = \"${VAR}\" in the entry's block",
@@ -480,7 +521,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
             repair,
         } => match repair {
             EntryRepair::Unset => Cow::Owned(format!(
-                "remove the key it conflicts with: {}",
+                "remove the key it conflicts with: {}, then run the command again",
                 unset_key(conflicting)
             )),
             EntryRepair::Rewrite { unset, command } => Cow::Owned(format!(
@@ -772,6 +813,27 @@ fn bare(error: &Error) -> Cow<'static, str> {
                 )),
             }
         }
+        // V-04: a TCP connect that does not finish is most often a wrong
+        // address or a firewall, so the address comes before the deadline.
+        Error::NetworkDeadlineExceeded {
+            entry,
+            phase: NetworkPhase::TcpConnect,
+            bound,
+            ..
+        } => Cow::Owned(format!(
+            "check that the host and port named above are the server's address and that it is \
+             reachable from here, or change them with: tpl cfg database update {} --host <host> \
+             --port <port>; to wait longer, {}",
+            entry_or_placeholder(entry),
+            match bound {
+                DeadlineBound::Phase =>
+                    "raise the deadline with: tpl cfg set core.connect_timeout \
+                                         <seconds>",
+                DeadlineBound::Overall =>
+                    "run the same command again with a larger --timeout \
+                                           <seconds>",
+            }
+        )),
         Error::NetworkDeadlineExceeded { phase, bound, .. } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
                 "raise the deadline with: tpl cfg set {} <seconds>",
@@ -852,6 +914,18 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // FR-PROJ-008 fixes this hint: correct the flag, and create a project
         // only at the path named — its parent, where the last segment is
         // `.tpl`, built under FR-ERR-041.
+        // FR-PROJ-027: the corrected value, and the command path or, where the
+        // invocation carried an operand, the words to run it again.
+        Error::ProjectDirUnusable {
+            path,
+            fault: TplDirFault::HoldsTplFolder,
+        } => holds_tpl_folder(path),
+        Error::ProjectDirUnusable {
+            fault: TplDirFault::NotTplFolder,
+            ..
+        } => Cow::Borrowed(
+            "correct --tpl-dir to name a project's .tpl folder, as in --tpl-dir <project>/.tpl",
+        ),
         Error::ProjectDirUnusable { path, .. } => {
             let named = path.file_name() == Some(std::ffi::OsStr::new(".tpl"));
 
@@ -870,6 +944,33 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // under FR-ERR-041, so that the command succeeds from any directory.
         Error::ConfigurationNotOwned { path, .. } => {
             Cow::Owned(format!("chown \"$(id -un)\" {}", configuration_file(path)))
+        }
+        // FR-PROJ-028: `--tpl-dir` is the way to name the caller's own project.
+        Error::ProjectFolderNotOwned { .. } => Cow::Borrowed(
+            "name your own project's .tpl folder with: tpl --tpl-dir <project>/.tpl <command>",
+        ),
+        // FR-CONF-047: the key set to the path itself, with a placeholder. No
+        // `tpl cfg` command runs until the file is valid, so the edit is the
+        // file's.
+        Error::ConfigurationPathReference {
+            key,
+            file,
+            position,
+            ..
+        } => {
+            // The leaf is one of two literals of FR-CONF-002 wherever the
+            // key is well formed; anything else is not reproduced.
+            let leaf = key
+                .rsplit('.')
+                .next()
+                .filter(|leaf| matches!(*leaf, "ca_file" | "ca_path"))
+                .unwrap_or("the key");
+            Cow::Owned(format!(
+                "edit {} at line {} and give the path itself, as in {leaf} = \"<path>\"; \
+                 {NO_CFG_COMMAND}",
+                configuration_file(file),
+                position.line
+            ))
         }
         Error::ConfigurationUnsafeMode { path, .. } => {
             Cow::Owned(format!("chmod 600 {}", configuration_file(path)))
@@ -1232,6 +1333,70 @@ fn configuration_file(path: &Path) -> Cow<'static, str> {
         Cow::Owned(path.display().to_string())
     } else {
         Cow::Borrowed("<project>/.tpl/.cfg")
+    }
+}
+
+/// The hint of a `--tpl-dir` that names the directory holding a `.tpl`
+/// folder (`FR-PROJ-027`).
+///
+/// The corrected value is the path as written followed by `/.tpl`, built
+/// under `FR-ERR-041`, or the placeholder of `FR-ERR-043` where that set
+/// refuses it. With no operand the command path is written back, and `-d` is
+/// carried onto it by [`hint`]; with one, the words say to run the same
+/// invocation again, and the operand is not reproduced.
+fn holds_tpl_folder(path: &Path) -> Cow<'static, str> {
+    let written = path.to_str().map(|text| text.trim_end_matches('/'));
+    let (corrected, replacing) = match written {
+        Some(text) if admits_template(&format!("{text}/.tpl")) => {
+            (format!("{text}/.tpl"), String::new())
+        }
+        _ => (
+            "<tpl-dir>/.tpl".to_owned(),
+            "; replace <tpl-dir> with the value you gave --tpl-dir".to_owned(),
+        ),
+    };
+
+    match restate::shape() {
+        Some(shape) if !shape.operand && !shape.path.is_empty() => Cow::Owned(format!(
+            "name the .tpl folder itself: tpl --tpl-dir {corrected} {}{replacing}",
+            shape.path
+        )),
+        _ => Cow::Owned(format!(
+            "name the .tpl folder itself: run the same command again with --tpl-dir \
+             {corrected}{replacing}"
+        )),
+    }
+}
+
+/// The hint of a `${VAR}` given for `ca_file` or `ca_path`, or for their
+/// flags (`FR-CONF-047`): the caller's command with `<path>` in its place.
+fn path_itself(parameter: &str) -> Cow<'static, str> {
+    let ids: &[&str] = match parameter {
+        "--ca-file" => &["ca_file"],
+        "--ca-path" => &["ca_path"],
+        _ => &["value"],
+    };
+    let edit = Edit::Value {
+        ids,
+        to: Replacement::Placeholder {
+            text: "<path>",
+            meaning: "the path of the trust material itself",
+        },
+    };
+
+    match restate::restated(&[edit]) {
+        Some(restated) => Cow::Owned(format!(
+            "give the path itself: {}{}",
+            restated.command,
+            restated.replacing()
+        )),
+        None if admits_key(parameter) => Cow::Owned(format!(
+            "give the path itself: tpl cfg set {parameter} <path>"
+        )),
+        None if admits_flag(parameter) => {
+            Cow::Owned(format!("give the path itself: {parameter} <path>"))
+        }
+        None => Cow::Borrowed("give the path itself, in place of the value named above"),
     }
 }
 

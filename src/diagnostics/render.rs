@@ -1316,6 +1316,37 @@ mod tests {
                 path: hostile_path(),
                 fault: crate::error::TplDirFault::NotDirectory,
             },
+            Error::ProjectDirUnusable {
+                path: hostile_path(),
+                fault: crate::error::TplDirFault::HoldsTplFolder,
+            },
+            Error::ProjectDirUnusable {
+                path: hostile_path(),
+                fault: crate::error::TplDirFault::NotTplFolder,
+            },
+            Error::ProjectFolderNotOwned {
+                path: hostile_path(),
+                owner: 0,
+                expected: 501,
+            },
+            Error::ConfigurationPathReference {
+                key: hostile(),
+                file: hostile_path(),
+                position: position(),
+                value: format!("${{{payload}}}"),
+            },
+            Error::MalformedValue {
+                parameter: format!("{payload}.ca_file"),
+                command: "cfg set".to_owned(),
+                value: format!("${{{payload}}}"),
+                expected: "a filesystem path",
+            },
+            Error::MalformedValue {
+                parameter: format!("{payload}.dsn"),
+                command: "cfg set".to_owned(),
+                value: format!("${{{payload}}}"),
+                expected: "a connection URL",
+            },
             Error::PrettyWithoutJson {
                 command: hostile(),
                 complete: true,
@@ -1463,7 +1494,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 70, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 76, "every variant of Error is sampled");
     }
 
     #[test]
@@ -1614,6 +1645,51 @@ mod tests {
 
     fn hint_of(error: &Error) -> String {
         line(&render(error), Label::Hint)
+    }
+
+    #[test]
+    fn v_04_a_tcp_connect_that_times_out_names_the_address_before_the_deadline() {
+        let timed_out = |bound| Error::NetworkDeadlineExceeded {
+            entry: String::from("far"),
+            phase: NetworkPhase::TcpConnect,
+            host: "10.255.255.1".to_owned(),
+            port: 3306,
+            bound,
+            limit: Duration::from_secs(1),
+        };
+
+        assert_eq!(
+            hint_of(&timed_out(DeadlineBound::Phase)),
+            "check that the host and port named above are the server's address and that it is \
+             reachable from here, or change them with: tpl cfg database update far --host \
+             <host> --port <port>; to wait longer, raise the deadline with: tpl cfg set \
+             core.connect_timeout <seconds>"
+        );
+        assert!(hint_of(&timed_out(DeadlineBound::Overall)).ends_with(
+            "to wait longer, run the same command again with a larger --timeout <seconds>"
+        ));
+    }
+
+    #[test]
+    fn fr_proj_028_a_folder_without_cfg_owned_by_another_user_names_it_and_points_at_tpl_dir() {
+        let rendered = render(&Error::ProjectFolderNotOwned {
+            path: PathBuf::from("/tmp/.tpl"),
+            owner: 0,
+            expected: 501,
+        });
+
+        assert_eq!(
+            line(&rendered, Label::Error),
+            "the .tpl folder at /tmp/.tpl cannot be used as a project"
+        );
+        let cause = line(&rendered, Label::Cause);
+        assert!(cause.starts_with("/tmp/.tpl holds no .cfg"), "{cause}");
+        assert!(cause.contains("owned by another user"), "{cause}");
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "name your own project's .tpl folder with: tpl --tpl-dir <project>/.tpl <command>"
+        );
+        assert!(line(&rendered, Label::Exit).starts_with("78 "));
     }
 
     #[test]

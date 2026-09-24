@@ -665,10 +665,10 @@ fn read_entry(block: &DeTable<'_>, text: &str, entry: &str, file: &Path) -> Resu
             EntryKey::Database => read.database = Some(string(value, text, &key, expects, file)?),
             EntryKey::Tls => read.tls = Some(tls(value, text, &key, file)?),
             EntryKey::CaFile => {
-                read.ca_file = Some(PathBuf::from(string(value, text, &key, expects, file)?));
+                read.ca_file = Some(PathBuf::from(literal_path(value, text, &key, file)?));
             }
             EntryKey::CaPath => {
-                read.ca_path = Some(PathBuf::from(string(value, text, &key, expects, file)?));
+                read.ca_path = Some(PathBuf::from(literal_path(value, text, &key, file)?));
             }
         }
     }
@@ -725,6 +725,28 @@ fn string(
         .as_str()
         .map(str::to_owned)
         .ok_or_else(|| malformed(text, value, key, expects.expected(), file))
+}
+
+/// The path `value` holds for `ca_file` or `ca_path`, which `FR-CONF-047`
+/// reads literally and refuses where it holds `${`.
+fn literal_path(
+    value: &Spanned<DeValue<'_>>,
+    text: &str,
+    key: &str,
+    file: &Path,
+) -> Result<String, Error> {
+    let path = string(value, text, key, ValueType::Path, file)?;
+
+    if path.contains("${") {
+        return Err(Error::ConfigurationPathReference {
+            key: key.to_owned(),
+            file: file.to_owned(),
+            position: at(text, value),
+            value: path,
+        });
+    }
+
+    Ok(path)
 }
 
 /// The positive number of seconds `value` holds (`FR-CONF-002`).

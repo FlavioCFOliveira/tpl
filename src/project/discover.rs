@@ -23,6 +23,13 @@
 //! why it returns through the same function and the caller cannot tell the two
 //! apart afterwards.
 //!
+//! `--tpl-dir` must also name a `.tpl` folder, per `FR-PROJ-027`: the last
+//! segment of the path, as written or once canonical, is `.tpl`. The walk only
+//! ever finds such a folder, so the test makes the flag accept exactly what
+//! discovery accepts, and a caller that named the directory holding the
+//! project — the most likely mistake with the flag — is refused rather than
+//! served an empty project.
+//!
 //! There is **no fallback**, per `FR-PROJ-007`: a walk that reaches the
 //! boundary without finding a `.tpl` fails with `78`, and settings are never
 //! read from anywhere else.
@@ -46,23 +53,60 @@ pub(crate) const MARKER: &str = ".tpl";
 /// # Errors
 ///
 /// Returns [`Error::ProjectNotFound`] where the walk reaches the boundary
-/// without finding a `.tpl`, and where `--tpl-dir` names a path that is not a
-/// directory (`FR-PROJ-006`), and [`Error::ProjectFileUnreadable`] where the
-/// directory the walk starts from cannot be resolved.
+/// without finding a `.tpl` (`FR-PROJ-006`), [`Error::ProjectDirUnusable`]
+/// where `--tpl-dir` names a path that is not a directory (`FR-PROJ-008`) or a
+/// directory that is not a `.tpl` folder (`FR-PROJ-027`), and
+/// [`Error::ProjectFileUnreadable`] where the directory the walk starts from
+/// cannot be resolved.
 pub(crate) fn locate(explicit: Option<&Path>, start: &Path) -> Result<PathBuf, Error> {
     match explicit {
-        // FR-PROJ-008: no walk is made, so the refusal names the path and why
-        // it is not usable rather than a walk that never happened.
-        Some(named) => canonical(named).ok_or_else(|| Error::ProjectDirUnusable {
-            path: named.to_owned(),
-            fault: if std::fs::symlink_metadata(named).is_ok() {
-                TplDirFault::NotDirectory
-            } else {
-                TplDirFault::Missing
-            },
-        }),
+        Some(named) => named_folder(named),
         None => walk(start),
     }
+}
+
+/// The folder `--tpl-dir` named, canonicalised, once it has passed the checks
+/// of `FR-PROJ-008` and the name test of `FR-PROJ-027`.
+///
+/// No walk is made, so a refusal names the path and why it is not usable
+/// rather than a walk that never happened. The name test runs after the path
+/// is resolved and before the trust checks of [`super::trust`], which is the
+/// order `FR-PROJ-027` fixes, and nothing inside a refused directory is read
+/// beyond whether it holds a `.tpl` folder.
+///
+/// # Errors
+///
+/// Returns [`Error::ProjectDirUnusable`] with the fault that applies.
+fn named_folder(named: &Path) -> Result<PathBuf, Error> {
+    let unusable = |fault| Error::ProjectDirUnusable {
+        path: named.to_owned(),
+        fault,
+    };
+
+    let Some(resolved) = canonical(named) else {
+        return Err(unusable(if std::fs::symlink_metadata(named).is_ok() {
+            TplDirFault::NotDirectory
+        } else {
+            TplDirFault::Missing
+        }));
+    };
+
+    // FR-PROJ-027: the written form admits a `.tpl` that is itself a link, and
+    // the canonical form a link whose target is a `.tpl` folder.
+    if is_marker(named) || is_marker(&resolved) {
+        return Ok(resolved);
+    }
+
+    Err(unusable(if canonical(&resolved.join(MARKER)).is_some() {
+        TplDirFault::HoldsTplFolder
+    } else {
+        TplDirFault::NotTplFolder
+    }))
+}
+
+/// Whether the last segment of `path` is `.tpl` (`FR-PROJ-027`).
+fn is_marker(path: &Path) -> bool {
+    path.file_name() == Some(std::ffi::OsStr::new(MARKER))
 }
 
 /// Climbs from `start` to the boundary, returning the first `.tpl` it finds.
@@ -132,7 +176,7 @@ fn is_mount_point(directory: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{MARKER, locate};
-    use crate::error::Error;
+    use crate::error::{Error, TplDirFault};
     use crate::project::scratch::Scratch;
 
     #[test]
@@ -193,12 +237,83 @@ mod tests {
         // does not run — so a project above the named one is not found.
         let scratch = Scratch::new();
         scratch.directory("outer/.tpl");
-        let named = scratch.directory("outer/aside/own-tpl");
+        let named = scratch.directory("outer/aside/.tpl");
         let start = scratch.directory("outer/inner");
 
         let found = locate(Some(&named), &start).expect("the named folder is used");
 
-        assert_eq!(found, named);
+        assert_eq!(found, scratch.canonical("outer/aside/.tpl"));
+    }
+
+    #[test]
+    fn fr_proj_027_a_directory_holding_a_tpl_folder_is_refused_and_says_so() {
+        // FR-PROJ-027: the project directory named instead of its `.tpl`.
+        let scratch = Scratch::new();
+        let project = scratch.directory("shop");
+        scratch.directory("shop/.tpl");
+
+        let condition = locate(Some(&project), &scratch.root()).expect_err("not a .tpl folder");
+
+        match &condition {
+            Error::ProjectDirUnusable { path, fault } => {
+                assert_eq!(path, &project);
+                assert_eq!(*fault, TplDirFault::HoldsTplFolder);
+            }
+            other => panic!("expected ProjectDirUnusable, got {other:?}"),
+        }
+        assert_eq!(condition.exit_code(), 78);
+    }
+
+    #[test]
+    fn fr_proj_027_a_directory_holding_no_tpl_folder_is_refused() {
+        // FR-PROJ-027: an empty directory, and a folder inside a project that
+        // is not its `.tpl` folder.
+        let scratch = Scratch::new();
+        let empty = scratch.directory("empty");
+        let templates = scratch.directory("shop/.tpl/templates");
+
+        for named in [empty, templates] {
+            let condition = locate(Some(&named), &scratch.root()).expect_err("not a .tpl folder");
+            assert!(matches!(
+                condition,
+                Error::ProjectDirUnusable {
+                    fault: TplDirFault::NotTplFolder,
+                    ..
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn fr_proj_027_the_name_is_tested_as_written_and_once_canonical() {
+        // FR-PROJ-027: a link named `.tpl` to a folder named otherwise, and a
+        // link named otherwise to a folder named `.tpl`, are both accepted; a
+        // link whose name and target are both something else is refused.
+        let scratch = Scratch::new();
+        let data = scratch.directory("data/tpl-data");
+        let real = scratch.directory("real/.tpl");
+        let written = scratch.directory("written");
+        scratch.link(&data, &written.join(MARKER));
+        let alias = scratch.path("alias");
+        scratch.link(&real, &alias);
+        let neither = scratch.path("neither");
+        scratch.link(&data, &neither);
+
+        assert_eq!(
+            locate(Some(&written.join(MARKER)), &scratch.root()).expect("written .tpl"),
+            data
+        );
+        assert_eq!(
+            locate(Some(&alias), &scratch.root()).expect("canonical .tpl"),
+            scratch.canonical("real/.tpl")
+        );
+        assert!(matches!(
+            locate(Some(&neither), &scratch.root()),
+            Err(Error::ProjectDirUnusable {
+                fault: TplDirFault::NotTplFolder,
+                ..
+            })
+        ));
     }
 
     #[test]

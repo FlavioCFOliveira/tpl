@@ -55,6 +55,10 @@ pub(super) enum Edit<'a> {
     FormatJson,
     /// Append these literal words at the end of the command.
     Append(&'a [&'a str]),
+    /// Remove the flag whose value is carried under one of these clap
+    /// identifiers, with its value: the `-d shop` a node that takes no `-d`
+    /// was given (finding V-08 of the fifth re-audit of rmp `#263`).
+    Remove(&'a [&'a str]),
     /// Write the command word `to` in place of the command word `from`: the
     /// caller's `cfg database add`, whole, as the `update` that changes the
     /// entry it could not create (finding U-07 of the fourth re-audit of rmp
@@ -117,6 +121,84 @@ pub(super) fn restated(edits: &[Edit<'_>]) -> Option<Restated> {
     let argv = RECORDED.get()?;
     let words: Vec<Option<&str>> = argv.iter().skip(1).map(|word| word.to_str()).collect();
     restate(&crate::cli::tree(), &words, edits)
+}
+
+/// The command path of the recorded invocation and whether it carried an
+/// operand.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Shape {
+    /// The nodes from `tpl` to the one reached, as their names are spelt in
+    /// the tree, separated by spaces and without `tpl`.
+    pub(super) path: String,
+    /// Whether any positional operand was given to the node reached.
+    pub(super) operand: bool,
+}
+
+/// The [`Shape`] of the recorded invocation, or [`None`] where no vector was
+/// recorded or a flag it holds is not one the tree declares.
+///
+/// `FR-PROJ-027` writes the command path back where the invocation carried no
+/// operand, and says in words to run it again where it carried one.
+pub(super) fn shape() -> Option<Shape> {
+    let argv = RECORDED.get()?;
+    let words: Vec<Option<&str>> = argv.iter().skip(1).map(|word| word.to_str()).collect();
+    shaped(&crate::cli::tree(), &words)
+}
+
+/// The walk behind [`shape`], over a vector without `argv[0]`.
+fn shaped(tree: &clap::Command, words: &[Option<&str>]) -> Option<Shape> {
+    let mut path: Vec<&clap::Command> = vec![tree];
+    let mut operand = false;
+    let mut words = words.iter().copied();
+
+    while let Some(word) = words.next() {
+        let Some(text) = word else {
+            operand = true;
+            continue;
+        };
+        if text == "--" {
+            operand |= words.next().is_some();
+            break;
+        }
+        if let Some(long) = text.strip_prefix("--").filter(|long| !long.is_empty()) {
+            let (name, attached) = match long.split_once('=') {
+                Some((name, value)) => (name, Some(value)),
+                None => (long, None),
+            };
+            let argument = declared(&path, |argument| argument.get_long() == Some(name))?;
+            if takes_value(argument) && attached.is_none() {
+                words.next();
+            }
+            continue;
+        }
+        if let Some(cluster) = text.strip_prefix('-').filter(|cluster| !cluster.is_empty()) {
+            for (at, short) in cluster.char_indices() {
+                let argument = declared(&path, |argument| argument.get_short() == Some(short))?;
+                if takes_value(argument) {
+                    if cluster[at + short.len_utf8()..].is_empty() {
+                        words.next();
+                    }
+                    break;
+                }
+            }
+            continue;
+        }
+        let node = *path.last()?;
+        match node.find_subcommand(text) {
+            Some(child) if !operand => path.push(child),
+            _ => operand = true,
+        }
+    }
+
+    Some(Shape {
+        path: path
+            .iter()
+            .skip(1)
+            .map(|node| node.get_name())
+            .collect::<Vec<_>>()
+            .join(" "),
+        operand,
+    })
 }
 
 /// Which of the two flags of `FR-ERR-043` a hint may carry: `false` where the
@@ -245,6 +327,16 @@ fn globals(tree: &clap::Command, words: &[Option<&str>]) -> Globals {
     }
 
     found
+}
+
+/// The `-d/--database` value the caller wrote, where the set of `FR-ERR-022`
+/// admits it.
+pub(super) fn database() -> Option<String> {
+    let argv = RECORDED.get()?;
+    let words: Vec<Option<&str>> = argv.iter().skip(1).map(|word| word.to_str()).collect();
+    let given = globals(&crate::cli::tree(), &words).database?;
+
+    given.placeholder.is_none().then_some(given.text)
 }
 
 /// The `--tpl-dir` value, tested by the set of `FR-ERR-041`.
@@ -687,6 +779,22 @@ fn apply(pieces: &mut Vec<Piece>, edit: Edit<'_>) -> Option<()> {
             }
         }
         Edit::Append(words) => pieces.extend(words.iter().map(|word| Piece::literal(word))),
+        Edit::Remove(ids) => {
+            let at = pieces.iter().position(|piece| {
+                piece
+                    .value_of
+                    .as_deref()
+                    .is_some_and(|id| ids.contains(&id))
+            })?;
+            // A value glued to its flag is one word; otherwise the flag is the
+            // word before it.
+            let start = if pieces[at].glued.is_some() {
+                at
+            } else {
+                at.saturating_sub(1)
+            };
+            pieces.drain(start..=at);
+        }
         Edit::Command { from, to } => {
             let piece = pieces.iter_mut().find(|piece| {
                 piece.value_of.is_none() && piece.glued.is_none() && piece.text == from
@@ -805,7 +913,54 @@ fn placeholder(id: Option<&str>, text: String, meaning: String) -> Piece {
 
 #[cfg(test)]
 mod tests {
-    use super::{Carry, Edit, Globals, Replacement, carry_into, globals, restate};
+    use super::{Carry, Edit, Globals, Replacement, Shape, carry_into, globals, restate, shaped};
+
+    fn shape_of(words: &[&str]) -> Shape {
+        let words: Vec<Option<&str>> = words.iter().copied().map(Some).collect();
+        shaped(&crate::cli::tree(), &words).expect("every flag is declared")
+    }
+
+    #[test]
+    fn fr_proj_027_the_shape_is_the_command_path_and_whether_an_operand_was_given() {
+        let shape = shape_of(&["--tpl-dir", "shop", "-d", "a", "cfg", "database", "list"]);
+        assert_eq!(shape.path, "cfg database list");
+        assert!(!shape.operand);
+
+        let shape = shape_of(&["--tpl-dir=shop", "schema", "tables", "--format", "json"]);
+        assert_eq!(shape.path, "schema tables");
+        assert!(!shape.operand);
+
+        let shape = shape_of(&[
+            "--tpl-dir",
+            "shop",
+            "cfg",
+            "database",
+            "add",
+            "zz",
+            "--host",
+            "h",
+        ]);
+        assert_eq!(shape.path, "cfg database add");
+        assert!(shape.operand);
+
+        let shape = shape_of(&["template", "show", "--", "example"]);
+        assert_eq!(shape.path, "template show");
+        assert!(shape.operand);
+    }
+
+    #[test]
+    fn v_08_remove_drops_the_flag_and_its_value_in_either_spelling() {
+        for words in [
+            &["-d", "shop", "cfg", "database", "test"][..],
+            &["--database=shop", "cfg", "database", "test"][..],
+        ] {
+            let (command, _) = restated(
+                words,
+                &[Edit::Remove(&["database"]), Edit::Append(&["shop"])],
+            );
+            assert_eq!(command, "tpl cfg database test shop");
+        }
+    }
 
     fn restated(words: &[&str], edits: &[Edit<'_>]) -> (String, String) {
         let words: Vec<Option<&str>> = words.iter().copied().map(Some).collect();

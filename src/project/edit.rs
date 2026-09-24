@@ -365,7 +365,9 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
             value(array(command.arguments()))
         }
         ValueType::Path | ValueType::Text => {
-            if supplied.is_empty() && expects == ValueType::Path {
+            // FR-CONF-047: `ca_file` and `ca_path` are read as literal paths,
+            // so a `${` is refused rather than stored as a file name.
+            if expects == ValueType::Path && (supplied.is_empty() || supplied.contains("${")) {
                 return Err(refused());
             }
             value(supplied)

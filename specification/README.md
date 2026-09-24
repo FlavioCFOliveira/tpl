@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-seven editions. All are in force;
+The specification has been written in forty-eight editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4138,6 +4138,79 @@ under the set of `FR-ERR-041`, and no credential enters a message. Neither
 root document paraphrases an amended requirement: the root `README.md`
 describes `password_command` as one string on the command line that `tpl`
 splits, which stays true. The fifth validation rule therefore owes nothing.
+
+### Forty-eighth edition — the folder `--tpl-dir` names, a project without `.cfg`, and a path that is not expanded
+
+The fifth re-audit of sprint 21, rmp `#263`, found three places where the
+system accepted what the caller did not mean and reported success. `tpl
+--tpl-dir ../shop cfg database list` read the directory that holds `.tpl` as
+the project, reported no entry, and a following `cfg database add` wrote a
+`.cfg` beside the real `.tpl` (finding V-01, rmp `#265`). The four `template`
+subcommands exited `0` over a malformed `.cfg` while their help listed `78`
+(finding V-02, rmp `#272`). And a `${VAR}` given to `ca_file` or `ca_path` was
+stored, never expanded, and failed at connection time with a `cause` that did
+not say why (finding V-03). This edition fixes the three outcomes.
+
+**Three identifiers are assigned — `FR-PROJ-027`, `FR-PROJ-028` and
+`FR-CONF-047`; none is retired and none is renumbered.** No term enters or
+leaves [glossary.md](glossary.md); the entry *project* is amended. No entry
+of [upstream-divergences.md](upstream-divergences.md) is raised or
+discharged, and the index of [open-questions.md](open-questions.md) stays
+empty.
+
+- **`--tpl-dir` names a `.tpl` folder, and nothing else** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-027` admits
+  a directory as the `.tpl` folder only where the last segment of its path is
+  `.tpl`, as written or after canonicalisation. Any other existing directory
+  named by `--tpl-dir` is `78` at step 2, with nothing read and nothing
+  written. Where the directory holds a `.tpl` folder, the `cause` says so and
+  the `hint` carries the corrected value and, for an invocation without
+  operands, the same command with it. `FR-PROJ-008` carries a note, and
+  `FR-SEC-016` restates the rule.
+- **A `.tpl` folder without `.cfg` is a project with an empty
+  configuration** — [project-and-discovery.md](project-and-discovery.md).
+  `FR-PROJ-028` pins what the implementation did: step 3 passes, every key
+  takes its default, and no entry is declared. It adds one check: such a
+  folder SHALL be owned by the current user, or the invocation is `78`,
+  because a planted `.tpl` without `.cfg` passed both checks of `FR-SEC-014`
+  and would receive the caller's credentials. The first `cfg` writer creates
+  the file at `0600` by the procedure of `FR-CFG-041`, which is amended to
+  say so; a `cfg` command that changes nothing creates nothing. `FR-PROJ-002`
+  and `FR-PROJ-023` carry notes, and `FR-SEC-014` is amended.
+- **The `template` subcommands validate `.cfg`** —
+  [template-commands.md](template-commands.md). `FR-TMPL-003` states that the
+  four subcommands perform step 3 of `FR-ERR-006` and exit `78` over a `.cfg`
+  that cannot be used. This was always required: `FR-ERR-006` exempts steps 2
+  and 3 only for the commands of `FR-PROJ-025`. `FR-ERR-006` carries a note.
+  Their help, which lists `78`, is correct and stays.
+- **`ca_file` and `ca_path` refuse `${`** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-015` never
+  expanded either key, and `FR-CONF-047` refuses a value holding `${`: `64`
+  on the command line, with nothing written, and `78` at step 3 in the file.
+  The `cause` states that the key is a literal path and is not expanded.
+  `FR-CONF-015` carries a note, and `FR-CFG-033` obliges the help of
+  `--ca-file` and `--ca-path` to state the refusal.
+- **The exit-code table and the path set follow** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). The `78` cell of
+  `FR-ERR-001` names the three conditions, and `FR-ERR-041` names the
+  corrected `--tpl-dir` value among the paths it governs. `UC-002` in
+  [use-cases.md](use-cases.md) gains three alternate flows.
+
+`FR-PROJ-001`, `FR-PROJ-004` through `FR-PROJ-007`, `FR-PROJ-009` through
+`FR-PROJ-011`, `FR-PROJ-014`, `FR-PROJ-017`, `FR-PROJ-022`, `FR-PROJ-025`,
+`FR-PROJ-026`, `FR-GLOB-009`, `FR-GLOB-010`, `FR-SEC-013`, `FR-CFG-010`,
+`FR-CFG-012`, `FR-CFG-027`, `FR-CFG-034`, `FR-CFG-040`, `FR-CONF-014`,
+`FR-CONF-034`, `FR-ERR-034`, `FR-ERR-043`, `FR-HELP-031` and `BR-ERR-004`
+were read against the changes, and none conflicts with them, so none is
+amended. The `78` row of `FR-ERR-034` already obliges the `cause` of a
+refused `--tpl-dir` to name the path and why it is not usable. `tpl init`
+is unchanged: it uses no `--tpl-dir`, per `FR-PROJ-026`, and still writes
+nothing to stdout, per `FR-PROJ-022`. The root `README.md` states that an
+absent `.cfg` is not a failure and reads as an empty configuration, which
+stays true: the refusal of `FR-PROJ-028` is for the folder's owner, not for
+the absence. It describes `--tpl-dir` as naming the `.tpl` folder, and
+`${VAR}` as expanded in six fields, both unchanged. The fifth validation rule
+therefore owes nothing.
 
 ### Still out of scope
 

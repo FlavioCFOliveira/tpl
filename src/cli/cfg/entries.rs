@@ -499,7 +499,10 @@ fn command_item(written: &str) -> Result<Item, Error> {
 
 /// The item a path flag writes.
 fn path_item(field: EntryKey, path: &std::path::Path) -> Result<Item, Error> {
+    // FR-CONF-047: neither key is expanded, so a `${` is refused with `64`
+    // rather than stored and read later as a file named after the reference.
     path.to_str()
+        .filter(|text| !text.contains("${"))
         .map(value)
         .ok_or_else(|| Error::MalformedValue {
             parameter: format!("--{}", field.leaf().replace('_', "-")),

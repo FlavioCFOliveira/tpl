@@ -43,6 +43,25 @@ tpl template path  [<name>]             Print the template root, or one template
 - **FR-TMPL-003**: No `template` subcommand SHALL open a database connection,
   read the cache, or require a database entry to be selected.
 
+  Every `template` subcommand SHALL read and validate `.tpl/.cfg` at step 3 of
+  `FR-ERR-006`, as every command outside `FR-PROJ-025` does. A `.cfg` that is
+  not TOML, holds a key outside `FR-CONF-002`, or holds a value that does not
+  conform to its type SHALL end the invocation with `78` (`EX_CONFIG`), before
+  any template is resolved. WHERE `.cfg` is absent, `FR-PROJ-028` governs.
+
+  *Amended in the forty-eighth edition: the second paragraph is new,* for rmp
+  `#272`. The first paragraph keeps the subcommands away from an entry, the
+  cache and the server, and was read as keeping them away from `.cfg`. It
+  never did: `FR-ERR-006` exempts steps 2 and 3 only for the commands of
+  `FR-PROJ-025`. The four subcommands exited `0` over a malformed `.cfg` while
+  their help listed `78`, per finding V-02 of the fifth re-audit. A caller
+  that runs `tpl template list` to check a project must learn that its `.cfg`
+  cannot be used.
+
+  *Rejected: exempting the subcommands from step 3 and narrowing their help.*
+  It adds a second exemption to `FR-ERR-006`, and it defers the fault to the
+  first `schema` or `render` command, far from the file that caused it.
+
 ## What is a template
 
 - **FR-TMPL-004**: A template SHALL be a regular file under `.tpl/templates/`

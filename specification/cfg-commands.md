@@ -600,6 +600,10 @@ tpl cfg database test   <name>
   invocation, and no expansion alternative exists. `BR-CFG-003` governs — `tpl`
   warns; it does not prevent.
 
+  *Amended in the forty-eighth edition.* The help of `--ca-file` and
+  `--ca-path` SHALL also state that the value is read as a literal path and
+  that a value containing `${` is refused, per `FR-CONF-047`.
+
 - **BR-CFG-003**: `tpl` warns; it does not prevent. Putting a secret in the
   argument vector is the caller's decision. What `tpl` guarantees is that no
   flag named `password` exists, and that the two remaining paths are documented
@@ -624,6 +628,13 @@ tpl cfg database test   <name>
   over the target — THEN the system SHALL exit `74` (`EX_IOERR`), and the
   `cause` SHALL name the path, the operation attempted on it, and what the
   filesystem returned, per the `74` row of `FR-ERR-034`.
+
+  WHERE `.tpl/.cfg` is absent, the same procedure SHALL create it, and a
+  failure part-way through SHALL leave no `.cfg`, per `FR-PROJ-028`.
+
+  *Amended in the forty-eighth edition: the paragraph above is new,* for rmp
+  `#265`. A clone holds no `.cfg`, per `FR-PROJ-003`, so the first `cfg`
+  writer creates the file rather than rewriting it.
 
   *Rationale.* This is the rule `FR-CACHE-030` already applies to the other
   thing `tpl` writes, and it matters more here: a truncated `.cfg` is a `78` on

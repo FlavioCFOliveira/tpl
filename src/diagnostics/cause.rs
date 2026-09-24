@@ -187,6 +187,25 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{value}' was supplied for '{parameter}', which takes {expected}; a ${{VAR}} \
              reference for a port is accepted only when written in .tpl/.cfg"
         )),
+        // V-03, FR-CONF-047: the key or the flag, and why the reference is
+        // refused rather than stored.
+        Error::MalformedValue {
+            parameter, value, ..
+        } if is_path_reference(parameter, value) => Cow::Owned(format!(
+            "{} is read as a literal path, and ${{VAR}} is not expanded in it; {}",
+            parameter.rsplit('.').next().unwrap_or(parameter),
+            reference_held(value)
+        )),
+        // V-06: the file variant's clause, so that the two say the same.
+        Error::MalformedValue {
+            parameter,
+            value,
+            expected,
+            ..
+        } if is_whole_dsn_reference(parameter, value) => Cow::Owned(format!(
+            "'{value}' was supplied for '{parameter}', which takes {expected}; a ${{VAR}} may \
+             stand for one part of the URL, never for the whole of it"
+        )),
         Error::MalformedValue {
             parameter,
             value,
@@ -618,7 +637,43 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 "--tpl-dir disabled the upward search; {} exists and is not a folder",
                 path.display()
             )),
+            // FR-PROJ-027 names the one of two facts that applies.
+            TplDirFault::HoldsTplFolder => Cow::Owned(format!(
+                "--tpl-dir disabled the upward search; {} holds a .tpl folder, and --tpl-dir \
+                 must name that folder",
+                path.display()
+            )),
+            TplDirFault::NotTplFolder => Cow::Owned(format!(
+                "--tpl-dir disabled the upward search; --tpl-dir names the .tpl folder of a \
+                 project, not the directory that holds it, and {} holds none",
+                path.display()
+            )),
         },
+        // FR-PROJ-028: the folder, that it holds no `.cfg`, and that another
+        // user owns it.
+        Error::ProjectFolderNotOwned {
+            path,
+            owner,
+            expected,
+        } => Cow::Owned(format!(
+            "{} holds no .cfg, and the folder is owned by another user, uid {owner}; tpl uses a \
+             .tpl folder without .cfg only when the invoking user, uid {expected}, owns it",
+            path.display()
+        )),
+        // FR-CONF-047: the key, that it is read as a literal path, and that
+        // `${VAR}` is not expanded in it.
+        Error::ConfigurationPathReference {
+            key,
+            file,
+            position,
+            value,
+        } => Cow::Owned(format!(
+            "{} at {position} declares {key} with a ${{VAR}} reference; {} is read as a literal \
+             path, and ${{VAR}} is not expanded in it; {}",
+            file.display(),
+            key.rsplit('.').next().unwrap_or(key),
+            reference_held(value)
+        )),
         Error::ConfigurationNotOwned {
             path,
             owner,
@@ -953,6 +1008,38 @@ fn os(returned: &std::io::Error) -> String {
 /// (finding U-03 of the fourth re-audit of rmp `#263`).
 pub(super) fn is_port_reference(parameter: &str, value: &str) -> bool {
     (parameter == "--port" || parameter.ends_with(".port")) && value.contains("${")
+}
+
+/// Whether `value`, given for `ca_file` or `ca_path` or for their flags,
+/// holds `${`, which `FR-CONF-047` refuses in either key.
+pub(crate) fn is_path_reference(parameter: &str, value: &str) -> bool {
+    (matches!(parameter, "--ca-file" | "--ca-path")
+        || parameter.ends_with(".ca_file")
+        || parameter.ends_with(".ca_path"))
+        && value.contains("${")
+}
+
+/// The words that say which reference a refused path holds: the first
+/// `${NAME}` whose name the set of `FR-ERR-022` admits, or `${` alone
+/// (`FR-CONF-047`).
+fn reference_held(value: &str) -> String {
+    value
+        .split("${")
+        .skip(1)
+        .find_map(|rest| {
+            let (name, _) = rest.split_once('}')?;
+            super::hint::admits(name).then(|| format!("the value holds ${{{name}}}"))
+        })
+        .unwrap_or_else(|| "the value holds ${".to_owned())
+}
+
+/// Whether `value`, given for a `dsn` or for `--dsn`, is one `${VAR}` and
+/// nothing else: `FR-CONF-018` expands a reference inside a part the URL
+/// delimits, so it never stands for the whole URL (finding V-06 of the fifth
+/// re-audit of rmp `#263`).
+pub(super) fn is_whole_dsn_reference(parameter: &str, value: &str) -> bool {
+    (parameter == "--dsn" || parameter.ends_with(".dsn"))
+        && crate::project::config::expand::is_whole_reference(value)
 }
 
 /// Whether `parameter` is one that takes a `password_command` supplied as one
