@@ -599,6 +599,11 @@ tpl -d shop cache status
   folder, per `FR-CACHE-002`. Neither line reads the cache, and neither
   changes what is stored.
 
+  *Note added in the fifty-fourth edition.* `FR-CFG-053` now writes its line
+  also when `tpl cfg set` or `tpl cfg unset` is given the key of one of those
+  fields: `host`, `port`, `user`, `database`, `tls` or `dsn`. The line still
+  reads no cache and changes nothing stored.
+
 - **BR-CACHE-004**: The cache changes when it is told to, never on its own. A
   configuration command must not delete cached data as a side effect, and a
   fingerprint compared on the read path would still not cover a hand-edited

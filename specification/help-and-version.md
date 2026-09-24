@@ -326,7 +326,8 @@ alongside the command it documents.
   | Command | Fact stated |
   |---|---|
   | `tpl cfg database remove` | Data cached for the entry under `.tpl/.cache/` is kept; an entry added later under the same name reads it; `tpl -d NAME cache clean` removes it, also after the entry is gone |
-  | `tpl cfg unset` | Where the key is the block of a whole entry, the fact stated for `tpl cfg database remove` |
+  | `tpl cfg set` | Writing `host`, `port`, `user`, `database`, `tls` or `dsn` of an entry keeps the data cached for it under `.tpl/.cache/NAME/`, and reads still serve it; `tpl -d NAME cache clean` removes it |
+  | `tpl cfg unset` | Where the key is the block of a whole entry, the fact stated for `tpl cfg database remove`; where the key is `host`, `port`, `user`, `database`, `tls` or `dsn` of an entry, the fact stated for `tpl cfg set`, with removing in place of writing |
   | `tpl cfg database add` | Data cached under `.tpl/.cache/NAME/` by an earlier entry of that name is read as it is; `tpl -d NAME cache clean` removes it before the first read |
   | `tpl cfg database update` | Changing `--host`, `--port`, `--user`, `--schema`, `--tls` or `--dsn` keeps the data cached for the entry, and reads still serve it; `tpl -d NAME cache clean` removes it |
   | `tpl cache clean` | Without an object flag, it also removes the data cached for a name that no entry of `.tpl/.cfg` declares any more |
@@ -345,6 +346,12 @@ alongside the command it documents.
   `tpl cfg database remove` as saying nothing about the cache.
 
   *Added in the fifty-third edition,* for rmp `#287`.
+
+  *Amended in the fifty-fourth edition: the `tpl cfg set` row is new, and the
+  `tpl cfg unset` row gains its second clause.* `FR-CFG-053` now writes its
+  line for those two commands, and their help said nothing about the cache
+  of an entry whose field they change. This is finding AD-01 of the
+  thirteenth re-audit of rmp `#263`, recorded for rmp `#289`.
 
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help

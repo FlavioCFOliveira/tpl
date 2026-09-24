@@ -2830,6 +2830,11 @@ const ENTRIES: [Entry; 35] = [
                  port is accepted only when written in .tpl/.cfg by editing the file, as port \
                  = \"${SHOP_PORT}\".",
             ),
+            Block::Prose(
+                "Writing host, port, user, database, tls or dsn of an entry keeps the data \
+                 cached for it under .tpl/.cache/NAME/, and reads still serve it; tpl -d NAME \
+                 cache clean removes it.",
+            ),
         ],
         touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
         examples: &[
@@ -2863,7 +2868,10 @@ const ENTRIES: [Entry; 35] = [
         blocks: &[Block::Prose(
             "Where KEY is a whole entry, database.NAME, data cached for the entry under \
              .tpl/.cache/NAME/ is kept, and an entry added later under the same name reads it; \
-             tpl -d NAME cache clean removes it, also after the entry is gone.",
+             tpl -d NAME cache clean removes it, also after the entry is gone. Where KEY is \
+             host, port, user, database, tls or dsn of an entry, removing it keeps the data \
+             cached for the entry under .tpl/.cache/NAME/, and reads still serve it; tpl -d \
+             NAME cache clean removes it.",
         )],
         touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
         examples: &[

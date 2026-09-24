@@ -251,6 +251,19 @@ impl EntryKey {
         }
     }
 
+    /// Whether writing or removing this key changes where the entry points
+    /// (`FR-CFG-053`): the six keys that hold what the flags of
+    /// `FR-CACHE-029` write.
+    ///
+    /// `password`, `password_command`, `ca_file` and `ca_path` do not: the
+    /// entry still reaches the same server and the same database.
+    pub(crate) const fn repoints(self) -> bool {
+        matches!(
+            self,
+            Self::Host | Self::Port | Self::User | Self::Database | Self::Tls | Self::Dsn
+        )
+    }
+
     /// Whether the value of this key may itself be a credential.
     ///
     /// `FR-ERR-013` bars a credential from every message, so a `cause` line

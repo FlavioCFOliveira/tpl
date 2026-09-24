@@ -1491,6 +1491,153 @@ fn fr_cfg_048_the_combinations_the_table_admits_are_written_by_all_three_paths()
     assert_eq!(code(&sandbox.run(&["cfg", "list"])), 0, "the file is valid");
 }
 
+/// The command a hint of the form "…: tpl <command>, then run the command
+/// again" carries, as the words after `tpl`.
+fn then_again(hint: &str) -> Vec<String> {
+    let (command, again) = hint
+        .split_once(", then run the command again")
+        .unwrap_or_else(|| panic!("the hint does not run the command again: {hint:?}"));
+    assert!(again.is_empty(), "{hint:?}");
+    hint_command(command, &[])
+}
+
+#[test]
+fn fr_cfg_048_rows_three_to_five_each_carry_their_own_hint_and_the_hint_repairs_it() {
+    // Finding AD-02 of the thirteenth re-audit of rmp #263: row three was
+    // answered with the dsn switch of row two. Rows one and two are run to
+    // success by the three tests above. Here each row's hint is run, then the
+    // refused invocation again, which must now exit 0.
+    struct Row {
+        what: &'static str,
+        file: &'static str,
+        invocation: &'static [&'static str],
+        written: &'static str,
+        conflicting: &'static str,
+        hint: &'static str,
+        /// The value for the `<url>` placeholder of the hint, where it has one.
+        url: Option<&'static str>,
+    }
+
+    let rows = [
+        Row {
+            what: "row three through cfg set",
+            file: "[database.e1]\nhost = \"h\"\ndatabase = \"s\"\npassword = \"x\"\n",
+            invocation: &["cfg", "set", "database.e1.password_command", "pass x"],
+            written: "database.e1.password_command",
+            conflicting: "database.e1.password",
+            hint: "remove the key it conflicts with: tpl cfg unset database.e1.password, then \
+                   run the command again",
+            url: None,
+        },
+        Row {
+            what: "row three through cfg database update",
+            file: "[database.e1]\nhost = \"h\"\ndatabase = \"s\"\npassword = \"x\"\n",
+            invocation: &[
+                "cfg",
+                "database",
+                "update",
+                "e1",
+                "--password-command",
+                "pass x",
+            ],
+            written: "database.e1.password_command",
+            conflicting: "database.e1.password",
+            hint: "remove the key it conflicts with: tpl cfg unset database.e1.password, then \
+                   run the command again",
+            url: None,
+        },
+        Row {
+            what: "row four, a password",
+            file: "[database.e1]\nhost = \"h\"\npassword_command = [\"pass\", \"x\"]\n",
+            invocation: &["cfg", "set", "database.e1.password", "x"],
+            written: "database.e1.password",
+            conflicting: "database.e1.password_command",
+            hint: "remove the key it conflicts with: tpl cfg unset \
+                   database.e1.password_command, then run the command again",
+            url: None,
+        },
+        Row {
+            what: "row four, a dsn carrying a password",
+            file: "[database.e1]\ndsn = \"mysql://u@h/s\"\npassword_command = [\"pass\", \"x\"]\n",
+            invocation: &["cfg", "set", "database.e1.dsn", "mysql://u:x@h2/s"],
+            written: "database.e1.dsn",
+            conflicting: "database.e1.password_command",
+            hint: "remove the key it conflicts with: tpl cfg unset \
+                   database.e1.password_command, then run the command again",
+            url: None,
+        },
+        Row {
+            what: "row five",
+            file: "[database.e1]\ndsn = \"mysql://u:x@h/s\"\n",
+            invocation: &[
+                "cfg",
+                "database",
+                "update",
+                "e1",
+                "--password-command",
+                "pass x",
+            ],
+            written: "database.e1.password_command",
+            conflicting: "database.e1.dsn",
+            hint: "write the dsn again without its password: tpl cfg database update e1 --dsn \
+                   <url>, where <url> is the connection URL with no password in it, then run \
+                   the command again",
+            url: Some("mysql://u@h/s"),
+        },
+    ];
+
+    for row in rows {
+        let sandbox = Sandbox::new();
+        sandbox.project(row.file);
+
+        let written = assert_refused(&sandbox.run(row.invocation), 64, row.what);
+        let cause = line(&written, "cause: ");
+        assert!(cause.contains(row.written), "{}: {written}", row.what);
+        assert!(cause.contains(row.conflicting), "{}: {written}", row.what);
+        // Only rows one and two concern the form of the connection.
+        assert!(!cause.contains("by dsn"), "{}: {written}", row.what);
+        assert!(!cause.contains("Unsetting"), "{}: {written}", row.what);
+        assert!(
+            !written.contains(":x@"),
+            "{}: the secret reached a message",
+            row.what
+        );
+        assert_eq!(sandbox.configuration(), row.file.as_bytes(), "{}", row.what);
+
+        let hint = line(&written, "hint:  ");
+        assert_eq!(hint, row.hint, "{}", row.what);
+
+        let repair = match row.url {
+            None => then_again(&hint),
+            Some(url) => hint_command(&hint, &[("<url>", url)]),
+        };
+        let repair: Vec<&str> = repair.iter().map(String::as_str).collect();
+        let repaired = sandbox.run(&repair);
+        assert_eq!(
+            code(&repaired),
+            0,
+            "{}: the hint {repair:?} did not run: {}",
+            row.what,
+            stderr(&repaired)
+        );
+
+        let again = sandbox.run(row.invocation);
+        assert_eq!(
+            code(&again),
+            0,
+            "{}: the invocation was still refused: {}",
+            row.what,
+            stderr(&again)
+        );
+        assert_eq!(
+            code(&sandbox.run(&["cfg", "list"])),
+            0,
+            "{}: the file is valid",
+            row.what
+        );
+    }
+}
+
 // ------------------------------------------------------------ FR-CFG-023 ---
 
 #[test]
@@ -1514,7 +1661,9 @@ fn fr_cfg_023_unset_of_the_block_clears_the_reference_and_unset_of_a_leaf_does_n
 
     assert_eq!(code(&leaf), 0, "{}", stderr(&leaf));
     assert_eq!(stdout(&leaf), "");
-    assert_eq!(stderr(&leaf), "");
+    // FR-CFG-023 writes no line of its own; the user is one of the fields of
+    // FR-CFG-053.
+    assert_eq!(stderr(&leaf), format!("{}\n", entry_repointed("shop")));
     assert_eq!(
         String::from_utf8(sandbox.configuration()).expect("the file is UTF-8"),
         concat!(
@@ -4130,8 +4279,11 @@ fn fr_cfg_050_unsetting_dsn_warns_of_what_it_carried_and_q_silences_it() {
     let written = stderr(&printed);
     assert_eq!(
         written,
-        "warning: removed database.ds.dsn; entry 'ds' no longer holds the host, port, user, \
-         password or database that dsn carried\n"
+        format!(
+            "warning: removed database.ds.dsn; entry 'ds' no longer holds the host, port, user, \
+             password or database that dsn carried\n{}\n",
+            entry_repointed("ds")
+        )
     );
     assert!(!written.contains("hunter2") && !written.contains("reader"));
 
@@ -4600,11 +4752,12 @@ fn fr_cfg_052_deleting_an_entry_says_its_cache_is_kept_and_leaves_the_cache_alon
     assert_eq!(code(&printed), 0);
     assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
 
-    // One field deletes no entry, and a refused removal writes no line.
+    // One field deletes no entry, so it writes the line of FR-CFG-053 and not
+    // this one; a refused removal writes no line.
     sandbox.project(two);
     let printed = sandbox.run(&["cfg", "unset", "database.shop.host"]);
     assert_eq!(code(&printed), 0);
-    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+    assert_eq!(stderr(&printed), format!("{}\n", entry_repointed("shop")));
     let written = assert_refused(
         &sandbox.run(&["cfg", "database", "remove", "absent"]),
         66,
@@ -4727,6 +4880,124 @@ fn fr_cfg_053_repointing_an_entry_says_its_cache_is_kept() {
              entry for commands that connect; the name argument already names the entry\n{}\n",
             entry_repointed("shop")
         )
+    );
+}
+
+#[test]
+fn fr_cfg_053_cfg_set_and_cfg_unset_of_a_connection_field_say_the_cache_is_kept() {
+    // Finding AD-01 of the thirteenth re-audit of rmp #263.
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[core]\n\n[database.shop]\nhost = \"h\"\n\n[database.ds]\ndsn = \"mysql://u@h/shop\"\n",
+    );
+    let cache = cache_for(&sandbox, "shop");
+
+    // The five discrete-side keys on `shop`, written and then removed; host
+    // is written back last so the entry stays valid.
+    for (key, value) in [
+        ("database.shop.port", "3307"),
+        ("database.shop.user", "u"),
+        ("database.shop.database", "crm"),
+        ("database.shop.tls", "disabled"),
+    ] {
+        for arguments in [&["cfg", "set", key, value][..], &["cfg", "unset", key][..]] {
+            let printed = sandbox.run(arguments);
+            assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+            assert!(printed.stdout.is_empty(), "{arguments:?}");
+            assert_eq!(
+                stderr(&printed),
+                format!("{}\n", entry_repointed("shop")),
+                "{arguments:?}"
+            );
+        }
+    }
+    for arguments in [
+        &["cfg", "set", "database.shop.host", "h2"][..],
+        &["cfg", "unset", "database.shop.host"][..],
+        &["cfg", "set", "database.shop.host", "h3"][..],
+    ] {
+        let printed = sandbox.run(arguments);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        assert_eq!(
+            stderr(&printed),
+            format!("{}\n", entry_repointed("shop")),
+            "{arguments:?}"
+        );
+    }
+
+    // dsn: set writes this line alone; unset writes the line of FR-CFG-050
+    // first and this line second (item 4).
+    let printed = sandbox.run(&["cfg", "set", "database.ds.dsn", "mysql://u@h2/crm"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(stderr(&printed), format!("{}\n", entry_repointed("ds")));
+
+    // Item 7: an entry the file did not carry before gets the line too.
+    let printed = sandbox.run(&["cfg", "set", "database.fresh.host", "h"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(stderr(&printed), format!("{}\n", entry_repointed("fresh")));
+
+    // Keys that do not change where the entry points write no line.
+    for arguments in [
+        &["cfg", "set", "database.shop.password_command", "pass db"][..],
+        &["cfg", "unset", "database.shop.password_command"][..],
+        &["cfg", "set", "database.shop.password", "x"][..],
+        &["cfg", "unset", "database.shop.password"][..],
+        &["cfg", "set", "database.shop.ca_file", "/etc/ca.pem"][..],
+        &["cfg", "unset", "database.shop.ca_file"][..],
+        &["cfg", "set", "core.query_timeout", "5"][..],
+    ] {
+        let printed = sandbox.run(arguments);
+        assert_eq!(code(&printed), 0, "{arguments:?}: {}", stderr(&printed));
+        assert!(
+            printed.stderr.is_empty(),
+            "{arguments:?}: {}",
+            stderr(&printed)
+        );
+    }
+
+    // -q suppresses the line; --tpl-dir is carried; a refusal writes none.
+    let printed = sandbox.run(&["-q", "cfg", "set", "database.shop.host", "h4"]);
+    assert_eq!(code(&printed), 0);
+    assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
+    let printed = sandbox.run(&["-q", "cfg", "unset", "database.shop.port"]);
+    assert_eq!(code(&printed), 66, "the port was already removed");
+    let printed = sandbox.run(&[
+        "--tpl-dir",
+        ".tpl",
+        "cfg",
+        "set",
+        "database.shop.port",
+        "3308",
+    ]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert!(
+        stderr(&printed).ends_with("clear it with: tpl --tpl-dir .tpl -d shop cache clean\n"),
+        "{}",
+        stderr(&printed)
+    );
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "set", "database.ds.host", "h"]),
+        64,
+        "a discrete field on a dsn entry",
+    );
+    assert!(!written.contains("warning: "), "{written}");
+
+    // Last, as it leaves `ds` with no field.
+    let printed = sandbox.run(&["cfg", "unset", "database.ds.dsn"]);
+    assert_eq!(code(&printed), 0, "{}", stderr(&printed));
+    assert_eq!(
+        stderr(&printed),
+        format!(
+            "warning: removed database.ds.dsn; entry 'ds' no longer holds the host, port, user, \
+             password or database that dsn carried\n{}\n",
+            entry_repointed("ds")
+        )
+    );
+
+    // The cache is not touched.
+    assert_eq!(
+        std::fs::read_to_string(cache.join("meta.json")).expect("the cache is kept"),
+        "{}\n"
     );
 }
 
@@ -4952,10 +5223,23 @@ fn fr_cache_041_a_refused_removal_is_74_with_no_warning() {
 }
 
 #[test]
-fn fr_help_036_the_five_descriptions_state_the_cache_fact_with_d_name() {
-    // Findings AC-01 and AC-03 of the twelfth re-audit of rmp #263.
+fn fr_help_036_each_description_states_the_cache_fact_with_d_name() {
+    // Findings AC-01 and AC-03 of the twelfth re-audit of rmp #263, and AD-01
+    // of the thirteenth.
     let sandbox = Sandbox::new();
-    let facts: [(&[&str], &str); 5] = [
+    let facts: [(&[&str], &str); 7] = [
+        (
+            &["cfg", "set"],
+            "Writing host, port, user, database, tls or dsn of an entry keeps the data cached \
+             for it under .tpl/.cache/NAME/, and reads still serve it; tpl -d NAME cache clean \
+             removes it.",
+        ),
+        (
+            &["cfg", "unset"],
+            "Where KEY is host, port, user, database, tls or dsn of an entry, removing it keeps \
+             the data cached for the entry under .tpl/.cache/NAME/, and reads still serve it; \
+             tpl -d NAME cache clean removes it.",
+        ),
         (
             &["cfg", "database", "remove"],
             "Data cached for the entry under .tpl/.cache/NAME/ is kept, and an entry added later \

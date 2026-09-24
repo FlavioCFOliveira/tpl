@@ -191,7 +191,17 @@ pub(crate) fn set(supplied: &Supplied<'_>, key: &str, value: &str) -> Result<(),
     let mut editor = project.editor()?;
     editor.set(&parsed, item);
 
-    editor.save()
+    editor.save()?;
+
+    // FR-CFG-053: after the rewrite, whatever the file held for the entry
+    // before (item 7), and without looking under `.tpl/.cache/` (item 3).
+    if let Key::Entry { entry, field } = &parsed
+        && field.repoints()
+    {
+        crate::diagnostics::emit::entry_repointed(entry);
+    }
+
+    Ok(())
 }
 
 /// `tpl cfg unset <key>` (`FR-CFG-011`, `FR-CFG-012`).
@@ -228,12 +238,17 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
     // FR-CFG-050: the one key that holds five facts. The block of the entry
     // writes no such line: the caller named the whole entry, and FR-CFG-052
     // writes the line of a deleted entry instead, without looking at the
-    // cache it names.
+    // cache it names. FR-CFG-053 follows for a field that changes where the
+    // entry points, after the line of FR-CFG-050 where both are written.
     match &target {
-        Target::Key(Key::Entry {
-            entry,
-            field: EntryKey::Dsn,
-        }) => crate::diagnostics::emit::dsn_unset(entry),
+        Target::Key(Key::Entry { entry, field }) => {
+            if *field == EntryKey::Dsn {
+                crate::diagnostics::emit::dsn_unset(entry);
+            }
+            if field.repoints() {
+                crate::diagnostics::emit::entry_repointed(entry);
+            }
+        }
         Target::Entry(entry) => crate::diagnostics::emit::entry_removed(entry),
         Target::Core | Target::Databases | Target::Key(_) => {}
     }
@@ -325,7 +340,7 @@ pub(super) fn printed(field: EntryKey, value: Written<'_>) -> Printed<'_> {
 #[cfg(test)]
 mod tests {
     use super::super::tests::Harness;
-    use crate::error::Error;
+    use crate::error::{EntryRepair, Error};
 
     #[test]
     fn fr_cfg_006_get_prints_the_value_as_written_and_does_not_redact_it() {
@@ -759,6 +774,23 @@ mod tests {
 
         assert_eq!(condition.exit_code(), 64);
         assert_eq!(harness.written(), file);
+
+        // Row three of the FR-CFG-048 table, not the dsn switch of row two:
+        // `password` is also a discrete connection field (AD-02 of the
+        // thirteenth re-audit of rmp #263).
+        match condition {
+            Error::IncoherentEntryWrite {
+                ref written,
+                ref conflicting,
+                ref repair,
+                ..
+            } => {
+                assert_eq!(written, "database.shop.password_command");
+                assert_eq!(conflicting, "database.shop.password");
+                assert_eq!(*repair, EntryRepair::Unset);
+            }
+            other => panic!("expected an incoherent write, got {other:?}"),
+        }
     }
 
     #[test]

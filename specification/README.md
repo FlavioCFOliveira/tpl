@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-three editions. All are in force;
+The specification has been written in fifty-four editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4522,6 +4522,44 @@ name belongs to the entry the invocation names, so `BR-ERR-005` is not
 engaged. The root `README.md` states that removing the entry `core.database`
 names clears it silently; that remains true, so the fifth validation rule
 owes nothing.
+
+### Fifty-fourth edition — a repoint through the key of a field
+
+The thirteenth re-audit of rmp `#263`, recorded for rmp `#289`, found that
+`tpl cfg set database.NAME.host` and `tpl cfg unset` of such a field change
+where an entry points with exit `0` and nothing on stderr, while
+`tpl cfg database update` given the same field warns that the entry's cache is
+kept (finding AD-01).
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Setting or unsetting a field says the cache is kept** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-053` is amended: its line is
+  also written when `tpl cfg set` or `tpl cfg unset` is given
+  `database.<name>.host`, `port`, `user`, `database`, `tls` or `dsn` and
+  exits `0`, with the same content, the same `--tpl-dir` rule and no access
+  to the cache. Item 4 places the line of `FR-CFG-050` first where both are
+  written, and a new item 7 makes the line independent of what the file held
+  before. `FR-CFG-008`, `FR-CFG-011`, `FR-CFG-050` and `FR-CFG-052` gain a
+  sentence that cites it.
+- **The help states the fact** —
+  [help-and-version.md](help-and-version.md). `FR-HELP-036` gains a row for
+  `tpl cfg set`, and its `tpl cfg unset` row a clause for one field, each
+  carrying `tpl -d NAME cache clean`.
+- **The rule on repointing records the extension** —
+  [cache-commands.md](cache-commands.md). `BR-CACHE-003` carries a note.
+
+`FR-CFG-004`, `FR-CFG-048`, `FR-CFG-051`, `FR-CACHE-002`, `FR-CACHE-011`,
+`FR-CACHE-029`, `BR-CACHE-004`, `FR-CONF-048`, `FR-ERR-022`, `FR-OUT-020`,
+`FR-OUT-023`, `FR-GLOB-015`, `FR-HELP-031` and `UC-011` were read against the
+changes. None conflicts with them, so none is amended: the line writes to
+stderr only, reads nothing under `.tpl/.cache/` and deletes nothing, so
+`FR-CFG-004`, `FR-CACHE-011` and `BR-CACHE-004` hold. The root `README.md`
+makes no statement about what `tpl cfg set` or `tpl cfg unset` writes to
+stderr, so the fifth validation rule owes nothing.
 
 ### Still out of scope
 

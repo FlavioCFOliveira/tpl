@@ -256,11 +256,11 @@ fn entry_removed_line(entry: &str, project: Option<Option<&str>>) -> String {
     )
 }
 
-/// Warns that `tpl cfg database update` repointed an entry and left the data
-/// cached for it (`FR-CFG-053`).
+/// Warns that `tpl cfg database update`, `tpl cfg set` or `tpl cfg unset`
+/// repointed an entry and left the data cached for it (`FR-CFG-053`).
 ///
 /// It is written after the rewrite succeeded, and after the line of
-/// `FR-CFG-051` where the invocation writes both. Nothing under
+/// `FR-CFG-051` or `FR-CFG-050` where the invocation writes both. Nothing under
 /// `.tpl/.cache/` is read to decide it. The command it carries carries the
 /// caller's `--tpl-dir`, per item 2.
 pub(crate) fn entry_repointed(entry: &str) {

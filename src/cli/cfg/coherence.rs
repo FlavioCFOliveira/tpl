@@ -130,6 +130,11 @@ fn repair(
         // Row five: the dsn carries a password, and the invocation writes
         // password_command.
         EntryKey::Dsn => EntryRepair::DsnWithoutPassword,
+        // Row three: the entry carries password, and the invocation writes
+        // password_command. `password` is also a discrete connection field, so
+        // this arm precedes row two, which is about a dsn the invocation
+        // writes and not about the source of the password.
+        EntryKey::Password if written.contains(&EntryKey::PasswordCommand) => EntryRepair::Unset,
         // Row two: the entry is described by discrete fields, and the
         // invocation writes a dsn.
         field if EntryKey::DISCRETE.contains(&field) => EntryRepair::Discrete {
