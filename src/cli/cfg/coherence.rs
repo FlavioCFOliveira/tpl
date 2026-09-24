@@ -40,7 +40,7 @@ use crate::project::config::{Configuration, dsn};
 /// pair, with the repair whose runnable command makes the write legal.
 pub(super) fn refuse(
     configuration: &Configuration,
-    command: &str,
+    command: &'static str,
     name: &str,
     written: &[EntryKey],
     dsn: Option<&str>,
@@ -87,13 +87,14 @@ pub(super) fn refuse(
         entry: name.to_owned(),
         written: qualified(name, writes),
         conflicting: qualified(name, conflicting),
-        repair: repair(command, combination, written, conflicting),
+        repair: repair(command, name, combination, written, conflicting),
     })
 }
 
 /// Which runnable command makes the write legal.
 fn repair(
-    command: &str,
+    command: &'static str,
+    entry: &str,
     combination: Combination,
     written: &[EntryKey],
     conflicting: EntryKey,
@@ -109,10 +110,34 @@ fn repair(
     let mut without = combination;
     without.declare(conflicting, false);
 
-    if without.refused().is_some() {
-        EntryRepair::Rewrite
-    } else {
-        EntryRepair::Unset
+    if without.refused().is_none() {
+        return EntryRepair::Unset;
+    }
+
+    // Every key the entry carries that the write cannot stand beside, found by
+    // asking the rule again after each removal. A pair whose two members are
+    // both written cannot occur here, because the file the invocation met was
+    // coherent and the pair written in full is the `Restate` above.
+    let mut unset = vec![conflicting];
+    while let Some((first, second)) = without.refused() {
+        let carried = if written.contains(&first) {
+            second
+        } else {
+            first
+        };
+        if written.contains(&carried) || unset.contains(&carried) {
+            break;
+        }
+        without.declare(carried, false);
+        unset.push(carried);
+    }
+
+    EntryRepair::Rewrite {
+        unset: unset
+            .into_iter()
+            .map(|field| qualified(entry, field))
+            .collect(),
+        command,
     }
 }
 

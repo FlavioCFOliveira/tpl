@@ -1016,7 +1016,19 @@ mod tests {
 
         match condition {
             Error::IncoherentEntryWrite { ref repair, .. } => {
-                assert_eq!(*repair, EntryRepair::Rewrite);
+                // S-03: every conflicting key is unset, and nothing else.
+                assert_eq!(
+                    *repair,
+                    EntryRepair::Rewrite {
+                        unset: vec![
+                            "database.shop.host".to_owned(),
+                            "database.shop.user".to_owned(),
+                            "database.shop.password".to_owned(),
+                        ]
+                        .into(),
+                        command: "cfg database update",
+                    }
+                );
             }
             other => panic!("expected an incoherent write, got {other:?}"),
         }

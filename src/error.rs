@@ -29,7 +29,7 @@
 use std::fmt;
 use std::io;
 use std::panic::Location;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use thiserror::Error;
@@ -116,7 +116,7 @@ impl fmt::Display for NetworkPhase {
             Self::DnsResolution => "DNS resolution",
             Self::TcpConnect => "the TCP connect",
             Self::TlsHandshake => "the TLS handshake",
-            Self::CatalogueQuery => "the catalogue query",
+            Self::CatalogueQuery => "a query reading the database structure",
         };
         f.write_str(name)
     }
@@ -180,6 +180,16 @@ pub enum RenderReason {
     Failed(String),
     /// The undefined expression begins with a lookup call that found nothing.
     Unresolved(Unresolved),
+    /// An `{% include %}` named a template the loader does not hold
+    /// (`FR-TMPL-009`).
+    IncludeNotFound {
+        /// The name the include wrote.
+        name: String,
+        /// Whether the name with `.jinja` appended is a template of the
+        /// project: the include then only lacks the extension `FR-TMPL-009`
+        /// requires it to write.
+        lacks_extension: bool,
+    },
 }
 
 /// A lookup call, with arguments the template wrote as literals, that found
@@ -195,6 +205,10 @@ pub struct Unresolved {
     pub name: String,
     /// For a column that was not found in a table that exists, that table.
     pub table: Option<String>,
+    /// The `--context` document the render read, WHERE it read one: the
+    /// names a lookup could have found are then that document's, and no `tpl`
+    /// command lists them.
+    pub document: Option<std::path::PathBuf>,
 }
 
 /// How a `--context` document failed the contract of `FR-RND-020`.
@@ -274,9 +288,19 @@ pub enum EntryRepair {
     Unset,
 
     /// The entry carries more than one key the write conflicts with, so no
-    /// single removal makes it legal and the entry is written afresh:
-    /// `tpl cfg database remove`, then `tpl cfg database add`.
-    Rewrite,
+    /// single removal makes it legal: one `tpl cfg unset` per conflicting key,
+    /// then the same write again.
+    ///
+    /// Removing the whole entry would also clear `core.database` and every
+    /// key the write does not conflict with, so the repair names the
+    /// conflicting keys and nothing else.
+    Rewrite {
+        /// The fully qualified keys to unset, in the order they are removed.
+        /// A boxed slice, so that the variant leaves [`Error`] no larger.
+        unset: Box<[String]>,
+        /// The command path below `tpl` that performs the write.
+        command: &'static str,
+    },
 
     /// The invocation itself supplies both members, so nothing in the file has
     /// to change and the command is written again without one of the two.
@@ -524,6 +548,9 @@ pub enum Error {
     FlagValueMissing {
         /// The flag, in the long form the tree declares it under.
         flag: String,
+        /// The values the flag accepts, where it accepts a fixed set, in the
+        /// order the tree declares them; empty otherwise.
+        permitted: Vec<String>,
     },
 
     /// A flag value beginning with `-` was supplied as a separate token
@@ -603,6 +630,11 @@ pub enum Error {
         /// The second member of the pair, as written.
         second: String,
     },
+
+    /// `tpl render` was given `--direct` together with `--context`
+    /// (`FR-RND-041`): the one demands the server read the other excludes.
+    #[error("--direct cannot be used with --context")]
+    DirectWithContext,
 
     /// `--pretty` given where the format in force is not JSON (`FR-OUT-009`).
     ///
@@ -887,10 +919,14 @@ pub enum Error {
     /// the document contract (`FR-RND-020`, `FR-ERR-029`).
     #[error("the --context document {} is malformed", context_origin(.path))]
     ContextDocumentMalformed {
-        /// The path the document was read from.
-        path: PathBuf,
+        /// The path the document was read from. Boxed, so that the flag
+        /// below leaves every `Result` this crate returns no larger.
+        path: Box<Path>,
         /// Which half of `FR-RND-020` it failed.
         fault: ContextFault,
+        /// Whether `core.database` names an entry, so that the dump the hint
+        /// suggests needs no `-d`.
+        default_entry: bool,
     },
 
     /// The render did not finish within its deadline (`FR-RND-033`,
@@ -1386,7 +1422,7 @@ pub enum Error {
 
     /// `password_command` is stored as something other than an array of
     /// strings (`FR-CONF-035`).
-    #[error("{key} is not an array")]
+    #[error("{}", password_command_not_an_array(key, found, *element))]
     PasswordCommandNotAnArray {
         /// The fully qualified key.
         key: String,
@@ -1398,6 +1434,9 @@ pub enum Error {
         position: Position,
         /// The TOML type found, against the array of `FR-CONF-023` expected.
         found: &'static str,
+        /// The zero-based index of the element that is not a string, WHERE
+        /// the value is an array and one of its elements is the fault.
+        element: Option<usize>,
     },
 
     /// One entry declares two keys that exclude one another (`FR-CONF-006`,
@@ -1574,6 +1613,9 @@ pub enum Error {
         /// The file the selection would have come from; `FR-GLOB-006` obliges
         /// the message to name it.
         file: PathBuf,
+        /// Whether that file declares any entry at all; where it declares
+        /// none, there is nothing to select and the hint says how to add one.
+        has_entries: bool,
     },
 
     /// The server is reachable and authenticated and is not MariaDB
@@ -1729,7 +1771,7 @@ fn render_failed(template: &str, position: &Position, reason: Option<&RenderReas
         Some(RenderReason::Failed(message)) => {
             format!("template '{template}' called fail() at {position}: {message}")
         }
-        Some(RenderReason::Unresolved(_)) | None => {
+        Some(RenderReason::Unresolved(_) | RenderReason::IncludeNotFound { .. }) | None => {
             format!("rendering template '{template}' failed at {position}")
         }
     }
@@ -1752,6 +1794,18 @@ pub(crate) fn context_name(path: &std::path::Path) -> String {
         "standard input".to_owned()
     } else {
         format!("'{}'", path.display())
+    }
+}
+
+/// The `error:` line of [`Error::PasswordCommandNotAnArray`]: an empty array is
+/// an array, so the line says what is wrong with it instead.
+fn password_command_not_an_array(key: &str, found: &str, element: Option<usize>) -> String {
+    if let Some(index) = element {
+        format!("{key} holds a non-string element at index {index}")
+    } else if found == crate::project::config::EMPTY_ARRAY {
+        format!("{key} is an empty array")
+    } else {
+        format!("{key} is not an array")
     }
 }
 
@@ -1872,6 +1926,7 @@ impl Error {
             | Self::InvocationRejected { .. }
             | Self::MissingArgument { .. }
             | Self::MutuallyExclusiveFlags { .. }
+            | Self::DirectWithContext
             | Self::PrettyWithoutJson { .. }
             | Self::ConnectionDetailsMissing { .. }
             | Self::NothingToUpdate { .. }
@@ -1969,7 +2024,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 76;
+    const VARIANT_COUNT: usize = 77;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2041,6 +2096,7 @@ mod tests {
             (
                 Error::FlagValueMissing {
                     flag: "--timeout".to_owned(),
+                    permitted: Vec::new(),
                 },
                 64,
             ),
@@ -2082,6 +2138,7 @@ mod tests {
                 },
                 64,
             ),
+            (Error::DirectWithContext, 64),
             (
                 Error::RoutinePrefixNotLowerCase {
                     token: "PROCEDURE:calc_vat".to_owned(),
@@ -2231,8 +2288,9 @@ mod tests {
             ),
             (
                 Error::ContextDocumentMalformed {
-                    path: PathBuf::from("context.json"),
+                    path: std::path::Path::new("context.json").into(),
                     fault: ContextFault::NotJson(position()),
+                    default_entry: false,
                 },
                 65,
             ),
@@ -2459,6 +2517,7 @@ mod tests {
                     file: path(),
                     position: position(),
                     found: "string",
+                    element: None,
                 },
                 78,
             ),
@@ -2544,7 +2603,13 @@ mod tests {
                 },
                 78,
             ),
-            (Error::NoDatabaseEntrySelected { file: path() }, 78),
+            (
+                Error::NoDatabaseEntrySelected {
+                    file: path(),
+                    has_entries: true,
+                },
+                78,
+            ),
             (
                 Error::ServerNotMariaDb {
                     entry: "shop".to_owned(),
@@ -2580,6 +2645,7 @@ mod tests {
             Error::InvocationRejected { .. } => "InvocationRejected",
             Error::MissingArgument { .. } => "MissingArgument",
             Error::MutuallyExclusiveFlags { .. } => "MutuallyExclusiveFlags",
+            Error::DirectWithContext => "DirectWithContext",
             Error::RoutinePrefixNotLowerCase { .. } => "RoutinePrefixNotLowerCase",
             Error::AmbiguousRoutineName { .. } => "AmbiguousRoutineName",
             Error::AmbiguousRoutineInContext { .. } => "AmbiguousRoutineInContext",
@@ -2779,6 +2845,7 @@ mod tests {
                 file: path(),
                 position: position(),
                 found: "string",
+                element: None,
             }
             .to_string(),
             "database.shop.password_command is not an array"

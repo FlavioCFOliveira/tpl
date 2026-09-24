@@ -135,6 +135,7 @@ pub(super) fn unresolved(
                     kind: LookupKind::Table,
                     name: table.clone(),
                     table: None,
+                    document: None,
                 }
             } else {
                 Unresolved {
@@ -142,6 +143,7 @@ pub(super) fn unresolved(
                     kind,
                     name: name.clone(),
                     table: Some(table.clone()),
+                    document: None,
                 }
             })
         }
@@ -151,6 +153,7 @@ pub(super) fn unresolved(
             kind,
             name: name.clone(),
             table: None,
+            document: None,
         }),
     }
 }
@@ -198,6 +201,31 @@ fn quoted(name: &str) -> String {
     } else {
         format!("\"{name}\"")
     }
+}
+
+/// The name an `{% include %}` wrote, where a template it named is what the
+/// loader did not hold.
+///
+/// The engine carries the name only in its message, `tried to include
+/// non-existing template "<name>"`, written with Rust's quoting; a name that
+/// the quoting escaped is not recovered, and yields nothing rather than a
+/// guess.
+pub(super) fn missing_include(reported: &minijinja::Error) -> Option<String> {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(reported);
+
+    while let Some(error) = current {
+        if let Some(engine) = error.downcast_ref::<minijinja::Error>()
+            && engine.kind() == minijinja::ErrorKind::TemplateNotFound
+        {
+            let detail = engine.detail()?;
+            let (_, quoted) = detail.split_once('"')?;
+            let name = quoted.strip_suffix('"')?;
+            return (!name.is_empty() && !name.contains(['"', '\\'])).then(|| name.to_owned());
+        }
+        current = error.source();
+    }
+
+    None
 }
 
 /// The message the template gave `fail(message)`, where that call is what
@@ -357,19 +385,35 @@ fn chain(reported: &minijinja::Error) -> Vec<String> {
         None => message,
     };
 
-    let mut chain = vec![located(reported.to_string())];
+    let mut chain = vec![unlabelled(located(reported.to_string()))];
     let mut source = reported.source();
 
     while let Some(current) = source {
         // The mark `fail` attaches repeats the message the error above it
         // already carries.
         if current.downcast_ref::<Failed>().is_none() {
-            chain.push(located(current.to_string()));
+            chain.push(unlabelled(located(current.to_string())));
         }
         source = current.source();
     }
 
     chain
+}
+
+/// The label the engine writes before the message of an invalid operation.
+///
+/// It names the engine's own error kind, which is nothing the author wrote:
+/// `fail("boom")` reads `invalid operation: boom`, and a range past its cap
+/// `invalid operation: range has too many elements`. The message after it is
+/// the link of the chain `FR-ERR-011` carries.
+const INVALID_OPERATION: &str = "invalid operation: ";
+
+/// One link of the chain, without the engine's [`INVALID_OPERATION`] label.
+fn unlabelled(message: String) -> String {
+    match message.strip_prefix(INVALID_OPERATION) {
+        Some(rest) => rest.to_owned(),
+        None => message,
+    }
 }
 
 #[cfg(test)]
@@ -385,6 +429,33 @@ mod tests {
         engine.set_debug(true);
 
         engine
+    }
+
+    #[test]
+    fn rmp_274_no_link_of_the_chain_carries_the_engines_invalid_operation_label() {
+        let mut engine = engine();
+        engine
+            .add_template("big", "{% for i in range(100000000) %}{% endfor %}")
+            .expect("the template parses");
+        let reported = engine
+            .get_template("big")
+            .expect("the template is there")
+            .render(())
+            .expect_err("the range is past the engine's cap");
+
+        let Error::RenderFailed { chain, .. } = during_render("big", &reported) else {
+            panic!("an evaluation failure is a RenderFailed");
+        };
+        assert!(
+            chain
+                .iter()
+                .any(|link| link.starts_with("range has too many elements")),
+            "{chain:?}"
+        );
+        assert!(
+            chain.iter().all(|link| !link.contains("invalid operation")),
+            "{chain:?}"
+        );
     }
 
     #[test]
@@ -543,6 +614,7 @@ mod tests {
                 kind: LookupKind::Table,
                 name: "absent".to_owned(),
                 table: None,
+                document: None,
             })
         );
         assert_eq!(
@@ -552,6 +624,7 @@ mod tests {
                 kind: LookupKind::Column,
                 name: "absent".to_owned(),
                 table: Some("consignment".to_owned()),
+                document: None,
             })
         );
         assert_eq!(

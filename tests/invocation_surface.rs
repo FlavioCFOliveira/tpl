@@ -864,3 +864,53 @@ fn fr_cli_014_a_repeated_value_carrying_flag_is_still_refused_by_the_process() {
         assert!(written.contains(second), "{written}");
     }
 }
+
+/// The `hint` line of a refusal, without its label.
+fn hint_of(printed: &Output) -> String {
+    stderr(printed)
+        .lines()
+        .find_map(|line| line.strip_prefix("hint:  "))
+        .expect("a refusal carries a hint")
+        .to_owned()
+}
+
+#[test]
+fn fr_err_042_a_prefix_of_a_command_is_suggested_and_never_run() {
+    // FR-ERR-042 at the three places a command token is read: the first
+    // token, a token after a group node, and a segment of the help path.
+    for (arguments, suggested) in [
+        (&["sch", "tables"][..], "did you mean 'schema'?"),
+        (&["cfg", "datab"][..], "did you mean 'database'?"),
+        (&["help", "sch"][..], "did you mean 'schema'?"),
+    ] {
+        let printed = run(arguments);
+        let spelled = arguments.join(" ");
+
+        assert_refused(&printed, &spelled);
+        assert!(
+            hint_of(&printed).starts_with(suggested),
+            "tpl {spelled}: {}",
+            stderr(&printed)
+        );
+    }
+
+    // FR-ERR-038: the comparison is over the characters as written.
+    let printed = run(&["SCH"]);
+    assert_refused(&printed, "SCH");
+    assert!(
+        !hint_of(&printed).contains("'schema'"),
+        "{}",
+        stderr(&printed)
+    );
+}
+
+#[test]
+fn s_14_a_flag_with_a_fixed_set_of_values_names_them_when_it_is_given_none() {
+    let printed = run(&["help", "--format"]);
+
+    assert_refused(&printed, "help --format");
+    assert_eq!(
+        hint_of(&printed),
+        "give text or json after the flag, e.g. --format text"
+    );
+}

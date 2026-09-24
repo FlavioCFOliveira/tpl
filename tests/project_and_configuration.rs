@@ -1375,14 +1375,19 @@ fn fr_cfg_048_add_refuses_a_dsn_carrying_a_password_beside_a_password_command() 
 fn fr_cfg_048_update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alone() {
     // FR-CFG-048 with FR-CFG-020: the fields the flags do not name stay in
     // place, so the write is refused rather than the entry made coherent by
-    // removing what the caller never named. The hint is the pair of commands
-    // that writes the entry afresh, and both are run.
+    // removing what the caller never named. The hint unsets each conflicting
+    // key and then writes again (S-03 of #274), and every command is run: the
+    // write succeeds, and core.database still names the entry.
     let sandbox = Sandbox::new();
     let before = concat!(
+        "[core]\n",
+        "database = \"shop\"\n",
+        "\n",
         "[database.shop]\n",
         "host = \"db.example.com\"\n",
         "user = \"alice\"\n",
         "password = \"hunter2\"\n",
+        "tls = \"disabled\"\n",
     );
     sandbox.project(before);
 
@@ -1401,20 +1406,28 @@ fn fr_cfg_048_update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alon
     assert!(cause.contains("database.shop.host"), "{written}");
     assert_eq!(sandbox.configuration(), before.as_bytes());
 
-    assert!(
-        line(&written, "hint:  ")
-            .contains("tpl cfg database remove shop, then tpl cfg database add shop --dsn <url>"),
+    let hint = line(&written, "hint:  ");
+    assert_eq!(
+        hint,
+        "remove the keys it conflicts with, then write it again: tpl cfg unset \
+         database.shop.host; tpl cfg unset database.shop.user; tpl cfg unset \
+         database.shop.password; then tpl cfg database update shop --dsn <url>",
         "{written}"
     );
-    assert_eq!(
-        code(&sandbox.run(&["cfg", "database", "remove", "shop"])),
-        0
-    );
+    assert!(!hint.contains("remove shop"), "{written}");
+
+    for key in [
+        "database.shop.host",
+        "database.shop.user",
+        "database.shop.password",
+    ] {
+        assert_eq!(code(&sandbox.run(&["cfg", "unset", key])), 0, "{key}");
+    }
     assert_eq!(
         code(&sandbox.run(&[
             "cfg",
             "database",
-            "add",
+            "update",
             "shop",
             "--dsn",
             "mysql://alice@db.example.com/shop",
@@ -1422,6 +1435,10 @@ fn fr_cfg_048_update_refuses_a_field_that_cannot_stand_beside_one_it_leaves_alon
         0,
         "the hint did not make the write legal"
     );
+
+    let kept = String::from_utf8(sandbox.configuration()).expect("the file is UTF-8");
+    assert!(kept.contains("database = \"shop\""), "{kept}");
+    assert!(kept.contains("tls = \"disabled\""), "{kept}");
 }
 
 #[test]
@@ -1878,4 +1895,145 @@ fn fr_proj_026_init_warns_that_tpl_dir_has_no_effect_and_never_looks_at_its_path
     assert_eq!(code(&printed), 0, "{}", stderr(&printed));
     assert!(printed.stderr.is_empty(), "{}", stderr(&printed));
     assert!(sandbox.path("nested/.tpl/.cfg").is_file());
+}
+
+// ------------------------------------------------------------ #274 ---------
+
+#[test]
+fn s_04_an_empty_password_command_array_is_named_as_empty() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.x]\nhost = \"h\"\ndatabase = \"d\"\npassword_command = []\n");
+
+    let written = assert_refused(
+        &sandbox.run(&["-d", "x", "schema", "tables"]),
+        78,
+        "an empty password_command",
+    );
+
+    assert_eq!(
+        line(&written, "error: "),
+        "database.x.password_command is an empty array"
+    );
+    let cause = line(&written, "cause: ");
+    assert!(
+        cause.ends_with(
+            "declares database.x.password_command as an empty array; this key takes an array \
+             of at least one string, the program first"
+        ),
+        "{written}"
+    );
+    assert!(!cause.contains("an an"), "{written}");
+}
+
+#[test]
+fn s_10_key_suggestions_stay_in_the_named_entry_and_find_a_core_key_under_an_entry() {
+    let sandbox = Sandbox::new();
+    sandbox.project(concat!(
+        "[database.p]\nhost = \"h\"\n\n",
+        "[database.b]\nhost = \"h\"\n\n",
+        "[database.c]\nhost = \"h\"\n",
+    ));
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "set", "database.p.hots", "x"]),
+        64,
+        "a misspelled key of entry p",
+    );
+    assert!(
+        line(&written, "hint:  ").starts_with("did you mean 'database.p.host'? list"),
+        "{written}"
+    );
+
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "set", "database.p.password_timeout", "5"]),
+        64,
+        "a core key under an entry",
+    );
+    assert!(
+        line(&written, "hint:  ").starts_with("did you mean 'core.password_timeout'?"),
+        "{written}"
+    );
+
+    // The same key in the file itself.
+    sandbox.project("[database.x]\npassword_timeout = 5\n");
+    let written = assert_refused(
+        &sandbox.run(&["cfg", "list"]),
+        78,
+        "a core key in [database.x]",
+    );
+    assert!(
+        line(&written, "hint:  ").starts_with("did you mean 'core.password_timeout'?"),
+        "{written}"
+    );
+}
+
+#[test]
+fn s_15_a_project_with_no_entry_is_told_how_to_add_one() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+
+    let written = assert_refused(&sandbox.run(&["schema", "tables"]), 78, "no entry at all");
+    assert_eq!(
+        line(&written, "hint:  "),
+        "this project has no database entry; add one with: tpl cfg database add <name> --host \
+         <host> --user <user> --schema <database>"
+    );
+
+    // With an entry to select, the hint still says how to select it.
+    sandbox.project("[database.shop]\nhost = \"h\"\ndatabase = \"d\"\n");
+    let written = assert_refused(&sandbox.run(&["schema", "tables"]), 78, "none selected");
+    assert!(
+        line(&written, "hint:  ").starts_with("select an entry with -d <entry>"),
+        "{written}"
+    );
+}
+
+#[test]
+fn s_13_a_failed_password_command_is_written_out_to_run_directly() {
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[database.p]\nhost = \"127.0.0.1\"\ndatabase = \"d\"\npassword_command = [\"false\"]\n",
+    );
+
+    let written = assert_refused(
+        &sandbox.run_from(
+            sandbox.root(),
+            &[("PATH", "/usr/bin:/bin")],
+            &["-d", "p", "schema", "tables"],
+        ),
+        78,
+        "a password_command that fails",
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "run it directly to see why it failed: false; tpl sends its standard error to the null \
+         device"
+    );
+}
+
+#[test]
+fn rmp_274_a_non_string_element_of_password_command_is_named_by_its_index() {
+    let sandbox = Sandbox::new();
+    sandbox.project(
+        "[database.x]\nhost = \"h\"\ndatabase = \"d\"\npassword_command = [\"pass\", 1]\n",
+    );
+
+    let written = assert_refused(
+        &sandbox.run(&["-d", "x", "schema", "tables"]),
+        78,
+        "a password_command with an integer element",
+    );
+
+    assert_eq!(
+        line(&written, "error: "),
+        "database.x.password_command holds a non-string element at index 1"
+    );
+    assert!(
+        line(&written, "cause: ").ends_with(
+            "declares database.x.password_command with an integer at index 1; every element of \
+             this key is a string"
+        ),
+        "{written}"
+    );
+    assert!(!written.contains("is not an array"), "{written}");
 }

@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in forty-five editions. All are in force;
+The specification has been written in forty-six editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4028,6 +4028,60 @@ order of `FR-ERR-006` gains no step. Neither root document paraphrases an
 amended requirement: the root `README.md` describes `--tpl-dir` under
 `FR-GLOB-009`, which is unchanged. The fifth validation rule therefore owes
 nothing.
+
+### Forty-sixth edition — every broken template, a flag that could not act, and a shortened command
+
+The second re-audit of sprint 21, closed for rmp `#274`, found three places
+where the text an agent reads promised more than the command did. `tpl
+template check` stopped at the first broken template while its help says it
+checks every one (finding S-05). `tpl render --context <file> --direct` exited
+`0` with `--direct` doing nothing (finding S-11). `tpl sch` received no
+suggestion, because a prefix is too far from the whole name by edit distance
+(finding S-14). No requirement fixed any of the three outcomes. This edition
+fixes them.
+
+**Three identifiers are assigned — `FR-TMPL-032`, `FR-RND-041` and
+`FR-ERR-042`; none is retired and none is renumbered.** No term enters or
+leaves [glossary.md](glossary.md); the entry *nearest match* is amended. No
+entry of [upstream-divergences.md](upstream-divergences.md) is raised or
+discharged, and the index of [open-questions.md](open-questions.md) stays
+empty.
+
+- **`tpl template check` reports every failure** —
+  [template-commands.md](template-commands.md). `FR-TMPL-032` checks every
+  selected template before it reports, writes one four-line message per
+  failing template in the order of checking, and exits `65`. A condition other
+  than a syntax error stops the check and is reported alone, with its own
+  code. `FR-TMPL-020` and `FR-ERR-006` carry notes: one condition met by
+  several objects is reported per object only where a requirement says so.
+- **`--direct` with `--context` is refused** —
+  [render-command.md](render-command.md). `FR-RND-041` exits `64` at argument
+  parsing, as `FR-RND-018` does for `--context` with an explicit `-d`. The
+  `cause` names both flags and why they contradict each other. The `hint`
+  names the flag to remove for each outcome and does not reproduce the path.
+  Where `-d` is also given, `FR-RND-018` is reported. `FR-RND-025` carries a
+  note.
+- **A shortened command is suggested** —
+  [errors-and-exit-codes.md](errors-and-exit-codes.md). `FR-ERR-042` admits,
+  for a command token only, every child of the node reached of which the token
+  is a proper prefix, at any distance. Such candidates join those of
+  `FR-ERR-019` under its order and its cap of three. Nothing is executed, and
+  `FR-CLI-004` still makes the invocation `64`. `FR-ERR-019`, `FR-ERR-020` and
+  `FR-CLI-004` carry notes, and `UC-012` in [use-cases.md](use-cases.md) gains
+  an alternate flow.
+
+`FR-TMPL-013`, `FR-TMPL-017` through `FR-TMPL-019`, `FR-TMPL-026`,
+`FR-TMPL-027`, `FR-TMPL-031`, `FR-OUT-037`, `FR-ERR-008`, `FR-ERR-011`,
+`FR-ERR-022`, `FR-ERR-024`, `FR-ERR-033`, `FR-ERR-034`, `FR-ERR-037`,
+`FR-ERR-038`, `FR-RND-018`, `FR-RND-019`, `FR-RND-022`, `FR-CACHE-013`,
+`FR-CACHE-015`, `FR-CACHE-018`, `FR-GLOB-021`, `BR-GLOB-001`, `FR-HELP-013`,
+`FR-HELP-027` and `FR-HELP-028` were read against the changes, and none
+conflicts with them, so none is amended. `FR-HELP-013` already obliges the
+help of `--direct` and `--context` to state the new mutual exclusion. The
+finding S-02 was read against `FR-CFG-016`, `FR-CONF-040` and `FR-CONF-041`,
+which admit an entry created from one discrete flag and refuse it with `78`
+when it is used; nothing is changed for it. Neither root document paraphrases
+an amended requirement, so the fifth validation rule owes nothing.
 
 ### Still out of scope
 

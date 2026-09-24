@@ -131,8 +131,9 @@ pub(crate) fn context<'a>(database: &'a Database<'a>) -> Result<DatabaseDocument
 /// invariant.
 pub(crate) fn read<'a>(bytes: &'a str, path: &Path) -> Result<Database<'a>, Error> {
     let malformed = |fault| Error::ContextDocumentMalformed {
-        path: path.to_owned(),
+        path: path.into(),
         fault,
+        default_entry: false,
     };
 
     // FR-SCH-036: the whole envelope, and not a bare `data` object in its
@@ -430,9 +431,11 @@ mod tests {
     /// The fault a supplied document failed on.
     fn refused(document: &str) -> ContextFault {
         match read(document, &path()).expect_err("the document does not match the contract") {
-            Error::ContextDocumentMalformed { path: named, fault } => {
+            Error::ContextDocumentMalformed {
+                path: named, fault, ..
+            } => {
                 assert_eq!(
-                    named,
+                    &*named,
                     path(),
                     "FR-ERR-034 obliges the cause to name the path"
                 );

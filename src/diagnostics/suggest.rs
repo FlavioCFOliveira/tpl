@@ -168,7 +168,8 @@ impl<'a> Suggestions<'a> {
 /// candidate it refuses is dropped before it is measured, so it occupies none
 /// of the three places and reaches no line of the output, which is
 /// `FR-ERR-023`. What survives is measured against `supplied` and kept where it
-/// lies within `MAX_DISTANCE`, ordered by distance and then by name.
+/// lies within `MAX_DISTANCE` — or, for a command, where `supplied` is a
+/// proper prefix of it (`FR-ERR-042`) — ordered by distance and then by name.
 ///
 /// **A candidate equal to `supplied` is refused before it is measured**, over
 /// every population this function serves. `FR-ERR-019` admits a candidate by
@@ -206,6 +207,18 @@ where
 
         if let Some(distance) = matrix.distance(candidate, MAX_DISTANCE) {
             kept.offer(distance, candidate);
+        } else if matches!(population, Population::Commands)
+            && !supplied.is_empty()
+            && candidate.starts_with(supplied)
+        {
+            // FR-ERR-042: a command of which the token is a proper prefix is a
+            // candidate at any distance. Its distance is the characters the
+            // token lacks, which only deletions from the candidate reach, so
+            // it ranks among the others by the order of FR-ERR-019.
+            kept.offer(
+                candidate.chars().count() - supplied.chars().count(),
+                candidate,
+            );
         }
     }
 

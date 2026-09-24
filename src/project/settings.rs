@@ -88,6 +88,7 @@ pub(crate) fn select<'a>(
             None => {
                 return Err(Error::NoDatabaseEntrySelected {
                     file: configuration.file().to_owned(),
+                    has_entries: configuration.names().len() > 0,
                 });
             }
         },

@@ -244,11 +244,10 @@ impl Configuration {
     /// (`FR-CFG-009`, `FR-CONF-034`).
     pub(crate) fn nearest_key_in_space(&self, supplied: &str) -> Vec<String> {
         let names: Vec<&str> = self.names().collect();
-        nearest(
-            supplied,
-            &keys::candidates(names, supplied),
-            Population::ConfigurationKeys,
-        )
+        let population = keys::candidates(names, supplied);
+        let suggested = nearest(supplied, &population, Population::ConfigurationKeys);
+
+        misplaced(supplied, &population, suggested)
     }
 
     /// The nearest matches to `supplied` among the entry names the file defines
@@ -426,26 +425,35 @@ fn check_key_space(
 /// The refusal of `FR-CONF-034`, with the nearest-match suggestion it obliges.
 fn outside_space(key: &str, known: &[&str], file: &Path) -> Error {
     let population = keys::candidates(known.iter().copied(), key);
-    let mut suggested = nearest(key, &population, Population::ConfigurationKeys);
-
-    // A known key written in the wrong table — `password_timeout` above
-    // `[core]` — is a whole segment away from its own spelling, so the
-    // distance of FR-ERR-019 never reaches it. The key is offered under every
-    // table that does hold a key of that name.
-    if suggested.is_empty() && !key.contains('.') {
-        suggested = population
-            .iter()
-            .filter(|candidate| candidate.rsplit('.').next() == Some(key))
-            .take(3)
-            .cloned()
-            .collect();
-    }
+    let suggested = nearest(key, &population, Population::ConfigurationKeys);
+    let suggested = misplaced(key, &population, suggested);
 
     Error::ConfigurationKeyOutsideSpace {
         key: key.to_owned(),
         file: file.to_owned(),
         nearest: suggested,
     }
+}
+
+/// The suggestions for `key`, or, where the distance of `FR-ERR-019` found
+/// none, the key of the same name in the table that holds it.
+///
+/// A known key written in the wrong table — `password_timeout` above `[core]`,
+/// or under `[database.x]` — is a whole segment away from its own spelling, so
+/// the distance never reaches it. The key is offered under every table that
+/// does hold a key of that name.
+fn misplaced(key: &str, population: &[String], suggested: Vec<String>) -> Vec<String> {
+    if !suggested.is_empty() {
+        return suggested;
+    }
+
+    let leaf = key.rsplit('.').next().unwrap_or(key);
+    population
+        .iter()
+        .filter(|candidate| candidate.as_str() != key && candidate.rsplit('.').next() == Some(leaf))
+        .take(3)
+        .cloned()
+        .collect()
 }
 
 /// The table `value` holds, or the refusal of a section that is not one.
@@ -745,27 +753,32 @@ fn arguments(
     key: &str,
     file: &Path,
 ) -> Result<PasswordCommand, Error> {
-    let not_an_array = |found: &'static str| Error::PasswordCommandNotAnArray {
+    let not_an_array = |found: &'static str, element| Error::PasswordCommandNotAnArray {
         key: key.to_owned(),
         file: file.to_owned(),
         position: at(text, value),
         found,
+        element,
     };
 
     let Some(members) = value.get_ref().as_array() else {
-        return Err(not_an_array(value.get_ref().type_str()));
+        return Err(not_an_array(value.get_ref().type_str(), None));
     };
 
     let mut collected = Vec::with_capacity(members.len());
-    for member in members.iter() {
+    for (index, member) in members.iter().enumerate() {
         let Some(argument) = member.get_ref().as_str() else {
-            return Err(not_an_array(member.get_ref().type_str()));
+            return Err(not_an_array(member.get_ref().type_str(), Some(index)));
         };
         collected.push(argument.to_owned());
     }
 
-    PasswordCommand::new(collected).ok_or_else(|| not_an_array("an empty array"))
+    PasswordCommand::new(collected).ok_or_else(|| not_an_array(EMPTY_ARRAY, None))
 }
+
+/// The `found` of [`Error::PasswordCommandNotAnArray`] for `password_command =
+/// []`: an array, but one with no program to run.
+pub(crate) const EMPTY_ARRAY: &str = "empty array";
 
 /// The refusal of a value that is not of its declared type.
 ///

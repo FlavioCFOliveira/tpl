@@ -230,8 +230,10 @@ here introduces behaviour of its own.
     the error is not. `FR-ERR-033` makes every diagnostic the same four lines of
     text, whatever the format, and the exit code is the machine-comparable
     signal
+  - The mistyped name is a shortened command, `tpl sch tables`: it is not
+    executed, and the `64` suggests `schema`, per `FR-ERR-042`.
 - **Requirements**: `FR-ERR-008`, `FR-ERR-009`, `FR-ERR-019` … `FR-ERR-024`,
-  `FR-ERR-033`, `FR-ERR-034`
+  `FR-ERR-033`, `FR-ERR-034`, `FR-ERR-042`
 
 ## UC-013 — Build an application's data layer from a known schema
 

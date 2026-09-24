@@ -239,6 +239,23 @@ impl Environment {
                     *reason = fault::unresolved(self.engine(), context, expression)
                         .map(|found| Box::new(crate::error::RenderReason::Unresolved(found)));
                 }
+                if let Error::RenderFailed {
+                    reason: reason @ None,
+                    ..
+                } = &mut condition
+                    && let Some(name) = fault::missing_include(&reported)
+                {
+                    // FR-TMPL-009 resolves an include literally, and the
+                    // root's own resolution completes the extension: the
+                    // second finding what the first did not is exactly the
+                    // name that lacks it.
+                    let lacks_extension =
+                        !name.ends_with(".jinja") && self.root.resolve(&name).is_ok();
+                    *reason = Some(Box::new(crate::error::RenderReason::IncludeNotFound {
+                        name,
+                        lacks_extension,
+                    }));
+                }
                 Err(condition)
             }
         }

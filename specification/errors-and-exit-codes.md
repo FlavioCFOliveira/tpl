@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md]
 ---
 
@@ -612,6 +612,13 @@ Out of scope: the wording of any individual message.
   again only for an abandoned render that returned within every bound, per
   `FR-CACHE-039` and `FR-RND-038`.
 
+  *Note added in the forty-sixth edition.* "The first that fails" names a
+  condition, not an object. One condition met by several objects of one
+  invocation is reported once per object only where a requirement says so,
+  and one does: `FR-TMPL-032` reports every template `tpl template check`
+  finds with a syntax error, one message each, all with `65`. The order of the
+  steps, and which code wins between two conditions, are unchanged.
+
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
 
@@ -836,6 +843,11 @@ Out of scope: the wording of any individual message.
   most three suggestions, drawn from names within an edit distance of two,
   ordered by distance and then by name.
 
+  *Note added in the forty-sixth edition.* For a command token, `FR-ERR-042`
+  also admits a child of which the token is a proper prefix, at any distance.
+  The cap of three and this order govern the candidates of both rules
+  together.
+
 - **FR-ERR-039**: The edit distance of `FR-ERR-019` SHALL be the **restricted**
   Damerau-Levenshtein distance — optimal string alignment — in which the
   insertion, the deletion and the substitution of one character, and the
@@ -902,6 +914,56 @@ Out of scope: the wording of any individual message.
 
 - **FR-ERR-020**: IF no candidate is within that distance, THEN the system SHALL
   omit the suggestion entirely rather than offer a poor one.
+
+  *Note added in the forty-sixth edition.* For a command, a candidate is also
+  one `FR-ERR-042` admits by prefix. A suggestion is omitted only where neither
+  rule admits a candidate.
+
+- **FR-ERR-042**: WHERE the supplied name is a command token — a first
+  non-flag token that is not a command, per `FR-CLI-003`; a token after a group
+  node that names none of its children; or a segment of the path of
+  `tpl help` that names no child, per `FR-HELP-028` — the system SHALL also
+  admit as a candidate every canonical name and every alias among the children
+  of the node reached of which the supplied token is a proper prefix, compared
+  over the characters as written, per `FR-ERR-038`, whatever its distance
+  under `FR-ERR-039`. The candidates admitted by `FR-ERR-019` and by this
+  requirement SHALL form one set, ordered by distance and then by name and
+  capped at three, per `FR-ERR-019`, and written per `FR-ERR-037`. The
+  suggestion SHALL NOT be acted on: the invocation still exits `64`
+  (`EX_USAGE`), per `FR-CLI-004`.
+
+  ```
+  tpl sch tables
+  error: unknown command 'sch'
+  cause: 'sch' is not a command of tpl; commands are matched in full, never by prefix
+  hint:  did you mean 'schema'? list the commands with: tpl help
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the candidate and the code.
+
+  *Rationale.* A caller that shortens a command writes a prefix of it, and a
+  prefix is far from the whole name by edit distance: `sch` is three steps
+  from `schema`, outside the threshold of `FR-ERR-019`, so the caller received
+  no suggestion for the slip it was most likely to make. The command space is
+  closed and small, so every prefix candidate is a real command, and the
+  suggestion costs nothing on the success path.
+
+  *Why this does not reopen `FR-CLI-004`.* That requirement bars **inferring**
+  a command from a prefix, because a prefix unique today stops being unique
+  when a command is added. A suggestion is not an inference: nothing runs, the
+  caller chooses, and a prefix that matches two commands produces a suggestion
+  naming both.
+
+  *Rejected: extending the rule to every population of `FR-ERR-021`.* Tables,
+  templates and entries are open populations of up to hundreds of names, where
+  a short prefix admits many candidates and the cap of three would choose
+  among them by name alone. The finding was about commands, and commands are
+  where the population is closed and known.
+
+  *Added in the forty-sixth edition,* for rmp `#274`, from finding S-14 of the
+  second re-audit.
 
 - **FR-ERR-021**: Suggestions SHALL apply to tables, views, routines, templates,
   database entries, commands, flags, and configuration keys.

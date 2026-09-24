@@ -381,9 +381,11 @@ impl fmt::Display for Target {
 /// enumerated space of `FR-CONF-002`, written out.
 ///
 /// The eight `[core]` keys are the whole of the section. The ten entry keys are
-/// written once per entry name the file defines and once for the name the
-/// supplied key itself carries, so that `database.shop.hst` is corrected in a
-/// project whose file does not yet define `shop`.
+/// written once per entry name the file defines; where the supplied key names
+/// an entry, they are written for that entry alone, so that
+/// `database.shop.hst` is corrected in a project whose file does not yet
+/// define `shop`, and is not offered the keys of another entry the caller did
+/// not name.
 ///
 /// The names are collected rather than borrowed because the entry names come
 /// from two populations with different lifetimes and the selection of
@@ -392,13 +394,10 @@ pub(crate) fn candidates<'a, N>(defined: N, supplied: &str) -> Vec<String>
 where
     N: IntoIterator<Item = &'a str>,
 {
-    let mut entries: Vec<String> = defined.into_iter().map(str::to_owned).collect();
-
-    if let Some(named) = entry_named_by(supplied)
-        && !entries.iter().any(|known| known == named)
-    {
-        entries.push(named.to_owned());
-    }
+    let entries: Vec<String> = match entry_named_by(supplied) {
+        Some(named) => vec![named.to_owned()],
+        None => defined.into_iter().map(str::to_owned).collect(),
+    };
 
     let mut population: Vec<String> = CoreKey::ALL
         .iter()
@@ -602,8 +601,9 @@ mod tests {
 
         assert!(population.iter().any(|key| key == "core.database"));
         assert!(population.iter().any(|key| key == "database.shop.host"));
+        // S-10: the entry the key names is the only one it is corrected in.
         assert!(
-            population
+            !population
                 .iter()
                 .any(|key| key == "database.reporting.host")
         );

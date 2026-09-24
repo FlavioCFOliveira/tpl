@@ -252,7 +252,8 @@ mod tests {
     use super::{Label, SOFTWARE, exit_content, render, render_panic, sysexits_name};
     use crate::error::{
         CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryRepair, Error,
-        NetworkPhase, PasswordCommandFault, Position, ReadOnlyFault, trigger_internal_invariant,
+        LookupKind, NetworkPhase, PasswordCommandFault, Position, ReadOnlyFault, RenderReason,
+        Unresolved, trigger_internal_invariant,
     };
     use std::collections::BTreeSet;
     use std::io;
@@ -505,8 +506,9 @@ mod tests {
     #[test]
     fn fr_err_034_code_65_names_the_context_path_and_the_position_of_the_malformed_json() {
         let rendered = render(&Error::ContextDocumentMalformed {
-            path: PathBuf::from("context.json"),
+            path: std::path::Path::new("context.json").into(),
             fault: ContextFault::NotJson(position()),
+            default_entry: false,
         });
         let cause = line(&rendered, Label::Cause);
 
@@ -517,13 +519,14 @@ mod tests {
     #[test]
     fn fr_ctx_042_the_cause_names_the_path_the_table_the_key_and_the_table_it_names() {
         let rendered = render(&Error::ContextDocumentMalformed {
-            path: PathBuf::from("context.json"),
+            path: std::path::Path::new("context.json").into(),
             fault: ContextFault::DanglingReference {
                 table: "address".to_owned(),
                 collection: "foreign_keys",
                 key: "fk_address_city".to_owned(),
                 names: "city".to_owned(),
             },
+            default_entry: false,
         });
         let cause = line(&rendered, Label::Cause);
 
@@ -543,13 +546,14 @@ mod tests {
     fn fr_ctx_042_every_name_of_a_dangling_reference_is_escaped() {
         // FR-ERR-024: all four names come from the untrusted document.
         let rendered = render(&Error::ContextDocumentMalformed {
-            path: PathBuf::from(HOSTILE),
+            path: std::path::Path::new(HOSTILE).into(),
             fault: ContextFault::DanglingReference {
                 table: HOSTILE.to_owned(),
                 collection: "referenced_by",
                 key: HOSTILE.to_owned(),
                 names: HOSTILE.to_owned(),
             },
+            default_entry: false,
         });
 
         assert_eq!(rendered.lines().count(), 4, "{rendered:?}");
@@ -665,7 +669,8 @@ mod tests {
         });
 
         assert!(
-            line(&rendered, Label::Cause).contains("the catalogue query for db.example.com:3306")
+            line(&rendered, Label::Cause)
+                .contains("a query reading the database structure for db.example.com:3306")
         );
         assert_eq!(
             line(&rendered, Label::Hint),
@@ -921,6 +926,7 @@ mod tests {
             file: path(),
             position: position(),
             found: "string",
+            element: None,
         });
 
         // FR-CONF-035's illustrative cause names a line of the file; the row
@@ -1144,7 +1150,10 @@ mod tests {
                 second: hostile(),
             },
             Error::RepeatedFlag { flag: hostile() },
-            Error::FlagValueMissing { flag: hostile() },
+            Error::FlagValueMissing {
+                flag: hostile(),
+                permitted: vec![hostile()],
+            },
             Error::SeparateTokenValue {
                 flag: hostile(),
                 value: hostile(),
@@ -1206,11 +1215,12 @@ mod tests {
                 root: hostile_path(),
             },
             Error::ContextDocumentMalformed {
-                path: hostile_path(),
+                path: hostile_path().into(),
                 fault: ContextFault::Structure {
                     at: hostile(),
                     expected: hostile(),
                 },
+                default_entry: false,
             },
             Error::RenderDeadlineExceeded {
                 bound: DeadlineBound::Phase,
@@ -1366,6 +1376,7 @@ mod tests {
                 file: hostile_path(),
                 position: position(),
                 found: "string",
+                element: None,
             },
             Error::ConflictingEntryKeys {
                 entry: hostile(),
@@ -1425,6 +1436,7 @@ mod tests {
             },
             Error::NoDatabaseEntrySelected {
                 file: hostile_path(),
+                has_entries: true,
             },
             Error::ServerNotMariaDb {
                 entry: hostile(),
@@ -1731,7 +1743,14 @@ mod tests {
             entry: "shop".to_owned(),
             written: "database.shop.dsn".to_owned(),
             conflicting: "database.shop.host".to_owned(),
-            repair: EntryRepair::Rewrite,
+            repair: EntryRepair::Rewrite {
+                unset: vec![
+                    "database.shop.host".to_owned(),
+                    "database.shop.user".to_owned(),
+                ]
+                .into(),
+                command: "cfg database update",
+            },
         });
         assert_eq!(
             line(&rendered, Label::Error),
@@ -1740,6 +1759,75 @@ mod tests {
         assert!(
             !line(&rendered, Label::Cause).contains("takes its password"),
             "{rendered}"
+        );
+    }
+
+    #[test]
+    fn s_03_several_conflicting_keys_are_unset_one_by_one_and_the_entry_is_never_removed() {
+        let rendered = render(&Error::IncoherentEntryWrite {
+            entry: "f".to_owned(),
+            written: "database.f.dsn".to_owned(),
+            conflicting: "database.f.host".to_owned(),
+            repair: EntryRepair::Rewrite {
+                unset: vec!["database.f.host".to_owned(), "database.f.port".to_owned()].into(),
+                command: "cfg set",
+            },
+        });
+
+        assert_eq!(
+            line(&rendered, Label::Hint),
+            "remove the keys it conflicts with, then write it again: tpl cfg unset \
+             database.f.host; tpl cfg unset database.f.port; then tpl cfg set database.f.dsn \
+             <url>"
+        );
+        assert!(!rendered.contains("database remove"), "{rendered}");
+    }
+
+    #[test]
+    fn s_06_a_lookup_under_context_lists_the_documents_names_with_jq() {
+        let failed = |kind, table: Option<&str>, document: &str| Error::RenderFailed {
+            template: "t.jinja".to_owned(),
+            invoked: "t".to_owned(),
+            undefined: Some("x".to_owned()),
+            reason: Some(Box::new(RenderReason::Unresolved(Unresolved {
+                call: "column(\"orders\", \"nope\")".to_owned(),
+                kind,
+                name: "nope".to_owned(),
+                table: table.map(str::to_owned),
+                document: Some(PathBuf::from(document)),
+            }))),
+            position: position(),
+            chain: vec!["undefined value".to_owned()],
+        };
+
+        assert_eq!(
+            line(
+                &render(&failed(LookupKind::Column, Some("orders"), "ok.json")),
+                Label::Hint
+            ),
+            "list the columns of table 'orders' in the --context document with jq, if it is \
+             installed: jq -r '.data.database.tables[] | select(.name==\"orders\") | \
+             .columns[].name' ok.json"
+        );
+        assert_eq!(
+            line(
+                &render(&failed(LookupKind::View, None, "ok.json")),
+                Label::Hint
+            ),
+            "list the views of the --context document with jq, if it is installed: jq -r \
+             '.data.database.views[].name' ok.json"
+        );
+        // Standard input cannot be read twice, so the member is named instead.
+        assert_eq!(
+            line(
+                &render(&failed(LookupKind::Routine, None, "-")),
+                Label::Hint
+            ),
+            "name one the --context document lists under data.database.routines"
+        );
+        assert!(
+            !render(&failed(LookupKind::Table, None, "ok.json")).contains("tpl schema"),
+            "the server's listing is not the document's"
         );
     }
 
@@ -1814,6 +1902,7 @@ mod tests {
             file: PathBuf::from("/srv/p/.tpl/.cfg"),
             position: position(),
             found: "integer",
+            element: None,
         });
 
         assert!(

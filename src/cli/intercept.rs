@@ -197,7 +197,10 @@ fn invalid_value(
     if value.is_empty() {
         return match value_after(tree, reached.node, written, &flag) {
             Some(value) => Error::SeparateTokenValue { flag, value },
-            None => Error::FlagValueMissing { flag },
+            None => Error::FlagValueMissing {
+                flag,
+                permitted: many(refused, ContextKind::ValidValue),
+            },
         };
     }
 

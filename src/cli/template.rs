@@ -301,44 +301,81 @@ fn show<W: Write>(out: &mut W, environment: &Environment, name: &str) -> Result<
     output::emit_verbatim(out, &source)
 }
 
-/// `tpl template check [<name> …]` (`FR-TMPL-017` … `FR-TMPL-020`).
+/// `tpl template check [<name> …]` (`FR-TMPL-017` … `FR-TMPL-020`,
+/// `FR-TMPL-032`).
 ///
 /// Given no name it checks every template of the project, per `FR-TMPL-018`;
 /// given names it checks exactly those, per `FR-TMPL-019`. Nothing reaches
 /// stdout in either case: `FR-TMPL-020` reports through the exit code and
 /// `BR-CLI-004` makes the `0` the message.
 ///
-/// **It stops at the first template that fails.** A condition is one value and
-/// the four labelled lines of `FR-ERR-008` carry one, so checking on past a
-/// failure could report no more than it already has. Which template that is, is
-/// not left to chance: the population arrives in the order `FR-TMPL-013` fixes
-/// and the named form is checked in the order the caller wrote, so the same
-/// invocation over the same project always names the same template.
+/// **Every selected template is checked before anything is reported**, per
+/// `FR-TMPL-032`, so one invocation names every template with a syntax error.
+/// The order is fixed: the population arrives in the order `FR-TMPL-013` fixes
+/// and the named form is checked in the order the caller wrote, each template
+/// once, at its first position. Every positional name is resolved before any
+/// template is checked, because resolution is step 4 of `FR-ERR-006` and a
+/// name that resolves to nothing is reported alone.
+///
+/// A condition other than a syntax error stops the check at once and is the
+/// only one reported, per point 5 of `FR-TMPL-032`: the syntax errors met
+/// before it are dropped, so every `exit` line written is the code returned.
 ///
 /// # Errors
 ///
-/// Returns what [`Environment::templates`](crate::render::Environment::templates)
-/// and [`Environment::compile`](crate::render::Environment::compile) return: the
+/// Returns what [`Environment::templates`](crate::render::Environment::templates),
+/// [`Environment::resolve`](crate::render::Environment::resolve) and
+/// [`Environment::compile`](crate::render::Environment::compile) return: the
 /// `66` of a name that resolves to nothing, the `65` of one that resolves
-/// outside the root, and the `65` of `FR-TMPL-020`.
+/// outside the root, and the `65` of `FR-TMPL-020`. Where several templates
+/// have a syntax error, every one but the last is reported here and the last
+/// is returned, for [`crate::run`] to report as it reports every condition.
 fn check(environment: &Environment, names: &[String]) -> Result<(), Error> {
+    let mut failures = Vec::new();
+
     if names.is_empty() {
         // FR-TMPL-018, and FR-TMPL-031 where the project carries none: an
         // empty population checks nothing and falls through to `Ok(())`.
         for template in environment.templates()? {
-            environment.compile(template.name())?;
+            syntax_only(environment.compile(template.name()), &mut failures)?;
         }
+    } else {
+        // FR-TMPL-019: exactly those, each named as the caller wrote it so that
+        // a refusal reproduces the caller's own spelling. `x` and `x.jinja`
+        // are one template, so a repetition is recognised by its path.
+        let mut seen = Vec::with_capacity(names.len());
+        let mut selected = Vec::with_capacity(names.len());
+        for name in names {
+            let path = environment.resolve(name)?;
+            if !seen.contains(&path) {
+                seen.push(path);
+                selected.push(name);
+            }
+        }
+        for name in selected {
+            syntax_only(environment.compile(name), &mut failures)?;
+        }
+    }
 
+    let Some(last) = failures.pop() else {
         return Ok(());
+    };
+    for failure in &failures {
+        crate::diagnostics::report(failure);
     }
+    Err(last)
+}
 
-    // FR-TMPL-019: exactly those, each named as the caller wrote it so that a
-    // refusal reproduces the caller's own spelling.
-    for name in names {
-        environment.compile(name)?;
+/// Keeps a syntax error of `FR-TMPL-020` for the report of `FR-TMPL-032`, and
+/// passes every other condition on, which stops the check.
+fn syntax_only(outcome: Result<(), Error>, failures: &mut Vec<Error>) -> Result<(), Error> {
+    match outcome {
+        Err(failure @ Error::TemplateSyntax { .. }) => {
+            failures.push(failure);
+            Ok(())
+        }
+        other => other,
     }
-
-    Ok(())
 }
 
 /// `tpl template path [<name>]` (`FR-TMPL-021`, `FR-TMPL-022`,

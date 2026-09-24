@@ -123,10 +123,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::deadline::{Bound, Phase};
-use crate::error::{CatalogueObjectKind, ContextFault, Error, Position};
+use crate::error::{CatalogueObjectKind, ContextFault, Error, Position, RenderReason};
 use crate::mariadb::catalogue::completeness;
 use crate::model::document::{self, DatabaseDocument};
 use crate::output;
+use crate::project::config::keys::{CoreKey, Key};
 use crate::project::settings;
 use crate::render::{Environment, RenderMemoryLimit};
 
@@ -484,7 +485,7 @@ fn run_body<W: std::io::Write>(
     // Step 1 of FR-ERR-006, in the order this module's documentation states.
     let defined = context::vars(supplied.set)?;
     let binding = Binding::of(supplied.object)?;
-    let document = document_flag(globals, supplied.context)?;
+    let document = document_flag(globals, supplied.context, supplied.caching.direct)?;
 
     match document {
         Some(path) => from_document(out, globals, supplied, &binding, &defined, path),
@@ -503,7 +504,16 @@ fn run_body<W: std::io::Write>(
 /// `FR-RND-019` makes `core.database` no conflict at all: a project that names
 /// a default entry renders from a document without the file having to be
 /// changed.
-fn document_flag<'a>(globals: &Globals, context: &'a [PathBuf]) -> Result<Option<&'a Path>, Error> {
+///
+/// Returns [`Error::DirectWithContext`] — `64` — where `--direct` was given
+/// with `--context`, per `FR-RND-041`. The `-d/--database` conflict is tested
+/// first, because `FR-RND-041` gives `FR-RND-018` the precedence where all
+/// three are given.
+fn document_flag<'a>(
+    globals: &Globals,
+    context: &'a [PathBuf],
+    direct: bool,
+) -> Result<Option<&'a Path>, Error> {
     let Some(path) = context.first() else {
         return Ok(None);
     };
@@ -513,6 +523,10 @@ fn document_flag<'a>(globals: &Globals, context: &'a [PathBuf]) -> Result<Option
             first: CONTEXT_FLAG.to_owned(),
             second: DATABASE_FLAG.to_owned(),
         });
+    }
+
+    if direct {
+        return Err(Error::DirectWithContext);
     }
 
     Ok(Some(path))
@@ -759,7 +773,14 @@ fn from_document<W: std::io::Write>(
         ending: supplied.ending,
     };
 
-    let bytes = read_document(path)?;
+    // The hint of a malformed document suggests the dump that would produce
+    // a valid one, which needs no -d where core.database names the entry.
+    let default_entry = configuration
+        .written(&Key::Core(CoreKey::Database))
+        .is_some();
+    let mark = |failure| with_default_entry(failure, default_entry);
+
+    let bytes = read_document(path).map_err(mark)?;
     let mut hand = |served: Served<'_, '_>| {
         produce(
             out,
@@ -778,14 +799,16 @@ fn from_document<W: std::io::Write>(
     // it without a copy (`super::source`'s documentation).
     match assembly.ending {
         Ending::Process => {
-            let model = leak(document::read(bytes.leak(), path)?);
+            let model = leak(document::read(bytes.leak(), path).map_err(mark)?);
 
-            hand(Served::leaked(leak(document::context(model)?)))
+            hand(Served::leaked(leak(
+                document::context(model).map_err(mark)?,
+            )))
         }
         Ending::Caller => {
-            let model = document::read(&bytes, path)?;
+            let model = document::read(&bytes, path).map_err(mark)?;
 
-            hand(Served::borrowed(&document::context(&model)?))
+            hand(Served::borrowed(&document::context(&model).map_err(mark)?))
         }
     }
 }
@@ -814,6 +837,13 @@ fn produce<W: std::io::Write>(
     at: Sought<'_>,
     now: Option<String>,
 ) -> Result<(), Error> {
+    // The names a failed lookup could have found are the document's, where the
+    // render reads one, and the hint says so (`listing_of` in diagnostics).
+    let read_from = match at {
+        Sought::Document { path, .. } => Some(path),
+        Sought::Catalogue { .. } => None,
+    };
+
     // 7 — FR-RND-032.
     let bound = assembly.binding.bind(&document, at)?;
 
@@ -838,11 +868,38 @@ fn produce<W: std::io::Write>(
     // it owns memory only, so stdout, its flush and the exit code are
     // untouched either way.
     assembly.ending.release(context);
-    let produced = produced?;
+    let produced = produced.map_err(|failure| read_in(failure, read_from))?;
 
     // FR-RND-028, and FR-OUT-019, which exempts a render's result from the
     // escaping of FR-OUT-018: the bytes the template produced, and no others.
     output::emit_verbatim(out, &produced)
+}
+
+/// Records on a malformed `--context` document whether `core.database` names
+/// an entry, which decides the dump its hint suggests.
+fn with_default_entry(mut failure: Error, named: bool) -> Error {
+    if let Error::ContextDocumentMalformed { default_entry, .. } = &mut failure {
+        *default_entry = named;
+    }
+    failure
+}
+
+/// Records on a lookup that found nothing the `--context` document the render
+/// read, where it read one, so that the hint lists that document's names and
+/// not the server's.
+fn read_in(mut failure: Error, document: Option<&Path>) -> Error {
+    if let (
+        Error::RenderFailed {
+            reason: Some(reason),
+            ..
+        },
+        Some(path),
+    ) = (&mut failure, document)
+        && let RenderReason::Unresolved(unresolved) = reason.as_mut()
+    {
+        unresolved.document = Some(path.to_path_buf());
+    }
+    failure
 }
 
 /// The bytes of the `--context` document (`FR-RND-016`, `FR-RND-017`).
@@ -883,8 +940,9 @@ fn read_document(path: &Path) -> Result<String, Error> {
         let read = reported.utf8_error().valid_up_to();
 
         Error::ContextDocumentMalformed {
-            path: path.to_owned(),
+            path: path.into(),
             fault: ContextFault::NotJson(position(&reported.as_bytes()[..read])),
+            default_entry: false,
         }
     })
 }
@@ -1183,8 +1241,8 @@ mod tests {
         // the test below supplies no flag and reaches `Some`.
         let context = [PathBuf::from("context.json")];
 
-        let condition =
-            document_flag(&globals(None, Some("shop")), &context).expect_err("two context sources");
+        let condition = document_flag(&globals(None, Some("shop")), &context, false)
+            .expect_err("two context sources");
 
         assert_eq!(condition.exit_code(), 64);
         assert!(
@@ -1197,11 +1255,11 @@ mod tests {
         );
 
         assert_eq!(
-            document_flag(&globals(None, None), &context).expect("one source"),
+            document_flag(&globals(None, None), &context, false).expect("one source"),
             Some(Path::new("context.json"))
         );
         assert_eq!(
-            document_flag(&globals(None, Some("shop")), &[]).expect("one source"),
+            document_flag(&globals(None, Some("shop")), &[], false).expect("one source"),
             None
         );
     }

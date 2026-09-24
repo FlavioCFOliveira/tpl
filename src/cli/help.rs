@@ -514,6 +514,21 @@ const NO_CACHE: Documented = Documented {
               still used.",
     excludes: &[],
 };
+/// `--direct` on `tpl render`, which `FR-RND-041` refuses with `--context`.
+const RENDER_DIRECT: Documented = Documented {
+    name: "--direct",
+    purpose: "Reads from the server even when the cache holds the data, and replaces the cached \
+              copy with what it read; add --no-cache to leave the cache untouched.",
+    excludes: &["--context"],
+};
+/// `--no-cache` on `tpl render`, which `FR-CACHE-018` accepts and ignores
+/// with `--context`.
+const RENDER_NO_CACHE: Documented = Documented {
+    name: "--no-cache",
+    purpose: "Stores nothing in the cache from this invocation; data the cache already holds is \
+              still used. It has no effect with --context, which uses no cache.",
+    excludes: &[],
+};
 /// `--set`, as every node that declares it states it.
 const SET: Documented = Documented {
     name: "--set",
@@ -527,7 +542,7 @@ const CONTEXT: Documented = Documented {
     name: "--context",
     purpose: "Reads the data from this JSON file, written by tpl schema dump, or from stdin when \
               the path is -, so that no server is contacted and no database entry is used.",
-    excludes: &["--database"],
+    excludes: &["--database", "--direct"],
 };
 /// `--dsn`, as every node that declares it states it.
 const DSN: Documented = Documented {
@@ -620,22 +635,20 @@ const CACHE_LOAD_NO_CACHE: Documented = Documented {
 /// `--table`, the object flag.
 const OBJECT_TABLE: Documented = Documented {
     name: "--table",
-    purpose: "Acts on this one table only; in tpl render, the template then sees it as the \
-              variable table.",
+    purpose: "Binds this table as the variable table; database still holds every table.",
     excludes: &["--view", "--routine"],
 };
 /// `--view`, the object flag.
 const OBJECT_VIEW: Documented = Documented {
     name: "--view",
-    purpose: "Acts on this one view only; in tpl render, the template then sees it as the variable \
-              view.",
+    purpose: "Binds this view as the variable view; database still holds every view.",
     excludes: &["--table", "--routine"],
 };
 /// `--routine`, the object flag.
 const OBJECT_ROUTINE: Documented = Documented {
     name: "--routine",
-    purpose: "Acts on this one routine only, named bare or as procedure:<name> or function:<name>; \
-              in tpl render, the template then sees it as the variable routine.",
+    purpose: "Binds this routine, named bare or as procedure:<name> or function:<name>, as the \
+              variable routine; database still holds every routine.",
     excludes: &["--table", "--view"],
 };
 
@@ -896,8 +909,8 @@ const ARGUMENTS: [(&[&str], &[Documented]); 28] = [
             OBJECT_ROUTINE,
             SET,
             CONTEXT,
-            DIRECT,
-            NO_CACHE,
+            RENDER_DIRECT,
+            RENDER_NO_CACHE,
         ],
     ),
     (
@@ -1237,7 +1250,9 @@ const SCHEMA_LISTING: &[Outcome] = &[
     outcome(
         Code::Configuration,
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
-         set core.database), or the server is not a supported MariaDB version.",
+         set core.database), the entry is incomplete (no host, or no server database name) or its \
+         password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
+         ca_path holds no certificate, or the server is not a supported MariaDB version.",
     ),
 ];
 
@@ -1270,7 +1285,9 @@ const SCHEMA_OBJECT: &[Outcome] = &[
     outcome(
         Code::Configuration,
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
-         set core.database), or the server is not a supported MariaDB version.",
+         set core.database), the entry is incomplete (no host, or no server database name) or its \
+         password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
+         ca_path holds no certificate, or the server is not a supported MariaDB version.",
     ),
 ];
 
@@ -1304,7 +1321,9 @@ const SCHEMA_ROUTINE: &[Outcome] = &[
     outcome(
         Code::Configuration,
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
-         set core.database), or the server is not a supported MariaDB version.",
+         set core.database), the entry is incomplete (no host, or no server database name) or its \
+         password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
+         ca_path holds no certificate, or the server is not a supported MariaDB version.",
     ),
 ];
 
@@ -1337,7 +1356,9 @@ const SCHEMA_DUMP: &[Outcome] = &[
     outcome(
         Code::Configuration,
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
-         set core.database), or the server is not a supported MariaDB version.",
+         set core.database), the entry is incomplete (no host, or no server database name) or its \
+         password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
+         ca_path holds no certificate, or the server is not a supported MariaDB version.",
     ),
 ];
 
@@ -1348,7 +1369,7 @@ const RENDER: &[Outcome] = &[
         Code::Usage,
         "An unknown flag, a missing TEMPLATE, or a flag given twice; more than one of --table, \
          --view and --routine; a --set without =, with an invalid key, or with a key given twice; \
-         or --context together with -d/--database.",
+         or --context together with -d/--database or --direct.",
     ),
     outcome(
         Code::DataError,
@@ -1380,7 +1401,9 @@ const RENDER: &[Outcome] = &[
     outcome(
         Code::Configuration,
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
-         set core.database), or the server is not a supported MariaDB version.",
+         set core.database), the entry is incomplete (no host, or no server database name) or its \
+         password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
+         ca_path holds no certificate, or the server is not a supported MariaDB version.",
     ),
 ];
 
@@ -1468,8 +1491,9 @@ const TEMPLATE_CHECK: &[Outcome] = &[
     outcome(Code::Usage, "An unknown flag or a flag given twice."),
     outcome(
         Code::DataError,
-        "A checked template has a syntax error, reported with its line and column, or a NAME \
-         resolves to a path outside .tpl/templates/.",
+        "A checked template has a syntax error; every failing template is reported, one \
+         message each with its line and column. Or a NAME resolves to a path outside \
+         .tpl/templates/.",
     ),
     outcome(
         Code::NoInput,
@@ -1516,7 +1540,9 @@ const CACHE_LOAD: &[Outcome] = &[
     outcome(
         Code::Configuration,
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
-         set core.database), or the server is not a supported MariaDB version.",
+         set core.database), the entry is incomplete (no host, or no server database name) or its \
+         password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
+         ca_path holds no certificate, or the server is not a supported MariaDB version.",
     ),
 ];
 
@@ -1741,7 +1767,10 @@ const CFG_DATABASE_TEST: &[Outcome] = &[
     outcome(
         Code::Configuration,
         "The login succeeded but the server is not a supported MariaDB version or the session \
-         could not be made read-only; or no project was found, or .tpl/.cfg cannot be used.",
+         could not be made read-only; the entry is incomplete (no host, or no server database \
+         name) or its password cannot be obtained (a ${VAR} is undefined, or password_command \
+         failed); ca_path holds no certificate; or no project was found, or .tpl/.cfg cannot be \
+         used.",
     ),
 ];
 
@@ -1771,8 +1800,8 @@ const HELP: &[Outcome] = &[
     ),
     outcome(
         Code::Usage,
-        "A word of COMMAND_PATH names no command under the words before it, or --pretty without \
-         --format json.",
+        "An unknown flag, a flag given twice, a word of COMMAND_PATH that names no command under \
+         the words before it, or --pretty without --format json.",
     ),
     outcome(
         Code::IoError,
@@ -1785,7 +1814,8 @@ const VERSION: &[Outcome] = &[
     outcome(Code::Ok, "The version line was written to stdout."),
     outcome(
         Code::Usage,
-        "An argument, or a flag other than the global ones: this command takes none.",
+        "An argument, a flag other than the global ones (this command takes none), or a global \
+         flag that takes a value given twice.",
     ),
     outcome(Code::IoError, "stdout could not be written."),
 ];
@@ -1857,9 +1887,10 @@ const ENTRIES: [Entry; 35] = [
                 rows: &[
                     row(
                         "database entry",
-                        "A named connection to a MariaDB server, stored in .tpl/.cfg. Select \
-                         one with -d NAME, or make one the default with tpl cfg set \
-                         core.database NAME.",
+                        "A named connection to a MariaDB server, stored in .tpl/.cfg. Its \
+                         --schema is the name of the database on that server, which need not \
+                         be the entry's name. Select one with -d NAME, or make one the default \
+                         with tpl cfg set core.database NAME.",
                     ),
                     row(
                         "cache",
@@ -1892,7 +1923,8 @@ const ENTRIES: [Entry; 35] = [
                 caption: "Set up a project, connect it to a local server that has no trusted \
                           certificate (hence --tls disabled), take the password from the \
                           environment variable SHOP_PASSWORD (or write the password itself in \
-                          place of the reference), and render one table.",
+                          place of the reference), list the tables as JSON, the form a program \
+                          reads, and render one table.",
                 lines: &[
                     run(&["tpl", "init"]),
                     run(&[
@@ -1918,7 +1950,7 @@ const ENTRIES: [Entry; 35] = [
                         "'${SHOP_PASSWORD}'",
                     ]),
                     run(&["tpl", "cfg", "set", "core.database", "shop"]),
-                    run(&["tpl", "schema", "tables"]),
+                    run(&["tpl", "schema", "tables", "--format", "json"]),
                     run(&["tpl", "render", "example", "--table", "orders"]),
                 ],
             },
@@ -2325,8 +2357,9 @@ const ENTRIES: [Entry; 35] = [
         description: "Renders one template once and prints the result to stdout. To write a file, \
                       redirect stdout: there is no --output flag. The data comes from the selected \
                       database entry, or from a --context file written by tpl schema dump, never \
-                      from both. With --table, --view or --routine the template also sees that one \
-                      object; without one, it sees the whole database.",
+                      from both. The template always sees the whole database as database; \
+                      --table, --view or --routine also binds that one object as table, view or \
+                      routine.",
         blocks: &[
             Block::Surface,
             Block::Prose(
@@ -2776,7 +2809,10 @@ const ENTRIES: [Entry; 35] = [
         description: "Creates a database entry named NAME. Give --dsn, or at least one of --host, \
                       --port, --user and --schema, but not both kinds; --tls, --password-command, \
                       --ca-file and --ca-path may be added to either. A NAME already in use is \
-                      refused; change an entry with tpl cfg database update.",
+                      refused; change an entry with tpl cfg database update. To connect, the \
+                      entry needs --host and --schema, or a --dsn that names both; --port defaults \
+                      to 3306 and --user is optional. An entry without them is stored, but every \
+                      later command that connects with it exits 78.",
         blocks: &[
             Block::Prose(
                 "Without --tls, the entry uses verify-identity, which needs a server \
@@ -3369,8 +3405,11 @@ mod tests {
             assert_eq!(stated(path, "--routine"), ["--table", "--view"]);
         }
 
-        // FR-RND-018.
-        assert_eq!(stated(&["render"], "--context"), ["--database"]);
+        // FR-RND-018 and FR-RND-041.
+        assert_eq!(stated(&["render"], "--context"), ["--database", "--direct"]);
+
+        // FR-RND-041.
+        assert_eq!(stated(&["render"], "--direct"), ["--context"]);
 
         // FR-CFG-029, on both nodes that declare the entry flags. The discrete
         // **connection** flags are the four that say where to connect.

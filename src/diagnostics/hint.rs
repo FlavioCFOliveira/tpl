@@ -124,7 +124,20 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                 Cow::Borrowed("give the flag named above once")
             }
         }
-        Error::FlagValueMissing { flag } => {
+        // S-14: a flag with a fixed set of values names them, so the caller
+        // need not ask the help for the one it must write.
+        Error::FlagValueMissing { flag, permitted }
+            if admits_flag(flag)
+                && !permitted.is_empty()
+                && permitted.iter().all(|value| admits_flag(value)) =>
+        {
+            Cow::Owned(format!(
+                "give {} after the flag, e.g. {flag} {}",
+                super::cause::alternatives(permitted),
+                permitted[0]
+            ))
+        }
+        Error::FlagValueMissing { flag, .. } => {
             if admits_flag(flag) {
                 Cow::Owned(format!(
                     "give the value after the flag, or in one token: {flag}=<value>"
@@ -180,6 +193,10 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // nonetheless tested, as a defensive assertion: a flag is a spelling
         // this corpus enumerates, so a token that fails the test came from
         // somewhere other than the flag table and is not reproduced.
+        // FR-RND-041: the flag to remove for each outcome, and never the path.
+        Error::DirectWithContext => Cow::Borrowed(
+            "remove --direct to render from the document, or remove --context to read the server",
+        ),
         Error::MutuallyExclusiveFlags { first, second } => {
             if admits_flag(first) && admits_flag(second) {
                 Cow::Owned(format!("give '{first}' or '{second}', and not both"))
@@ -325,17 +342,17 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // or one the same invocation supplied.
         Error::IncoherentEntryWrite {
             entry,
+            written,
             conflicting,
             repair,
-            ..
         } => match repair {
             EntryRepair::Unset => Cow::Owned(format!(
                 "remove the key it conflicts with: {}",
                 unset_key(conflicting)
             )),
-            EntryRepair::Rewrite => Cow::Owned(format!(
-                "write the entry one way only: {}",
-                rewrite_entry(entry)
+            EntryRepair::Rewrite { unset, command } => Cow::Owned(format!(
+                "remove the keys it conflicts with, then write it again: {}",
+                rewrite_entry(entry, written, unset, command)
             )),
             EntryRepair::Restate(command) => Cow::Owned(format!(
                 "write a DSN that carries no password: {}",
@@ -376,8 +393,13 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             reason,
             ..
         } => {
-            if let Some(RenderReason::Unresolved(unresolved)) = reason.as_deref() {
-                return listing_of(unresolved);
+            match reason.as_deref() {
+                Some(RenderReason::Unresolved(unresolved)) => return listing_of(unresolved),
+                Some(RenderReason::IncludeNotFound {
+                    name,
+                    lacks_extension,
+                }) => return include_of(name, *lacks_extension),
+                Some(RenderReason::Failed(_)) | None => {}
             }
 
             if let Some(line) = undefined.as_deref().and_then(defining_flag) {
@@ -399,7 +421,11 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         // the entry that would produce a valid one is a value only the caller
         // knows, and a placeholder stands for it. The file is known, and is
         // named; standard input is not a file a dump can be redirected to.
-        Error::ContextDocumentMalformed { path, fault } => {
+        Error::ContextDocumentMalformed {
+            path,
+            fault,
+            default_entry,
+        } => {
             // FR-ERR-041 admits the path or puts the placeholder in its
             // place; `-` begins with `-` and is refused, and is no file.
             let target = if admits_file(path) {
@@ -413,8 +439,11 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
                     "write a document that matches,"
                 }
             };
+            // With core.database set, the dump reads that entry and needs
+            // no -d; without it, the entry is a value only the caller knows.
+            let selection = if *default_entry { "" } else { "-d <entry> " };
             Cow::Owned(format!(
-                "{lead} with: tpl -d <entry> schema dump > {target}"
+                "{lead} with: tpl {selection}schema dump > {target}"
             ))
         }
         Error::RenderFuelExhausted { .. } => Cow::Borrowed(
@@ -761,11 +790,24 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         )),
         // FR-CONF-035 obliges the hint to show the array form, and states this
         // example itself.
-        Error::PasswordCommandNotAnArray { file, position, .. } => Cow::Owned(format!(
-            "edit {} at line {} and write it as an array: password_command = [\"security\", \
+        Error::PasswordCommandNotAnArray {
+            file,
+            position,
+            found,
+            element,
+            ..
+        } => Cow::Owned(format!(
+            "edit {} at line {} and write it as {}: password_command = [\"security\", \
              \"find-generic-password\", \"-s\", \"tpl-shop\", \"-w\"]",
             configuration_file(file),
-            position.line
+            position.line,
+            if element.is_some() {
+                "an array of quoted strings"
+            } else if *found == crate::project::config::EMPTY_ARRAY {
+                "an array whose first string is the program"
+            } else {
+                "an array"
+            }
         )),
         Error::ConflictingEntryKeys {
             entry,
@@ -827,6 +869,17 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
         ),
         // FR-CONF-032 records the remedy: the child's own standard error is
         // visible when the command is run directly, and nowhere else.
+        // The command is written out where every word of it is admitted by
+        // FR-ERR-022; a word outside that set leaves it to the file.
+        Error::PasswordCommandFailed { command, .. }
+            if !command.is_empty() && command.iter().all(|word| admits(word)) =>
+        {
+            Cow::Owned(format!(
+                "run it directly to see why it failed: {}; tpl sends its standard error to the \
+                 null device",
+                command.join(" ")
+            ))
+        }
         Error::PasswordCommandFailed { .. } => Cow::Borrowed(
             "run the command directly to see why it failed; tpl sends its standard error to the \
              null device",
@@ -855,6 +908,13 @@ pub(super) fn hint(error: &Error) -> Cow<'static, str> {
             "set it with: tpl cfg database update {} {flag} {placeholder}",
             entry_or_placeholder(entry)
         )),
+        // S-15: with no entry in the file, listing them would print nothing.
+        Error::NoDatabaseEntrySelected {
+            has_entries: false, ..
+        } => Cow::Borrowed(
+            "this project has no database entry; add one with: tpl cfg database add <name> --host \
+             <host> --user <user> --schema <database>",
+        ),
         Error::NoDatabaseEntrySelected { .. } => Cow::Borrowed(
             "select an entry with -d <entry>, or set a default with: tpl cfg set core.database \
              <entry>; list the entries with: tpl cfg database list",
@@ -957,8 +1017,13 @@ fn with_template(invocation: &'static str, template: Option<&str>) -> Cow<'stati
 
 /// The hint for a lookup that found nothing: the command that lists the names
 /// it could have found. A render reads the selected database entry, and so
-/// does the listing.
+/// does the listing; a render from a `--context` document reads that document,
+/// which no `tpl` command lists, so the line names jq over it instead.
 fn listing_of(unresolved: &Unresolved) -> Cow<'static, str> {
+    if let Some(document) = &unresolved.document {
+        return listing_in_document(unresolved, document);
+    }
+
     match (unresolved.kind, &unresolved.table) {
         (LookupKind::Column, Some(table)) if admits(table) => Cow::Owned(format!(
             "list the columns of table '{table}' with: tpl schema table {table}"
@@ -969,6 +1034,55 @@ fn listing_of(unresolved: &Unresolved) -> Cow<'static, str> {
         (LookupKind::Table, _) => Cow::Borrowed("list the tables with: tpl schema tables"),
         (LookupKind::View, _) => Cow::Borrowed("list the views with: tpl schema views"),
         (LookupKind::Routine, _) => Cow::Borrowed("list the routines with: tpl schema routines"),
+    }
+}
+
+/// The hint for an `{% include %}` that named no template (`FR-TMPL-009`).
+///
+/// The rule that an include writes the extension is stated in the help of
+/// `tpl template list` alone, so the line states it again, and suggests the
+/// name with the extension where that name is a template of the project.
+fn include_of(name: &str, lacks_extension: bool) -> Cow<'static, str> {
+    const RULE: &str = "an {% include %} names the template file with its extension, as in {% \
+                        include \"example.jinja\" %}; list the templates with: tpl template list";
+
+    if lacks_extension && admits_template(name) {
+        let candidate = format!("{name}.jinja");
+        Cow::Owned(suggest::hint_line(std::iter::once(candidate.as_str()), RULE).into_owned())
+    } else {
+        Cow::Borrowed(RULE)
+    }
+}
+
+/// [`listing_of`] for a render from the `--context` document `document`.
+///
+/// jq is an external tool, and the line says so. The path and a table name are
+/// written into the command only where `FR-ERR-022` admits them; standard input
+/// cannot be read twice, so `-` leaves the member of the document to name.
+fn listing_in_document(unresolved: &Unresolved, document: &Path) -> Cow<'static, str> {
+    let member = match unresolved.kind {
+        LookupKind::Table | LookupKind::Column => "tables",
+        LookupKind::View => "views",
+        LookupKind::Routine => "routines",
+    };
+    let file = (document != Path::new("-") && admits_file(document)).then(|| document.display());
+
+    match (unresolved.kind, &unresolved.table, file) {
+        (LookupKind::Column, Some(table), Some(file)) if admits(table) => Cow::Owned(format!(
+            "list the columns of table '{table}' in the --context document with jq, if it is \
+             installed: jq -r '.data.database.tables[] | select(.name==\"{table}\") | \
+             .columns[].name' {file}"
+        )),
+        (LookupKind::Column, _, _) => Cow::Borrowed(
+            "name a column the --context document lists under data.database.tables[].columns",
+        ),
+        (_, _, Some(file)) => Cow::Owned(format!(
+            "list the {member} of the --context document with jq, if it is installed: jq -r \
+             '.data.database.{member}[].name' {file}"
+        )),
+        (_, _, None) => Cow::Owned(format!(
+            "name one the --context document lists under data.database.{member}"
+        )),
     }
 }
 
@@ -1106,19 +1220,65 @@ fn unset_key(key: &str) -> Cow<'static, str> {
     }
 }
 
-/// The two commands that write one entry afresh (`FR-CFG-048`).
+/// The unsets that make the write legal, then the write again (`FR-CFG-048`).
 ///
-/// `FR-CFG-048` names this pair as the second of the two repairs, and it is the
-/// one that applies where no single `tpl cfg unset` would make the write legal.
-fn rewrite_entry(entry: &str) -> Cow<'static, str> {
-    if admits(entry) {
-        Cow::Owned(format!(
-            "tpl cfg database remove {entry}, then tpl cfg database add {entry} --dsn <url>"
-        ))
+/// This is the repair where no single `tpl cfg unset` would do: one unset per
+/// key the write conflicts with, and nothing else. `tpl cfg database remove`
+/// followed by `add` would also make the write legal, but it clears
+/// `core.database` when that names the entry and drops every key the write
+/// does not touch, so the caller would have to rebuild what it never asked to
+/// change.
+///
+/// The value written is a placeholder, never the caller's own: `BR-ERR-003`
+/// bars a DSN from every message.
+fn rewrite_entry(entry: &str, written: &str, unset: &[String], command: &str) -> String {
+    let mut commands: Vec<Cow<'static, str>> = unset.iter().map(|key| unset_key(key)).collect();
+    commands.push(write_again(entry, written, command));
+
+    let last = commands.len() - 1;
+    let mut line = String::new();
+    for (index, one) in commands.iter().enumerate() {
+        if index == last && index > 0 {
+            line.push_str("; then ");
+        } else if index > 0 {
+            line.push_str("; ");
+        }
+        line.push_str(one);
+    }
+    line
+}
+
+/// The write `FR-CFG-048` refused, as a runnable command with its value left as
+/// a placeholder.
+///
+/// `written` is a fully qualified key; the flag of `tpl cfg database update`
+/// that writes it is the key's last segment, except `database`, which the flag
+/// `--schema` writes.
+fn write_again(entry: &str, written: &str, command: &str) -> Cow<'static, str> {
+    let field = written.rsplit('.').next().unwrap_or_default();
+    let value = match field {
+        "dsn" => "<url>",
+        "password_command" => "<command>",
+        _ => "<value>",
+    };
+
+    if command == "cfg set" {
+        return if admits_key(written) {
+            Cow::Owned(format!("tpl cfg set {written} {value}"))
+        } else {
+            Cow::Owned(format!("tpl cfg set <key> {value}"))
+        };
+    }
+
+    let flag = match field {
+        "database" => "schema".to_owned(),
+        other => other.replace('_', "-"),
+    };
+    let named = if admits(entry) { entry } else { "<entry>" };
+    if admits_path(command) && admits(&flag.replace('-', "_")) {
+        Cow::Owned(format!("tpl {command} {named} --{flag} {value}"))
     } else {
-        Cow::Borrowed(
-            "tpl cfg database remove <entry>, then tpl cfg database add <entry> --dsn <url>",
-        )
+        Cow::Owned(format!("tpl cfg database update {named} --dsn <url>"))
     }
 }
 

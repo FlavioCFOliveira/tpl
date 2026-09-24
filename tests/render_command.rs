@@ -1687,9 +1687,11 @@ fn r_02_an_undefined_value_quotes_the_whole_expression_and_a_lookup_that_found_n
         ),
         "{written}"
     );
+    // S-06 of #274: the names are the document's, which no tpl command lists.
     assert_eq!(
         line(&written, LABELS[2]),
-        "list the tables with: tpl schema tables"
+        "list the tables of the --context document with jq, if it is installed: jq -r \
+         '.data.database.tables[].name' context.json"
     );
 }
 
@@ -1710,4 +1712,121 @@ fn r_09_and_e_21_fail_puts_the_message_on_the_error_line_and_no_location_is_said
 
     let written = refused(&sandbox, &["render", "broken", "--context", CONTEXT], 65);
     assert!(!line(&written, LABELS[1]).contains("(in "), "{written}");
+}
+
+// ------------------------------------------------------------ #274 ---------
+
+#[test]
+fn fr_rnd_041_direct_with_context_is_64_before_any_project_is_discovered() {
+    // FR-RND-041: refused at step 1, so the empty sandbox is never searched
+    // for a project, and neither the document nor a server is read.
+    let sandbox = Sandbox::new();
+
+    let written = refused(
+        &sandbox,
+        &["render", WHOLE, "--context", "missing.json", "--direct"],
+        64,
+    );
+    assert_eq!(
+        line(&written, LABELS[0]),
+        "--direct cannot be used with --context"
+    );
+    assert_eq!(
+        line(&written, LABELS[1]),
+        "--context reads the context from a document and contacts no server; --direct demands \
+         a read from the server"
+    );
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "remove --direct to render from the document, or remove --context to read the server"
+    );
+    assert!(!written.contains("missing.json"), "{written}");
+
+    // With an explicit -d as well, FR-RND-018 is the conflict reported.
+    let written = refused(
+        &sandbox,
+        &[
+            "-d",
+            "shop",
+            "render",
+            WHOLE,
+            "--context",
+            CONTEXT,
+            "--direct",
+        ],
+        64,
+    );
+    assert!(
+        line(&written, LABELS[0]).contains("'--database'"),
+        "{written}"
+    );
+    // S-08: neither flag is required, so the cause does not say one is.
+    assert!(
+        line(&written, LABELS[1]).contains("at most one"),
+        "{written}"
+    );
+}
+
+#[test]
+fn s_07_an_include_without_its_extension_is_told_the_rule_and_the_name_it_meant() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+    sandbox.write(".tpl/templates/resolves.jinja", "fine\n");
+    sandbox.write(".tpl/templates/inc.jinja", "{% include \"resolves\" %}");
+    sandbox.write(
+        ".tpl/templates/gone.jinja",
+        "{% include \"nothing.jinja\" %}",
+    );
+
+    let written = refused(&sandbox, &["render", "inc", "--context", CONTEXT], 65);
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 'resolves.jinja'? an {% include %} names the template file with its \
+         extension, as in {% include \"example.jinja\" %}; list the templates with: tpl \
+         template list"
+    );
+
+    let written = refused(&sandbox, &["render", "gone", "--context", CONTEXT], 65);
+    assert!(
+        line(&written, LABELS[2]).starts_with("an {% include %} names the template file"),
+        "{written}"
+    );
+}
+
+#[test]
+fn s_12_and_s_13_fail_drops_the_engine_label_and_a_default_entry_needs_no_d_in_the_dump_hint() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\ndatabase = \"shop\"\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+    sandbox.write("bad.json", "{}");
+    sandbox.write(".tpl/templates/stop.jinja", "{{ fail(\"boom\") }}");
+    sandbox.write(".tpl/templates/resolves.jinja", "fine\n");
+
+    let written = refused(&sandbox, &["render", "stop", "--context", CONTEXT], 65);
+    assert!(line(&written, LABELS[1]).ends_with(": boom"), "{written}");
+    assert!(!written.contains("invalid operation"), "{written}");
+
+    // core.database names the entry, so the dump needs no -d.
+    let written = refused(
+        &sandbox,
+        &["render", "resolves", "--context", "bad.json"],
+        65,
+    );
+    assert!(
+        line(&written, LABELS[2]).ends_with("with: tpl schema dump > bad.json"),
+        "{written}"
+    );
+
+    // Without it, the entry is the caller's to name.
+    sandbox.project("[core]\n");
+    let written = refused(
+        &sandbox,
+        &["render", "resolves", "--context", "bad.json"],
+        65,
+    );
+    assert!(
+        line(&written, LABELS[2]).ends_with("with: tpl -d <entry> schema dump > bad.json"),
+        "{written}"
+    );
 }

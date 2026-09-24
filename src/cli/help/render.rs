@@ -1496,8 +1496,8 @@ EXAMPLES
 
 EXIT CODES
   0   EX_OK     The version line was written to stdout.
-  64  EX_USAGE  An argument, or a flag other than the global ones: this command
-                takes none.
+  64  EX_USAGE  An argument, a flag other than the global ones (this command
+                takes none), or a global flag that takes a value given twice.
   74  EX_IOERR  stdout could not be written.
 
 SEE ALSO

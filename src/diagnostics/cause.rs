@@ -105,8 +105,13 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 "tpl cfg get reads one key; {key} is a block of keys, not a key"
             )),
         },
+        // FR-RND-041 fixes both lines: why the two contradict each other.
+        Error::DirectWithContext => Cow::Borrowed(
+            "--context reads the context from a document and contacts no server; --direct demands \
+             a read from the server",
+        ),
         Error::MutuallyExclusiveFlags { first, second } => Cow::Owned(format!(
-            "the invocation supplies both '{first}' and '{second}'; exactly one of the two may be \
+            "the invocation supplies both '{first}' and '{second}'; at most one of the two may be \
              given"
         )),
         // FR-SCH-008: the cause names the token as written and the spelling
@@ -194,7 +199,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                     "the invocation writes both {written} and {conflicting} to database entry \
                      '{entry}'; {rule}; nothing was written"
                 ),
-                EntryRepair::Unset | EntryRepair::Rewrite => format!(
+                EntryRepair::Unset | EntryRepair::Rewrite { .. } => format!(
                     "the invocation writes {written} and database entry '{entry}' already \
                      declares {conflicting}; {rule}; nothing was written"
                 ),
@@ -218,7 +223,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{flag}' carries no value, so a second occurrence of it states nothing the first did \
              not; tpl accepts each flag once"
         )),
-        Error::FlagValueMissing { flag } => Cow::Owned(format!(
+        Error::FlagValueMissing { flag, .. } => Cow::Owned(format!(
             "'{flag}' carries one value and the invocation supplied none for it"
         )),
         // FR-CLI-018: the token was written as a token of its own, which is
@@ -291,7 +296,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                  render: {}",
                 joined(chain)
             )),
-            (None, None | Some(RenderReason::Unresolved(_))) => Cow::Owned(format!(
+            (_, Some(RenderReason::IncludeNotFound { .. }))
+            | (None, None | Some(RenderReason::Unresolved(_))) => Cow::Owned(format!(
                 "'{template}' failed while being evaluated, at {position}: {}",
                 joined(chain)
             )),
@@ -303,7 +309,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         )),
         // The row obliges the path and either the position of the malformed
         // JSON or the structural rule the document failed.
-        Error::ContextDocumentMalformed { path, fault } => match fault {
+        Error::ContextDocumentMalformed { path, fault, .. } => match fault {
             ContextFault::NotJson(position) => Cow::Owned(format!(
                 "{} is not well-formed JSON; the parser stopped at {position}",
                 context_name(path)
@@ -576,15 +582,31 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             file,
             position,
             found,
-        } => Cow::Owned(format!(
-            "{} at {position} declares {key} as {} {found}; this key takes an array of strings",
-            file.display(),
-            if found.starts_with(['a', 'e', 'i', 'o', 'u']) {
+            element,
+        } => {
+            let article = if found.starts_with(['a', 'e', 'i', 'o', 'u']) {
                 "an"
             } else {
                 "a"
-            }
-        )),
+            };
+            Cow::Owned(match element {
+                Some(index) => format!(
+                    "{} at {position} declares {key} with {article} {found} at index {index}; \
+                     every element of this key is a string",
+                    file.display()
+                ),
+                None if *found == crate::project::config::EMPTY_ARRAY => format!(
+                    "{} at {position} declares {key} as an empty array; this key takes an array \
+                     of at least one string, the program first",
+                    file.display()
+                ),
+                None => format!(
+                    "{} at {position} declares {key} as {article} {found}; this key takes an \
+                     array of strings",
+                    file.display()
+                ),
+            })
+        }
         Error::ConflictingEntryKeys {
             entry,
             file,
@@ -650,13 +672,14 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             ..
         } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
-                "password_command {command:?} had not both exited and closed its standard output \
-                 when its own deadline of {limit:?} expired, and its process group was terminated"
+                "password_command {command:?} was still running, or still held its standard output \
+                 open, when its own deadline of {limit:?} expired, and its process group was \
+                 terminated"
             )),
             DeadlineBound::Overall => Cow::Owned(format!(
-                "password_command {command:?} had not both exited and closed its standard output \
-                 when the overall budget of {limit:?}, measured from process start, expired, and \
-                 its process group was terminated"
+                "password_command {command:?} was still running, or still held its standard output \
+                 open, when the overall budget of {limit:?}, measured from process start, expired, \
+                 and its process group was terminated"
             )),
         },
         Error::PasswordCommandOutputCapExceeded { command, cap, .. } => Cow::Owned(format!(
@@ -708,8 +731,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // the fault is one, and this fault is `ca_path`'s.
         Error::TrustDirectoryEmpty { entry, path } => Cow::Owned(format!(
             "no entry of the directory {} resolves to a regular file, so \
-             'database.{entry}.ca_path' supplies no certificate to the trust material the \
-             connection was to validate against",
+             'database.{entry}.ca_path' adds no certificate to the certificates the connection \
+             trusts",
             path.display()
         )),
         Error::ReadOnlySessionNotEnforced { entry, fault } => match fault {
@@ -731,14 +754,14 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              without it",
             file.display()
         )),
-        Error::NoDatabaseEntrySelected { file } => Cow::Owned(format!(
+        Error::NoDatabaseEntrySelected { file, .. } => Cow::Owned(format!(
             "neither -d/--database nor core.database in {} names an entry, and this command needs \
              one to know which database to use",
             file.display()
         )),
         Error::ServerNotMariaDb { entry, product } => Cow::Owned(format!(
             "database entry '{entry}' reached a server that connected and authenticated and \
-             reports '{product}'; tpl reads the catalogue of MariaDB alone"
+             reports '{product}'; tpl reads only MariaDB servers"
         )),
         Error::SeriesNotSupported {
             entry,
@@ -809,7 +832,7 @@ pub(crate) fn invoked(command: &str) -> Cow<'_, str> {
 }
 
 /// Joins the values a flag enumerates into the choice they are.
-fn alternatives(permitted: &[String]) -> Cow<'_, str> {
+pub(super) fn alternatives(permitted: &[String]) -> Cow<'_, str> {
     match permitted {
         [] => Cow::Borrowed(NO_PERMITTED_VALUE),
         [only] => Cow::Borrowed(only.as_str()),

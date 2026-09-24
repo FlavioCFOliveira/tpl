@@ -1,7 +1,7 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md]
 ---
 
@@ -322,7 +322,11 @@ cached read, or a `--context` document — and is defined by
 ## nearest match
 
 A suggestion offered when a supplied name does not exist, computed by edit
-distance over the names that do exist. See `FR-ERR-019`.
+distance over the names that do exist, and for a command also by prefix. See
+`FR-ERR-019` and `FR-ERR-042`.
+
+*Amended in the forty-sixth edition.* The prefix clause is new: `FR-ERR-042`
+also admits a command of which the supplied token is a proper prefix.
 
 ## normative budget
 

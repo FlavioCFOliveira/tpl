@@ -1301,3 +1301,73 @@ fn r_269_the_password_rows_of_add_and_update_state_the_password_given_twice() {
         );
     }
 }
+
+/// The help of `path`, as text with its lines rejoined, so that a sentence
+/// the layout wrapped can be found whole.
+fn prose(path: &[&str]) -> String {
+    let mut arguments = vec!["help"];
+    arguments.extend_from_slice(path);
+    let written = String::from_utf8(succeeds(&arguments)).expect("the help is UTF-8");
+
+    written.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn rmp_274_the_help_states_what_the_second_re_audit_found_it_left_out() {
+    let render = prose(&["render"]);
+    for stated in [
+        // S-01: the object flags bind one object; database stays whole.
+        "The template always sees the whole database as database; --table, --view or \
+         --routine also binds that one object as table, view or routine.",
+        "Binds this table as the variable table; database still holds every table.",
+        "Binds this view as the variable view; database still holds every view.",
+        // S-11 and FR-HELP-013: the exclusion is stated on both flags.
+        "Not to be given with --database or --direct.",
+        "Not to be given with --context.",
+        "or --context together with -d/--database or --direct.",
+        // --no-cache is accepted and ignored with --context.
+        "It has no effect with --context, which uses no cache.",
+    ] {
+        assert!(render.contains(stated), "tpl help render lacks {stated:?}");
+    }
+    assert!(!render.contains("Acts on this one"), "{render}");
+
+    // S-02: what an entry needs before it can connect.
+    let add = prose(&["cfg", "database", "add"]);
+    assert!(
+        add.contains(
+            "To connect, the entry needs --host and --schema, or a --dsn that names both; --port \
+             defaults to 3306 and --user is optional. An entry without them is stored, but every \
+             later command that connects with it exits 78."
+        ),
+        "{add}"
+    );
+
+    // S-05 and FR-TMPL-032.
+    assert!(
+        prose(&["template", "check"]).contains("every failing template is reported"),
+        "tpl help template check"
+    );
+
+    // S-09: the conditions the 78 and 64 rows left out.
+    for path in [
+        &["schema", "tables"][..],
+        &["render"][..],
+        &["cfg", "database", "test"][..],
+    ] {
+        let text = prose(path);
+        for stated in ["password_command failed", "ca_path holds no certificate"] {
+            assert!(text.contains(stated), "tpl help {path:?} lacks {stated:?}");
+        }
+    }
+    assert!(prose(&["help"]).contains("An unknown flag, a flag given twice"));
+    assert!(prose(&["version"]).contains("a global flag that takes a value given twice"));
+
+    // The walkthrough: --schema is glossed, and listing points at JSON.
+    let root = prose(&[]);
+    assert!(
+        root.contains("Its --schema is the name of the database on that server"),
+        "{root}"
+    );
+    assert!(root.contains("tpl schema tables --format json"), "{root}");
+}

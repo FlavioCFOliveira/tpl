@@ -1,7 +1,7 @@
 ---
 title: CLI Contract
 status: approved
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-24
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
 
@@ -81,6 +81,10 @@ tpl [global flags] <command> [<subcommand> …] [<arguments>] [local flags]
 
 - **FR-CLI-004**: The system SHALL NOT infer a command from a prefix of its
   name. `tpl sch tables` is `64`.
+
+  *Note added in the forty-sixth edition.* The `64` carries the suggestion
+  `schema`, per `FR-ERR-042`: a prefix is never executed, and it is offered as
+  a nearest match.
 
 - **FR-CLI-005**: The system SHALL NOT infer a long flag from a prefix of its
   name. `tpl --data shop schema tables` is `64`.
