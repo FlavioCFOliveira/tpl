@@ -1681,7 +1681,9 @@ fn r_02_an_undefined_value_quotes_the_whole_expression_and_a_lookup_that_found_n
 
     let written = refused(&sandbox, &["render", "deep", "--context", CONTEXT], 65);
     assert!(
-        line(&written, LABELS[1]).contains("reads 'database.nosuch.x', which is not defined"),
+        // Z-01: the walk now names the step that found nothing.
+        line(&written, LABELS[1])
+            .contains("reads 'database.nosuch.x', and 'database' has no attribute 'nosuch'"),
         "{written}"
     );
 
@@ -1792,9 +1794,11 @@ fn s_07_an_include_without_its_extension_is_told_the_rule_and_the_name_it_meant(
          template list"
     );
 
+    // Z-03: the include wrote the extension, so the rule is not repeated.
     let written = refused(&sandbox, &["render", "gone", "--context", CONTEXT], 65);
-    assert!(
-        line(&written, LABELS[2]).starts_with("an {% include %} names the template file"),
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "list the templates with: tpl template list",
         "{written}"
     );
 }
@@ -2027,6 +2031,239 @@ fn y_01_an_undefined_member_of_a_bound_object_points_at_the_template_and_not_the
         "'table' exists only when the render names one: add --table <name> to the tpl render \
          command"
     );
+}
+
+#[test]
+fn z_01_an_undefined_member_of_any_context_variable_names_the_step_that_found_nothing() {
+    // Finding Z-01 of the ninth re-audit of rmp #263: `database`, `tpl` and
+    // `now` got none of the Y-01 treatment.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(
+        CONTEXT,
+        &EMPTY_CONTEXT.replace(r#""tables":[]"#, &format!(r#""tables":{ORDERS}"#)),
+    );
+    sandbox.write(".tpl/templates/db.jinja", "{{ database.nme }}\n");
+    sandbox.write(
+        ".tpl/templates/past.jinja",
+        "{{ database.tables[3].name }}\n",
+    );
+    sandbox.write(
+        ".tpl/templates/server.jinja",
+        "{{ database.server.vrsion }}\n",
+    );
+    sandbox.write(".tpl/templates/tv.jinja", "{{ tpl.vrsion }}\n");
+    sandbox.write(".tpl/templates/when.jinja", "{{ now.year }}\n");
+
+    for (template, cause, hint) in [
+        (
+            "db",
+            "reads 'database.nme', and 'database' has no attribute 'nme'",
+            "did you mean 'name'? 'database' has no attribute 'nme'; its attributes are name, \
+             charset, collation, server, tables, views, routines; correct the template, then \
+             print the template's source with: tpl template show db.jinja",
+        ),
+        (
+            "past",
+            "reads 'database.tables[3].name', and 'database.tables' has 1 item, so it has no \
+             item [3]",
+            "'database.tables' has 1 item, at index 0, so [3] reads nothing",
+        ),
+        (
+            "server",
+            "and 'database.server' has no attribute 'vrsion'",
+            "did you mean 'version'? 'database.server' has no attribute 'vrsion'",
+        ),
+        (
+            "tv",
+            "and 'tpl' has no attribute 'vrsion'",
+            "did you mean 'version'? 'tpl' has no attribute 'vrsion'; its attributes are \
+             version;",
+        ),
+        (
+            "when",
+            "and 'now' is a string, which has no attribute 'year'",
+            "'now' is a string with no attribute 'year'; correct the template",
+        ),
+    ] {
+        let written = refused(&sandbox, &["render", template, "--context", CONTEXT], 65);
+        assert!(line(&written, LABELS[1]).contains(cause), "{written}");
+        let given = line(&written, LABELS[2]);
+        assert!(given.starts_with(hint), "{written}");
+        assert!(!given.contains("add --"), "{written}");
+        assert!(
+            given.ends_with(&format!("tpl template show {template}.jinja")),
+            "{written}"
+        );
+    }
+}
+
+#[test]
+fn z_02_a_vars_key_near_a_set_key_is_named_and_never_hidden_behind_a_new_set() {
+    // Finding Z-02 of the ninth re-audit of rmp #263: the hint asked for a
+    // new --set whether the typo sat in the template or in the flag.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+    sandbox.write(".tpl/templates/titl.jinja", "{{ vars.titl }}\n");
+    sandbox.write(".tpl/templates/title.jinja", "{{ vars.title }}\n");
+
+    for (template, set, cause, hint) in [
+        (
+            "titl",
+            "title=x",
+            "reads 'vars.titl', and no --set gave the key 'titl'",
+            "did you mean 'title'? --set gave title; correct the key in the template or in \
+             --set so the two match",
+        ),
+        (
+            "title",
+            "titel=x",
+            "reads 'vars.title', and no --set gave the key 'title'",
+            "did you mean 'titel'? --set gave titel; correct the key in the template or in \
+             --set so the two match",
+        ),
+        (
+            "title",
+            "author=x",
+            "no --set gave the key 'title'",
+            "--set gave author, and none is near 'title': add --set title=<value> to the tpl \
+             render command",
+        ),
+    ] {
+        let written = refused(
+            &sandbox,
+            &["render", template, "--context", CONTEXT, "--set", set],
+            65,
+        );
+        assert!(line(&written, LABELS[1]).contains(cause), "{written}");
+        assert!(line(&written, LABELS[2]).starts_with(hint), "{written}");
+    }
+
+    // With no --set at all, the key is the one to add.
+    let written = refused(&sandbox, &["render", "title", "--context", CONTEXT], 65);
+    assert!(
+        line(&written, LABELS[2]).starts_with("'vars.title' is set with --set: add --set title="),
+        "{written}"
+    );
+}
+
+#[test]
+fn z_03_an_include_with_its_extension_gets_the_nearest_template_and_not_the_rule() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+    sandbox.write(".tpl/templates/t/ok.jinja", "fine\n");
+    sandbox.write(".tpl/templates/near.jinja", "{% include \"t/oj.jinja\" %}");
+    sandbox.write(".tpl/templates/bare.jinja", "{% include \"t/oj\" %}");
+
+    let written = refused(&sandbox, &["render", "near", "--context", CONTEXT], 65);
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 't/ok.jinja'? list the templates with: tpl template list"
+    );
+
+    // Without the extension, the rule stays, and so does the suggestion.
+    let written = refused(&sandbox, &["render", "bare", "--context", CONTEXT], 65);
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 't/ok.jinja'? an {% include %} names the template file with its \
+         extension, as in {% include \"example.jinja\" %}; list the templates with: tpl \
+         template list"
+    );
+}
+
+#[test]
+fn z_04_a_misspelt_root_suggests_the_bound_variable_and_a_loop_variable_does_not() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(
+        CONTEXT,
+        &EMPTY_CONTEXT.replace(r#""tables":[]"#, &format!(r#""tables":{ORDERS}"#)),
+    );
+    sandbox.write(".tpl/templates/top.jinja", "{{ tabel.name }}\n");
+    sandbox.write(
+        ".tpl/templates/row.jinja",
+        "{% for row in table.columns %}{{ row.nme }}{% endfor %}\n",
+    );
+
+    let table = ["--context", CONTEXT, "--table", "orders"];
+    let written = refused(&sandbox, &[&["render", "top"][..], &table].concat(), 65);
+    assert!(
+        line(&written, LABELS[1])
+            .contains("reads 'tabel.name', and 'tabel' is no variable tpl binds in this render"),
+        "{written}"
+    );
+    assert_eq!(
+        line(&written, LABELS[2]),
+        "did you mean 'table'? 'tabel' is no variable tpl binds in this render; correct the \
+         template, then print the template's source with: tpl template show top.jinja"
+    );
+
+    // `row` is the template's own, one edit from `now`: no suggestion.
+    let written = refused(&sandbox, &[&["render", "row"][..], &table].concat(), 65);
+    assert!(!written.contains("did you mean"), "{written}");
+}
+
+#[test]
+fn a_context_variable_name_the_template_binds_is_described_as_the_templates_own() {
+    // A loop variable named `table` is not the render's `table`: the walk
+    // describes what the loop yields, and never asks for --table.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(
+        CONTEXT,
+        &EMPTY_CONTEXT.replace(r#""tables":[]"#, &format!(r#""tables":{ORDERS}"#)),
+    );
+    sandbox.write(
+        ".tpl/templates/loop.jinja",
+        "{% for table in database.tables %}{{ table.nme }}{% endfor %}\n",
+    );
+    sandbox.write(
+        ".tpl/templates/param.jinja",
+        "{% macro m(table) %}{{ table.nme }}{% endmacro %}{{ m(database) }}\n",
+    );
+
+    for flags in [
+        &["--context", CONTEXT][..],
+        &["--context", CONTEXT, "--table", "orders"][..],
+    ] {
+        let written = refused(&sandbox, &[&["render", "loop"][..], flags].concat(), 65);
+        assert!(
+            line(&written, LABELS[1]).contains(
+                "reads 'table.nme', and 'table' is a loop variable of the template, which holds \
+                 the template's own value, not the render's, and 'table' has no attribute 'nme'"
+            ),
+            "{written}"
+        );
+        let given = line(&written, LABELS[2]);
+        assert!(
+            given.starts_with(
+                "did you mean 'name'? 'table' is a loop variable of the template, not the \
+                 render's 'table': 'table' has no attribute 'nme'; its attributes are name, \
+                 table_type, engine,"
+            ),
+            "{written}"
+        );
+        assert!(!given.contains("add --"), "{written}");
+        assert!(given.ends_with("tpl template show loop.jinja"), "{written}");
+
+        // A macro's parameter holds a value only the call knows: no list.
+        let written = refused(&sandbox, &[&["render", "param"][..], flags].concat(), 65);
+        assert!(
+            line(&written, LABELS[1]).contains(
+                "'table' is a variable the template binds, which holds the template's own value, \
+                 not the render's, and reading 'nme' of it found nothing"
+            ),
+            "{written}"
+        );
+        assert_eq!(
+            line(&written, LABELS[2]),
+            "'table' is a variable the template binds, not the render's 'table': reading 'nme' \
+             of it found nothing; correct the template, then print the template's source with: \
+             tpl template show param.jinja"
+        );
+    }
 }
 
 #[test]

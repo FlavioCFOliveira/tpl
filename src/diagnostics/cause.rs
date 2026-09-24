@@ -1328,7 +1328,10 @@ fn missing_step(missing: &Missing) -> String {
         Missing::Attribute {
             owner, name, kind, ..
         } => {
-            if *kind == "an object" {
+            // Z-02: a key of `vars` is a `--set` key, per FR-CTX-026.
+            if owner == "vars" {
+                format!("no --set gave the key '{name}'")
+            } else if *kind == "an object" {
                 format!("'{owner}' has no attribute '{name}'")
             } else {
                 format!("'{owner}' is {kind}, which has no attribute '{name}'")
@@ -1346,9 +1349,55 @@ fn missing_step(missing: &Missing) -> String {
             format!("'{owner}' is {kind}, which has no item [{index}]")
         }
         Missing::Elsewhere { root } => format!(
-            "'{root}' is defined, because --{root} names one, but a later step of the expression \
-             is not"
+            "'{root}' is defined, {}, but a later step of the expression is not",
+            bound_because(root)
         ),
+        Missing::Variable { name, .. } => {
+            format!("'{name}' is no variable tpl binds in this render")
+        }
+        Missing::Bound {
+            name,
+            loop_variable,
+            step,
+            read,
+        } => {
+            let which = template_variable(name, *loop_variable);
+            match (step, read) {
+                (Some(step), _) => format!(
+                    "{which} holds the template's own value, not the render's, and {}",
+                    missing_step(step)
+                ),
+                (None, Some(read)) => format!(
+                    "{which} holds the template's own value, not the render's, and reading \
+                     '{read}' of it found nothing"
+                ),
+                (None, None) => format!(
+                    "{which} holds the template's own value, not the render's, and a later step \
+                     of the expression is not defined"
+                ),
+            }
+        }
+    }
+}
+
+/// A context variable's name the template binds itself, in words: `the loop
+/// variable 'table' of the template`.
+pub(super) fn template_variable(name: &str, loop_variable: bool) -> String {
+    if loop_variable {
+        format!("'{name}' is a loop variable of the template, which")
+    } else {
+        format!("'{name}' is a variable the template binds, which")
+    }
+}
+
+/// Why a context variable is defined in this render, per `FR-RND-023` and
+/// `FR-RND-024`: an object variable because its flag names one, and every
+/// other because every render binds it.
+pub(super) fn bound_because(root: &str) -> String {
+    if matches!(root, "table" | "view" | "routine") {
+        format!("because --{root} names one")
+    } else {
+        "as it is in every render".to_owned()
     }
 }
 

@@ -161,30 +161,38 @@ pub(super) fn unresolved(
     }
 }
 
-/// The step that found nothing in an undefined expression rooted at `table`,
-/// `view` or `routine`, WHERE the render bound that variable; [`None`] where
-/// the expression has another root, or the variable is not bound.
-///
-/// `FR-RND-023` binds each of the three only when its flag is given, so a
-/// bound root means the flag was given, and the hint that asks for it would
-/// be false (finding Y-01 of the eighth re-audit of rmp `#263`). The walk
-/// reads the context itself, step by step, over the attributes and decimal
-/// indexes the expression begins with, and stops at the first step that
-/// finds nothing.
-pub(super) fn missing(context: &minijinja::Value, expression: &str) -> Option<Missing> {
-    let (root, mut rest) = identifier(expression)?;
-    let root: &'static str = match root {
-        "table" => "table",
-        "view" => "view",
-        "routine" => "routine",
-        _ => return None,
-    };
-    let mut current = context
-        .get_attr(root)
-        .ok()
-        .filter(|value| !value.is_undefined())?;
-    let mut consumed = root.len();
+/// The context variables of `FR-RND-023`, in the order it names them.
+const VARIABLES: [&str; 7] = ["database", "table", "view", "routine", "vars", "tpl", "now"];
 
+/// The step that found nothing in an undefined expression rooted at a context
+/// variable of `FR-RND-023`, WHERE the render bound that variable; [`None`]
+/// where the expression has another root, or the variable is not bound.
+///
+/// `FR-RND-023` binds `table`, `view` and `routine` only when the flag of the
+/// same name is given, so a bound one means the flag was given, and the hint
+/// that asks for it would be false (finding Y-01 of the eighth re-audit of rmp
+/// `#263`); the other four are bound in every render, and a step of them that
+/// finds nothing is named in the same way (finding Z-01 of the ninth). The
+/// walk reads the context itself, step by step, over the attributes and
+/// decimal indexes the expression begins with, and stops at the first step
+/// that finds nothing.
+pub(super) fn missing(context: &minijinja::Value, expression: &str) -> Option<Missing> {
+    let (root, rest) = identifier(expression)?;
+    let root: &'static str = VARIABLES.into_iter().find(|&variable| variable == root)?;
+    let current = bound(context, root)?;
+
+    Some(walk(expression, root.len(), rest, current).unwrap_or(Missing::Elsewhere { root }))
+}
+
+/// The first step of `expression` after its first `consumed` bytes that finds
+/// nothing in `current`, the value those bytes hold; [`None`] where every step
+/// the walk can read finds something.
+fn walk(
+    expression: &str,
+    mut consumed: usize,
+    mut rest: &str,
+    mut current: minijinja::Value,
+) -> Option<Missing> {
     loop {
         let owner = &expression[..consumed];
         if let Some(after) = rest.strip_prefix('.') {
@@ -251,7 +259,194 @@ pub(super) fn missing(context: &minijinja::Value, expression: &str) -> Option<Mi
         }
     }
 
-    Some(Missing::Elsewhere { root })
+    None
+}
+
+/// The undefined expression rooted at a context variable's name that the
+/// template binds itself — `{% for table in database.tables %}` — described
+/// as the template's variable rather than as the render's.
+///
+/// The render's `table` is not what the expression reads, so the walk over
+/// the context would describe the wrong value, and a hint asking for
+/// `--table` would be false. Where the name has one binding whose value can be
+/// evaluated against the context alone — the first item of a loop's iterable,
+/// or the value of a `set` or a `with` — the walk runs over that value; the
+/// step it finds is then what the variable holds. Otherwise the step is not
+/// determined, and only the first attribute the expression reads is named.
+pub(super) fn template_bound(
+    engine: &minijinja::Environment<'_>,
+    context: &minijinja::Value,
+    expression: &str,
+    reported: &minijinja::Error,
+) -> Option<Missing> {
+    let (root, rest) = identifier(expression)?;
+    if !VARIABLES.contains(&root) {
+        return None;
+    }
+    let found = bindings(reported.template_source()?, root);
+    let first = found.first()?;
+    let unique = found.iter().all(|binding| binding == first);
+    let evaluate = |text: &str| {
+        engine
+            .compile_expression(text)
+            .and_then(|compiled| compiled.eval(context))
+            .ok()
+            .filter(|value| !value.is_undefined())
+    };
+    let held = match (unique, first.keyword) {
+        (true, "for") => first
+            .value
+            .and_then(evaluate)
+            .and_then(|iterable| iterable.try_iter().ok()?.next()),
+        (true, "set" | "with") => first.value.and_then(evaluate),
+        _ => None,
+    };
+    let step = held
+        .and_then(|value| walk(expression, root.len(), rest, value))
+        .map(Box::new);
+    let read = rest
+        .strip_prefix('.')
+        .and_then(identifier)
+        .map(|(name, _)| name.to_owned());
+
+    Some(Missing::Bound {
+        name: root.to_owned(),
+        loop_variable: found.iter().all(|binding| binding.keyword == "for"),
+        step,
+        read,
+    })
+}
+
+/// One occurrence of a name in a template's source that reads as a binding.
+#[derive(Debug, PartialEq, Eq)]
+struct Binding<'a> {
+    /// What precedes the name: `for`, `set`, `with`, `as`, `import`, `,` or
+    /// `(`.
+    keyword: &'static str,
+    /// The expression the binding gives the name, WHERE it is the whole of a
+    /// loop's iterable or of a `set`'s or a `with`'s value.
+    value: Option<&'a str>,
+}
+
+/// Every occurrence of the word `name` in `source` that reads as a binding
+/// the template makes itself: after `for`, `set`, `with`, `as` or `import`,
+/// or after a `,` or a `(` that a loop target, a macro's parameters or a call
+/// block's list would place it after.
+fn bindings<'a>(source: &'a str, name: &str) -> Vec<Binding<'a>> {
+    const KEYWORDS: [&str; 5] = ["for", "set", "with", "as", "import"];
+    let bytes = source.as_bytes();
+    let word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+
+    source
+        .match_indices(name)
+        .filter_map(|(at, _)| {
+            let end = at + name.len();
+            if (at > 0 && word(bytes[at - 1])) || bytes.get(end).copied().is_some_and(word) {
+                return None;
+            }
+            let before = source[..at].trim_end();
+            let keyword = if before.ends_with(',') {
+                ","
+            } else if before.ends_with('(') {
+                "("
+            } else {
+                KEYWORDS.into_iter().find(|keyword| {
+                    before
+                        .strip_suffix(keyword)
+                        .is_some_and(|head| head.bytes().next_back().is_none_or(|byte| !word(byte)))
+                })?
+            };
+            Some(Binding {
+                keyword,
+                value: bound_value(keyword, &source[end..]),
+            })
+        })
+        .collect()
+}
+
+/// The expression a binding gives its name, read from just after the name:
+/// the iterable of `for <name> in <expression> %}`, or the value of
+/// `set <name> = <expression> %}` and `with <name> = <expression> %}`; [`None`]
+/// for any other shape, a loop filtered with `if` or a `with` of several names
+/// included.
+fn bound_value<'a>(keyword: &str, after: &'a str) -> Option<&'a str> {
+    let after = after.trim_start();
+    let value = match keyword {
+        "for" => after.strip_prefix("in")?,
+        "set" | "with" => after
+            .strip_prefix('=')
+            .filter(|value| !value.starts_with('='))?,
+        _ => return None,
+    };
+    if keyword == "for" && !value.starts_with(char::is_whitespace) {
+        return None;
+    }
+    let (value, _) = value.split_once("%}")?;
+    let value = value.trim().trim_end_matches('-').trim_end();
+    let excluded = [" if ", " recursive"];
+    (!value.is_empty()
+        && !excluded.iter().any(|word| value.contains(word))
+        && !(keyword == "with" && value.contains(',')))
+    .then_some(value)
+}
+
+/// The value `variable` holds in `context`, WHERE the render bound it.
+fn bound(context: &minijinja::Value, variable: &str) -> Option<minijinja::Value> {
+    context
+        .get_attr(variable)
+        .ok()
+        .filter(|value| !value.is_undefined())
+}
+
+/// The root of an undefined expression that is no context variable, with the
+/// bound context variables nearest to it (finding Z-04 of the ninth re-audit
+/// of rmp `#263`); [`None`] where none is near, or where the name may be one
+/// the template binds itself.
+///
+/// The engine reports `c.nme`, for a loop variable `c`, over the same range as
+/// `tabel.name`, so the root alone does not tell a misspelt variable from a
+/// template's own. A name is therefore taken for a misspelling only WHERE the
+/// failure arose in the template the caller named — an included template or
+/// an imported macro sees names its caller bound — and no occurrence of the
+/// name in its source reads as a binding: after `for`, `set`, `with`, `as` or
+/// `import`, or after a `,` or a `(` that a loop target, a macro's parameters
+/// or a call block's list would place it after.
+pub(super) fn unbound(
+    context: &minijinja::Value,
+    expression: &str,
+    reported: &minijinja::Error,
+    invoked: &str,
+) -> Option<Missing> {
+    let (root, _) = identifier(expression)?;
+    if VARIABLES.contains(&root) || reported.name().is_some_and(|name| name != invoked) {
+        return None;
+    }
+    if reported
+        .template_source()
+        .is_some_and(|source| binds(source, root))
+    {
+        return None;
+    }
+
+    let variables: Vec<&'static str> = VARIABLES
+        .into_iter()
+        .filter(|variable| bound(context, variable).is_some())
+        .collect();
+    let nearest: Vec<&'static str> =
+        suggest::suggestions(root, variables.iter().copied(), Population::Names)
+            .names()
+            .collect();
+
+    (!nearest.is_empty()).then(|| Missing::Variable {
+        name: root.to_owned(),
+        nearest,
+    })
+}
+
+/// Whether an occurrence of the word `name` in `source` reads as a binding the
+/// template makes itself, per [`unbound`].
+fn binds(source: &str, name: &str) -> bool {
+    !bindings(source, name).is_empty()
 }
 
 /// The name an expression fragment begins with, and what follows it.
@@ -947,5 +1142,152 @@ mod tests {
             super::missing(&context, "table.name|upper"),
             Some(Missing::Elsewhere { root: "table" })
         );
+    }
+
+    /// Finding Z-01 of the ninth re-audit of rmp `#263`: the walk reaches
+    /// every context variable, `vars` included.
+    #[test]
+    fn z_01_the_walk_reaches_every_bound_context_variable() {
+        use crate::error::Missing;
+
+        let context = minijinja::Value::from_serialize(serde_json::json!({
+            "database": {"name": "shop", "tables": [{"name": "a"}, {"name": "b"}]},
+            "vars": {"title": "x"},
+            "tpl": {"version": "1.0.0"},
+            "now": "1970-01-01T00:00:00Z",
+        }));
+
+        assert_eq!(
+            super::missing(&context, "database.tables[3].name"),
+            Some(Missing::Index {
+                owner: "database.tables".to_owned(),
+                index: 3,
+                length: 2,
+            })
+        );
+        assert_eq!(
+            super::missing(&context, "tpl.vrsion"),
+            Some(Missing::Attribute {
+                owner: "tpl".to_owned(),
+                name: "vrsion".to_owned(),
+                kind: "an object",
+                attributes: vec!["version".to_owned()],
+                nearest: vec!["version".to_owned()],
+            })
+        );
+        assert_eq!(
+            super::missing(&context, "vars.titl"),
+            Some(Missing::Attribute {
+                owner: "vars".to_owned(),
+                name: "titl".to_owned(),
+                kind: "an object",
+                attributes: vec!["title".to_owned()],
+                nearest: vec!["title".to_owned()],
+            })
+        );
+        assert!(matches!(
+            super::missing(&context, "now.year"),
+            Some(Missing::Attribute {
+                kind: "a string",
+                ..
+            })
+        ));
+        assert_eq!(super::missing(&context, "table.name"), None);
+    }
+
+    /// The undefined root of a render of `source` as `name`, per
+    /// [`super::unbound`].
+    fn root_of(source: &str, invoked: &str) -> Option<crate::error::Missing> {
+        let context = minijinja::Value::from_serialize(serde_json::json!({
+            "database": {"name": "shop"},
+            "table": {"name": "orders", "columns": [{"name": "id"}]},
+            "vars": {},
+            "tpl": {"version": "1.0.0"},
+            "now": "1970-01-01T00:00:00Z",
+        }));
+        let mut engine = engine();
+        engine
+            .add_template("t.jinja", source)
+            .expect("the template parses");
+        let reported = engine
+            .get_template("t.jinja")
+            .expect("the template is there")
+            .render(&context)
+            .expect_err("the render fails");
+        let Error::RenderFailed {
+            undefined: Some(expression),
+            ..
+        } = during_render("t.jinja", &reported)
+        else {
+            panic!("{source} quotes no undefined expression");
+        };
+
+        super::unbound(&context, &expression, &reported, invoked)
+    }
+
+    /// Finding Z-04 of the ninth re-audit of rmp `#263`.
+    #[test]
+    fn z_04_a_misspelt_root_is_matched_only_where_the_template_binds_no_such_name() {
+        use crate::error::Missing;
+
+        assert_eq!(
+            root_of("{{ tabel.name }}", "t.jinja"),
+            Some(Missing::Variable {
+                name: "tabel".to_owned(),
+                nearest: vec!["table"],
+            })
+        );
+        assert_eq!(
+            root_of("{{ tabel }}{{ tabel.name }}", "t.jinja").map(|_| ()),
+            Some(())
+        );
+        // Another template than the one invoked may see its caller's names.
+        assert_eq!(root_of("{{ tabel.name }}", "other.jinja"), None);
+        // Nothing near.
+        assert_eq!(root_of("{{ zzzzzz.name }}", "t.jinja"), None);
+        for bound in [
+            "{% for row in table.columns %}{{ row.nme }}{% endfor %}",
+            "{% for i, row in [[0, table]] %}{{ row.nme }}{% endfor %}",
+            "{% macro m(row) %}{{ row.nme }}{% endmacro %}{{ m(table) }}",
+            "{% set row = table %}{{ row.nme }}",
+            "{% with row = table %}{{ row.nme }}{% endwith %}",
+        ] {
+            assert_eq!(root_of(bound, "t.jinja"), None, "{bound}");
+        }
+    }
+
+    #[test]
+    fn z_04_a_binding_is_read_only_where_the_whole_word_follows_the_keyword() {
+        assert!(super::binds("{% for row in x %}", "row"));
+        assert!(super::binds("{% set a, row = x %}", "row"));
+        assert!(!super::binds("{{ arrow.x }}{{ row.y }}", "row"));
+        assert!(!super::binds("{% set rows = x %}{{ row.y }}", "row"));
+        assert!(!super::binds("{{ offset }}{{ row.y }}", "row"));
+    }
+
+    #[test]
+    fn a_binding_carries_its_value_only_where_the_whole_of_it_is_one_expression() {
+        fn value(source: &str) -> Vec<(&'static str, Option<&str>)> {
+            super::bindings(source, "table")
+                .into_iter()
+                .map(|binding| (binding.keyword, binding.value))
+                .collect()
+        }
+
+        assert_eq!(
+            value("{% for table in database.tables -%}"),
+            [("for", Some("database.tables"))]
+        );
+        assert_eq!(
+            value("{% for table in database.tables if table.name %}"),
+            [("for", None)]
+        );
+        assert_eq!(
+            value("{% set table = database.tables[0] %}"),
+            [("set", Some("database.tables[0]"))]
+        );
+        assert_eq!(value("{% with table = a, b = c %}"), [("with", None)]);
+        assert_eq!(value("{% macro m(table) %}"), [("(", None)]);
+        assert_eq!(value("{{ table.name }}"), []);
     }
 }

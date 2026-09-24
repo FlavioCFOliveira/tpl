@@ -465,6 +465,26 @@ impl Root {
         nearest.names().map(str::to_owned).collect()
     }
 
+    /// The templates nearest to the name an `{% include %}` wrote, each with
+    /// the extension `FR-TMPL-008` makes an include write (finding Z-03 of the
+    /// ninth re-audit of rmp `#263`).
+    ///
+    /// The name is measured with the extension completed, against the names
+    /// that carry it, so `t/oj.jinja` and `t/oj` are both one edit from
+    /// `t/ok.jinja`. A walk that fails suggests nothing, as the nearest
+    /// matches of `FR-TMPL-027` do.
+    pub(crate) fn nearest_included(&self, named: &str) -> Vec<String> {
+        let population = self.templates().unwrap_or_default();
+        let completed = complete(named);
+        let nearest = suggest::suggestions(
+            &completed,
+            population.iter().map(Template::name),
+            Population::Templates,
+        );
+
+        nearest.names().map(str::to_owned).collect()
+    }
+
     /// The `65` of `FR-TMPL-026`, which `FR-TMPL-024` also reaches.
     fn escaped(&self, named: &str) -> Error {
         Error::TemplateOutsideRoot {

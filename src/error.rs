@@ -180,10 +180,12 @@ pub enum RenderReason {
     Failed(String),
     /// The undefined expression begins with a lookup call that found nothing.
     Unresolved(Unresolved),
-    /// The undefined expression begins with `table`, `view` or `routine`, and
-    /// the render bound that variable: the flag that binds it was given, and
-    /// what is undefined is a step of the expression after it (finding Y-01
-    /// of the eighth re-audit of rmp `#263`).
+    /// The undefined expression begins with a context variable the render
+    /// bound, and what is undefined is a step of the expression after it
+    /// (finding Y-01 of the eighth re-audit of rmp `#263`, extended to every
+    /// context variable by finding Z-01 of the ninth); or it begins with a
+    /// name that is no context variable, near one the render bound (finding
+    /// Z-04).
     Missing(Missing),
     /// An `{% include %}` named a template the loader does not hold
     /// (`FR-TMPL-009`).
@@ -194,6 +196,10 @@ pub enum RenderReason {
         /// project: the include then only lacks the extension `FR-TMPL-009`
         /// requires it to write.
         lacks_extension: bool,
+        /// The templates of the project nearest to the name, each with the
+        /// extension an include writes, at most three, in the order of
+        /// `FR-ERR-019` (finding Z-03 of the ninth re-audit of rmp `#263`).
+        nearest: Vec<String>,
     },
 }
 
@@ -216,8 +222,8 @@ pub struct Unresolved {
     pub document: Option<std::path::PathBuf>,
 }
 
-/// The step of an expression rooted at a bound object variable that found
-/// nothing.
+/// The step of an expression rooted at a bound context variable that found
+/// nothing, or the root itself where it is no context variable.
 ///
 /// `owner` is the part of the expression before that step, as the template
 /// wrote it. It is built only from names and decimal indexes, so every
@@ -261,8 +267,37 @@ pub enum Missing {
     /// The variable is bound, and the step that found nothing could not be
     /// located: the expression calls a function, a filter or a method.
     Elsewhere {
-        /// The bound variable: `table`, `view` or `routine`.
+        /// The bound variable: `database`, `table`, `view`, `routine`,
+        /// `vars`, `tpl` or `now`.
         root: &'static str,
+    },
+    /// The expression begins with `name`, which is no context variable of
+    /// this render, and is near one the render bound (finding Z-04 of the
+    /// ninth re-audit of rmp `#263`).
+    Variable {
+        /// The name the expression begins with.
+        name: String,
+        /// The bound context variables nearest to `name`, at most three, in
+        /// the order of `FR-ERR-019`; never empty.
+        nearest: Vec<&'static str>,
+    },
+    /// The expression begins with the name of a context variable that the
+    /// template binds itself — a loop variable, a `set`, a `with`, a macro's
+    /// parameter — so what it reads is the template's value, not the
+    /// render's.
+    Bound {
+        /// The name the template binds.
+        name: String,
+        /// Whether every binding of the name is a loop's.
+        loop_variable: bool,
+        /// The step that found nothing in the value the binding holds, WHERE
+        /// that value could be evaluated against the context alone; never
+        /// [`Missing::Elsewhere`], [`Missing::Variable`] or another
+        /// [`Missing::Bound`].
+        step: Option<Box<Missing>>,
+        /// The first attribute the expression reads after the name, WHERE it
+        /// reads one.
+        read: Option<String>,
     },
 }
 

@@ -730,10 +730,9 @@ fn bare(error: &Error) -> Cow<'static, str> {
         } => {
             match reason.as_deref() {
                 Some(RenderReason::Unresolved(unresolved)) => return listing_of(unresolved),
-                Some(RenderReason::IncludeNotFound {
-                    name,
-                    lacks_extension,
-                }) => return include_of(name, *lacks_extension),
+                Some(RenderReason::IncludeNotFound { name, nearest, .. }) => {
+                    return include_of(name, nearest);
+                }
                 // Y-01: the object flag was given, so the fault is the
                 // template's and the hint never asks for the flag.
                 Some(RenderReason::Missing(missing)) => return missing_step(missing, template),
@@ -1889,18 +1888,18 @@ fn listing_of(unresolved: &Unresolved) -> Cow<'static, str> {
 /// The hint for an `{% include %}` that named no template (`FR-TMPL-009`).
 ///
 /// The rule that an include writes the extension is stated in the help of
-/// `tpl template list` alone, so the line states it again, and suggests the
-/// name with the extension where that name is a template of the project.
-fn include_of(name: &str, lacks_extension: bool) -> Cow<'static, str> {
+/// `tpl template list` alone, so the line states it again where the include
+/// did not write it, and drops it where the include did (finding Z-03 of the
+/// ninth re-audit of rmp `#263`). Either way the line suggests the nearest
+/// templates, with the extension, that `FR-ERR-041` admits.
+fn include_of(name: &str, nearest: &[String]) -> Cow<'static, str> {
     const RULE: &str = "an {% include %} names the template file with its extension, as in {% \
                         include \"example.jinja\" %}; list the templates with: tpl template list";
+    const LIST: &str = "list the templates with: tpl template list";
 
-    if lacks_extension && admits_template(name) {
-        let candidate = format!("{name}.jinja");
-        Cow::Owned(suggest::hint_line(std::iter::once(candidate.as_str()), RULE).into_owned())
-    } else {
-        Cow::Borrowed(RULE)
-    }
+    let generic = if name.ends_with(".jinja") { LIST } else { RULE };
+    let admitted = admitted(nearest, admits_template);
+    Cow::Owned(suggest::hint_line(admitted.into_iter(), generic).into_owned())
 }
 
 /// [`listing_of`] for a render from the `--context` document `document`.
@@ -1938,13 +1937,16 @@ fn listing_in_document(unresolved: &Unresolved, document: &Path) -> Cow<'static,
 /// The most attributes a hint lists by name.
 const MAX_ATTRIBUTES: usize = 24;
 
-/// The hint for an undefined expression rooted at a bound `table`, `view` or
-/// `routine` (finding Y-01 of the eighth re-audit of rmp `#263`).
+/// The hint for an undefined expression rooted at a bound context variable
+/// (finding Y-01 of the eighth re-audit of rmp `#263`, and Z-01 of the ninth),
+/// or at a name near one (finding Z-04).
 ///
-/// The flag that binds the variable was given, so the correction is in the
-/// template: the hint says what the step that found nothing reads, what the
-/// value before it holds, and prints the template's source. An attribute name
-/// reaches the line only where the set of `FR-ERR-022` admits it.
+/// The variable is bound, so the correction is in the template: the hint says
+/// what the step that found nothing reads, what the value before it holds, and
+/// prints the template's source. A key of `vars` is the exception, because
+/// `--set` may be the side that is wrong, and [`set_key`] answers it. An
+/// attribute name reaches the line only where the set of `FR-ERR-022` admits
+/// it.
 fn missing_step(missing: &Missing, template: &str) -> Cow<'static, str> {
     let show = if admits_template(template) {
         format!("print the template's source with: tpl template show {template}")
@@ -1953,6 +1955,13 @@ fn missing_step(missing: &Missing, template: &str) -> Cow<'static, str> {
     };
 
     let line = match missing {
+        Missing::Attribute {
+            owner,
+            name,
+            attributes,
+            nearest,
+            ..
+        } if owner == "vars" => return set_key(name, attributes, nearest),
         Missing::Attribute {
             owner,
             name,
@@ -2012,11 +2021,113 @@ fn missing_step(missing: &Missing, template: &str) -> Cow<'static, str> {
             "'{owner}' is {kind}, which has no item [{index}]; correct the template, then {show}"
         ),
         Missing::Elsewhere { root } => format!(
-            "'{root}' is defined, because --{root} names one, so the fault is in the \
-             expression; correct the template, then {show}"
+            "'{root}' is defined, {}, so the fault is in the expression; correct the template, \
+             then {show}",
+            super::cause::bound_because(root)
         ),
+        // Z-04: the nearest are context variables, literals of FR-ERR-022,
+        // and the name is written only where its set admits it.
+        Missing::Variable { name, nearest } => {
+            let generic = if admits(name) {
+                format!(
+                    "'{name}' is no variable tpl binds in this render; correct the template, \
+                     then {show}"
+                )
+            } else {
+                format!(
+                    "the name is no variable tpl binds in this render; correct the template, \
+                     then {show}"
+                )
+            };
+            suggest::hint_line(nearest.iter().copied(), &generic).into_owned()
+        }
+        // The template binds the name, so no flag and no --set is the fix,
+        // and the render's value of the same name is not described. The name
+        // is a context variable's, a literal of FR-ERR-022.
+        Missing::Bound {
+            name,
+            loop_variable,
+            step,
+            read,
+        } => {
+            let kind = if *loop_variable {
+                "a loop variable of the template"
+            } else {
+                "a variable the template binds"
+            };
+            let lead = format!("'{name}' is {kind}, not the render's '{name}': ");
+            match (step.as_deref(), read) {
+                // A step of `vars` would be read as a `--set` key.
+                (Some(step), _) if name != "vars" => {
+                    let inner = missing_step(step, template);
+                    match inner
+                        .strip_prefix("did you mean ")
+                        .and_then(|rest| rest.split_once("? "))
+                    {
+                        Some((names, generic)) => {
+                            format!("did you mean {names}? {lead}{generic}")
+                        }
+                        None => format!("{lead}{inner}"),
+                    }
+                }
+                (_, Some(read)) if admits(read) => format!(
+                    "{lead}reading '{read}' of it found nothing; correct the template, then {show}"
+                ),
+                _ => format!("{lead}correct the expression in the template, then {show}"),
+            }
+        }
     };
     Cow::Owned(line)
+}
+
+/// The hint for a key of `vars` that no `--set` gave (finding Z-02 of the
+/// ninth re-audit of rmp `#263`).
+///
+/// A key `--set` gave that is near the one the template reads is a typo on
+/// one side or the other, so the line names it and never asks for a new
+/// `--set`; only where no key is near does it ask for one. The keys are
+/// `--set` keys, which `FR-RND-012` confines to the set of `FR-ERR-022`; each
+/// is tested again, and one outside the set is not written.
+fn set_key(name: &str, given: &[String], nearest: &[String]) -> Cow<'static, str> {
+    let keys: Vec<&str> = given
+        .iter()
+        .map(String::as_str)
+        .filter(|key| admits(key))
+        .collect();
+    let listed = {
+        let shown = keys
+            .iter()
+            .take(MAX_ATTRIBUTES)
+            .copied()
+            .collect::<Vec<_>>()
+            .join(", ");
+        match keys.len().saturating_sub(MAX_ATTRIBUTES) {
+            0 => shown,
+            more => format!("{shown} and {more} more"),
+        }
+    };
+    let near = admitted(nearest, admits);
+
+    if !near.is_empty() {
+        let generic = format!(
+            "--set gave {listed}; correct the key in the template or in --set so the two match"
+        );
+        return Cow::Owned(suggest::hint_line(near.into_iter(), &generic).into_owned());
+    }
+
+    let add = if admits(name) {
+        format!("add --set {name}=<value> to the tpl render command")
+    } else {
+        "add --set <key>=<value> to the tpl render command".to_owned()
+    };
+    Cow::Owned(match (keys.is_empty(), admits(name)) {
+        (true, true) => format!("'vars.{name}' is set with --set: {add}"),
+        (true, false) => format!("a key of 'vars' is set with --set: {add}"),
+        (false, true) => format!("--set gave {listed}, and none is near '{name}': {add}"),
+        (false, false) => {
+            format!("--set gave {listed}, and none is near the key the template reads: {add}")
+        }
+    })
 }
 
 /// The hint for an undefined expression whose first segment is a variable a

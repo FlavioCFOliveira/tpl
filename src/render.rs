@@ -239,7 +239,11 @@ impl Environment {
                     *reason = fault::unresolved(self.engine(), context, expression)
                         .map(crate::error::RenderReason::Unresolved)
                         .or_else(|| {
-                            fault::missing(context, expression)
+                            fault::template_bound(self.engine(), context, expression, &reported)
+                                .or_else(|| fault::missing(context, expression))
+                                .or_else(|| {
+                                    fault::unbound(context, expression, &reported, &resolved.name)
+                                })
                                 .map(crate::error::RenderReason::Missing)
                         })
                         .map(Box::new);
@@ -256,9 +260,18 @@ impl Environment {
                     // name that lacks it.
                     let lacks_extension =
                         !name.ends_with(".jinja") && self.root.resolve(&name).is_ok();
+                    // Z-03: the nearest templates whether or not the include
+                    // wrote the extension; the name that only lacks it is
+                    // itself the one suggestion.
+                    let nearest = if lacks_extension {
+                        vec![format!("{name}.jinja")]
+                    } else {
+                        self.root.nearest_included(&name)
+                    };
                     *reason = Some(Box::new(crate::error::RenderReason::IncludeNotFound {
                         name,
                         lacks_extension,
+                        nearest,
                     }));
                 }
                 Err(condition)
