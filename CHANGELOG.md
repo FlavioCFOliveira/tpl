@@ -56,7 +56,8 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
   `tpl version` prints `tpl 0.1.0`.
 - **Projects.** `tpl init` creates a `.tpl` project. Commands find one by walking
   up from the working directory as far as the mount point; `--tpl-dir` names the
-  folder and suppresses the walk. `.tpl/.cfg` is checked for ownership and
+  `.tpl` folder itself and suppresses the walk, and has no effect on `init`,
+  `help` and `version`. `.tpl/.cfg` is checked for ownership and
   permissions, at the target of a symbolic link, before it is read.
 - **Configuration.** `cfg get`, `cfg set`, `cfg unset` and `cfg list` read and
   write `.tpl/.cfg`, preserving its comments and its ordering.
@@ -138,6 +139,60 @@ or secure. The first release renames this heading to `0.1.0` and dates it.
 - **Diagnostics.** Exit codes drawn from the `sysexits` set, one per condition;
   nearest-match suggestions on an unknown name; verbosity gated by `-v` and `-q`;
   and a panic hook that reports a defect in `tpl` as exit `70`.
+- **Help and error texts a caller can act on alone.** Every help text and
+  every error message states what failed, why, and a command that can succeed.
+  - Help: every leaf's `DESCRIPTION`, and its JSON `description`, ends with
+    four statements — whether it contacts the server, which database entry it
+    needs, which files it writes, and what it prints. `tpl help render` lists
+    the context variables and every guaranteed filter, test and function with
+    its signature and purpose.
+  - `tpl help --format json`: each `template_surface` name is an object with
+    `name`, `signature`, `operand`, `arguments` and `purpose`; `data` gains
+    `context_variables`; a flag `default` is `null` or one JSON string of the
+    command-line text, so `--port` shows `"3306"`.
+  - `cfg get`, `cfg list` and `cfg database show` with `--format json` keep
+    TOML types: an integer is a number, `password_command` an array.
+  - New refusals: `--tpl-dir` naming a directory that is not a `.tpl` folder
+    exits `78`, and the `hint` names the `.tpl` folder it holds; a `.tpl`
+    folder without `.cfg` not owned by the caller exits `78`; `tpl init` into
+    a `.tpl` folder exits `64`; `tpl render --context --direct` exits `64`;
+    `tpl cfg database update` with no field flag exits `64`; `tpl cfg get` of
+    a block exits `64`; `tpl cache clean` naming an object that is not cached
+    exits `66`.
+  - New refusals of values, each `64` on the command line with nothing
+    written, and `78` in `.tpl/.cfg` where the value can stand there: a `password_command` string that yields no word,
+    leaves a quote unclosed, ends in a backslash or begins with `[`; `${` in
+    `ca_file` or `ca_path`; an entry name, including `core.database`, outside
+    `[A-Za-z0-9_]{1,64}`; a `${NAME}` reference whose name is not
+    `[A-Za-z_][A-Za-z0-9_]*`; an empty or whitespace-only host or database.
+    `${VAR}` in `password_command` is stored and passed to the program as
+    written.
+  - `tpl template check` reports every failing template, one message each,
+    before exiting `65`.
+  - `tpl -d <name> cache clean` removes `.tpl/.cache/<name>/` of a name no
+    entry declares.
+  - New stderr warnings, exit code unchanged, suppressed by `-q`: `--tpl-dir`
+    given to `tpl init`; `-d/--database` given to `cfg database add` or
+    `update`, naming `--schema` or `--dsn` where one would act; `tpl cfg unset` of a `dsn`, naming
+    what it carried; and, naming `tpl -d <name> cache clean`, each entry
+    removed or repointed by `cfg database remove`, `cfg database update`,
+    `cfg set` or `cfg unset`, since any data cached for it is kept.
+  - Hints: a `tpl` command in a `hint` carries the invocation's `--tpl-dir`
+    and `-d`; no `hint` deletes or overwrites a value or cached object the
+    invocation did not name, so an entry defined by `dsn` is changed through
+    `--dsn`; a rewritten command keeps the whole invocation; a prefix of a
+    command (`tpl sch`) and an undefined value in a render get a
+    nearest-match suggestion; a suggestion must share a character with the
+    name; `-d` or `--tpl-dir` that took a command name reports that the flag
+    needs a value.
+  - Library API: `tpl::Error` gained eighteen variants, and thirty-two
+    existing variants gained fields; `LoadWithoutStoring` became a struct
+    variant. `Error` is `#[non_exhaustive]`, so a `match` with a wildcard arm
+    still compiles, but code that constructs or destructures a changed
+    variant without `..` does not. In `tpl::error`, `ContextFault::Structure`
+    replaced `rule` with `at` and `expected`, `ContextFault` gained `Empty`,
+    and `EntryRepair::Rewrite` was replaced by `InsideDsn`,
+    `DsnWithoutPassword` and `Discrete`; neither enum is `#[non_exhaustive]`.
 - **Worked examples.** `examples/` holds four complete demonstrations that build
   an application's data layer — in Go, Rust, Python and Node.js — from three
   known schemas through the command line alone, each ending in a compile gate

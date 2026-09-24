@@ -187,7 +187,7 @@ my-project/
 
 `tpl init` writes five of those artefacts: `.cfg`, `.gitignore`, `templates/`, `templates/example.jinja`, and `templates/rust/_types.jinja`. It does **not** create `.cache/`, which is per-machine state a read populates.
 
-`tpl init` takes an optional path, defaulting to the current directory, and creates any missing parent with it. It refuses a destination that already holds a `.tpl` folder, changing nothing, and exits `73`. A project created inside another succeeds, exits `0`, and warns on stderr that it shadows the one above.
+`tpl init` takes an optional path, defaulting to the current directory, and creates any missing parent with it. It refuses a destination that already holds a `.tpl` folder, changing nothing, and exits `73`; it refuses a destination that is itself a `.tpl` folder, such as `projects/reports/.tpl`, with `64`, naming the parent directory to use instead. `--tpl-dir` has no effect on `tpl init` and draws a warning: the destination is the path operand. A project created inside another succeeds, exits `0`, and warns on stderr that it shadows the one above.
 
 ```bash
 tpl init
@@ -196,9 +196,9 @@ tpl init projects/reports
 
 ### Discovery
 
-`tpl` finds the project by walking **up** from the current directory to the first `.tpl` folder it meets. The walk stops at the mount point of the filesystem it started on; there is no fallback anywhere else, and no environment variable takes part. A command that needs a project and finds none exits `78` and tells you to run `tpl init`.
+`tpl` finds the project by walking **up** from the current directory to the first `.tpl` folder it meets. The walk stops at the mount point of the filesystem it started on; there is no fallback anywhere else, and no environment variable takes part. A command that needs a project and finds none exits `78` and tells you to run `tpl init` or to name one with `--tpl-dir`.
 
-`--tpl-dir <path>` names the `.tpl` folder outright and suppresses the walk. It exempts nothing: the folder it names is subject to every check below.
+`--tpl-dir <path>` names the `.tpl` folder outright and suppresses the walk. The path must be the `.tpl` folder itself, its last segment `.tpl`: naming the directory that holds it, or any other directory, exits `78`, and the `hint` names the `.tpl` folder where there is one. It exempts nothing: the folder it names is subject to every check below.
 
 Four entries of the tree need no project and perform no discovery at all: `tpl init`; `tpl help` in its three forms; `-h/--help` at any node; and `tpl version` with `-V/--version`. Each runs where no project exists, reads no file under `.tpl` and opens no socket — which is what makes `tpl help --format json` safe as an agent's first invocation, before it knows `tpl init` exists.
 
@@ -209,7 +209,7 @@ The file decides which host is contacted, which credential is used and which chi
 - it is owned by the invoking user, and
 - it grants no access to group and none to other — mode `0600`, as `tpl init` creates it.
 
-Either failure exits `78`, naming what was found. A symbolic link is checked at its target, not at the link. An **absent** `.cfg` is not a failure: there is nothing to own and nothing to grant, so the project reads as one with an empty configuration, and `tpl cfg set` can write the file again.
+Either failure exits `78`, naming what was found. A symbolic link is checked at its target, not at the link. An **absent** `.cfg` is not a failure: the `.tpl` folder must then be owned by the invoking user, or the invocation exits `78`, and the project reads as one with an empty configuration, which `tpl cfg set` can write again.
 
 ### What to version, and what not to
 
@@ -274,8 +274,8 @@ A DSN takes the form `scheme://[user[:password]@]host[:port]/database`, with `my
 
 Two mechanisms, and each is a key of the space above. Both take effect when the configuration is **resolved for a connection** — which is what every command that opens one does: the `schema` subcommands, `tpl cache load`, `tpl cfg database test`, and `tpl render` when its context comes from the database rather than from `--context`. The commands that only read or write `.tpl/.cfg` expand no variable and run no `password_command`.
 
-- **`${VAR}`** expands from the environment in six fields: `dsn`, `host`, `port`, `user`, `password`, and `database`. It is a single pass — an expanded value is never re-expanded — `$$` is a literal `$`, and an undefined variable or an unclosed `${` exits `78` rather than substituting nothing. It is deliberately **not** admitted in `tls` or in `password_command`, so no environment variable can weaken transport or choose the program that runs.
-- **`password_command`** is an argument **array**, executed directly, with no shell. Shell metacharacters are literal arguments. Its trimmed standard output is the password, read to a cap of 4096 bytes; its standard error goes to the null device; a non-zero exit is `78`. On the command line you write it as one string and `tpl` stores the array it splits into:
+- **`${VAR}`** expands from the environment in six fields: `dsn`, `host`, `port`, `user`, `password`, and `database`. It is a single pass — an expanded value is never re-expanded — `$$` is a literal `$`, and in the file an undefined variable, an unclosed `${` or a name that is not `[A-Za-z_][A-Za-z0-9_]*` exits `78` rather than substituting nothing; on the command line the last two are refused with `64`. It is deliberately **not** expanded anywhere else, so no environment variable can weaken transport or choose the program that runs: `ca_file`, `ca_path` and `core.database` refuse a `${`, and in `password_command` it reaches the program as written.
+- **`password_command`** is an argument **array**, executed directly, with no shell. Shell metacharacters are literal arguments. Its trimmed standard output is the password, read to a cap of 4096 bytes; its standard error goes to the null device; a non-zero exit is `78`. On the command line you write it as one string and `tpl` stores the array it splits into; a string that yields no word, leaves a quote unclosed, ends in a backslash or begins with `[` is refused with `64`:
 
   ```bash
   tpl cfg database update reporting \
@@ -313,9 +313,11 @@ Four properties hold across every write.
 - **`add` creates and `update` changes.** Neither does the other's job: `add` against a name that exists is `64` and points at `update`; `update` against a name that does not is `66`. There is no `--force`.
 - **An update touches only the fields its flags name.** The rest of the entry is left exactly as it was.
 - **Comments and key order survive.** The file is rewritten through a format-preserving parser, so the commented example `tpl init` writes is still there after the first `tpl cfg set`, and a comment you wrote beside a key stays beside it.
-- **A write that would break the file is refused before the file is touched.** Writing `dsn` into an entry that carries `host`, or a `password` into one that carries `password_command`, exits `64` with the file unchanged, names both keys, and hands you a runnable command that makes the write legal.
+- **A write that would break the file is refused before the file is touched.** Writing `dsn` into an entry that carries `host`, or a `password` into one that carries `password_command`, exits `64` with the file unchanged, names both keys, and hands you a command that makes the change without deleting anything you did not name — for an entry defined by `dsn`, `tpl cfg database update <name> --dsn <url>`.
 
 Removing the entry `core.database` names also clears `core.database`, silently and in the same rewrite, so the file stays coherent. Both `tpl cfg database remove shop` and `tpl cfg unset database.shop` do it; `tpl cfg unset database.shop.host` does not, because the entry survives.
+
+No `cfg` command touches `.tpl/.cache/`. Removing an entry, or changing where it points, leaves any data cached for it in place and says so on stderr, naming `tpl -d <name> cache clean`, which removes that cache even after the entry is gone.
 
 The rewrite is atomic: a temporary file inside `.tpl/`, created at mode `0600`, renamed over the target. An interrupted write leaves the previous file exactly as it was. No lock is taken, so two simultaneous writers leave one whole file or the other, never a mixture.
 
@@ -328,7 +330,7 @@ Seven flags, accepted at **every** node of the tree and in any position — befo
 | Flag | Short | What it does |
 |---|---|---|
 | `--database <name>` | `-d` | Which `[database.<name>]` entry this invocation uses. Absent, `core.database` applies |
-| `--tpl-dir <path>` | | Use this `.tpl` folder and do not walk |
+| `--tpl-dir <path>` | | Use this `.tpl` folder and do not walk. The path must end in `.tpl`. No effect on `init`, `help` and `version` |
 | `--timeout <seconds>` | | An overall wall-clock budget for the invocation, measured from process start. No default |
 | `--verbose` | `-v` | Raise the diagnostic level. Repeatable: once, twice, three times |
 | `--quiet` | `-q` | Lower it to errors only |
@@ -373,12 +375,12 @@ An error answers three questions, in this order and no others — what failed, w
 
 ```
 error: no .tpl project found
-cause: the walk upward ended at / without meeting a .tpl folder
-hint:  create a project here with: tpl init
+cause: no .tpl folder in the working directory or in any parent of it, up to /
+hint:  create a project here with: tpl init, or name an existing one with: tpl --tpl-dir <path>/.tpl <command>
 exit:  78 (EX_CONFIG)
 ```
 
-`hint` carries a runnable command wherever one exists. A misspelled key, entry, or command name gets a nearest-match suggestion inside it. Credentials never appear, at any verbosity.
+`hint` carries a runnable command wherever one exists, with the `--tpl-dir` and `-d` the invocation was given, and never one that deletes or overwrites what the invocation did not name. A misspelled key, entry, or command name gets a nearest-match suggestion inside it. Credentials never appear, at any verbosity.
 
 **`--format` applies to a result and never to a failure.** No error is ever emitted as JSON, under any value of that flag: when the outcome is an error the flag is ignored and the four lines above are what a caller receives. The **exit code** is the machine-comparable signal.
 
