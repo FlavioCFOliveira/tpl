@@ -48,7 +48,9 @@ enforces, which `operations.md` adds to
 [The release gates](operations.md#the-release-gates), with the pre-release path;
 `open-decisions.md` names Semantic Versioning 2.0.0 in `OD-03`, a wording
 precision that changes no decision. For rmp `#294`, `OD-03` and `data-model.md`
-set the binary version to `0.0.1`, the first release the user chose.
+set the binary version to `0.0.1`, the first release the user chose. For rmp
+`#267`, `operations.md` cites `ADR-012` Decision 10: measurement tests are
+ignored by the pipeline and run on demand with `--ignored`.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree
