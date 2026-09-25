@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
@@ -20,10 +20,21 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Fifty-six entries are recorded. As of 2026-09-23, five are due in full,
-forty-seven are discharged, and four are partly discharged.** Nine entries
-still owe something: five owe it to `CLAUDE.md` and four to `README.md`, and no
+**Fifty-six entries are recorded. As of 2026-09-25, three are due in full,
+forty-nine are discharged, and four are partly discharged.** Seven entries
+still owe something: five owe it to `CLAUDE.md` and two to `README.md`, and no
 entry is in both counts.
+
+*The counts moved in the sixty-fourth edition, and two entries moved them.*
+Both root documents were re-read against `c360c80`. `DIV-054` is discharged
+by `455e48d` and `015a77e`, and `DIV-056` by `6bc8513`, so two entries leave
+the **due** count and the count owed to `README.md`, and join the discharged
+one. The three that remain due in full are `DIV-032` and `DIV-041`, owed to
+`CLAUDE.md`, and `DIV-053`, owed to `README.md`. The four partly discharged
+are unchanged. No divergence the register does not hold was found: the
+passages of both files that paraphrase a requirement amended in the
+fifty-seventh to sixty-third editions were read and agree with it. The
+counts restated in `DIV-032` and `DIV-041` move with this paragraph.
 
 *The counts moved in the forty-second edition, and one entry moved them.*
 `DIV-056` is raised against `README.md`, because `FR-CONF-002` gained three
@@ -427,9 +438,9 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-051](#div-051) | `CLAUDE.md` | Overstatement | Discharged, `d8e7e8a` | The eight `cargo` commands, in a repository with no crate |
 | [DIV-052](#div-052) | `CLAUDE.md` | Overstatement | Discharged, `abbfe70` | The benchmark directory, in a repository with no benchmarks |
 | [DIV-053](#div-053) | `README.md` | Contradiction | Due | Four commands said to perform no discovery at all |
-| [DIV-054](#div-054) | `README.md` | Overstatement | Due | Two passages saying no command reaches a server |
+| [DIV-054](#div-054) | `README.md` | Overstatement | Discharged, `455e48d` and `015a77e` | Two passages saying no command reaches a server |
 | [DIV-055](#div-055) | `CLAUDE.md` | Contradiction | Discharged, `9562fb2` | A regression against a recorded baseline said to fail the change |
-| [DIV-056](#div-056) | `README.md` | Contradiction | Due | The `.cfg` key space counted short of the eighteen keys of `FR-CONF-002` |
+| [DIV-056](#div-056) | `README.md` | Contradiction | Discharged, `6bc8513` | The `.cfg` key space counted short of the eighteen keys of `FR-CONF-002` |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -453,6 +464,10 @@ for a non-zero `password_command` exit, `64` for `add` against a name that
 exists, `66` for `update` against one that does not, and `74` for a pipe
 closed part-way through a JSON document. A summary that cites is not a second
 source; a figure restated is one, and it is the copy nobody updates.
+Re-read on 2026-09-25 at `c360c80`: both parts are still due. The key count
+now reads eighteen, which `DIV-056` records as discharged, and the
+*Configuration* section now also restates the defaults and ranges of the
+three render bounds of `FR-CONF-045`, which is more of the same part.
 
 
 
@@ -1114,8 +1129,10 @@ is the one stated above and nothing more.
 in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
 most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
-this passage. It is one of the nine entries this register still owes something
-on, and one of the five owed to that file.
+this passage. It is one of the seven entries this register still owes
+something on, and one of the five owed to that file. Re-read on 2026-09-25 at
+`c360c80`: `6bc8513`, `390c6c6` and `70661da` touched `CLAUDE.md` since and
+none reaches this passage.
 
 *Corrected in the thirty-sixth edition, with `DIV-041`.* The sentence read
 *one of the seven corrections this register still owes and one of the six owed
@@ -1528,8 +1545,9 @@ sentence.
 **Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The deferral stands
 verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
 `9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
-`NFR-PERF-012` carry. It is one of the nine entries this register still owes
-something on.
+`NFR-PERF-012` carry. It is one of the seven entries this register still
+owes something on. Re-read on 2026-09-25 at `c360c80`: the deferral stands,
+unmoved by `6bc8513`, `390c6c6` and `70661da`.
 
 *Corrected in the thirty-sixth edition, with `DIV-032`*, and for the reason
 given there.
@@ -2499,7 +2517,8 @@ own rather than by this entry.
 **Target**: `README.md`, *Discovery*. **Kind**: contradiction.
 
 **Status**: **due**, raised on 2026-09-21 at `db80114`. The sentence stands,
-unchanged since `e75996c`.
+unchanged since `e75996c`; re-read on 2026-09-25 at `c360c80`, and it still
+stands.
 
 
 
@@ -2543,7 +2562,12 @@ to say so, in [README.md](README.md#maintenance-debt).
 **Target**: `README.md`, *Keeping a password off disk* and *Development*.
 **Kind**: overstatement.
 
-**Status**: **due**, raised on 2026-09-21 at `db80114`. Both clauses stand.
+**Status**: **discharged** by `455e48d` and `015a77e`, re-read on
+2026-09-25 against `README.md` at `c360c80`. `455e48d` deleted the
+*Development* clause and `015a77e` the clause under *Keeping a password off
+disk*, each in the way this entry asked for. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-09-21 at `db80114`. Both clauses stood.
 `db7337d` made both of them false and left both; `db80114` rewrote the status
 banner that contradicts them and left both again.
 
@@ -2698,8 +2722,14 @@ target.
 **Target**: `README.md`, *Configuration*, the first paragraph of *The key
 space is closed*. **Kind**: contradiction.
 
-**Status**: **due**, raised on 2026-09-23 at `d89ffc4`, and re-read the same
-day against the working tree. At `d89ffc4` the sentence counted fifteen keys,
+**Status**: **discharged** by `6bc8513`, re-read on 2026-09-25 against
+`README.md` at `c360c80`, which reads "`.tpl/.cfg` admits exactly eighteen
+keys — eight under `[core]` and ten per `[database.<name>]` block". The counts
+match `FR-CONF-002`. The sentence keeps its counts beside the pointer, so it
+is owed again the next time `FR-CONF-002` gains a key. Nothing is owed now.
+
+*Status when raised*: **due**, on 2026-09-23 at `d89ffc4`, and re-read the
+same day against the working tree. At `d89ffc4` the sentence counted fifteen keys,
 five under `[core]`. An uncommitted edit to the working tree changed it to
 seventeen and seven, which matched `FR-CONF-002` before the third render key
 was added and matches it no longer. No commit has

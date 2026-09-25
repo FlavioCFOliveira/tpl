@@ -1,7 +1,7 @@
 ---
 title: Architecture Decision Records
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [../spec-technical/README.md, ../spec-technical/open-decisions.md]
 ---
 
@@ -24,13 +24,16 @@ Both cite this register **by role and not by address**. Neither names a path, a
 filename, or a record number, and neither ever will. That is deliberate, and
 rule R1 below is what preserves it.
 
-A third requirement delegates in a weaker form. `FR-ERR-030`
+Two more requirements delegate in a weaker form. `FR-ERR-030`
 (`specification/errors-and-exit-codes.md`) states that which mechanism produces
 the `70` outcome "is an architecture decision, and this corpus names none". It
 hands the fact out of the corpus without naming this register as its home, so it
-is not a delegation R1 constrains — but it is the delegation `ADR-004` answers,
-and a reader arriving from that requirement resolves it through the index
-below.
+is not a delegation R1 constrains — but it is the delegation `ADR-004` answers.
+`FR-RND-036` (`specification/render-command.md`) states that "which allocator
+counts is a matter for the technical specification and the architecture decision
+records, not for this corpus"; it names this register by role, beside the
+technical specification, and `ADR-011` answers it. A reader arriving from either
+requirement resolves it through the index below.
 
 ## This is not a fifth source of truth
 
@@ -206,7 +209,7 @@ specification, which is how a fourth place starts drifting.
 | [ADR-008](adr-008-packaging-and-build-path.md) | The build path for the four targets | Accepted 2026-09-10 | `NFR-PERF-018`, `NFR-PERF-012` | — |
 | [ADR-009](adr-009-foreign-key-embedding-representation.md) | The in-memory representation of the two foreign-key embeddings | Accepted 2026-09-10 | `FR-CTX-006` … `FR-CTX-010`, `FR-SCH-022` | — |
 | [ADR-010](adr-010-driver-tls-connect-stall.md) | The TLS connect stall in the pinned driver | Accepted 2026-09-11 | `FR-CONF-013`, `NFR-PERF-014` | — |
-| [ADR-011](adr-011-render-memory-accounting.md) | The heap count behind the render memory limit | Accepted 2026-09-23 | `FR-RND-039`, `FR-RND-038` | — |
+| [ADR-011](adr-011-render-memory-accounting.md) | The heap count behind the render memory limit | Accepted 2026-09-23 | `FR-RND-039`, `FR-RND-036` | — |
 | [ADR-012](adr-012-ci-and-release-distribution.md) | Continuous integration and release distribution | Accepted 2026-09-24 | `NFR-PERF-018`, `FR-SRV-019` | — |
 
 The `Serves` column names the requirements a reader is most likely to arrive

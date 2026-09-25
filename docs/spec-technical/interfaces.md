@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -216,12 +216,12 @@ its own, and the eight-step validation order that decides which code wins when
 several conditions are unsatisfied is `architecture.md`'s (`FR-ERR-006`,
 `FR-ERR-007`).
 
-**One interim reading of the `70` row.** Until each leaf is implemented, a leaf
-the parser accepts and no sprint has written is itself a detected invariant
-violation, raised through the same guard, so a caller does reach `70` from an
-ordinary invocation today. The arrangement, what it covers and what removes it
-are [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation);
-the `#[cfg(test)]` trigger of `FR-ERR-031` is untouched by it and remains absent
+**The interim reading of the `70` row is discharged.** Until 2026-09-22 a leaf
+the parser accepted and no sprint had written was a detected invariant
+violation raised through the same guard, so a caller reached `70` from an
+ordinary invocation; every leaf now has its implementation
+([`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation)). The
+`#[cfg(test)]` trigger of `FR-ERR-031` was untouched by it and remains absent
 from the artefact.
 
 **stdout is empty on every error path.** `--format` is ignored, the four lines
@@ -796,10 +796,10 @@ division, and why the two paths are two modules, are
 
 | Obligation | Forced by |
 |---|---|
-| The ownership and mode checks are a **precondition** of reading, on a canonicalised path, and an explicitly named project folder is not exempt from them | `FR-PROJ-009`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-PROJ-008`, `FR-GLOB-010` |
+| The type, ownership and mode checks are a **precondition** of reading, made on the descriptor the file is then read through, below a canonicalised path, and an explicitly named project folder is not exempt from them | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-PROJ-008`, `FR-GLOB-010` |
 | The value the reader hands `error.rs` on a malformed file carries the **position** of the fault as well as the key. The strictness that makes this reachable — an unrecognised key anywhere is fatal — is [data-model.md](data-model.md#tplcfg)'s and is not restated | `FR-CONF-034`, `FR-CONF-035`, `FR-ERR-034` |
 | The whole file is walked for keys outside the space **before** any value is read, so a file carrying both a misspelled key and a malformed value reports the misspelling | `FR-CONF-034`, `FR-CONF-002`, `FR-ERR-007` |
-| An **absent** file is an empty document rather than a failure: the project is the folder, and the directed write surface must be able to write the file again | `FR-PROJ-001`, `FR-PROJ-017`, `FR-CFG-004` |
+| An **absent** file is an empty document rather than a failure, once the `.tpl` folder is found to be the caller's: the project is the folder, and the directed write surface must be able to write the file again | `FR-PROJ-028`, `FR-PROJ-001`, `FR-PROJ-017`, `FR-CFG-004` |
 | A setting resolves through exactly two layers above a built-in default, with no environment layer; the resolver therefore has three inputs and no fourth | `FR-CONF-029`, `FR-CONF-030`, `FR-CLI-022` |
 | An entry selected on the command line is **distinguishable** from one resolved through the configured default, because two render rules depend on the distinction | `FR-GLOB-008`, `FR-RND-018`, `FR-RND-019` |
 | Nothing selected is `78`; a named entry that does not exist is `66` with a suggestion | `FR-GLOB-006`, `FR-GLOB-007`, `FR-ERR-004`, `FR-ERR-005` |

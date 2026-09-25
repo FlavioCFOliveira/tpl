@@ -1176,7 +1176,7 @@ fn bounded_project(configuration: &str, templates: &[(&str, &str)]) -> Sandbox {
 }
 
 #[test]
-#[ignore = "measurement: the memory limit is sampled every 10 ms (ADR-011); a render can cross it between samples"]
+#[ignore = "measurement: the memory limit is sampled (ADR-011) at the interval architecture.md fixes; a render can cross it between samples"]
 fn fr_rnd_039_a_render_that_grows_past_its_memory_limit_is_65_naming_the_bound_and_writes_nothing()
 {
     // FR-RND-039, FR-SEC-025, ADR-011: the counting allocator the binary
@@ -1201,7 +1201,7 @@ fn fr_rnd_039_a_render_that_grows_past_its_memory_limit_is_65_naming_the_bound_a
 }
 
 #[test]
-#[ignore = "measurement: the memory limit is sampled every 10 ms (ADR-011); a render can cross it between samples"]
+#[ignore = "measurement: the memory limit is sampled (ADR-011) at the interval architecture.md fixes; a render can cross it between samples"]
 fn fr_rnd_039_the_default_memory_limit_stops_the_doubling_render() {
     // FR-CONF-002: the default, 128 MiB, applies where the key is absent.
     let sandbox = bounded_project("[core]\n", &[("grow", DOUBLING)]);
@@ -1212,7 +1212,7 @@ fn fr_rnd_039_the_default_memory_limit_stops_the_doubling_render() {
 }
 
 #[test]
-#[ignore = "measurement: the memory limit is sampled every 10 ms (ADR-011); a render can cross it between samples"]
+#[ignore = "measurement: the memory limit is sampled (ADR-011) at the interval architecture.md fixes; a render can cross it between samples"]
 fn fr_conf_045_raising_the_memory_limit_lets_a_legitimately_large_render_pass() {
     // The same 32 MiB render is refused under a 16 MiB limit and produced
     // under a raised one.
@@ -1539,7 +1539,7 @@ fn fr_cache_039_an_abandoned_render_that_exhausts_its_fuel_or_output_limit_ends_
 }
 
 #[test]
-#[ignore = "measurement: a 1 s wall-clock deadline and the memory limit sampled every 10 ms (ADR-011)"]
+#[ignore = "measurement: a 1 s wall-clock deadline, and the memory limit sampled (ADR-011) at the interval architecture.md fixes"]
 fn fr_cache_039_an_abandoned_render_that_outlasts_its_deadline_or_crosses_its_memory_limit_ends_with_65_and_reads_no_server()
  {
     // The same as the counted bounds above, for the two bounds the watchdog

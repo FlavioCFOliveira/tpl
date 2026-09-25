@@ -3,7 +3,7 @@ id: ADR-012
 title: Continuous integration and release distribution
 status: accepted
 decided: 2026-09-24
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 requirements: [NFR-PERF-018, NFR-PERF-005, NFR-PERF-007, FR-SRV-019, BR-PERF-008, FR-RND-039, FR-CONF-028, FR-CONF-031]
 supersedes: []
 superseded-by: null
@@ -160,8 +160,9 @@ nothing runs on GitHub in reaction to a push or a tag.
      installed `tpl --version`; if they match, it says so and exits `0`
      without downloading anything;
    - otherwise downloads that release's archive for the target and its
-     `SHA256SUMS`, verifies the archive, and installs `tpl` into `/usr/local/bin` on Linux and macOS, using
-     `sudo` only when that directory is not writable. It creates the
+     `SHA256SUMS`, verifies the archive, and installs `tpl` into
+     `/usr/local/bin` on Linux and macOS, using `sudo` only when that directory
+     is not writable. It creates the
      directory when it does not exist, again with `sudo` only when needed.
      `TPL_INSTALL_DIR` overrides the directory. It is a variable of the script,
      not of `tpl`, which never reads it.
@@ -181,9 +182,11 @@ nothing runs on GitHub in reaction to a push or a tag.
     it touches anything. The destination is
     `${TPL_SKILL_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/tpl}`, the
     personal skills location, which loads in every project on the machine
-    (Sources). An existing destination is removed and replaced; if it is a
-    symbolic link, only the link is removed, never its target. The script never
-    uses `sudo`, because the path belongs to the user. `TPL_SKILL_DIR` is a
+    (Sources). An existing directory or symbolic link at the destination is
+    replaced; for a link, only the link is removed, never its target. Any other
+    kind of entry, such as a regular file, stops the install and nothing is
+    deleted. The script never uses `sudo`, because the path belongs to the
+    user. `TPL_SKILL_DIR` is a
     variable of the script, not of `tpl`.
 
 ## Alternatives rejected
@@ -224,6 +227,9 @@ nothing runs on GitHub in reaction to a push or a tag.
 - **The project's `.claude/skills/` as the skill's destination.** Rejected: it
   loads only in that repository, not everywhere.
 
+- **Replacing any existing entry at the destination.** Rejected: it would
+  delete an entry `tpl` did not create.
+
 - **Keeping an existing skill, or merging into it.** Rejected: the user wants
   a replacement.
 
@@ -234,8 +240,8 @@ nothing runs on GitHub in reaction to a push or a tag.
   forbids measurement on the release path, and a retry or a wider threshold
   keeps it there.
 
-- **Checking the peak at the end of the render.** Rejected here: it needs
-  `ADR-011` and `FR-RND-039` changed. It is recorded as backlog rmp `#297`.
+- **Checking the peak at the end of the render.** Rejected; the rejection and
+  its reasons are `ADR-011`'s.
 
 - **A separate measurement workflow.** Rejected: the workflows stay very simple
   and correctness-only.
@@ -311,7 +317,7 @@ work is not complete until the five commands pass is not changed by this
 record.
 
 **The server-side checks remain an obligation carried by hand.** Without a
-fixture, `ci.yml` skips every assertion observed through the server's statement
+fixture, both workflows skip every assertion observed through the server's statement
 record or connection record. In particular it skips:
 
 - the connection clause of `NFR-PERF-005`, which that requirement makes
@@ -319,7 +325,7 @@ record or connection record. In particular it skips:
 - the two server-side instruments of `NFR-PERF-007`, the statement record and
   the connection record, which that requirement binds to all four targets.
 
-A green `ci.yml` run therefore does not verify these checks. Whoever prepares a
+A green run of either workflow therefore does not verify these checks. Whoever prepares a
 release runs them against the fixture, through its harness, on every target.
 
 **`FR-SRV-019` stays manual, and it is done before tagging.** The supported-series
@@ -374,8 +380,8 @@ preserved, so gate 2 cannot trust the tag object the checkout leaves locally
 
 **The checksum file proves integrity, not origin.** `SHA256SUMS` lets a reader
 check an archive against the release page it came from. Because nothing is
-signed, nothing in the release proves who produced it. GitHub also attaches the repository's source archives to every release
-automatically (Sources). `release.yml` does not produce them, and `SHA256SUMS`
+signed, nothing in the release proves who produced it. GitHub also attaches the
+repository's source archives to every release automatically (Sources). `release.yml` does not produce them, and `SHA256SUMS`
 does not cover them.
 
 **A lint the floor raises fails CI.** Clippy's lints differ between toolchains,
@@ -436,7 +442,7 @@ the build path.
 | The skill archive, `install-skill.sh`, its destination, replacement and symlink rules, and the five rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#303` | 2026-09-24 |
 | Personal skills live at `~/.claude/skills/<skill-name>/SKILL.md` and load in "all your projects on this machine"; a skill entry can be a symlink to a directory elsewhere; changes under `~/.claude/skills/` are picked up in the current session, except for a top-level skills directory created after the session started | code.claude.com, `docs/en/skills.md`, *Choose where skills load* and *Edit a skill during a session* | 2026-09-24 |
 | With `CLAUDE_CONFIG_DIR` set, every `~/.claude` path lives under that directory instead; its default is `~/.claude` | code.claude.com, `docs/en/claude-directory.md` and `docs/en/env-vars.md`, `CLAUDE_CONFIG_DIR` | 2026-09-24 |
-| `v0.0.1` is the only tag | `git tag -l` in this repository | 2026-09-24 |
+| `v0.0.1` is the only tag | `git tag -l` in this repository | 2026-09-24, re-checked 2026-09-25 |
 | For `workflow_dispatch`, `GITHUB_REF` is the branch or tag that received the dispatch and `GITHUB_SHA` the last commit on it; the event triggers a run only if the workflow file exists on the default branch | docs.github.com, *Events that trigger workflows*, `workflow_dispatch` | 2026-09-24 |
 | `github.ref` is `refs/tags/<tag_name>` for a tag; `github.ref_type` is `branch` or `tag` | docs.github.com, *Contexts reference*, `github` context | 2026-09-24 |
 | `gh workflow run --ref` names the "branch or tag name which contains the version of the workflow file you'd like to run" | GitHub `cli/cli`, `pkg/cmd/workflow/run/run.go` | 2026-09-24 |

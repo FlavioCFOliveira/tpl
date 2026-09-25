@@ -485,7 +485,7 @@ Os sistemas suportados e verificados são o **Linux** e o **macOS**, nas arquite
 
 **O Windows está fora do âmbito.** Não é alvo, não se escreve código para o acomodar, e não se aceita uma dependência por causa dele.
 
-A matriz concreta de alvos — target triples, escolha de libc, linkagem e forma de empacotar o binário — é decisão de arquitectura em curso e **não se fixa aqui**.
+A matriz concreta de alvos — target triples, escolha de libc e linkagem — está fixada em `NFR-PERF-018`, em `specification/performance-requirements.md`, que regista também a consequência observável da ligação estática ao `musl` na resolução de nomes. O caminho de build de cada alvo é `ADR-008`, e a validação e a forma de empacotar os artefactos distribuídos são `ADR-012`, ambos em `docs/adr/`. **Não se repetem aqui.**
 
 ### Regras que decorrem disto
 
@@ -520,7 +520,7 @@ tpl/
 └── docs/                    # especificação técnica e registos de decisão (ADR)
 ```
 
-O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o que um template vê. A sua forma não se decide no código — é a especificação que a fixa (`specification/catalogue-coverage.md` e `specification/context-document.md`); o `model/` implementa-a e as suas structs são a superfície pública documentada.
+O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o que um template vê. A sua forma não se decide no código — é a especificação que a fixa (`specification/catalogue-coverage.md` e `specification/context-document.md`); o `model/` implementa-a. O contrato é esse documento, não os tipos que o produzem: as structs do `model/` não são superfície pública, e a biblioteca não carrega promessa de compatibilidade — `DIV-032`, em `specification/upstream-divergences.md`, e `docs/spec-technical/overview.md`.
 
 ## Convenções de Código Rust
 
@@ -530,7 +530,7 @@ O código deste projecto — e a forma como está organizado — segue as **boas
 
 - **Módulos.** Nomes em `snake_case`, sem abreviaturas obscuras e sem repetir o nome do pai (`mariadb::reader`, nunca `mariadb::mariadb_reader`). Um módulo por conceito, alinhado com a árvore da secção anterior.
 - **Um só estilo de ficheiro-módulo.** Usar sempre a forma `foo.rs` acompanhada da directoria `foo/`; **não** usar `mod.rs`. Misturar os dois estilos na mesma árvore é proibido.
-- **Visibilidade mínima.** Por omissão tudo é privado. `pub(crate)` para o que atravessa módulos, `pub(super)` para o que só o pai precisa, e `pub` reservado ao que é genuinamente superfície pública — no essencial o `model/` e o tipo de erro.
+- **Visibilidade mínima.** Por omissão tudo é privado. `pub(crate)` para o que atravessa módulos, `pub(super)` para o que só o pai precisa, e `pub` reservado ao que a biblioteca publica — o `model/`, o `error.rs` e as quatro funções de entrada (`docs/spec-technical/interfaces.md`, *The library shape*), sem promessa de estabilidade, por `DIV-032`.
 - **Re-exports deliberados.** O `lib.rs` re-exporta uma API coerente com `pub use`; não se re-exporta um módulo inteiro só para poupar um caminho de `use`.
 - **Biblioteca e binário separados.** A lógica vive na biblioteca e é testável sem lançar processo; o `main.rs` limita-se a fazer parse, despachar e mapear o erro para exit code.
 
@@ -556,7 +556,7 @@ Conformidade com as [Rust API Guidelines](https://rust-lang.github.io/api-guidel
 
 - **Iteradores e combinadores** em vez de loops indexados com acumulador mutável, quando não custem clareza nem desempenho.
 - **Pattern matching exaustivo**, sem um `_ =>` que engula silenciosamente variantes futuras de um `enum` do próprio crate.
-- **`#[non_exhaustive]`** nos tipos públicos que se prevê virem a crescer — tipicamente o `enum` de erro e as structs do `model/`.
+- **`#[non_exhaustive]`** nos tipos públicos que se prevê virem a crescer — tipicamente o `enum` de erro e as structs do `model/`. É convenção de código, não promessa de compatibilidade.
 - **Derives em vez de implementações manuais** sempre que sejam equivalentes.
 
 ### Ferramentas como árbitro

@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -246,8 +246,9 @@ exception outside `.tpl`:
 
 The fourth writer is why `BR-PROJ-002` denies that a read command is read-only
 with respect to the filesystem unless it is invoked with `--direct --no-cache`.
-`DIV-005` is the register entry that carries this count against the root
-coordination document; it is cited, not restated.
+`DIV-005` is the register entry that carried this count against the root
+coordination document, discharged by commit `0ea5624`; it is cited, not
+restated.
 
 **Recorded discrepancy — the temporary files.** `FR-PROJ-002` reads that `.tpl`
 holds *"exactly the artefacts above and nothing else that `tpl` reads or

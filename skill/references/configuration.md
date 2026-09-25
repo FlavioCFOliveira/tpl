@@ -56,7 +56,7 @@ Rules for the operator:
 
 ## Project safety
 
-- `.tpl/.cfg` must be owned by the invoking user, with no group or other access (0600). Otherwise exit 78, before the file is read. A symbolic link is checked at its target. If you created the file by copying, fix it with `chmod 600 .tpl/.cfg`.
+- `.tpl/.cfg` must be a regular file, owned by the invoking user, with no group or other access (0600). Otherwise exit 78, before the file is read. A symbolic link, directory, FIFO, socket or device at `.cfg` is refused, naming the kind; to keep a project elsewhere, name its `.tpl` folder with `--tpl-dir` instead of linking `.cfg`. If you created the file by copying, fix it with `chmod 600 .tpl/.cfg`.
 - A `.tpl` folder with no `.cfg` is read as an empty configuration, provided you own the folder.
 - Never commit `.tpl/.cfg` or `.tpl/.cache/`. `.tpl/.gitignore` excludes both. Commit `.tpl/templates/`.
 

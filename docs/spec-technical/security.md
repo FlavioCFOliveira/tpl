@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -38,7 +38,7 @@ being raw.
 | # | Untrusted input | First seen by | What that boundary does with it | Forced by |
 |---|---|---|---|---|
 | 1 | The argument vector | `cli/` | Parsed and classified before any filesystem access; a rejected token leaves the parser as a typed value in an error, never as text the parser rendered | `FR-ERR-006`, `FR-CLI-006`, [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
-| 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised and both trust checks run as a **precondition** of opening the file; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
+| 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised; the file is opened without following a link and without blocking, and its type and both trust checks are judged on that descriptor as a **precondition** of reading it; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
 | 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-SEC-007` |
 | 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
 | 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
@@ -258,7 +258,7 @@ The render deadline remains the backstop.
 
 ## Project discovery: the boundary and the trust checks
 
-The walk, the boundary and the three checks are
+The walk, the boundary and the five checks are
 [architecture.md](architecture.md#project-discovery-and-the-trust-checks)'s
 table. What belongs here is which threat each closes and what the build
 therefore contains.
@@ -269,15 +269,17 @@ therefore contains.
 | A path is checked at its target | The resolved path is canonicalised **before** any check | `FR-SEC-015`, `FR-PROJ-009` |
 | The file is the caller's | The process's own user identifier is obtained through a safe call and compared with the file's | `FR-SEC-014`, `FR-PROJ-010`, [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | Nobody else can write it | The mode check reads the same metadata as the ownership check | `FR-SEC-014`, `FR-PROJ-011` |
+| It is a regular file | Its type is read from the descriptor it is then read through, so a link, a FIFO, a socket or a device is `78` and nothing blocks | `FR-PROJ-030`, `FR-SEC-027` |
 | Naming the folder explicitly exempts nothing | The explicit path suppresses the walk and enters the same check sequence | `FR-SEC-016`, `FR-PROJ-008` |
-| An absent file is not a bypass | There is nothing to own and nothing to grant, so the checks pass and the configuration is empty; the project is the folder, and the write surface may create the file again | `FR-PROJ-001`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-004` |
+| An absent file is not a bypass | There is no file to own and nothing to grant, so the `.tpl` folder's ownership is checked instead; the configuration is then empty, and the write surface may create the file again | `FR-PROJ-028`, `FR-PROJ-001`, `FR-CFG-004` |
 
 Two consequences are worth stating because a reader would otherwise assume more
 or less than the design gives. The boundary is **not** what refuses a project
 left in a directory anyone may write to — the two checks on the configuration
 file are, and `FR-SEC-013` records the correction. And the checks are a
 precondition of reading rather than a validation of what was read, which is why
-they sit before the open in `project/` and not inside the parser
+they run on the opened descriptor in `project/`, before the read, and not inside
+the parser
 ([interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)).
 
 ## Template containment

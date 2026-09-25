@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md]
 ---
 
@@ -247,7 +247,7 @@ the last two rows below.
 | **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it. **No entry carries this status today**: `OD-22`'s residual was discharged on 2026-09-11 |
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
-| **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. `OD-30` is the one entry carrying it |
+| **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. **No entry carries this status today**: `OD-30`'s arrangement was discharged on 2026-09-22 |
 | **Open** | Not decided. The entry names the options and the owner. **`OD-33` is the one entry carrying it**, since 2026-09-22 |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
@@ -284,17 +284,16 @@ the last two rows below.
 | [OD-27](#od-27--seed-benchsql-and-wl-001) | `seed-bench.sql` and `WL-001` | Settled | — |
 | [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Settled | — |
 | [OD-29](#od-29--the-json-command-tree-two-shapes-and-what-the-binary-publishes) | The JSON command tree: two shapes, and what the binary publishes | Settled | — |
-| [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled, interim | — |
+| [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled; the interim arrangement is discharged | — |
 | [OD-31](#od-31--the-models-shape-strings-fields-and-the-attribute) | The model's shape: strings, fields, and the attribute | Settled | — |
 | [OD-32](#od-32--anyhow-in-the-shipped-graph) | `anyhow` in the shipped graph | Settled | — |
 | [OD-33](#od-33--uc-013-and-the-twelve-flow-acceptance-skeleton) | `UC-013` and the twelve-flow acceptance skeleton | Open | user |
 | [OD-34](#od-34--an-in-process-entry-point-over-a-supplied-argument-vector) | An in-process entry point over a supplied argument vector | Settled | — |
 
-Thirty-one entries are settled outright; `OD-19` alone carries an observation
-owed, and `OD-33` is open. Thirty-one, one and one are the whole of the
-thirty-three. `OD-30` is settled and
-**interim**: it records an arrangement each later sprint removes one arm of, and
-it is discharged when no arm remains — one arm remains.
+Thirty-two entries are settled outright; `OD-19` alone carries an observation
+owed, and `OD-33` is open. Thirty-two, one and one are the whole of the
+thirty-four. `OD-30` was settled and **interim** until 2026-09-22, when its last
+arm was removed; it is now settled outright.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
@@ -548,6 +547,17 @@ the library rather than for the binary that ships. It follows the precedent of
 the panic hook of `ADR-004`, which the binary installs for the same reason.
 `render/` gains a submodule, `bounds.rs`, holding the three bound types and the
 counting writer of `FR-RND-037`.
+
+**Refined on 2026-09-24, when the file operations were made directory-relative:
+a thirteenth module, `at.rs`, at the crate root.** `OD-24`'s amendment makes
+every cache operation, and the read of `.tpl/.cfg` and of a template, start
+from a directory descriptor, and three modules use it: `cache/` for every cache path,
+`project/` for `.tpl/.cfg`, and `render/` for a template. It sits at the crate
+root for the reason the phase clock does: a construct shared by three modules
+belongs to none of them, and placed in each it is the same rule written three
+times. The module's own documentation states its operations and the one step,
+listing a directory, that still resolves a path by name
+([data-model.md](data-model.md#tplcache)). Read at `c360c80`, 2026-09-25.
 
 **The name `diagnostics` rather than `diag`.** The project's own convention
 refuses obscure abbreviations in module names. The register named `diag/` as a
@@ -2298,7 +2308,11 @@ rather than deleted, so that an identifier resolves to what happened.
 
 ## OD-30 — A parsed leaf with no implementation
 
-**Status: settled, interim.**
+**Status: settled. The interim arrangement is discharged**: its last arm,
+`tpl cfg database test`, was replaced at commit `a7fb45b` of 2026-09-22, and
+`fr_err_030_no_leaf_of_the_tree_answers_with_the_interim_seventy_any_longer` in
+`src/cli.rs` asserts that no leaf answers with it (read at `c360c80`,
+2026-09-25). What follows is kept as the record of the arrangement.
 
 **Decision.** Every node of the tree parses from the sprint that declares it. A
 leaf whose work belongs to a later sprint returns the violated-invariant

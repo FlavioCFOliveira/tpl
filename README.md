@@ -209,11 +209,12 @@ tpl cache clean
 
 # 8. Read the templates the project carries.
 tpl template list
-tpl template show rust/struct
+tpl template show example
 tpl template check
 
-# 9. Render one of them. The result goes to stdout and nowhere else, so where
-#    it lands is a redirection you write.
+# 9. Render a template. The result goes to stdout and nowhere else, so where
+#    it lands is a redirection you write. rust/struct and docs/table.md stand
+#    for templates of your own: tpl init writes only example and rust/_types.
 tpl render rust/struct --table orders > src/models/orders.rs
 tpl render docs/table.md --table orders --set title=Orders
 
@@ -222,7 +223,7 @@ tpl render rust/struct --context context.json --table orders
 tpl schema dump | tpl render rust/struct --context - --table orders
 ```
 
-Steps 4, 5, 6 and 8 are read commands and accept `--format json` and `--pretty`, except `tpl schema dump`, which emits JSON and nothing else, and `tpl template show` and `tpl template check`, neither of which has a second representation. Steps 1 to 3, step 7 and `tpl template check` write and print nothing on success: the exit code is the message. Steps 9 and 10 write the rendered text and nothing else — `tpl render` has no `--output`, no `--format` and no `--pretty`.
+Steps 4, 5, 6 and 8, and `tpl cache status` in step 7, are read commands and accept `--format json` and `--pretty`, except `tpl schema dump`, which emits JSON and nothing else, and `tpl template show` and `tpl template check`, neither of which has a second representation. Steps 1 to 3, `tpl cache load` and `tpl cache clean` in step 7, and `tpl template check` print nothing on success: the exit code is the message. Steps 9 and 10 write the rendered text and nothing else — `tpl render` has no `--output`, no `--format` and no `--pretty`.
 
 ---
 
@@ -278,7 +279,7 @@ tpl init projects/reports
 
 `--tpl-dir <path>` names the `.tpl` folder outright and suppresses the walk. The path must be the `.tpl` folder itself, its last segment `.tpl`: naming the directory that holds it, or any other directory, exits `78`, and the `hint` names the `.tpl` folder where there is one. It exempts nothing: the folder it names is subject to every check below.
 
-Four entries of the tree need no project and perform no discovery at all: `tpl init`; `tpl help` in its three forms; `-h/--help` at any node; and `tpl version` with `-V/--version`. Each runs where no project exists, reads no file under `.tpl` and opens no socket — which is what makes `tpl help --format json` safe as an agent's first invocation, before it knows `tpl init` exists.
+Four entries of the tree need no project, and no project above the invocation decides what any of them does: `tpl init`; `tpl help` in its three forms; `-h/--help` at any node; and `tpl version` with `-V/--version`. `tpl init` alone looks upward, only to warn on stderr that the project it creates shadows one above it; see [`FR-PROJ-025`](specification/project-and-discovery.md). Each runs where no project exists, reads no file under `.tpl` and opens no socket — which is what makes `tpl help --format json` safe as an agent's first invocation, before it knows `tpl init` exists.
 
 ### `.tpl/.cfg` must be yours alone
 
@@ -354,7 +355,7 @@ A DSN takes the form `scheme://[user[:password]@]host[:port]/database`, with `my
 Two mechanisms, and each is a key of the space above. Both take effect when the configuration is **resolved for a connection** — which is what every command that opens one does: the `schema` subcommands, `tpl cache load`, `tpl cfg database test`, and `tpl render` when its context comes from the database rather than from `--context`. The commands that only read or write `.tpl/.cfg` expand no variable and run no `password_command`.
 
 - **`${VAR}`** expands from the environment in six fields: `dsn`, `host`, `port`, `user`, `password`, and `database`. It is a single pass — an expanded value is never re-expanded — `$$` is a literal `$`, and in the file an undefined variable, an unclosed `${` or a name that is not `[A-Za-z_][A-Za-z0-9_]*` exits `78` rather than substituting nothing; on the command line the last two are refused with `64`. It is deliberately **not** expanded anywhere else, so no environment variable can weaken transport or choose the program that runs: `ca_file`, `ca_path` and `core.database` refuse a `${`, and in `password_command` it reaches the program as written.
-- **`password_command`** is an argument **array**, executed directly, with no shell. Shell metacharacters are literal arguments. Its trimmed standard output is the password, read to a cap of 4096 bytes; its standard error goes to the null device; a non-zero exit is `78`. On the command line you write it as one string and `tpl` stores the array it splits into; a string that yields no word, leaves a quote unclosed, ends in a backslash or begins with `[` is refused with `64`:
+- **`password_command`** is an argument **array**, executed directly, with no shell. Shell metacharacters are literal arguments. Its trimmed standard output is the password, read to a bounded length; its standard error goes to the null device; a non-zero exit fails the invocation. The bound and the exit codes are [`FR-CONF-031`](specification/configuration-model.md) and [`FR-CONF-033`](specification/configuration-model.md). On the command line you write it as one string and `tpl` stores the array it splits into; a string that yields no word, leaves a quote unclosed, ends in a backslash or begins with `[` is refused with `64`:
 
   ```bash
   tpl cfg database update reporting \
@@ -389,7 +390,7 @@ tpl cfg database remove staging
 
 Four properties hold across every write.
 
-- **`add` creates and `update` changes.** Neither does the other's job: `add` against a name that exists is `64` and points at `update`; `update` against a name that does not is `66`. There is no `--force`.
+- **`add` creates and `update` changes.** Neither does the other's job: `add` against a name that exists is refused and points at `update`, and `update` against a name that does not exist is refused. There is no `--force`. The exit code of each is in `tpl help cfg database add` and `tpl help cfg database update`.
 - **An update touches only the fields its flags name.** The rest of the entry is left exactly as it was.
 - **Comments and key order survive.** The file is rewritten through a format-preserving parser, so the commented example `tpl init` writes is still there after the first `tpl cfg set`, and a comment you wrote beside a key stays beside it.
 - **A write that would break the file is refused before the file is touched.** Writing `dsn` into an entry that carries `host`, or a `password` into one that carries `password_command`, exits `64` with the file unchanged, names both keys, and hands you a command that makes the change without deleting anything you did not name — for an entry defined by `dsn`, `tpl cfg database update <name> --dsn <url>`.
@@ -438,11 +439,13 @@ Every blocking phase has a deadline, so an invocation cannot hang with no diagno
 
 A render is bounded by three more limits besides its deadline, each set by a `[core]` key:
 
-- **`render_fuel`** — the evaluation steps one render may execute, counted by the template engine. Default `100000000`; an integer from `1` to `1000000000000`.
-- **`render_output_limit`** — the bytes one render may produce, counted as they are produced. Default `67108864` (64 MiB); an integer from `1` to `1099511627776` (1 TiB). A render stopped here writes nothing to stdout.
-- **`render_memory_limit`** — the heap the process may hold while the render runs, as its allocator counts it, observed every 10 ms. Default `134217728` (128 MiB); an integer from `8388608` (8 MiB) to `1099511627776` (1 TiB). A render stopped here writes nothing further to stdout.
+- **`render_fuel`** — the evaluation steps one render may execute, counted by the template engine.
+- **`render_output_limit`** — the bytes one render may produce, counted as they are produced. A render stopped here writes nothing to stdout.
+- **`render_memory_limit`** — the heap the process may hold while the render runs, as its allocator counts it, observed periodically. A render stopped here writes nothing further to stdout.
 
-Fuel and output are counts, so a template that loops or writes without end stops at the same point on every run. The memory limit is observed periodically: the process may hold more than the limit between two observations, and a single allocation the operating system refuses outright still ends the process by a signal rather than with `65`. The output is held in memory until the render ends, which is why its default sits at half the memory default — endless output is reported as the output limit, not as memory.
+Each key's default and admitted range are printed by `tpl help cfg set` and fixed by [`FR-CONF-045`](specification/configuration-model.md); they are not repeated here.
+
+Fuel and output are counts, so a template that loops or writes without end stops at the same point on every run. The memory limit is observed periodically: the process may hold more than the limit between two observations, and a single allocation the operating system refuses outright still ends the process by a signal rather than with `65`. The output is held in memory until the render ends, which is why its default sits below the memory default — endless output is reported as the output limit, not as memory.
 
 Whichever of the four is crossed first ends the render and exits `65`, naming the bound, its resolved value, and the key that raises it. No key admits `0` or any value meaning "no bound": a value outside the range in `.tpl/.cfg` exits `78`, and `tpl cfg set` refuses it with `64`. No flag and no environment variable sets any of them, and `--timeout` does not affect them. See [`FR-RND-036` … `FR-RND-039`](specification/render-command.md) and [`FR-CONF-045`](specification/configuration-model.md).
 
@@ -465,7 +468,7 @@ exit:  78 (EX_CONFIG)
 
 Ten exit codes are used, following `sysexits.h`, and each distinct failure has its own so that the code alone decides what to do next. The table, and what the `cause` line names for each code, is [`errors-and-exit-codes.md`](specification/errors-and-exit-codes.md).
 
-`EPIPE` on stdout — the `tpl … | head` case — exits `0` silently in the ordinary case. A pipe that closes part-way through a JSON document is `74`, because the document written is not the document promised.
+`EPIPE` on stdout — the `tpl … | head` case — exits `0` silently in the ordinary case. A pipe that closes part-way through a JSON document is an error, because the document written is not the document promised; its exit code is [`FR-ERR-025`](specification/errors-and-exit-codes.md)'s.
 
 ---
 
@@ -502,7 +505,7 @@ cargo test --all-features
 cargo audit
 ```
 
-Both workflows run only when started by hand, through `workflow_dispatch`; nothing runs on a push or a tag. `gh workflow run ci.yml --ref <ref>` runs these five commands on the four targets against the chosen ref (`.github/workflows/ci.yml`). A release is cut by pushing `main`, then the annotated `v` tag, then running `gh workflow run release.yml --ref vX.Y.Z` (`.github/workflows/release.yml`), which refuses a ref that is not a tag and publishes only when the tag is annotated, points at a commit reachable from `main`, is `v` followed by a Semantic Versioning 2.0.0 version equal to `version` in `Cargo.toml`, and has exactly one `release-notes/<tag>-<YYYYMMDD>.md`, which becomes the release body — and only if the same validation then passes on the four targets. A tag with a pre-release identifier, such as `v0.2.0-rc.1`, publishes a GitHub pre-release. See [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
+Both workflows run only when started by hand, through `workflow_dispatch`: `ci.yml` runs these five commands on the four targets against a chosen ref, and `release.yml` publishes a GitHub Release from an annotated `v*` tag, only after its gates and the same validation pass. The triggers, the gates and the release procedure are [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md)'s.
 
 `unsafe` is forbidden; `#![forbid(unsafe_code)]` stays at the top of the crate.
 

@@ -1,7 +1,7 @@
 ---
 title: Architecture
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md, open-decisions.md, overview.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -23,7 +23,7 @@ is [data-model.md](data-model.md).
 
 ## The module map
 
-[`OD-05`](open-decisions.md#od-05--the-module-decomposition) settles twelve
+[`OD-05`](open-decisions.md#od-05--the-module-decomposition) settles thirteen
 modules under `src/`, plus the crate root, and it settles the visibility rule.
 Its rationale, the seven placements it argued and the homes it rejected are
 recorded there and are not restated.
@@ -42,6 +42,7 @@ src/
 ├── diagnostics/   the four-line renderer, the suggestion machinery, the verbosity gate
 ├── deadline.rs    the phase clock, and the threads OD-12 bounds two phases with
 ├── heap.rs        the one reading of the process's heap count, installed by the binary (ADR-011)
+├── at.rs          directory-relative file operations below the canonical .tpl (OD-24)
 └── error.rs       the error type and the exit-code derivation
 ```
 
@@ -141,7 +142,7 @@ commit `243c4d6`.
 
 | Under `cli/` | Owns | Traced to |
 |---|---|---|
-| `cli.rs` | The tree and the five settings that close it at every node; the one route from the process to the parser; the dispatch, with the one arm a leaf without an implementation still takes | `FR-CLI-002`, `FR-CLI-004`, `FR-CLI-005`, `FR-CLI-006`, [`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own), [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) |
+| `cli.rs` | The tree and the five settings that close it at every node; the one route from the process to the parser; the dispatch, in which every leaf of the tree has its implementation | `FR-CLI-002`, `FR-CLI-004`, `FR-CLI-005`, `FR-CLI-006`, [`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own), [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) |
 | `globals.rs`, `local.rs` | The seven global flags, declared once and accepted at any position; the flags more than one node declares, written once and flattened by each | `FR-GLOB-001`, `FR-GLOB-002`, `FR-CLI-024` |
 | `schema.rs`, `template.rs`, `cache.rs`, `cfg.rs` | The nodes, positional arguments and local flags of each group, taken from the module of `/specification` that owns the command | `FR-CLI-010`, `FR-CLI-008` |
 | `schema/named.rs`, `schema/pattern.rs`, `schema/text.rs` | Naming one object — the qualified routine form, the lookup shared by the first arm, two `cache` subcommands and `render`, the `66` a name that reaches nothing produces and the `77` a short object owes; the `LIKE` filter evaluated in memory; and the `text` half of the first arm | `FR-SCH-005`, `FR-SCH-008`, `FR-SCH-010`, `FR-CACHE-024`, `FR-RND-003`, `FR-PRIV-003`; `FR-SCH-011` … `FR-SCH-015`, `BR-SCH-001`; `FR-SCH-026`, `FR-SCH-027` |
@@ -187,10 +188,10 @@ nothing afterwards reads the two flags
 that supplied neither flag, which costs nothing: the four labelled lines are
 written at every level (`FR-ERR-008`).
 
-**A leaf whose implementation is a later sprint reports `70`**, naming its
-command path, and that arrangement is recorded as
-[`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) rather
-than left in the code that carries it.
+**Every leaf of the tree has an implementation.** Until 2026-09-22 a leaf whose
+implementation was a later sprint reported `70`, naming its command path; that
+arrangement is recorded, and its discharge, in
+[`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation).
 
 ## Inside `project/`
 
@@ -198,13 +199,13 @@ than left in the code that carries it.
 configuration, and to the settings a connection will need. It is divided by the
 step of `FR-ERR-006` each part serves, so that the order of the steps is a
 property of the code rather than a convention: a project value exists only once
-discovery and both trust checks have passed, and reading the file is a method on
-it.
+discovery and the trust checks have passed, and parsing the text they read is a
+method on it.
 
 | Part | What it owns | Serves |
 |---|---|---|
 | The locator | The upward walk, the mount-point boundary, the explicitly named folder, canonicalisation | Step 2 (`FR-PROJ-004` … `FR-PROJ-009`) |
-| The trust checks | Ownership and mode, judged over metadata already read | Step 2 (`FR-PROJ-010`, `FR-PROJ-011`) |
+| The trust checks | The file's type, ownership and mode, judged over the metadata of the descriptor the text is then read through; the folder's ownership where the file is absent | Step 2 (`FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-PROJ-028`) |
 | The reader | Parse, key space, declared types, coherence, DSN grammar — in that order, over the whole file | Step 3 (`FR-CONF-001`, `FR-CONF-002`, `FR-CONF-006` … `FR-CONF-014`, `FR-CONF-034`, `FR-CONF-035`) |
 | The key space | The enumerated keys as a type, with the declared type of each, and what `unset` may be given | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CFG-011` |
 | The entry | One `[database.<name>]` block typed, and the predicate that decides `FR-CONF-007` | `FR-CONF-002`, `FR-CONF-006`, `FR-CONF-007` |
@@ -257,8 +258,10 @@ project.
 | Boundary | The mount point of the filesystem the walk starts on, determined without reading any environment variable | `FR-PROJ-005`, `FR-CLI-021`, `BR-CLI-002`, `FR-SEC-013` |
 | Failure | No fallback anywhere outside the project: a walk that reaches the boundary without finding one fails | `FR-PROJ-006`, `FR-PROJ-007` |
 | Check 1 | Canonicalise the resolved path **before** any check, so a symlinked folder is verified at its target | `FR-PROJ-009`, `FR-SEC-015` |
-| Check 2 | The configuration file is owned by the current user | `FR-PROJ-010` |
-| Check 3 | The configuration file carries no group and no other access bits | `FR-PROJ-011` |
+| Check 2 | The configuration file, where it exists, is a regular file, established on the descriptor it is then read through | `FR-PROJ-030`, `FR-SEC-027` |
+| Check 3 | The configuration file is owned by the current user | `FR-PROJ-010` |
+| Check 4 | The configuration file carries no group and no other access bits | `FR-PROJ-011` |
+| Check 5 | Where no configuration file exists, the `.tpl` folder is owned by the current user | `FR-PROJ-028` |
 
 Three properties of the checks as built are decisions the requirements leave
 open, and each is stated rather than inferred.
@@ -267,11 +270,12 @@ open, and each is stated rather than inferred.
   refused whatever its mode says, because the caller's next step is to stop
   using it rather than to change its permissions (`FR-PROJ-010`,
   `FR-PROJ-011`).
-- **An absent configuration file passes.** There is nothing to own and nothing
-  to grant. `FR-PROJ-001` makes the project the folder rather than the file, and
-  `FR-CFG-004` lets the directed write surface create it again, so a project
-  whose file was removed by hand is a project with an empty configuration and
-  not a project that cannot be used.
+- **An absent configuration file is not refused for its absence.** There is
+  no file to own and nothing to grant, so the folder's ownership is checked
+  instead (`FR-PROJ-028`). `FR-PROJ-001` makes the project the folder rather
+  than the file, and `FR-CFG-004` lets the directed write surface create it
+  again, so a project whose file was removed by hand is a project with an empty
+  configuration and not a project that cannot be used.
 - **The judgment is separable from the metadata read.** The ownership half
   cannot be exercised otherwise: a test process cannot give a file to another
   user, and a check only ever called with its own identifier is a check nothing
@@ -281,12 +285,15 @@ open, and each is stated rather than inferred.
 directory's filesystem device identifier with its parent's, which is why no
 home directory is located and no environment variable is read on this path
 ([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid),
-which also settles how the process's own user identifier is obtained for check
-2, and states the accepted cost `FR-PROJ-005` carries).
+which also settles how the process's own user identifier is obtained for checks
+3 and 5, and states the accepted cost `FR-PROJ-005` carries).
 
-**Checks 2 and 3 are a precondition of reading, not a validation of what was
-read**, so they run before the configuration file is opened
-([interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)).
+**Checks 2 to 4 are a precondition of reading, not a validation of what was
+read.** The file is opened once, relative to `.tpl`, without following a link
+and without blocking; the checks run on that descriptor's metadata, and only
+then is the text read through the same descriptor
+([data-model.md](data-model.md#tplcfg),
+[interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)).
 Containment of template paths under the project root is a different boundary,
 enforced at one point in `render/` and owned as a subject by `security.md`.
 
