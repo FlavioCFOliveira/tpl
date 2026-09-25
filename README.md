@@ -12,7 +12,7 @@ The same command installs and updates `tpl`, into `/usr/local/bin` by default. I
 curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh
 ```
 
-This command installs or updates the Claude Code skill in your personal skills folder, `~/.claude/skills/tpl` by default. It works from the first release that ships the skill archive; v0.0.1 does not, so today it reports that the release has no skill archive. See [Claude Code skill](#claude-code-skill).
+This command installs or updates the Claude Code skill in your personal skills folder, `~/.claude/skills/tpl` by default. Releases ship the skill archive from v0.0.2; v0.0.1 does not. See [Claude Code skill](#claude-code-skill).
 
 Its interaction model is modelled on `git`: a single executable, commands with subcommands, short aliases, and read commands whose output is stable enough to pipe into something else. Templates are **plain files on disk, loaded and compiled at render time**, so changing a template never requires rebuilding `tpl`.
 
@@ -20,9 +20,9 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 
 ---
 
-> ## Status: implemented, first release v0.0.1
+> ## Status: implemented, released (latest v0.0.2)
 >
-> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 is the first release of `tpl`; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds.
+> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 was the first release of `tpl` and v0.0.2 is the latest; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds.
 >
 > | Command | State |
 > |---|---|
@@ -116,7 +116,7 @@ The script supports four targets, `x86_64-unknown-linux-musl`, `aarch64-unknown-
 
 ### By hand
 
-Each release carries one archive per target, `tpl-<tag>-<triple>.tar.gz`, holding the `tpl` binary, `README.md`, `LICENSE` and `CHANGELOG.md`, and one `SHA256SUMS` file. In v0.0.1 it covers those four archives; every release from the first that ships the skill archive, `tpl-skill-<tag>.tar.gz`, also carries that archive, and its `SHA256SUMS` covers all five. Download the archive for your target and `SHA256SUMS`, verify, and extract:
+Each release carries one archive per target, `tpl-<tag>-<triple>.tar.gz`, holding the `tpl` binary, `README.md`, `LICENSE` and `CHANGELOG.md`, and one `SHA256SUMS` file. From v0.0.2, each release also carries the skill archive, `tpl-skill-<tag>.tar.gz`, and its `SHA256SUMS` covers all five archives; in v0.0.1, it covers the four target archives. Download the archive for your target and `SHA256SUMS`, verify, and extract:
 
 ```sh
 tag=vX.Y.Z                    # the release's tag
@@ -152,7 +152,7 @@ Install or update it with one command:
 curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh
 ```
 
-The script downloads `tpl-skill-<tag>.tar.gz` from the latest release, verifies it against the release's `SHA256SUMS`, and installs it into `$CLAUDE_CONFIG_DIR/skills/tpl`, where `CLAUDE_CONFIG_DIR` defaults to `~/.claude`. `TPL_SKILL_DIR` names another destination; both variables are read by the script, not by `tpl`. An existing skill at the destination is replaced; if it is a symbolic link, only the link is removed, never its target. The script never uses `sudo`. It works from the first release that ships the skill archive: v0.0.1 does not, so today it reports that the release has no skill archive.
+The script downloads `tpl-skill-<tag>.tar.gz` from the latest release, verifies it against the release's `SHA256SUMS`, and installs it into `$CLAUDE_CONFIG_DIR/skills/tpl`, where `CLAUDE_CONFIG_DIR` defaults to `~/.claude`. `TPL_SKILL_DIR` names another destination; both variables are read by the script, not by `tpl`. An existing skill at the destination is replaced; if it is a symbolic link, only the link is removed, never its target. The script never uses `sudo`. Releases ship the skill archive from v0.0.2; v0.0.1 does not.
 
 For development, install from a clone instead. From its root, link the folder, so that `git pull` updates the skill:
 
