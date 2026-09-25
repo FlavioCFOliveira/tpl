@@ -124,6 +124,20 @@ impl Layout {
         &self.entry
     }
 
+    /// `.tpl/.cache`, the folder every entry's folder sits in.
+    pub(super) fn root(&self) -> &Path {
+        // The entry folder is always composed as `.tpl/.cache/<entry>` by
+        // `Layout::of`, so it always has a parent; the entry folder itself
+        // stands in for the impossible case rather than an `expect`.
+        self.entry.parent().unwrap_or(&self.entry)
+    }
+
+    /// The `.tpl` folder the cache sits in.
+    pub(super) fn tpl(&self) -> &Path {
+        let root = self.root();
+        root.parent().unwrap_or(root)
+    }
+
     /// `meta.json`.
     pub(super) fn meta(&self) -> PathBuf {
         self.entry.join(META)

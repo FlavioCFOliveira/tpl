@@ -411,8 +411,8 @@ restart is needed (Sources).
 validation itself or depends on a validation job.
 
 **No performance figure is produced or consumed.** This is consistent with
-`BR-PERF-008`, and `NFR-PERF-012`'s attribution of a figure to a target and a
-build path is unaffected, because continuous integration records no figure.
+`BR-PERF-008`, and `NFR-PERF-012`'s attribution of a figure to a target is
+unaffected, because continuous integration records no figure.
 
 **Under R3, this decision lives here alone.** `docs/spec-technical/` cites
 `ADR-012` for the pipeline and the release artefact, and cites `ADR-008` only for

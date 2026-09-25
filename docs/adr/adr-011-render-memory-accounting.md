@@ -3,7 +3,7 @@ id: ADR-011
 title: The heap count behind the render memory limit
 status: accepted
 decided: 2026-09-23
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 requirements: [FR-RND-039, FR-RND-038, FR-RND-033, FR-RND-034, FR-CONF-045]
 supersedes: []
 superseded-by: null
@@ -147,6 +147,23 @@ and was stopped only by the 30 s render deadline.
   - **`FR-RND-039` places a hard ceiling outside `tpl`**: "A caller who needs a
     hard ceiling on the machine's memory must impose it outside `tpl`."
 
+- **A check of the heap peak at the end of the render**, through `cap`'s
+  `stats` feature, so that a completed render whose peak exceeded
+  `render_memory_limit` always ends with `65`. Rejected by the user on
+  2026-09-24 (rmp `#297`). The case it targets is real: in rmp `#267`, a 32 MiB
+  render under a 16 MiB limit completed in some runs, idle and under load,
+  because the limit is enforced only at each poll (point 2, at the interval
+  `docs/spec-technical/architecture.md` fixes); the counts are recorded in
+  `ADR-012`, *Consequences*. It is refused for four reasons.
+  - **The limit guards against runaway renders**, and sampling stops those.
+  - **`FR-RND-039` acts on the observed count and allows the escape**: the
+    process "MAY hold more than the limit between one observation and the
+    next".
+  - **It needs the `stats` feature this record refuses** (point 1), and with it
+    an atomic update on every allocation.
+  - **A render that never finishes still depends on sampling**, so the check
+    would not replace the poll.
+
 - **Other crates.** Each was read at its latest release on 2026-09-23.
   - `stats_alloc` 0.1.10 (MIT, 2022-03-30): no limit; six `SeqCst` counters
     with two read-modify-writes per allocation; the held count is derived by
@@ -168,6 +185,10 @@ and was stopped only by the 30 s render deadline.
     dependency budget for one counter.
 
 ## Consequences
+
+- **A test of the memory limit is a measurement test.** Its verdict depends on
+  sampling, so it is kept off the release path under `ADR-012`, Decision
+  point 10, and runs on demand.
 
 - **Every allocation of the process pays one atomic read-modify-write, and
   every deallocation one more**, for the whole invocation, not only while a
@@ -241,4 +262,6 @@ and was stopped only by the 30 s render deadline.
 | `stats_alloc`: six `SeqCst` counters, two RMWs per allocation, no limit; `peak_alloc`: `fetch_add` plus `fetch_max` per allocation, `System` only, no limit; `tracking-allocator`: runtime-registered tracker hooks and thread-local groups; `alloc_counter`: thread-local counters | Each crate's `src/lib.rs` from the published `.crate` | 2026-09-23 |
 | `tikv-jemallocator` builds jemalloc from C and reads statistics through an epoch refresh | unverified | — |
 | Per-allocation overhead of `cap` on the render hot path | unverified; to be measured after implementation | — |
+| The rejection of the end-of-render peak check and its four reasons | The user's decision of 2026-09-24, relayed for rmp `#297` | 2026-09-24 |
+| The process "MAY hold more than the limit between one observation and the next" | `specification/render-command.md`, `FR-RND-039` | 2026-09-24 |
 | 16 981 MB peak resident memory in 30 s for the H-1 template, inside the fuel budget | `SECURITY-AUDIT.md`, *Remediation*, row H-1 | 2026-09-23 |

@@ -61,6 +61,9 @@ use config::Configuration;
 pub(crate) struct Project {
     /// The `.tpl` folder, canonical per `FR-PROJ-009`.
     root: PathBuf,
+    /// The text of `.tpl/.cfg`, read by the trust checks from the descriptor
+    /// they judged (`FR-PROJ-030`), or [`None`] where the file is absent.
+    text: Option<String>,
 }
 
 impl Project {
@@ -80,9 +83,11 @@ impl Project {
     pub(crate) fn open(explicit: Option<&Path>, start: &Path) -> Result<Self, Error> {
         let root = discover::locate(explicit, start)?;
 
-        trust::check(&root.join(edit::CONFIGURATION), &root)?;
+        // FR-PROJ-030: the type, the two checks and the read are one
+        // descriptor's, so the text kept is the text of the file judged.
+        let text = trust::check(&root.join(edit::CONFIGURATION), &root)?;
 
-        Ok(Self { root })
+        Ok(Self { root, text })
     }
 
     /// Discovers the project from the process's own working directory.
@@ -126,7 +131,10 @@ impl Project {
     ///
     /// Returns what [`config::load`] returns.
     pub(crate) fn configuration(&self) -> Result<Configuration, Error> {
-        config::load(&self.configuration_path())
+        config::from_text(
+            &self.configuration_path(),
+            self.text.clone().unwrap_or_default(),
+        )
     }
 
     /// Opens `.tpl/.cfg` for writing — the path of `FR-CFG-041`.

@@ -472,7 +472,7 @@ Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tab
 | Configuração | `toml` + `serde` na leitura; `toml_edit` na escrita | A escrita preserva comentários e ordem; `OD-09`, em `docs/spec-technical/open-decisions.md` |
 | Erros | `thiserror` na biblioteca; o binário não carrega tipo de erro próprio | O `main.rs` lê o `exit_code` da biblioteca e devolve-o; `OD-32`, em `docs/spec-technical/open-decisions.md` |
 | Logging | Diagnósticos próprios, sem subscriber instalado | Sem `tracing` nem `tracing-subscriber`; controlado pela flag de verbosidade; `OD-17`, em `docs/spec-technical/open-decisions.md` |
-| uid do processo e grupo do helper | `rustix`, `default-features = false`, `features = ["process"]` | `getuid`, `kill_process_group` e `waitid` seguros; via `libc` exigiriam `unsafe`; `OD-24` e `OD-12`, em `docs/spec-technical/open-decisions.md` |
+| uid do processo, grupo do helper e operações de ficheiro relativas a directório | `rustix`, `default-features = false`, `features = ["fs", "process"]` | `getuid`, `kill_process_group`, `waitid`, `openat`, `unlinkat`, `renameat` e `mkdirat` seguros, e aberturas `O_NOFOLLOW`/`O_NONBLOCK`; via `libc` exigiriam `unsafe`; `OD-24` e `OD-12`, em `docs/spec-technical/open-decisions.md` |
 | Contagem de heap | `cap` sobre `std::alloc::System`, como `#[global_allocator]` | Limite de memória do render (`FR-RND-039`), lido pelo thread do prazo; versão, política de limite rígido e alternativas rejeitadas: `ADR-011`, em `docs/adr/` |
 
 > **Decisão fechada — driver MariaDB.** A escolha, a regra que a decidiu, o candidato rejeitado e a medição que confirmou a escolha — desmentindo a suspeita que aqui estava escrita — estão em `ADR-003`, em `docs/adr/`. O âmbito do runtime está em `ADR-005`.
@@ -603,7 +603,7 @@ O desempenho e a economia de recursos são exigências de **desenho e de arquite
 
 **Os números não vivem aqui.** As propriedades exigidas, as cargas de referência, os pontos de medição e o protocolo pertencem a `specification/performance-requirements.md`; as leituras efectivamente medidas vivem em `BENCHMARKS.md`.
 
-**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes em cada `cargo test`. Quebrá-las é defeito funcional, não execução lenta.
+**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes onde o instrumento de que cada asserção precisa está ao alcance da execução: as que se observam do lado do servidor exigem a fixture de pé, e a forma em syscalls das cláusulas de descoberta e de configuração exige um host que permita o trace, o que nenhum dos alvos Darwin permite — é `NFR-PERF-007` e a secção *What an assertion needs in order to run*, em `specification/performance-requirements.md`. Uma asserção saltada não é um requisito enfraquecido: cada cláusula vale nos quatro alvos e é verificada nos quatro, e uma execução que não alcança o instrumento salta a asserção declarando a razão, e nunca a dá por passada em silêncio. Quebrá-las é defeito funcional, não execução lenta.
 
 ### Regras de implementação
 

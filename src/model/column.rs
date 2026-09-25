@@ -107,8 +107,9 @@ pub struct Generated<'a> {
 /// field, and the two that are decompositions rather than readings —
 /// [`Column::column_type`] and [`Column::default`] — enforce their own.
 ///
-/// [`Deserialize`] is written by hand, in [`decode`], and reads exactly the
-/// flat object the derived [`Serialize`] writes; the reason is given there.
+/// [`Deserialize`] is written by hand, in this module's private `decode`
+/// submodule, and reads exactly the flat object the derived [`Serialize`]
+/// writes; the reason is given there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub struct Column<'a> {
@@ -142,8 +143,8 @@ pub struct Column<'a> {
     /// [`ColumnType`]'s own order spliced in at this position.
     ///
     /// The attribute governs the serialisation only: the decoding of the same
-    /// flat object is [`decode`]'s, which reads the nine keys without the
-    /// buffering the attribute imposes on a derived decoding.
+    /// flat object is the private `decode` submodule's, which reads the nine
+    /// keys without the buffering the attribute imposes on a derived decoding.
     #[serde(flatten)]
     pub column_type: ColumnType<'a>,
 

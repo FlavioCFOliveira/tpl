@@ -99,7 +99,7 @@ rejected option and cites the argument rather than reproducing it.
 | `toml` | The read path over `.tpl/.cfg`, through its document tree — spanned keys and spanned values — rather than through a `serde` derive | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which would put an editing document on the path that reads untrusted input; and a `serde` derive, which cannot name the offending key or its position |
 | `toml_edit` | The write path over `.tpl/.cfg`, preserving comments, spacing and the relative order of items | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml` alone, which would delete the commented example `FR-PROJ-018` requires on the first write |
 | `thiserror` | Derives the one public error enum and its `Display` | [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) | `anyhow` in the library; per-module enums composed by `From`; an exit code stored as a field ([`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)) |
-| `rustix` | Supplies three calls `std` does not give: the process's own user identifier, for the ownership check of `FR-PROJ-010`; and, for the `password_command` child of `FR-CONF-028` and `FR-CONF-031`, a signal to a whole process group and an exit observed without reaping | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid); the two child calls, [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) | `libc` with a local `unsafe` block; `nix`; a crate that resolves the user account; inferring ownership by attempting a write ([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid)) |
+| `rustix` | Supplies calls `std` does not give: the process's own user identifier, for the ownership check of `FR-PROJ-010`; for the `password_command` child of `FR-CONF-028` and `FR-CONF-031`, a signal to a whole process group and an exit observed without reaping; and directory-relative, non-following, non-blocking file operations for the cache, `.tpl/.cfg` and templates | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid); the two child calls, [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) | `libc` with a local `unsafe` block; `nix`; a crate that resolves the user account; inferring ownership by attempting a write ([`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid)) |
 
 **One crate left the graph, and both tables above lost its row.** `anyhow` was
 removed by [`OD-32`](open-decisions.md#od-32--anyhow-in-the-shipped-graph),
@@ -361,13 +361,20 @@ observability.
 
 ## The calls `std` does not supply
 
-`rustix`, with `default-features = false` and the `process` feature alone,
-supplies three safe functions `std` does not.
+`rustix`, with `default-features = false` and the features `fs` and `process`
+alone, supplies safe functions `std` does not. The `fs` feature was added on
+2026-09-24 by the user's decision, recorded in [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid); it is declared `fs = []` and
+adds no crate to the graph. The four `fs` calls below are implemented in
+`src/at.rs`, for rmp `#306` and `#307`. The `alloc` feature, which would supply
+`rustix::fs::Dir`, is not added, so a directory is still listed with
+`std::fs::read_dir` ([data-model.md](data-model.md#tplcache)).
 
 | Call | Used for | Source | Decided in |
 |---|---|---|---|
 | `getuid` | The process's own user identifier. `std` supplies the file's identifier and mode on the same metadata, so the ownership check of `FR-PROJ-010` needs exactly this one call and the mode check of `FR-PROJ-011` none | — | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | `kill_process_group(pid, sig)` | `SIGKILL` to the `password_command` child's group at the deadline and at the cap: "`kill(-pid, sig)`—Sends a signal to all processes in a process group"; a pid of `1` is never passed | docs.rs, `rustix` 1.1.4, `rustix::process::kill_process_group`, feature `process`, consulted 2026-09-23 | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| `openat` with `OFlags::NOFOLLOW`, `DIRECTORY`, `NONBLOCK` and `CLOEXEC` | Each cache path component opened relative to its parent's descriptor, refusing a symbolic link (`NOFOLLOW`) and a non-directory (`DIRECTORY`); each file opened without following a link and without blocking on a FIFO (`NONBLOCK`) — cache records and object files, `.tpl/.cfg` and templates | docs.rs, `rustix` 1.1.4, `rustix::fs::openat` and `OFlags`, feature `fs`, consulted 2026-09-24 | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
+| `unlinkat`, `renameat`, `mkdirat` | Removing, renaming over and creating a cache entry relative to the descriptor already opened, so no path is resolved by name a second time | docs.rs, `rustix` 1.1.4, `rustix::fs::unlinkat`, `renameat`, `mkdirat`, feature `fs`, consulted 2026-09-24 | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | `waitid` with `WaitIdOptions::EXITED`, `NOHANG` and `NOWAIT` | Observing the child's exit while keeping it waitable, so its pid is not freed before the group kill. `NOWAIT`: "Keep processed in a waitable state"; `NOHANG`: "Return immediately if no child has exited" | docs.rs, `rustix` 1.1.4, `rustix::process::waitid` and `WaitIdOptions`, feature `process`, consulted 2026-09-23 | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
 
 The group itself is created by `std`: `CommandExt::process_group(0)` "will use

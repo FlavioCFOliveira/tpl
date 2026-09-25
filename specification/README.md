@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in fifty-seven editions. All are in force;
+The specification has been written in sixty-three editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4656,6 +4656,235 @@ the snapshot tests carry the line because they compare whole outputs, and no
 file of this corpus reproduces a complete help text that would need it. The
 root `README.md` and `CLAUDE.md` do not reproduce the help layout, so the
 fifth validation rule owes nothing.
+
+### Fifty-eighth edition — a cache reached through a link, and a clean that moved the load time
+
+rmp `#288` found that `tpl cache clean` resolves its paths through
+`.tpl/.cache` when that folder is a symbolic link, so a planted link makes it
+delete folders outside the project. rmp `#302` found that a clean given an
+object flag rewrites `loaded_at` to the time of the clean, while the corpus
+said nothing of what that clean writes to `meta.json`. rmp `#305`, joined to
+the same effort, found the write side of `#288`: `tpl cache load` and every
+read that fills the cache write through the same link.
+
+**Five identifiers are assigned: `FR-CACHE-042`, `FR-CACHE-043`,
+`FR-CACHE-044`, `FR-CDOC-017` and `FR-SEC-026`.** None is retired and none is renumbered. No term enters or
+leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **No clean removes through a link** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-042` refuses, with `78`, every clean where `.tpl/.cache` is a
+  link, and every clean given an object flag where the entry folder or the
+  collection folder is one; nothing is removed and the `hint` removes the
+  link alone. A link that is itself the thing removed is removed as a link.
+  `FR-CACHE-023` and `FR-CACHE-041` carry notes that cite it.
+- **No read or write goes through a link** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-044` refuses with `78`,
+  before the cache is consulted or a connection opened, every `schema`
+  subcommand, `tpl render` without `--context`, `tpl cache load` and
+  `tpl cache status` where `.tpl/.cache`, the entry folder or a collection
+  folder it would use is a link, whether the read would hit or miss.
+  `--direct --no-cache` touches no cache and is not refused. Serving from the
+  server and skipping the write was rejected. `FR-CACHE-030` and
+  `FR-CACHE-036` carry notes.
+- **A partial clean keeps the load time** —
+  [cache-commands.md](cache-commands.md). `FR-CACHE-043` fixes the one change
+  such a clean makes to `meta.json`: the collection is recorded as not whole,
+  per `BR-CDOC-002`. `loaded_at`, both versions and every other collection
+  are unchanged. `FR-CDOC-013` in [cache-documents.md](cache-documents.md)
+  carries a note.
+- **The two records are read only as regular files** —
+  [cache-documents.md](cache-documents.md). A security review found
+  `meta.json` and `database.json` read through links. `FR-CDOC-017` makes a
+  record that is a link, is not a regular file, or exceeds an implementation
+  bound unusable: never read through, a miss for a read, left in place by a
+  partial clean, and replaced without being followed by a full write. The
+  value of the bound lives in the technical specification. `FR-CACHE-043`
+  drops its sentence on replacing a link, which could never apply, and
+  `FR-CACHE-044` cites the new rule. `FR-CACHE-034` gains a clause: where
+  `meta.json` is absent or unusable, `tpl cache status` reports `loaded_at`
+  `null` and all three collections with their counts and `whole` `false`. `FR-CACHE-035`
+  now defines the empty cache: nothing at `meta.json` and no object file, so
+  the two requirements never both apply.
+- **The list of writers is whole again** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-023` gains a
+  row for `tpl cache clean`, which removes files in `.tpl/.cache/` and, under
+  `FR-CACHE-043`, rewrites `meta.json`.
+- **The security module points at the rules** — [security.md](security.md).
+  `FR-SEC-026`, under a new section *Cache containment*, covers the paths
+  and the records.
+
+`FR-ERR-001`, `FR-ERR-006`, `FR-ERR-041`, `FR-PROJ-009`, `FR-PROJ-010`,
+`FR-PROJ-011`, `FR-PROJ-028`, `FR-SEC-015`, `FR-SEC-017`, `FR-TMPL-024`,
+`FR-TMPL-026`, `FR-CACHE-009`, `FR-CACHE-015`, `FR-CACHE-016`,
+`FR-CACHE-030`, `FR-CACHE-033`, `FR-CACHE-036`, `FR-CACHE-040`, `FR-CDOC-006`,
+`FR-CDOC-007`,
+`FR-HELP-011` and `FR-HELP-036` were read against the changes. None conflicts
+with them, so none is amended: the cells of `FR-ERR-001` characterise classes
+and `78` already holds the project trust checks, step 6 of `FR-ERR-006`
+already carries `78`, and every command refused could already exit `78`. The
+root `README.md` does not describe how the cache is reached, so the
+fifth validation rule owes nothing.
+
+### Fifty-ninth edition — five configuration checks
+
+Five tasks of sprint 25 were settled in one pass: rmp `#264`, `#266`, `#271`,
+`#277` and `#278`.
+
+**One identifier is assigned: `FR-CFG-054`.** None is retired and none is
+renumbered. No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Entry names (`#264`)** — no change. `FR-CONF-048` has fixed the grammar
+  `[A-Za-z0-9_]{1,64}` since the forty-ninth edition, and refuses a name
+  outside it given to `tpl cfg database add` with `64`, writing nothing.
+- **The default entry must exist (`#271`)** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-054` refuses
+  `tpl cfg set core.database` of a name no entry declares with `66` and a
+  nearest-match suggestion.
+- **`-d` where it has no effect (`#266`)** —
+  [global-flags.md](global-flags.md). `FR-GLOB-007` states that the flag is
+  accepted silently wherever the command requires no entry, save the warning
+  of `FR-CFG-051`.
+- **Blocks are suggestion candidates (`#277`)** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-012` suggests over the blocks
+  the file carries, with a `hint` that shows and never deletes.
+- **Line continuation and two variables that do not exist (`#278`)** —
+  [configuration-model.md](configuration-model.md): `FR-CONF-025` removes a
+  backslash and a newline outside single quotes, as POSIX does.
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and
+  [cfg-commands.md](cfg-commands.md): `FR-ERR-043` and item 2 of `FR-CFG-052`
+  no longer name `TPL_DIR` or `TPL_DATABASE`, which `FR-CONF-030` says do not
+  exist.
+
+`FR-CONF-030`, `FR-CONF-046`, `FR-CFG-007`, `FR-CFG-023`, `FR-CFG-051`,
+`FR-GLOB-005`, `FR-GLOB-025`, `BR-GLOB-001`, `FR-PROJ-026`, `FR-CLI-021`,
+`FR-CLI-024`, `FR-ERR-005`, `FR-ERR-019`, `FR-ERR-020`, `FR-ERR-021`,
+`FR-ERR-035`, `BR-ERR-002`, `BR-ERR-005` and `FR-HELP-031` were read against
+the changes. None conflicts with them, so none is amended. The root
+`README.md` does not state what `tpl cfg set core.database`, `tpl cfg unset`
+or the splitting of `password_command` do, so the fifth validation rule owes
+nothing.
+
+### Sixtieth edition — the unbound object, and a context document of another version
+
+rmp `#301` found that a template rendered without an object flag sees `table`,
+`view` and `routine` as defined, because the three lookup functions carried
+the names of the three object variables. rmp `#270` found that
+`tpl render --context` renders a document whose `schema_version` the binary
+does not emit, at exit `0`.
+
+**One identifier is assigned: `FR-RND-042`.** None is retired and none is
+renumbered. No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The lookups are renamed** —
+  [template-environment.md](template-environment.md). `FR-ENV-020` names them
+  `table_named(name)`, `view_named(name)` and `routine_named(name)`, and bars
+  any filter, test or function from carrying the name of a context variable.
+  The rename is breaking under `FR-ENV-029` and is owed to the project
+  changelog. `FR-RND-006` in [render-command.md](render-command.md) carries a
+  note, and `FR-CACHE-038` in [cache-commands.md](cache-commands.md) cites the
+  new names.
+- **A context document of another version is refused** —
+  [render-command.md](render-command.md). `FR-RND-042` exits `65`, renders
+  nothing, and points at `tpl schema dump`. `FR-RND-020` carries a note.
+
+`FR-RND-018`, `FR-RND-023`, `FR-RND-031`, `BR-RND-001`, `FR-ENV-015`,
+`FR-ENV-029`, `FR-ENV-047`, `FR-HELP-032`, `FR-HELP-033`, `FR-SCH-017`,
+`FR-OUT-014`, `FR-OUT-025`, `FR-OUT-038` and `FR-CDOC-004` were read against
+the changes. None conflicts with them, so none is amended. The root
+`README.md` names no lookup function and says nothing of `schema_version` in
+a `--context` document, so the fifth validation rule owes nothing.
+
+### Sixty-first edition — what the overall budget bounds
+
+rmp `#273` found that `FR-GLOB-011` calls `--timeout` a budget for every
+invocation while `FR-GLOB-013` gives an exit code only for the network, the
+`password_command` and the render phases, and that most commands never read
+the budget.
+
+**One identifier is assigned: `FR-GLOB-026`.** None is retired and none is
+renumbered. No term enters or leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The budget bounds the blocking phases** —
+  [global-flags.md](global-flags.md). `FR-GLOB-026` states that the budget
+  bounds the blocking phases of `FR-CONF-005` and nothing else, gives the
+  effect per command, and makes the flag accepted with no effect and no line
+  where no phase runs. `FR-GLOB-011` carries a note, and the table of
+  `BR-GLOB-001` gains a row. A deadline over the whole invocation was
+  rejected.
+
+`FR-GLOB-007`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-CONF-004`, `FR-CONF-005`,
+`FR-CFG-005`, `FR-CFG-014`, `FR-CFG-041`, `FR-CFG-044`, `FR-SEC-018`,
+`FR-SEC-022`, `FR-RND-022`, `FR-RND-033` and `FR-ERR-001` were read against
+the change. None conflicts with it, so none is amended. The root `README.md`
+does not state what `--timeout` bounds, so the fifth validation rule owes
+nothing.
+
+### Sixty-second edition — what the instruments reach
+
+Two tasks of sprint 25 on [performance-requirements.md](performance-requirements.md).
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Ratifying the measured budgets (rmp `#219`)** — no change. The task
+  predates the thirty-sixth edition, which withdrew ratification with
+  `NFR-PERF-015` through `NFR-PERF-017` and made `NFR-PERF-020` a recording
+  rule under `BR-PERF-008`; the thirty-seventh edition removed the last
+  adopted figure from `NFR-PERF-014`. Nothing the task asks for exists to be
+  done.
+- **What `NFR-PERF-007` reaches (rmp `#230`)** — `NFR-PERF-007` now names the
+  six requirements of form it governs, and `NFR-PERF-008` states its own
+  verification: the lines of `FR-GLOB-017` counted at `-v` against the
+  server's statement record.
+
+`NFR-PERF-001` through `NFR-PERF-006`, `NFR-PERF-012`, `NFR-PERF-014`,
+`NFR-PERF-018` through `NFR-PERF-020`, `BR-PERF-001`, `BR-PERF-006`,
+`BR-PERF-008`, `FR-GLOB-017` and `NFR-DET-001` were read against the
+changes. None conflicts with them, so none is amended. The root `README.md`
+does not state what `NFR-PERF-007` reaches, so the fifth validation rule owes
+nothing.
+
+### Sixty-third edition — files that are not regular files
+
+rmp `#307` found that a `.tpl/.cfg` or a template that is a FIFO, a socket or a
+device passes every trust check and makes `tpl` block with no deadline or read
+unbounded data.
+
+**Three identifiers are assigned: `FR-PROJ-030`, `FR-TMPL-033` and
+`FR-SEC-027`.** None is retired and none is renumbered. No term enters or
+leaves [glossary.md](glossary.md). No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **`.tpl/.cfg` is a regular file** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-030` refuses
+  any other kind with `78` at step 2, before the ownership and mode checks,
+  with the type tested on the file then read. No size bound applies.
+  `FR-PROJ-004` carries a note: the walk opens no candidate.
+- **A template is a regular file** — [template-commands.md](template-commands.md).
+  `FR-TMPL-033` keeps any other kind unlisted and unchecked, answers its name
+  on the command line with `66` and inside a template with `65`, and opens it
+  for no read. No size bound applies.
+- **The security module points at both** — [security.md](security.md),
+  `FR-SEC-027`.
+
+`FR-PROJ-008` through `FR-PROJ-011`, `FR-PROJ-028`, `FR-CFG-041`,
+`FR-CONF-005`, `FR-GLOB-026`, `FR-TMPL-004`, `FR-TMPL-005`, `FR-TMPL-009`,
+`FR-TMPL-024` through `FR-TMPL-027`, `FR-CDOC-017`, `FR-ERR-006`,
+`BR-ERR-005` and `FR-RND-036` through `FR-RND-039` were read against the
+changes. None conflicts with them, so none is amended. The root `README.md`
+does not state what kind of file `.cfg` or a template must be, so the fifth
+validation rule owes nothing.
 
 ### Still out of scope
 

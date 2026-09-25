@@ -55,7 +55,29 @@ ignored by the pipeline and run on demand with `--ignored`. For rmp `#299`,
 and the release sequence that follows from it. For rmp `#303`, `operations.md`
 cites `ADR-012` Decisions 4 and 11 for the skill archive and `install-skill.sh`,
 and records that the skill archive is built on Linux, outside the Darwin `tar`
-flags.
+flags. For rmp `#288`, `#302` and `#305`, `data-model.md` records the 1 MiB
+bound `FR-CDOC-017` leaves to this folder, and `security.md` adds the two cache
+records and the `78` refusal of a link on the path to the cache to `cache/`'s
+disposition of a symbolic link, and completes its recorded gap on the cache;
+`data-model.md` adds that refusal and scopes its write row to object files.
+Against the fifty-eighth edition's amendment of `FR-PROJ-023`, `data-model.md`,
+`traceability.md` and this file count five writers inside `.tpl`, adding
+`tpl cache clean`. For rmp `#257`, `interfaces.md` gains
+[The library entry points](interfaces.md#the-library-entry-points), over
+`run_from`, and `open-decisions.md` gains `OD-34`, which holds its rejected
+options. For rmp `#230`, `verification.md` records as settled by the
+sixty-second edition that `NFR-PERF-007` reaches exactly the six requirements of
+form, and that `NFR-PERF-008` is verified against the server's statement
+record; `quality-attributes.md`, `operations.md` and `traceability.md` state
+that verification, and `verification.md`'s register names the test that makes
+it. For rmp `#306` and `#307`, `open-decisions.md` amends `OD-24` with
+`rustix`'s `fs` feature, reverses `OD-10`'s rejection of `O_NOFOLLOW`, and
+records the correction owed to `CLAUDE.md`; `technology-stack.md` lists the four
+`fs` calls, and `data-model.md` prescribes the cache's path operations as
+directory-relative. With the two tasks implemented in `src/at.rs`,
+`data-model.md` and `technology-stack.md` describe those operations as built,
+with the one listing residual and the swap evidence; `data-model.md` adds how
+`.tpl/.cfg` is opened, and `security.md` and `OD-15` how a template is read.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree
@@ -189,7 +211,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: thirty-two settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: thirty-three settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. Nothing bounds it: `OD-14`'s owed observation was made on 2026-09-21 and the entry records the answer |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
@@ -275,7 +297,8 @@ Context access from a filter or a test. The configuration reader and writer, the
 one predicate that decides an entry's coherence for both of them, and the two
 codes its two callers produce. The `password_command` child, its process
 group, and why its parent polls. The phase clock's four obligations. The three
-contracts behind the render bounds. The pattern matcher and the
+contracts behind the render bounds. The library entry points, and what an
+in-process caller of `run_from` must know. The pattern matcher and the
 qualified-routine-name parser. The two directions over the document: which
 emitted types are the model's own and which four are not, the two projections,
 the one flattening, what the read-back checks, and the four things it does not. The five
@@ -295,7 +318,7 @@ ordered classification. The `database` object. The four treatments of a
 cross-series difference. `.tpl/.cfg`: format, key space, mode, rewrite
 discipline. `.tpl/.cache/`: layout, keying, encoding, filenames, atomic write.
 `meta.json` and its two independent versions. Migration. What a cached document
-does not promise. The four writers inside `.tpl`.
+does not promise. The five writers inside `.tpl`.
 
 **Must not contain.** The JSON document contract, which
 `specification/context-document.md` owns and this file cites.

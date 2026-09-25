@@ -130,11 +130,14 @@ impl PasswordCommand {
     /// of `FR-CONF-025`.
     ///
     /// Single and double quotes are honoured and removed. Outside any quoted
-    /// run a backslash escapes the next character; inside a double-quoted run
-    /// it escapes only `$`, `` ` ``, `"`, `\` and a newline — the backslash and
-    /// the newline it escapes are both removed, as POSIX line continuation
-    /// removes them — and before any other character it is kept, so `"a\b"`
-    /// is the word `a\b`. Unquoted runs of whitespace separate words.
+    /// run a backslash escapes the next character, except that a backslash
+    /// followed by a newline is a line continuation: both are removed, and
+    /// what precedes joins what follows, so `a\<newline>b` is the word `ab`.
+    /// Inside a double-quoted run it escapes only `$`, `` ` ``, `"`, `\` and a
+    /// newline — the backslash and the newline it escapes are both removed,
+    /// the same line continuation — and before any other character it is
+    /// kept, so `"a\b"` is the word `a\b`. Inside a single-quoted run both
+    /// are kept. Unquoted runs of whitespace separate words.
     /// `FR-CFG-046` is this rule's caller on the command line, and
     /// `FR-CONF-035` is why the rule is **not** applied to a string found in
     /// the file.
@@ -199,6 +202,10 @@ impl PasswordCommand {
                     }
                 }
                 '\\' => match characters.next() {
+                    // FR-CONF-025, POSIX XCU 2.2.1: a line continuation. Both
+                    // characters are removed, so what precedes and what
+                    // follows join, and no word is started or ended by it.
+                    Some('\n') => {}
                     Some(escaped) => {
                         started = true;
                         word.push(escaped);
@@ -715,6 +722,26 @@ mod tests {
         // inside single quotes it is an ordinary character.
         assert_eq!(split(r"get a\b"), ["get", "ab"]);
         assert_eq!(split(r"get 'a\b'"), ["get", r"a\b"]);
+    }
+
+    #[test]
+    fn fr_conf_025_a_backslash_and_a_newline_outside_single_quotes_are_removed() {
+        // FR-CONF-025, fifty-ninth edition, POSIX XCU 2.2.1 to 2.2.3: a line
+        // continuation is removed before splitting, unquoted and inside
+        // double quotes, and joins what it separates; inside single quotes
+        // both characters are kept.
+        let split = |supplied: &str| {
+            PasswordCommand::split(supplied)
+                .expect("the string is split")
+                .arguments()
+                .to_vec()
+        };
+
+        assert_eq!(split("get a\\\nb"), ["get", "ab"]);
+        assert_eq!(split("get \\\n--flag"), ["get", "--flag"]);
+        assert_eq!(split("get a \\\n b"), ["get", "a", "b"]);
+        assert_eq!(split("get \"a\\\nb\""), ["get", "ab"]);
+        assert_eq!(split("get 'a\\\nb'"), ["get", "a\\\nb"]);
     }
 
     #[test]

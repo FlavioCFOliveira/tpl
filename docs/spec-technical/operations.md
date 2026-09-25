@@ -438,7 +438,7 @@ picture.
 | Two streams, one contract | stdout alone is contract; stderr is neither deterministic nor contract, and cannot be, because the timings `FR-GLOB-017` requires differ on every run. The extent of the contract is [quality-attributes.md](quality-attributes.md#determinism)'s | `NFR-DET-001`, `FR-GLOB-017`, `DIV-039` |
 | Four levels, selected by two flags | `-v` raises and saturates, `-q` lowers to errors only, and neither alters stdout | `FR-GLOB-014`, `FR-GLOB-015`, `FR-GLOB-016` |
 | What each level reports | Phases and their durations, and one line per catalogue query, at `INFO`; cache hits and misses at `DEBUG`; internal detail permitted at `TRACE` | `FR-GLOB-017` |
-| One line is structurally load-bearing | The per-query line carries a fixed leading token, which is what makes the query count observable from outside the process and `NFR-PERF-001` and `NFR-PERF-002` checkable at all | `NFR-PERF-008`, `NFR-PERF-007` |
+| One line is structurally load-bearing | The per-query line carries a fixed leading token, which is what makes the query count observable from outside the process and `NFR-PERF-001` and `NFR-PERF-002` checkable at all. `NFR-PERF-008` is verified by counting those lines at `-v` against the server's statement record for the same invocation (sixty-second edition), which needs the fixture | `NFR-PERF-008`, `NFR-PERF-007` |
 | Six categories reach no stream, at any level | Denied a home rather than denied by a rule: the sink is a closed set of typed emission functions, and no subscriber is installed for a dependency's events to reach | `FR-GLOB-018`, `FR-SEC-005` |
 | No colour, no terminal detection | Neither stream carries an ANSI byte, on any path | `NFR-DET-003`, `NFR-DET-004` |
 
@@ -458,7 +458,7 @@ change and no test reads it
 
 `FR-PROJ-017` fixes exactly five artefacts and `FR-PROJ-013` the one write
 outside `.tpl` — the destination directory and its missing parents. The five
-are enumerated in [data-model.md](data-model.md#tpl-on-disk-and-its-four-writers)
+are enumerated in [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)
 and in the requirement; what belongs here is that **two of the five are shipped
 content** and therefore travel with the binary.
 

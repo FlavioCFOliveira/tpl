@@ -131,6 +131,7 @@ tpl -d shop schema dump | tpl render rust/struct --context - --table orders   # 
 - The document must be `schema dump` output (compact or `--pretty`). A malformed document is exit 65, and an unreadable file is exit 74.
 - An object missing from the document is exit 66. The hint suggests `jq -r '.data.database.tables[].name' FILE`.
 - A dump is a snapshot. Regenerate it after schema changes.
+- A dump is tied to its `schema_version`. A document whose `schema_version` differs from the one the installed tpl emits (1 for now), for example one kept from another tpl release, is refused with exit 65 and nothing is rendered. Re-dump it with the installed binary (`tpl -d <entry> schema dump > shop.json`) rather than editing the version number.
 
 ## 7. Work from a warm cache
 

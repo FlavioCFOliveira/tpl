@@ -22,22 +22,22 @@ jq '.data.context_variables, .data.template_surface' /tmp/h.json
 | Variable | Contents |
 |---|---|
 | `database` | Always present: `name`, `charset`, `collation`, `server` (`version`, `series`, `standing`), `tables`, `views`, `routines` |
-| `table` | The object bound by `--table` |
-| `view` | The object bound by `--view` |
-| `routine` | The object bound by `--routine` |
+| `table` | The object bound by `--table`. Undefined without it |
+| `view` | The object bound by `--view`. Undefined without it |
+| `routine` | The object bound by `--routine`. Undefined without it |
 | `vars` | The `--set` values, all strings. `{}` when none are given |
 | `tpl` | `tpl.version` |
 | `now` | Render time in UTC, e.g. `2026-09-10T08:14:22Z`. It is the only source of non-determinism |
 
-### Trap: `table`, `view` and `routine` are also function names
+### Guarding a template that needs a bound object
 
-The help says `table` is "undefined without --table". In tpl 0.0.1, the unbound name instead resolves to the global function of the same name. So `{{ table is defined }}` is `true` even without `--table`, and `{{ table }}` prints a function name. Test a field instead:
+At most one of `table`, `view` and `routine` is bound per render. The others are undefined, and reading one (`{{ table.name }}` without `--table`) is exit 65, with a hint to add the flag. To fail with a clearer message, guard at the top:
 
 ```jinja
-{% if table.name is defined %}…bound…{% else %}{{ fail("render this with --table <name>") }}{% endif %}
+{% if table is undefined %}{{ fail("render this with --table <name>") }}{% endif %}
 ```
 
-`table.name is defined` is `false` when nothing is bound, and `true` when `--table` is given. The same holds for `view.name` and `routine.name`.
+`table is defined` is `false` when nothing is bound. The field test `table.name is defined` gives the same answer. The same holds for `view` and `routine`. Before the lookup functions were renamed to `*_named`, an unbound `table` resolved to the function `table()`, so `table is defined` was wrongly `true`. A binary that still has `table(name)` in `tpl help render` behaves that way. There, use `table.name is defined`.
 
 ## The model
 
@@ -62,7 +62,7 @@ The functions, and the tests and filters tpl registers, are a contract. The engi
 - **Code filters:** `quote` (MariaDB backticks), `sql_type` (a column's `data_type`), `json`, `indent(n)`, `comment(prefix)`, `escape("html"|"xml")`.
 - **Pinned engine filters:** `default`, `join`, `length`, `map(attribute=…)`, `select`, `reject`, `first`, `last`, `reverse`, `sort(attribute=…, reverse=…, case_sensitive=…)`, `trim`, `upper`, `lower`, `replace`.
 - **Column tests:** `nullable`, `primary_key`, `auto_increment`, `unique`, `numeric`, `temporal`, `textual`. Each fails the render on anything but a column.
-- **Functions:** `table(name)`, `view(name)`, `routine(name)`, `column(table, name)` (using the result fails the render when the object is missing), and `fail(message)`, which stops the render with exit 65.
+- **Functions:** `table_named(name)`, `view_named(name)`, `routine_named(name)` (the first routine of that name), `column(table, name)` (using the result fails the render when the object is missing), and `fail(message)`, which stops the render with exit 65. The old names `table()`, `view()` and `routine()` no longer exist: calling one is exit 65, "unknown function".
 
 There is no per-language type filter (no `rust_type`). Write a type-mapping macro the project owns, as `rust/_types.jinja` does, and end it with `fail()` so an unmapped `data_type` stops the render instead of producing wrong code.
 

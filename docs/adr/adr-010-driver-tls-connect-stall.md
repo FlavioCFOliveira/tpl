@@ -3,8 +3,8 @@ id: ADR-010
 title: The TLS connect stall in the pinned driver
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-22
-requirements: [FR-CONF-013, FR-CONF-036, NFR-PERF-012, NFR-PERF-014]
+last-reviewed: 2026-09-24
+requirements: [FR-CONF-013, FR-CONF-036, NFR-PERF-014]
 supersedes: []
 superseded-by: null
 ---
@@ -86,9 +86,12 @@ only `disabled` does not. Three of `NFR-PERF-014`'s nine measurement points
 reach a server, and two of those three are timings — `tpl schema dump` over
 `WL-001`, and the canonical loop of 200 invocations — against adopted figures
 stated in milliseconds. Neither figure refuses anything, per `BR-PERF-008`; what
-the stall costs is exactly what those figures are kept to show, and
-`NFR-PERF-012` makes the identity of the built artefact material to every figure
-recorded against it.
+the stall costs is exactly what those figures are kept to show. A figure is
+comparable only with another taken from the same build, so the identity of the
+built artefact matters to every figure recorded against it. That is this
+record's design ground, not a requirement: `NFR-PERF-012` requires a recorded
+measurement to name its target and, where it reaches a server, its series, and
+names no artefact.
 
 **What this record prescribed now exists.** It was written before there was a
 `Cargo.toml`, to prescribe what the sprint that creates the manifest must put
@@ -117,9 +120,11 @@ Two mechanical constraints follow from how Cargo reads a patch, and are stated
 here so the manifest is written once: the entry SHALL be declared in the
 workspace-root manifest, because Cargo reads patch settings nowhere else; and
 the patched source SHALL be pinned to an immutable revision — a git `rev` or
-tag, or a path inside this repository — never a branch, because `NFR-PERF-012`
-requires a recorded measurement to name the artefact it was taken on and a
-floating source leaves that artefact unnameable.
+tag, or a path inside this repository — never a branch. The patched source must
+be published 0.9.0 plus one statement and nothing else, and that can be checked
+only against bytes a commit of this repository fixes. Cargo locks a git
+dependency's commit in `Cargo.lock` and moves it on `cargo update` (Sources), so
+a branch would let the patched source change without any edit to the manifest.
 
 **The condition that retires this record, stated so that it cannot be forgotten:
 the first `sqlx` release whose `sqlx-core` contains PR `#4336`.** On that
@@ -145,10 +150,9 @@ published source is a defect in it.
 
 **Of the three forms the immutability constraint admits, this is the
 strongest.** The bytes compiled are fixed by the commit of this repository the
-build was taken at, so a recorded figure names its artefact by naming that
-commit and its target, which is what `NFR-PERF-012` requires; no revision of a
-second repository has to be recorded, resolved, or still reachable for that name
-to keep its meaning. The vendored tree SHALL carry its provenance beside it: the
+build was taken at, so naming that commit names the patched source exactly; no
+revision of a second repository has to be recorded, resolved, or still
+reachable for that name to keep its meaning. The vendored tree SHALL carry its provenance beside it: the
 crate and version it was taken from, and the upstream change the added
 statement reproduces, PR `#4336`. Both are already facts of this record; what
 the vendored form adds is that they travel with the source, so the divergence
@@ -285,7 +289,7 @@ choice was made; either is the user's to overturn.
   re-examined; it is refused as the standing control because it feeds command 5
   a lockfile naming a registry source for a crate this project does not build
   from the registry — the artefact audited would not be the artefact built,
-  which is the property `NFR-PERF-012` exists to protect — and because a
+  which defeats the audit — and because a
   mutated lockfile is one `git add` away from being committed. A sixth pipeline
   command is refused under R2: the pipeline is prescribed in
   `docs/spec-technical/operations.md`, this register is subordinate and cannot
@@ -305,8 +309,10 @@ this record did not have: two of them are below, and the third settled the
 question the Decision left open about the workspace exclusion.
 
 **No artefact built under the patch is the published crate.** A figure
-taken against it names an artefact that differs from `sqlx-core` 0.9.0 by one
-statement, and `NFR-PERF-012` requires that to be visible in what is recorded.
+taken against it comes from a build that differs from `sqlx-core` 0.9.0 by one
+statement. `BENCHMARKS.md` is a record of observations, and a reader comparing
+such a figure with one from the unpatched crate needs to see that difference;
+no requirement obliges it to be recorded.
 Removing the patch when the fix ships changes the artefact again; the change
 should be behaviour-neutral by construction, since the statement removed is the
 statement the release adds. Under the vendored form that identity is cheap to
@@ -435,6 +441,8 @@ not by this register.
 | The toolchain floor of 1.94.0 is declared by the crate at the version `ADR-003` pins, and moves with it | `ADR-007`, *Decision* | 2026-09-11 |
 | Cargo reads `[patch]` settings only from the workspace-root manifest and ignores them in dependencies; a patch source may be a git repository pinned to a branch, tag or rev, or a local path | The Cargo Book, *Overriding Dependencies* | 2026-09-11 |
 | All `path` dependencies residing in the workspace directory automatically become workspace members, and the `exclude` key prevents a path from being included | The Cargo Book, *Workspaces*, the `members` and `exclude` fields | 2026-09-11 |
+| A recorded measurement names its target and, where it reaches a server, its series; none of the three requirements names the artefact | `specification/performance-requirements.md`, `NFR-PERF-012`, `NFR-PERF-009`, `NFR-PERF-010` | 2026-09-24 |
+| Cargo locks the commits of git dependencies in `Cargo.lock` when they are added and checks for updates only on `cargo update` | The Cargo Book, *Specifying Dependencies* | 2026-09-24 |
 | The measured candidate fixes were produced by vendoring `sqlx-core` 0.9.0 and redirecting to it with `[patch.crates-io]` and a `path` — the form this record prescribes | `BENCHMARKS.md`, "2026-09-11 — The TLS connect stall on Linux loopback", *Reproduction* | 2026-09-11 |
 | `cargo audit`, command 5 of the mandatory validation pipeline, audits `Cargo.lock` | `docs/spec-technical/operations.md`, the pipeline table, row 5, which cites the crates.io index and rustsec.org for `cargo-audit` 0.22.2 | 2026-09-11 |
 | `cargo audit` matches advisories only for a lockfile package carrying a `source`, so the path-patched `sqlx-core` is counted and never matched; the `source` field alone gates it and the `checksum` is irrelevant | Three runs of `cargo audit` against a probe advisory database — over this repository's `Cargo.lock` at `be16e30`, over `git show HEAD:Cargo.lock` at the same commit, and over the working lock with `source` restored and `checksum` still absent — recorded in full on task `#67` | 2026-09-12 |

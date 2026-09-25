@@ -327,6 +327,53 @@ tpl template path  [<name>]             Print the template root, or one template
   exit `66` (`EX_NOINPUT`) with a nearest-match suggestion over the template
   names that do exist.
 
+- **FR-TMPL-033**: An entry of `.tpl/templates/` whose name ends in `.jinja`
+  and that is not a regular file — a FIFO, a socket, or a character or block
+  device — is not a template, per `FR-TMPL-004`, and SHALL NOT be opened for
+  reading. The system SHALL establish the type without following a symbolic
+  link and without waiting for a writer, on the file that is then read, so
+  that no other file can take its place between the test and the read.
+
+  1. **Listing and checking.** `tpl template list` SHALL NOT list the entry,
+     and `tpl template check` SHALL NOT check it, per `FR-TMPL-005`. Neither
+     writes a line about it.
+  2. **Named on the command line.** `tpl render`, `tpl template show`,
+     `tpl template check` and `tpl template path` given its name SHALL exit
+     `66` (`EX_NOINPUT`), per `FR-TMPL-027`. The `cause` SHALL state that the
+     entry exists and is not a regular file, and SHALL name the kind found,
+     so that it does not read as a name that is absent.
+  3. **Named by another template.** `{% include %}`, `{% import %}` and
+     `{% extends %}` naming it SHALL fail the render with `65`
+     (`EX_DATAERR`), per `FR-TMPL-009`, naming the template, the line and
+     the column; the `cause` SHALL state that the entry is not a regular
+     file.
+
+  ```
+  tpl template show header
+  error: template 'header' does not exist
+  cause: .tpl/templates/header.jinja exists and is a FIFO; a template is a regular file
+  hint:  list the templates with: tpl template list
+  exit:  66 (EX_NOINPUT)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code.
+
+  *No size bound*, for the reason `FR-PROJ-030` gives for `.tpl/.cfg`: the
+  unbounded reads are closed by the type, and a regular template has a size
+  its author fixed. The render's own bounds, `FR-RND-036` through
+  `FR-RND-039`, govern what the template does once read.
+
+  *Why `66` and `65`, and not one code.* `FR-TMPL-005` makes a file that is
+  not a template invisible, and the corpus answers an invisible entry named
+  on the command line with `66` under `FR-TMPL-027`, and an unresolvable
+  name inside a template with `65` under `FR-TMPL-009`. The file type adds a
+  fact to the `cause` and no new condition. *Rejected: `65` on the command
+  line, as for a path escaping the root under `FR-TMPL-026`.* No path
+  escapes; the entry is inside the root and is not a template.
+
+  *Added in the sixty-third edition,* for rmp `#307`.
+
 ## Business rules
 
 - **BR-TMPL-002**: The second arm is read-only with respect to both the database

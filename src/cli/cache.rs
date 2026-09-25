@@ -151,6 +151,18 @@ enum Wanted<'a> {
 }
 
 impl<'a> Wanted<'a> {
+    /// The collections the command reaches for what it names: all three for
+    /// the whole catalogue, and the object's own collection otherwise
+    /// (`FR-CACHE-042`, `FR-CACHE-044`).
+    const fn collections(&self) -> &'static [Collection] {
+        match self {
+            Self::Everything => &Collection::ALL,
+            Self::Table(_) => &[Collection::Tables],
+            Self::View(_) => &[Collection::Views],
+            Self::Routine(_) => &[Collection::Routines],
+        }
+    }
+
     /// What `object` names, for the command at `invocation`.
     ///
     /// # Errors
@@ -263,7 +275,9 @@ fn load(
     // server is what the command does — so the lookup is suppressed whatever
     // the invocation said.
     let reader = Reader::new(globals, None, ending);
-    let opened = reader.open()?;
+    // FR-CACHE-044: the collections the store write reaches are checked for a
+    // link before the connection is opened.
+    let opened = reader.open(wanted.collections())?;
     let catalogue = reader.fetch(&opened)?;
     let model = catalogue.model()?;
     let document = document::context(&model)?;
@@ -330,14 +344,32 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
         && !configuration
             .names()
             .any(|declared| declared.eq_ignore_ascii_case(name))
-        && let Some(recorded) = Store::of(project.root(), name).clean_orphan()?
     {
-        crate::diagnostics::emit::orphan_cache_removed(name, recorded.name.as_deref());
-        return Ok(());
+        let orphan = Store::of(project.root(), name);
+
+        // FR-CACHE-042 item 1: a link at `.tpl/.cache` is refused before
+        // condition 3 of FR-CACHE-041 looks through it. A link at the orphan's
+        // own folder is removed as a link by `clean_orphan`, per item 2.
+        orphan.refuse_links(false, &[], true)?;
+
+        if let Some(recorded) = orphan.clean_orphan()? {
+            crate::diagnostics::emit::orphan_cache_removed(name, recorded.name.as_deref());
+            return Ok(());
+        }
     }
 
     let entry = source::entry_of(&configuration, reader.requested())?;
     let cache = Store::of(project.root(), entry);
+
+    // FR-CACHE-042 item 1, at step 6 of FR-ERR-006 and before the condition of
+    // FR-CACHE-040: with no object flag only `.tpl/.cache` is refused, since
+    // a link at the entry's folder is the thing removed and is removed as a
+    // link (item 2); with one, the entry's folder and the object's collection
+    // folder are refused as well.
+    match &wanted {
+        Wanted::Everything => cache.refuse_links(false, &[], true)?,
+        other => cache.refuse_links(true, other.collections(), true)?,
+    }
 
     // FR-CACHE-040: an object flag that names nothing the cache holds deletes
     // nothing and is 66, with the nearest cached names of that kind.
@@ -363,7 +395,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
     };
     let held =
         |collection: Collection, kind: CatalogueObjectKind, name: &str, file: Option<PathBuf>| {
-            if Store::holds(file.as_deref()) {
+            if cache.holds(file.as_deref()) {
                 cache.clean_one(collection, file)
             } else {
                 Err(absent(collection, kind, name, None, None))
@@ -386,7 +418,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
         ),
         Wanted::Routine(named::Wanted::Qualified(kind, name)) => {
             let file = cache.routine_file(&kind, name);
-            if Store::holds(file.as_deref()) {
+            if cache.holds(file.as_deref()) {
                 return cache.clean_one(Collection::Routines, file);
             }
             // Y-05 of the eighth re-audit of rmp `#263`: a routine of the
@@ -406,7 +438,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
                 _ => (None, None, None),
             };
             let held_as = other
-                .filter(|other| Store::holds(cache.routine_file(other, name).as_deref()))
+                .filter(|other| cache.holds(cache.routine_file(other, name).as_deref()))
                 .and(other_kind);
             Err(absent(
                 Collection::Routines,
@@ -424,7 +456,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
             // namespaces is refused rather than resolved in favour of either.
             // The population here is what the store holds, because that is
             // what the command acts on.
-            if Store::holds(procedure.as_deref()) && Store::holds(function.as_deref()) {
+            if cache.holds(procedure.as_deref()) && cache.holds(function.as_deref()) {
                 return Err(Error::AmbiguousRoutineName {
                     name: name.to_owned(),
                     entry: entry.to_owned(),
@@ -438,7 +470,7 @@ fn clean(globals: &Globals, object: &local::Object, ending: Ending) -> Result<()
                 });
             }
 
-            let file = if Store::holds(procedure.as_deref()) {
+            let file = if cache.holds(procedure.as_deref()) {
                 procedure
             } else {
                 function
@@ -474,7 +506,12 @@ fn status<W: Write>(
     let reader = Reader::new(globals, None, ending);
     let (project, configuration) = source::project(reader.tpl_dir())?;
     let entry = source::entry_of(&configuration, reader.requested())?;
-    let held = Store::of(project.root(), entry).status();
+    let store = Store::of(project.root(), entry);
+
+    // FR-CACHE-044: the report reads `meta.json` and counts every collection,
+    // so all three folders are checked for a link first.
+    store.refuse_links(true, &Collection::ALL, false)?;
+    let held = store.status();
 
     let format = output
         .format
@@ -507,6 +544,12 @@ fn status<W: Write>(
 /// What the text report writes for `loaded_at` when the cache is empty.
 const NEVER_LOADED: &str = "never (the cache is empty; fill it with tpl cache load)";
 
+/// What the text report writes for `loaded_at` when the cache holds files but
+/// no usable load record, per `FR-CACHE-034`: the collections below carry the
+/// counts, so the cache is not called empty.
+const UNRECORDED: &str = "not recorded (no usable load record; the counts below are the files present; \
+     reload with tpl cache load)";
+
 /// Writes the `text` form of `tpl cache status`.
 ///
 /// Two parts: the entry and the load time, which are properties of the store,
@@ -521,10 +564,15 @@ fn text<W: Write>(out: &mut W, entry: &str, held: &Status) -> Result<(), Error> 
     // AB-01 of the eleventh re-audit of rmp `#263`: the command the row names
     // carries the caller's -d and --tpl-dir, as a hint's does, so that copied
     // it fills this entry's cache and not the default entry's.
+    let absent = if held.collections.is_empty() {
+        NEVER_LOADED
+    } else {
+        UNRECORDED
+    };
     let loaded_at = held
         .loaded_at
         .as_deref()
-        .map_or_else(|| crate::diagnostics::carried(NEVER_LOADED), Cow::Borrowed);
+        .map_or_else(|| crate::diagnostics::carried(absent), Cow::Borrowed);
     let own: Vec<[layout::Cell<'_>; 2]> = vec![
         [layout::text("entry"), layout::text(entry)],
         [

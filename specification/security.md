@@ -2,7 +2,7 @@
 title: Security Rules Across the Surface
 status: approved
 last-reviewed: 2026-09-24
-related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md]
+related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md]
 ---
 
 # Security Rules Across the Surface
@@ -180,6 +180,18 @@ module, `BR-SEC-003` excepted.
 - **FR-SEC-016**: `--tpl-dir` SHALL be subject to the same checks, without
   exemption. See `FR-PROJ-008`.
 
+- **FR-SEC-027**: `tpl` SHALL read `.tpl/.cfg` and every template only from a
+  regular file, and SHALL establish the type without following a link,
+  without waiting for a writer, and on the file it then reads. A `.cfg` of
+  another kind is `78`; a template entry of another kind is not a template.
+  See `FR-PROJ-030` and `FR-TMPL-033`.
+
+  *Threat closed.* A FIFO or a device in the place of `.tpl/.cfg` or of a
+  template must not hang the invocation with no deadline, nor feed it
+  unbounded data.
+
+  *Added in the sixty-third edition,* for rmp `#307`.
+
   *Note added in the forty-eighth edition.* `--tpl-dir` SHALL name a directory
   whose last segment is `.tpl`, per `FR-PROJ-027`, so that the flag names no
   folder the walk would not find.
@@ -192,6 +204,30 @@ module, `BR-SEC-003` excepted.
 
   *Threat closed.* `ln -s ../.cfg .tpl/templates/leak.jinja` must not turn
   `tpl template show` into a credential dump.
+
+## Cache containment
+
+- **FR-SEC-026**: No command SHALL resolve a cache path through a symbolic
+  link. `tpl cache clean` SHALL refuse with `78` a link at `.tpl/.cache`, or on
+  the path to the object a clean given an object flag removes, and SHALL
+  remove as a link a link that is itself the thing removed. Every other
+  command that reads or writes the cache SHALL refuse with `78` a link at
+  `.tpl/.cache`, at the selected entry's folder, or at a collection folder it
+  would read or write, before it reads, writes or connects. A record of the
+  cache, `meta.json` or `database.json`, that is a link, is not a regular
+  file, or exceeds its bound SHALL be unusable and SHALL never be read
+  through. See `FR-CACHE-042`, `FR-CACHE-044` and `FR-CDOC-017`.
+
+  *Threat closed.* `ln -s /home/ana .tpl/.cache` must not turn
+  `tpl -d shop cache clean` into the deletion of `/home/ana/shop`, nor
+  `tpl -d shop cache load` into writes under `/home/ana/shop`, nor a cache hit
+  into catalogue data read from outside the project, nor a record replaced by
+  a FIFO or by a link to `/dev/zero` into a hang or an exhausted memory.
+
+  *Added in the fifty-eighth edition,* for rmp `#288`. *Amended within the
+  fifty-eighth edition,* for rmp `#305`: the second sentence and the last two
+  threats are new. *Amended again within it:* the sentence on the records and
+  the last threat are new.
 
 - **FR-SEC-018**: `tpl template check` SHALL parse only, never evaluating an
   expression, calling a function, or connecting to a database, so that it is

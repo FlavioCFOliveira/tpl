@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -874,7 +874,7 @@ nothing, reports a failure the filesystem returns with `73`, writes nothing to
 stdout, and warns on stderr at `0` when the new project nests inside an existing
 one (`FR-PROJ-012` … `FR-PROJ-016`, `FR-PROJ-022`). What it ships is
 `operations.md`; where its five artefacts land is
-[data-model.md](data-model.md#tpl-on-disk-and-its-four-writers).
+[data-model.md](data-model.md#tpl-on-disk-and-its-five-writers).
 
 ## The `password_command` child
 
@@ -980,6 +980,38 @@ engine's out-of-fuel error, found anywhere in the error chain, becomes
 failure (`FR-RND-036`, `FR-RND-037`). The deadline and the memory limit leave
 the process from the watchdog and return nothing.
 
+## The library entry points
+
+The library has four public functions. The binary calls the first three;
+`run_from` serves an in-process caller, a test or a fuzz harness:
+`install_panic_hook` ([`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md)),
+`install_heap_counter` ([The render bounds](#the-render-bounds)), `run`, and
+`run_from`. Why `run_from` takes the shape it does, and the options rejected, are
+[`OD-34`](open-decisions.md#od-34--an-in-process-entry-point-over-a-supplied-argument-vector)'s.
+
+```rust
+pub fn run() -> Result<(), Error>;
+
+pub fn run_from<I, T>(args: I) -> Result<(), Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString>;
+```
+
+| Obligation | Forced by |
+|---|---|
+| `run()` is `run_from(std::env::args_os())` and nothing else, so the two paths cannot diverge | [`OD-34`](open-decisions.md#od-34--an-in-process-entry-point-over-a-supplied-argument-vector) |
+| The first element of `args` is the program name and is not parsed as an argument; the command path starts at the second. A caller passes `"tpl"` first | The parser: "The first argument will be parsed as the binary name unless `Command::no_binary_name` is used" (docs.rs, `clap` 4.6.6, the version `Cargo.lock` resolves, `Command::try_get_matches_from`, whose `_mut` form `cli/` calls, consulted 2026-09-24), and `tpl` does not use `no_binary_name` |
+| The four labelled lines are written by `run_from` on the way out, once, and the error is then returned for the caller to map to an exit status | `FR-ERR-008`, `FR-ERR-033`, [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
+| Three values are set **once per process, and the first call wins**: the instant the `--timeout` budget is measured from, the heap counter, and the argument vector a `hint` writes back. A second call in the same process measures its budget from the first call's start and writes the first call's vector into its hints. The diagnostic level is set again on every call | `FR-GLOB-011`; `FR-RND-039`, [`ADR-011`](../adr/adr-011-render-memory-accounting.md); `FR-ERR-043`; `FR-GLOB-014`, `FR-GLOB-015` |
+| Two paths end the process with `std::process::exit` and do not return: the render deadline and the render memory limit, from the watchdog thread. The panic path exits only where the caller installed the hook | [architecture.md](architecture.md#two-exits-that-do-not-return-through-mainrs) |
+| The working directory and the environment are read from the process, not from an argument: discovery walks up from the current directory unless `--tpl-dir` is given, `tpl init` compares its destination with it, and `${VAR}` references are expanded from the process environment | `FR-PROJ-004`, `FR-CONF-015` |
+| No stability promise: the signature may change in any release | `DIV-032`, [overview.md](overview.md#the-library-api-is-not-a-public-surface) |
+
+A caller that drives `run_from` repeatedly — a fuzz harness — must therefore run
+each input where a process exit is acceptable, or bound the input so neither
+exit path is reached.
+
 ## The library shape: five questions, open
 
 `DIV-032` fixes that the contract runs through the JSON document and the command
@@ -989,16 +1021,19 @@ rather than answering them.
 consequence; [data-model.md](data-model.md#the-model-in-memory) records that
 four of the five are not decided there.
 
-**All five are now answered over the published surface**, which is `model/` and
-`error.rs` and nothing else
-([`OD-05`](open-decisions.md#od-05--the-module-decomposition)). Four were
+**All five are now answered over the published types**, which are those of
+`model/` and `error.rs` and no others
+([`OD-05`](open-decisions.md#od-05--the-module-decomposition)); the crate root
+also exposes the four entry functions of
+[The library entry points](#the-library-entry-points), which carry no stability
+promise either (`DIV-032`). Four were
 settled when the model was built and are recorded in
 [`OD-31`](open-decisions.md#od-31--the-models-shape-strings-fields-and-the-attribute);
 the fifth was already settled. None is settled **here**: the register is where a
 decision and its rejected options live, and this table states the answer and
 cites it.
 
-| # | Question | Answer over the published surface | Recorded in |
+| # | Question | Answer over the published types | Recorded in |
 |---|---|---|---|
 | 1 | Owned versus borrowed types in the model | Neither alone: one clone-on-write string type, under one lifetime parameter threaded through every type, so one shape serves a live read, a cached read and a supplied document | [`OD-31`](open-decisions.md#od-31--the-models-shape-strings-fields-and-the-attribute) |
 | 2 | Public fields versus accessors | Divided by whether the type carries an invariant: public fields where every field is an independent fact, private fields and one constructor where a value relates two of them | [`OD-31`](open-decisions.md#od-31--the-models-shape-strings-fields-and-the-attribute) |

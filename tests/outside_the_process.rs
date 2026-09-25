@@ -615,14 +615,20 @@ fn nfr_perf_007_the_file_open_trace_is_taken_on_a_linux_target_and_credited_nowh
     let control =
         fixture::opens(&["sh", "-c", &reading]).expect("strace answered once and is still there");
 
+    // `.tpl/.cfg` is opened relative to the descriptor of `.tpl` since rmp
+    // `#307` (FR-PROJ-030), so the trace records it as `openat(<fd>, ".cfg",
+    // …)` rather than by its path; either spelling is the file.
+    let names_the_file =
+        |recorded: &str| recorded.contains(".tpl/.cfg") || recorded.contains("\".cfg\"");
+
     assert!(
-        control.contains(".tpl/.cfg"),
+        names_the_file(&control),
         "the trace of a command that reads .tpl/.cfg did not record it, so the \
          absence below establishes nothing"
     );
 
     assert!(
-        !trace.contains(".tpl/.cfg"),
+        !names_the_file(&trace),
         "tpl help opened or stat'ed .tpl/.cfg, which NFR-PERF-005 forbids"
     );
     assert!(

@@ -14,6 +14,9 @@
 #     ./up.sh                # all five
 #     ./up.sh 10.11 notls    # only the named servers
 #
+# It ends by asking `status.sh` about the same servers it was asked to start,
+# and exits with that answer: 0 when every requested server answered.
+#
 # down.sh is the other half. Leave no container running after a validation run.
 
 set -euo pipefail
@@ -143,7 +146,12 @@ main() {
         verify_clean      "$name" "$series" "$image" "$container" "$port" "$tls"
     done 9<<< "$TPL_MARIADB_SERVERS"
     log ""
-    ./status.sh
+    # The closing verification covers what was asked for and nothing else: the
+    # same selection is handed to the gate, so `./up.sh 12.3` reports 12.3 and
+    # exits with 12.3's answer, and not with the `2` of a half-standing fixture
+    # that the other, unrequested servers would make it. With no selection the
+    # gate is asked of the whole fixture, as before.
+    ./status.sh "$@"
 }
 
 main "$@"

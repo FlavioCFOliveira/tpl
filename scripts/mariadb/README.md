@@ -394,8 +394,12 @@ count the file is answerable for. What the file seeds is the catalogue.
 ./seed-bench.sh --drop         # drop both schemas
 ```
 
-Loading is idempotent — the file drops each schema before creating it — and the
-script asks the gate before it starts, because a load against a server that is
+Loading is idempotent — the file drops each schema before creating it — and a
+dropped schema takes its grants with it, so the script grants `tpl_reader`
+`SELECT, EXECUTE` on both schemas after every load, the same grant `setup.sql`
+gives it on `freight` and by the same mechanism `seed-datasets.sh` uses, and
+then counts what the reader sees of each. The script asks the gate before it
+starts, because a load against a server that is
 not up fails halfway and leaves a partial schema behind. Its exit code is `0`
 when every requested server holds both workloads at every stated count, `1` when
 one does not, and `2` when the invocation is wrong or the fixture is down.

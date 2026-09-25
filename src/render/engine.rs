@@ -59,6 +59,7 @@ use minijinja::{AutoEscape, Environment, ErrorKind, Output, State, UndefinedBeha
 use super::bounds::RenderFuel;
 use super::root::Root;
 use super::surface;
+use crate::at::Unread;
 use crate::error::Error;
 
 /// The spelling `FR-SEM-021` fixes for a true value.
@@ -139,7 +140,7 @@ fn load(root: &Root, name: &str) -> Result<Option<String>, minijinja::Error> {
         // not resolve. On the command-line path the name was already resolved
         // before the engine was reached, per `OD-15`, so this arm is the
         // include's.
-        Err(Error::TemplateNotFound { .. }) => return Ok(None),
+        Err(Error::TemplateNotFound { .. } | Error::TemplateNotRegular { .. }) => return Ok(None),
         Err(refused) => {
             return Err(minijinja::Error::new(
                 ErrorKind::InvalidOperation,
@@ -148,15 +149,23 @@ fn load(root: &Root, name: &str) -> Result<Option<String>, minijinja::Error> {
         }
     };
 
-    std::fs::read_to_string(&located)
-        .map(Some)
-        .map_err(|returned| {
-            minijinja::Error::new(
-                ErrorKind::InvalidOperation,
-                format!("template '{name}' could not be read"),
-            )
-            .with_source(returned)
-        })
+    // FR-TMPL-033 and FR-SEC-027: read on a descriptor opened without
+    // following a link and without waiting for a writer, and typed on it. An
+    // entry that became something other than a regular file since it was
+    // resolved is no template, as it would have been at the resolution.
+    match root.read(&located) {
+        Ok(text) => Ok(Some(text)),
+        Err(Unread::NotRegular(_)) => Ok(None),
+        Err(Unread::Io(returned)) => Err(minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("template '{name}' could not be read"),
+        )
+        .with_source(returned)),
+        Err(Unread::Oversized) => Err(minijinja::Error::new(
+            ErrorKind::InvalidOperation,
+            format!("template '{name}' could not be read"),
+        )),
+    }
 }
 
 #[cfg(test)]

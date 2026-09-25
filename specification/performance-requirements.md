@@ -424,9 +424,9 @@ a summary.
   an implementer which invocations were considered, and dropping it to avoid
   having to extend it would lose the only record of that.
 
-- **NFR-PERF-007**: Each requirement of this section SHALL be verified by an
-  observation made outside the process, and SHALL NOT be verified by reading
-  the source. The instruments SHALL be exactly the following four, and each
+- **NFR-PERF-007**: Each of the six requirements of form, `NFR-PERF-001`
+  through `NFR-PERF-006`, SHALL be verified by an observation made outside the
+  process, and SHALL NOT be verified by reading the source. The instruments SHALL be exactly the following four, and each
   SHALL be used only on the targets of `NFR-PERF-018` its row names:
 
   | Instrument | What it observes | Targets |
@@ -501,9 +501,38 @@ a summary.
   requirement in force. Here two remain, one of them on every target, so the
   condition that would open it is not met.
 
+  *Amended in the sixty-second edition,* for rmp `#230`. The first sentence
+  read *each requirement of this section*, and the section also holds this
+  requirement, `NFR-PERF-008` and `BR-PERF-001`. This one fixes how the others
+  are verified and `BR-PERF-001` is a rule for drafting; neither is a
+  property of the running system. `NFR-PERF-008` is one, and its own text now
+  states how it is verified. The sentence names the six it reaches, which is
+  the reading the technical specification had recorded. *Rejected: keeping
+  the wide sentence and stating the three exclusions.* A reader who stops at
+  the rule reads the wide claim, and an exclusion list has to be kept in step
+  with every requirement the section gains. *Rejected: adding the diagnostic
+  stream as a fifth instrument.* Every requirement of form could then be
+  verified by reading a stream `NFR-DET-001` makes no promise about, where
+  today only the count of `NFR-PERF-008` is, and only against the server's own
+  record.
+
 - **NFR-PERF-008**: The catalogue-query count SHALL be observable from the
   diagnostic stream, per `FR-GLOB-017`, which requires one line per catalogue
   query issued, distinguishable from every other diagnostic line.
+
+  It SHALL be verified by running an invocation that reads the catalogue at
+  `-v/--verbose`, counting the lines of `FR-GLOB-017` on its stderr, and
+  comparing that count with the catalogue queries the server's statement
+  record of `NFR-PERF-007` shows for the same invocation. The two SHALL be
+  equal. It needs the fixture standing, as the first row of the table under
+  *Requirements of form* states for that record, and a run without it skips
+  the assertion with a stated reason.
+
+  *Added in the sixty-second edition,* for rmp `#230`. The requirement stated
+  what must be observable and not how that is established, and
+  `NFR-PERF-007` no longer reaches it. The comparison reads the stream
+  against the server's own record, so neither side is a number written
+  twice.
 
 - **BR-PERF-001**: A requirement of form is preferred to a figure wherever both
   would catch the same defect, because a figure has to be re-measured on every

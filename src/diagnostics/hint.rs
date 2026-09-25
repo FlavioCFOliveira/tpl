@@ -794,6 +794,11 @@ fn bare(error: &Error) -> Cow<'static, str> {
                  with --context {target}"
             ))
         }
+        // FR-RND-042: the command that produces a document this binary
+        // reads, with the placeholder the requirement writes.
+        Error::ContextDocumentVersion { .. } => {
+            Cow::Borrowed("produce a document this tpl reads with: tpl -d <entry> schema dump")
+        }
         Error::RenderFuelExhausted { .. } => Cow::Borrowed(
             "look for a loop that never ends, or raise the limit with: tpl cfg set \
              core.render_fuel <evaluation steps>",
@@ -909,10 +914,39 @@ fn bare(error: &Error) -> Cow<'static, str> {
             admits_template,
             "list the project's templates with: tpl template list",
         ),
+        Error::TemplateNotRegular { .. } => {
+            Cow::Borrowed("list the project's templates with: tpl template list")
+        }
         // FR-GLOB-007 obliges the nearest-match half over the entry names the
         // file defines. An entry name is a value this corpus does not fix, so
         // FR-ERR-022 governs it by the character set and FR-ERR-023 drops a
         // candidate outside it in every form.
+        // FR-CFG-054: the nearest declared entry, written into the command
+        // that sets it; else the listing; else, with no entry at all, the
+        // command that adds one, with its placeholder.
+        Error::DefaultEntryUndeclared {
+            nearest, declared, ..
+        } => {
+            let admitted = admitted(nearest, admits);
+            match admitted.first() {
+                Some(entry) => {
+                    let verb = if admitted.len() == 1 {
+                        "set it"
+                    } else {
+                        "set the nearest"
+                    };
+                    Cow::Owned(
+                        suggest::hint_line(
+                            admitted.iter().copied(),
+                            &format!("{verb} with: tpl cfg set core.database {entry}"),
+                        )
+                        .into_owned(),
+                    )
+                }
+                None if *declared => Cow::Borrowed("list the entries with: tpl cfg database list"),
+                None => Cow::Borrowed("add the entry first with: tpl cfg database add <name>"),
+            }
+        }
         Error::DatabaseEntryNotFound {
             nearest,
             by_default,
@@ -935,6 +969,42 @@ fn bare(error: &Error) -> Cow<'static, str> {
             if crate::error::section_named(key).is_some() =>
         {
             Cow::Borrowed("show every key and its value with: tpl cfg list")
+        }
+        // FR-CFG-012, fifty-ninth edition: an entry's block the file does not
+        // declare. The candidates are the blocks it does declare, and the
+        // hint shows the nearest rather than deleting it, per BR-ERR-005.
+        // With none admitted, the entries are listed.
+        Error::ConfigurationKeyNotFound {
+            key,
+            nearest,
+            entry_missing: true,
+            ..
+        } if crate::project::config::keys::Key::parse(key).is_none() => {
+            let admitted: Vec<&str> = nearest
+                .iter()
+                .map(|(candidate, _)| candidate.as_str())
+                .filter(|candidate| candidate.strip_prefix("database.").is_some_and(admits))
+                .collect();
+            match admitted
+                .first()
+                .and_then(|block| block.strip_prefix("database."))
+            {
+                Some(entry) => {
+                    let verb = if admitted.len() == 1 {
+                        "show it"
+                    } else {
+                        "show the nearest"
+                    };
+                    Cow::Owned(
+                        suggest::hint_line(
+                            admitted.iter().copied(),
+                            &format!("{verb} with: tpl cfg database show {entry}"),
+                        )
+                        .into_owned(),
+                    )
+                }
+                None => Cow::Borrowed("list the entries with: tpl cfg database list"),
+            }
         }
         Error::ConfigurationKeyNotFound {
             nearest,
@@ -1205,6 +1275,23 @@ fn bare(error: &Error) -> Cow<'static, str> {
         }
         Error::ConfigurationUnsafeMode { path, .. } => {
             Cow::Owned(format!("chmod 600 {}", configuration_file(path)))
+        }
+        // FR-PROJ-030 item 2: the file is to be replaced, and no command that
+        // deletes it is carried, per BR-ERR-005.
+        Error::ConfigurationNotRegular { path, .. } => Cow::Owned(format!(
+            "replace {} with a regular file holding the configuration",
+            configuration_file(path)
+        )),
+        // FR-CACHE-042 item 1 and FR-CACHE-044: the command that removes the
+        // link alone, since `rm` given a link removes the link and not its
+        // target. The path is absolute, built under FR-ERR-041, or the
+        // placeholder where that set refuses it.
+        Error::CachePathLinked { path, within, .. } => {
+            if path.is_absolute() && admits_file(path) {
+                Cow::Owned(format!("rm {}", path.display()))
+            } else {
+                Cow::Owned(format!("rm <project>/.tpl/{}", within.display()))
+            }
         }
         // BR-ERR-004: no `tpl cfg` command runs while `.tpl/.cfg` fails step 3
         // of FR-ERR-006, so every hint of a fault in the file names the file,

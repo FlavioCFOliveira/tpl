@@ -59,6 +59,68 @@ workflow, before it closes.
   `-h`/`--help` at every node — now opens with
   `tpl v<version> - Code Generation based on database schema` and one empty
   line. `tpl help --format json` and `tpl version` are unchanged.
+- **`tpl cfg set core.database` requires the entry to exist.** A name no entry
+  of `.tpl/.cfg` declares is refused with `66`, writing nothing, and the `hint`
+  suggests the nearest declared entry.
+- **`tpl cfg unset` of an absent block suggests the nearest one.** For `core`,
+  `database` or `database.<name>`, the `hint` names the nearest block the file
+  carries, and for an entry's block, `tpl cfg database show <name>`.
+- **Breaking: the lookup functions are renamed.** In the registered template
+  surface, `table(name)`, `view(name)` and `routine(name)` are now
+  `table_named(name)`, `view_named(name)` and `routine_named(name)`; `column`
+  is unchanged. A template that calls an old name fails with `65`. Under the
+  pre-1.0 rule, this moves the minor number of the next release.
+- **`.tpl/.cfg` must be a regular file.** A `.cfg` that is a symbolic link, a
+  directory, a FIFO, a socket or a device is refused with `78`, naming the
+  kind found and reading nothing, so a FIFO no longer makes `tpl` block. **A
+  `.cfg` kept as a symbolic link, which was checked at its target, is now
+  refused:** replace it with a regular file, or keep the project elsewhere and
+  name its `.tpl` folder with `--tpl-dir`.
+
+### Fixed
+
+- **A template that is not a regular file is never opened.** A `.jinja` entry
+  of `.tpl/templates/` that is a FIFO, a socket or a device is not listed or
+  checked, is refused with `66` when named on the command line, and fails a
+  render with `65` when an `include`, `import` or `extends` names it; a FIFO
+  no longer makes `tpl` block.
+- **Cache operations do not follow a `.tpl/.cache` swapped for a link
+  mid-operation.** Every cache path is resolved relative to the directory
+  already opened, so a component replaced by a symbolic link between two steps
+  fails the next step instead of redirecting a read, write or removal outside
+  the project.
+- **`table`, `view` and `routine` are undefined without an object flag.** A
+  `tpl render` given no `--table`, `--view` or `--routine` no longer sees them
+  as defined: they resolved to the lookup functions of the same names.
+- **`tpl render --context` refuses a document of another `schema_version`.**
+  A document whose `schema_version` is not the one this `tpl` emits exits
+  `65`, rendering nothing, and the `hint` carries `tpl -d <entry> schema dump`;
+  it was rendered.
+- **A backslash-newline in a `password_command` string is a line
+  continuation.** Given to `tpl cfg set database.<name>.password_command` or
+  to `--password-command`, a backslash followed by a newline outside single
+  quotes is removed before the string is split into words, as POSIX does; it
+  was kept.
+- **`tpl cache clean` removes nothing through a symbolic link.** In every
+  form, a linked `.tpl/.cache`, and for `--table`, `--view` or `--routine` a
+  linked `.tpl/.cache/<name>` or collection folder, is refused with `78`,
+  nothing removed, and a `hint` that removes the link alone; a link that is
+  itself the folder or file removed is removed as a link, and no link beneath
+  a removed folder is followed.
+- **A partial `tpl cache clean` keeps `loaded_at`.** With `--table`, `--view`
+  or `--routine`, it only marks the object's collection as not loaded whole in
+  `meta.json`, and leaves an absent or unusable `meta.json` as it found it.
+- **No cache path is read or written through a symbolic link.** The eight
+  `schema` subcommands, `tpl render` without `--context`, `tpl cache load` and
+  `tpl cache status` refuse a linked `.tpl/.cache`, entry folder or collection
+  folder with `78`, reading, writing and connecting to nothing;
+  `--direct --no-cache` still reads the server. `meta.json` and
+  `database.json` are read only as regular files within a size bound, and a
+  full write replaces a link there rather than following it.
+- **`tpl cache status` no longer calls a cache with objects empty.** With
+  `meta.json` absent or unusable beside cached objects, it reports
+  `loaded_at` `null` and all three collections with their counts and `whole`
+  `false`.
 
 ## [0.0.1] - 2026-09-24
 

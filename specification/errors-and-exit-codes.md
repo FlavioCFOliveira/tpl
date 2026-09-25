@@ -689,9 +689,15 @@ Out of scope: the wording of any individual message.
   through `FR-ERR-012`. The examples fix which flags the command carries,
   where, and the placeholder.
 
-  A value taken from `TPL_DIR`, `TPL_DATABASE` or `core.database` SHALL NOT be
-  written: the same command, run in the same environment and project,
-  resolves it again.
+  A value the invocation was not given on the command line SHALL NOT be
+  written: neither a `.tpl` found by discovery, per `FR-PROJ-004`, nor an
+  entry selected by `core.database`, per `FR-GLOB-005`. The same command, run
+  from the same directory in the same project, resolves it again.
+
+  *Amended in the fifty-ninth edition,* for rmp `#278`. The paragraph named
+  values taken from `TPL_DIR` and `TPL_DATABASE`. Neither variable exists,
+  per `FR-CONF-030` and `FR-CLI-021`, so the paragraph now names the two
+  sources a value not given on the command line does come from.
 
   *Rationale.* A `hint` is copied and run. A `tpl` command copied without the
   `--tpl-dir` the invocation was given discovers a project from the current

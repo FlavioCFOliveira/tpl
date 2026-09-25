@@ -2,11 +2,16 @@
 //!
 //! | Function | What it does |
 //! |---|---|
-//! | `table(name)` | Resolves a table by name in the render context |
-//! | `view(name)` | Resolves a view by name |
-//! | `routine(name)` | Resolves a routine by name |
+//! | `table_named(name)` | Resolves a table by name in the render context |
+//! | `view_named(name)` | Resolves a view by name |
+//! | `routine_named(name)` | Resolves a routine by name |
 //! | `column(table, name)` | Resolves a column of a named table |
 //! | `fail(message)` | Ends the render with `65`, carrying the author's message |
+//!
+//! No function carries the name of a context variable (`FR-ENV-020`, sixtieth
+//! edition): the lookups were once named `table`, `view` and `routine`, and a
+//! template sees one namespace, so without an object flag `table is defined`
+//! was `true` and with one the bound object hid the lookup.
 //!
 //! `FR-ENV-020` closes the set at those five, and `FR-ENV-022` through
 //! `FR-ENV-025` state four prohibitions as prohibitions rather than as an
@@ -23,8 +28,8 @@
 //! `undefined`, which the strict undefined behaviour of `OD-14` turns into the
 //! `65` of `FR-SEM-012` at the point the template **uses** the answer. The
 //! outcome is therefore the failure `BR-SEM-004` asks for, and a template that
-//! wants to ask first can still write `{% if table("x") is defined %}` or
-//! `{{ table("x") | default(…) }}` — the inherited `default` of `FR-ENV-018`
+//! wants to ask first can still write `{% if table_named("x") is defined %}` or
+//! `{{ table_named("x") | default(…) }}` — the inherited `default` of `FR-ENV-018`
 //! being guaranteed for exactly that.
 //!
 //! *Rejected: `none`.* It renders as the empty string under `FR-SEM-010`, so a
@@ -40,23 +45,23 @@ use minijinja::{Error, ErrorKind, State, Value};
 
 use super::lookup;
 
-/// `table(name)` (`FR-ENV-020`).
-pub(super) fn table(state: &State<'_, '_>, name: &str) -> Value {
+/// `table_named(name)` (`FR-ENV-020`).
+pub(super) fn table_named(state: &State<'_, '_>, name: &str) -> Value {
     resolved(lookup::member(state, lookup::TABLES, name))
 }
 
-/// `view(name)` (`FR-ENV-020`).
-pub(super) fn view(state: &State<'_, '_>, name: &str) -> Value {
+/// `view_named(name)` (`FR-ENV-020`).
+pub(super) fn view_named(state: &State<'_, '_>, name: &str) -> Value {
     resolved(lookup::member(state, lookup::VIEWS, name))
 }
 
-/// `routine(name)` (`FR-ENV-020`).
+/// `routine_named(name)` (`FR-ENV-020`).
 ///
 /// The first routine of that name, in the order `NFR-DET-002` fixes for the
 /// collection. A database may declare a procedure and a function under one
 /// name, and `FR-ENV-020` gives the function one argument, so the name is what
 /// it resolves on.
-pub(super) fn routine(state: &State<'_, '_>, name: &str) -> Value {
+pub(super) fn routine_named(state: &State<'_, '_>, name: &str) -> Value {
     resolved(lookup::member(state, lookup::ROUTINES, name))
 }
 
@@ -123,15 +128,15 @@ mod tests {
     fn fr_env_020_the_four_lookups_resolve_an_object_of_the_render_context() {
         // FR-ENV-020, rows one to four, over the fixture's model.
         assert_eq!(
-            render("{{ table('consignment').name }}").expect("it exists"),
+            render("{{ table_named('consignment').name }}").expect("it exists"),
             "consignment"
         );
         assert_eq!(
-            render("{{ view('v_consignment_manifest').name }}").expect("it exists"),
+            render("{{ view_named('v_consignment_manifest').name }}").expect("it exists"),
             "v_consignment_manifest"
         );
         assert_eq!(
-            render("{{ routine('sp_book_consignment').name }}").expect("it exists"),
+            render("{{ routine_named('sp_book_consignment').name }}").expect("it exists"),
             "sp_book_consignment"
         );
         assert_eq!(
@@ -145,18 +150,18 @@ mod tests {
         // The answer is `undefined`, and OD-14's strict behaviour makes every
         // use of it the `65` of FR-SEM-012 — while leaving the two guards the
         // module header names available.
-        assert!(render("{{ table('absent') }}").is_err());
-        assert!(render("{{ table('absent').name }}").is_err());
+        assert!(render("{{ table_named('absent') }}").is_err());
+        assert!(render("{{ table_named('absent').name }}").is_err());
         assert!(render("{{ column('consignment', 'absent') }}").is_err());
         assert!(render("{{ column('absent', 'reference') }}").is_err());
 
         assert_eq!(
-            render("{% if table('absent') is defined %}yes{% else %}no{% endif %}")
+            render("{% if table_named('absent') is defined %}yes{% else %}no{% endif %}")
                 .expect("the guard is allowed"),
             "no"
         );
         assert_eq!(
-            render("{{ table('absent') | default('none of them') }}")
+            render("{{ table_named('absent') | default('none of them') }}")
                 .expect("the guard is allowed"),
             "none of them"
         );

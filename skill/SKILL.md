@@ -77,7 +77,7 @@ For the full workflows, including one file per table, offline rendering, repoint
 |---|---|---|
 | 0 | Success. An empty listing is still success. | Continue. For `cfg database test`, also check `can_read_catalogue`. |
 | 64 | Usage: bad command, flag, value, conflicting flags, or unknown key for `cfg set`. | Fix the invocation. Run `tpl help <path>`. |
-| 65 | Template syntax error, render failure, `fail()`, malformed `--context`, a render limit, or a template path outside `.tpl/templates/`. | Fix the template, or its input. Run `tpl template check NAME`. |
+| 65 | Template syntax error, render failure, `fail()`, malformed `--context` or one with the wrong `schema_version`, a render limit, or a template path outside `.tpl/templates/`. | Fix the template, or its input. Run `tpl template check NAME`. |
 | 66 | A named thing does not exist: a table, view, routine, template, entry or key. | List what exists, then retry with a real name. |
 | 69 | The server is unreachable, or a connection step timed out. | Check host, port and network. Retrying is safe. |
 | 70 | A bug in tpl. | Report it with the command and `tpl version`. Don't work around it. |

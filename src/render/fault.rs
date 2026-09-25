@@ -98,10 +98,10 @@ pub(super) fn during_render(name: &str, reported: &minijinja::Error) -> Error {
 /// are literals and the call, evaluated again against the same context,
 /// finds nothing.
 ///
-/// `table("orders").name` is undefined either because there is no table
+/// `table_named("orders").name` is undefined either because there is no table
 /// `orders` or because a table has no member `name`; evaluating the call alone
 /// is what tells the two apart, with the very function the template called.
-/// An argument that is not a literal — `table(t.name)` — names a value only
+/// An argument that is not a literal — `table_named(t.name)` — names a value only
 /// the template's own scope holds, so no claim is made.
 pub(super) fn unresolved(
     engine: &minijinja::Environment<'_>,
@@ -110,9 +110,9 @@ pub(super) fn unresolved(
 ) -> Option<Unresolved> {
     let (function, rest) = expression.split_once('(')?;
     let kind = match function {
-        "table" => LookupKind::Table,
-        "view" => LookupKind::View,
-        "routine" => LookupKind::Routine,
+        "table_named" => LookupKind::Table,
+        "view_named" => LookupKind::View,
+        "routine_named" => LookupKind::Routine,
         "column" => LookupKind::Column,
         _ => return None,
     };
@@ -131,7 +131,7 @@ pub(super) fn unresolved(
 
     match (kind, arguments.as_slice()) {
         (LookupKind::Column, [table, name]) => {
-            let table_call = format!("table({})", quoted(table));
+            let table_call = format!("table_named({})", quoted(table));
             Some(if undefined(&table_call) {
                 Unresolved {
                     call: call.to_owned(),
@@ -728,7 +728,7 @@ fn undefined(reported: &minijinja::Error) -> Option<String> {
 
     // The engine's range can begin part-way into the expression — at
     // `.nosuch.x` of `database.nosuch.x`, or at `("orders").name` of
-    // `table("orders").name` — so it is extended back to where the expression
+    // `table_named("orders").name` — so it is extended back to where the expression
     // begins; one that still does not begin with a name is quoted not at all
     // rather than as a fragment.
     let named = expression
@@ -1124,7 +1124,10 @@ mod tests {
         // expression, and the quote lost its first name.
         for (source, expected) in [
             ("{{ database.nosuch.x }}", Some("database.nosuch.x")),
-            ("{{ table('absent').name }}", Some("table('absent').name")),
+            (
+                "{{ table_named('absent').name }}",
+                Some("table_named('absent').name"),
+            ),
             ("{{ \"x\".y.z }}", None),
         ] {
             let Error::RenderFailed { undefined, .. } = failed_with(source) else {
@@ -1142,9 +1145,9 @@ mod tests {
         let unresolved = |expression: &str| super::unresolved(&engine, &context, expression);
 
         assert_eq!(
-            unresolved("table(\"absent\").name"),
+            unresolved("table_named(\"absent\").name"),
             Some(Unresolved {
-                call: "table(\"absent\")".to_owned(),
+                call: "table_named(\"absent\")".to_owned(),
                 kind: LookupKind::Table,
                 name: "absent".to_owned(),
                 table: None,
@@ -1166,9 +1169,9 @@ mod tests {
             Some(LookupKind::Table)
         );
         // The table exists, so the member is what is absent.
-        assert_eq!(unresolved("table('consignment').nosuch"), None);
+        assert_eq!(unresolved("table_named('consignment').nosuch"), None);
         // An argument only the template's scope holds is not evaluated.
-        assert_eq!(unresolved("table(t.name).x"), None);
+        assert_eq!(unresolved("table_named(t.name).x"), None);
         assert_eq!(unresolved("database.nosuch"), None);
     }
 

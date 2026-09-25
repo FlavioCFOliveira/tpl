@@ -3,7 +3,7 @@ id: ADR-004
 title: The release profile and the panic path
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-24
 requirements: [FR-ERR-001, FR-ERR-008, FR-ERR-030, FR-ERR-031, FR-ERR-032, FR-ERR-033, FR-ERR-034, FR-GLOB-018, FR-RND-034, BR-ERR-001]
 supersedes: []
 superseded-by: null
@@ -87,10 +87,11 @@ and `FR-ERR-032` require is present in the only artefact a caller ever runs.
     profile to buy a wording that a hook already satisfies would be a trade made
     blind in both directions.
   - **It costs the comparability of every recorded figure.**
-    `NFR-PERF-012` makes a measurement meaningful only against one stated
-    target, and `BR-PERF-008` keeps a figure as evidence for a reader rather
-    than a verdict on a change. A profile change makes every existing figure
-    unreadable against every later one, so all four targets of `NFR-PERF-018`
+    A figure is comparable only with another taken from the same build, and
+    `BR-PERF-008` keeps a figure as evidence for a reader rather than a verdict
+    on a change. That comparability is this record's design ground;
+    `NFR-PERF-012` requires only the target and the server series. A profile
+    change makes every existing figure unreadable against every later one, so all four targets of `NFR-PERF-018`
     would have to be re-measured before a later number could be read against an
     earlier one — to obtain a behaviour already obtainable.
   - **It buys nothing observable.** `catch_unwind` and the hook produce the same

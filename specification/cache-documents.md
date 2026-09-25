@@ -1,7 +1,7 @@
 ---
 title: Cache Documents
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [cache-commands.md, context-document.md, output-formats.md, catalogue-coverage.md]
 ---
 
@@ -63,6 +63,42 @@ Out of scope: when the cache is consulted or written, which is
   binary no longer understands.
 
   *Rejected.* A single version, paired with a boolean `cached` field on reads.
+
+## The two records
+
+- **FR-CDOC-017**: The system SHALL read `.tpl/.cache/<entry>/meta.json` and
+  `.tpl/.cache/<entry>/database.json` only where the file is a regular file
+  no larger than a size bound. A record that is a symbolic link, is not a
+  regular file, or exceeds the bound SHALL be **unusable**: the system SHALL
+  NOT read through it or from it, and SHALL treat it as it treats a record
+  whose version is unknown under `FR-CDOC-004` — a miss under `FR-CACHE-033`
+  for a read, and not written by a clean given an object flag, per
+  `FR-CACHE-043`.
+
+  1. **A partial clean leaves it in place.** A clean given `--table`,
+     `--view` or `--routine` SHALL NOT write an unusable `meta.json` and
+     SHALL leave it as it found it.
+  2. **A full write replaces it.** A write of the record after a miss, or by
+     `tpl cache load`, SHALL replace it through the temporary file and the
+     rename of `FR-CACHE-030`, and SHALL NOT follow it.
+
+  The bound is an implementation bound, not a caller-facing limit: no flag
+  and no key sets it, and its value is recorded in the technical
+  specification. It SHALL be large enough that no record `tpl` writes reaches
+  it.
+
+  *Threat closed.* Read through a link, a record served data from outside the
+  project; a FIFO in a record's place hung the invocation; a link to
+  `/dev/zero` exhausted memory. Each breaks the first sentence of
+  `FR-SEC-026`. The read now applies to the two records the guard
+  `FR-CACHE-033` applies to an object file.
+
+  *Why a miss and not a refusal.* `FR-CACHE-044` refuses a link on the path
+  to the cache, which redirects every file beneath it. A record in its own
+  place redirects nothing else, and a miss discards it and rewrites it, as
+  `FR-CACHE-033` does for a linked object file.
+
+  *Added within the fifty-eighth edition,* for rmp `#302` and `#305`.
 
 ## Per-collection completeness
 
@@ -128,6 +164,10 @@ Out of scope: when the cache is consulted or written, which is
 
 - **FR-CDOC-013**: `loaded_at` SHALL appear in `meta.json` and in the output of
   `tpl cache status`, and nowhere else.
+
+  *Note added in the fifty-eighth edition.* A clean given an object flag
+  leaves `loaded_at` unchanged, per `FR-CACHE-043`. This requirement is
+  unchanged.
 
 - **BR-CDOC-003**: A load time in a read would make two identical invocations
   against an unchanged project produce different bytes, which `NFR-DET-001`

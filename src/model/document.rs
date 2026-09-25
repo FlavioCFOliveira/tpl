@@ -65,7 +65,7 @@ use serde_json::error::Category;
 
 use crate::error::{ContextFault, Error, Position};
 use crate::model::database::Database;
-use crate::output::{Document, Source};
+use crate::output::{Document, SCHEMA_VERSION, Source};
 
 pub(crate) use shape::{ContextData, DatabaseDocument};
 
@@ -136,13 +136,50 @@ pub(crate) fn read<'a>(bytes: &'a str, path: &Path) -> Result<Database<'a>, Erro
         default_entry: false,
     };
 
+    // FR-RND-042: a document of another version may carry the same keys with
+    // other meanings, so it is refused whole. It is refused with that cause
+    // even where its `data` does not decode under this binary's contract:
+    // the version is what explains the mismatch.
+    let other_version = |declared: u32| Error::ContextDocumentVersion {
+        path: path.into(),
+        found: declared,
+    };
+
     // FR-SCH-036: the whole envelope, and not a bare `data` object in its
     // place. A document that omits `schema_version` is refused here, by the
     // three fields of `Document` having no defaults.
-    let document: Document<ContextData<'a>> =
-        serde_json::from_str(bytes).map_err(|reported| malformed(fault(bytes, &reported)))?;
+    let document: Document<ContextData<'a>> = match serde_json::from_str(bytes) {
+        Ok(document) => document,
+        Err(reported) => {
+            // PERF: the version is decoded on its own only once the whole
+            // document has failed, so a valid document is decoded once.
+            if let Some(declared) = declared_version(bytes)
+                && declared != SCHEMA_VERSION
+            {
+                return Err(other_version(declared));
+            }
+            return Err(malformed(fault(bytes, &reported)));
+        }
+    };
+
+    if document.schema_version() != SCHEMA_VERSION {
+        return Err(other_version(document.schema_version()));
+    }
 
     read::database(document.into_data().database).map_err(malformed)
+}
+
+/// The `schema_version` a document declares, where its top level is an object
+/// carrying one as an integer this binary can hold, whatever else it carries.
+fn declared_version(bytes: &str) -> Option<u32> {
+    #[derive(serde::Deserialize)]
+    struct Versioned {
+        schema_version: u32,
+    }
+
+    serde_json::from_str::<Versioned>(bytes)
+        .ok()
+        .map(|versioned| versioned.schema_version)
 }
 
 /// Classifies what the decoder reported, per the `65` row of `FR-ERR-034`.
