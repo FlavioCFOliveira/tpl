@@ -47,8 +47,10 @@ thing.
 **`cargo-zigbuild` for the two `musl` targets; native builds for the two Darwin
 targets.** This reproduces the path `BENCHMARKS.md` records for the measured
 artefacts — `cargo-zigbuild` 0.23.4 with zig 0.16.0 — so that a later
-measurement can be read against the recorded one, which is the attribution
-`NFR-PERF-012` requires of a recorded figure.
+measurement can be read against the recorded one: a figure is comparable only
+with another taken under the same build path. That is this record's design
+ground; `NFR-PERF-012` requires a figure to name its target, not its build
+path.
 `cargo-zigbuild` is described by its publisher as compiling "Cargo project with
 zig as linker" (crates.io, verified 2026-09-11).
 
@@ -57,8 +59,8 @@ zig as linker" (crates.io, verified 2026-09-11).
 - **`cross`, or a container-based build**, for the `musl` targets. Either may be
   right later, and neither produced the recorded figures. Adopting one now would
   make the first post-decision measurement unreadable against the recorded
-  figures it would stand beside, which is the cost `NFR-PERF-012` is written to
-  prevent. This is a rejection on evidence, not on the merits of the tools, and
+  figures it would stand beside, which is the cost this record exists to
+  avoid. This is a rejection on evidence, not on the merits of the tools, and
   it expires the moment a re-measurement of all four targets is done under a new
   path.
 

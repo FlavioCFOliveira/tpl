@@ -66,6 +66,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::at::{self, Unread};
 use crate::diagnostics::suggest::{self, Population};
 use crate::error::Error;
 
@@ -347,6 +348,15 @@ impl Root {
         let metadata = self.unlinked(&root, relative, named, suggesting)?;
 
         if !metadata.is_file() {
+            // FR-TMPL-033 item 2: an entry that exists and is a FIFO, a socket
+            // or a device is still no template, and the line says what it is.
+            if let Some(kind) = special(&metadata.file_type()) {
+                return Err(Error::TemplateNotRegular {
+                    name: named.to_owned(),
+                    file: relative.to_owned(),
+                    kind,
+                });
+            }
             return Err(self.missing(named, suggesting));
         }
 
@@ -408,6 +418,41 @@ impl Root {
         // loop's own totality, and is a degradation rather than a panic on the
         // same terms `Template::displayed` states.
         reached.ok_or_else(|| self.missing(named, suggesting))
+    }
+
+    /// The text of the template at `located`, a path [`Root::locate`] or
+    /// [`Root::resolve`] answered (`FR-TMPL-033`, `FR-SEC-027`).
+    ///
+    /// The file is opened relative to the canonical root, one component at a
+    /// time and following none, without waiting for a writer, and its type is
+    /// read from the descriptor it is then read through: a FIFO swapped in
+    /// after the resolution neither blocks the read nor is read.
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`at::read_checked`] returns, and an [`Unread::Io`] where
+    /// the root or a folder on the way cannot be reached.
+    pub(crate) fn read(&self, located: &Path) -> Result<String, Unread> {
+        let root = std::fs::canonicalize(&self.path).map_err(Unread::Io)?;
+        let (folder, name) =
+            at::parent(&root, located).map_err(|fault| Unread::Io(fault.into_io()))?;
+
+        at::read_checked(&folder, name, None)
+    }
+
+    /// What the entry `name`, written exactly as an include writes it, is
+    /// where it exists under the root and is a FIFO, a socket or a device;
+    /// [`None`] otherwise (`FR-TMPL-033`, item 3).
+    ///
+    /// It is examined without following any component and without opening
+    /// it.
+    pub(crate) fn special_entry(&self, name: &str) -> Option<&'static str> {
+        let root = std::fs::canonicalize(&self.path).ok()?;
+        let found = at::examine_path(&root, &root.join(name))?;
+        let kind = at::kind(&found);
+
+        (kind.is_fifo() || kind.is_socket() || kind.is_char_device() || kind.is_block_device())
+            .then(|| at::kind_name(kind))
     }
 
     /// The canonical template root of step 4 (`FR-TMPL-025`).
@@ -491,6 +536,24 @@ impl Root {
             name: named.to_owned(),
             root: self.path.clone(),
         }
+    }
+}
+
+/// The words `FR-TMPL-033` names a FIFO, a socket or a device with, or
+/// [`None`] for any other kind of entry.
+fn special(kind: &std::fs::FileType) -> Option<&'static str> {
+    use std::os::unix::fs::FileTypeExt as _;
+
+    if kind.is_fifo() {
+        Some("a FIFO")
+    } else if kind.is_socket() {
+        Some("a socket")
+    } else if kind.is_char_device() {
+        Some("a character device")
+    } else if kind.is_block_device() {
+        Some("a block device")
+    } else {
+        None
     }
 }
 

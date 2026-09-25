@@ -1,13 +1,12 @@
 # The five-command validation pipeline on the four targets of NFR-PERF-018
 # (ADR-012), each built by its ADR-008 path: cargo-zigbuild for musl, native
 # for Darwin. No fixture, benchmark or performance step runs here.
+# Started by hand only, against a chosen ref:
+#   gh workflow run ci.yml --ref <branch-or-tag>
 name: CI
 
 on:
-  # Branches only: a tag push is validated by release.yml.
-  push:
-    branches: ["**"]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -66,9 +66,10 @@ unverified. It is repeated here as a limit on what may be claimed of the Linux
 artefacts, not as a second statement of the fact.
 
 **The form of the release artefact is
-[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md)'s** — the archive per
-target, its name and contents, the checksum file, and the absence of a
-signature. This document does not restate it.
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md)'s** (Decision 4) —
+the archive per target, the one platform-independent skill archive, their names
+and contents, the `SHA256SUMS` file covering all five archives, and the absence
+of a signature. This document does not restate them.
 
 ## The mandatory validation pipeline
 
@@ -108,7 +109,9 @@ tests the pipeline ignores run on demand with
 `NFR-PERF-018` makes none of the four second class, so passing on the
 development host is not passing. The `ci.yml` workflow that
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes runs the
-five commands on all four targets; see
+five commands on all four targets, but only when someone dispatches it; between
+releases, all-target coverage depends on that dispatch, and only `release.yml`
+enforces it, at release time (that record's *Consequences*). See
 [Continuous integration and release](#continuous-integration-and-release). On
 every target, command 4 leaves out the measurement tests, which carry the
 `ignore` attribute that [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 10, prescribes.
@@ -222,11 +225,12 @@ not a pin, not a requirement, and re-taken rather than assumed.
 | Components beyond the default set | `llvm-tools` |
 
 **All four targets being installed lets the pipeline run locally against each,
-and nothing else.** Covering all four targets is no longer carried by a person:
-the `ci.yml` workflow that
+and nothing else.** The `ci.yml` workflow that
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes runs the
-pipeline on each, by the build path of
-[`ADR-008`](../adr/adr-008-packaging-and-build-path.md).
+pipeline on each target, by the build path of
+[`ADR-008`](../adr/adr-008-packaging-and-build-path.md), when someone dispatches
+it. Between releases, all-target coverage therefore still depends on a person;
+only `release.yml` enforces it, at release time (`ADR-012`, *Consequences*).
 
 **The `1.87.0` toolchain is installed and is below the floor.** It is not the
 active one, no path in this document selects it, and the floor
@@ -363,9 +367,10 @@ fixture must contain.
 Under [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), `release.yml`
 publishes nothing unless the tag passes the provenance gates and the tagged
 commit passes the validation pipeline on all four targets, which enforces the
-first three rows. The supported-series table is
-re-verified by hand before the `v*` tag is pushed, as that record requires,
-because the push is what publishes. The engine pin is checked by hand when the
+first three rows. The supported-series table is re-verified by hand before
+the `v*` tag is created, as that record requires, so that any change it forces
+is in the tagged commit; publishing starts only when `release.yml` is
+dispatched against the tag. The engine pin is checked by hand when the
 pin moves; no workflow checks it.
 
 ## The four version numbers: where a bump is enacted
@@ -433,7 +438,7 @@ picture.
 | Two streams, one contract | stdout alone is contract; stderr is neither deterministic nor contract, and cannot be, because the timings `FR-GLOB-017` requires differ on every run. The extent of the contract is [quality-attributes.md](quality-attributes.md#determinism)'s | `NFR-DET-001`, `FR-GLOB-017`, `DIV-039` |
 | Four levels, selected by two flags | `-v` raises and saturates, `-q` lowers to errors only, and neither alters stdout | `FR-GLOB-014`, `FR-GLOB-015`, `FR-GLOB-016` |
 | What each level reports | Phases and their durations, and one line per catalogue query, at `INFO`; cache hits and misses at `DEBUG`; internal detail permitted at `TRACE` | `FR-GLOB-017` |
-| One line is structurally load-bearing | The per-query line carries a fixed leading token, which is what makes the query count observable from outside the process and `NFR-PERF-001` and `NFR-PERF-002` checkable at all | `NFR-PERF-008`, `NFR-PERF-007` |
+| One line is structurally load-bearing | The per-query line carries a fixed leading token, which is what makes the query count observable from outside the process and `NFR-PERF-001` and `NFR-PERF-002` checkable at all. `NFR-PERF-008` is verified by counting those lines at `-v` against the server's statement record for the same invocation (sixty-second edition), which needs the fixture | `NFR-PERF-008`, `NFR-PERF-007` |
 | Six categories reach no stream, at any level | Denied a home rather than denied by a rule: the sink is a closed set of typed emission functions, and no subscriber is installed for a dependency's events to reach | `FR-GLOB-018`, `FR-SEC-005` |
 | No colour, no terminal detection | Neither stream carries an ANSI byte, on any path | `NFR-DET-003`, `NFR-DET-004` |
 
@@ -453,7 +458,7 @@ change and no test reads it
 
 `FR-PROJ-017` fixes exactly five artefacts and `FR-PROJ-013` the one write
 outside `.tpl` — the destination directory and its missing parents. The five
-are enumerated in [data-model.md](data-model.md#tpl-on-disk-and-its-four-writers)
+are enumerated in [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)
 and in the requirement; what belongs here is that **two of the five are shipped
 content** and therefore travel with the binary.
 
@@ -538,14 +543,17 @@ the root documents, and what that is remains that register's to state.
 ## Continuous integration and release
 
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes two GitHub
-Actions workflows, both limited to correctness validations. Their triggers,
+Actions workflows, both limited to correctness validations and both started by
+`workflow_dispatch` only: no push, pull request or tag starts either. A release
+is `main` pushed, then the annotated tag, then `release.yml` dispatched against
+that tag; `release.yml` refuses a ref that is not a tag. The dispatch commands,
 target matrix, release gate and artefacts are that record's and are not
 restated here; the build path each uses per target is
 [`ADR-008`](../adr/adr-008-packaging-and-build-path.md)'s.
 
 | Workflow | What it enforces in this document |
 |---|---|
-| `ci.yml` | The [validation pipeline](#the-mandatory-validation-pipeline), on all four targets of `NFR-PERF-018`, on every push and pull request |
+| `ci.yml` | The [validation pipeline](#the-mandatory-validation-pipeline), on all four targets of `NFR-PERF-018`, on demand against a chosen ref |
 | `release.yml` | The first three [release gates](#the-release-gates) — the provenance gates first, then the validation on all four targets — before it publishes. A pre-release tag publishes a GitHub pre-release |
 
 **What each workflow installs is
@@ -556,7 +564,10 @@ development host's.** The toolchain is the
 against a hard-coded SHA-256 before extraction; a mismatch fails the job. The
 Darwin archives are created with the `tar` flags that record fixes, so that they
 carry no extended attributes. That the runners' `tar` behaves as the development
-host's did is **unverified** in that record.
+host's did is **unverified** in that record. The skill archive is built once, in
+the publish job, on a Linux runner with GNU `tar`, so the Darwin flags do not
+apply to it; the runner was decided by the user for rmp `#303`, as relayed by
+the session coordinator on 2026-09-24.
 
 **`install.sh`, at the repository root, is the installer
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes.** It
@@ -565,6 +576,16 @@ checking the archive against `SHA256SUMS`. Its one-line invocation, its target
 detection, its install directory and its privilege rule are that record's.
 `TPL_INSTALL_DIR` is a variable of the script only: `tpl` never reads it. What
 the one-line invocation and the hash pins trust is that record's *Consequences*.
+
+**`install-skill.sh`, at the repository root, is the skill installer
+[`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes**
+(Decision 11). It installs or updates the Claude Code skill from the latest
+release's skill archive, after checking it against `SHA256SUMS` and before it
+touches anything. Its one-line invocation, its destination, its replacement and
+symbolic-link rules, and its refusal of `sudo` are that record's.
+`TPL_SKILL_DIR` is a variable of the script only: `tpl` never reads it. The
+script shares `install.sh`'s trust path, and works only from the first release
+that carries the skill archive; both are that record's *Consequences*.
 
 **Neither workflow runs the fixture or the
 [measurement harness](#the-measurement-harness).** A green run therefore does
@@ -586,5 +607,5 @@ lists them. No figure is produced or consumed, consistent with `BR-PERF-008`.
 | The six untrusted inputs, credentials, and transport | [security.md](security.md) |
 | The fixture's contents, its deliberate omissions, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
 | The record of every difference observed between the series — fourteen | `FR-SRV-038` |
-| The release artefact: the archive per target, its name and contents, the checksum file, and the absence of a signature; and `install.sh` | [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
+| The release artefact: the archive per target, the skill archive, their names and contents, the checksum file, and the absence of a signature; `install.sh` and `install-skill.sh` | [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | Why a settled decision went the way it did | [`docs/adr/`](../adr/README.md), or [open-decisions.md](open-decisions.md) where no record holds it |

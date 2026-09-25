@@ -153,10 +153,45 @@ verify_schema() {
     fi
 }
 
+# Both benchmark schemas are created from nothing by the load, and a dropped
+# schema takes its grants with it, so the reader is granted on every load — the
+# mechanism `seed-datasets.sh` uses for its two schemas, and the one grant
+# `setup.sql` gives it on `freight`: SELECT and EXECUTE, and nothing else.
+#
+# Without it, INFORMATION_SCHEMA shows the reader nothing of either schema, and
+# a reader-backed entry presents an empty catalogue at exit 0 — the
+# FR-PRIV-001 hazard, silently, rather than an error.
+grant_reader() {
+    local server="$1" schema="$2"
+    tpl_mariadb_sql "$server" -e \
+        "GRANT SELECT, EXECUTE ON \`$schema\`.* TO '$TPL_MARIADB_READER_USER'@'%';"
+    log "  grant   SELECT, EXECUTE on $schema to $TPL_MARIADB_READER_USER"
+}
+
 load_one() {
     local server="$1"
     log "  load    $SQL_FILE into $(tpl_mariadb_field "$server" 4)"
     tpl_mariadb_sql "$server" < "$SQL_FILE"
+    grant_reader "$server" "$TPL_MARIADB_BENCH_LARGE_SCHEMA"
+    grant_reader "$server" "$TPL_MARIADB_BENCH_SMALL_SCHEMA"
+}
+
+# What the unprivileged reader sees of one schema, asked as that reader, against
+# the figure the workload states: INFORMATION_SCHEMA shows a user only the
+# objects it holds some privilege on, so a loaded and ungranted schema passes
+# every root count above and is still empty to the reader.
+verify_reader() {
+    local server="$1" schema="$2" expected="$3"
+    local seen
+    seen="$(tpl_mariadb_sql_as "$server" \
+        "$TPL_MARIADB_READER_USER" "$TPL_MARIADB_READER_PASSWORD" -N -B -e \
+        "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '$schema'")"
+    if [ "$seen" = "$expected" ]; then
+        log "  ok      $schema: $TPL_MARIADB_READER_USER sees $seen of $expected objects"
+    else
+        log "  MISMATCH $schema: $TPL_MARIADB_READER_USER sees $seen objects, expected $expected"
+        failures=$((failures + 1))
+    fi
 }
 
 drop_one() {
@@ -189,6 +224,9 @@ verify_one() {
         "views=0" \
         "routines=0" \
         "commented_tables=1"
+    verify_reader "$server" "$TPL_MARIADB_BENCH_LARGE_SCHEMA" \
+        "$((TPL_MARIADB_WL001_TABLES + TPL_MARIADB_WL001_VIEWS))"
+    verify_reader "$server" "$TPL_MARIADB_BENCH_SMALL_SCHEMA" "$TPL_MARIADB_WL003_TABLES"
 }
 
 # The inventory is read on file descriptor 9, not on stdin, on the same terms

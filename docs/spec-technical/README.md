@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -21,36 +21,75 @@ difference is a defect to be reported.
 3. [open-decisions.md](open-decisions.md), for what is settled, what is open,
    and who owns each open point.
 
-A document listed below as *waiting* does not exist yet, and it waits on a
-named entry of `open-decisions.md`, or on a residual inside an entry that is
-otherwise settled. It waits deliberately: writing it around an unsettled point
-would produce a technical statement with no trace, which this folder does not
-admit. A document listed as *unblocked* has no entry against it and has simply
-not been written.
+Every document listed below is **written**. A document not yet written would be
+listed as *waiting*, where it waits on a named entry of `open-decisions.md`, or
+as *unblocked*, where no entry stands against it; none is either today.
 
-As of 2026-09-22 one entry of `open-decisions.md` is open — `OD-33`, whether
+As of 2026-09-25 one entry of `open-decisions.md` is open — `OD-33`, whether
 `UC-013` joins the acceptance skeleton — and **no document waits**: what it
 blocks is a statement in a written document, not a document. Every other entry
-is settled. One of those is settled and **interim** — `OD-30`, which records an
-arrangement each later sprint removes one arm of — and it blocks nothing; one
-arm remains.
+is settled. `OD-30`, the one entry that was settled and **interim**, was
+discharged on 2026-09-22, when the last leaf of the tree was implemented.
 
-**Three documents were reconciled on 2026-09-24 with `ADR-012`**, which
-prescribes continuous integration and fixes the release artefact, and with
-`ADR-008`, now reduced to the build path. `operations.md` replaces its
-no-pipeline section with
-[Continuous integration and release](operations.md#continuous-integration-and-release);
-`open-decisions.md` amends `OD-23`; `technology-stack.md` cites the new record.
-After the record's amendment the same day, `operations.md` also cites it for the
-CI toolchain, the pinned and hash-checked tools, the Darwin `tar` flags, and
-`install.sh`; and, for rmp `#293`, for the four provenance gates `release.yml`
-enforces, which `operations.md` adds to
-[The release gates](operations.md#the-release-gates), with the pre-release path;
-`open-decisions.md` names Semantic Versioning 2.0.0 in `OD-03`, a wording
-precision that changes no decision. For rmp `#294`, `OD-03` and `data-model.md`
-set the binary version to `0.0.1`, the first release the user chose. For rmp
-`#267`, `operations.md` cites `ADR-012` Decision 10: measurement tests are
-ignored by the pipeline and run on demand with `--ignored`.
+**The folder was audited on 2026-09-25 against the sixty-fourth edition of
+`/specification` and the code at `c360c80`**, for rmp `#308`. Every internal
+link and anchor resolves. Corrected:
+
+- the status column of [The documents](#the-documents), which listed seven
+  written documents as unwritten, and the count of auxiliary command groups,
+  four here against five in `overview.md` and `FR-CLI-010`;
+- `OD-30`, discharged on 2026-09-22, and the four documents that still cited
+  its arrangement as standing;
+- the reading of `.tpl/.cfg` in `architecture.md`, `interfaces.md` and
+  `security.md`, which still put the trust checks before the open and passed
+  an absent file without the folder check of `FR-PROJ-028`;
+- the count of the suite in `verification.md`, re-read at `c360c80`;
+- the module map in `architecture.md` and `OD-05`, which lacked `at.rs`, and
+  the `rustix` calls in `technology-stack.md`, which lacked `open`, `fstat` and
+  `statat`;
+- in `traceability.md`, the count of writers inside `.tpl`, and what the
+  mapping covers and how far behind it is;
+- the entry of `DIV-005` in `data-model.md`, discharged since it was cited. `verification.md`'s passage on
+what `NFR-PERF-007` reaches was already settled, so a report that it still
+raised the question was stale.
+
+**Changes of 2026-09-24**, by task:
+
+- **`#292`, `#293`, `#294`, `#267`, `#299`, `#303` — distribution.**
+  `operations.md` replaces its no-pipeline section with
+  [Continuous integration and release](operations.md#continuous-integration-and-release)
+  and cites [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) for the
+  two workflows started by `workflow_dispatch` only, the CI toolchain, the
+  pinned and hash-checked tools, the Darwin `tar` flags, the provenance gates
+  and the pre-release path, the ignored measurement tests, the skill archive,
+  `install.sh` and `install-skill.sh`; it cites `ADR-008` for the build path
+  alone. `open-decisions.md` amends `OD-23`, and `OD-03` names Semantic
+  Versioning 2.0.0 and sets the binary version to `0.0.1`, as does
+  `data-model.md`. `technology-stack.md` cites `ADR-012`.
+- **`#288`, `#302`, `#305` — the cache and a link.** `data-model.md` records the
+  1 MiB bound `FR-CDOC-017` leaves to this folder, the `78` refusal of a link
+  on the path to the cache, and a write row scoped to object files;
+  `security.md` adds both to `cache/`'s disposition of a symbolic link and
+  completes its recorded gap on the cache. Against the fifty-eighth edition's
+  amendment of `FR-PROJ-023`, `data-model.md`, `traceability.md` and this file
+  count five writers inside `.tpl`.
+- **`#257` — the library entry point.** `interfaces.md` gains
+  [The library entry points](interfaces.md#the-library-entry-points), and
+  `open-decisions.md` gains `OD-34`, which holds the rejected options of
+  `run_from`.
+- **`#230` — what the instruments reach.** `verification.md` records as settled
+  by the sixty-second edition that `NFR-PERF-007` reaches exactly the six
+  requirements of form, and that `NFR-PERF-008` is verified against the
+  server's statement record; `quality-attributes.md`, `operations.md` and
+  `traceability.md` state that verification, and `verification.md`'s register
+  names the test that makes it.
+- **`#306`, `#307` — directory-relative file operations.** `open-decisions.md`
+  amends `OD-24` with `rustix`'s `fs` feature, reverses `OD-10`'s rejection of
+  `O_NOFOLLOW`, and records the correction to `CLAUDE.md`, applied the same
+  day; `OD-15` amends its last step. `technology-stack.md` lists the four `fs`
+  calls; `data-model.md` describes the cache's path operations and the
+  `.tpl/.cfg` open as implemented in `src/at.rs`, with the one listing
+  residual and the swap evidence; `security.md` states how a template is read.
 
 **The whole folder was swept on 2026-09-23 against the forty-second edition of
 `/specification`, `ADR-011`, and the code of sprint 20** in the working tree
@@ -184,15 +223,15 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: thirty-two settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
-| `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | unblocked |
-| `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | unblocked. Nothing bounds it: `OD-14`'s owed observation was made on 2026-09-21 and the entry records the answer |
-| `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | unblocked |
-| `interfaces.md` | The contracts crossing a component boundary, and how each external contract is realised | unblocked |
-| `data-model.md` | The model in memory and everything persisted: `.tpl/.cfg`, `.tpl/.cache/`, `meta.json`, versions, migration | unblocked |
-| `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | unblocked |
+| `open-decisions.md` | The decision register: thirty-three settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
+| `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | written |
+| `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | written |
+| `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | written |
+| `interfaces.md` | The contracts crossing a component boundary, and how each external contract is realised | written |
+| `data-model.md` | The model in memory and everything persisted: `.tpl/.cfg`, `.tpl/.cache/`, `meta.json`, versions, migration | written |
+| `security.md` | Trust boundaries as implemented, secrets, transport, containment, the structural prohibitions | written |
 | `operations.md` | Build, target matrix, packaging, release gates, observability | written |
-| `quality-attributes.md` | Performance and reliability targets, and how each is measured | unblocked |
+| `quality-attributes.md` | Performance and reliability targets, and how each is measured | written |
 | `verification.md` | Test strategy, harness, fixture, the mandated-test register, the test seams | written |
 | `decisions.md` | Retired. The register and its index live at [`docs/adr/`](../adr/README.md) | n/a |
 
@@ -203,7 +242,7 @@ own, and it would then hold those alone.
 
 ### `overview.md`
 
-**Answers.** What `tpl` is as a built artefact: three arms and four auxiliary
+**Answers.** What `tpl` is as a built artefact: three arms and five auxiliary
 command groups; read-only over the database; one render per invocation; no
 file-writing surface. The primary consumer and its three channels. The five
 catalogue features excluded by decision. The three limits the system states
@@ -270,7 +309,8 @@ Context access from a filter or a test. The configuration reader and writer, the
 one predicate that decides an entry's coherence for both of them, and the two
 codes its two callers produce. The `password_command` child, its process
 group, and why its parent polls. The phase clock's four obligations. The three
-contracts behind the render bounds. The pattern matcher and the
+contracts behind the render bounds. The library entry points, and what an
+in-process caller of `run_from` must know. The pattern matcher and the
 qualified-routine-name parser. The two directions over the document: which
 emitted types are the model's own and which four are not, the two projections,
 the one flattening, what the read-back checks, and the four things it does not. The five
@@ -290,7 +330,7 @@ ordered classification. The `database` object. The four treatments of a
 cross-series difference. `.tpl/.cfg`: format, key space, mode, rewrite
 discipline. `.tpl/.cache/`: layout, keying, encoding, filenames, atomic write.
 `meta.json` and its two independent versions. Migration. What a cached document
-does not promise. The four writers inside `.tpl`.
+does not promise. The five writers inside `.tpl`.
 
 **Must not contain.** The JSON document contract, which
 `specification/context-document.md` owns and this file cites.

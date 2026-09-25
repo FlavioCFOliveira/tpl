@@ -132,6 +132,29 @@ impl Meta {
             .any(|recorded| recorded.name == collection.name() && recorded.whole)
     }
 
+    /// The record `self` becomes when a clean removes one object of
+    /// `collection`, or [`None`] where the record already says that collection
+    /// is not whole (`FR-CACHE-043`).
+    ///
+    /// Exactly one thing changes: the collection's flag. `loaded_at`, both
+    /// versions and every other collection are carried over as they are,
+    /// because no load happened and `FR-CACHE-025` reports `loaded_at` as the
+    /// time the cache was loaded.
+    pub(super) fn without_whole(&self, collection: Collection) -> Option<Self> {
+        if !self.whole(collection) {
+            return None;
+        }
+
+        let mut record = self.clone();
+        for recorded in &mut record.collections {
+            if recorded.name == collection.name() {
+                recorded.whole = false;
+            }
+        }
+
+        Some(record)
+    }
+
     /// The record `self` becomes when a named read refreshes one object.
     ///
     /// The completeness flags are carried over unchanged and only the load
@@ -292,6 +315,23 @@ mod tests {
         for collection in Collection::ALL {
             assert!(!meta.whole(collection), "{}", collection.name());
         }
+    }
+
+    #[test]
+    fn fr_cache_043_a_partial_clean_changes_the_one_flag_and_keeps_the_load_time() {
+        // FR-CACHE-043: exactly one thing changes, and a collection already
+        // recorded as not whole has nothing to change.
+        let mut whole = Meta::new([true, false, true]);
+        whole.loaded_at = "2026-09-01T00:00:00Z".to_owned();
+
+        let cleaned = whole
+            .without_whole(Collection::Tables)
+            .expect("the tables were whole");
+        let mut expected = whole.clone();
+        expected.collections[0].whole = false;
+
+        assert_eq!(cleaned, expected);
+        assert_eq!(whole.without_whole(Collection::Views), None);
     }
 
     #[test]

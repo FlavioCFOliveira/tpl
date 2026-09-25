@@ -3,7 +3,7 @@ id: ADR-012
 title: Continuous integration and release distribution
 status: accepted
 decided: 2026-09-24
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 requirements: [NFR-PERF-018, NFR-PERF-005, NFR-PERF-007, FR-SRV-019, BR-PERF-008, FR-RND-039, FR-CONF-028, FR-CONF-031]
 supersedes: []
 superseded-by: null
@@ -17,7 +17,8 @@ Accepted, 2026-09-24. Decided by the user for rmp `#292`, as relayed by the
 session coordinator, including the release gate, the version pins and the
 archive contents. The provenance gates of Decision point 3 were decided by the
 user for rmp `#293`, on the same day. Decision point 10 was decided by the user
-for rmp `#267`, on the same day.
+for rmp `#267`, the on-demand triggers for rmp `#299`, and the skill asset and
+its installer (Decision points 4 and 11) for rmp `#303`, on the same day.
 
 This record takes over two parts of `ADR-008`: its refusal to prescribe a
 pipeline, with the rejection that argued it, and its open question on the form
@@ -60,9 +61,12 @@ states which assertions need the fixture.
 
 **`tpl` is distributed through GitHub Actions. Every GitHub Release publishes
 all the artefacts continuous integration produces.** There are two workflows,
-and both run correctness validations only.
+and both run correctness validations only. **Both are triggered by
+`workflow_dispatch` only**: no `push`, `pull_request` or tag trigger exists, and
+nothing runs on GitHub in reaction to a push or a tag.
 
-1. **`ci.yml` runs on every push and every pull request.** It runs the five
+1. **`ci.yml` runs on demand, against a chosen ref**, for example before a
+   release is cut: `gh workflow run ci.yml --ref release/X.Y.Z`. It runs the five
    commands of the root coordination document, in order:
    `cargo fmt --all -- --check`,
    `cargo clippy --all-targets --all-features -- -D warnings`,
@@ -75,10 +79,15 @@ and both run correctness validations only.
 
 3. **A release is published only from a tag of a commit on `main`, pushed to
    GitHub, and only if that commit passes the five-command validation.**
-   `release.yml` runs when a tag matching `v*` is pushed. The tag is produced by
-   the `gitflow` procedure, over the version bump, changelog and release notes
-   the `release-manager` procedure writes; neither procedure is restated here.
-   Before any validation or publishing, the workflow enforces four gates:
+   The tag is produced by the `gitflow` procedure, over the version bump,
+   changelog and release notes the `release-manager` procedure writes; neither
+   procedure is restated here. Under `gitflow`, `main` is pushed and then the
+   annotated tag, and the release is then started with
+   `gh workflow run release.yml --ref vX.Y.Z`. The run's `github.ref`,
+   `github.ref_name` and `GITHUB_SHA` are therefore the tag and its commit
+   (Sources). The gate job refuses a ref that is not a tag: `github.ref_type`
+   must be `tag`. Before any validation or publishing, the workflow enforces
+   four gates:
    1. the tagged commit is an ancestor of `origin/main`;
    2. the tag is annotated;
    3. the tag is `v` followed by a valid Semantic Versioning 2.0.0 version,
@@ -100,11 +109,16 @@ and both run correctness validations only.
    for the version number itself is `OD-03`'s, in
    `docs/spec-technical/open-decisions.md`, and is not restated here.
 
-4. **The release carries one archive per target and one `SHA256SUMS` file.**
+4. **The release carries one archive per target, one skill archive and one
+   `SHA256SUMS` file.**
    Each archive is named `tpl-<tag>-<triple>.tar.gz`, for example
    `tpl-v1.2.0-aarch64-apple-darwin.tar.gz`, and contains the `tpl` binary,
-   `README.md`, `LICENSE` and `CHANGELOG.md`. `SHA256SUMS` covers the four
-   archives. **No artefact is signed.** Signing is not done, not left open.
+   `README.md`, `LICENSE` and `CHANGELOG.md`. The skill archive,
+   `tpl-skill-<tag>.tar.gz`, contains the `skill/` tree at the tagged commit.
+   It is platform-independent and is built once, in the publish job, so the
+   skill's version is the version of the binary it describes. `SHA256SUMS`
+   covers all five archives. **No artefact is signed.** Signing is not done,
+   not left open.
    The two Darwin archives are created with
    `tar --no-mac-metadata --no-xattrs`, so they carry no extended attributes
    (Sources).
@@ -146,8 +160,9 @@ and both run correctness validations only.
      installed `tpl --version`; if they match, it says so and exits `0`
      without downloading anything;
    - otherwise downloads that release's archive for the target and its
-     `SHA256SUMS`, verifies the archive, and installs `tpl` into `/usr/local/bin` on Linux and macOS, using
-     `sudo` only when that directory is not writable. It creates the
+     `SHA256SUMS`, verifies the archive, and installs `tpl` into
+     `/usr/local/bin` on Linux and macOS, using `sudo` only when that directory
+     is not writable. It creates the
      directory when it does not exist, again with `sudo` only when needed.
      `TPL_INSTALL_DIR` overrides the directory. It is a variable of the script,
      not of `tpl`, which never reads it.
@@ -158,6 +173,21 @@ and both run correctness validations only.
     measurement test. It carries `#[ignore = "measurement: <reason>"]`, so
     `cargo test` never runs it, and it runs on demand with
     `cargo test --all-features -- --ignored`, outside both workflows.
+
+11. **`install-skill.sh`, at the repository root, installs and updates the
+    Claude Code skill.** It is POSIX `sh`, and runs as
+    `curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh`.
+    It resolves the latest GitHub Release as `install.sh` does, downloads
+    `tpl-skill-<tag>.tar.gz` and `SHA256SUMS`, and verifies the archive before
+    it touches anything. The destination is
+    `${TPL_SKILL_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/tpl}`, the
+    personal skills location, which loads in every project on the machine
+    (Sources). An existing directory or symbolic link at the destination is
+    replaced; for a link, only the link is removed, never its target. Any other
+    kind of entry, such as a regular file, stops the install and nothing is
+    deleted. The script never uses `sudo`, because the path belongs to the
+    user. `TPL_SKILL_DIR` is a
+    variable of the script, not of `tpl`.
 
 ## Alternatives rejected
 
@@ -188,12 +218,30 @@ and both run correctness validations only.
 - **Exempting pre-releases from gate 4.** Rejected: a gate does not vary with
   the kind of tag.
 
+- **GitHub's source tarball as the skill's release asset.** Rejected:
+  `SHA256SUMS` does not cover it.
+
+- **Installing the skill from the `main` branch.** Rejected: `main` is not a
+  release, and it drifts.
+
+- **The project's `.claude/skills/` as the skill's destination.** Rejected: it
+  loads only in that repository, not everywhere.
+
+- **Replacing any existing entry at the destination.** Rejected: it would
+  delete an entry `tpl` did not create.
+
+- **Keeping an existing skill, or merging into it.** Rejected: the user wants
+  a replacement.
+
+- **Skipping the skill install when the version is unchanged.** Rejected: not
+  asked for.
+
 - **Retrying a measurement test, or tuning its thresholds.** Rejected: the rule
   forbids measurement on the release path, and a retry or a wider threshold
   keeps it there.
 
-- **Checking the peak at the end of the render.** Rejected here: it needs
-  `ADR-011` and `FR-RND-039` changed. It is recorded as backlog rmp `#297`.
+- **Checking the peak at the end of the render.** Rejected; the rejection and
+  its reasons are `ADR-011`'s.
 
 - **A separate measurement workflow.** Rejected: the workflows stay very simple
   and correctness-only.
@@ -204,6 +252,16 @@ and both run correctness validations only.
 - **Publishing a pre-release as a stable release.** Rejected: it would become
   the latest release, and `install.sh` would install it.
 
+- **Keeping the `push`, `pull_request` and tag triggers.** Rejected by the user
+  as a waste of resources.
+
+- **A `tag` input to `release.yml` instead of `--ref`.** Rejected: it
+  duplicates the ref and opens a gap between the input and the commit that is
+  checked out.
+
+- **`repository_dispatch`.** Rejected as less simple: it needs a token and a
+  raw API call.
+
 - **Triggering on a push to `main` and reading the tag from `HEAD`.** Rejected
   as fragile: under `gitflow` the tag is pushed after `main`, so the `main` push
   runs before the tag exists on GitHub.
@@ -212,8 +270,8 @@ and both run correctness validations only.
   recorded under rmp `#293`.
 
 - **No release gate, with a person checking `ci.yml` before tagging.**
-  Rejected: a tag push publishes, so a check a person can forget would let a
-  failing commit become a release.
+  Rejected: a check a person can forget would let a failing commit become a
+  release.
 
 - **Running clippy on stable in CI.** Rejected: CI validates the toolchain the
   crate declares as its floor.
@@ -251,13 +309,15 @@ and both run correctness validations only.
 
 ## Consequences
 
-**Two obligations move from a person to `ci.yml`.** The five-command sequence
-and its coverage of all four targets now run on every push and pull request.
-The root coordination document's rule that work is not complete until the five
-commands pass is not changed by this record.
+**Nothing validates a pushed commit automatically.** `ci.yml` runs the
+five-command sequence on all four targets only when someone dispatches it.
+`release.yml` runs the same validation on the tagged commit before it
+publishes, so no release escapes it. The root coordination document's rule that
+work is not complete until the five commands pass is not changed by this
+record.
 
 **The server-side checks remain an obligation carried by hand.** Without a
-fixture, `ci.yml` skips every assertion observed through the server's statement
+fixture, both workflows skip every assertion observed through the server's statement
 record or connection record. In particular it skips:
 
 - the connection clause of `NFR-PERF-005`, which that requirement makes
@@ -265,12 +325,12 @@ record or connection record. In particular it skips:
 - the two server-side instruments of `NFR-PERF-007`, the statement record and
   the connection record, which that requirement binds to all four targets.
 
-A green `ci.yml` run therefore does not verify these checks. Whoever prepares a
+A green run of either workflow therefore does not verify these checks. Whoever prepares a
 release runs them against the fixture, through its harness, on every target.
 
 **`FR-SRV-019` stays manual, and it is done before tagging.** The supported-series
-table is re-verified against its source before the `v*` tag is pushed, because
-the push is what publishes the release.
+table is re-verified against its source before the `v*` tag is created, so that
+any change it forces is in the tagged commit.
 
 **The file-open observation of `NFR-PERF-005` depends on the runner image.** On
 the two Linux targets, the suite skips that assertion with a printed reason when
@@ -278,15 +338,18 @@ the host has no `strace`. Whether the GitHub-hosted Linux images provide it is
 **unverified**. The differential runs of `NFR-PERF-007` need no server and run in
 `ci.yml` on all four targets.
 
-**A tag push validates the tagged commit twice.** A `push` event fires for tags
-as well as commits (Sources), so a tag push triggers `ci.yml` as well as the
-gated validation of `release.yml`. Only the latter decides whether a release is
-published.
+**A pushed tag publishes nothing until `release.yml` is dispatched.** Only
+`release.yml`'s gated validation decides whether a release is published.
 
-**The tag push must follow the `main` push.** If the tag reaches GitHub first,
-gate 1 fails and nothing is published. The remedy is to re-run the workflow
-after `main` is pushed: a re-run keeps the original event's commit and ref
-(Sources), and gate 1 reads `origin/main` as it stands when the gate runs.
+**Dispatch after `main` is pushed.** If `release.yml` is dispatched before
+`main` reaches GitHub, gate 1 fails and nothing is published. The remedy is to
+dispatch it again after `main` is pushed; gate 1 reads `origin/main` as it
+stands when the gate runs.
+
+**The workflow files must be on the default branch.** `workflow_dispatch`
+triggers a run only if the workflow file exists on the default branch, and the
+run uses the workflow file as it stands at the dispatched ref (Sources). A tag
+therefore runs the `release.yml` its own commit carries.
 
 **`install.sh` never installs a pre-release.** GitHub's latest release is the
 most recent release that is neither a draft nor a pre-release, and a
@@ -317,8 +380,8 @@ preserved, so gate 2 cannot trust the tag object the checkout leaves locally
 
 **The checksum file proves integrity, not origin.** `SHA256SUMS` lets a reader
 check an archive against the release page it came from. Because nothing is
-signed, nothing in the release proves who produced it. GitHub also attaches the repository's source archives to every release
-automatically (Sources). `release.yml` does not produce them, and `SHA256SUMS`
+signed, nothing in the release proves who produced it. GitHub also attaches the
+repository's source archives to every release automatically (Sources). `release.yml` does not produce them, and `SHA256SUMS`
 does not cover them.
 
 **A lint the floor raises fails CI.** Clippy's lints differ between toolchains,
@@ -334,14 +397,28 @@ Moving any tool version means replacing its hashes.
 **`curl | sh` trusts the `main` branch and TLS.** Whoever can change
 `install.sh` on `main`, or intercept the download, controls what runs. The
 checksum proves the archive matches the release's `SHA256SUMS`. Because nothing
-is signed, it does not prove who produced either file.
+is signed, it does not prove who produced either file. `install-skill.sh`
+follows the same trust path.
+
+**`install-skill.sh` works only from the first release that carries the skill
+archive.** `v0.0.1` does not carry it.
+
+**A symlinked skill is replaced by a copy.** Claude Code documents that a
+personal skill entry can be a symbolic link to a directory elsewhere (Sources),
+which is how `skill/README.md` suggests linking the repository. The script
+removes such a link and installs a copy, leaving the link's target untouched.
+
+**The replacement reloads live, with one exception.** Claude Code picks up an
+added, edited or removed skill under the personal skills directory without a
+restart; if that top-level directory did not exist when the session started, a
+restart is needed (Sources).
 
 **Not fixed by this record:** the runner labels; whether `release.yml` runs the
 validation itself or depends on a validation job.
 
 **No performance figure is produced or consumed.** This is consistent with
-`BR-PERF-008`, and `NFR-PERF-012`'s attribution of a figure to a target and a
-build path is unaffected, because continuous integration records no figure.
+`BR-PERF-008`, and `NFR-PERF-012`'s attribution of a figure to a target is
+unaffected, because continuous integration records no figure.
 
 **Under R3, this decision lives here alone.** `docs/spec-technical/` cites
 `ADR-012` for the pipeline and the release artefact, and cites `ADR-008` only for
@@ -361,7 +438,15 @@ the build path.
 | SemVer as the default versioning rule; gate 3's SemVer check; pre-release tags published as pre-releases; the two rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#293` | 2026-09-24 |
 | The numbered-capture-group regular expression for a Semantic Versioning 2.0.0 version, compatible with ECMAScript, PCRE, Python and Go | semver.org, *Semantic Versioning 2.0.0*, FAQ "Is there a suggested regular expression (RegEx) to check a SemVer string?"; the same text in GitHub `semver/semver`, `semver.md` | 2026-09-24 |
 | The latest release is "the most recent non-prerelease, non-draft release"; "Drafts and prereleases cannot be set as latest"; `releases/latest` links to the latest release | docs.github.com, REST API *Releases*, "Get the latest release" and "Create a release" (`make_latest`); *Linking to releases* | 2026-09-24 |
-| A re-run uses the same `GITHUB_SHA` and `GITHUB_REF` as the original event | docs.github.com, *Re-running workflows and jobs* | 2026-09-24 |
+| The `workflow_dispatch`-only triggers, the dispatch commands, the `ref_type` refusal, and the three rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#299` | 2026-09-24 |
+| The skill archive, `install-skill.sh`, its destination, replacement and symlink rules, and the five rejected alternatives | The user's decision of 2026-09-24, relayed for rmp `#303` | 2026-09-24 |
+| Personal skills live at `~/.claude/skills/<skill-name>/SKILL.md` and load in "all your projects on this machine"; a skill entry can be a symlink to a directory elsewhere; changes under `~/.claude/skills/` are picked up in the current session, except for a top-level skills directory created after the session started | code.claude.com, `docs/en/skills.md`, *Choose where skills load* and *Edit a skill during a session* | 2026-09-24 |
+| With `CLAUDE_CONFIG_DIR` set, every `~/.claude` path lives under that directory instead; its default is `~/.claude` | code.claude.com, `docs/en/claude-directory.md` and `docs/en/env-vars.md`, `CLAUDE_CONFIG_DIR` | 2026-09-24 |
+| `v0.0.1` is the only tag | `git tag -l` in this repository | 2026-09-24, re-checked 2026-09-25 |
+| For `workflow_dispatch`, `GITHUB_REF` is the branch or tag that received the dispatch and `GITHUB_SHA` the last commit on it; the event triggers a run only if the workflow file exists on the default branch | docs.github.com, *Events that trigger workflows*, `workflow_dispatch` | 2026-09-24 |
+| `github.ref` is `refs/tags/<tag_name>` for a tag; `github.ref_type` is `branch` or `tag` | docs.github.com, *Contexts reference*, `github` context | 2026-09-24 |
+| `gh workflow run --ref` names the "branch or tag name which contains the version of the workflow file you'd like to run" | GitHub `cli/cli`, `pkg/cmd/workflow/run/run.go` | 2026-09-24 |
+| The default branch of `FlavioCFOliveira/tpl` is `main` | GitHub REST API, `repos/FlavioCFOliveira/tpl` | 2026-09-24 |
 | `actions/checkout` fetches a single commit by default; `fetch-depth: 0` fetches all history | GitHub `actions/checkout`, `README.md` | 2026-09-24 |
 | Tag annotations are not preserved by `actions/checkout`; the issue is open | GitHub `actions/checkout`, issue `#290`, *Preserve tag annotations* | 2026-09-24 |
 | `README.md`, `LICENSE` and `CHANGELOG.md` exist at the repository root | Repository listing | 2026-09-24 |
@@ -372,8 +457,7 @@ the build path.
 | `cargo-zigbuild` v0.23.4 publishes a `.sha256` file beside each archive | GitHub API, `rust-cross/cargo-zigbuild` releases, tag `v0.23.4` | 2026-09-24 |
 | `ziglang.org/download/index.json` carries a `shasum` per 0.16.0 tarball | `https://ziglang.org/download/index.json`, key `0.16.0` | 2026-09-24 |
 | `/specification` needs no requirement for distribution; the connection clause of `NFR-PERF-005` and the server-side checks of `NFR-PERF-007` skip without a fixture; `FR-SRV-019` stays manual | Findings of the specification-manager, relayed for rmp `#292` | 2026-09-24 |
-| A `push` event runs a workflow "when you push a commit or tag"; with no activity types given, `pull_request` runs when a pull request is opened or reopened or its head branch is updated | docs.github.com, *Events that trigger workflows*, `push` and `pull_request` | 2026-09-24 |
-| `on.push.tags` accepts glob patterns; `jobs.<job_id>.strategy.matrix` defines a matrix of job configurations | docs.github.com, *Workflow syntax for GitHub Actions* | 2026-09-24 |
+| `jobs.<job_id>.strategy.matrix` defines a matrix of job configurations | docs.github.com, *Workflow syntax for GitHub Actions* | 2026-09-24 |
 | GitHub-hosted runners exist for Linux x64, Linux arm64, macOS Intel and macOS arm64 | docs.github.com, *GitHub-hosted runners*, supported runners table (`github/docs`, `data/reusables/actions/supported-github-runners.md`) | 2026-09-24 |
 | Releases are based on Git tags and carry binary files; GitHub automatically adds a zip file and a tarball of the repository at the tag | docs.github.com, *About releases* | 2026-09-24 |
 | `cargo-zigbuild` 0.23.4 provides the `zigbuild`, `clippy` and `test` subcommands | GitHub `rust-cross/cargo-zigbuild`, tag `v0.23.4`, `src/bin/cargo-zigbuild.rs` | 2026-09-24 |

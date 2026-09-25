@@ -78,14 +78,35 @@ impl Editor {
     pub(crate) fn open(directory: &Path) -> Result<Self, Error> {
         let file = directory.join(CONFIGURATION);
 
-        let text = match std::fs::read_to_string(&file) {
+        // FR-PROJ-030 and FR-SEC-027: the file the rewrite starts from is read
+        // on a descriptor opened relative to `.tpl` without following a link
+        // and without waiting for a writer, and typed on that descriptor, so a
+        // FIFO swapped in after the trust checks cannot hang the command.
+        let unreadable = |returned: std::io::Error| Error::ProjectFileUnreadable {
+            path: file.clone(),
+            returned,
+        };
+        let folder = crate::at::directory(directory, directory)
+            .map_err(|fault| unreadable(fault.into_io()))?;
+        let text = match crate::at::read_checked(&folder, std::ffi::OsStr::new(CONFIGURATION), None)
+        {
             Ok(text) => text,
-            Err(returned) if returned.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(returned) => {
-                return Err(Error::ProjectFileUnreadable {
+            Err(crate::at::Unread::NotRegular(kind)) => {
+                return Err(Error::ConfigurationNotRegular {
                     path: file,
-                    returned,
+                    kind: crate::at::kind_name(kind),
                 });
+            }
+            Err(crate::at::Unread::Io(returned))
+                if returned.kind() == std::io::ErrorKind::NotFound =>
+            {
+                String::new()
+            }
+            Err(crate::at::Unread::Io(returned)) => return Err(unreadable(returned)),
+            Err(crate::at::Unread::Oversized) => {
+                return Err(unreadable(std::io::Error::from(
+                    std::io::ErrorKind::InvalidData,
+                )));
             }
         };
 

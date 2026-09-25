@@ -277,18 +277,15 @@ harness without anything here being edited.
 server has been removed, so that is where a run ends. Only the series the run
 was told to use is touched.
 
-**The benchmark entries authenticate as `root`.** `tpl_reader` holds
-`SELECT, EXECUTE ON freight.*` and `seed-bench.sql` grants it nothing on
-`freight_wl001` or `freight_wl003`, so a reader-backed entry would present an
-empty catalogue — which `FR-PRIV-001` makes a silent success rather than an
-error, and a reading taken over an empty catalogue is not a reading over
-`WL-001`.
-
-**`up.sh` exits `2` on success when it is asked for one server.** It ends by
-printing an unfiltered `./status.sh`, which reports the other four as down and
-returns that command's `2`. Its exit code is therefore not read here; the
-filtered gate is asked immediately afterwards and that is what decides whether
-the server came up.
+**The benchmark entries authenticate as `root`, and keep it.** `seed-bench.sh`
+grants `tpl_reader` `SELECT, EXECUTE` on `freight_wl001` and `freight_wl003`,
+the grant `setup.sql` gives it on `freight`, so a reader-backed entry does
+present both catalogues. It presents less of them: the reader sees no
+foreign-key constraint, no trigger, no view definition and no routine body
+(`scripts/mariadb/README.md`, *Users*). A reading over that document, with its
+views and routines marked `restricted` and left out of the cache, is not a
+reading over `WL-001` as `NFR-PERF-014` states it, so `root` is what reads the
+workload.
 
 ## What the work directory holds
 

@@ -1,7 +1,7 @@
 ---
 title: Quality Attributes
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 related: [README.md, traceability.md, open-decisions.md, overview.md]
 ---
 
@@ -83,7 +83,9 @@ observation made **outside** the process and never by reading the source
 observable on the diagnostic stream (`NFR-PERF-008`, `FR-GLOB-017`), which makes
 one diagnostic line structurally load-bearing although stderr is not contract —
 that is `operations.md`, settled in
-[`OD-17`](open-decisions.md#od-17--observability).
+[`OD-17`](open-decisions.md#od-17--observability). Since the sixty-second
+edition `NFR-PERF-008` is verified by counting those lines at `-v` against the
+server's statement record for the same invocation, which is `verification.md`.
 
 ## Determinism
 

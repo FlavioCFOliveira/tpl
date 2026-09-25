@@ -178,6 +178,19 @@ pub(crate) fn set(supplied: &Supplied<'_>, key: &str, value: &str) -> Result<(),
 
     let item = edit::assign(&parsed, value)?;
 
+    // FR-CFG-054: the default entry must be one the file declares, compared
+    // byte for byte. A value outside FR-CONF-048 has already been refused
+    // with 64 by the assignment above; nothing has been written.
+    if matches!(parsed, Key::Core(CoreKey::Database))
+        && !configuration.names().any(|declared| declared == value)
+    {
+        return Err(Error::DefaultEntryUndeclared {
+            name: value.to_owned(),
+            nearest: configuration.nearest_entry(value),
+            declared: configuration.names().len() > 0,
+        });
+    }
+
     // FR-CFG-048: one key of one entry is still a write to that entry, and
     // `tpl cfg set database.<name>.dsn` beside a host the file carries is the
     // invocation the twenty-second edition was written for. The value has
@@ -497,20 +510,23 @@ mod tests {
 
     #[test]
     fn fr_cfg_008_set_writes_the_value_under_the_key() {
-        // FR-CFG-008.
-        let harness = Harness::new("[core]\n");
+        // FR-CFG-008. The entry is declared, per FR-CFG-054.
+        let harness = Harness::new("[core]\n\n[database.shop]\nhost = \"h\"\n");
 
         harness
             .set("core.database", "shop")
             .expect("the key is written");
 
-        assert_eq!(harness.written(), "[core]\ndatabase = \"shop\"\n");
+        assert_eq!(
+            harness.written(),
+            "[core]\ndatabase = \"shop\"\n\n[database.shop]\nhost = \"h\"\n"
+        );
     }
 
     #[test]
     fn fr_out_023_set_writes_nothing_to_stdout() {
         // FR-OUT-023: a command that writes no result leaves stdout empty.
-        let harness = Harness::new("[core]\n");
+        let harness = Harness::new("[core]\n\n[database.shop]\nhost = \"h\"\n");
 
         assert_eq!(harness.set_output("core.database", "shop"), "");
     }

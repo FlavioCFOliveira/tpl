@@ -150,11 +150,11 @@ impl fmt::Display for DeadlineBound {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LookupKind {
-    /// `table(name)`.
+    /// `table_named(name)`.
     Table,
-    /// `view(name)`.
+    /// `view_named(name)`.
     View,
-    /// `routine(name)`.
+    /// `routine_named(name)`.
     Routine,
     /// `column(table, name)`.
     Column,
@@ -200,6 +200,10 @@ pub enum RenderReason {
         /// extension an include writes, at most three, in the order of
         /// `FR-ERR-019` (finding Z-03 of the ninth re-audit of rmp `#263`).
         nearest: Vec<String>,
+        /// Where the name is an entry of the template root that is a FIFO, a
+        /// socket or a device, its kind, as the `cause` names it
+        /// (`FR-TMPL-033`, item 3); [`None`] where no such entry exists.
+        not_regular: Option<&'static str>,
     },
 }
 
@@ -207,7 +211,7 @@ pub enum RenderReason {
 /// nothing — the reason an expression built on it is undefined.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unresolved {
-    /// The call as the template wrote it: `table("orders")`.
+    /// The call as the template wrote it: `table_named("orders")`.
     pub call: String,
     /// What was sought: the function's kind, or [`LookupKind::Table`] for a
     /// `column` call whose table does not exist.
@@ -736,7 +740,7 @@ pub enum Error {
         /// after it, where every other token is admitted into a hint
         /// (`FR-ERR-022`, `FR-ERR-040`, `FR-ERR-041`); [`None`] otherwise.
         ///
-        /// Boxed, with `path`, so that the variant leaves [`Error`] within
+        /// Boxed, with `path`, so that the variant leaves [`enum@Error`] within
         /// the size `clippy::result_large_err` admits.
         rebuilt: Option<Box<str>>,
         /// The command path the invocation names once the flag has its
@@ -1193,6 +1197,16 @@ pub enum Error {
         default_entry: bool,
     },
 
+    /// A `--context` document whose `schema_version` is not the one this
+    /// binary emits (`FR-RND-042`).
+    #[error("the --context document {} has an unsupported schema_version", context_origin(.path))]
+    ContextDocumentVersion {
+        /// The path the document was read from, `-` for standard input.
+        path: Box<Path>,
+        /// The version the document declares.
+        found: u32,
+    },
+
     /// The render did not finish within its deadline (`FR-RND-033`,
     /// `FR-ERR-027`, `FR-GLOB-013`).
     #[error("the render exceeded {bound} of {limit:?}")]
@@ -1300,6 +1314,22 @@ pub enum Error {
         nearest: Vec<String>,
     },
 
+    /// A named template whose entry exists under the template root and is not
+    /// a regular file: a FIFO, a socket or a device (`FR-TMPL-033`, item 2).
+    ///
+    /// It is the `66` of `FR-TMPL-027`, with the fact that the entry exists
+    /// and its kind, so that it does not read as a name that is absent.
+    #[error("template '{name}' does not exist")]
+    TemplateNotRegular {
+        /// The name, as the caller named it.
+        name: String,
+        /// The entry below the template root, with its extension:
+        /// `header.jinja`.
+        file: String,
+        /// The kind found, as the `cause` names it: "a FIFO".
+        kind: &'static str,
+    },
+
     /// A named template that does not exist under the template root
     /// (`FR-TMPL-027`, `FR-RND-029`).
     #[error("template '{name}' does not exist")]
@@ -1340,6 +1370,20 @@ pub enum Error {
         by_default: bool,
     },
 
+    /// `tpl cfg set core.database` given a well-formed name no entry of
+    /// `.tpl/.cfg` has (`FR-CFG-054`).
+    #[error("database entry '{name}' does not exist")]
+    DefaultEntryUndeclared {
+        /// The name given, which matches `FR-CONF-048`.
+        name: String,
+        /// The nearest matches among the entry names the file declares,
+        /// selected by `FR-ERR-019` and `FR-ERR-044`. Empty where nothing
+        /// qualified, per `FR-ERR-020`.
+        nearest: Vec<String>,
+        /// Whether the file declares any entry at all.
+        declared: bool,
+    },
+
     /// A key that is absent from `.tpl/.cfg` (`FR-CFG-007`, `FR-CFG-012`).
     ///
     /// A spelling outside the key space of `FR-CONF-002` reaches it too, and
@@ -1357,7 +1401,7 @@ pub enum Error {
         /// declare. The line then reports the missing entry, which the
         /// renderers read out of the key, not a missing key (finding
         /// U-05 of the fourth re-audit of rmp `#263`). A flag rather than the
-        /// name keeps [`Error`] within the size `clippy::result_large_err`
+        /// name keeps [`enum@Error`] within the size `clippy::result_large_err`
         /// admits.
         entry_missing: bool,
         /// The value the configuration gives the key where the file sets
@@ -1383,7 +1427,7 @@ pub enum Error {
         /// The database entry the connection was opened for.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The host attempted.
         host: String,
@@ -1397,7 +1441,7 @@ pub enum Error {
         /// The database entry the connection was opened for.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The host attempted.
         host: String,
@@ -1431,7 +1475,7 @@ pub enum Error {
         /// The database entry the connection was opened for.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The phase that was in progress.
         phase: NetworkPhase,
@@ -1684,6 +1728,17 @@ pub enum Error {
         expected: u32,
     },
 
+    /// `.tpl/.cfg` is not a regular file: a symbolic link, a directory, a FIFO,
+    /// a socket or a device (`FR-PROJ-030`).
+    #[error(".tpl/.cfg is not a regular file")]
+    ConfigurationNotRegular {
+        /// The file, by its canonical path (`FR-PROJ-009`).
+        path: PathBuf,
+        /// The kind found, as the `cause` names it: "a FIFO", "a symbolic
+        /// link".
+        kind: &'static str,
+    },
+
     /// `.tpl/.cfg` grants access to group or other (`FR-PROJ-011`).
     #[error("{} has unsafe permissions", .path.display())]
     ConfigurationUnsafeMode {
@@ -1691,6 +1746,24 @@ pub enum Error {
         path: PathBuf,
         /// The permission bits found.
         mode: u32,
+    },
+
+    /// A component of a cache path is a symbolic link, so the command reads,
+    /// writes and removes nothing (`FR-CACHE-042`, `FR-CACHE-044`,
+    /// `FR-SEC-026`).
+    #[error(
+        ".tpl/{} is a symbolic link; nothing was {}",
+        .within.display(),
+        if *.removal { "removed" } else { "read or written" }
+    )]
+    CachePathLinked {
+        /// The link, under the canonical `.tpl` of `FR-PROJ-009`.
+        path: PathBuf,
+        /// The link relative to the `.tpl` folder, such as `.cache/shop`.
+        within: PathBuf,
+        /// Whether the refused command is `tpl cache clean`, which removes,
+        /// rather than one that reads or writes.
+        removal: bool,
     },
 
     /// `.tpl/.cfg` is not valid TOML (`FR-ERR-001`, the `78` row).
@@ -1753,7 +1826,7 @@ pub enum Error {
         /// expanded it to rather than what the file holds; [`None`] where the
         /// file holds `found` itself (finding T-04 of the third re-audit of
         /// rmp `#263`). Boxed behind a thin pointer, so that the variant
-        /// leaves [`Error`] no larger: a `Box<str>` is two words wide.
+        /// leaves [`enum@Error`] no larger: a `Box<str>` is two words wide.
         expanded_from: Option<Box<String>>,
     },
 
@@ -1968,7 +2041,7 @@ pub enum Error {
         /// The entry whose connection it was.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// Which of the two conditions of `FR-SRV-010` arose.
         fault: ReadOnlyFault,
@@ -2022,7 +2095,7 @@ pub enum Error {
         /// The entry that reached it.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The product the server reported.
         product: String,
@@ -2035,7 +2108,7 @@ pub enum Error {
         /// The entry that reached it.
         entry: String,
         /// Whether that entry is defined by `dsn`, so that a `hint` repointing
-        /// it names `--dsn` (`FR-ERR-045`). Set by [`Error::of_dsn_entry`].
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
         by_dsn: bool,
         /// The series found, as the server reported it.
         series: String,
@@ -2469,6 +2542,7 @@ impl Error {
             | Self::RenderFailed { .. }
             | Self::TemplateOutsideRoot { .. }
             | Self::ContextDocumentMalformed { .. }
+            | Self::ContextDocumentVersion { .. }
             | Self::RenderDeadlineExceeded { .. }
             | Self::RenderFuelExhausted { .. }
             | Self::RenderOutputLimitExceeded { .. }
@@ -2479,8 +2553,10 @@ impl Error {
             | Self::CatalogueObjectNotFound { .. }
             | Self::ContextObjectNotFound { .. }
             | Self::TemplateNotFound { .. }
+            | Self::TemplateNotRegular { .. }
             | Self::DatabaseEntryNotFound { .. }
-            | Self::ConfigurationKeyNotFound { .. } => 66,
+            | Self::ConfigurationKeyNotFound { .. }
+            | Self::DefaultEntryUndeclared { .. } => 66,
 
             // 69 EX_UNAVAILABLE
             Self::NameNotResolved { .. }
@@ -2512,6 +2588,8 @@ impl Error {
             | Self::ConfigurationPathReference { .. }
             | Self::ConfigurationNotOwned { .. }
             | Self::ConfigurationUnsafeMode { .. }
+            | Self::ConfigurationNotRegular { .. }
+            | Self::CachePathLinked { .. }
             | Self::ConfigurationMalformed { .. }
             | Self::ConfigurationKeyOutsideSpace { .. }
             | Self::ConfigurationValueMalformed { .. }
@@ -2552,7 +2630,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 87;
+    const VARIANT_COUNT: usize = 92;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2866,6 +2944,13 @@ mod tests {
                 65,
             ),
             (
+                Error::ContextDocumentVersion {
+                    path: std::path::Path::new("old.json").into(),
+                    found: 2,
+                },
+                65,
+            ),
+            (
                 Error::RenderDeadlineExceeded {
                     bound: DeadlineBound::Phase,
                     limit: Duration::from_secs(30),
@@ -2908,6 +2993,14 @@ mod tests {
                 66,
             ),
             (
+                Error::TemplateNotRegular {
+                    name: "header".to_owned(),
+                    file: "header.jinja".to_owned(),
+                    kind: "a FIFO",
+                },
+                66,
+            ),
+            (
                 Error::TemplateNotFound {
                     name: "missing.jinja".to_owned(),
                     root: PathBuf::from(".tpl/templates"),
@@ -2921,6 +3014,14 @@ mod tests {
                     file: path(),
                     nearest: vec!["shop".to_owned()],
                     by_default: false,
+                },
+                66,
+            ),
+            (
+                Error::DefaultEntryUndeclared {
+                    name: "shpo".to_owned(),
+                    nearest: vec!["shop".to_owned()],
+                    declared: true,
                 },
                 66,
             ),
@@ -3060,6 +3161,14 @@ mod tests {
                 78,
             ),
             (
+                Error::CachePathLinked {
+                    path: PathBuf::from("/home/ana/shop/.tpl/.cache"),
+                    within: PathBuf::from(".cache"),
+                    removal: true,
+                },
+                78,
+            ),
+            (
                 Error::ConfigurationPathReference {
                     key: "database.shop.ca_file".to_owned(),
                     file: path(),
@@ -3072,6 +3181,13 @@ mod tests {
                 Error::ConfigurationUnsafeMode {
                     path: path(),
                     mode: 0o644,
+                },
+                78,
+            ),
+            (
+                Error::ConfigurationNotRegular {
+                    path: PathBuf::from("/home/ana/shop/.tpl/.cfg"),
+                    kind: "a FIFO",
                 },
                 78,
             ),
@@ -3292,6 +3408,7 @@ mod tests {
             Error::RenderFailed { .. } => "RenderFailed",
             Error::TemplateOutsideRoot { .. } => "TemplateOutsideRoot",
             Error::ContextDocumentMalformed { .. } => "ContextDocumentMalformed",
+            Error::ContextDocumentVersion { .. } => "ContextDocumentVersion",
             Error::RenderDeadlineExceeded { .. } => "RenderDeadlineExceeded",
             Error::RenderFuelExhausted { .. } => "RenderFuelExhausted",
             Error::RenderOutputLimitExceeded { .. } => "RenderOutputLimitExceeded",
@@ -3300,7 +3417,9 @@ mod tests {
             Error::NothingCachedNamed { .. } => "NothingCachedNamed",
             Error::ContextObjectNotFound { .. } => "ContextObjectNotFound",
             Error::TemplateNotFound { .. } => "TemplateNotFound",
+            Error::TemplateNotRegular { .. } => "TemplateNotRegular",
             Error::DatabaseEntryNotFound { .. } => "DatabaseEntryNotFound",
+            Error::DefaultEntryUndeclared { .. } => "DefaultEntryUndeclared",
             Error::ConfigurationKeyNotFound { .. } => "ConfigurationKeyNotFound",
             Error::NameNotResolved { .. } => "NameNotResolved",
             Error::ConnectionRefused { .. } => "ConnectionRefused",
@@ -3320,6 +3439,8 @@ mod tests {
             Error::ProjectFolderNotOwned { .. } => "ProjectFolderNotOwned",
             Error::ConfigurationPathReference { .. } => "ConfigurationPathReference",
             Error::ConfigurationUnsafeMode { .. } => "ConfigurationUnsafeMode",
+            Error::ConfigurationNotRegular { .. } => "ConfigurationNotRegular",
+            Error::CachePathLinked { .. } => "CachePathLinked",
             Error::ConfigurationMalformed { .. } => "ConfigurationMalformed",
             Error::ConfigurationKeyOutsideSpace { .. } => "ConfigurationKeyOutsideSpace",
             Error::ConfigurationValueMalformed { .. } => "ConfigurationValueMalformed",

@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-25
 related: [README.md, open-decisions.md]
 ---
 
@@ -20,8 +20,9 @@ directions.
   that answer it, and the five concerns the corpus forces as a whole rather
   than through any one file.
 
-`specification/` holds **26 files**: 25 requirement modules and `README.md`,
-the index. All 26 are covered. The mapping was harvested against the seventh
+`specification/` holds **27 files**: 26 requirement modules and `README.md`,
+the index. **26 are covered**: `examples.md`, added in the thirty-fourth
+edition, has no section here. The mapping was harvested against the seventh
 edition and is **current with the ninth**, reconciled on 2026-09-11. The eighth
 edition changed the rows drawn from `cli-contract.md`,
 `configuration-model.md`, `project-and-discovery.md`,
@@ -81,8 +82,19 @@ this folder. Its eight identifiers — `FR-RND-036` … `FR-RND-040`,
 `FR-CONF-002`, `FR-CONF-028`, `FR-CONF-031`, `FR-CACHE-030`, `FR-CACHE-033`,
 `FR-CACHE-039`, `FR-CDOC-008`, `FR-SEC-012`, `FR-SEC-024`, `FR-ERR-001`,
 `FR-ERR-006` and `FR-ERR-034` move rows in sections 7, 8, 9, 11, 14, 15, 18, 23
-and 24. Counting it, **the mapping is behind by eighteen editions**: the
-twenty-third to the forty-first, less the two rows of the thirty-second above.
+and 24. Counting it, the mapping was behind by eighteen editions on
+2026-09-23: the twenty-third to the forty-first, less the two rows of the
+thirty-second above.
+
+**As of the sixty-fourth edition, read on 2026-09-25, the mapping is behind by
+forty editions**: the twenty-third to the forty-first and the forty-third to
+the sixty-fourth, less what was taken out of order — the two rows of the
+thirty-second above, the fifth writer of the fifty-eighth (section 26), and the
+verification of `NFR-PERF-008` of the sixty-second (sections 3 and 23). The
+identifiers those editions added are not mapped here, among them
+`FR-CDOC-017`, `FR-CACHE-042` … `FR-CACHE-044`, `FR-SEC-026`, `FR-SEC-027`,
+`FR-PROJ-030` and `FR-TMPL-033`; the documents that answer them cite them
+directly.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -181,7 +193,7 @@ that honours it.
 | An entry selected on the command line must be **distinguishable** from one resolved through `core.database`: the resolved value carries its provenance | `FR-GLOB-008`, `FR-RND-018`, `FR-RND-019` | `interfaces` |
 | `--timeout` is an overall budget from **process start** that composes with per-phase deadlines; the first of the two to expire ends the phase | `FR-GLOB-011`, `FR-GLOB-012` | `architecture` (`OD-12`) |
 | A timeout exits with the code of the **phase**, so the deadline machinery must know which phase it is in | `FR-GLOB-013`, `FR-ERR-027` | `architecture`, `interfaces` (`OD-12`) |
-| Four diagnostic levels, one line per catalogue query at `INFO`, **distinguishable from every other line**, and cache hit/miss at `DEBUG` | `FR-GLOB-014` … `FR-GLOB-017`, `NFR-PERF-008` | `operations` (`OD-17`) |
+| Four diagnostic levels, one line per catalogue query at `INFO`, **distinguishable from every other line**, and cache hit/miss at `DEBUG`; the count of those lines at `-v` must equal the catalogue statements the server's statement record shows | `FR-GLOB-014` … `FR-GLOB-017`, `NFR-PERF-008` (sixty-second edition) | `operations` (`OD-17`), `verification` |
 | Six categories of content must never reach any diagnostic stream at any level: argv, resolved DSN, `password_command` and its stderr, raw driver error, `.cfg` contents. A raw driver error is what a naive `tracing` call on an `Err` emits | `FR-GLOB-018`, `FR-SEC-005` | `security`, `operations` (`OD-17`) |
 | Five short forms exist in the whole tool and no local flag may declare one | `FR-GLOB-024` | `interfaces` |
 | The refusal of `-q` with `-v` is stated **where both flags are declared**, so an implementer resolving the pair meets it without reading another file; no precedence is admitted, because quiet-over-verbose and last-wins both make the result depend on how a script grew | `FR-GLOB-015` (twentieth edition), `FR-CLI-015`, `FR-CLI-014` | `interfaces` |
@@ -352,7 +364,7 @@ that honours it.
 | `tpl init` creates five artefacts, `.cfg` at `0600`, missing parents included, and refuses an existing `.tpl` with `73` changing nothing | `FR-PROJ-013` … `FR-PROJ-019` | `interfaces`, `operations` |
 | Two artefacts are **shipped content**: `example.jinja` and `rust/_types.jinja`; the example must render against any table of any supported series and use at least one filter and one test | `FR-PROJ-017`, `FR-PROJ-021`, `FR-ENV-011` | `operations`, `verification` |
 | The generated `.cfg` carries a **commented-out** example entry — the file must survive later rewrites with its comments | `FR-PROJ-017`, `FR-PROJ-018` | `data-model` (`OD-09`) |
-| Exactly four writers inside `.tpl`, and exactly one file-system exception outside it | `FR-PROJ-023`, `FR-PROJ-024` | `architecture`, `security` |
+| Exactly five writers inside `.tpl`, and exactly one file-system exception outside it | `FR-PROJ-023`, `FR-PROJ-024` | `architecture`, `security` |
 | A nested project warns on stderr and exits `0` | `FR-PROJ-016` | `interfaces` |
 | An **absent** `.cfg` passes the trust checks and reads as an empty configuration: there is nothing to own and nothing to grant, the project is the folder, and the write surface may create the file again | `FR-PROJ-001`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-004` | `architecture`, `security` |
 | Ownership is judged **before** the mode, because a file belonging to another user is refused whatever its mode says | `FR-PROJ-010`, `FR-PROJ-011` | `architecture` |
@@ -570,7 +582,7 @@ what replaced it.
 | Six **requirements of form** constrain the design from the first commit: query count independent of object count for a full read and for a single object, no connection on a cache hit, at most one connection, nothing at all for four commands, no connection for any command needing no catalogue | `NFR-PERF-001` … `NFR-PERF-006` | `quality-attributes`, `architecture` |
 | The one connection of `NFR-PERF-004` is closed, and its runtime gone, before a render starts | `NFR-PERF-004` note, `FR-RND-040` (forty-second edition) | `architecture` (`OD-11`) |
 | Each is verified from **outside the process**, never by reading the source, by **four** named instruments — the statements a server receives, the connections it accepts, a syscall trace, and a differential run — each usable only on the targets its row names: the trace on the two Linux targets, the other three on all four | `NFR-PERF-007`, `NFR-PERF-018`, `BR-SRV-003` | `verification` |
-| The query count must be observable from the diagnostic stream, which makes one diagnostic line structurally load-bearing although stderr is not contract | `NFR-PERF-008`, `FR-GLOB-017` | `operations`, `verification` (`OD-17`) |
+| The query count must be observable from the diagnostic stream, which makes one diagnostic line structurally load-bearing although stderr is not contract; it is verified by counting those lines at `-v` against the server's statement record, with the fixture standing | `NFR-PERF-008` (sixty-second edition), `FR-GLOB-017` | `operations`, `verification` (`OD-17`) |
 | Exactly four targets; Linux is `musl`, statically linked; no target is second class. The parity is of **results**, not of instruments: one instrument of `NFR-PERF-007` exists on two targets only | `NFR-PERF-018` | `operations`, `verification` |
 | A Linux observation **may not be credited to either Darwin target**, and a trace taken inside a Linux container may not be credited to macOS, because the artefact observed is not the artefact distributed. What the two Darwin targets consequently do not catch is named by the requirement — a build that opened `.tpl/.cfg`, read it and discarded what it read — and a run on such a target must say which instrument established a clause | `NFR-PERF-005` as amended in the eleventh edition; `NFR-PERF-007`, `NFR-PERF-018` | `verification`, `operations` |
 | Nine **measurement points**, each fixing its invocation, its workload, whether a server answers and the cache posture the reading is taken under; three reach a server and five need the fixture. A measurement names its target **and its server series** | `NFR-PERF-012`, `NFR-PERF-014`, `BR-PERF-007` | `quality-attributes` |
@@ -625,7 +637,7 @@ is named only where a row would otherwise imply a correction is outstanding.
 | `WL-001` needs `scripts/mariadb/seed-bench.sql`; the measurement points over that workload could not be measured until it existed, and it was written on 2026-09-21. What the entry still owes the root documents is that register's to state | `DIV-036` | `verification` (`OD-27`) |
 | The catalogue is read through `INFORMATION_SCHEMA` only: the closed list of `FR-SRV-006` has four entries, `SHOW` is not one of them, and no necessity admits a fifth | `DIV-031` | `security`, `interfaces` |
 | Determinism is over **stdout** only | `DIV-039` | `quality-attributes` |
-| Four things write inside `.tpl`: `tpl init`, `tpl cfg …`, `tpl cache load`, and any cached read command on a miss | `DIV-005` | `architecture` |
+| Five things write inside `.tpl`: `tpl init`, `tpl cfg …`, `tpl cache load`, any cached read command on a miss, and `tpl cache clean` | `DIV-005`, discharged; `FR-PROJ-023` (fifty-eighth edition) | `architecture`, `data-model` |
 | `tpl cache` is a group node of the command tree in its own right, with three subcommands, and not a part of project management: the auxiliary set is not closed without it | `DIV-040` | `architecture` |
 | Every divergence is a correction owed to a file **the specification never edits** — the technical spec inherits that restraint and must not restate the corrected content either | *Overview* | `README`, `overview` |
 | **A register describing a file this corpus does not own decays whenever somebody else edits that file**, and no reference check, recount or sweep of the corpus can see it happen. Every entry therefore carries a state, and a discharged entry names the **commit** that discharged it, so that when it stopped being owed is auditable. This folder adopted the same rule for its own statements about a file it does not own | *Maintenance debt*, fifth validation rule (fifteenth edition) | `README`, `decisions` |

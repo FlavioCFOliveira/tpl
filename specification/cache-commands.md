@@ -2,7 +2,7 @@
 title: Catalogue Cache
 status: approved
 last-reviewed: 2026-09-24
-related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md]
+related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md, security.md]
 ---
 
 # Catalogue Cache
@@ -129,7 +129,8 @@ read from the server on a miss.
   miss under `FR-CACHE-033`.
 
   A lookup by name — the tests `primary_key` and `unique` of `FR-ENV-015` and
-  the functions `table`, `view`, `routine` and `column` of `FR-ENV-020` —
+  the functions `table_named`, `view_named`, `routine_named` and `column` of
+  `FR-ENV-020` —
   SHALL resolve the name from the collection's listing and SHALL reach only the
   object it returns. An object the lookup passes over is not reached by it, and
   a lookup that returns no object reaches none.
@@ -358,6 +359,12 @@ tpl -d shop cache status
   *Note added in the fifty-third edition.* `FR-CACHE-041` states the one
   clean whose selected name no entry of `.tpl/.cfg` declares.
 
+  *Note added in the fifty-eighth edition.* `FR-CACHE-042` states what every
+  clean does where a symbolic link lies on the path it removes, and
+  `FR-CACHE-043` states what a clean given an object flag writes to
+  `meta.json`. `FR-CACHE-044` states the same refusal for every other command
+  that reads or writes the cache.
+
 - **FR-CACHE-041**: WHEN `tpl cache clean` is given no object flag, and the
   selected name — given by `-d/--database` or by `core.database`, per
   `FR-GLOB-025` — meets all three of the following conditions, the system
@@ -384,7 +391,8 @@ tpl -d shop cache status
   1. **Only that path.** The system SHALL remove `.tpl/.cache/<name>` and
      everything beneath it, and nothing else. It SHALL NOT follow a symbolic
      link: where `.tpl/.cache/<name>`, or any file beneath it, is a symbolic
-     link, the link itself is removed and nothing it points at.
+     link, the link itself is removed and nothing it points at. A link at
+     `.tpl/.cache` itself is refused, per `FR-CACHE-042`.
   2. **The line.** It SHALL state that no entry of the name given is declared
      in `.tpl/.cfg`, and that the data cached in the folder it names was
      removed. The name given has passed condition 1, so it is reproduced
@@ -496,6 +504,171 @@ tpl -d shop cache status
 
   *Added in the fiftieth edition,* for rmp `#282`.
 
+- **FR-CACHE-042**: `tpl cache clean`, in every form — with no object flag
+  under `FR-CACHE-023`, for a name no entry declares under `FR-CACHE-041`, and
+  with `--table`, `--view` or `--routine` — SHALL NOT resolve a path through a
+  symbolic link when it removes anything. The resolved `.tpl` is canonicalised
+  first, per `FR-PROJ-009`; every component below it is tested as it is
+  written, without following it:
+
+  1. **A link on the path is refused.** IF `.tpl/.cache` is a symbolic link,
+     or, for a clean given an object flag, `.tpl/.cache/<name>` or the folder
+     of the object's collection beneath it is a symbolic link, THEN the system
+     SHALL remove nothing, SHALL write nothing to the cache, SHALL open no
+     connection, and SHALL exit `78` (`EX_CONFIG`). The `cause` SHALL name the
+     link by its path; the `hint` SHALL carry the command that removes the
+     link and nothing it points at, with the absolute path built under
+     `FR-ERR-041`.
+  2. **A link that is the thing removed is removed as a link.** Where the
+     folder a clean with no object flag removes, `.tpl/.cache/<name>`, is a
+     symbolic link, or where the object file a clean given an object flag
+     removes is one, the system SHALL remove the link itself and nothing it
+     points at, as item 1 of `FR-CACHE-041` already states for its own clean.
+  3. **Nothing beneath a removed folder is followed.** A symbolic link beneath
+     a folder the clean removes SHALL be removed as a link and SHALL NOT be
+     followed.
+
+  The condition of item 1 SHALL be evaluated at step 6 of `FR-ERR-006`, before
+  anything is removed and before the condition of `FR-CACHE-040` is
+  evaluated, so that neither the removal nor the listing behind that
+  condition's `hint` reads through the link.
+
+  ```
+  tpl -d shop cache clean
+  error: .tpl/.cache is a symbolic link; nothing was removed
+  cause: /home/ana/shop/.tpl/.cache is a symbolic link, and tpl cache clean removes nothing through a link
+  hint:  rm /home/ana/shop/.tpl/.cache
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command and
+  the code. `rm` given a symbolic link removes the link and not its target.
+
+  *Threat closed.* A `.tpl/.cache` replaced by a link to another folder made
+  `tpl -d shop cache clean` remove that folder's `shop` directory, and a
+  linked collection folder made a clean given `--table` remove a file outside
+  the project. This is the case rmp `#288` found: `FR-CACHE-041` guarded the
+  links at and beneath the folder it removes and not the links above it.
+
+  *Why `78`.* It is the code of the project trust checks, `FR-PROJ-010`,
+  `FR-PROJ-011` and `FR-PROJ-028`: the content of `.tpl` is not in a state
+  `tpl` accepts, and the caller repairs the project rather than the
+  invocation. *Rejected: `74`*, which tells the caller to check permissions
+  and free space, and neither is at fault. *Rejected: `65`*, the code of a
+  template path escaping its root under `FR-TMPL-026`, whose instruction is to
+  fix the template. *Rejected: removing the link at `.tpl/.cache` and exiting
+  `0`.* It deletes a link the caller may rely on, on the strength of a command
+  that named a cache entry. *Rejected: removing through the link after
+  canonicalising it and checking that the target lies inside `.tpl`.* A
+  target inside `.tpl` is not the cache, so the check admits a link to
+  `.tpl/templates/` and the deletion of a folder of templates.
+
+  *Accepted cost.* A project that keeps its cache on another volume through a
+  linked `.tpl/.cache` cannot be cleaned by `tpl`. The caller removes the
+  cached files directly.
+
+  *Added in the fifty-eighth edition,* for rmp `#288`.
+
+- **FR-CACHE-043**: WHEN `tpl cache clean` is given `--table`, `--view` or
+  `--routine` and removes the object's file, the system SHALL change exactly
+  one thing in `meta.json`: it SHALL record the object's collection as not
+  loaded whole, per `FR-CDOC-006`. It SHALL leave `loaded_at`, `cache_format`,
+  `schema_version` and the record of every other collection unchanged, and
+  SHALL write nothing else. WHERE `meta.json` is absent, or unusable under
+  `FR-CDOC-004` or `FR-CDOC-017`, the system SHALL NOT write it and SHALL
+  leave it as it found it; a symbolic link, a file that is not a regular file,
+  and a file over the bound of `FR-CDOC-017` are among the unusable. Otherwise
+  the file SHALL be written through a temporary file renamed over the target,
+  as `FR-CACHE-030` writes an object file.
+
+  *Amended within the fifty-eighth edition.* The requirement said a symbolic
+  link at `meta.json` is replaced and not followed. A link is an unusable
+  record under `FR-CDOC-017`, which this requirement does not write, so the
+  sentence could never apply. The link is left in place, and the next full
+  write replaces it.
+
+  *Rationale.* No load happened, so the time `tpl cache status` reports as
+  when the cache was loaded, per `FR-CACHE-025`, does not move. A clean that
+  moved it made `tpl cache status` report the time of the clean as the age of
+  data read earlier, which is the only signal `BR-CACHE-003` gives that a
+  cache is stale. This is the case rmp `#302` found. The collection is
+  recorded as not whole because a listing served from a collection one object
+  has been removed from would omit that object and exit `0`, which is the
+  failure `BR-CDOC-002` exists to prevent; the next listing is a miss, per
+  `FR-CDOC-007`, and reads the server.
+
+  *Added in the fifty-eighth edition,* for rmp `#302`.
+
+- **FR-CACHE-044**: Every command that reads or writes the cache SHALL NOT
+  resolve a cache path through a symbolic link. The commands are the eight
+  `schema` subcommands and `tpl render` without `--context`, per
+  `FR-CACHE-009`, whichever of `--direct` and `--no-cache` they carry except
+  both together, and `tpl cache load` and `tpl cache status`.
+  `tpl cache clean` is governed by `FR-CACHE-042`.
+
+  IF `.tpl/.cache` is a symbolic link, or `.tpl/.cache/<name>` for the
+  selected entry is one, or the folder of a collection the invocation would
+  read or write beneath it is one, THEN the system SHALL read nothing from the
+  cache, SHALL write nothing to it, SHALL open no connection, SHALL write
+  nothing to stdout, and SHALL exit `78` (`EX_CONFIG`). The `cause` and the
+  `hint` SHALL follow item 1 of `FR-CACHE-042`: the `cause` names the link by
+  its path, and the `hint` carries the command that removes the link alone,
+  with the absolute path built under `FR-ERR-041`. `.tpl` is canonicalised
+  first, per `FR-PROJ-009`, and every component below it is tested as it is
+  written. The condition SHALL be evaluated at step 6 of `FR-ERR-006`, before
+  the cache is consulted and before any connection is opened, so a read that
+  would be a hit is refused as a read that would miss is.
+
+  ```
+  tpl -d shop schema tables
+  error: .tpl/.cache is a symbolic link; nothing was read or written
+  cause: /home/ana/shop/.tpl/.cache is a symbolic link, and tpl reads and writes no cache through a link
+  hint:  rm /home/ana/shop/.tpl/.cache
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command and
+  the code.
+
+  `tpl ... --direct --no-cache` touches no cache, per `FR-CACHE-016`, so it is
+  not refused and is the form that reads the server while the link stands. A
+  symbolic link at an object file remains a miss under `FR-CACHE-033` and is
+  replaced under `FR-CACHE-030`; a symbolic link at `meta.json` or at
+  `database.json` is an unusable record under `FR-CDOC-017`, never read
+  through, replaced and not followed by a full write, and left in place by a
+  clean given an object flag, per `FR-CACHE-043`. `FR-CACHE-036` does not apply: it
+  governs a cache that cannot be written, and here the cache is not reached.
+
+  *Threat closed.* A `.tpl/.cache` replaced by a link made `tpl cache load`
+  and every read that fills the cache write files outside the project, and
+  made a hit serve catalogue data from outside the project as though the
+  cache held it — the forgery `FR-CACHE-033` refuses at the level of one
+  object file. This is rmp `#305`.
+
+  *Why the whole command is refused.* It is how every trust check of this
+  corpus answers a planted state: an unsafe `.cfg` is `78` under
+  `FR-PROJ-010` and `FR-PROJ-011`, a `.tpl` without `.cfg` owned by another
+  user is `78` under `FR-PROJ-028`, and a linked template is refused under
+  `FR-TMPL-024`. It also gives one state one answer: `FR-CACHE-042` refuses
+  the clean, so a read that went ahead would leave the caller a link that
+  only one command reports.
+
+  *Rejected: serving the read from the server and skipping the cache write,
+  as `FR-CACHE-036` does for a cache that cannot be written.* A cache that
+  cannot be written is an optimisation that failed; a linked cache root is a
+  project state `tpl` does not accept, and a silent skip reports it to
+  nobody. It also answers only the miss: a hit would have to be refused or
+  served through the link, so the same state would give two outcomes
+  depending on what the cache held.
+
+  *Accepted cost.* A project that keeps its cache on another volume through a
+  linked `.tpl/.cache` cannot use the cache at all. Its reads pass
+  `--direct --no-cache`, or the link is replaced by a folder.
+
+  *Added within the fifty-eighth edition,* for rmp `#305`.
+
 - **FR-CACHE-025**: `tpl cache status` SHALL report the database entry, when the
   cache was loaded, and the object counts it holds.
 
@@ -554,9 +727,44 @@ tpl -d shop cache status
   *Accepted cost.* A count can include a file that the next read treats as a
   miss, per `FR-CACHE-033`, until that read rewrites it.
 
+  WHERE the cache for the selected entry is not empty under `FR-CACHE-035`,
+  and `meta.json` is absent, unreadable under `FR-CACHE-033`, or unusable
+  under `FR-CDOC-004` or `FR-CDOC-017`, `loaded_at` SHALL be `null`, and `collections` SHALL carry
+  all three collections, each with its `count` as defined above and `whole`
+  `false`. The system SHALL NOT read through the record to report it, and
+  SHALL exit `0`. The wording of the `text` form in that case is the
+  implementation's.
+
+  *Added within the fifty-eighth edition,* for rmp `#305`, as decided by the
+  user. No load time is held, so none is reported. The collections are
+  reported because the count reports what the cache holds and not what it can
+  serve, as the rationale above states, and no collection is whole because
+  no record says one is, per `FR-CDOC-007`. The case is not the empty cache of
+  `FR-CACHE-035`, whose `collections` is an empty array.
+
+  *Rejected: reporting the case as an empty cache*, with `collections` an
+  empty array. It hides object files that are present.
+
 - **FR-CACHE-035**: WHEN the cache for the selected entry is empty, the `data`
   of `tpl cache status` SHALL carry `loaded_at` `null` and `collections` an
   empty array. The exit code is `0`, per `FR-CACHE-026`.
+
+  The cache for an entry SHALL be **empty** exactly WHERE nothing exists at
+  its `meta.json` — no file, no link and no file of any other kind — and no
+  collection holds an object file, as `FR-CACHE-034` counts one. Every other
+  state is not empty. A `meta.json` that exists and is unreadable under
+  `FR-CACHE-033` or unusable under `FR-CDOC-004` or `FR-CDOC-017` — a link,
+  a file that is not a regular file, a file over its bound, an unknown
+  version, a torn or empty file — therefore makes the cache not empty even where no collection holds an object file,
+  and an absent `meta.json` beside an object file does the same. Both are
+  reported under the last clause of `FR-CACHE-034`.
+
+  *Amended within the fifty-eighth edition,* for rmp `#305`. The requirement
+  did not say what empty is, and the clause `FR-CACHE-034` gained for an
+  absent or unusable record would otherwise apply to a cache with no files at
+  all, which this requirement answers. The two now meet at one boundary.
+  Other files — `database.json`, the collection folders, a temporary file of
+  a write in flight — do not make a cache not empty.
 
 ## Invalidation
 
@@ -631,6 +839,11 @@ tpl -d shop cache status
   the rename. A target that is a symbolic link SHALL NOT be left in place and
   SHALL NOT be followed, whatever it points at: the rename SHALL replace the
   link itself with a regular file.
+
+  *Note added in the fifty-eighth edition.* This requirement governs a link
+  at the object file. A link at `.tpl/.cache`, at the entry folder or at a
+  collection folder refuses the command before any write, per
+  `FR-CACHE-044`.
 
   *Amended in the forty-second edition, as decided for rmp `#256`.* The last
   sentence is new. The permission above read a byte-identical target through a
@@ -760,6 +973,10 @@ tpl -d shop cache status
   it, and SHALL report neither an error nor a warning. A failed cache write
   SHALL NOT change the exit code and SHALL NOT change a byte of stdout.
 
+  *Note added in the fifty-eighth edition.* A symbolic link at `.tpl/.cache`,
+  at the entry folder or at a collection folder is not a cache that cannot be
+  written. It refuses the command with `78`, per `FR-CACHE-044`.
+
   *Rationale.* The read succeeded. The answer the caller asked for is correct,
   complete, and live, and the only thing that did not happen is an
   optimisation. Failing the command would make `.tpl/` being read-only —
@@ -824,6 +1041,8 @@ tpl -d shop cache status
   always bypasses the cache.
 - [project-and-discovery.md](project-and-discovery.md) — the `.tpl/` layout and
   the writers of it.
+- [security.md](security.md) — `FR-SEC-026`, which points at `FR-CACHE-042`
+  and `FR-CACHE-044`.
 
 ## Open questions
 

@@ -3,8 +3,8 @@ id: ADR-010
 title: The TLS connect stall in the pinned driver
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-22
-requirements: [FR-CONF-013, FR-CONF-036, NFR-PERF-012, NFR-PERF-014]
+last-reviewed: 2026-09-25
+requirements: [FR-CONF-013, FR-CONF-036, NFR-PERF-014]
 supersedes: []
 superseded-by: null
 ---
@@ -86,9 +86,12 @@ only `disabled` does not. Three of `NFR-PERF-014`'s nine measurement points
 reach a server, and two of those three are timings — `tpl schema dump` over
 `WL-001`, and the canonical loop of 200 invocations — against adopted figures
 stated in milliseconds. Neither figure refuses anything, per `BR-PERF-008`; what
-the stall costs is exactly what those figures are kept to show, and
-`NFR-PERF-012` makes the identity of the built artefact material to every figure
-recorded against it.
+the stall costs is exactly what those figures are kept to show. A figure is
+comparable only with another taken from the same build, so the identity of the
+built artefact matters to every figure recorded against it. That is this
+record's design ground, not a requirement: `NFR-PERF-012` requires a recorded
+measurement to name its target and, where it reaches a server, its series, and
+names no artefact.
 
 **What this record prescribed now exists.** It was written before there was a
 `Cargo.toml`, to prescribe what the sprint that creates the manifest must put
@@ -102,7 +105,7 @@ them.
 **The package patches the driver rather than living with the stall, changes
 version, or diverges from upstream's own fix.**
 
-The manifest, when it is created, SHALL carry a `[patch.crates-io]` entry
+The manifest SHALL carry a `[patch.crates-io]` entry
 redirecting `sqlx-core` to a copy of the published 0.9.0 source carrying one
 added statement — `socket.set_nodelay(true)?`, where the TLS transport
 establishes its socket. That statement is the change upstream made in PR
@@ -113,13 +116,15 @@ nothing else.
 patch applies over that version and replaces no version. This record holds the
 patch; `ADR-003` holds the pin.
 
-Two mechanical constraints follow from how Cargo reads a patch, and are stated
-here so the manifest is written once: the entry SHALL be declared in the
+Two mechanical constraints follow from how Cargo reads a patch: the entry SHALL
+be declared in the
 workspace-root manifest, because Cargo reads patch settings nowhere else; and
 the patched source SHALL be pinned to an immutable revision — a git `rev` or
-tag, or a path inside this repository — never a branch, because `NFR-PERF-012`
-requires a recorded measurement to name the artefact it was taken on and a
-floating source leaves that artefact unnameable.
+tag, or a path inside this repository — never a branch. The patched source must
+be published 0.9.0 plus one statement and nothing else, and that can be checked
+only against bytes a commit of this repository fixes. Cargo locks a git
+dependency's commit in `Cargo.lock` and moves it on `cargo update` (Sources), so
+a branch would let the patched source change without any edit to the manifest.
 
 **The condition that retires this record, stated so that it cannot be forgotten:
 the first `sqlx` release whose `sqlx-core` contains PR `#4336`.** On that
@@ -131,10 +136,9 @@ patch with no stated expiry becomes permanent by forgetting, and this one must
 not.
 
 **Where the patched source lives: a vendored copy inside this repository.** The
-sprint that writes the manifest SHALL place the patched source at
-`vendor/sqlx-core-0.9.0/` — a tracked directory holding the published 0.9.0
-source of `sqlx-core` with the one added statement and nothing else — and SHALL
-redirect to it by path, `sqlx-core = { path = "vendor/sqlx-core-0.9.0" }` under
+patched source SHALL live at `vendor/sqlx-core-0.9.0/` — a tracked directory
+holding the published 0.9.0 source of `sqlx-core` with the one added statement
+and nothing else — and the manifest SHALL redirect to it by path, `sqlx-core = { path = "vendor/sqlx-core-0.9.0" }` under
 the `[patch.crates-io]` table of that manifest. It is the form `BENCHMARKS.md`
 records for the measured candidates, so what this record prescribes is the
 configuration the measurement was taken on. The version belongs in the directory
@@ -145,10 +149,9 @@ published source is a defect in it.
 
 **Of the three forms the immutability constraint admits, this is the
 strongest.** The bytes compiled are fixed by the commit of this repository the
-build was taken at, so a recorded figure names its artefact by naming that
-commit and its target, which is what `NFR-PERF-012` requires; no revision of a
-second repository has to be recorded, resolved, or still reachable for that name
-to keep its meaning. The vendored tree SHALL carry its provenance beside it: the
+build was taken at, so naming that commit names the patched source exactly; no
+revision of a second repository has to be recorded, resolved, or still
+reachable for that name to keep its meaning. The vendored tree SHALL carry its provenance beside it: the
 crate and version it was taken from, and the upstream change the added
 statement reproduces, PR `#4336`. Both are already facts of this record; what
 the vendored form adds is that they travel with the source, so the divergence
@@ -285,7 +288,7 @@ choice was made; either is the user's to overturn.
   re-examined; it is refused as the standing control because it feeds command 5
   a lockfile naming a registry source for a crate this project does not build
   from the registry — the artefact audited would not be the artefact built,
-  which is the property `NFR-PERF-012` exists to protect — and because a
+  which defeats the audit — and because a
   mutated lockfile is one `git add` away from being committed. A sixth pipeline
   command is refused under R2: the pipeline is prescribed in
   `docs/spec-technical/operations.md`, this register is subordinate and cannot
@@ -305,8 +308,10 @@ this record did not have: two of them are below, and the third settled the
 question the Decision left open about the workspace exclusion.
 
 **No artefact built under the patch is the published crate.** A figure
-taken against it names an artefact that differs from `sqlx-core` 0.9.0 by one
-statement, and `NFR-PERF-012` requires that to be visible in what is recorded.
+taken against it comes from a build that differs from `sqlx-core` 0.9.0 by one
+statement. `BENCHMARKS.md` is a record of observations, and a reader comparing
+such a figure with one from the unpatched crate needs to see that difference;
+no requirement obliges it to be recorded.
 Removing the patch when the fix ships changes the artefact again; the change
 should be behaviour-neutral by construction, since the statement removed is the
 statement the release adds. Under the vendored form that identity is cheap to
@@ -429,12 +434,14 @@ not by this register.
 | The floor is paid on all four supported server series, over loopback and over the docker bridge path, and is absent only on the macOS host path, where a userland proxy terminates the connection | same entry, *Independent of server series and of network interface* | 2026-09-11 |
 | The regression chronology: present in 0.7.4 through 0.8.6, zero occurrences in 0.9.0, present again on `main`; dropped by the runtime rewrite; re-reported as issue `#4335` on 2026-07-10; fixed on `main` by PR `#4336`, merged 2026-08-17. Repository `https://github.com/transact-rs/sqlx` | same entry, *Whose defect it is, and its status upstream* | 2026-09-11 |
 | `StdSocket` still lacks a `write_vectored` implementation on `main`, so the `rustls` flight still leaves split upstream | same entry, *What is not reported upstream* | 2026-09-11 |
-| `sqlx` 0.9.0, published 2026-05-21, is still the maximum stable release; 0.8.6 was published 2025-05-19. No release carries PR `#4336`, so the retiring condition has not been met | crates.io index API, crate `sqlx`, `max_stable_version` and version list | 2026-09-11, re-checked 2026-09-12 |
+| `sqlx` 0.9.0, published 2026-05-21, is still the maximum stable release; 0.8.6 was published 2025-05-19. No release carries PR `#4336`, so the retiring condition has not been met | crates.io index API, crate `sqlx`, `max_stable_version` and version list | 2026-09-11, re-checked 2026-09-12 and 2026-09-25 (`sqlx` and `sqlx-core`) |
 | `sqlx::mysql::MySqlSslMode` declares the same five variants — `Disabled`, `Preferred`, `Required`, `VerifyCa`, `VerifyIdentity` — at 0.8.6 and at 0.9.0 | docs.rs, `sqlx` 0.8.6 and `sqlx` 0.9.0, `sqlx::mysql::MySqlSslMode` | 2026-09-11 |
 | The cell-by-cell behaviour of the five modes was established against running servers on 2026-09-10, against the version `ADR-003` pins and against no other; the failure this guards against is silent and is not visible from an API listing | `ADR-002`, *Context*; `ADR-003`, *Alternatives rejected* | 2026-09-11 |
 | The toolchain floor of 1.94.0 is declared by the crate at the version `ADR-003` pins, and moves with it | `ADR-007`, *Decision* | 2026-09-11 |
 | Cargo reads `[patch]` settings only from the workspace-root manifest and ignores them in dependencies; a patch source may be a git repository pinned to a branch, tag or rev, or a local path | The Cargo Book, *Overriding Dependencies* | 2026-09-11 |
 | All `path` dependencies residing in the workspace directory automatically become workspace members, and the `exclude` key prevents a path from being included | The Cargo Book, *Workspaces*, the `members` and `exclude` fields | 2026-09-11 |
+| A recorded measurement names its target and, where it reaches a server, its series; none of the three requirements names the artefact | `specification/performance-requirements.md`, `NFR-PERF-012`, `NFR-PERF-009`, `NFR-PERF-010` | 2026-09-24 |
+| Cargo locks the commits of git dependencies in `Cargo.lock` when they are added and checks for updates only on `cargo update` | The Cargo Book, *Specifying Dependencies* | 2026-09-24 |
 | The measured candidate fixes were produced by vendoring `sqlx-core` 0.9.0 and redirecting to it with `[patch.crates-io]` and a `path` — the form this record prescribes | `BENCHMARKS.md`, "2026-09-11 — The TLS connect stall on Linux loopback", *Reproduction* | 2026-09-11 |
 | `cargo audit`, command 5 of the mandatory validation pipeline, audits `Cargo.lock` | `docs/spec-technical/operations.md`, the pipeline table, row 5, which cites the crates.io index and rustsec.org for `cargo-audit` 0.22.2 | 2026-09-11 |
 | `cargo audit` matches advisories only for a lockfile package carrying a `source`, so the path-patched `sqlx-core` is counted and never matched; the `source` field alone gates it and the `checksum` is irrelevant | Three runs of `cargo audit` against a probe advisory database — over this repository's `Cargo.lock` at `be16e30`, over `git show HEAD:Cargo.lock` at the same commit, and over the working lock with `source` restored and `checksum` still absent — recorded in full on task `#67` | 2026-09-12 |
@@ -443,4 +450,4 @@ not by this register.
 | `LICENSE-APACHE` and `LICENSE-MIT` in the published artefact are 17- and 14-byte files whose entire content is `../LICENSE-APACHE` and `../LICENSE-MIT`; upstream keeps them as symbolic links into its workspace root. The declared offer is `MIT OR Apache-2.0` | `vendor/sqlx-core-0.9.0/LICENSE-APACHE`, `LICENSE-MIT` and `Cargo.toml`, read directly | 2026-09-12 |
 | The texts those stubs point at exist at the repository root of the revision the crate was published from, `003b698e99e024f3621b8043a2426fde5b741171`: `LICENSE-MIT`, 1109 bytes, sha256 `5abbdd84…32b339d`, carrying the copyright notice; `LICENSE-APACHE`, 10297 bytes, sha256 `c8f54536…1b50ac99` | `transact-rs/sqlx` at that revision, which `vendor/sqlx-core-0.9.0/.cargo_vcs_info.json` names | 2026-09-12 |
 | A redistributor must give any other recipient of the work a copy of the Apache License; and the MIT copyright notice and permission notice must be included in all copies or substantial portions of the software | Apache License 2.0, section 4(a), and the MIT permission notice, read from the two files above | 2026-09-12 |
-| The RustSec advisory database records no advisory for `sqlx-core` | `rustsec/advisory-db`, the absence of a `crates/sqlx-core` directory, cross-checked against the per-crate page on `rustsec.org` | 2026-09-12 |
+| The RustSec advisory database records no advisory for `sqlx-core` | `rustsec/advisory-db`, the absence of a `crates/sqlx-core` directory, cross-checked against the per-crate page on `rustsec.org` | 2026-09-12, re-checked 2026-09-25 |

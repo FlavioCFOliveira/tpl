@@ -8,15 +8,21 @@ curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.s
 
 The same command installs and updates `tpl`, into `/usr/local/bin` by default. It installs the latest published release; the first is v0.0.1. See [Installation](#installation).
 
+```sh
+curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh
+```
+
+This command installs or updates the Claude Code skill in your personal skills folder, `~/.claude/skills/tpl` by default. Releases ship the skill archive from v0.0.2; v0.0.1 does not. See [Claude Code skill](#claude-code-skill).
+
 Its interaction model is modelled on `git`: a single executable, commands with subcommands, short aliases, and read commands whose output is stable enough to pipe into something else. Templates are **plain files on disk, loaded and compiled at render time**, so changing a template never requires rebuilding `tpl`.
 
 The intended caller is an AI coding agent rather than a person at a prompt. Such a caller has three channels for understanding a command-line tool — its help text, its exit code, and what it prints — so all three are treated as contract.
 
 ---
 
-> ## Status: implemented, first release v0.0.1
+> ## Status: implemented, released (latest v0.0.2)
 >
-> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 is the first release of `tpl`; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds.
+> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 was the first release of `tpl` and v0.0.2 is the latest; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds.
 >
 > | Command | State |
 > |---|---|
@@ -41,6 +47,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 - [What `tpl` is for](#what-tpl-is-for)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Claude Code skill](#claude-code-skill)
 - [Quick start](#quick-start)
 - [Worked examples](#worked-examples)
 - [The `.tpl` project](#the-tpl-project)
@@ -87,7 +94,7 @@ MySQL is not a target. A server that is not MariaDB is refused rather than read,
 
 ## Installation
 
-Releases are published on [GitHub Releases](https://github.com/FlavioCFOliveira/tpl/releases) when a `v*` tag is pushed. The first is v0.0.1. The installer below installs the latest release, and building from source remains an alternative. How releases are built and published is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
+Releases are published on [GitHub Releases](https://github.com/FlavioCFOliveira/tpl/releases), each by a release workflow started by hand against an already pushed `v*` tag. The first is v0.0.1. The installer below installs the latest release, and building from source remains an alternative. How releases are built and published is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
 
 ### With the install script
 
@@ -109,7 +116,7 @@ The script supports four targets, `x86_64-unknown-linux-musl`, `aarch64-unknown-
 
 ### By hand
 
-Each release carries one archive per target, `tpl-<tag>-<triple>.tar.gz`, holding the `tpl` binary, `README.md`, `LICENSE` and `CHANGELOG.md`, and one `SHA256SUMS` file covering the four. Download the archive for your target and `SHA256SUMS`, verify, and extract:
+Each release carries one archive per target, `tpl-<tag>-<triple>.tar.gz`, holding the `tpl` binary, `README.md`, `LICENSE` and `CHANGELOG.md`, and one `SHA256SUMS` file. From v0.0.2, each release also carries the skill archive, `tpl-skill-<tag>.tar.gz`, and its `SHA256SUMS` covers all five archives; in v0.0.1, it covers the four target archives. Download the archive for your target and `SHA256SUMS`, verify, and extract:
 
 ```sh
 tag=vX.Y.Z                    # the release's tag
@@ -132,6 +139,33 @@ cargo build --release
 ```
 
 The binary is produced at `target/release/tpl`.
+
+---
+
+## Claude Code skill
+
+[`skill/`](skill/README.md) is a Claude Code skill that makes Claude the sole operator of `tpl` for Claude Code agents: every `tpl` task goes through the `tpl` binary, never through a reimplementation of it. The skill needs `tpl` on `PATH`.
+
+Install or update it with one command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh
+```
+
+The script downloads `tpl-skill-<tag>.tar.gz` from the latest release, verifies it against the release's `SHA256SUMS`, and installs it into `$CLAUDE_CONFIG_DIR/skills/tpl`, where `CLAUDE_CONFIG_DIR` defaults to `~/.claude`. `TPL_SKILL_DIR` names another destination; both variables are read by the script, not by `tpl`. An existing skill at the destination is replaced; if it is a symbolic link, only the link is removed, never its target. The script never uses `sudo`. Releases ship the skill archive from v0.0.2; v0.0.1 does not.
+
+For development, install from a clone instead. From its root, link the folder, so that `git pull` updates the skill:
+
+```sh
+mkdir -p ~/.claude/skills
+ln -s "$PWD/skill" ~/.claude/skills/tpl
+```
+
+Or copy it, which gives a snapshot you must replace to update: `rm -rf ~/.claude/skills/tpl && cp -R skill ~/.claude/skills/tpl`.
+
+Claude Code picks up changes to its skills directory in the current session. Only a skills directory created after the session started needs Claude Code to be restarted.
+
+[`skill/README.md`](skill/README.md) describes what the skill holds, and how to run `skill/scripts/check-coverage.sh`, which checks that the skill's command map names every command and alias the installed `tpl` publishes. How the skill is released and installed is [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
 
 ---
 
@@ -175,11 +209,12 @@ tpl cache clean
 
 # 8. Read the templates the project carries.
 tpl template list
-tpl template show rust/struct
+tpl template show example
 tpl template check
 
-# 9. Render one of them. The result goes to stdout and nowhere else, so where
-#    it lands is a redirection you write.
+# 9. Render a template. The result goes to stdout and nowhere else, so where
+#    it lands is a redirection you write. rust/struct and docs/table.md stand
+#    for templates of your own: tpl init writes only example and rust/_types.
 tpl render rust/struct --table orders > src/models/orders.rs
 tpl render docs/table.md --table orders --set title=Orders
 
@@ -188,7 +223,7 @@ tpl render rust/struct --context context.json --table orders
 tpl schema dump | tpl render rust/struct --context - --table orders
 ```
 
-Steps 4, 5, 6 and 8 are read commands and accept `--format json` and `--pretty`, except `tpl schema dump`, which emits JSON and nothing else, and `tpl template show` and `tpl template check`, neither of which has a second representation. Steps 1 to 3, step 7 and `tpl template check` write and print nothing on success: the exit code is the message. Steps 9 and 10 write the rendered text and nothing else — `tpl render` has no `--output`, no `--format` and no `--pretty`.
+Steps 4, 5, 6 and 8, and `tpl cache status` in step 7, are read commands and accept `--format json` and `--pretty`, except `tpl schema dump`, which emits JSON and nothing else, and `tpl template show` and `tpl template check`, neither of which has a second representation. Steps 1 to 3, `tpl cache load` and `tpl cache clean` in step 7, and `tpl template check` print nothing on success: the exit code is the message. Steps 9 and 10 write the rendered text and nothing else — `tpl render` has no `--output`, no `--format` and no `--pretty`.
 
 ---
 
@@ -244,16 +279,17 @@ tpl init projects/reports
 
 `--tpl-dir <path>` names the `.tpl` folder outright and suppresses the walk. The path must be the `.tpl` folder itself, its last segment `.tpl`: naming the directory that holds it, or any other directory, exits `78`, and the `hint` names the `.tpl` folder where there is one. It exempts nothing: the folder it names is subject to every check below.
 
-Four entries of the tree need no project and perform no discovery at all: `tpl init`; `tpl help` in its three forms; `-h/--help` at any node; and `tpl version` with `-V/--version`. Each runs where no project exists, reads no file under `.tpl` and opens no socket — which is what makes `tpl help --format json` safe as an agent's first invocation, before it knows `tpl init` exists.
+Four entries of the tree need no project, and no project above the invocation decides what any of them does: `tpl init`; `tpl help` in its three forms; `-h/--help` at any node; and `tpl version` with `-V/--version`. `tpl init` alone looks upward, only to warn on stderr that the project it creates shadows one above it; see [`FR-PROJ-025`](specification/project-and-discovery.md). Each runs where no project exists, reads no file under `.tpl` and opens no socket — which is what makes `tpl help --format json` safe as an agent's first invocation, before it knows `tpl init` exists.
 
 ### `.tpl/.cfg` must be yours alone
 
-The file decides which host is contacted, which credential is used and which child process is run, so `tpl` refuses to read it unless two things hold, and it checks both **before** opening it:
+The file decides which host is contacted, which credential is used and which child process is run, so `tpl` refuses to read it unless three things hold, and it checks all three, in this order, **before** reading it:
 
-- it is owned by the invoking user, and
+- it is a regular file — not a symbolic link, a directory, a FIFO, a socket or a device;
+- it is owned by the invoking user; and
 - it grants no access to group and none to other — mode `0600`, as `tpl init` creates it.
 
-Either failure exits `78`, naming what was found. A symbolic link is checked at its target, not at the link. An **absent** `.cfg` is not a failure: the `.tpl` folder must then be owned by the invoking user, or the invocation exits `78`, and the project reads as one with an empty configuration, which `tpl cfg set` can write again.
+Any failure exits `78`, naming what was found — for the first, the kind of file — and nothing is read from the file. To keep the configuration outside the project, name that project's `.tpl` folder with `--tpl-dir` rather than linking `.cfg`. An **absent** `.cfg` is not a failure: the `.tpl` folder must then be owned by the invoking user, or the invocation exits `78`, and the project reads as one with an empty configuration, which `tpl cfg set` can write again.
 
 ### What to version, and what not to
 
@@ -319,7 +355,7 @@ A DSN takes the form `scheme://[user[:password]@]host[:port]/database`, with `my
 Two mechanisms, and each is a key of the space above. Both take effect when the configuration is **resolved for a connection** — which is what every command that opens one does: the `schema` subcommands, `tpl cache load`, `tpl cfg database test`, and `tpl render` when its context comes from the database rather than from `--context`. The commands that only read or write `.tpl/.cfg` expand no variable and run no `password_command`.
 
 - **`${VAR}`** expands from the environment in six fields: `dsn`, `host`, `port`, `user`, `password`, and `database`. It is a single pass — an expanded value is never re-expanded — `$$` is a literal `$`, and in the file an undefined variable, an unclosed `${` or a name that is not `[A-Za-z_][A-Za-z0-9_]*` exits `78` rather than substituting nothing; on the command line the last two are refused with `64`. It is deliberately **not** expanded anywhere else, so no environment variable can weaken transport or choose the program that runs: `ca_file`, `ca_path` and `core.database` refuse a `${`, and in `password_command` it reaches the program as written.
-- **`password_command`** is an argument **array**, executed directly, with no shell. Shell metacharacters are literal arguments. Its trimmed standard output is the password, read to a cap of 4096 bytes; its standard error goes to the null device; a non-zero exit is `78`. On the command line you write it as one string and `tpl` stores the array it splits into; a string that yields no word, leaves a quote unclosed, ends in a backslash or begins with `[` is refused with `64`:
+- **`password_command`** is an argument **array**, executed directly, with no shell. Shell metacharacters are literal arguments. Its trimmed standard output is the password, read to a bounded length; its standard error goes to the null device; a non-zero exit fails the invocation. The bound and the exit codes are [`FR-CONF-031`](specification/configuration-model.md) and [`FR-CONF-033`](specification/configuration-model.md). On the command line you write it as one string and `tpl` stores the array it splits into; a string that yields no word, leaves a quote unclosed, ends in a backslash or begins with `[` is refused with `64`:
 
   ```bash
   tpl cfg database update reporting \
@@ -354,7 +390,7 @@ tpl cfg database remove staging
 
 Four properties hold across every write.
 
-- **`add` creates and `update` changes.** Neither does the other's job: `add` against a name that exists is `64` and points at `update`; `update` against a name that does not is `66`. There is no `--force`.
+- **`add` creates and `update` changes.** Neither does the other's job: `add` against a name that exists is refused and points at `update`, and `update` against a name that does not exist is refused. There is no `--force`. The exit code of each is in `tpl help cfg database add` and `tpl help cfg database update`.
 - **An update touches only the fields its flags name.** The rest of the entry is left exactly as it was.
 - **Comments and key order survive.** The file is rewritten through a format-preserving parser, so the commented example `tpl init` writes is still there after the first `tpl cfg set`, and a comment you wrote beside a key stays beside it.
 - **A write that would break the file is refused before the file is touched.** Writing `dsn` into an entry that carries `host`, or a `password` into one that carries `password_command`, exits `64` with the file unchanged, names both keys, and hands you a command that makes the change without deleting anything you did not name — for an entry defined by `dsn`, `tpl cfg database update <name> --dsn <url>`.
@@ -403,11 +439,13 @@ Every blocking phase has a deadline, so an invocation cannot hang with no diagno
 
 A render is bounded by three more limits besides its deadline, each set by a `[core]` key:
 
-- **`render_fuel`** — the evaluation steps one render may execute, counted by the template engine. Default `100000000`; an integer from `1` to `1000000000000`.
-- **`render_output_limit`** — the bytes one render may produce, counted as they are produced. Default `67108864` (64 MiB); an integer from `1` to `1099511627776` (1 TiB). A render stopped here writes nothing to stdout.
-- **`render_memory_limit`** — the heap the process may hold while the render runs, as its allocator counts it, observed every 10 ms. Default `134217728` (128 MiB); an integer from `8388608` (8 MiB) to `1099511627776` (1 TiB). A render stopped here writes nothing further to stdout.
+- **`render_fuel`** — the evaluation steps one render may execute, counted by the template engine.
+- **`render_output_limit`** — the bytes one render may produce, counted as they are produced. A render stopped here writes nothing to stdout.
+- **`render_memory_limit`** — the heap the process may hold while the render runs, as its allocator counts it, observed periodically. A render stopped here writes nothing further to stdout.
 
-Fuel and output are counts, so a template that loops or writes without end stops at the same point on every run. The memory limit is observed periodically: the process may hold more than the limit between two observations, and a single allocation the operating system refuses outright still ends the process by a signal rather than with `65`. The output is held in memory until the render ends, which is why its default sits at half the memory default — endless output is reported as the output limit, not as memory.
+Each key's default and admitted range are printed by `tpl help cfg set` and fixed by [`FR-CONF-045`](specification/configuration-model.md); they are not repeated here.
+
+Fuel and output are counts, so a template that loops or writes without end stops at the same point on every run. The memory limit is observed periodically: the process may hold more than the limit between two observations, and a single allocation the operating system refuses outright still ends the process by a signal rather than with `65`. The output is held in memory until the render ends, which is why its default sits below the memory default — endless output is reported as the output limit, not as memory.
 
 Whichever of the four is crossed first ends the render and exits `65`, naming the bound, its resolved value, and the key that raises it. No key admits `0` or any value meaning "no bound": a value outside the range in `.tpl/.cfg` exits `78`, and `tpl cfg set` refuses it with `64`. No flag and no environment variable sets any of them, and `--timeout` does not affect them. See [`FR-RND-036` … `FR-RND-039`](specification/render-command.md) and [`FR-CONF-045`](specification/configuration-model.md).
 
@@ -430,7 +468,7 @@ exit:  78 (EX_CONFIG)
 
 Ten exit codes are used, following `sysexits.h`, and each distinct failure has its own so that the code alone decides what to do next. The table, and what the `cause` line names for each code, is [`errors-and-exit-codes.md`](specification/errors-and-exit-codes.md).
 
-`EPIPE` on stdout — the `tpl … | head` case — exits `0` silently in the ordinary case. A pipe that closes part-way through a JSON document is `74`, because the document written is not the document promised.
+`EPIPE` on stdout — the `tpl … | head` case — exits `0` silently in the ordinary case. A pipe that closes part-way through a JSON document is an error, because the document written is not the document promised; its exit code is [`FR-ERR-025`](specification/errors-and-exit-codes.md)'s.
 
 ---
 
@@ -467,7 +505,7 @@ cargo test --all-features
 cargo audit
 ```
 
-CI runs these five commands on the four targets on every push and pull request (`.github/workflows/ci.yml`). Pushing a `v*` tag runs `.github/workflows/release.yml`, which publishes a release only when the tag is annotated, points at a commit reachable from `main`, is `v` followed by a Semantic Versioning 2.0.0 version equal to `version` in `Cargo.toml`, and has exactly one `release-notes/<tag>-<YYYYMMDD>.md`, which becomes the release body — and only if the same validation then passes on the four targets. A tag with a pre-release identifier, such as `v0.2.0-rc.1`, publishes a GitHub pre-release; the expected order is the `gitflow` procedure's: merge to `main`, create the annotated tag, push `main`, then push the tag. See [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md).
+Both workflows run only when started by hand, through `workflow_dispatch`: `ci.yml` runs these five commands on the four targets against a chosen ref, and `release.yml` publishes a GitHub Release from an annotated `v*` tag, only after its gates and the same validation pass. The triggers, the gates and the release procedure are [`ADR-012`](docs/adr/adr-012-ci-and-release-distribution.md)'s.
 
 `unsafe` is forbidden; `#![forbid(unsafe_code)]` stays at the top of the crate.
 

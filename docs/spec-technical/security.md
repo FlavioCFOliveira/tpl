@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -38,7 +38,7 @@ being raw.
 | # | Untrusted input | First seen by | What that boundary does with it | Forced by |
 |---|---|---|---|---|
 | 1 | The argument vector | `cli/` | Parsed and classified before any filesystem access; a rejected token leaves the parser as a typed value in an error, never as text the parser rendered | `FR-ERR-006`, `FR-CLI-006`, [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
-| 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised and both trust checks run as a **precondition** of opening the file; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
+| 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised; the file is opened without following a link and without blocking, and its type and both trust checks are judged on that descriptor as a **precondition** of reading it; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
 | 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-SEC-007` |
 | 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
 | 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
@@ -54,7 +54,10 @@ among the untrusted inputs, and neither does this document. `FR-CACHE-033` and
 `FR-CDOC-004` fix the treatment of a file that cannot be read or carries an
 unknown version — a silent miss — and, since the forty-second edition, of an
 object file that is a symbolic link or holds an object other than the one
-asked for, both misses too
+asked for, both misses too. `FR-CDOC-017` makes a `meta.json` or
+`database.json` that is a link, is not a regular file, or exceeds its bound an
+unusable record, and `FR-CACHE-044` refuses with `78` a link on the path to the
+cache; `FR-SEC-026` collects both
 ([data-model.md](data-model.md#tplcache)). No requirement subjects a cached document
 that **does** parse to the structural validation `FR-RND-020` requires of a
 supplied one, although the assembled-model invariant of `FR-CAT-044` is checked
@@ -255,7 +258,7 @@ The render deadline remains the backstop.
 
 ## Project discovery: the boundary and the trust checks
 
-The walk, the boundary and the three checks are
+The walk, the boundary and the five checks are
 [architecture.md](architecture.md#project-discovery-and-the-trust-checks)'s
 table. What belongs here is which threat each closes and what the build
 therefore contains.
@@ -266,15 +269,17 @@ therefore contains.
 | A path is checked at its target | The resolved path is canonicalised **before** any check | `FR-SEC-015`, `FR-PROJ-009` |
 | The file is the caller's | The process's own user identifier is obtained through a safe call and compared with the file's | `FR-SEC-014`, `FR-PROJ-010`, [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | Nobody else can write it | The mode check reads the same metadata as the ownership check | `FR-SEC-014`, `FR-PROJ-011` |
+| It is a regular file | Its type is read from the descriptor it is then read through, so a link, a FIFO, a socket or a device is `78` and nothing blocks | `FR-PROJ-030`, `FR-SEC-027` |
 | Naming the folder explicitly exempts nothing | The explicit path suppresses the walk and enters the same check sequence | `FR-SEC-016`, `FR-PROJ-008` |
-| An absent file is not a bypass | There is nothing to own and nothing to grant, so the checks pass and the configuration is empty; the project is the folder, and the write surface may create the file again | `FR-PROJ-001`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-004` |
+| An absent file is not a bypass | There is no file to own and nothing to grant, so the `.tpl` folder's ownership is checked instead; the configuration is then empty, and the write surface may create the file again | `FR-PROJ-028`, `FR-PROJ-001`, `FR-CFG-004` |
 
 Two consequences are worth stating because a reader would otherwise assume more
 or less than the design gives. The boundary is **not** what refuses a project
 left in a directory anyone may write to — the two checks on the configuration
 file are, and `FR-SEC-013` records the correction. And the checks are a
 precondition of reading rather than a validation of what was read, which is why
-they sit before the open in `project/` and not inside the parser
+they run on the opened descriptor in `project/`, before the read, and not inside
+the parser
 ([interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)).
 
 ## Template containment
@@ -291,6 +296,7 @@ the reasons that entry records.
 | The template root is the boundary of every lookup | The one resolution function | `FR-TMPL-023` |
 | A symbolic link is refused at **every component of the name below the canonical root**, not at the final component alone, each read from the entry's own metadata rather than by following it | The same function | `FR-SEC-017`, `FR-TMPL-024`, [`OD-15`](open-decisions.md#od-15--the-template-loader) |
 | The path that was checked is the path that is opened: one canonical form is compared with the root's, and nothing else is opened afterwards | The same function | `FR-SEC-017`, `FR-TMPL-025`, `FR-TMPL-026` |
+| A template is read only from a regular file. It is opened relative to the canonical root, one component at a time following none, with `O_NONBLOCK`, and its type is read from the descriptor it is then read through, so a FIFO swapped in after resolution neither blocks nor is read. An entry of another kind is not listed, is `66` when named, and fails a render with `65` when an include, import or extends names it | `Root::read` in `render/root.rs`, through `src/at.rs` | `FR-TMPL-033`, `FR-SEC-027`, [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | Syntax analysis is reachable without evaluation: no expression evaluated, no function called, no connection opened | `render/`, on the check path | `FR-SEC-018`, `FR-TMPL-017`, `BR-TMPL-001` |
 
 The second row was the final component alone until 2026-09-21. What the narrow
@@ -382,11 +388,14 @@ is the fourth row above, stated where a reader would otherwise assume more.
 **A symbolic link has four dispositions in this crate, and no component decides
 for another.** `render/` refuses one at every component below the template root,
 `project/` canonicalises before either file check, `mariadb/` resolves a
-`ca_path` entry and judges what it resolves to, and `cache/` never reads through
-one at an object file — a miss — and replaces one at a write target — the first
+`ca_path` entry and judges what it resolves to, and `cache/` refuses one on the
+path to the cache with `78`, never reads through one at an object file — a
+miss — or at `meta.json` or `database.json` — an unusable record — and
+replaces one at a write target — the first
 two are the tables of *Template containment* and *Project discovery* above, the
 third is the fifth row of this one, and the fourth is
-[data-model.md](data-model.md#tplcache)'s (`FR-CACHE-030`, `FR-CACHE-033`). There is no shared path-policy helper: each disposition is written
+[data-model.md](data-model.md#tplcache)'s (`FR-CACHE-030`, `FR-CACHE-033`,
+`FR-CACHE-042`, `FR-CACHE-044`, `FR-CDOC-017`, `FR-SEC-026`). There is no shared path-policy helper: each disposition is written
 where its own requirement applies, and a single helper would have to carry the
 difference as a parameter. Why each requirement disposes as it does is
 `FR-CONF-014`'s weighing; which entries of a `ca_path` contribute is

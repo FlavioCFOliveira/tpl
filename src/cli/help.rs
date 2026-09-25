@@ -1666,6 +1666,10 @@ const CFG_SET: &[Outcome] = &[
          any command, also -v with -q, or a global flag given a value it does not take, such as \
          --timeout 0.",
     ),
+    outcome(
+        Code::NoInput,
+        "KEY is core.database and VALUE names no database entry the file has.",
+    ),
     outcome(Code::IoError, "Reading or rewriting .tpl/.cfg failed."),
     outcome(
         Code::Configuration,

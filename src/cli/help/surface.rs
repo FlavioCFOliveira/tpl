@@ -392,18 +392,18 @@ const TESTS: &[Item] = &[
 /// Every global function help describes, all registered by `FR-ENV-020`.
 const FUNCTIONS: &[Item] = &[
     lookup(
-        "table",
-        "table(name)",
+        "table_named",
+        "table_named(name)",
         "Returns the table of that name; using the result fails the render when there is none.",
     ),
     lookup(
-        "view",
-        "view(name)",
+        "view_named",
+        "view_named(name)",
         "Returns the view of that name; using the result fails the render when there is none.",
     ),
     lookup(
-        "routine",
-        "routine(name)",
+        "routine_named",
+        "routine_named(name)",
         "Returns the first routine of that name; using the result fails the render when there \
          is none.",
     ),

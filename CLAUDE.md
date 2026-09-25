@@ -472,7 +472,7 @@ Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tab
 | Configuração | `toml` + `serde` na leitura; `toml_edit` na escrita | A escrita preserva comentários e ordem; `OD-09`, em `docs/spec-technical/open-decisions.md` |
 | Erros | `thiserror` na biblioteca; o binário não carrega tipo de erro próprio | O `main.rs` lê o `exit_code` da biblioteca e devolve-o; `OD-32`, em `docs/spec-technical/open-decisions.md` |
 | Logging | Diagnósticos próprios, sem subscriber instalado | Sem `tracing` nem `tracing-subscriber`; controlado pela flag de verbosidade; `OD-17`, em `docs/spec-technical/open-decisions.md` |
-| uid do processo e grupo do helper | `rustix`, `default-features = false`, `features = ["process"]` | `getuid`, `kill_process_group` e `waitid` seguros; via `libc` exigiriam `unsafe`; `OD-24` e `OD-12`, em `docs/spec-technical/open-decisions.md` |
+| uid do processo, grupo do helper e operações de ficheiro relativas a directório | `rustix`, `default-features = false`, `features = ["fs", "process"]` | `getuid`, `kill_process_group`, `waitid`, `openat`, `unlinkat`, `renameat` e `mkdirat` seguros, e aberturas `O_NOFOLLOW`/`O_NONBLOCK`; via `libc` exigiriam `unsafe`; `OD-24` e `OD-12`, em `docs/spec-technical/open-decisions.md` |
 | Contagem de heap | `cap` sobre `std::alloc::System`, como `#[global_allocator]` | Limite de memória do render (`FR-RND-039`), lido pelo thread do prazo; versão, política de limite rígido e alternativas rejeitadas: `ADR-011`, em `docs/adr/` |
 
 > **Decisão fechada — driver MariaDB.** A escolha, a regra que a decidiu, o candidato rejeitado e a medição que confirmou a escolha — desmentindo a suspeita que aqui estava escrita — estão em `ADR-003`, em `docs/adr/`. O âmbito do runtime está em `ADR-005`.
@@ -485,7 +485,7 @@ Os sistemas suportados e verificados são o **Linux** e o **macOS**, nas arquite
 
 **O Windows está fora do âmbito.** Não é alvo, não se escreve código para o acomodar, e não se aceita uma dependência por causa dele.
 
-A matriz concreta de alvos — target triples, escolha de libc, linkagem e forma de empacotar o binário — é decisão de arquitectura em curso e **não se fixa aqui**.
+A matriz concreta de alvos — target triples, escolha de libc e linkagem — está fixada em `NFR-PERF-018`, em `specification/performance-requirements.md`, que regista também a consequência observável da ligação estática ao `musl` na resolução de nomes. O caminho de build de cada alvo é `ADR-008`, e a validação e a forma de empacotar os artefactos distribuídos são `ADR-012`, ambos em `docs/adr/`. **Não se repetem aqui.**
 
 ### Regras que decorrem disto
 
@@ -520,7 +520,7 @@ tpl/
 └── docs/                    # especificação técnica e registos de decisão (ADR)
 ```
 
-O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o que um template vê. A sua forma não se decide no código — é a especificação que a fixa (`specification/catalogue-coverage.md` e `specification/context-document.md`); o `model/` implementa-a e as suas structs são a superfície pública documentada.
+O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o que um template vê. A sua forma não se decide no código — é a especificação que a fixa (`specification/catalogue-coverage.md` e `specification/context-document.md`); o `model/` implementa-a. O contrato é esse documento, não os tipos que o produzem: as structs do `model/` não são superfície pública, e a biblioteca não carrega promessa de compatibilidade — `DIV-032`, em `specification/upstream-divergences.md`, e `docs/spec-technical/overview.md`.
 
 ## Convenções de Código Rust
 
@@ -530,7 +530,7 @@ O código deste projecto — e a forma como está organizado — segue as **boas
 
 - **Módulos.** Nomes em `snake_case`, sem abreviaturas obscuras e sem repetir o nome do pai (`mariadb::reader`, nunca `mariadb::mariadb_reader`). Um módulo por conceito, alinhado com a árvore da secção anterior.
 - **Um só estilo de ficheiro-módulo.** Usar sempre a forma `foo.rs` acompanhada da directoria `foo/`; **não** usar `mod.rs`. Misturar os dois estilos na mesma árvore é proibido.
-- **Visibilidade mínima.** Por omissão tudo é privado. `pub(crate)` para o que atravessa módulos, `pub(super)` para o que só o pai precisa, e `pub` reservado ao que é genuinamente superfície pública — no essencial o `model/` e o tipo de erro.
+- **Visibilidade mínima.** Por omissão tudo é privado. `pub(crate)` para o que atravessa módulos, `pub(super)` para o que só o pai precisa, e `pub` reservado ao que a biblioteca publica — o `model/`, o `error.rs` e as quatro funções de entrada (`docs/spec-technical/interfaces.md`, *The library shape*), sem promessa de estabilidade, por `DIV-032`.
 - **Re-exports deliberados.** O `lib.rs` re-exporta uma API coerente com `pub use`; não se re-exporta um módulo inteiro só para poupar um caminho de `use`.
 - **Biblioteca e binário separados.** A lógica vive na biblioteca e é testável sem lançar processo; o `main.rs` limita-se a fazer parse, despachar e mapear o erro para exit code.
 
@@ -556,7 +556,7 @@ Conformidade com as [Rust API Guidelines](https://rust-lang.github.io/api-guidel
 
 - **Iteradores e combinadores** em vez de loops indexados com acumulador mutável, quando não custem clareza nem desempenho.
 - **Pattern matching exaustivo**, sem um `_ =>` que engula silenciosamente variantes futuras de um `enum` do próprio crate.
-- **`#[non_exhaustive]`** nos tipos públicos que se prevê virem a crescer — tipicamente o `enum` de erro e as structs do `model/`.
+- **`#[non_exhaustive]`** nos tipos públicos que se prevê virem a crescer — tipicamente o `enum` de erro e as structs do `model/`. É convenção de código, não promessa de compatibilidade.
 - **Derives em vez de implementações manuais** sempre que sejam equivalentes.
 
 ### Ferramentas como árbitro
@@ -603,7 +603,7 @@ O desempenho e a economia de recursos são exigências de **desenho e de arquite
 
 **Os números não vivem aqui.** As propriedades exigidas, as cargas de referência, os pontos de medição e o protocolo pertencem a `specification/performance-requirements.md`; as leituras efectivamente medidas vivem em `BENCHMARKS.md`.
 
-**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes em cada `cargo test`. Quebrá-las é defeito funcional, não execução lenta.
+**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes onde o instrumento de que cada asserção precisa está ao alcance da execução: as que se observam do lado do servidor exigem a fixture de pé, e a forma em syscalls das cláusulas de descoberta e de configuração exige um host que permita o trace, o que nenhum dos alvos Darwin permite — é `NFR-PERF-007` e a secção *What an assertion needs in order to run*, em `specification/performance-requirements.md`. Uma asserção saltada não é um requisito enfraquecido: cada cláusula vale nos quatro alvos e é verificada nos quatro, e uma execução que não alcança o instrumento salta a asserção declarando a razão, e nunca a dá por passada em silêncio. Quebrá-las é defeito funcional, não execução lenta.
 
 ### Regras de implementação
 

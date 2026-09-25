@@ -32,6 +32,7 @@
 //! | `mariadb` | The one connection of `NFR-PERF-004`, the TLS mode of `FR-CONF-037` and `ADR-002`, the read-only session of `FR-SRV-008` … `FR-SRV-011`, the version probe of `FR-SRV-002` with the window of `FR-SRV-015`, and the classification `OD-06` drops the driver's error at |
 //! | `mariadb::catalogue` | The fixed repertoire of catalogue queries — one per object kind, whose count `NFR-PERF-001` and `NFR-PERF-002` fix — the common column lists of `FR-SRV-037`, the fold that turns their rows into the model, and the completeness verdict of `FR-PRIV-001` … `FR-PRIV-019` it takes as it folds |
 //! | `cache` | The store of `FR-CACHE-001` … `FR-CACHE-037`: one folder per entry, one file per object written through a rename, the two versions and the completeness record of `FR-CDOC-001` … `FR-CDOC-007`, and a failure in either direction that is a miss rather than a condition |
+//! | `at` | Directory-relative file operations below the canonical `.tpl`: every component opened without following a link, every file opened without waiting for a writer and typed on its descriptor (`FR-SEC-026`, `FR-SEC-027`) |
 //! | `heap` | The heap count the render memory limit of `FR-RND-039` bounds: the one place the library reads the counting allocator of `ADR-011`, which the binary installs and hands over through [`install_heap_counter`] |
 //! | `render` | The engine of `ADR-001`, built lazily and from disk at render time; the one template-name resolution of `FR-TMPL-023` … `FR-TMPL-027`; and the registered surface of `FR-ENV-005` … `FR-ENV-046` with the semantics of `FR-SEM-001` … `FR-SEM-021` |
 //!
@@ -49,6 +50,8 @@
 pub mod error;
 
 pub mod model;
+
+pub(crate) mod at;
 
 pub(crate) mod cache;
 
@@ -126,7 +129,54 @@ pub fn install_heap_counter(counter: fn() -> usize) {
 /// by an invocation that raises its condition, and the two the commands of
 /// `FR-PROJ-025` skip skipped for them.
 pub fn run() -> Result<(), Error> {
-    dispatch().inspect_err(diagnostics::report)
+    run_from(std::env::args_os())
+}
+
+/// Runs `tpl` over the argument vector `args`, exactly as [`run`] runs it over
+/// the process's own.
+///
+/// [`run`] is `run_from(std::env::args_os())`. This entry point exists so that
+/// an in-process caller — a test, or a fuzz harness — can drive the whole
+/// invocation, parsing and the diagnostic on the way out included, without
+/// launching a process.
+///
+/// # What a caller must know
+///
+/// - **The first element is the program name**, as `clap` reads it: it is
+///   skipped, and the command path starts at the second. Pass `"tpl"` first.
+/// - **Some state is set once per process, and the first call wins**: the
+///   instant the `--timeout` budget of `FR-GLOB-011` is measured from, the
+///   heap counter of [`install_heap_counter`], and the argument vector a
+///   `hint` writes back under `FR-ERR-043`. A second call in the same process
+///   measures its budget from the first call's start and writes the first
+///   call's vector into its hints. The diagnostic level of `FR-GLOB-014` and
+///   `FR-GLOB-015` is set again on every call.
+/// - **Some paths end the process.** An expired deadline and the render memory
+///   limit of `FR-RND-039` end it with [`std::process::exit`] from a watchdog
+///   thread, per `FR-GLOB-013` and `ADR-011`, and do not return here. A fuzz
+///   harness must run each input where that is acceptable, such as in a child
+///   process, or bound the input so neither is reached.
+/// - **Discovery reads the working directory and the environment**: the walk
+///   of `FR-PROJ-004` starts at the current directory unless `--tpl-dir` is
+///   given, and `${VAR}` references of `FR-CONF-015` are expanded from the
+///   process environment. A caller controls both through the process, not
+///   through this function.
+/// - **The library API carries no stability promise.** The contract runs
+///   through the command line and the JSON document, not through the library
+///   (`DIV-032`, `docs/spec-technical/overview.md`), so this signature may
+///   change in any release.
+///
+/// # Errors
+///
+/// Returns what [`run`] returns, after it has been reported on stderr.
+pub fn run_from<I, T>(args: I) -> Result<(), Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString>,
+{
+    let argv: Vec<std::ffi::OsString> = args.into_iter().map(Into::into).collect();
+
+    dispatch(argv).inspect_err(diagnostics::report)
 }
 
 /// Parses the invocation and runs the command it names.
@@ -143,17 +193,16 @@ pub fn run() -> Result<(), Error> {
 /// a run that supplied neither flag, which costs nothing: the four labelled
 /// lines of `FR-ERR-008` are written at every level.
 ///
-/// It reports nothing: the diagnostic is written once, by [`run`], for whatever
-/// condition reaches it first.
-fn dispatch() -> Result<(), Error> {
+/// It reports nothing: the diagnostic is written once, by [`run_from`], for
+/// whatever condition reaches it first.
+fn dispatch(argv: Vec<std::ffi::OsString>) -> Result<(), Error> {
     // FR-GLOB-011 measures the overall budget from process start, and this is
     // the earliest instant a library function can record: the argument vector
-    // has not been read, so nothing blocking can have run.
+    // has only been collected, not parsed, so nothing blocking can have run.
     deadline::mark_process_start();
 
     // T-01: a hint that corrects the command writes back the whole of it, so
     // the vector is kept for the one diagnostic this process may write.
-    let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
     diagnostics::record_invocation(&argv);
     let invocation = cli::parse(argv)?;
 

@@ -1,13 +1,14 @@
-# Publishes a GitHub Release for a pushed v* tag (ADR-012). The gate job
-# enforces the four provenance gates; each target then runs the five-command
+# Publishes a GitHub Release for an already pushed v* tag (ADR-012). Started by
+# hand only, against that tag:
+#   gh workflow run release.yml --ref vX.Y.Z
+# The gate job refuses any ref that is not a tag, then enforces the four
+# provenance gates; each target then runs the five-command
 # validation by its ADR-008 path and packages the release binary it built; the
 # release is created only if everything passes.
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -53,11 +54,16 @@ jobs:
       - id: gate
         env:
           TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           fail() {
             echo "::error::$*"
             exit 1
           }
+
+          # 0. The run was dispatched against a tag.
+          [[ "$REF_TYPE" == tag ]] ||
+            fail "release.yml must be dispatched against a tag, not a $REF_TYPE ($TAG): gh workflow run release.yml --ref vX.Y.Z"
 
           # 1. The tagged commit is on main.
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main ||
@@ -209,6 +215,17 @@ jobs:
           pattern: tpl-*
           merge-multiple: true
           path: dist
+
+      # The skill/ tree at the tagged commit, its contents at the archive root
+      # (./SKILL.md, ./references/...). Sorted names, root ownership, the
+      # commit's time and gzip -n keep it close to reproducible.
+      - name: Package the skill
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mtime="$(git log -1 --format=%ct)"
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${mtime}" \
+            -C "$GITHUB_WORKSPACE/skill" -cf - . | gzip -n > "dist/tpl-skill-${TAG}.tar.gz"
 
       - name: Create the GitHub Release
         env:

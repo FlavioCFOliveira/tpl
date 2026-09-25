@@ -8,9 +8,14 @@
 //! with, and they apply to every project without exemption — including one
 //! named by `--tpl-dir`, per `FR-PROJ-008` and `FR-GLOB-010`.
 //!
-//! The file is followed to its target first, per `FR-PROJ-009`, so a `.cfg`
-//! that is a symbolic link is checked at its real target rather than at the
-//! link, whose own mode Unix does not enforce.
+//! The file must be a regular file, and that is established first, per
+//! `FR-PROJ-030`: the file is opened relative to the canonical `.tpl` without
+//! following a link and without waiting for a writer, its type is read from
+//! the descriptor, and the two checks are then made on that descriptor's
+//! metadata, so the file judged is the file whose bytes are read. A `.cfg`
+//! that is a symbolic link, a directory, a FIFO, a socket or a device is `78`
+//! and nothing is read from it; a link to a regular file is refused with the
+//! rest, as `FR-PROJ-030` states plainly.
 //!
 //! An **absent** `.cfg` is not refused for its absence: `FR-PROJ-028` makes a
 //! `.tpl` folder without one a project with an empty configuration, which is
@@ -27,59 +32,90 @@
 //! with its own uid is a check nothing has watched fire.
 
 use std::io;
-use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+use std::os::unix::fs::MetadataExt as _;
 use std::path::Path;
 
+use crate::at::{self, Unread};
 use crate::error::Error;
 
 /// The permission bits `FR-PROJ-011` requires to be clear: group and other.
 const GROUP_AND_OTHER: u32 = 0o077;
 
-/// The bits of a mode that are permissions.
-const PERMISSIONS: u32 = 0o7777;
-
-/// Applies the two checks to `file`, the `.cfg` of the `.tpl` folder
-/// `folder`, or the folder's ownership check where `file` is absent.
+/// Applies the checks of `FR-PROJ-030`, `FR-PROJ-010` and `FR-PROJ-011` to
+/// `file`, the `.cfg` of the `.tpl` folder `folder`, or the folder's ownership
+/// check where `file` is absent, and answers the file's text, or [`None`] where
+/// it is absent.
 ///
-/// `folder` is canonical, per `FR-PROJ-009`, so the owner judged is the real
-/// target's.
+/// The type is tested, the two checks are made and the text is read on one
+/// descriptor, opened relative to the folder `file` sits in without following
+/// a link and without waiting for a writer, so no other file can take the
+/// judged one's place.
 ///
 /// # Errors
 ///
-/// Returns [`Error::ConfigurationNotOwned`] where the file belongs to another
-/// user (`FR-PROJ-010`), [`Error::ConfigurationUnsafeMode`] where it grants
-/// group or other any access (`FR-PROJ-011`), [`Error::ProjectFolderNotOwned`]
-/// where the file is absent and the folder belongs to another user
-/// (`FR-PROJ-028`), and [`Error::ProjectFileUnreadable`] where the metadata of
-/// either cannot be read for any reason other than the file's absence.
-pub(crate) fn check(file: &Path, folder: &Path) -> Result<(), Error> {
-    // `metadata` follows the link, which is what FR-PROJ-009 asks for: the
-    // ownership and the mode that matter are the target's.
-    let metadata = match std::fs::metadata(file) {
-        Ok(metadata) => metadata,
-        Err(returned) if returned.kind() == io::ErrorKind::NotFound => {
+/// Returns [`Error::ConfigurationNotRegular`] where the file is not a regular
+/// file (`FR-PROJ-030`), [`Error::ConfigurationNotOwned`] where it belongs to
+/// another user (`FR-PROJ-010`), [`Error::ConfigurationUnsafeMode`] where it
+/// grants group or other any access (`FR-PROJ-011`),
+/// [`Error::ProjectFolderNotOwned`] where the file is absent and the folder
+/// belongs to another user (`FR-PROJ-028`), and
+/// [`Error::ProjectFileUnreadable`] where either cannot be read for any reason
+/// other than the file's absence.
+pub(crate) fn check(file: &Path, folder: &Path) -> Result<Option<String>, Error> {
+    let unreadable = |returned: io::Error| Error::ProjectFileUnreadable {
+        path: file.to_owned(),
+        returned,
+    };
+    let (Some(directory), Some(name)) = (file.parent(), file.file_name()) else {
+        return Err(unreadable(io::Error::from(io::ErrorKind::InvalidInput)));
+    };
+    let parent =
+        at::directory(directory, directory).map_err(|fault| unreadable(fault.into_io()))?;
+
+    let (handle, found) = match at::open_regular(&parent, name) {
+        Ok(opened) => opened,
+        Err(Unread::NotRegular(kind)) => {
+            return Err(Error::ConfigurationNotRegular {
+                path: file.to_owned(),
+                kind: at::kind_name(kind),
+            });
+        }
+        Err(Unread::Io(returned)) if returned.kind() == io::ErrorKind::NotFound => {
             let owner = std::fs::metadata(folder)
                 .map_err(|returned| Error::ProjectFileUnreadable {
                     path: folder.to_owned(),
                     returned,
                 })?
                 .uid();
-            return judge_folder(folder, owner, invoking_user());
+            return judge_folder(folder, owner, invoking_user()).map(|()| None);
         }
-        Err(returned) => {
-            return Err(Error::ProjectFileUnreadable {
-                path: file.to_owned(),
-                returned,
-            });
-        }
+        Err(Unread::Io(returned)) => return Err(unreadable(returned)),
+        Err(Unread::Oversized) => unreachable_oversized(file)?,
     };
 
-    judge(
-        file,
-        metadata.uid(),
-        metadata.permissions().mode() & PERMISSIONS,
-        invoking_user(),
-    )
+    judge(file, found.st_uid, at::permissions(&found), invoking_user())?;
+
+    match at::read_open(&handle, &found, None) {
+        Ok(text) => Ok(Some(text)),
+        Err(Unread::Io(returned)) => Err(unreadable(returned)),
+        Err(Unread::NotRegular(_) | Unread::Oversized) => unreachable_oversized(file),
+    }
+}
+
+/// The answer to an outcome [`check`] cannot meet: no cap is given, and the
+/// type was established before the read. It is written as a `70` rather than
+/// a panic, so the module carries none.
+fn unreachable_oversized<T>(file: &Path) -> Result<T, Error> {
+    crate::error::ensure_invariant(
+        false,
+        "a .cfg read with no cap, after its type was established, is neither oversized nor of \
+         another kind",
+    )?;
+
+    Err(Error::ProjectFileUnreadable {
+        path: file.to_owned(),
+        returned: io::Error::from(io::ErrorKind::Other),
+    })
 }
 
 /// Decides the two checks over an ownership and a mode already read.
@@ -279,21 +315,27 @@ mod tests {
     }
 
     #[test]
-    fn fr_proj_009_a_symbolic_link_is_checked_at_its_target() {
-        // FR-PROJ-009: the path is followed before any check, so the mode that
-        // decides is the target's and not the link's.
+    fn fr_proj_030_a_symbolic_link_is_refused_whatever_its_target() {
+        // FR-PROJ-030, sixty-third edition: the type is tested without
+        // following the link, so a link is not a regular file, and it is
+        // refused before the target's owner or mode is looked at — here a
+        // target the two checks would pass.
         let scratch = Scratch::new();
         let target = scratch.file("target.cfg", "[core]\n");
-        scratch.chmod(&target, 0o644);
+        scratch.chmod(&target, 0o600);
         let link = scratch.path("link.cfg");
         scratch.link(&target, &link);
 
-        let condition = check(&link, &scratch.root()).expect_err("the target's mode is unsafe");
+        let condition = check(&link, &scratch.root()).expect_err("a link is not a regular file");
 
         assert!(matches!(
             condition,
-            Error::ConfigurationUnsafeMode { mode: 0o644, .. }
+            Error::ConfigurationNotRegular {
+                kind: "a symbolic link",
+                ..
+            }
         ));
+        assert_eq!(condition.exit_code(), 78);
     }
 
     #[test]

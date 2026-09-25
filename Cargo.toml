@@ -13,7 +13,7 @@ exclude = ["vendor/sqlx-core-0.9.0", "examples/rust-data-layer"]
 
 [package]
 name = "tpl"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 rust-version = "1.94.0"
 
@@ -44,7 +44,7 @@ clap = { version = "4.6.6", default-features = false, features = [
 # `fuel` bounds every render by a count of evaluation steps (`FR-RND-036`).
 minijinja = { version = "~2.24.0", features = ["fuel"] }
 minijinja-contrib = "~2.24.0"
-rustix = { version = "1.1.4", default-features = false, features = ["process"] }
+rustix = { version = "1.1.4", default-features = false, features = ["fs", "process"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sqlx = { version = "0.9.0", features = [

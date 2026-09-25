@@ -163,6 +163,51 @@ tpl cfg database test   <name>
   type declared for that key in `FR-CONF-002`, and SHALL exit `64` if it does
   not conform.
 
+- **FR-CFG-054**: IF the value given to `tpl cfg set core.database` matches
+  `FR-CONF-048` and no entry of `.tpl/.cfg` has that name, compared byte for
+  byte, THEN the system SHALL exit `66` (`EX_NOINPUT`) and SHALL write nothing
+  to `.tpl/.cfg`. A value outside `FR-CONF-048` is refused first, with `64`,
+  by that requirement.
+
+  The `cause` SHALL name the value and state that `.tpl/.cfg` declares no
+  entry of that name. The `hint` SHALL offer the nearest matches among the
+  entry names the file declares, per `FR-ERR-019` and `FR-ERR-044`, with the
+  command `tpl cfg set core.database <candidate>`. WHERE no candidate is
+  admitted, the `hint` SHALL carry `tpl cfg database list`, and WHERE the file
+  declares no entry, `tpl cfg database add <name>` with its placeholder.
+
+  ```
+  tpl cfg set core.database shpo
+  error: database entry 'shpo' does not exist
+  cause: core.database names an entry, and .tpl/.cfg declares no entry 'shpo'
+  hint:  did you mean 'shop'? set it with: tpl cfg set core.database shop
+  exit:  66 (EX_NOINPUT)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the candidate, the
+  command and the code.
+
+  *Rationale.* `tpl cfg set core.database nope` exited `0`, and the next
+  command that requires an entry failed with `66` under `FR-ERR-005`, far
+  from the command that wrote the name. `FR-CFG-023` already keeps the file
+  from reaching this state by a deletion; this requirement keeps it from
+  reaching it by a write. `66` is the code `FR-ERR-035` gives a named object
+  that does not exist, and the code `FR-CFG-012` gives an unset of an absent
+  key. The `hint` writes the invocation's own value under the candidate, which
+  `BR-ERR-005` admits. This is rmp `#271`.
+
+  *Rejected: exiting `0` with a warning.* The state the warning describes is
+  one `FR-CFG-023` exists to prevent, and a caller that checks only the exit
+  code learns of it at the next command, per `BR-ERR-002`. *Rejected:
+  documenting it as allowed.* It keeps the defect and the distance between
+  cause and failure.
+
+  *Accepted cost.* The default entry cannot be set before the entry exists.
+  The caller adds the entry first, or passes `-d` until it does.
+
+  *Added in the fifty-ninth edition,* for rmp `#271`.
+
 - **FR-CFG-011**: `tpl cfg unset <key>` SHALL accept either a leaf key, such as
   `database.shop.host`, or a whole block, such as `database.shop`, and SHALL
   delete what it is given. `FR-CFG-023` states the one further change a
@@ -207,6 +252,36 @@ tpl cfg database test   <name>
 - **FR-CFG-012**: IF the key or block supplied to `tpl cfg unset` is absent,
   THEN the system SHALL exit `66`. For a key, the nearest-match suggestion and
   its `hint` SHALL follow `FR-CFG-007`.
+
+  For a block — `core`, `database`, or `database.<name>` — the candidates
+  SHALL be the blocks the file carries, each `database.<name>` written with
+  the name the file declares. The `hint` SHALL name the candidates and SHALL
+  NOT carry a `tpl cfg unset` command, per `BR-ERR-005`. WHERE the candidate
+  is an entry's block, the `hint` SHALL carry
+  `tpl cfg database show <candidate name>`. WHERE no candidate is admitted,
+  the `hint` SHALL carry `tpl cfg database list` for a `database.<name>`
+  block and `tpl cfg list` otherwise.
+
+  ```
+  tpl cfg unset database.shpo
+  error: block 'database.shpo' is not in .tpl/.cfg
+  cause: .tpl/.cfg declares no entry 'shpo'
+  hint:  did you mean 'database.shop'? show it with: tpl cfg database show shop
+  exit:  66 (EX_NOINPUT)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the candidate, the command and the
+  code.
+
+  *Amended in the fifty-ninth edition,* for rmp `#277`. The requirement gave
+  a suggestion for a key and none for a block, so `database.shpo` received
+  none although the file declares `shop`. `FR-ERR-021` makes database entries
+  and configuration keys suggestion candidates, and a block names one or the
+  other. The `hint` shows the candidate rather than deleting it, because the
+  caller may have meant another name and a deletion cannot be undone by the
+  next command. *Rejected: a `hint` carrying
+  `tpl cfg unset database.<candidate>`*, which `BR-ERR-005` forbids.
 
   *Amended in the forty-seventh edition,* for rmp `#276`. The requirement named
   no suggestion, and the implementation drew one over the keys the file sets,
@@ -728,7 +803,13 @@ tpl cfg database test   <name>
      as the caller wrote it, under the set of `FR-ERR-041`. IF the set refuses
      the value, THEN the command SHALL carry `--tpl-dir <path>`, and the line
      SHALL state in words that `<path>` stands for the `--tpl-dir` this
-     invocation was given. A value taken from `TPL_DIR` SHALL NOT be written.
+     invocation was given. A `.tpl` found by discovery, per `FR-PROJ-004`,
+     SHALL NOT be written: the same command, run from the same directory,
+     finds it again.
+
+     *Amended in the fifty-ninth edition,* for rmp `#278`. The item named a
+     value taken from `TPL_DIR`, which does not exist, per `FR-CONF-030` and
+     `FR-CLI-021`.
 
      ```
      tpl --tpl-dir /srv/shop/.tpl cfg database remove shop

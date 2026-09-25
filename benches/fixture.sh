@@ -48,16 +48,10 @@ fixture_is_series() {
 
 # Starts the named server and does not return until `up.sh` has verified it.
 #
-# `up.sh` ends by printing `./status.sh` **unfiltered**, so it reports the
-# whole inventory and inherits that command's exit code: asked for one server
-# while the other four are down, it verifies that server, prints `ready` for it,
-# and exits `2` — the code its own documentation gives to a half-standing
-# fixture. Its exit code is therefore not the gate here. The filtered gate is,
-# and it is asked immediately afterwards, which is what this function returns.
+# `up.sh` ends by asking the gate about the servers it was asked to start, so
+# its exit code is that server's answer, and it is what this function returns.
 fixture_up() {
-    "$FIXTURE_DIR/up.sh" "$1" >&2 || true
-
-    fixture_is_up "$1" >/dev/null 2>&1
+    "$FIXTURE_DIR/up.sh" "$1" >&2
 }
 
 # Loads `WL-001` and `WL-003` into it, and verifies every count they state.
@@ -113,12 +107,14 @@ FIXTURE_ENTRY_SMALL='bench_wl003'
 # carrying two database entries would put the parse of those entries into a
 # figure that is supposed to carry no workload at all.
 #
-# The account is `root` and not `tpl_reader`. The reader holds
-# `SELECT, EXECUTE ON freight.*` and `seed-bench.sql` grants it nothing on
-# `freight_wl001` or `freight_wl003`, so a reader-backed entry would present an
-# empty catalogue — which `FR-PRIV-001` makes a silent success rather than an
-# error, and a reading taken over an empty catalogue is not a reading over
-# `WL-001`.
+# The account is `root` and not `tpl_reader`, although `seed-bench.sh` grants
+# the reader `SELECT, EXECUTE` on both benchmark schemas. That grant is the one
+# `setup.sql` gives on `freight`, and it shows the reader every table and view
+# but no foreign-key constraint, no trigger, no view definition and no routine
+# body (scripts/mariadb/README.md, "Users"). A reader-backed reading would be
+# taken over a smaller document, with objects marked `restricted` that the
+# cache does not store, which is not a reading over `WL-001` as the
+# specification states it.
 
 # The first of the two. It needs no fixture and no server, which is why it is
 # built on its own: the points whose workload is `none` must be measurable

@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -807,8 +807,9 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   of hash-named symbolic links is taken as given from the task that raised the
   question. It is not cited to a published authority, because no document in
   this repository states it and the project's scope rule admits no reading
-  outside the repository; `ADR-002` records only that no driver method takes a
-  directory, which is why `tpl` reads it. **The decision does not rest on the
+  outside the repository; the project's architecture decision record for the
+  TLS mode mapping records only that no driver method takes a directory, which
+  is why `tpl` reads it. **The decision does not rest on the
   convention alone**, and stands if it is ever shown to be wrong: the weighing
   above turns on there being no disclosure for a link to arrange, which makes
   following the more useful behaviour for any directory a caller curates, and
@@ -1252,8 +1253,22 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   quoting rules, honouring single and double quotes, and SHALL store the
   resulting array. `FR-CONF-046` states the strings it SHALL refuse instead.
 
+  A backslash immediately followed by a newline, outside single quotes, SHALL
+  be removed together with the newline before the string is split, so that
+  it joins what precedes it to what follows it and separates no words. Inside
+  single quotes both characters SHALL be kept.
+
   *Amended in the forty-seventh edition.* The second sentence is new, for rmp
   `#276`.
+
+  *Amended in the fifty-ninth edition,* for rmp `#278`. The paragraph on a
+  backslash and a newline states what "POSIX quoting rules" already required:
+  POSIX.1-2024, XCU 2.2.1, reads a backslash followed by a newline as a line
+  continuation and removes both before splitting the input into tokens; XCU
+  2.2.3 keeps that meaning inside double quotes; XCU 2.2.2 keeps every
+  character inside single quotes. **Verified 2026-09-24** against
+  pubs.opengroup.org, *Shell Command Language*. The implementation kept the
+  pair outside quotes.
 
 - **FR-CONF-046**: IF a `password_command` supplied as a single string — the
   value given to `tpl cfg set database.<name>.password_command`, or to

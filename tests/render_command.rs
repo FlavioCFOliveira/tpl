@@ -1176,7 +1176,7 @@ fn bounded_project(configuration: &str, templates: &[(&str, &str)]) -> Sandbox {
 }
 
 #[test]
-#[ignore = "measurement: the memory limit is sampled every 10 ms (ADR-011); a render can cross it between samples"]
+#[ignore = "measurement: the memory limit is sampled (ADR-011) at the interval architecture.md fixes; a render can cross it between samples"]
 fn fr_rnd_039_a_render_that_grows_past_its_memory_limit_is_65_naming_the_bound_and_writes_nothing()
 {
     // FR-RND-039, FR-SEC-025, ADR-011: the counting allocator the binary
@@ -1201,7 +1201,7 @@ fn fr_rnd_039_a_render_that_grows_past_its_memory_limit_is_65_naming_the_bound_a
 }
 
 #[test]
-#[ignore = "measurement: the memory limit is sampled every 10 ms (ADR-011); a render can cross it between samples"]
+#[ignore = "measurement: the memory limit is sampled (ADR-011) at the interval architecture.md fixes; a render can cross it between samples"]
 fn fr_rnd_039_the_default_memory_limit_stops_the_doubling_render() {
     // FR-CONF-002: the default, 128 MiB, applies where the key is absent.
     let sandbox = bounded_project("[core]\n", &[("grow", DOUBLING)]);
@@ -1212,7 +1212,7 @@ fn fr_rnd_039_the_default_memory_limit_stops_the_doubling_render() {
 }
 
 #[test]
-#[ignore = "measurement: the memory limit is sampled every 10 ms (ADR-011); a render can cross it between samples"]
+#[ignore = "measurement: the memory limit is sampled (ADR-011) at the interval architecture.md fixes; a render can cross it between samples"]
 fn fr_conf_045_raising_the_memory_limit_lets_a_legitimately_large_render_pass() {
     // The same 32 MiB render is refused under a 16 MiB limit and produced
     // under a raised one.
@@ -1429,7 +1429,7 @@ fn fr_rnd_040_the_server_records_the_session_ended_before_the_first_byte_of_the_
 
 /// The bound a render abandoned under `FR-CACHE-039` crosses after the miss:
 /// its name, the `[core]` keys that set it, the template text that crosses it
-/// after `table('vessel')`, and what the `cause` names.
+/// after `table_named('vessel')`, and what the `cause` names.
 type Crossing = (&'static str, &'static str, &'static str, &'static str);
 
 /// Runs `cases` for [`fr_cache_039_an_abandoned_render_that_exhausts_its_fuel_or_output_limit_ends_with_65_and_reads_no_server`]
@@ -1443,7 +1443,7 @@ fn abandoned_render_crosses(test: &str, cases: &[Crossing]) {
         return;
     };
 
-    let reach = "{% set t = table('vessel') %}";
+    let reach = "{% set t = table_named('vessel') %}";
 
     for server in series {
         let name = server.name();
@@ -1515,7 +1515,7 @@ fn fr_cache_039_an_abandoned_render_that_exhausts_its_fuel_or_output_limit_ends_
  {
     // FR-CACHE-039, second paragraph, FR-RND-038 and the note on FR-ERR-006:
     // an abandoned render keeps every render bound until it has returned. A
-    // render that reaches the miss through `table(...)` survives it and keeps
+    // render that reaches the miss through `table_named(...)` survives it and keeps
     // evaluating; exhausting render fuel or the output limit after the miss
     // ends the invocation with 65 and that bound's cause. Both bounds are
     // counted inside the render, so the verdict does not depend on timing.
@@ -1539,7 +1539,7 @@ fn fr_cache_039_an_abandoned_render_that_exhausts_its_fuel_or_output_limit_ends_
 }
 
 #[test]
-#[ignore = "measurement: a 1 s wall-clock deadline and the memory limit sampled every 10 ms (ADR-011)"]
+#[ignore = "measurement: a 1 s wall-clock deadline, and the memory limit sampled (ADR-011) at the interval architecture.md fixes"]
 fn fr_cache_039_an_abandoned_render_that_outlasts_its_deadline_or_crosses_its_memory_limit_ends_with_65_and_reads_no_server()
  {
     // The same as the counted bounds above, for the two bounds the watchdog
@@ -1708,7 +1708,7 @@ fn r_02_an_undefined_value_quotes_the_whole_expression_and_a_lookup_that_found_n
     sandbox.write(".tpl/templates/deep.jinja", "{{ database.nosuch.x }}");
     sandbox.write(
         ".tpl/templates/lookup.jinja",
-        "{{ table(\"orders\").name }}",
+        "{{ table_named(\"orders\").name }}",
     );
 
     let written = refused(&sandbox, &["render", "deep", "--context", CONTEXT], 65);
@@ -1722,7 +1722,7 @@ fn r_02_an_undefined_value_quotes_the_whole_expression_and_a_lookup_that_found_n
     let written = refused(&sandbox, &["render", "lookup", "--context", CONTEXT], 65);
     assert!(
         line(&written, LABELS[1]).contains(
-            "reads 'table(\"orders\").name', and table(\"orders\") found no table named 'orders'"
+            "reads 'table_named(\"orders\").name', and table_named(\"orders\") found no table named 'orders'"
         ),
         "{written}"
     );
@@ -1947,11 +1947,12 @@ fn t_02_an_undefined_operand_of_a_filter_names_the_flag_that_defines_it() {
     sandbox.write(".tpl/templates/typed.jinja", "{{ database|pascal }}\n");
 
     let written = refused(&sandbox, &["render", "piped", "--context", CONTEXT], 65);
+    // Since the sixtieth edition `table` is itself undefined without --table
+    // (FR-ENV-020), so the engine stops at `table.name` before the filter is
+    // reached; the line still names the expression and the flag.
     assert!(
-        line(&written, LABELS[1]).contains(
-            "reads 'table.name', which is not defined in this render; the template engine \
-             reports: the filter 'pascal' accepts a string, and was given an undefined value"
-        ),
+        line(&written, LABELS[1])
+            .contains("reads 'table.name', which is not defined in this render"),
         "{written}"
     );
     assert_eq!(
@@ -2636,5 +2637,181 @@ fn a_string_subscript_of_a_bound_object_is_answered_as_the_attribute_is() {
         line(&written, LABELS[2])
             .starts_with("did you mean 'name'? 'table.columns[0]' has no attribute 'nam'"),
         "{written}"
+    );
+}
+
+// ------------------------------------------ FR-ENV-020 and FR-RND-042, 60th ---
+
+/// A context document holding the tables `orders` and `customers`.
+fn two_tables() -> String {
+    let customers = ORDERS.replace("orders", "customers");
+    let both = format!(
+        "{},{}",
+        ORDERS.trim_end_matches(']'),
+        customers.trim_start_matches('[')
+    );
+
+    EMPTY_CONTEXT.replace(r#""tables":[]"#, &format!(r#""tables":{both}"#))
+}
+
+#[test]
+fn fr_env_020_without_an_object_flag_table_view_and_routine_are_undefined() {
+    // Sixtieth edition, rmp #301: nothing else carries the three names, so an
+    // unbound object variable is undefined, and reading it is the 65 of
+    // FR-RND-031.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, &two_tables());
+    sandbox.write(
+        ".tpl/templates/probe.jinja",
+        "{{ table is defined }} {{ view is defined }} {{ routine is defined }}\n",
+    );
+    for name in ["table", "view", "routine"] {
+        sandbox.write(
+            &format!(".tpl/templates/read_{name}.jinja"),
+            &format!("{{{{ {name} }}}}\n"),
+        );
+    }
+
+    assert_eq!(
+        succeeds(&sandbox, &["render", "probe", "--context", CONTEXT]),
+        "false false false\n"
+    );
+    for name in ["table", "view", "routine"] {
+        refused(
+            &sandbox,
+            &["render", &format!("read_{name}"), "--context", CONTEXT],
+            65,
+        );
+    }
+}
+
+#[test]
+fn fr_env_020_table_named_resolves_with_and_without_an_object_flag() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, &two_tables());
+    sandbox.write(
+        ".tpl/templates/lookup.jinja",
+        "{{ table_named('customers').name }}\n",
+    );
+    sandbox.write(
+        ".tpl/templates/both.jinja",
+        "{{ table.name }} {{ table_named('customers').name }}\n",
+    );
+
+    assert_eq!(
+        succeeds(&sandbox, &["render", "lookup", "--context", CONTEXT]),
+        "customers\n"
+    );
+    assert_eq!(
+        succeeds(
+            &sandbox,
+            &["render", "both", "--context", CONTEXT, "--table", "orders"]
+        ),
+        "orders customers\n"
+    );
+}
+
+#[test]
+fn fr_env_020_the_old_lookup_names_are_not_registered() {
+    // Called without an object flag, each old name is an undefined value, not
+    // a function: the render fails with 65.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(CONTEXT, &two_tables());
+    for name in ["table", "view", "routine"] {
+        sandbox.write(
+            &format!(".tpl/templates/old_{name}.jinja"),
+            &format!("{{{{ {name}('orders') }}}}\n"),
+        );
+        refused(
+            &sandbox,
+            &["render", &format!("old_{name}"), "--context", CONTEXT],
+            65,
+        );
+    }
+
+    // Nor does the published surface name them.
+    let printed = sandbox.run(&["help", "--format", "json"]);
+    let document: serde_json::Value =
+        serde_json::from_slice(&printed.stdout).expect("the command tree is JSON");
+    let functions: Vec<&str> = document["data"]["template_surface"]["registered"]["functions"]
+        .as_array()
+        .expect("the surface lists its functions")
+        .iter()
+        .map(|item| item["name"].as_str().expect("a function has a name"))
+        .collect();
+    assert_eq!(
+        functions,
+        [
+            "table_named",
+            "view_named",
+            "routine_named",
+            "column",
+            "fail"
+        ]
+    );
+}
+
+#[test]
+fn fr_rnd_042_a_document_of_another_schema_version_is_65_and_renders_nothing() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(".tpl/templates/plain.jinja", "{{ database.name }}\n");
+    sandbox.write(
+        "old.json",
+        &EMPTY_CONTEXT.replace(r#""schema_version":1"#, r#""schema_version":2"#),
+    );
+    // A document of another version whose data this binary cannot decode is
+    // refused for its version all the same.
+    sandbox.write(
+        "older.json",
+        r#"{"schema_version":2,"source":"server","data":{"something":"else"}}"#,
+    );
+
+    for file in ["old.json", "older.json"] {
+        let written = refused(&sandbox, &["render", "plain", "--context", file], 65);
+
+        assert_eq!(
+            line(&written, LABELS[0]),
+            format!("the --context document '{file}' has an unsupported schema_version")
+        );
+        assert_eq!(
+            line(&written, LABELS[1]),
+            format!("'{file}' carries schema_version 2; this tpl reads schema_version 1")
+        );
+        assert_eq!(
+            line(&written, LABELS[2]),
+            "produce a document this tpl reads with: tpl -d <entry> schema dump"
+        );
+    }
+
+    // Standard input is named as the stream.
+    let printed = sandbox.run_with_stdin(
+        &["render", "plain", "--context", "-"],
+        EMPTY_CONTEXT
+            .replace(r#""schema_version":1"#, r#""schema_version":2"#)
+            .as_bytes(),
+    );
+    assert_eq!(printed.status.code(), Some(65));
+    assert!(printed.stdout.is_empty());
+    assert!(
+        stderr(&printed).contains("cause: standard input carries schema_version 2"),
+        "{}",
+        stderr(&printed)
+    );
+}
+
+#[test]
+fn fr_rnd_042_a_document_of_the_version_the_binary_emits_still_renders() {
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(".tpl/templates/plain.jinja", "{{ database.name }}\n");
+    sandbox.write(CONTEXT, EMPTY_CONTEXT);
+
+    assert_eq!(
+        succeeds(&sandbox, &["render", "plain", "--context", CONTEXT]),
+        "shop\n"
     );
 }

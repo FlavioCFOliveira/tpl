@@ -3,7 +3,7 @@
 // Server:   MariaDB 12.3.3-MariaDB-ubu2404, series 12.3, standing supported.
 // Schema:   sakila, utf8mb4 / utf8mb4_uca1400_ai_ci.
 // Tables:   16.
-// Renderer: tpl 0.1.0.
+// Renderer: tpl 0.0.1.
 
 //! A data layer for the `sakila` schema, rendered from the catalogue of the
 //! server named above.

@@ -510,6 +510,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                  render; the template engine reports: {}",
                 joined(chain)
             )),
+            // FR-TMPL-033 item 3: the entry the include names is not a
+            // regular file, and the line says so and what it is.
+            (
+                _,
+                Some(RenderReason::IncludeNotFound {
+                    name,
+                    not_regular: Some(kind),
+                    ..
+                }),
+            ) => Cow::Owned(format!(
+                "'{template}' at {position} names '{name}', which exists under the template \
+                 folder and is {kind}; a template is a regular file"
+            )),
             (_, Some(RenderReason::IncludeNotFound { .. }))
             | (None, None | Some(RenderReason::Unresolved(_) | RenderReason::Missing(_))) => {
                 Cow::Owned(format!(
@@ -525,6 +538,13 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         )),
         // The row obliges the path and either the position of the malformed
         // JSON or the structural rule the document failed.
+        // FR-RND-042: the path or the stream, the version found and the
+        // version this binary reads.
+        Error::ContextDocumentVersion { path, found } => Cow::Owned(format!(
+            "{} carries schema_version {found}; this tpl reads schema_version {}",
+            context_name(path),
+            crate::output::SCHEMA_VERSION
+        )),
         Error::ContextDocumentMalformed { path, fault, .. } => match fault {
             ContextFault::NotJson(position) => Cow::Owned(format!(
                 "{} is not well-formed JSON; the parser stopped at {position}",
@@ -629,9 +649,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              named '{name}'",
             path.display()
         )),
+        // FR-TMPL-033 item 2: the entry exists, and its kind is named, so the
+        // line does not read as a name that is absent.
+        Error::TemplateNotRegular { file, kind, .. } => Cow::Owned(format!(
+            ".tpl/templates/{file} exists and is {kind}; a template is a regular file"
+        )),
         Error::TemplateNotFound { name, root, .. } => Cow::Owned(format!(
             "no template named '{name}' exists under the template folder {}",
             root.display()
+        )),
+        // FR-CFG-054: the name matches FR-CONF-048, so it is within the set
+        // of FR-ERR-022 and is reproduced.
+        Error::DefaultEntryUndeclared { name, .. } => Cow::Owned(format!(
+            "core.database names an entry, and .tpl/.cfg declares no entry '{name}'"
         )),
         Error::DatabaseEntryNotFound {
             name,
@@ -871,10 +901,25 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              uid {expected}",
             path.display()
         )),
+        // FR-PROJ-030: the canonical path, the kind found, and that the
+        // configuration is read only from a regular file.
+        Error::ConfigurationNotRegular { path, kind } => Cow::Owned(format!(
+            "{} is {kind}; tpl reads its configuration only from a regular file",
+            path.display()
+        )),
         Error::ConfigurationUnsafeMode { path, mode } => Cow::Owned(format!(
             "mode {mode:04o} grants access to group or other; tpl reads {} only when group and \
              other have no access, as at mode 0600",
             path.display()
+        )),
+        Error::CachePathLinked { path, removal, .. } => Cow::Owned(format!(
+            "{} is a symbolic link, and {}",
+            path.display(),
+            if *removal {
+                "tpl cache clean removes nothing through a link"
+            } else {
+                "tpl reads and writes no cache through a link"
+            }
         )),
         Error::ConfigurationMalformed {
             path,

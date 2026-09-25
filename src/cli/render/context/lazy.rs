@@ -890,7 +890,7 @@ mod tests {
     fn written(scratch: &Scratch) -> Cache {
         let model = document::fixture::whole();
         let built = document::context(&model).expect("the fixture model is coherent");
-        let cache = Cache::of(&scratch.path(".tpl"), "shop");
+        let cache = Cache::of(&scratch.directory(".tpl"), "shop");
         cache.write(&built, Covered::Everything);
 
         cache

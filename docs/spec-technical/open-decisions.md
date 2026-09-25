@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md]
 ---
 
@@ -9,8 +9,8 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Thirty-three entries, each a decision the repository could not settle on its
-own. **Thirty-two are settled. One, `OD-33`, is open.** Nineteen were settled by
+Thirty-four entries, each a decision the repository could not settle on its
+own. **Thirty-three are settled. One, `OD-33`, is open.** Nineteen were settled by
 the product owner in the interview of 2026-09-10, by the establishment of the
 decision register, and by the eighth edition of `/specification`; nine more were
 settled on 2026-09-11, together with all five residuals the eighth edition left
@@ -56,13 +56,19 @@ poll interval [`ADR-011`](../adr/adr-011-render-memory-accounting.md)
 delegates is fixed in [architecture.md](architecture.md#the-render-bounds), not
 here.
 
-**Two settled entries were amended on 2026-09-24**: `OD-23` now cites
+**Four settled entries were amended on 2026-09-24**: `OD-23` now cites
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), which reverses the
 entry's refusal to prescribe continuous integration and fixes the release
 artefact. The same day, for rmp `#293`, `OD-03` was worded more precisely, and
 its decision is unchanged: its binary-version rule names Semantic Versioning
 2.0.0. For rmp `#294`, `OD-03` was amended: the binary version's value is
-`0.0.1`, the first release the user chose.
+`0.0.1`, the first release the user chose. For rmp `#306` and `#307`, `OD-24`
+adds `rustix`'s `fs` feature for directory-relative cache operations and
+non-blocking opens, and `OD-10`'s rejection of `O_NOFOLLOW` is reversed by it;
+the correction this owed `CLAUDE.md` is recorded below as applied.
+
+**One entry was added on 2026-09-24**, for rmp `#257`: `OD-34`, the in-process
+entry point `run_from`, whose rejected options have no record to live in.
 
 **One factual claim was corrected on 2026-09-18**, in `OD-18`: the entry denied
 that `indexmap` is in the dependency graph, and `cargo tree` at commit `fd51ca2`
@@ -113,8 +119,8 @@ the register itself rather than a record.
 
 ### Corrections owed to `CLAUDE.md`
 
-`CLAUDE.md` is coordination and **this folder never edits it**; five entries
-have prepared a correction to it, and **all five have been applied**. Four
+`CLAUDE.md` is coordination and **this folder never edits it**; six
+corrections have been prepared for it, and **all six have been applied**. Four
 landed on 2026-09-11, each entry recording the commit that discharged it; the
 fifth was prepared on 2026-09-21 and applied by the user on 2026-09-22.
 
@@ -124,6 +130,7 @@ fifth was prepared on 2026-09-21 and applied by the user on 2026-09-22.
 | `OD-17` | The logging row loses `tracing` and `tracing-subscriber` | Applied. Task #20, commit `ee7363d` |
 | `OD-24` | The stack table gains a row for `rustix` | Applied. Task #20, commit `ee7363d` |
 | `OD-26` | *Fontes de Verdade* gains this folder as a fourth source | Applied. Task #46, commit `c6356df` |
+| `OD-24`, amended 2026-09-24 | The *Stack* table's `rustix` row reads `features = ["fs", "process"]`, and its note names the directory-relative calls beside `getuid`, `kill_process_group` and `waitid` | **Applied 2026-09-24**, at line 475: the row reads `features = ["fs", "process"]` and names `openat`, `unlinkat`, `renameat` and `mkdirat` and the `O_NOFOLLOW`/`O_NONBLOCK` opens. Uncommitted in the working tree when this was read |
 | `OD-32` | The *Stack* table's error row loses `anyhow`, and the *Tipos e erros* convention that repeats that row loses it with it | **Applied 2026-09-22, by the user**, at both lines. The table's row now states the positive choice — `thiserror` in the library, no error type of the binary's own — and cites this entry by name; the convention states the same. Uncommitted in the working tree when this was read |
 
 **The whole register was re-read against `CLAUDE.md` at commit `8f936d4` on
@@ -240,7 +247,7 @@ the last two rows below.
 | **Settled, with a residual** | Decided in substance. One narrow point remains, named in the entry with its owner and the document that settles it. **No entry carries this status today**: `OD-22`'s residual was discharged on 2026-09-11 |
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
-| **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. `OD-30` is the one entry carrying it |
+| **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. **No entry carries this status today**: `OD-30`'s arrangement was discharged on 2026-09-22 |
 | **Open** | Not decided. The entry names the options and the owner. **`OD-33` is the one entry carrying it**, since 2026-09-22 |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
@@ -277,16 +284,16 @@ the last two rows below.
 | [OD-27](#od-27--seed-benchsql-and-wl-001) | `seed-bench.sql` and `WL-001` | Settled | — |
 | [OD-28](#od-28--the-release-profile-against-the-caught-panic-condition-of-70) | The release profile against the caught-panic condition of `70` | Settled | — |
 | [OD-29](#od-29--the-json-command-tree-two-shapes-and-what-the-binary-publishes) | The JSON command tree: two shapes, and what the binary publishes | Settled | — |
-| [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled, interim | — |
+| [OD-30](#od-30--a-parsed-leaf-with-no-implementation) | A parsed leaf with no implementation | Settled; the interim arrangement is discharged | — |
 | [OD-31](#od-31--the-models-shape-strings-fields-and-the-attribute) | The model's shape: strings, fields, and the attribute | Settled | — |
 | [OD-32](#od-32--anyhow-in-the-shipped-graph) | `anyhow` in the shipped graph | Settled | — |
 | [OD-33](#od-33--uc-013-and-the-twelve-flow-acceptance-skeleton) | `UC-013` and the twelve-flow acceptance skeleton | Open | user |
+| [OD-34](#od-34--an-in-process-entry-point-over-a-supplied-argument-vector) | An in-process entry point over a supplied argument vector | Settled | — |
 
-Thirty-one entries are settled outright; `OD-19` alone carries an observation
-owed, and `OD-33` is open. Thirty-one, one and one are the whole of the
-thirty-three. `OD-30` is settled and
-**interim**: it records an arrangement each later sprint removes one arm of, and
-it is discharged when no arm remains — one arm remains.
+Thirty-two entries are settled outright; `OD-19` alone carries an observation
+owed, and `OD-33` is open. Thirty-two, one and one are the whole of the
+thirty-four. `OD-30` was settled and **interim** until 2026-09-22, when its last
+arm was removed; it is now settled outright.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
@@ -540,6 +547,17 @@ the library rather than for the binary that ships. It follows the precedent of
 the panic hook of `ADR-004`, which the binary installs for the same reason.
 `render/` gains a submodule, `bounds.rs`, holding the three bound types and the
 counting writer of `FR-RND-037`.
+
+**Refined on 2026-09-24, when the file operations were made directory-relative:
+a thirteenth module, `at.rs`, at the crate root.** `OD-24`'s amendment makes
+every cache operation, and the read of `.tpl/.cfg` and of a template, start
+from a directory descriptor, and three modules use it: `cache/` for every cache path,
+`project/` for `.tpl/.cfg`, and `render/` for a template. It sits at the crate
+root for the reason the phase clock does: a construct shared by three modules
+belongs to none of them, and placed in each it is the same rule written three
+times. The module's own documentation states its operations and the one step,
+listing a directory, that still resolves a path by name
+([data-model.md](data-model.md#tplcache)). Read at `c360c80`, 2026-09-25.
 
 **The name `diagnostics` rather than `diag`.** The project's own convention
 refuses obscure abbreviations in module names. The register named `diag/` as a
@@ -938,7 +956,12 @@ regular file is a miss and is never read through: `read_object()` in
 with what it inspected. *Rejected — `O_NOFOLLOW` on the open.* The flag's value
 differs between the supported targets, the crate would carry it only through a
 further `rustix` feature, and an open that follows no link still opens a FIFO,
-which blocks, where the inspection refuses it first.
+which blocks, where the inspection refuses it first. **This rejection is
+reversed on 2026-09-24** by `OD-24`'s amendment: `rustix`'s `fs` feature
+supplies the flag per target, and `O_NONBLOCK` beside it keeps a FIFO from
+blocking the open. Implemented the same day in `src/at.rs`: an object file is
+opened with both flags and typed on its descriptor, which replaces the `lstat`
+and the device-and-inode comparison.
 
 **The collision outcome is superseded, 2026-09-23, by the user's decision for
 rmp `#254`.** The fix is the stored-name check above and nothing else: no
@@ -1334,6 +1357,13 @@ constrain it and none of them may be applied twice:
 4. Re-check the canonical path against the canonicalised root; an escape is `65`, per `FR-TMPL-026`.
 5. Refuse a symbolic link at **every component of the name below the canonical root, taken in order**, refusing the first that is one, per `FR-TMPL-024`. Each component's own metadata is read rather than followed — `std::fs::symlink_metadata`, which "queries the metadata about a file without following symlinks" and "corresponds to the `lstat` function on Unix" (Rust standard library documentation, `std::fs::symlink_metadata`, verified 2026-09-11).
 6. Open the path that was checked, and no other.
+
+**Step 6 was amended on 2026-09-24, for rmp `#307`.** The path is opened
+relative to the canonical root, one component at a time and following none,
+with `O_NOFOLLOW` and `O_NONBLOCK`, and the type is read from the descriptor it
+is then read through (`FR-TMPL-033`, `FR-SEC-027`). The calls are `OD-24`'s
+`fs` feature; [security.md](security.md#template-containment) states the
+property.
 
 **Step 5 was the final component alone until 2026-09-21, and that was narrower
 than the requirement.** `FR-TMPL-024` refuses a symbolic link inside
@@ -1892,6 +1922,9 @@ and are **not restated here**, per rule R3 of
 
 **Status: settled. Applied to `CLAUDE.md` on 2026-09-11.** The conflict was
 resolved by the eighth edition; the residual it left is settled below.
+**Amended on 2026-09-24**, for rmp `#306` and `#307`: `rustix` gains the `fs`
+feature, by the user's decision; the correction it owed `CLAUDE.md` was applied
+the same day.
 
 **What the conflict was.** `FR-PROJ-005` made the user's home directory a
 boundary of project discovery. It can only be located from `HOME`, which
@@ -1965,6 +1998,56 @@ here and applied under the authorisation of that day, in the same commit as
 `OD-09`'s and `OD-17`'s corrections.
 
 **Unblocks.** `technology-stack`.
+
+**Amended on 2026-09-24 — the `fs` feature.** Decided by the user for rmp
+`#306` and `#307`, as relayed by the session coordinator; `adr-guardian` judged
+no architecture decision record admissible, under rules R3 and R4 of
+[`docs/adr/README.md`](../adr/README.md), because the crate's feature set lives
+in this entry and in `OD-12`. The manifest's `features = ["process"]` becomes
+`features = ["fs", "process"]`.
+
+*Why.* Two races remain open with the calls `std` supplies.
+
+- **Check-then-use on cache paths** (CWE-367). A path inspected and then used
+  by name can be swapped between the two; the security review of rmp `#305`
+  demonstrated a deletion outside the project on run 971 of a swap loop.
+  Closing it needs every component opened relative to its parent's descriptor,
+  with `openat` and `O_NOFOLLOW | O_DIRECTORY`, and the file operations made
+  relative to that descriptor: `unlinkat`, `renameat` and `mkdirat`.
+- **A FIFO in a file's place.** A FIFO swapped in after `lstat` blocks the
+  `open` of a cache record or object file; and, for rmp `#307`, a FIFO at
+  `.tpl/.cfg` or at a template blocks outside every deadline. Closing both
+  needs opens with `O_NONBLOCK | O_NOFOLLOW`.
+
+*What was verified* (docs.rs and crates.io, `rustix` 1.1.4, consulted 2026-09-24). `openat`, `unlinkat`, `renameat` and `mkdirat` are
+safe functions, each "available on crate feature `fs` only". `OFlags` carries
+`NOFOLLOW`, `DIRECTORY`, `NONBLOCK` and `CLOEXEC`. The feature is declared
+`fs = []`, so it adds no crate to the graph. The crate declares
+`rust-version = "1.63"`, below the floor of
+[`ADR-007`](../adr/adr-007-msrv.md), which is therefore unaffected. `windows-sys`
+is a dependency only under `cfg(windows)`, which no target of `NFR-PERF-018`
+sets.
+
+*Rejected.*
+
+- **Not adding the feature, and accepting the two races as residuals.** The
+  review's proof of concept deleted outside the project, and `FR-SEC-026` and
+  `FR-PROJ-024` forbid exactly that.
+- **`libc`.** Each call would be `unsafe`, which `#![forbid(unsafe_code)]`
+  forbids, as for `getuid` above.
+- **`nix`.** A second binding to the same calls beside `rustix`, which the
+  dependency budget refuses.
+- **Hard-coding the flag values.** They differ between the supported targets,
+  as `OD-10` recorded, and `rustix` supplies them per target.
+
+*Consequence.* The cache's path operations, the `.tpl/.cfg` read and the
+template read are directory-relative, implemented in `src/at.rs`
+([data-model.md](data-model.md#tplcache),
+[security.md](security.md#template-containment)); the calls are listed in
+[technology-stack.md](technology-stack.md#the-calls-std-does-not-supply). One
+step, listing a directory, still resolves a path by name, because the `alloc`
+feature that supplies `rustix::fs::Dir` was not added; why that is benign is
+data-model.md's.
 
 ---
 
@@ -2225,7 +2308,11 @@ rather than deleted, so that an identifier resolves to what happened.
 
 ## OD-30 — A parsed leaf with no implementation
 
-**Status: settled, interim.**
+**Status: settled. The interim arrangement is discharged**: its last arm,
+`tpl cfg database test`, was replaced at commit `a7fb45b` of 2026-09-22, and
+`fr_err_030_no_leaf_of_the_tree_answers_with_the_interim_seventy_any_longer` in
+`src/cli.rs` asserts that no leaf answers with it (read at `c360c80`,
+2026-09-25). What follows is kept as the record of the arrangement.
 
 **Decision.** Every node of the tree parses from the sprint that declares it. A
 leaf whose work belongs to a later sprint returns the violated-invariant
@@ -2483,6 +2570,50 @@ those twelve.
 
 ---
 
+## OD-34 — An in-process entry point over a supplied argument vector
+
+**Status: settled.** Decided for rmp `#257` on 2026-09-24; `adr-guardian`
+judged that no architecture decision record is admissible under rule R4 of
+[`docs/adr/README.md`](../adr/README.md), so the rejected options live here.
+
+**The question.** `run()` read `std::env::args_os()` and nothing else. Under
+libFuzzer those arguments are the fuzzer's own, so a coverage-guided harness
+stopped at the parser and reached no other code (`SECURITY-AUDIT.md`,
+*Limitations*). What public entry point lets an in-process caller drive the
+whole invocation?
+
+**Decision.** `pub fn run_from<I, T>(args: I) -> Result<(), Error>`, with
+`I: IntoIterator<Item = T>` and `T: Into<OsString>`, and `run()` reduced to
+`run_from(std::env::args_os())`. The obligations on it are
+[interfaces.md](interfaces.md#the-library-entry-points)'s.
+
+**Rejected.**
+
+- **The name `run_with`.** In the standard library a `_with` suffix marks a
+  closure argument — `Vec::resize_with` takes `f: F` where `F: FnMut() -> T`
+  (doc.rust-lang.org, `std::vec::Vec`, consulted 2026-09-24) — and this function
+  takes a value.
+- **Returning `ExitCode`.** It moves the mapping from error to exit status into
+  the library, which `OD-06` leaves to `main.rs` over `Error::exit_code`.
+- **A `Clone` bound on the iterator or its items.** `run_from` collects the
+  vector once and nothing iterates `args` twice, so the bound would constrain
+  callers for nothing.
+- **A working-directory argument.** Discovery reads the process's current
+  directory under `FR-PROJ-004`; threading a directory through every reader is a
+  change to discovery, outside the question.
+- **An entry compiled only under `#[cfg(fuzzing)]`.** The entry serves a test
+  as well as a fuzz harness, and a test build does not set that configuration.
+- **A harness that spawns the binary per input.** It is the black-box fuzzing
+  already delivered, one process per input; it gives the fuzzer no coverage
+  feedback from inside the process, which is the gap this entry closes.
+
+**Consequence.** The once-per-process state and the two exits that do not
+return make repeated calls in one process differ from repeated invocations of
+the binary; the entry states them rather than removing them, and a caller runs
+each input accordingly.
+
+---
+
 ## Editorial defects, reported and corrected
 
 Two statements in `specification/` were stale when this register was written.
@@ -2528,11 +2659,11 @@ reasoned; the second, one test per mapped `clap::ErrorKind` (`OD-08`), was
 discharged at commit `f8f335d` of 2026-09-15. Each is recorded as discharged in
 its own entry.
 
-**No correction is owed outside this folder either.** The last one standing was
-`OD-32`'s, over the two places `CLAUDE.md` named `anyhow` — lines 465 and 539 —
-and **the user applied it on 2026-09-22**. All five corrections this register
-has ever prepared for that file are now applied, and each records where and when
-under [Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd).
+**No correction is owed outside this folder.** The last one standing was
+`OD-24`'s amendment of 2026-09-24, over the `rustix` row of `CLAUDE.md`'s
+*Stack* table at line 475, applied the same day. All six corrections this
+register has prepared for that file are applied, and each records where and
+when under [Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd).
 
 **`OD-27`'s consequence is discharged.** `scripts/mariadb/seed-bench.sql` was
 written on 2026-09-21, and `quality-attributes` and `verification` no longer

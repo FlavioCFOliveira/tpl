@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -58,60 +58,67 @@ whole**, and each is named where it falls short rather than counted as answered:
 | 24 | Context strictness, as a **unit** test in `src/render/predicate.rs` | The integration form the row names |
 
 **The suite reaches the containers.** `tests/outside_the_process.rs` carries
-fourteen tests: ten are driven once per series of `FR-SRV-015` and gated on the
-fixture, two are differential runs that need no server, one is the syscall trace
-the two Linux targets admit, and one exercises the gate's own mapping with no
-fixture in reach. What is recorded of every other test is its obligation, its
+fifteen tests: eleven are driven once per series of `FR-SRV-015` and gated on
+the fixture, one of them ignored as a measurement test; two are differential
+runs that need no server; one is the syscall trace the two Linux targets admit;
+and one exercises the gate's own mapping with no fixture in reach. What is recorded of every other test is its obligation, its
 trace, and, where the test exists, where it lives — never an outcome.
 
 ## The suite as it stands
 
-Read from the working tree at commit `243c4d6` on 2026-09-21, by
-`cargo test --all-features --no-run` followed by `--list` on each compiled
-target, and recorded with its point in history because it is a count that moves:
-**1 010 tests**, made of 863 unit tests inside the library, 145 integration
-tests over the binary, and 2 doc-tests. The binary's own test target carries
-none.
+Read at commit `c360c80` on 2026-09-25, by `cargo test --all-features -- --list`
+and again with `--ignored`, and recorded with its point in history because it
+is a count that moves: **1 403 tests**, made of 1 055 unit tests inside the
+library, 346 integration tests over the binary, and 2 doc-tests. The binary's
+own test target carries none. **Thirteen are measurement tests** carrying
+`#[ignore]` under [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md),
+Decision 10 — six unit tests and seven integration tests — so
+`cargo test --all-features` runs 1 390.
 
-| Integration target | Tests | Gated on the fixture |
-|---|---|---|
-| `tests/schema_and_cache.rs` | 51 | 46 |
-| `tests/project_and_configuration.rs` | 25 | 0 |
-| `tests/help_surface.rs` | 17 | 0 |
-| `tests/outside_the_process.rs` | 14 | 10 |
-| `tests/template_commands.rs` | 14 | 0 |
-| `tests/invocation_surface.rs` | 11 | 0 |
-| `tests/render_command.rs` | 9 | 6 |
-| `tests/help_environment.rs` | 4 | 0 |
-| **Total** | **145** | **62** |
+| Integration target | Tests | Ignored | Gated on the fixture |
+|---|---|---|---|
+| `tests/project_and_configuration.rs` | 121 | 0 | 1 |
+| `tests/schema_and_cache.rs` | 52 | 0 | 47 |
+| `tests/render_command.rs` | 49 | 6 | 11 |
+| `tests/help_surface.rs` | 30 | 0 | 0 |
+| `tests/cache_containment.rs` | 17 | 0 | 0 |
+| `tests/template_commands.rs` | 17 | 0 | 0 |
+| `tests/outside_the_process.rs` | 15 | 1 | 11 |
+| `tests/invocation_surface.rs` | 13 | 0 | 0 |
+| `tests/cfg_validation.rs` | 10 | 0 | 0 |
+| `tests/connectivity_command.rs` | 8 | 0 | 6 |
+| `tests/non_regular_files.rs` | 7 | 0 | 0 |
+| `tests/help_environment.rs` | 4 | 0 | 0 |
+| `tests/run_from.rs` | 2 | 0 | 0 |
+| `tests/timeout_without_phase.rs` | 1 | 0 | 0 |
+| **Total** | **346** | **7** | **76** |
 
-It was 621 at commit `fd51ca2`, 504 in the working tree of 2026-09-17 and 272 at
-commit `f8f335d` of 2026-09-15.
+It was 1 010 at commit `243c4d6` of 2026-09-21, 621 at commit `fd51ca2`, 504 in
+the working tree of 2026-09-17 and 272 at commit `f8f335d` of 2026-09-15.
 
 `tests/support/` holds three modules and no test target: `fixture.rs`, which is
 the gate and the three server-side instruments; `differential.rs`, which is the
 fourth; and `sandbox.rs`, which is the temporary directory and cleared
 environment every launch of the binary runs under. All three are reached by
-`#[path]` from the files that use them — `sandbox.rs` by five targets,
-`fixture.rs` by three, `differential.rs` by one.
+`#[path]` from the files that use them — `sandbox.rs` by eleven targets,
+`fixture.rs` by five, `differential.rs` by one.
 
-**Sixty-two tests need a server**, in three targets — 46 in
-`tests/schema_and_cache.rs`, 10 in `tests/outside_the_process.rs`, 6 in
-`tests/render_command.rs` — and every one is gated on the fixture: it runs where
-the fixture is up and is skipped, with a printed reason, where it is not. The
-count is of tests whose body calls `fixture::series` or `fixture::exclusive`.
+**Seventy-six tests need a server**, in five targets — the fourth column above —
+and every one is gated on the fixture: it runs where the fixture is up and is
+skipped, with a printed reason, where it is not. The count is of tests whose
+body calls `fixture::series` or `fixture::exclusive`, directly or through a
+helper of its own file.
 `tests/template_commands.rs` reaches no server **by design**: `FR-TMPL-003`
 makes the absence of a connection the property under test, and that target
 establishes it with a control run instead of a fixture, which its own header
 records.
 
-**One leaf of the tree is still unwritten** — `tpl cfg database test`, the
-connectivity subcommand, which exits `70` under the one arm
-[`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) leaves
-(verified by invocation, 2026-09-21). No test asserts what that command must do;
-`fr_cache_010_the_connection_test_touches_no_file_of_the_store` asserts the
-clause that holds however the command ends and prints a notice for the clause
-that does not.
+**Every leaf of the tree is written.** The last, `tpl cfg database test`, was
+implemented at commit `a7fb45b` of 2026-09-22, which discharged [`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation); its
+behaviour is asserted in `tests/connectivity_command.rs` and in
+`src/cli/cfg/connectivity.rs`, and
+`fr_err_030_no_leaf_of_the_tree_answers_with_the_interim_seventy_any_longer`
+in `src/cli.rs` fails the day a leaf is added without an implementation.
 
 ## The four kinds of test, and what each needs
 
@@ -263,6 +270,7 @@ and for the same reason.
 | The discovery clause of `NFR-PERF-005` | A differential run, with its inversion | All four targets: it needs no server |
 | The configuration clause of `NFR-PERF-005` | A differential run, with its inversion | All four targets |
 | The two clauses above, **as syscalls** | A syscall trace | **Written, and run on neither Darwin target.** The body skips, with a printed notice, on a host that is not Linux or that has no `strace` |
+| `NFR-PERF-008`, outside the six | The `FR-GLOB-017` lines on stderr of `schema dump --direct --no-cache -v`, counted and compared with the catalogue statements the server's statement record shows for the same invocation | Every series of `FR-SRV-015`, in `fr_glob_017_one_diagnostic_line_per_catalogue_query_and_none_at_the_default_level` (`tests/schema_and_cache.rs`), gated on the fixture |
 
 The trace is written and does not run on either Darwin target, and that is the
 requirement's arrangement rather than a gap in the suite: `NFR-PERF-005` forbids
@@ -475,14 +483,18 @@ side. One observation of the connections a server accepts discharges both. The
 nine is a count of requirements, and the instruments are four, so neither number
 counts the observations a run makes.
 
-**Recorded reading — which requirements `NFR-PERF-007` reaches.** It reads
-*"each requirement of this section"*, and the section it sits in also contains
-`NFR-PERF-007` itself, `NFR-PERF-008` and `BR-PERF-001`, none of which is a
-property of the running system that an outside observation could reach. The six
-above are the ones it can reach, which is the reading
-[quality-attributes.md](quality-attributes.md#the-six-requirements-of-form)
-already takes. The wording is the functional owner's to settle; nothing in the
-built system differs between the readings.
+**Settled — which requirements `NFR-PERF-007` reaches.** Exactly the six
+requirements of form, `NFR-PERF-001` through `NFR-PERF-006`: the sixty-second
+edition of `specification/performance-requirements.md` amended `NFR-PERF-007`
+to name them, which is the reading this document and
+[quality-attributes.md](quality-attributes.md#the-six-requirements-of-form) had
+recorded. `NFR-PERF-007` itself and `BR-PERF-001` are not properties of the
+running system. `NFR-PERF-008` is one, and since the same edition it carries its
+own verification: an invocation that reads the catalogue is run at `-v`, the
+`FR-GLOB-017` lines on its stderr are counted, and the count must equal the
+catalogue queries the server's statement record shows for that invocation. It
+needs the fixture standing, and a run without it skips the assertion with a
+stated reason.
 
 ## The invocation surface, observed on the process
 
@@ -874,13 +886,11 @@ only flow that must run where **no project exists**, which is what makes
 `UC-011` is the only flow whose expected outcome is a **wrong answer with exit
 `0`**: the test asserts the documented failure mode, not its absence.
 
-**Which flows the built tree can reach, at 2026-09-21.** Eleven of the twelve.
-Every command each of them composes is written, `UC-004`'s excepted: that flow
-is `tpl cfg database test`, the one leaf
-[`OD-30`](open-decisions.md#od-30--a-parsed-leaf-with-no-implementation) still
-covers, and it exits `70`.
+**Which flows the built tree can reach, at 2026-09-25.** All twelve: every
+command each of them composes is written. `UC-004`, `tpl cfg database test`,
+became reachable at commit `a7fb45b` of 2026-09-22.
 
-`UC-003` was the last to become reachable, and the change is in the resolution
+`UC-003` became reachable before it, and the change is in the resolution
 rather than in the flow: the execution half — no shell, the cap, the deadline,
 the `78` — is entered by any command that opens a connection, so a project whose
 `password_command` fails answers `78` from `tpl schema tables` (verified by

@@ -3,8 +3,8 @@ id: ADR-011
 title: The heap count behind the render memory limit
 status: accepted
 decided: 2026-09-23
-last-reviewed: 2026-09-23
-requirements: [FR-RND-039, FR-RND-038, FR-RND-033, FR-RND-034, FR-CONF-045]
+last-reviewed: 2026-09-25
+requirements: [FR-RND-039, FR-RND-036, FR-RND-038, FR-RND-033, FR-RND-034, FR-CONF-045]
 supersedes: []
 superseded-by: null
 ---
@@ -97,7 +97,8 @@ and was stopped only by the 30 s render deadline.
    through the diagnostics path, then `std::process::exit` with `65`, which
    discards buffered stdout and keeps `FR-RND-034`. Reading the count
    allocates nothing. The interval is a parameter of the technical
-   specification, not of this record: Consequences proposes its value.
+   specification, not of this record: Consequences gives the reasoning behind
+   its value.
 
 3. **The crate's hard limit is not set.** The allocator is constructed with
    the limit `usize::MAX` and `set_limit` is never called, so `cap` refuses no
@@ -147,6 +148,23 @@ and was stopped only by the 30 s render deadline.
   - **`FR-RND-039` places a hard ceiling outside `tpl`**: "A caller who needs a
     hard ceiling on the machine's memory must impose it outside `tpl`."
 
+- **A check of the heap peak at the end of the render**, through `cap`'s
+  `stats` feature, so that a completed render whose peak exceeded
+  `render_memory_limit` always ends with `65`. Rejected by the user on
+  2026-09-24 (rmp `#297`). The case it targets is real: in rmp `#267`, a 32 MiB
+  render under a 16 MiB limit completed in some runs, idle and under load,
+  because the limit is enforced only at each poll (point 2, at the interval
+  `docs/spec-technical/architecture.md` fixes); the counts are recorded in
+  `ADR-012`, *Consequences*. It is refused for four reasons.
+  - **The limit guards against runaway renders**, and sampling stops those.
+  - **`FR-RND-039` acts on the observed count and allows the escape**: the
+    process "MAY hold more than the limit between one observation and the
+    next".
+  - **It needs the `stats` feature this record refuses** (point 1), and with it
+    an atomic update on every allocation.
+  - **A render that never finishes still depends on sampling**, so the check
+    would not replace the poll.
+
 - **Other crates.** Each was read at its latest release on 2026-09-23.
   - `stats_alloc` 0.1.10 (MIT, 2022-03-30): no limit; six `SeqCst` counters
     with two read-modify-writes per allocation; the held count is derived by
@@ -169,6 +187,10 @@ and was stopped only by the 30 s render deadline.
 
 ## Consequences
 
+- **A test of the memory limit is a measurement test.** Its verdict depends on
+  sampling, so it is kept off the release path under `ADR-012`, Decision
+  point 10, and runs on demand.
+
 - **Every allocation of the process pays one atomic read-modify-write, and
   every deallocation one more**, for the whole invocation, not only while a
   template runs. This is a cost to measure, not an estimate: after
@@ -188,18 +210,19 @@ and was stopped only by the 30 s render deadline.
   following render is observed, so the following render is not charged for
   it; the technical specification must preserve that order.
 
-- **Poll interval: 10 ms is proposed for the technical specification.** The
-  overshoot `FR-RND-039` admits is what the render allocates within one
-  interval. Reading an atomic costs nothing measurable, and a legitimate render
+- **The poll interval is the technical specification's**, which fixes it in
+  `docs/spec-technical/architecture.md`. The overshoot `FR-RND-039` admits is
+  what the render allocates within one interval. Reading an atomic costs nothing measurable, and a legitimate render
   of the worked examples ends within a few intervals, so the poll costs a
   legitimate render at most a few idle wake-ups. The measured growth in H-1
-  averaged 566 MB/s (16 981 MB in 30 s); 10 ms is about 5.7 MB of that
-  average. That average understates the peak rate of an exponential curve,
-  and a shorter interval does not help where it matters most: for a doubling
-  value the overshoot is set by the size of the one allocation that crosses
-  the limit, not by the interval. The realised overshoot is to be observed
-  after implementation by re-running the H-1 template under the default limit
-  and recording the exit status and peak resident memory.
+  averaged 566 MB/s (16 981 MB in 30 s); an interval of 10 ms is about 5.7 MB
+  of that average. That average understates the peak rate of an exponential
+  curve, and a shorter interval does not help where it matters most: for a
+  doubling value the overshoot is set by the size of the one allocation that crosses
+  the limit, not by the interval. The realised overshoot has been observed:
+  `SECURITY-AUDIT.md` records the H-1 template ending with `65` under the
+  default limit and under a 16 MiB limit, with the peak resident memory of
+  each (Sources).
 
 - **The abort residual stays exactly as `FR-RND-039` states it.** An
   allocation the operating system refuses aborts, with the one line the
@@ -241,4 +264,7 @@ and was stopped only by the 30 s render deadline.
 | `stats_alloc`: six `SeqCst` counters, two RMWs per allocation, no limit; `peak_alloc`: `fetch_add` plus `fetch_max` per allocation, `System` only, no limit; `tracking-allocator`: runtime-registered tracker hooks and thread-local groups; `alloc_counter`: thread-local counters | Each crate's `src/lib.rs` from the published `.crate` | 2026-09-23 |
 | `tikv-jemallocator` builds jemalloc from C and reads statistics through an epoch refresh | unverified | — |
 | Per-allocation overhead of `cap` on the render hot path | unverified; to be measured after implementation | — |
+| The rejection of the end-of-render peak check and its four reasons | The user's decision of 2026-09-24, relayed for rmp `#297` | 2026-09-24 |
+| The process "MAY hold more than the limit between one observation and the next" | `specification/render-command.md`, `FR-RND-039` | 2026-09-24 |
+| After the counting allocator, the H-1 string-doubling template ends with `65` and a memory-limit cause under the default limit and under a 16 MiB limit; peak resident memory is recorded for each | `SECURITY-AUDIT.md`, *Remediation*, row H-1, pass 2 | 2026-09-25 |
 | 16 981 MB peak resident memory in 30 s for the H-1 template, inside the fuel budget | `SECURITY-AUDIT.md`, *Remediation*, row H-1 | 2026-09-23 |

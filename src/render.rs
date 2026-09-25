@@ -169,6 +169,38 @@ impl Environment {
         Ok(self.root.resolve(name)?.path)
     }
 
+    /// The text of the template `name` resolves to, read on a descriptor typed
+    /// as a regular file (`FR-TMPL-033`, `FR-SEC-027`).
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`Environment::resolve`] returns;
+    /// [`Error::TemplateNotRegular`] where the entry became something other
+    /// than a regular file after it was resolved; and
+    /// [`Error::ProjectFileUnreadable`] where the file could not be read or is
+    /// not UTF-8.
+    pub(crate) fn source(&self, name: &str) -> Result<String, Error> {
+        let resolved = self.root.resolve(name)?;
+
+        self.root
+            .read(&resolved.path)
+            .map_err(|unread| match unread {
+                crate::at::Unread::NotRegular(kind) => Error::TemplateNotRegular {
+                    name: name.to_owned(),
+                    file: resolved.name.clone(),
+                    kind: crate::at::kind_name(kind),
+                },
+                crate::at::Unread::Io(returned) => Error::ProjectFileUnreadable {
+                    path: resolved.path.clone(),
+                    returned,
+                },
+                crate::at::Unread::Oversized => Error::ProjectFileUnreadable {
+                    path: resolved.path.clone(),
+                    returned: std::io::Error::from(std::io::ErrorKind::InvalidData),
+                },
+            })
+    }
+
     /// Compiles the template `name` without evaluating anything
     /// (`FR-TMPL-017`, `FR-TMPL-020`).
     ///
@@ -269,10 +301,14 @@ impl Environment {
                     } else {
                         self.root.nearest_included(&name)
                     };
+                    // FR-TMPL-033 item 3: an entry of that name that is a
+                    // FIFO, a socket or a device is named for what it is.
+                    let not_regular = self.root.special_entry(&name);
                     *reason = Some(Box::new(crate::error::RenderReason::IncludeNotFound {
                         name,
                         lacks_extension,
                         nearest,
+                        not_regular,
                     }));
                 }
                 Err(condition)

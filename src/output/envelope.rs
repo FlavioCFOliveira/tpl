@@ -109,6 +109,15 @@ impl<T> Document<T> {
         }
     }
 
+    /// The version a decoded document declared.
+    ///
+    /// It is read on the one path that decodes a document: `FR-RND-042`
+    /// refuses a `--context` document of a version other than
+    /// [`SCHEMA_VERSION`], which the binary emits.
+    pub(crate) const fn schema_version(&self) -> u32 {
+        self.schema_version
+    }
+
     /// The payload, taken out of the envelope.
     ///
     /// It is the counterpart of [`Document::new`] on the one path that reads a
