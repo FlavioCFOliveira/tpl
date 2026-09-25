@@ -24,7 +24,7 @@ Install or update the skill from the latest release with one command:
 curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install-skill.sh | sh
 ```
 
-The script downloads `tpl-skill-<tag>.tar.gz`, verifies it against the release's `SHA256SUMS`, and installs it into `$CLAUDE_CONFIG_DIR/skills/tpl`, where `CLAUDE_CONFIG_DIR` defaults to `~/.claude`. `TPL_SKILL_DIR` names another destination. An existing skill at the destination is replaced; if it is a symbolic link, only the link is removed, never its target. The script never uses `sudo`. It works from the first release that ships the skill archive: v0.0.1 does not, so today it reports that the release has no skill archive.
+The script downloads `tpl-skill-<tag>.tar.gz`, verifies it against the release's `SHA256SUMS`, and installs it into `$CLAUDE_CONFIG_DIR/skills/tpl`, where `CLAUDE_CONFIG_DIR` defaults to `~/.claude`. `TPL_SKILL_DIR` names another destination. An existing skill at the destination is replaced; if it is a symbolic link, only the link is removed, never its target. The script never uses `sudo`. Releases ship the skill archive from v0.0.2; v0.0.1 does not.
 
 ### From a clone, for development
 

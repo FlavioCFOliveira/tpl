@@ -36,6 +36,8 @@ workflow, before it closes.
 
 ## Unreleased
 
+## [0.0.2] - 2026-09-25
+
 ### Added
 
 - **The Claude Code skill.** `skill/` makes Claude the sole operator of `tpl`
@@ -49,6 +51,11 @@ workflow, before it closes.
   installs or updates the skill from it into `~/.claude/skills/tpl` — under
   `CLAUDE_CONFIG_DIR` when set, or `TPL_SKILL_DIR` — replacing an existing skill
   or symbolic link there.
+- **`tpl::run_from(args)` in the library.** It runs `tpl` on an explicit
+  argument vector instead of the process arguments, so a fuzz harness can drive
+  `tpl` in process; `tpl::run` is `run_from` over the process arguments. The
+  library API carries no stability promise (`DIV-032`): the contract is the
+  command line and the JSON document.
 
 ### Changed
 
@@ -69,8 +76,9 @@ workflow, before it closes.
 - **Breaking: the lookup functions are renamed.** In the registered template
   surface, `table(name)`, `view(name)` and `routine(name)` are now
   `table_named(name)`, `view_named(name)` and `routine_named(name)`; `column`
-  is unchanged. A template that calls an old name fails with `65`. Under the
-  pre-1.0 rule, this moves the minor number of the next release.
+  is unchanged. A template that calls an old name fails with `65`. It is a
+  breaking change of the registered template surface, released in `0.0.2` by
+  the maintainer's decision rather than as a minor bump.
 - **`.tpl/.cfg` must be a regular file.** A `.cfg` that is a symbolic link, a
   directory, a FIFO, a socket or a device is refused with `78`, naming the
   kind found and reading nothing, so a FIFO no longer makes `tpl` block. **A
