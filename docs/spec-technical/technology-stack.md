@@ -1,7 +1,7 @@
 ---
 title: Technology Stack
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -364,17 +364,20 @@ observability.
 `rustix`, with `default-features = false` and the features `fs` and `process`
 alone, supplies safe functions `std` does not. The `fs` feature was added on
 2026-09-24 by the user's decision, recorded in [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid); it is declared `fs = []` and
-adds no crate to the graph. The four `fs` calls below are implemented in
-`src/at.rs`, for rmp `#306` and `#307`. The `alloc` feature, which would supply
+adds no crate to the graph. The `fs` calls below are made from `src/at.rs`, for
+rmp `#306` and `#307`; `rustix::io::read` and `write`, which need no feature,
+move the bytes through the descriptors they open (read at `c360c80`,
+2026-09-25). The `alloc` feature, which would supply
 `rustix::fs::Dir`, is not added, so a directory is still listed with
 `std::fs::read_dir` ([data-model.md](data-model.md#tplcache)).
 
 | Call | Used for | Source | Decided in |
 |---|---|---|---|
-| `getuid` | The process's own user identifier. `std` supplies the file's identifier and mode on the same metadata, so the ownership check of `FR-PROJ-010` needs exactly this one call and the mode check of `FR-PROJ-011` none | — | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
+| `getuid` | The process's own user identifier. The file's identifier and mode come from the `fstat` of the descriptor `.tpl/.cfg` is read through, so the ownership check of `FR-PROJ-010` needs exactly this one further call and the mode check of `FR-PROJ-011` none | — | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | `kill_process_group(pid, sig)` | `SIGKILL` to the `password_command` child's group at the deadline and at the cap: "`kill(-pid, sig)`—Sends a signal to all processes in a process group"; a pid of `1` is never passed | docs.rs, `rustix` 1.1.4, `rustix::process::kill_process_group`, feature `process`, consulted 2026-09-23 | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
 | `openat` with `OFlags::NOFOLLOW`, `DIRECTORY`, `NONBLOCK` and `CLOEXEC` | Each cache path component opened relative to its parent's descriptor, refusing a symbolic link (`NOFOLLOW`) and a non-directory (`DIRECTORY`); each file opened without following a link and without blocking on a FIFO (`NONBLOCK`) — cache records and object files, `.tpl/.cfg` and templates | docs.rs, `rustix` 1.1.4, `rustix::fs::openat` and `OFlags`, feature `fs`, consulted 2026-09-24 | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | `unlinkat`, `renameat`, `mkdirat` | Removing, renaming over and creating a cache entry relative to the descriptor already opened, so no path is resolved by name a second time | docs.rs, `rustix` 1.1.4, `rustix::fs::unlinkat`, `renameat`, `mkdirat`, feature `fs`, consulted 2026-09-24 | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
+| `open`, `fstat`, `statat` | Opening the anchor, the canonical `.tpl` or template root, by path with `NOFOLLOW` on its last component; typing an opened file on its own descriptor; and examining a name relative to a directory descriptor without following it | docs.rs, `rustix` 1.1.4, `rustix::fs::open`, `fstat`, `statat`, feature `fs`, consulted 2026-09-25 | [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 | `waitid` with `WaitIdOptions::EXITED`, `NOHANG` and `NOWAIT` | Observing the child's exit while keeping it waitable, so its pid is not freed before the group kill. `NOWAIT`: "Keep processed in a waitable state"; `NOHANG`: "Return immediately if no child has exited" | docs.rs, `rustix` 1.1.4, `rustix::process::waitid` and `WaitIdOptions`, feature `process`, consulted 2026-09-23 | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
 
 The group itself is created by `std`: `CommandExt::process_group(0)` "will use

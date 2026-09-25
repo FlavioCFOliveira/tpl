@@ -1,7 +1,7 @@
 ---
 title: The Context Document
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-25
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
 ---
 
@@ -140,8 +140,8 @@ variable is bound to a source, which is
   graph because a template author must be able to know, without inspecting the
   database, exactly how deep the object in hand goes.
 
-  *Rejected.* Names only everywhere, with a `table()` lookup function to resolve
-  them — the smallest document and a trivial round-trip, but every template that
+  *Rejected.* Names only everywhere, with a lookup function to resolve them,
+  as `table_named()` of `FR-ENV-020` now does by name — the smallest document and a trivial round-trip, but every template that
   wants a referenced column has to perform the lookup itself. Also rejected: a
   summary embedding of name, primary key, and column names only, which grows the
   document by roughly a sixth instead of roughly doubling it, but which stops

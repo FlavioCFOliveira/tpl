@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
 ---
 
@@ -807,8 +807,9 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   of hash-named symbolic links is taken as given from the task that raised the
   question. It is not cited to a published authority, because no document in
   this repository states it and the project's scope rule admits no reading
-  outside the repository; `ADR-002` records only that no driver method takes a
-  directory, which is why `tpl` reads it. **The decision does not rest on the
+  outside the repository; the project's architecture decision record for the
+  TLS mode mapping records only that no driver method takes a directory, which
+  is why `tpl` reads it. **The decision does not rest on the
   convention alone**, and stands if it is ever shown to be wrong: the weighing
   above turns on there being no disclosure for a link to arrange, which makes
   following the more useful behaviour for any directory a caller curates, and

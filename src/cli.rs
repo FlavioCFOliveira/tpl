@@ -627,17 +627,17 @@ impl Ending {
 /// while `tpl version`, `tpl --version` and `tpl -V` all arrive at the second.
 ///
 /// Below them every arm is either a group node, which prints its own help and
-/// succeeds per `FR-CLI-007`, or a leaf, which reports the interim `70` until
-/// the sprint that owns it replaces the arm.
+/// succeeds per `FR-CLI-007`, or a leaf, which runs its command: every leaf of
+/// the tree has an implementation, as this module's documentation states.
 ///
 /// The writer is a parameter rather than standard output taken directly, so
 /// that what a node prints is observable from a test without a process.
 ///
 /// # Errors
 ///
-/// Returns [`Error::InternalInvariant`] for a leaf with no implementation,
-/// whatever `tpl help` reports for a path that names no node, and
-/// [`Error::StdoutUnwritable`] where the text could not be written.
+/// Returns whatever the command a leaf runs returns, whatever `tpl help`
+/// reports for a path that names no node, and [`Error::StdoutUnwritable`]
+/// where the text could not be written.
 fn route<W: Write>(out: &mut W, invocation: &Invocation, ending: Ending) -> Result<(), Error> {
     let command = match &invocation.form {
         // FR-GLOB-019 and FR-GLOB-020: both flags are answered at the node

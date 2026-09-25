@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [README.md, open-decisions.md]
 ---
 
@@ -20,8 +20,9 @@ directions.
   that answer it, and the five concerns the corpus forces as a whole rather
   than through any one file.
 
-`specification/` holds **26 files**: 25 requirement modules and `README.md`,
-the index. All 26 are covered. The mapping was harvested against the seventh
+`specification/` holds **27 files**: 26 requirement modules and `README.md`,
+the index. **26 are covered**: `examples.md`, added in the thirty-fourth
+edition, has no section here. The mapping was harvested against the seventh
 edition and is **current with the ninth**, reconciled on 2026-09-11. The eighth
 edition changed the rows drawn from `cli-contract.md`,
 `configuration-model.md`, `project-and-discovery.md`,
@@ -81,8 +82,19 @@ this folder. Its eight identifiers — `FR-RND-036` … `FR-RND-040`,
 `FR-CONF-002`, `FR-CONF-028`, `FR-CONF-031`, `FR-CACHE-030`, `FR-CACHE-033`,
 `FR-CACHE-039`, `FR-CDOC-008`, `FR-SEC-012`, `FR-SEC-024`, `FR-ERR-001`,
 `FR-ERR-006` and `FR-ERR-034` move rows in sections 7, 8, 9, 11, 14, 15, 18, 23
-and 24. Counting it, **the mapping is behind by eighteen editions**: the
-twenty-third to the forty-first, less the two rows of the thirty-second above.
+and 24. Counting it, the mapping was behind by eighteen editions on
+2026-09-23: the twenty-third to the forty-first, less the two rows of the
+thirty-second above.
+
+**As of the sixty-fourth edition, read on 2026-09-25, the mapping is behind by
+forty editions**: the twenty-third to the forty-first and the forty-third to
+the sixty-fourth, less what was taken out of order — the two rows of the
+thirty-second above, the fifth writer of the fifty-eighth (section 26), and the
+verification of `NFR-PERF-008` of the sixty-second (sections 3 and 23). The
+identifiers those editions added are not mapped here, among them
+`FR-CDOC-017`, `FR-CACHE-042` … `FR-CACHE-044`, `FR-SEC-026`, `FR-SEC-027`,
+`FR-PROJ-030` and `FR-TMPL-033`; the documents that answer them cite them
+directly.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -625,7 +637,7 @@ is named only where a row would otherwise imply a correction is outstanding.
 | `WL-001` needs `scripts/mariadb/seed-bench.sql`; the measurement points over that workload could not be measured until it existed, and it was written on 2026-09-21. What the entry still owes the root documents is that register's to state | `DIV-036` | `verification` (`OD-27`) |
 | The catalogue is read through `INFORMATION_SCHEMA` only: the closed list of `FR-SRV-006` has four entries, `SHOW` is not one of them, and no necessity admits a fifth | `DIV-031` | `security`, `interfaces` |
 | Determinism is over **stdout** only | `DIV-039` | `quality-attributes` |
-| Four things write inside `.tpl`: `tpl init`, `tpl cfg …`, `tpl cache load`, and any cached read command on a miss | `DIV-005` | `architecture` |
+| Five things write inside `.tpl`: `tpl init`, `tpl cfg …`, `tpl cache load`, any cached read command on a miss, and `tpl cache clean` | `DIV-005`, discharged; `FR-PROJ-023` (fifty-eighth edition) | `architecture`, `data-model` |
 | `tpl cache` is a group node of the command tree in its own right, with three subcommands, and not a part of project management: the auxiliary set is not closed without it | `DIV-040` | `architecture` |
 | Every divergence is a correction owed to a file **the specification never edits** — the technical spec inherits that restraint and must not restate the corrected content either | *Overview* | `README`, `overview` |
 | **A register describing a file this corpus does not own decays whenever somebody else edits that file**, and no reference check, recount or sweep of the corpus can see it happen. Every entry therefore carries a state, and a discharged entry names the **commit** that discharged it, so that when it stopped being owed is auditable. This folder adopted the same rule for its own statements about a file it does not own | *Maintenance debt*, fifth validation rule (fifteenth edition) | `README`, `decisions` |

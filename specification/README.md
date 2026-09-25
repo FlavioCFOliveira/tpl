@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-three editions. All are in force;
+The specification has been written in sixty-four editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -3223,7 +3223,9 @@ whose every internal check passes.
   citation this edition adds names the record by role. The two forms now sit in
   one requirement. Which form this corpus uses is a question for a reading that
   covers it, not a by-product of a scoped task, and nothing is ambiguous while
-  they stand.
+  they stand. *Discharged in the sixty-fourth edition:* the note names the
+  record by role, as the rule of the decision-record register requires of this
+  corpus.
 - **The corpus holds twenty-seven files and two passages count twenty-six.**
   Both are accounts of what the thirty-third edition's sweep covered, in the
   past tense, and both stay true of that edition; neither is amended, on the
@@ -4885,6 +4887,49 @@ and the index of [open-questions.md](open-questions.md) stays empty.
 changes. None conflicts with them, so none is amended. The root `README.md`
 does not state what kind of file `.cfg` or a template must be, so the fifth
 validation rule owes nothing.
+
+### Sixty-fourth edition — the audit before v0.0.2
+
+rmp `#308` audited the whole corpus before release v0.0.2: links, anchors,
+identifiers, the edition log, the examples, and the register of divergences
+against the two files it describes. It also spot-checked the release binary
+built from `c360c80` against the requirements editions fifty-seven to
+sixty-three added that state observable output, in scratch projects with no
+server: `FR-HELP-037`, `FR-CFG-054`, `FR-ENV-020`, `FR-RND-042`,
+`FR-PROJ-030`, `FR-TMPL-033`, `FR-CACHE-042` and `FR-CACHE-044`. Each behaved
+as stated.
+
+**No identifier is assigned, retired or renumbered.** Every internal link and
+anchor resolves, no identifier is defined twice, and every identifier cited
+is defined. No term enters or leaves [glossary.md](glossary.md), and the index
+of [open-questions.md](open-questions.md) stays empty.
+
+- **An example that no longer matched its rule** —
+  [template-commands.md](template-commands.md). The listing of `FR-TMPL-011`
+  gains the header row `FR-OUT-006` requires.
+- **A lookup by its old name** — [context-document.md](context-document.md).
+  The rejected option of `BR-CTX-001` named a `table()` function, the name
+  `FR-ENV-020` retired in the sixtieth edition.
+- **The register, re-read** — [upstream-divergences.md](upstream-divergences.md).
+  `DIV-054` and `DIV-056` are discharged, each with its commit; `DIV-032`,
+  `DIV-041` and `DIV-053` stay due; `DIV-001` stays partly discharged, with a
+  larger remaining part. The counts, and their two restatements, move to three
+  due, forty-nine discharged and four partly discharged.
+- **A named candidate that the file itself settled** — the observation the
+  thirty-seventh edition named under *Maintenance debt*, that `CLAUDE.md`
+  claimed the requirements of form are asserted *em cada `cargo test`*, owes
+  nothing. `390c6c6` narrowed that sentence to what `NFR-PERF-007` and the
+  section *What an assertion needs in order to run* state.
+
+- **A decision record cited by number** —
+  [configuration-model.md](configuration-model.md). The provenance note of
+  `FR-CONF-014` named `ADR-002`; it now names the record by role, as the rest
+  of the requirement does, which discharges the item the thirty-fourth-edition
+  section of this file named and did not act on.
+
+The fifth validation rule is discharged for this edition: both root
+documents were read against every requirement amended since the register was
+last re-read.
 
 ### Still out of scope
 

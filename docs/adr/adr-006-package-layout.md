@@ -3,7 +3,7 @@ id: ADR-006
 title: The package layout
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-25
 requirements: [FR-ERR-031, BR-ERR-001, BR-SCH-004, NFR-PERF-018]
 supersedes: []
 superseded-by: null
@@ -47,10 +47,10 @@ of the split rather than the number of packages.
 **One Cargo package**, carrying a library and a binary. The logic lives in the
 library; the binary parses, dispatches, and maps the error to an exit code.
 
-**`benches/` gets no package of its own.** `criterion` and `dhat` are
-dev-dependencies, and nothing a dev-dependency drags in is compiled into the
-release artefact — so a second package would move nothing out of a graph it was
-never in. The question a second manifest was reached for is answered by naming
+**`benches/` gets no package of its own.** `criterion` and `dhat` enter as
+dev-dependencies when they are declared (the manifest declares none today), and
+nothing a dev-dependency drags in is compiled into the release artefact — so a
+second package would move nothing out of a graph it was never in. The question a second manifest was reached for is answered by naming
 the command that answers it: `cargo tree`'s `--edges` defaults to
 `normal,build,dev`, which is why an unfiltered listing shows a dev-dependency,
 and the shipped graph is what `cargo tree -e normal,build` prints — "a mostly
@@ -120,3 +120,4 @@ this record.
 | The library carries no compatibility guarantee; only the JSON document and the command line are contract | `specification/upstream-divergences.md`, `DIV-032` | 2026-09-11 |
 | The trigger for `70` is reachable only from the system's own test configuration and from no invocation of the distributed binary | `specification/errors-and-exit-codes.md`, `FR-ERR-031` | 2026-09-11 |
 | One manifest at the root with `src/` beneath it; the logic in the library, testable without launching a process | `CLAUDE.md`, *Estrutura do Projecto* and *Organização* | 2026-09-11 |
+| The manifest declares no `[dev-dependencies]` table | `Cargo.toml` | 2026-09-25 |

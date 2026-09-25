@@ -1,7 +1,7 @@
 ---
 title: Template Commands (Second Arm)
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 related: [cli-contract.md, render-command.md, project-and-discovery.md, security.md]
 ---
 
@@ -109,7 +109,7 @@ tpl template path  [<name>]             Print the template root, or one template
 
   ```
   tpl template list
-
+  NAME
   docs/table.md
   example
   rust/_types
@@ -121,6 +121,10 @@ tpl template path  [<name>]             Print the template root, or one template
   fixes: byte-wise, `_` (0x5F) sorts before `s` (0x73), so `rust/_types` comes
   first. The example was the evidence that no order had been stated, and it is
   now the worked case of the one that has.
+
+  *Corrected in the sixty-fourth edition.* The example carried no header row,
+  which `FR-OUT-006` requires of every `text` listing and `FR-OUT-034` keeps
+  even when the listing is empty. The row is `NAME`, as the binary prints it.
 
 - **FR-TMPL-012**: Listed names SHALL be usable verbatim as the positional
   argument of `tpl render`, `tpl template show`, `tpl template check`, and
