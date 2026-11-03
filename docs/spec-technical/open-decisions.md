@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-03
 related: [README.md, traceability.md]
 ---
 
@@ -9,8 +9,18 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Thirty-four entries, each a decision the repository could not settle on its
-own. **Thirty-three are settled. One, `OD-33`, is open.** Nineteen were settled by
+Thirty-eight entries, each a decision the repository could not settle on its
+own. **Thirty-six are settled. Two, `OD-33` and `OD-38`, are open.**
+
+**Four entries were added on 2026-11-03**, for rmp `#316`, when the sixty-fifth
+and sixty-sixth editions of `/specification` gave `tpl` a second provider and
+[`ADR-013`](../adr/adr-013-sqlite-driver.md) chose its driver: `OD-35`, the
+provider dispatch and the SQLite reader; `OD-36`, the deadline of a statement on
+a SQLite connection; `OD-37`, the SQLite fixture and the statement record; and
+`OD-38`, open, a SQLite result code the contract does not classify. `OD-05`,
+`OD-11` and `OD-12` are amended, and one correction is owed to `CLAUDE.md`.
+
+Nineteen were settled by
 the product owner in the interview of 2026-09-10, by the establishment of the
 decision register, and by the eighth edition of `/specification`; nine more were
 settled on 2026-09-11, together with all five residuals the eighth edition left
@@ -119,10 +129,11 @@ the register itself rather than a record.
 
 ### Corrections owed to `CLAUDE.md`
 
-`CLAUDE.md` is coordination and **this folder never edits it**; six
-corrections have been prepared for it, and **all six have been applied**. Four
-landed on 2026-09-11, each entry recording the commit that discharged it; the
-fifth was prepared on 2026-09-21 and applied by the user on 2026-09-22.
+`CLAUDE.md` is coordination and **this folder never edits it**; seven
+corrections have been prepared for it, **six have been applied, and one is
+owed**. Four landed on 2026-09-11, each entry recording the commit that
+discharged it; the fifth was prepared on 2026-09-21 and applied by the user on
+2026-09-22; the seventh was prepared on 2026-11-03.
 
 | Entry | Correction | State |
 |---|---|---|
@@ -132,6 +143,7 @@ fifth was prepared on 2026-09-21 and applied by the user on 2026-09-22.
 | `OD-26` | *Fontes de Verdade* gains this folder as a fourth source | Applied. Task #46, commit `c6356df` |
 | `OD-24`, amended 2026-09-24 | The *Stack* table's `rustix` row reads `features = ["fs", "process"]`, and its note names the directory-relative calls beside `getuid`, `kill_process_group` and `waitid` | **Applied 2026-09-24**, at line 475: the row reads `features = ["fs", "process"]` and names `openat`, `unlinkat`, `renameat` and `mkdirat` and the `O_NOFOLLOW`/`O_NONBLOCK` opens. Uncommitted in the working tree when this was read |
 | `OD-32` | The *Stack* table's error row loses `anyhow`, and the *Tipos e erros* convention that repeats that row loses it with it | **Applied 2026-09-22, by the user**, at both lines. The table's row now states the positive choice — `thiserror` in the library, no error type of the binary's own — and cites this entry by name; the convention states the same. Uncommitted in the working tree when this was read |
+| `OD-35`, for [`ADR-013`](../adr/adr-013-sqlite-driver.md) and [`ADR-003`](../adr/adr-003-database-driver.md) as amended | The *Stack* table gains a row for SQLite access citing `ADR-013` for the driver, its features and the library it carries, and its MariaDB-access row names the driver in the form `ADR-003` now records. `CLAUDE.md` states that a change to that table is an architecture decision recorded before it is implemented; `ADR-013` records it and names the root coordination document among the places that cite it (*Consequences*, under R3) | **Owed.** Prepared 2026-11-03 against `CLAUDE.md` at `6203216`. Owner: the user |
 
 **The whole register was re-read against `CLAUDE.md` at commit `8f936d4` on
 2026-09-21**, the last commit to touch the file. The re-read before it was at
@@ -238,6 +250,8 @@ the last two rows below.
 | `CLAUDE.md` | Working tree over HEAD `d89ffc4`; the edit is **not yet committed** | 2026-09-23 | No ground moved. The *Stack* table gains a heap-count row citing `ADR-011`, which this folder cites for the same crate, and the `rustix` row now names `getuid`, `kill_process_group` and `waitid` with `OD-24` and `OD-12`, as [technology-stack.md](technology-stack.md#the-calls-std-does-not-supply) does. No correction is owed |
 | [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) | Working tree over HEAD `455e48d`; the amendment is **not yet committed** | 2026-09-22 | Nothing this folder states moved. Its thirteen citations, in four files, name the five-mode mapping, the bundled anchors, the rejected platform store and the absence of a TLS version pin; what the amendment moved is the `ca_path` assembly, which no passage of this folder restates |
 | [`ADR-007`](../adr/adr-007-msrv.md) | Working tree over HEAD `455e48d`; the amendment is **not yet committed** | 2026-09-22 | Nothing this folder states moved. Its fifteen citations, in three files, name the rule and the figure it yields, and neither changed; what the amendment moved — the dependency-floor table and the graph's crate counts — this folder has never restated |
+| [`ADR-003`](../adr/adr-003-database-driver.md) | `7738619` | 2026-11-03 | The form in which the package consumes the driver moved: `sqlx-core` and `sqlx-mysql` in place of the facade. [technology-stack.md](technology-stack.md) named the facade as a direct dependency and listed its features, and both passages are restated against the record. The citations in `OD-04`, `OD-11` and `OD-12` name the pin and the driver's behaviour, which did not move |
+| [`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) | `7738619` | 2026-11-03 | Nothing this folder states moved. Three sentences of the record now name the driver rather than the facade; the passages of this folder that cite it name the vendored crate, the patch and its retiring condition |
 
 ## Status legend
 
@@ -248,7 +262,7 @@ the last two rows below.
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
 | **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. **No entry carries this status today**: `OD-30`'s arrangement was discharged on 2026-09-22 |
-| **Open** | Not decided. The entry names the options and the owner. **`OD-33` is the one entry carrying it**, since 2026-09-22 |
+| **Open** | Not decided. The entry names the options and the owner. **`OD-33` carries it since 2026-09-22, and `OD-38` since 2026-11-03** |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
 ## Index
@@ -289,11 +303,15 @@ the last two rows below.
 | [OD-32](#od-32--anyhow-in-the-shipped-graph) | `anyhow` in the shipped graph | Settled | — |
 | [OD-33](#od-33--uc-013-and-the-twelve-flow-acceptance-skeleton) | `UC-013` and the twelve-flow acceptance skeleton | Open | user |
 | [OD-34](#od-34--an-in-process-entry-point-over-a-supplied-argument-vector) | An in-process entry point over a supplied argument vector | Settled | — |
+| [OD-35](#od-35--the-provider-dispatch-and-the-sqlite-reader) | The provider dispatch and the SQLite reader | Settled | — |
+| [OD-36](#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) | The deadline of a statement on a SQLite connection | Settled | — |
+| [OD-37](#od-37--the-sqlite-fixture-and-the-statement-record) | The SQLite fixture, and the statement record | Settled | — |
+| [OD-38](#od-38--a-sqlite-result-code-the-contract-does-not-classify) | A SQLite result code the contract does not classify | Open | `specification-manager` |
 
-Thirty-two entries are settled outright; `OD-19` alone carries an observation
-owed, and `OD-33` is open. Thirty-two, one and one are the whole of the
-thirty-four. `OD-30` was settled and **interim** until 2026-09-22, when its last
-arm was removed; it is now settled outright.
+Thirty-five entries are settled outright; `OD-19` alone carries an observation
+owed, and `OD-33` and `OD-38` are open. Thirty-five, one and two are the whole
+of the thirty-eight. `OD-30` was settled and **interim** until 2026-09-22, when
+its last arm was removed; it is now settled outright.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
 were corrected in the eighth edition; neither is outstanding.
@@ -316,7 +334,9 @@ has landed — the crate out of the manifest, the lock file and the resolved
 graph, and the correction applied to `CLAUDE.md`; and **2026-09-23** for the
 `tokio`, `rustix` and `std` behaviour the amendments of `OD-11` and `OD-12`
 rest on, and for the readings of `src/` behind the amendments of `OD-05` and
-`OD-10`. Anything not verified says so
+`OD-10`; and **2026-11-03** for the `rusqlite` 0.41.1, `libsqlite3-sys` 0.39.1
+and SQLite behaviour `OD-35` … `OD-38` rest on, and for the reading of `src/`
+at `7738619` behind them. Anything not verified says so
 in its own text. No claim rests on recollection.
 
 The engine behaviour `OD-14` records has a source of a different kind, and it is
@@ -528,7 +548,7 @@ composes no byte and opens no file. What sits under `model/` is the document's
 division is [architecture.md](architecture.md#inside-model)'s. One placement
 inside the submodule is **not** settled by this refinement and is recorded as a
 discrepancy in
-[interfaces.md](interfaces.md#ordering-one-default-and-six-exceptions): which
+[interfaces.md](interfaces.md#ordering-one-default-and-seven-exceptions): which
 component applies the ordering of `NFR-DET-002` to the document's collections.
 
 **Refined on 2026-09-23, when the render memory limit was built: a twelfth
@@ -558,6 +578,15 @@ belongs to none of them, and placed in each it is the same rule written three
 times. The module's own documentation states its operations and the one step,
 listing a directory, that still resolves a path by name
 ([data-model.md](data-model.md#tplcache)). Read at `c360c80`, 2026-09-25.
+
+**Refined on 2026-11-03, for rmp `#316`: a fourteenth and a fifteenth module,
+`sqlite/` and `provider.rs`.** `FR-CONF-051` gives every entry a provider and
+`specification/sqlite-contract.md` a second reader. `sqlite/` owns every
+statement a `sqlite` entry issues, for the reason `mariadb/` owns a server's:
+one module holds the closed list (`FR-LITE-015`, `FR-LITE-016`). `provider.rs`
+holds the one match over the provider, at the crate root for the reason the
+phase clock is there: three callers share it. The decision, and the homes
+rejected for both, are [`OD-35`](#od-35--the-provider-dispatch-and-the-sqlite-reader).
 
 **The name `diagnostics` rather than `diag`.** The project's own convention
 refuses obscure abbreviations in module names. The register named `diag/` as a
@@ -1012,6 +1041,13 @@ suite, where another test's connection on another thread is not this
 invocation's; the runtime is current-thread and the counted values are not
 `Send`, so the per-thread count is exact.
 
+**Amended on 2026-11-03 — the SQLite path builds no runtime.** `rusqlite` is
+synchronous, so a command that reads a `sqlite` entry reaches nothing in
+`mariadb/` and builds no runtime; `ADR-005` is kept by construction
+([`ADR-013`](../adr/adr-013-sqlite-driver.md), *Consequences*). The quiescence
+`FR-RND-040` requires is answered over both readers by `provider.rs`
+([`OD-35`](#od-35--the-provider-dispatch-and-the-sqlite-reader)).
+
 ---
 
 ## OD-12 — How six phase deadlines are enforced
@@ -1257,6 +1293,15 @@ outlives its deadline is abandoned and ends with the process. That is the
 honest statement of what a deadline on DNS can be, and it is what
 `NFR-PERF-018`'s musl note already assumes when it says a name simply does not
 resolve.
+
+**Amended on 2026-11-03 — a `sqlite` entry.** `FR-LITE-009` runs no DNS, TCP,
+TLS or `password_command` phase for a `sqlite` entry, and bounds every
+statement on the connection by the catalogue-query deadline. The runtime's
+timer is unavailable on that path, so the catalogue-query row is bounded there
+by the library's busy timeout and a watchdog thread holding `rusqlite`'s
+interrupt handle, settled in
+[`OD-36`](#od-36--the-deadline-of-a-statement-on-a-sqlite-connection). The
+decision above is unchanged for a `mariadb` entry.
 
 **Unblocks.** `architecture`, `interfaces`, `quality-attributes`.
 
@@ -2614,6 +2659,266 @@ each input accordingly.
 
 ---
 
+## OD-35 — The provider dispatch and the SQLite reader
+
+**Status: settled.** Decided for rmp `#316` on 2026-11-03.
+[`ADR-013`](../adr/adr-013-sqlite-driver.md) fixes the driver and the library
+and leaves the reader's shape to this folder. Whether rule R4 of
+[`docs/adr/README.md`](../adr/README.md) admits a record for it is
+`adr-guardian`'s to judge; until one exists, the rejected options live here.
+
+**The question.** `FR-CONF-051` makes the provider decide how an entry is read,
+and the user required that MariaDB support not change
+(`specification/README.md`, *Sixty-fifth edition*). Where is the choice made,
+and what shape does the second reader take?
+
+**Decision.**
+
+1. **One closed enumeration of the two providers**, declared in
+   `model/database.rs` because `FR-CTX-043` makes it a value of the document,
+   and carried unchanged by the entry (`FR-CONF-051`), the resolved settings,
+   the dispatch and the model. Every site where behaviour differs matches it
+   exhaustively, with no wildcard arm (`CLAUDE.md`, *Types and errors*).
+2. **The resolved settings carry what each reader needs and nothing else**: a
+   closed enumeration whose `mariadb` arm holds the server fields resolved
+   today and whose `sqlite` arm holds the absolute path of `FR-CONF-054`. The
+   entry name and the four deadlines are common to both.
+3. **`src/provider.rs`, at the crate root, is the dispatch.** It holds the read
+   entry point, returning a closed enumeration over the two readers' results,
+   each of which yields the same `model::Database`; the four steps of
+   `tpl cfg database test` (`FR-CFG-024`, `FR-CFG-056`); and the quiescence
+   `FR-RND-040` asks for, over both readers. Its callers are `cli/source.rs`,
+   through which the eight `schema` subcommands, `tpl cache load` and
+   `tpl render` read; `cli/cfg/connectivity.rs`; and `bounded()` in
+   `cli/render.rs`.
+4. **`src/sqlite.rs` and `src/sqlite/` are the second reader**, beside
+   `mariadb/` and shaped like it, and own every statement a `sqlite` entry
+   issues. Its submodules are
+   [architecture.md](architecture.md#the-sqlite-reader)'s.
+5. **`mariadb/` does not change**, except for the import paths `ADR-013`
+   point 4 moves.
+
+**Rejected.**
+
+- **A trait with two implementations, behind `Box<dyn …>`.** The two cases are
+  closed and known when the crate is compiled, which is the case `CLAUDE.md`
+  *Types and errors* reserves the enumeration for. The two sessions also differ
+  in kind — one owns the asynchronous runtime of `ADR-005`, the other is
+  synchronous — so a common trait would either expose a runtime to a reader
+  that has none or put a blocking adapter over `mariadb/`, which point 5
+  forbids.
+- **A trait with static dispatch.** The provider is read from `.tpl/.cfg` at
+  run time, so a match on it is needed in any case, and the trait adds a layer
+  that removes nothing.
+- **The match inside `cli/source.rs`.** The connectivity command and `bounded()`
+  would match the provider again. A construct shared by three callers belongs
+  to none of them, the ground `OD-05` gives `deadline.rs`, `heap.rs` and
+  `at.rs`.
+- **The SQLite reader inside `mariadb/`.** A module named after the server
+  would own a file format; `OD-05` refuses the cache a home there on the same
+  ground.
+- **One `catalogue/` module both readers move into.** It moves `mariadb/`'s
+  code, which point 5 excludes.
+
+**Four consequences for the model**, decided here because `FR-LITE-023` …
+`FR-LITE-033` make values `null` that no MariaDB read leaves `null`, and
+`FR-LITE-029` reads a key that has no index:
+
+- **The table holds its primary key as a value the producer sets**, rather
+  than deriving it from the index named `PRIMARY`: the MariaDB fold sets that
+  index, unchanged (`FR-CAT-043`); the SQLite fold sets the key of
+  `FR-LITE-029`. On the way back in, a `mariadb` document's key is still taken
+  from its indexes, and a `sqlite` document's from its `primary_key`.
+  *Rejected — deriving it from an index for both*: a rowid alias has no index,
+  and `FR-LITE-029` names the key after its own index of origin. *Rejected —
+  reading `primary_key` back for both*: it gives a MariaDB document the second
+  source `FR-CAT-043` and `BR-CTX-003` refuse. *Rejected — an index named
+  `PRIMARY` synthesised by the SQLite fold*: it contradicts the name
+  `FR-LITE-029` fixes and the index list of `FR-LITE-030`.
+
+- **Every field those requirements set to `null` is optional in the model's
+  type.** A `mariadb` read fills each one, and a present value serialises as
+  the value, so no byte of a MariaDB document changes (`FR-CTX-043`). The
+  fields are listed in [data-model.md](data-model.md#a-sqlite-read).
+- **`SET DEFAULT` is carried by the value `FR-CAT-055` carries an unrecorded
+  rule in, and no variant is added** (`FR-LITE-031`). *Rejected — a variant of
+  its own*: it would make the rule representable on the path `FR-CAT-033`
+  governs, so that refusal would rest on the server rather than on the type.
+- **The library's reason for a view that does not compile travels beside the
+  document**, from the read to the named-object verdict, on the live-read path
+  alone (`FR-LITE-035`, `FR-PRIV-003`). No other path needs it: a marked
+  object is never cached (`FR-CACHE-037`) and a marked document is refused as a
+  context (`FR-PRIV-008`). *Rejected — a field of the model*: the document
+  contract carries none, and it would add a second omission attribute to the
+  one `OD-18` admits. *Rejected — inside the `restricted` marking*:
+  `FR-PRIV-016` fixes it as an array of property names.
+
+---
+
+## OD-36 — The deadline of a statement on a SQLite connection
+
+**Status: settled.** Decided for rmp `#316` on 2026-11-03.
+[`ADR-013`](../adr/adr-013-sqlite-driver.md) (*Consequences*) names the two
+means — the library's own wait for a lock, and `rusqlite`'s `InterruptHandle` —
+requires `rusqlite`'s 5000 ms default to be replaced, and leaves how the
+deadline is built to this folder.
+
+**Decision.** For each statement on a `sqlite` connection, in this order:
+
+1. **Its bound** is the phase clock's bound over `core.query_timeout`, composed
+   with the overall budget as for every phase (`FR-LITE-009`, `FR-CONF-005`,
+   `FR-GLOB-012`). A bound already spent starts nothing, and is the `69` of
+   `FR-ERR-027`.
+2. **The busy timeout is set to what remains of the bound**, replacing the
+   default. A statement that finds the database locked waits within the bound
+   and fails with `SQLITE_BUSY` at it — the `69` row of `FR-LITE-007`.
+3. **One watchdog thread per connection**, started after the open, holds the
+   connection's interrupt handle. It is armed with the statement's remaining
+   bound before the statement runs, and disarmed when it returns; disarming is
+   a rendezvous, so an interrupt reaches the statement it was armed for or
+   none. At the bound it interrupts, the statement fails with
+   `SQLITE_INTERRUPT`, and that is the `69` of `FR-ERR-027`.
+4. **The watchdog is stopped and joined before the connection is closed**, so
+   no interrupt is ever issued against a closed connection.
+
+The open itself is outside every bound: `FR-LITE-005` states, as its accepted
+cost, that no deadline interrupts a blocked open, and the watchdog exists only
+once there is a connection to interrupt.
+
+**Sources, consulted 2026-11-03.** One busy handler per connection, sleeping
+until the total reaches the timeout and then returning `SQLITE_BUSY`
+(`https://sqlite.org/c3ref/busy_timeout.html`). An interrupt is safe from
+another thread; an interrupted operation returns `SQLITE_INTERRUPT`; a call
+"when there are no running SQL statements is a no-op" and does not reach a
+statement started after it returns; and it is "not safe to call this routine
+with a database connection that is closed"
+(`https://sqlite.org/c3ref/interrupt.html`). `Connection::busy_timeout(&self,
+Duration)`, `Connection::get_interrupt_handle`, and
+`InterruptHandle::interrupt`, "Interrupt the query currently executing on
+another thread", with `InterruptHandle` both `Send` and `Sync` (docs.rs,
+`rusqlite` 0.41.1). **What `InterruptHandle::interrupt` does once its
+connection is closed is not confirmed in `rusqlite`'s official
+documentation**, which is why point 4 does not rely on it.
+
+**Rejected.**
+
+- **The busy timeout alone.** It bounds a wait for a lock and nothing else,
+  while `FR-LITE-009` bounds every statement.
+- **`rusqlite`'s progress handler.** It is gated on the `hooks` feature
+  (docs.rs, `rusqlite` 0.41.1, `Connection::progress_handler`, consulted
+  2026-11-03), outside the feature set `ADR-013` fixes, and it puts a callback
+  on every statement's evaluation where one waiting thread suffices.
+- **A thread per statement.** The same mechanism, started once per statement
+  rather than once per connection.
+- **The read on a worker thread while the caller waits on a channel.** `OD-12`
+  rejects the inverted construct for the render; here it would also leave an
+  abandoned worker holding the connection open after the invocation answered,
+  which `FR-RND-040` refuses before a render.
+- **The runtime's timer.** The SQLite path builds no runtime (`ADR-013`,
+  *Consequences*; `ADR-005`), and building one for a timer is start-up work
+  the command does not otherwise need (`NFR-PERF-006`).
+
+**The thread is not speculative parallelism**, on the ground `OD-12` gives the
+render's watchdog: it performs no work of the invocation, makes nothing faster,
+and exists only on the path that opens a database file.
+
+---
+
+## OD-37 — The SQLite fixture, and the statement record
+
+**Status: settled.** Decided for rmp `#316` on 2026-11-03.
+
+**The question.** `FR-LITE-038` requires the databases the SQLite tests read to
+be built from versioned SQL text at test time and never committed as a binary
+file, and `FR-LITE-018` requires a statement record taken through the library's
+trace from the seam of `FR-ERR-031`. What builds the databases, and how is the
+record taken?
+
+**Decision.**
+
+1. **`scripts/sqlite/` holds SQL text alone**: the main database of
+   `FR-LITE-038`, the database whose only objects are the internal tables, and
+   any other SQL an artefact of that requirement is built from. No script,
+   image or harness lives there, because nothing has to be started or stopped.
+2. **Test support code builds every artefact into a fresh temporary directory,
+   through `rusqlite`**, which is the library the binary carries — the ground
+   `FR-LITE-038` gives for building from text. It is `tests/support/sqlite.rs`,
+   reached by `#[path]` from the library's unit tests and from the integration
+   targets, as `tests/support/fixture.rs` is. The builder uses a plain
+   connection and none of `tpl`'s controls: item 9 must be written under
+   `trusted_schema` on, and the length-limit database by a connection that
+   does not set the limit. The same code makes the artefacts that are not SQL
+   — the write-ahead-log copy, the empty, text and truncated files, the
+   directory, the FIFO and the two links — the FIFO with the system's
+   `mkfifo`, as `tests/non_regular_files.rs` already does, and the oversized
+   `CREATE TABLE` generated by a rule rather than stored.
+3. **No gate.** The fixture needs nothing the test process lacks, so no test
+   over it is skipped for the fixture's absence, and it runs wherever
+   `cargo test` runs — in both workflows of
+   [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), on all four
+   targets. One case is excepted: a directory refusing the write-ahead-log
+   files (`FR-LITE-007`, `FR-LITE-008`) refuses no process whose user
+   identifier is `0`, so that test skips, with a printed reason, when run as
+   root.
+4. **The record is taken in process.** A `#[cfg(test)]` hook in `sqlite/`
+   installs `trace_v2` with `SQLITE_TRACE_STMT` on the connection immediately
+   after the open and before the first statement, and records every text the
+   trace reports. A text beginning with `-- ` is a nested statement: it is kept
+   apart, neither checked nor counted (`FR-LITE-018`). The hook is compiled
+   under the test configuration alone — the seam `FR-ERR-031` names and
+   [`OD-21`](#od-21--two-test-seams-that-must-not-be-on-the-published-surface)
+   settles — so the distributed binary carries no call to it.
+
+Source: `Connection::trace_v2(&mut self, mask: TraceEventCodes, trace_fn:
+Option<F>)`, gated on the feature `trace`; `TraceEventCodes::SQLITE_TRACE_STMT`;
+and `TraceEvent::Stmt(StmtRef, &str)`, carrying the statement's text (docs.rs,
+`rusqlite` 0.41.1, consulted 2026-11-03).
+
+**Rejected.**
+
+- **A committed database file.** `FR-LITE-038` forbids it.
+- **The `sqlite3` shell.** It builds with the host's library and not the
+  carried one, which defeats the reason `FR-LITE-038` gives for building from
+  text; it is not present on every host; and the release it carried differed
+  from the one read through the driver (`specification/sqlite-contract.md`,
+  *Observations*).
+- **A build script.** It would run on every build, the release build included,
+  for an asset only the suite reads.
+- **A harness script, on the model of `scripts/mariadb/`.** There is no
+  container to start, verify or stop, and a script would add a process and a
+  host tool to what the test process does itself.
+
+---
+
+## OD-38 — A SQLite result code the contract does not classify
+
+**Status: open.** Owner: `specification-manager`, because the answer is an exit
+code, which `FR-ERR-001` makes contract.
+
+**The question.** `FR-LITE-007` classifies the library's failures by condition,
+and `FR-LITE-009`, `FR-LITE-012` and `FR-LITE-035` add the deadline, a control
+not in effect and a view that does not compile. The library reports other
+result codes too — `rusqlite`'s `ErrorCode` names twenty-four (docs.rs,
+`rusqlite` 0.41.1, consulted 2026-11-03). Which exit code does a failure carry
+that none of those classifies: `SQLITE_NOMEM`, `SQLITE_PERM`,
+`SQLITE_PROTOCOL`, `SQLITE_LOCKED`, `SQLITE_READONLY` other than its directory
+variant, `SQLITE_MISUSE`, or `SQLITE_ERROR` on a statement other than the one
+reading every view's columns?
+
+| Option | Ground | Cost |
+|---|---|---|
+| **A — `70` for every one** | `FR-ERR-030`: the system declines to continue past an outcome it was not built to classify | A host out of memory, or a file whose locking protocol fails, is reported as a defect of `tpl` |
+| **B — `74` for every one** | The `74` row of `FR-ERR-001`: a read of a file the entry names failed | Library misuse, or an error in a statement `tpl` wrote, is reported as a fault of the caller's filesystem |
+| **C — split by who is at fault** | `70` where the library reports misuse or an error in a statement `tpl` wrote — `SQLITE_MISUSE`, `SQLITE_ERROR` outside `FR-LITE-035`; `74` for the rest | One more row in the table of `FR-LITE-007` |
+
+**Recommended: C**, because each code then reaches the row whose next step fits
+it, which is what `FR-ERR-002` asks of a code. **Nothing is assigned
+meanwhile.** The reader's fault mapping classifies exactly the outcomes the
+corpus names; its arm for every other result code is the one part of `sqlite/`
+that waits on this entry.
+
+---
+
 ## Editorial defects, reported and corrected
 
 Two statements in `specification/` were stale when this register was written.
@@ -2631,13 +2936,15 @@ left hunting for an open defect.
 
 ## What remains
 
-One entry is open and one obligation stands. Each blocks one statement, and
-neither blocks the other.
+Two entries are open, one obligation stands, and one correction is owed. Each
+blocks one statement or one arm, and none blocks another.
 
 | Order | What | Owner | Blocks |
 |---|---|---|---|
 | 1 | `OD-19`'s owed observation — `ADR-009`'s *owned copy* against a value whose members are borrowed, and the peak-memory consequence the record draws from that word | `adr-guardian` | No document of this folder may read *owned copy* as settling how an embedded value holds its members |
 | 2 | `OD-33`'s question — whether `UC-013` joins the acceptance skeleton, on the two options that entry states | user | No document of this folder may present its flow count as closed against the corpus; the twelve stand as written and `UC-013` is neither added to them nor named as excluded until this is answered |
+| 3 | `OD-38`'s question — the exit code of a SQLite result code the contract does not classify | `specification-manager` | The one arm of `sqlite/`'s fault mapping that handles such a code |
+| 4 | The correction owed to `CLAUDE.md` for `ADR-013` and `ADR-003`, recorded under [Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd) | user | Nothing in this folder, which cites the two records directly |
 `OD-14`'s obligation, which stood first in this table, was discharged on
 2026-09-21: the observation was made, it went the other way, and the entry
 records both the answer and what in `render/` now carries the two requirements
@@ -2659,11 +2966,10 @@ reasoned; the second, one test per mapped `clap::ErrorKind` (`OD-08`), was
 discharged at commit `f8f335d` of 2026-09-15. Each is recorded as discharged in
 its own entry.
 
-**No correction is owed outside this folder.** The last one standing was
-`OD-24`'s amendment of 2026-09-24, over the `rustix` row of `CLAUDE.md`'s
-*Stack* table at line 475, applied the same day. All six corrections this
-register has prepared for that file are applied, and each records where and
-when under [Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd).
+**One correction is owed outside this folder**, row 4 above, prepared on
+2026-11-03. The six corrections this register prepared before it are applied,
+and each records where and when under
+[Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd).
 
 **`OD-27`'s consequence is discharged.** `scripts/mariadb/seed-bench.sql` was
 written on 2026-09-21, and `quality-attributes` and `verification` no longer

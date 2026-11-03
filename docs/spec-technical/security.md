@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-03
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -29,11 +29,12 @@ file's shape, mode and rewrite discipline are
 [data-model.md](data-model.md#tplcfg); versions, features and trust-anchor
 crates are [technology-stack.md](technology-stack.md).
 
-## The six untrusted inputs
+## The seven untrusted inputs
 
-`specification/security.md` *Trust boundaries* enumerates six. Each enters the
-process at exactly one component, and that component is where the input stops
-being raw.
+`specification/security.md` *Trust boundaries* enumerates seven; the seventh,
+a SQLite database file, since the sixty-fifth edition. Each enters the process
+at exactly one component, and that component is where the input stops being
+raw.
 
 | # | Untrusted input | First seen by | What that boundary does with it | Forced by |
 |---|---|---|---|---|
@@ -43,9 +44,12 @@ being raw.
 | 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
 | 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
+| 7 | A SQLite database file | `sqlite/` | Its kind is established without opening it; it is opened read-only and never created, and the library is confirmed hardened before any statement reads it; its values are converted and coverage applied at that one boundary, and none reaches a statement | `FR-SEC-028`, `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` … `FR-LITE-017`, `FR-OUT-017` |
 
 Rows 1, 4 and 5 are the populations `FR-ERR-024` and `FR-OUT-019` name as
-sources of an interpolated value, which is why escaping is a property of the
+sources of an interpolated value — row 7's values reach output as catalogue
+values, row 4's population, and the library's messages about the file reach a
+`cause` ([interfaces.md](interfaces.md#the-sqlite-reader)) — which is why escaping is a property of the
 emitting and the diagnostic paths and not of these boundaries.
 
 **Recorded gap — the cache is not one of the six.** `.tpl/.cache/` holds
@@ -363,6 +367,57 @@ into the statement text. Settling it here would be taking a decision the
 register has not taken, which this folder does not admit; it is reported to the
 register owner.
 
+## A SQLite database file
+
+`FR-SEC-028` states the rule and the threats it closes, and points at the
+requirements that carry it. The order the controls are applied in is
+[architecture.md](architecture.md#the-sqlite-reader)'s; what belongs here is
+which control closes which threat, and how the build confirms each.
+
+| Control | Applied by | Confirmed by | Closes | Forced by |
+|---|---|---|---|---|
+| A regular file | A lookup that opens nothing | The kind it reports | A FIFO hanging the open; a device or a directory read as a database | `FR-LITE-005` |
+| A read-only open that creates nothing | The open's flags | `is_readonly` on `main` | Any write through the connection; a database created at a mistyped path | `FR-LITE-006` |
+| `query_only` on | Its pragma | Its pragma, read | A write the open did not refuse, as defence in depth | `FR-LITE-010` |
+| Defensive mode on, `trusted_schema` off | The configuration interface | The configuration interface, read | Corruption by ordinary SQL; a function or module not marked innocuous run from a view or a schema expression | `FR-LITE-010` |
+| Extension loading absent | The build ([`ADR-013`](../adr/adr-013-sqlite-driver.md)) | `PRAGMA compile_options` returning `OMIT_LOAD_EXTENSION`, before anything reads the file | Code loaded from a path a schema or a statement names | `FR-LITE-010` |
+| `cell_size_check` on, `mmap_size` `0` | Their pragmas | Their pragmas, read | A malformed page read unchecked; a page read through a map another process can change | `FR-LITE-010` |
+| Length, statement length and attachments limited | `set_limit` | `limit` | A value sized to exhaust memory; a second file attached | `FR-LITE-011` |
+
+**Every control is confirmed before any byte of the file is parsed**, and one
+not confirmed is `70`, naming the control, the value set and the value read
+(`FR-LITE-012`, `FR-LITE-017`). No flag, key or environment condition reaches
+any of them: nothing in the key space, the flag tree or the environment layer
+names one (`FR-LITE-014`).
+
+**The path is literal, and handed to the library absolute.** `path` is never
+expanded and refuses `${` (`FR-CONF-054`, `FR-SEC-007`'s note); a relative
+value is resolved against the project directory, so the library receives a
+path beginning with `/`, which it never reads as a URI although the bundled
+build enables URI filenames ([architecture.md](architecture.md#the-sqlite-reader)).
+A link in it is followed, on the ground `FR-LITE-005` gives: the path is the
+caller's own, in a file only the caller may write (`FR-PROJ-010`,
+`FR-PROJ-011`).
+
+**No statement carries a value from the file.** Every statement is a constant,
+and the one name a statement needs — a view's, in the fallback of
+`FR-LITE-035` — is a bound parameter (`FR-LITE-016`;
+[architecture.md](architecture.md#the-sqlite-reader)). A nested statement the
+library runs for a pragma function or a module is bounded by the read-only open
+and `query_only`, and which module may run from a view by `trusted_schema` off
+(`FR-LITE-018`).
+
+**Three residuals, each stated by its requirement and none closed here.**
+
+- A file replaced by a FIFO between the lookup and the open blocks the open,
+  and no deadline interrupts it; arranging it needs write access to the
+  directory that holds the database (`FR-LITE-005`).
+- A database in write-ahead-log mode may leave `<file>-wal` and `<file>-shm`
+  beside it (`FR-LITE-008`); the discrepancy this opens against `FR-PROJ-024` is
+  recorded in [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers).
+- Damage confined to pages the catalogue read never touches is not detected,
+  because no integrity check runs (`FR-LITE-013`).
+
 ## Transport
 
 `FR-SEC-021` fixes which mode a connection takes when nobody chose one, and
@@ -422,6 +477,22 @@ produce, are
 [architecture.md](architecture.md#the-connection-lifecycle)'s. Describing the
 session setting as prevention overstates it, and no passage of this folder may
 (`BR-SRV-002`).
+
+### For a `sqlite` entry, three parts
+
+`BR-LITE-001` divides the promise for a database file in three, and two of them
+prevent.
+
+| Part | What it is in the build | What it does | Forced by |
+|---|---|---|---|
+| The read-only open | Stage 2 of the SQLite reader, read back at stage 5 | **Prevents**, at the library: the connection cannot write the file | `FR-LITE-006` |
+| The closed statement list | Every statement `sqlite/` can send is a constant of the crate | **Prevents**, in `tpl` | `FR-LITE-015`, `FR-LITE-016` |
+| `query_only` | Set and read back at stage 5 | Makes a write fail on a connection that could otherwise make one; defence in depth | `FR-LITE-010` |
+
+None is disableable (`FR-LITE-014`). What the promise does not cover — the two
+files a database in write-ahead-log mode may leave beside it — is
+`FR-LITE-008`'s, and the promise is verified from outside the process
+([verification.md](verification.md#the-sqlite-provider)).
 
 ## What this document defers, and to what
 

@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-03
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -30,11 +30,11 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 
 | # | Contract | Producing component | Consuming component | Section |
 |---|---|---|---|---|
-| 1 | A catalogue read, one result set per object kind | `mariadb/` | `model/` | [The catalogue reader](#the-catalogue-reader) |
-| 2 | The named-object read | `mariadb/` | `model/` | [The catalogue reader](#the-catalogue-reader) |
-| 3 | Bytes to text: the lossy conversion | `mariadb/` | `model/` | [The catalogue reader](#the-catalogue-reader) |
-| 4 | The resolved series and the `server` object | `mariadb/` | `mariadb/` itself, `model/` | [The catalogue reader](#the-catalogue-reader) |
-| 5 | The key-to-column invariant over an assembled table | `mariadb/`, `cache/`, `cli/` | `model/` | [The catalogue reader](#the-catalogue-reader) |
+| 1 | A catalogue read, one result set per object kind | `mariadb/`; `sqlite/` for a `sqlite` entry | `model/` | [The catalogue reader](#the-catalogue-reader), [The SQLite reader](#the-sqlite-reader) |
+| 2 | The named-object read | `mariadb/`; `sqlite/` for a `sqlite` entry | `model/` | [The catalogue reader](#the-catalogue-reader), [The SQLite reader](#the-sqlite-reader) |
+| 3 | Bytes to text: the lossy conversion | `mariadb/`, `sqlite/` | `model/` | [The catalogue reader](#the-catalogue-reader) |
+| 4 | The resolved series and the `server` object | `mariadb/`; `sqlite/`, from the library's probe | `mariadb/` itself, `model/` | [The catalogue reader](#the-catalogue-reader), [The SQLite reader](#the-sqlite-reader) |
+| 5 | The key-to-column invariant over an assembled table | `mariadb/`, `sqlite/`, `cache/`, `cli/` | `model/` | [The catalogue reader](#the-catalogue-reader) |
 | 6 | A short read: the completeness verdict | `mariadb/privileges.rs` | `error.rs` for a named object, `model/` for a listing | [The three privilege detections](#the-three-privilege-detections) |
 | 7 | The `source` discriminant | `cache/` | `output/` | [The document emitter](#the-document-emitter) |
 | 8 | The error value | every module | `error.rs` | [The error type and the exit code](#the-error-type-and-the-exit-code) |
@@ -45,7 +45,7 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 13 | The envelope and one of seventeen payloads | `output/` | stdout, from `model/`, `cli/help.rs`, `cli/cfg/`, `cache/` | [The document emitter](#the-document-emitter) |
 | 14 | Key order | `model/` and the other payload types | `output/` | [The document emitter](#the-document-emitter) |
 | 15 | The buffered writer and the mid-document state | `output/` | `error.rs`, `main.rs` | [The document emitter](#the-document-emitter) |
-| 16 | Every ordering | `output/`, with three orders preserved by `mariadb/` | stdout | [Ordering](#ordering-one-default-and-six-exceptions) |
+| 16 | Every ordering | `output/`, with three orders preserved by the reader | stdout | [Ordering](#ordering-one-default-and-seven-exceptions) |
 | 17 | The parsed command tree, introspected | `cli/` | `cli/help.rs` | [The help surface](#the-help-surface) |
 | 18 | The examples and exit-codes table | `cli/help.rs` | the text help, and `output/` | [The help surface](#the-help-surface) |
 | 19 | A template name resolved to a path | `render/` | the engine's loader, and the three `template` subcommands in `cli/` that resolve without the engine | [The template surface](#the-template-surface) |
@@ -54,7 +54,7 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 22 | The typed key space, read | `project/config.rs` | every consumer of a setting | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
 | 23 | The typed key space, written | `cli/cfg/` | `project/edit.rs` | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
 | 24 | The password from a child process | `project/password.rs`, bounded by `deadline.rs` | `mariadb/`, through `project/settings.rs` | [The `password_command` child](#the-password_command-child) |
-| 25 | A phase deadline | `deadline.rs` | `mariadb/`, `project/password.rs`, `render/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
+| 25 | A phase deadline | `deadline.rs` | `mariadb/`, `sqlite/`, `project/password.rs`, `render/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
 | 29 | The refusal of an incoherent entry write | `cli/cfg/coherence.rs`, over the predicate in `project/config/entry.rs` | `error.rs` | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
 | 26 | A name matched against a pattern | `cli/` | applied over names from `model/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
 | 27 | A routine named bare or qualified | `cli/` | `mariadb/`, `cache/` | [The shared functions and the phase clock](#the-shared-functions-and-the-phase-clock) |
@@ -63,7 +63,11 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 31 | A supplied context document, read back as a model | `cli/`, from bytes it opened | `model/document/` | [The two directions over the document](#the-two-directions-over-the-document) |
 | 32 | The three render bounds, resolved | `project/settings.rs` | `render/`, and `cli/render.rs` for the memory limit | [The render bounds](#the-render-bounds) |
 | 33 | The heap count | `main.rs`, through the library's `install_heap_counter` | `heap.rs`, read by `cli/render.rs` | [The render bounds](#the-render-bounds) |
-| 34 | Whether anything of a catalogue read is alive | `mariadb/` | `cli/render.rs` | [The render bounds](#the-render-bounds) |
+| 34 | Whether anything of a catalogue read is alive | `mariadb/`; prescribed: `provider.rs`, over `mariadb/` and `sqlite/` | `cli/render.rs` | [The render bounds](#the-render-bounds) |
+| 35 | The read dispatched by the entry's provider | `provider.rs` | `cli/source.rs`, `cli/cfg/connectivity.rs` | [The SQLite reader](#the-sqlite-reader) |
+| 36 | The settings a `sqlite` entry resolves to: its absolute path | `project/settings.rs` | `provider.rs`, `sqlite/` | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
+| 37 | The library's reason for a view it marked | `sqlite/`, through `provider.rs` and `cli/source.rs` | the named-object verdict in `cli/` | [The SQLite reader](#the-sqlite-reader) |
+| 38 | A statement bound on a SQLite connection | `deadline.rs` | `sqlite/watch.rs` | [The SQLite reader](#the-sqlite-reader) |
 
 ## The catalogue reader
 
@@ -192,6 +196,82 @@ The one limit the detections do not reach — a hidden trigger list, which is
 byte-identical to an empty one — is stated in `FR-PRIV-020` and carried in
 [overview.md](overview.md#the-three-limits-the-system-states-rather-than-overcomes).
 
+## The SQLite reader
+
+`sqlite/` returns model material to `model/`, through `provider.rs`, and
+nothing else; no other component sends a statement for a `sqlite` entry. Its
+stages, its plan and its submodules are
+[architecture.md](architecture.md#the-sqlite-reader)'s, and the dispatch that
+reaches it is [architecture.md](architecture.md#the-provider-dispatch)'s.
+SQLite has no privileges, so none of the three detections above runs on a
+`sqlite` read (`FR-LITE-036`).
+
+| Obligation on the surface | Forced by |
+|---|---|
+| The one route to a connection applies the kind check, the read-only open, every control and limit with its read-back, and the probe, in that order and behind no condition | `FR-LITE-017`, `FR-LITE-014` |
+| Every statement is a constant of the crate, drawn from the closed list; no value read from the file enters a statement's text | `FR-LITE-015`, `FR-LITE-016` |
+| Only `main` is read, and coverage — the types `pragma_table_list` reports and the seven exclusions — is applied before any object is folded | `FR-LITE-019` … `FR-LITE-021` |
+| Every value keeps its storage class and a SQL `NULL` stays distinct; text is converted here, with U+FFFD substituted | `FR-LITE-004` step 2, `FR-OUT-017` |
+| One fact is read from stored text — a trigger's timing and event — and no other | `BR-LITE-002`, `FR-LITE-032` |
+| The result yields the model and, beside it, the library's message for every view it marked | `FR-LITE-035`, [`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader) |
+| The `server` object describes the carried library, and `standing` is `supported` with no window consulted | `FR-LITE-002`, `FR-LITE-003` |
+
+**Where the library's result becomes a condition.** `sqlite/fault.rs`
+classifies by the stage and the result code, and never by a message's text.
+
+| Where | Returned | Exit | Forced by |
+|---|---|---|---|
+| Stage 1 | Anything but a regular file | `78` | `FR-LITE-005` |
+| Stage 1 or 2 | Nothing at the path, a dangling link, a refused lookup, or `SQLITE_CANTOPEN` | `74` | `FR-LITE-007` |
+| Stage 4 or 5 | A control or a limit not applied, or not confirmed by its read-back, whatever the library returned | `70` | `FR-LITE-012` |
+| Any later statement | `SQLITE_NOTADB`; `SQLITE_CORRUPT`, a schema that cannot be loaded included; `SQLITE_TOOBIG` | `78` | `FR-LITE-007` |
+| Any later statement | `SQLITE_READONLY_DIRECTORY`; `SQLITE_IOERR` under any extended code | `74` | `FR-LITE-007`, `FR-LITE-008` |
+| Any statement | `SQLITE_BUSY` at the bound, or `SQLITE_INTERRUPT` from the watchdog | `69` | `FR-LITE-009`, `FR-ERR-027` |
+| Statement 7, or a per-view statement | `SQLITE_ERROR` | The view is marked; a request naming it is `77` | `FR-LITE-035`, `FR-PRIV-003` |
+| The fold | A trigger header without one timing and one event | `70` | `FR-LITE-032` |
+| The fold, or the probe | A pragma value of a class the library does not document for it, or a version without two dot-separated parts | `70` | `FR-ERR-030` |
+| Anywhere | Any other result code | **Not assigned** | [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
+
+**The named view.** A view a `sqlite` read marked is `77` when a request names
+it (`FR-PRIV-003`, `FR-LITE-035`). The verdict names the view, the property
+`columns`, and the message the library gave, which it receives from the read;
+the privilege wording `mariadb/`'s verdict carries is not used. The message
+reaches `cli/schema/named.rs` and the object flags of `cli/render.rs` from
+`cli/source.rs`, beside the document, and only on a live read
+([`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)).
+
+**`tpl cfg database test` for a `sqlite` entry** reports the four steps of
+`FR-CFG-056` in the fields of `FR-CFG-039`: stages 1 and 2 are `connected`;
+stages 4 and 5 are `read_only_session`; stage 6 is `server`; and one `SELECT`
+against `sqlite_schema` of `main`, whose rows are not read, answers
+`can_read_catalogue`, true whenever it is answered. The document keeps one
+shape for both providers (`FR-OUT-027`), and the command touches no cache
+(`FR-CFG-025`).
+
+**Three readings this folder records**, each reported to the functional owner
+with both readings, as this folder records every such reading:
+
+- **A failure at stage 1 is `FR-LITE-007`'s first condition.** That requirement
+  classifies failures "once the kind of the file is established"; a path whose
+  kind cannot be established because it names nothing, or names a dangling
+  link, names nothing whichever of the lookup and the open finds it, and the
+  caller's next step is the same `--path` repair.
+- **The library's message in a `cause`.** `FR-LITE-007` and `FR-LITE-035`
+  oblige the `cause` to carry what the library returned, the object and the
+  reason; `FR-GLOB-018` bars "the raw driver error" from every diagnostic
+  stream. This folder takes the specific requirements as governing, as
+  [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers) does for the
+  temporary files: the condition carries the result code's name and the
+  library's message text, escaped under `FR-ERR-024`, and never the driver's
+  error value or its `Display`.
+- **A deadline that expires without a lock.** The sixty-fifth edition's note to
+  `FR-ERR-034` has a `sqlite` `69` name "that the catalogue-query deadline
+  expired while the database was locked". The watchdog can end a statement that
+  met no lock, and a `cause` naming a lock would then be false, which
+  `FR-ERR-010` forbids. This folder's reading: the `cause` names a lock only
+  where the library returned `SQLITE_BUSY`, and otherwise names the path, the
+  statement and the resolved deadline.
+
 ## The error type and the exit code
 
 Settled in [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation):
@@ -204,12 +284,13 @@ and the rejected options are not restated here.
 | Ten codes and no others, each distinct condition with its own code, never collapsed where the caller's next step differs | `FR-ERR-001`, `FR-ERR-002` |
 | Every variant carries the **instance**, not the category: the token, the identifier and the population, the phase with host and port, the path and the operation, the key with the value found and the value expected | `FR-ERR-034`, `FR-ERR-010`, `FR-ERR-012` |
 | A render variant carries the chain of underlying engine errors, with template, line and column | `FR-ERR-011`, `FR-RND-030`, `FR-RND-031`, `FR-SEM-019` |
-| No variant carries the database driver's error. The driver's failure is classified at the `mariadb/` boundary into a phase, a host, a port and a classification, and the original value is dropped | `FR-GLOB-018`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
+| No variant carries the database driver's error. The driver's failure is classified at the `mariadb/` boundary into a phase, a host, a port and a classification, and at the `sqlite/` boundary into the row below, and the original value is dropped | `FR-GLOB-018`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
 | `73` is constructible only on the `tpl init` path; `70` only from a panic or a detected invariant violation, its trigger reachable from nothing a caller can write | `FR-ERR-003`, `FR-ERR-030`, `FR-ERR-031`, [`OD-21`](open-decisions.md#od-21--two-test-seams-that-must-not-be-on-the-published-surface) |
 | A deadline produces the code of the **phase in progress**, so the value the phase clock hands to `error.rs` names the phase | `FR-ERR-027`, `FR-GLOB-013`, `FR-GLOB-012` |
 | One condition reachable over **two populations** is two variants, not one, where a single `cause` would carry wording that is false on one of them. An object sought in a catalogue read names the database entry it was read through; sought in a `--context` document it has no entry to name, because `FR-RND-019` resolves none and `FR-RND-022` opens no connection, so the document's **path** stands where the entry stands. Both name the database | `FR-ERR-034`, `FR-RND-032`, `FR-SCH-010`, `FR-RND-019`, `FR-RND-022` |
 | A repetition the specification **permits** is not the repetition `FR-CLI-014` refuses: `--set` is repeatable, so a second occurrence is correct and a second occurrence of the same **key** is the fault, reported with both values | `FR-RND-008`, `FR-RND-014`, `FR-CLI-014`, `FR-ERR-034` |
 | Each render bound is a variant of its own carrying the resolved value, so the `cause` names the bound, the value and the key that raises it, and the `hint` names the `tpl cfg set` that raises it | `FR-RND-036`, `FR-RND-037`, `FR-RND-039`, `FR-ERR-034` row `65`, `FR-ERR-009` |
+| A `sqlite` condition carries the path as resolved, the stage or statement, and what the library returned — the result code's name and its message — and never the driver's error value; a `74` or `78` carries the entry for the `hint` the corpus fixes. A `70` of `FR-LITE-012` carries the control or limit, the value set and the value read back | `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-012`, `FR-ERR-034` and its sixty-fifth-edition notes, `FR-ERR-045` note; the reading on `FR-GLOB-018` is [The SQLite reader](#the-sqlite-reader)'s |
 
 `main.rs` reads the exit status and returns it; it performs no classification of
 its own, and the eight-step validation order that decides which code wins when
@@ -374,23 +455,31 @@ outcome is `74` (`FR-ERR-025`, `FR-ERR-026`, `FR-OUT-021`,
 Results go to stdout and everything else to stderr, and a command that produces
 no result writes nothing (`FR-OUT-020`, `FR-OUT-023`, `BR-CLI-004`).
 
-## Ordering: one default and six exceptions
+## Ordering: one default and seven exceptions
 
 Every ordering is applied by `output/` and none is inherited from the server or
 from the filesystem (`NFR-DET-002`, `NFR-DET-001`). The default is by name,
-ascending, byte-wise. Six collections are excepted, and each exception's order
-is carried **from** `mariadb/` rather than re-derived:
+ascending, byte-wise. Seven collections are excepted; the first six carry their
+order **from** the reader — `mariadb/` or `sqlite/` — rather than re-derive it,
+and the seventh is derived from content:
 
 | Collection | Order | Fixed by |
 |---|---|---|
-| A table's columns | Ordinal position | `NFR-DET-002` |
-| An index's columns | The order the catalogue states | `FR-CAT-010` |
-| A primary key's columns | The order the catalogue states | `FR-CAT-043` |
-| A foreign key's columns, and the referenced columns paired with them | The order the catalogue states | `FR-CAT-045` |
+| A table's columns | Ordinal position — for a `sqlite` read, the `cid` field | `NFR-DET-002`, `FR-LITE-025` |
+| An index's columns | The order the catalogue states — for a `sqlite` read, `seqno` | `FR-CAT-010`, `FR-LITE-030` |
+| A primary key's columns | The order the catalogue states — for a `sqlite` read, `pk` | `FR-CAT-043`, `FR-LITE-029` |
+| A foreign key's columns, and the referenced columns paired with them | The order the catalogue states — for a `sqlite` read, `seq` | `FR-CAT-045`, `FR-LITE-031` |
 | An `ENUM` or `SET` member list | The order the catalogue states | `FR-CTX-016` |
 | A routine's parameters | Declaration order | `FR-CAT-018` |
+| A table's `foreign_keys` and `referenced_by`, for a `sqlite` read | Referencing table, referencing columns, referenced table, referenced columns, each byte-wise | `FR-LITE-031`, `NFR-DET-002` |
 
-Three of the six would be **silently corrupted** by the default, which is why
+**The seventh is selected by the provider.** A `sqlite` key carries no name, so
+the default has nothing to compare; the document's assembly reads
+`database.provider` and applies the content order to the two collections of a
+`sqlite` document, and to a `mariadb` one the name order — with the
+`referenced_by` order recorded below — unchanged.
+
+Three of the first six would be **silently corrupted** by the default, which is why
 the reader must preserve an order rather than hand `output/` an unordered set: a
 sorted primary key is a different key, an independently sorted foreign-key
 column list pairs each column with the wrong counterpart, and a sorted member
@@ -418,8 +507,8 @@ folder's to settle in a pass of its own, and not here.
 
 **Recorded gap — the order of `referenced_by`.** An entry of that collection is
 a pair of a referencing table and the key it declares, so it has two names and
-the default rule of `NFR-DET-002` is written over one. The corpus names no
-order for it and the collection is not among the six exceptions. As built the
+the default rule of `NFR-DET-002` is written over one. For a `mariadb` read the
+corpus names no order for it and the collection is not among the exceptions. As built the
 entries are ordered by the referencing table's name and then by the constraint's,
 which is total — a table may reference another more than once — and byte-wise
 like every other. The gap is reported to the functional owner rather than closed
@@ -465,7 +554,8 @@ deserialisation or a constructor the model already has.
 | Checked | Where |
 |---|---|
 | The three envelope keys, with `source` one of the four values of `FR-OUT-026` | The envelope's derived deserialisation; a bare payload in place of the envelope is refused (`FR-SCH-036`) |
-| Every key the document contract names, with the type it fixes | Each type's derived deserialisation. An absent key is a fault, because `FR-OUT-012` emits an absent **value** as `null` rather than omitting the key |
+| Every key the document contract names, with the type it fixes | Each type's derived deserialisation. An absent key is a fault, because `FR-OUT-012` emits an absent **value** as `null` rather than omitting the key — with one exception: `database.provider` may be absent, and is then read as `mariadb` (`FR-CTX-043`, item 3) |
+| `database.provider` one of its two values | The provider's closed enumeration; any other value is `65`, the `cause` naming `data.database.provider` and the two values (`FR-CTX-043`, `FR-RND-020`). Nothing else about the provider is validated (`FR-CTX-033`, note of the sixty-fifth edition), so a field a `sqlite` read leaves `null` is read back as `null` whichever provider the document names |
 | `version`, `series` and `standing` present and strings, `standing` one of two values | The `server` object's three fields and its closed enumeration (`FR-CTX-031`, `FR-CTX-033`, `FR-CTX-034`) |
 | No key of a table names a column that table does not carry | The one constructor a table has (`FR-CAT-044`) |
 | Every table a foreign key names — the referenced table under `foreign_keys`, the referencing table under `referenced_by` — is a member of `tables`; a `null` referenced table names none | `references_are_carried()` in `src/model/document/read.rs`, over the tables already read back; a fault is `ContextFault::DanglingReference`, naming the carrying table, the collection, the key and the table named (`FR-CTX-042`) |
@@ -479,7 +569,7 @@ it in as many words and two because no requirement asks for them.
 | `series` against the supported window | `FR-CTX-033` forbids it. No connection is opened on this path (`FR-RND-022`), so there is no server to vouch for, and validating the window would make every committed dump expire on a calendar date as the window moved |
 | `standing` against `series` | `FR-CTX-033` forbids it in as many words |
 | The value of `schema_version` | `FR-OUT-014` fixes what moves it and states no rule for refusing a value, so refusing one would be a check the corpus does not ask for |
-| `primary_key` against `indexes` | `FR-CAT-043` makes the index collection the authoritative source and bars a second, and `BR-CTX-003` is the ground: the document presents the key twice so that a template need not match on a name, and reading both back would give the model a second place the two could disagree from. The document's `primary_key` is therefore not read at all |
+| `primary_key` against `indexes` | `FR-CAT-043` makes the index collection the authoritative source and bars a second, and `BR-CTX-003` is the ground: the document presents the key twice so that a template need not match on a name, and reading both back would give the model a second place the two could disagree from. The `primary_key` of a `mariadb` document is therefore not read at all. **A `sqlite` document's is the one read**, because a rowid alias has no index to take it from (`FR-LITE-029`; [data-model.md](data-model.md#a-sqlite-read)) |
 
 A column's `table_name` is not a reference under `FR-CTX-042` and is not
 checked: an absent table fails the render when a test resolves it, which
@@ -805,6 +895,9 @@ division, and why the two paths are two modules, are
 | Nothing selected is `78`; a named entry that does not exist is `66` with a suggestion | `FR-GLOB-006`, `FR-GLOB-007`, `FR-ERR-004`, `FR-ERR-005` |
 | The five admitted and refused combinations of connection and password keys are decided **before** any connection is opened; a DSN carries no query parameters | `FR-CONF-006`, `FR-CONF-007`, `FR-CONF-011`, `FR-CONF-012` |
 | Expansion reaches six fields only, is a single pass, and inside a DSN parses the URL **first**, expands within the delimited field, then percent-encodes; an unclosed form and an undefined variable are both `78` | `FR-CONF-015` … `FR-CONF-022` |
+| `provider` takes one of two values, an absent key meaning `mariadb`, and any other value in any entry is `78` at step 3; a `path` holding `${` is `78` at step 3; `path` is never expanded, and is held as written | `FR-CONF-051`, `FR-CONF-054`, `FR-CONF-015` |
+| For the selected entry alone, at entry resolution: a key its provider refuses, then a missing or empty `path`, is `78`, decided before any expansion and before the child; the `cause` states whether the provider was written or taken from an absent key | `FR-CONF-052`, `FR-CONF-053` |
+| A relative `path` resolves against the project directory and never against the working directory, and the result handed to `sqlite/` is absolute; the reading for a `.tpl` reached through a link is [data-model.md](data-model.md#tplcfg)'s | `FR-CONF-054` |
 
 **Three read paths over one file produce three different outputs**, and they are
 three code paths rather than one with a flag:
@@ -834,6 +927,9 @@ and the relative order of items, which six requirements make a functional need
 | The connection-string flag admits exactly what the file admits — the grammar, the two schemes, no query parameter — validated before the write, stored verbatim when admitted, `64` and nothing written when not; a variable reference stays opaque and unexpanded | `FR-CFG-031`, `FR-CONF-009`, `FR-CONF-010`, `FR-CONF-011`, `FR-CONF-018` |
 | The password-command flag accepts a single string, stores the array it splits into, accepts no array on the command line and is not repeatable | `FR-CFG-046`, `FR-CONF-023`, `FR-CONF-025` |
 | No `cfg` subcommand writes anywhere but the configuration file, and only one of them contacts a server | `FR-CFG-004`, `FR-CFG-005` |
+| `--provider` and `--path` write `provider` and `path`. A provider outside the two values is `64`; a `--path` that is empty or holds `${` is `64`; `path` is stored as written and never resolved by the write | `FR-CFG-027`, `FR-CONF-051`, `FR-CFG-055` item 4, `FR-CONF-054` |
+| The combinations of flags and provider decidable from the command line alone are refused at argument parsing, `64`, before the file is read | `FR-CFG-055` items 1 and 2, `FR-CFG-016` |
+| `tpl cfg database update` given `--provider` or `--path` writes the cache warning the other repointing flags write | `FR-CACHE-029`, `FR-CFG-053` |
 
 **One key space, two callers, two codes.** An unknown key supplied to the write
 path is `64`; the same key found in the file is `78`. The distinction is the
@@ -857,6 +953,14 @@ invocation names declared on top; the reader feeds it the entry alone. The
 difference between the two callers is therefore the input and the code, never
 the rule.
 
+**A second rule over the same predicate, since the sixty-fifth edition.**
+`FR-CONF-052` decides which keys each provider takes, so the predicate also
+carries the provider, written or taken from an absent key. The reader applies
+the rule at entry resolution, to the selected entry alone, for the reason
+`FR-CONF-052` gives for not refusing at step 3; the writer applies it to the
+entry as it would stand after the write, `64` and nothing written
+(`FR-CFG-048`, amended in the sixty-fifth edition).
+
 **The connectivity command reports one field per step.** Four ordered steps —
 connect and authenticate, enforce and confirm the read-only session, verify the
 series, run the privilege probe — each separately reportable and separately
@@ -866,7 +970,8 @@ and read for two facts only; it is not model content, and a negative answer does
 **not** change the exit code (`FR-CFG-044`, `FR-CFG-045`). An unsupported series
 is `78` with the `cause` stating that connection and authentication succeeded
 (`FR-CFG-043`, `FR-SRV-030`); this command reads and writes no cache
-(`FR-CFG-025`, `FR-CACHE-010`).
+(`FR-CFG-025`, `FR-CACHE-010`). For a `sqlite` entry the four steps are
+`FR-CFG-056`'s, reported as [The SQLite reader](#the-sqlite-reader) states.
 
 **The project writer.** Creating a project creates the destination directory and
 its missing parents, refuses an existing project folder with `73` changing
@@ -928,7 +1033,7 @@ What belongs here is the surface.
 | The word-list tokeniser | A string operand in `render/`; five rules applied once, left to right, with a published eight-row vector | None of its own; the five naming filters that consume it fail `65` on a non-string operand | `FR-ENV-030` … `FR-ENV-033`, `FR-ENV-034` |
 | The edit distance | A supplied name and a population, in `diagnostics/` | None; it returns a possibly empty candidate list | `FR-ERR-019` … `FR-ERR-021` |
 | ASCII-only case folding | Shared by the matcher and the tokeniser, independent of server, collation and locale | None | `FR-SCH-014`, `FR-ENV-031` |
-| The series derivation | The probed version string, in `mariadb/` | A string without the product marker is refused, `78` | `FR-SRV-040`, `FR-SRV-021`, `FR-SRV-041`, `FR-CTX-032` |
+| The series derivation | The probed version string, in `mariadb/`; in `sqlite/`, the library's version, with no product marker | A string without the product marker is refused, `78`; a library version without two dot-separated parts is `70` | `FR-SRV-040`, `FR-SRV-021`, `FR-SRV-041`, `FR-CTX-032`; `FR-LITE-002`, `FR-ERR-030` |
 
 One row of the six has two callers and must therefore be one implementation:
 ASCII folding, because a locale-dependent second copy would make the same
@@ -938,14 +1043,16 @@ apostrophe unescaping that serves a literal default and a member list alike,
 which is
 [data-model.md](data-model.md#a-column-default-one-discriminant-eight-ordered-rows)'s.
 
-**The phase clock is a shared construct with three users** — the runtime inside
-`mariadb/`, the child process, and the render — because every phase deadline
-composes with one budget measured from process start, and a budget belonging to
-three modules belongs to none of them (`FR-GLOB-011`, `FR-GLOB-012`,
-`FR-GLOB-013`, `FR-CONF-005`, `FR-SEC-022`). The three mechanisms and what each
-phase is bounded by are
-[`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced); the
-machinery itself is `architecture.md`.
+**The phase clock is a shared construct with four users** — the runtime inside
+`mariadb/`, the statement watchdog inside `sqlite/`, the child process, and the
+render — because every phase deadline composes with one budget measured from
+process start, and a budget belonging to four modules belongs to none of them
+(`FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-CONF-005`, `FR-SEC-022`,
+`FR-LITE-009`). The mechanisms and what each phase is bounded by are
+[`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and,
+for a `sqlite` entry,
+[`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection);
+the machinery itself is `architecture.md`.
 
 Four obligations shape its surface, and each is a property of the type rather
 than of its callers.
@@ -971,7 +1078,7 @@ Three contracts serve the bounds of `FR-RND-038`; how they compose, and the
 |---|---|---|
 | The resolved bounds | `project/settings.rs` hands `render/` one value carrying render fuel, the output limit and the memory limit, each the file's value or the built-in default. Each is a type that cannot hold a value outside its range. Every render made under it — an abandoned one and the one that follows — starts with the whole of each | `FR-CONF-045`, `FR-RND-038` |
 | The heap count | `tpl::install_heap_counter(fn() -> usize)` is public, beside `run` and `install_panic_hook`: the binary calls it once, before `run`, with a function reading its allocator's count, and the first installation wins. Reading the count allocates nothing. Not calling it leaves the memory limit without a count | `FR-RND-039`, [`ADR-011`](../adr/adr-011-render-memory-accounting.md) |
-| Quiescence | `mariadb::quiescent()` answers whether the calling thread holds no open connection and no driver runtime; `bounded()` in `cli/render.rs` refuses to start a render with `70` when it does not | `FR-RND-040`, `FR-ERR-030` |
+| Quiescence | `mariadb::quiescent()` answers whether the calling thread holds no open connection and no driver runtime; `bounded()` in `cli/render.rs` refuses to start a render with `70` when it does not. Prescribed for the second provider: `provider.rs` answers over both readers, `sqlite/` counting its open connections and live watchdogs per thread as `mariadb/` counts its own ([`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)) | `FR-RND-040`, `FR-ERR-030` |
 
 The first two render bounds are answered by `render/` as conditions: the
 engine's out-of-fuel error, found anywhere in the error chain, becomes
