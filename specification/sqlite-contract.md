@@ -2,7 +2,7 @@
 title: SQLite Contract
 status: approved
 last-reviewed: 2026-11-03
-related: [configuration-model.md, server-contract.md, catalogue-coverage.md, context-document.md, privileges-and-completeness.md, security.md, cfg-commands.md, performance-requirements.md]
+related: [configuration-model.md, server-contract.md, catalogue-coverage.md, context-document.md, privileges-and-completeness.md, security.md, cfg-commands.md, performance-requirements.md, errors-and-exit-codes.md, global-flags.md, project-and-discovery.md]
 ---
 
 # SQLite Contract
@@ -301,7 +301,12 @@ two builds returned, in the same sense as those above.
   a character or block device — THEN the system SHALL exit `78` (`EX_CONFIG`)
   and SHALL NOT open it. The `cause` SHALL name the path as resolved, the kind
   of file found, and that a SQLite database is read only from a regular file.
-  The `hint` SHALL carry `tpl cfg database update <entry> --path <path>`.
+  The `hint` SHALL carry `tpl cfg database update <entry> --path <path>`. IF
+  the kind cannot be established because the lookup of the path fails — the
+  path names nothing, a link on it dangles, or the filesystem refuses the
+  lookup — THEN the system SHALL NOT open the path, and SHALL end the
+  invocation under the first row of `FR-LITE-007`, which decides the code and
+  the `cause`.
 
   *Observed.* Opened read-only, a FIFO **blocked**: the read was still waiting
   when a three-second bound ended it. A directory failed with
@@ -324,6 +329,23 @@ two builds returned, in the same sense as those above.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the last sentence is
+  new. The kind is established before the library opens the path, so a path
+  that names nothing is found by the check of its kind and never reaches the
+  open that returns `SQLITE_CANTOPEN`. This requirement refused only the kinds
+  it lists, and `FR-LITE-007` began "once the kind of the file is
+  established", so neither decided that case. It now has one rule, the first
+  row of `FR-LITE-007`, whichever of the two operations meets it.
+
+  *Rejected: `78`, as a kind this requirement refuses.* A file removed between
+  the check of its kind and the open would then be `78` or `74` by which
+  operation met its absence first, one condition with two codes, which
+  `FR-ERR-002` forbids; and a path naming nothing is the condition
+  `FR-LITE-007` already gives `74`, for the reason it states. *Rejected:
+  letting the open find it.* The open would follow a check that failed, and
+  `FR-LITE-017` puts the check first so that nothing is opened before the kind
+  is known.
+
 - **FR-LITE-006**: The system SHALL open the database file read-only, and SHALL
   NOT create it. A path that names no file SHALL stay naming no file after any
   invocation.
@@ -335,13 +357,14 @@ two builds returned, in the same sense as those above.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
-- **FR-LITE-007**: Once the kind of the file is established under
-  `FR-LITE-005`, a failure to read it SHALL end the invocation with the code
-  below, and SHALL NOT be reported as an empty database:
+- **FR-LITE-007**: A failure to read the file — from the check of its kind
+  under `FR-LITE-005` onwards, save the kinds that requirement refuses — SHALL
+  end the invocation with the code below, and SHALL NOT be reported as an
+  empty database:
 
   | Condition | Observed as | Code |
   |---|---|---|
-  | The path names nothing, the filesystem refuses the open, or a link dangles | `SQLITE_CANTOPEN` | `74` (`EX_IOERR`) |
+  | The path names nothing, the filesystem refuses the lookup or the open, or a link dangles | The check of the file's kind, finding nothing, or `SQLITE_CANTOPEN` at the open | `74` (`EX_IOERR`) |
   | The file is not a SQLite database | `SQLITE_NOTADB`, at the version probe | `78` (`EX_CONFIG`) |
   | The file is a SQLite database that is damaged, or whose schema the library cannot load — a corrupt page, or a schema object the library cannot parse within the limits it is built with | `SQLITE_CORRUPT`, including `malformed database schema (<object>) - <reason>`, at the version probe or any later statement | `78` |
   | The file's schema holds a value longer than the length limit of `FR-LITE-011` | `SQLITE_TOOBIG`, `string or blob too big`, at the version probe | `78` |
@@ -349,10 +372,11 @@ two builds returned, in the same sense as those above.
   | A read of the file fails part-way | `SQLITE_IOERR` | `74` |
   | The database stays locked by a writer until the catalogue-query deadline expires, per `FR-LITE-009` | `SQLITE_BUSY` | `69` (`EX_UNAVAILABLE`) |
 
-  The `cause` SHALL name the path as resolved, the statement or the open that
-  failed, and what the library returned, including the object and the reason
-  where the library names them. For `74` and `78` the `hint` SHALL carry
-  `tpl cfg database update <entry> --path <path>`.
+  The `cause` SHALL name the path as resolved, the statement, the open or the
+  check of the file's kind that failed, and what the library returned,
+  including the object and the reason where the library names them — or, for
+  the check of the kind, what the filesystem returned. For `74` and `78` the
+  `hint` SHALL carry `tpl cfg database update <entry> --path <path>`.
 
   *Observed.* A text file failed with `file is not a database`; a file whose
   header bytes 16 to 19 were overwritten failed the same way; a file cut to
@@ -399,6 +423,17 @@ two builds returned, in the same sense as those above.
   expression-depth reading was re-taken on the builds 3.51.3 and 3.54.1 and
   holds.
 
+  *Amended in the sixty-seventh edition,* for rmp `#314`. The opening sentence
+  and the first row take a path whose kind cannot be established, because its
+  lookup fails, which `FR-LITE-005` now routes here: the condition was this
+  row's, and the requirement began only once the kind was established. The
+  `cause` names the check of the kind where that is what failed, with what
+  the filesystem returned; the code and the `hint` are unchanged.
+  `FR-LITE-040` reads each row of this table by its result code, wherever the
+  library returns it, and gives every result code the table does not name a
+  code of its own. What the library returned is stated in the `cause` in the
+  form `FR-GLOB-018` fixes, bounded under `FR-ERR-046`.
+
 - **FR-LITE-008**: The system SHALL NOT write to the database file. WHERE the
   database is in write-ahead-log mode, the library MAY create the two files
   that mode keeps beside the database — `<file>-wal` and `<file>-shm` — when
@@ -430,6 +465,15 @@ two builds returned, in the same sense as those above.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Note added in the sixty-seventh edition,* for rmp `#314`. The requirement
+  is unchanged, by the user's decision of 2026-11-03. `FR-PROJ-024` now admits
+  the two files as an exception to "no file outside `.tpl`", and
+  `BR-PROJ-002`, `FR-CACHE-016` and `BR-SCH-003` admit them beside the pure
+  read of `--direct --no-cache`. The temporary files the library would
+  otherwise write outside `.tpl` are kept in memory by the `temp_store`
+  control of `FR-LITE-010`, which is what keeps the last sentence of this
+  requirement true.
+
 - **FR-LITE-009**: For a `sqlite` entry, every statement the system issues on
   the connection SHALL run under the catalogue-query deadline of
   `FR-CONF-005`, resolved from `core.query_timeout`, and a statement that finds
@@ -450,6 +494,121 @@ two builds returned, in the same sense as those above.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+- **FR-LITE-040**: For a `sqlite` entry, every
+  [result code](glossary.md#result-code) by which the library reports a
+  failure SHALL be classified, and the failure SHALL end the invocation with
+  exactly one code of `FR-ERR-001`, save where `FR-LITE-035` marks a view
+  instead. The classification SHALL be the first of the following that names
+  the result code:
+
+  1. `FR-LITE-012`, at the stage that applies or confirms a control or a
+     limit, whatever the library returned there;
+  2. `FR-LITE-035`, for `SQLITE_ERROR` on a statement that reads the columns
+     of views;
+  3. the rows of `FR-LITE-007`, each by its result code, at the open or at any
+     statement. The *Observed as* column records where a code was observed and
+     does not bound where its row applies, so the row of `SQLITE_CANTOPEN`
+     also takes a file beside the database that the library cannot open, and
+     the row of `SQLITE_BUSY` a lock the library returns without waiting out
+     the catalogue-query deadline;
+  4. the table below, by the primary result code, under any extended code
+     unless a row names one.
+
+  | Result code | What the library reports | Code |
+  |---|---|---|
+  | `SQLITE_MISUSE`, `SQLITE_RANGE`, `SQLITE_NOTFOUND` | A use of the library by `tpl` that the library refuses: an interface called in a way it does not support, a parameter or column number out of range, or an operation code it does not recognise | `70` (`EX_SOFTWARE`) |
+  | `SQLITE_ERROR`, anywhere but on a statement of `FR-LITE-035` | An error in a statement of `FR-LITE-015`, which `tpl` wrote and issued over a file whose schema has loaded, or in how `tpl` opened the connection | `70` |
+  | `SQLITE_INTERNAL` | A malfunction inside the library the binary carries, per `FR-LITE-001` | `70` |
+  | `SQLITE_ABORT`, `SQLITE_AUTH`, `SQLITE_CONSTRAINT`, `SQLITE_LOCKED`, `SQLITE_MISMATCH`, and `SQLITE_READONLY` with no extended code of its own | An outcome that only an operation `tpl` does not perform produces: a write or a constraint on one, an abort or a rollback it requests, an authorisation callback, a plan a virtual-table module refuses, or a conflict inside its one connection or with a second connection sharing its cache | `70` |
+  | `SQLITE_EMPTY`, `SQLITE_FORMAT`, `SQLITE_NOTICE`, `SQLITE_WARNING` | A code the library documents as not used, or as returned by no interface | `70` |
+  | `SQLITE_NOMEM` | An allocation the library needed failed | `74` (`EX_IOERR`) |
+  | `SQLITE_FULL`, `SQLITE_NOLFS`, `SQLITE_PERM` | The disk is full; the filesystem cannot hold a file of the database's size; or it did not grant the access mode the library asked for a file it creates beside the database | `74` |
+  | `SQLITE_READONLY` under an extended code other than `SQLITE_READONLY_DIRECTORY` | A file the read needs beside the database — the shared memory of the write-ahead log, or a journal to roll back — cannot be written, a recovery needs write access the connection does not have, or the database file moved after it was opened | `74` |
+  | `SQLITE_PROTOCOL` | In write-ahead-log mode, other connections kept winning the race for the database's locks, and the library gave up after retrying | `69` (`EX_UNAVAILABLE`) |
+  | `SQLITE_SCHEMA` | Another connection kept changing the schema while a statement ran, past the library's own re-preparation of it | `69` |
+  | `SQLITE_INTERRUPT` | The statement was ended at the catalogue-query deadline, per `FR-LITE-009` and `FR-ERR-027` | `69` |
+  | A primary result code that no row of this table or of `FR-LITE-007` names | A code SQLite had not published on the date below | `70` |
+
+  The `cause` SHALL name what `FR-LITE-007` obliges it to name — the path as
+  resolved, the statement or the open that failed, and what the library
+  returned — in the form `FR-GLOB-018` fixes. For `70` these are the invariant
+  and the place the `70` row of `FR-ERR-034` obliges the `cause` to name, and
+  the `hint` SHALL be the one `FR-ERR-032` fixes. What a `69` `cause` names is
+  stated in the note on `FR-ERR-034` for a `sqlite` entry.
+
+  *Source.* SQLite's result-code page, `https://sqlite.org/rescode.html`, last
+  updated 2026-02-18 and checked 2026-11-03, lists twenty-eight primary result
+  codes that report a failure, from `SQLITE_ERROR` to `SQLITE_WARNING`, beside
+  `SQLITE_OK`, `SQLITE_ROW` and `SQLITE_DONE`, which report none. `FR-LITE-007`
+  names six of them — `SQLITE_CANTOPEN`, `SQLITE_NOTADB`, `SQLITE_CORRUPT`,
+  `SQLITE_TOOBIG`, `SQLITE_IOERR` and `SQLITE_BUSY` — and the extended code
+  `SQLITE_READONLY_DIRECTORY`; the table names the other twenty-two. The
+  second column paraphrases that page, which states that `SQLITE_MISUSE`
+  indicates a bug in the application, that `SQLITE_EMPTY` and `SQLITE_FORMAT`
+  are not currently used, that no interface returns `SQLITE_NOTICE` or
+  `SQLITE_WARNING`, and that `SQLITE_SCHEMA` reaches the application only after
+  the library has re-prepared the statement up to its retry limit.
+
+  *Why three codes, divided by whose the fault is.* `FR-ERR-002` gives two
+  failures one code only where the caller's next step is the same, and a
+  result code says whose the fault is, which decides the next step. Where the
+  library reports that `tpl` used it wrongly, that it failed itself, or an
+  outcome only an operation `tpl` never performs can produce, the binary is at
+  fault and nothing the caller does repairs it: the result code is how the
+  system detects the violated invariant `FR-ERR-030` gives `70`, the ground
+  `FR-LITE-012` and `FR-LITE-032` already use. Where the host or the
+  filesystem did not supply what the read needed — memory, space, an access
+  mode, a writable file beside the database — the next step is the host's,
+  which is the step `74` states. Where another connection holds or changes the
+  database, the next step is the one `FR-LITE-009` gives a lock: the operation
+  is read-only and therefore repeatable, which is `69`. A primary result code
+  SQLite publishes after the date above is an outcome the system was not built
+  to classify, and `FR-ERR-030` declines to continue past one.
+
+  *Observed, on 2026-11-03, through the Python library 3.54.1, on a read-only
+  connection with `trusted_schema` off.* A database whose schema calls a
+  function and names a collation that the reading library does not hold — in
+  a generated column, a `CHECK`, a `DEFAULT`, a collated index, a partial
+  index and an expression index — loaded, and statements of each kind the
+  last row of `FR-LITE-015` names, written for the observation, read its
+  tables, columns, indexes, index members, foreign keys and schema rows
+  without error. On a file whose schema has loaded, only a statement that
+  reads the columns of views was observed to fail with `SQLITE_ERROR`, which
+  is `FR-LITE-035`'s case; that is the ground for reading `SQLITE_ERROR`
+  anywhere else as an error in the statement and not in the file.
+
+  *Rationale for the two departures from the split the technical
+  specification recommended,* `70` for a misuse of the library by `tpl` and
+  `74` for every other code. The split is followed except in two places, each
+  decided by `FR-ERR-002`: `SQLITE_PROTOCOL` and
+  `SQLITE_SCHEMA` are `69`, because what the caller has to look at is another
+  connection and not the filesystem, and the read is repeatable; and
+  `SQLITE_LOCKED` is `70`, because with one connection and no write the only
+  conflict it can report is one `tpl` made.
+
+  *Rejected: `70` for every result code the rows above do not classify.* A
+  host out of memory, a full disk or a database another process holds would be
+  reported as a defect of `tpl`. *Rejected: `74` for every one.* A use of the
+  library that `tpl` got wrong would send the caller to its filesystem.
+  *Rejected: `69` for every one, by reading `FR-ERR-036` onto a `sqlite`
+  entry.* That requirement's condition is a session that stops answering,
+  which a library inside the process cannot do, and its `69` would tell a
+  caller to repeat a read that fails on a defect every time. *Rejected: `78`
+  for `SQLITE_ERROR` outside `FR-LITE-035`, as a fault of the file.* Per the
+  observation above, no file whose schema loads makes those statements fail.
+
+  *Consequence, stated plainly.* A malfunction of the library that a crafted
+  file provokes is reported with `70`, as a defect of the binary, and it is
+  one: the library is the binary's, per `FR-LITE-001`, and a release that
+  carries a fix is what `FR-LITE-039` obliges. `SQLITE_NOMEM` reaches `74`,
+  whose class is I/O: the code set of `FR-ERR-001` has no code for the host's
+  memory, and the host's resources are the next step `74` names, so its cell
+  in `FR-ERR-001` names memory for a SQLite read.
+
+  *Added in the sixty-seventh edition,* for rmp `#314`. The technical
+  specification recorded that no requirement gave these result codes an exit
+  code, and left that one arm of the reader's fault mapping open on it.
+
 ## Hardening against an untrusted file
 
 - **FR-LITE-010**: The database file SHALL be treated as untrusted input, per
@@ -462,7 +621,13 @@ two builds returned, in the same sense as those above.
   which the system SHALL issue before any statement that reads the file. The
   control is in effect only WHERE that statement returns the row
   `OMIT_LOAD_EXTENSION`; IF the row is absent, the control has not taken
-  effect, under `FR-LITE-012`.
+  effect, under `FR-LITE-012`. Temporary storage is a setting of the
+  connection whose effect also depends on how the library is built, so it is
+  confirmed twice: it is in effect only WHERE `PRAGMA temp_store` reads back
+  `2` and `PRAGMA compile_options` returns the row `TEMP_STORE=1`,
+  `TEMP_STORE=2` or `TEMP_STORE=3`; IF that statement returns `TEMP_STORE=0`,
+  or no `TEMP_STORE` row, the control has not taken effect, under
+  `FR-LITE-012`.
 
   | Control | Setting | Closes |
   |---|---|---|
@@ -473,6 +638,7 @@ two builds returned, in the same sense as those above.
   | Extension loading | absent: the carried library is built with SQLite's compile-time option `SQLITE_OMIT_LOAD_EXTENSION`, which omits the mechanism, its library interface and the `load_extension()` function | code loaded from a path a schema or a statement names |
   | `cell_size_check` | on | a malformed page read without its cell sizes checked |
   | `mmap_size` | `0` | a page read through a memory map of a file another process can change |
+  | `temp_store` | `MEMORY` (`2`) | a temporary file, written outside `.tpl` with content of the database, when a statement sorts, materialises a subquery or builds a transient index |
 
   *Source.* SQLite's own guidance for untrusted database files, *Defense
   Against The Dark Arts*, at `https://sqlite.org/security.html`, last updated
@@ -579,6 +745,63 @@ two builds returned, in the same sense as those above.
   issues can fire one, per `FR-LITE-016`, and reading a trigger's definition
   compiles nothing; the control would close nothing that is open.
 
+  *Temporary storage: why it is a control.* It is not in SQLite's guidance for
+  an untrusted file; it is what keeps `FR-LITE-008` and `FR-PROJ-024` true.
+  The library keeps the temporary data of a sort, of a materialised subquery
+  and of a transient index in a file of the host's temporary directory, from
+  the moment that data no longer fits in its page cache, unless
+  `temp_store` keeps it in memory, per `https://sqlite.org/tempfiles.html`,
+  last updated 2025-06-12, and the `temp_store` pragma at
+  `https://sqlite.org/pragma.html`, both checked 2026-11-03. The compile-time
+  option `SQLITE_TEMP_STORE` decides whether the pragma is obeyed: `0` always
+  uses files and `3` always memory, while `1`, the default, and `2` let the
+  pragma choose, per `https://sqlite.org/compile.html`, checked 2026-11-03.
+  Such a file lies outside `.tpl`, in a directory `tpl` does not choose, and
+  holds content of an untrusted file in an amount the file decides.
+
+  *Observed, on 2026-11-03, through the Python library 3.54.1, built with
+  SQLite's default `TEMP_STORE=1`, on a read-only connection under
+  `query_only`, `trusted_schema` off, `cell_size_check` on and `mmap_size`
+  `0`.* The database held 40 tables of 250 columns each, with column names
+  3 000 characters long, each schema statement within the length limits of
+  `FR-LITE-011`. A statement reading every column of every table, sorted on a
+  column of its result, opened a temporary file named `etilqs_` and a suffix
+  in the directory `SQLITE_TMPDIR` named, removed it before it ended, and
+  moved that directory's modification time, with `temp_store` at its default
+  and at `1`. With `temp_store` at `2` the same statement opened no file and
+  left the directory's modification time as it was, and the setting read back
+  as `2`. The statement without its sort opened no file under any setting.
+  Setting `temp_store` and reading it back succeeded over a text file and a
+  truncated file, before the probe failed on each, and the statement trace
+  reported both, so neither reads anything from the file. The library the
+  binary carries is the same release, built — per the build script of the
+  driver the project's decision records select, read at its public source on
+  2026-11-03 — with no `SQLITE_TEMP_STORE` of its own, so with the default
+  `1`; the read-back of `PRAGMA compile_options` confirms the build at every
+  open whatever it is.
+
+  *Rejected: amending `FR-PROJ-024` and `FR-LITE-008` to admit the library's
+  temporary files.* They land in a directory the host's environment chooses,
+  hold content of an untrusted file in an amount that file decides — the
+  observation's schema made one — and would leave the pure read of
+  `FR-CACHE-016` writing where the caller cannot see. `FR-PROJ-002`, which
+  fixes what `.tpl` holds, is not the requirement such a file contradicts: it
+  lies outside `.tpl`. *Rejected: directing the temporary files into `.tpl`.*
+  `.tpl` need not be writable, which is the case the pure read exists for, and
+  `FR-PROJ-002` fixes what it holds. *Rejected: statements that never sort or
+  materialise.* The text of a statement is outside this corpus, per the
+  [README](README.md#still-out-of-scope), and whether a transient index is
+  built is the library's planning, not the statement's wording; the control
+  closes every case whatever the text. *Rejected: relying on the page cache.*
+  A temporary file is created only once the cache spills, and the observation
+  above is a schema that made it spill.
+
+  *Accepted cost.* A statement's temporary data is held in memory, so the
+  memory a read uses grows with the largest sort or transient index a
+  statement makes over the schema, which is of the order of the schema the
+  model holds in any case. A host that cannot supply it ends the read with
+  `74`, per `SQLITE_NOMEM` in `FR-LITE-040`.
+
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
   *Amended in the sixty-sixth edition,* for rmp `#319`. Extension loading was
@@ -586,6 +809,11 @@ two builds returned, in the same sense as those above.
   `unsafe` code. It is now absent from the carried library and confirmed by
   `PRAGMA compile_options` before the file is read. The observation of
   `trusted_schema` off is corrected, in the note above.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: `temp_store` is a
+  new control, at `MEMORY`, confirmed by its read-back and by
+  `PRAGMA compile_options`, for the reasons in the notes on temporary storage
+  above. The other controls are unchanged.
 
 - **FR-LITE-011**: On every connection, before the version probe, the system
   SHALL set the following run-time limits of the library and SHALL confirm
@@ -689,13 +917,13 @@ two builds returned, in the same sense as those above.
 
   | Statement | Purpose | When |
   |---|---|---|
-  | `PRAGMA query_only`, `PRAGMA trusted_schema`, `PRAGMA cell_size_check` and `PRAGMA mmap_size`, each in the form that sets the value `FR-LITE-010` fixes and in the form that reads it back | The controls of `FR-LITE-010` that a statement applies | Once each, at connection start |
-  | `PRAGMA compile_options`, in the form that reads the options | The confirmation of the extension-loading control of `FR-LITE-010` | Once, at connection start |
+  | `PRAGMA query_only`, `PRAGMA trusted_schema`, `PRAGMA cell_size_check`, `PRAGMA mmap_size` and `PRAGMA temp_store`, each in the form that sets the value `FR-LITE-010` fixes and in the form that reads it back | The controls of `FR-LITE-010` that a statement applies | Once each, at connection start |
+  | `PRAGMA compile_options`, in the form that reads the options | The confirmation of the extension-loading control of `FR-LITE-010`, and of the build on which its temporary-storage control depends | Once, at connection start |
   | `SELECT sqlite_version()`, reading nothing else | The version probe of `FR-LITE-002` | Once, at connection start |
   | `SELECT` against the schema table `sqlite_schema` and the pragma table-valued functions `pragma_table_list`, `pragma_table_xinfo`, `pragma_index_list`, `pragma_index_xinfo`, `pragma_foreign_key_list` and `pragma_encoding`, restricted to the schema `main` | Reading the catalogue, and the probe of `FR-CFG-056` | As the command requires |
 
   A control the system applies through the library's configuration interface
-  rather than by a statement issues no statement, and the list admits the four
+  rather than by a statement issues no statement, and the list admits the five
   pragmas of the first row without obliging their use; the pragma of the
   second row is the one `FR-LITE-010` obliges. The table fixes membership and
   not order; the order is `FR-LITE-017`.
@@ -714,6 +942,11 @@ two builds returned, in the same sense as those above.
   new, for the confirmation `FR-LITE-010` now requires, and the catalogue row,
   formerly the third, is named the last.
 
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the first row names
+  `PRAGMA temp_store`, and the second the confirmation of the build it
+  depends on, for the control `FR-LITE-010` adds. Both read nothing from the
+  file, per the observation under that requirement.
+
 - **FR-LITE-016**: The system SHALL NOT issue any other statement for a
   `sqlite` entry. It SHALL issue no DDL, no DML, no `ATTACH` or `DETACH`, no
   `VACUUM`, `ANALYZE` or `REINDEX`, no `PRAGMA` outside the list of
@@ -726,9 +959,10 @@ two builds returned, in the same sense as those above.
 - **FR-LITE-017**: WHEN the system opens a connection for a `sqlite` entry, it
   SHALL establish the kind of the file under `FR-LITE-005`, open it under
   `FR-LITE-006`, apply and confirm every control of `FR-LITE-010` — the
-  extension-loading control by `PRAGMA compile_options` — and every limit of
-  `FR-LITE-011`, and only then issue the version probe of `FR-LITE-002`. Every
-  catalogue statement SHALL follow the probe.
+  extension-loading control by `PRAGMA compile_options`, and the
+  temporary-storage control by its read-back and by that statement — and
+  every limit of `FR-LITE-011`, and only then issue the version probe of
+  `FR-LITE-002`. Every catalogue statement SHALL follow the probe.
 
   *Rationale.* The probe is the first statement that reads the file and loads
   its schema, per the observation under `FR-LITE-002`, so every control is in
@@ -744,6 +978,9 @@ two builds returned, in the same sense as those above.
   probe stays the first statement that does, and a control fixed when the
   library was built is confirmed, like the others, before the schema is
   parsed.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the
+  temporary-storage control is named in the order, for the same reason.
 
 - **BR-LITE-001**: For a `sqlite` entry the read-only promise of `BR-SEC-002`
   has three parts, and two of them prevent. The read-only open of
@@ -1215,7 +1452,39 @@ two builds returned, in the same sense as those above.
   has no index, so the index cannot be the source, and the `pk` field is
   populated in every case.
 
+  WHERE the primary key is the rowid alias, its remaining properties of
+  `FR-CAT-042` SHALL be: `unique` true; the prefix length of its member `null`;
+  `type` `null`; `comment` the empty string; and `ignored` false.
+
+  *Rationale.* `unique` is a fact SQLite's documentation fixes for every rowid
+  alias, which `BR-LITE-002` admits as a source: the rowid is "a 64-bit signed
+  integer key that uniquely identifies the row within its table", per
+  `https://sqlite.org/lang_createtable.html`, last updated 2025-04-30 and
+  checked 2026-11-03. The other four are the values `FR-LITE-030` gives every
+  index of a `sqlite` read: no statement of `FR-LITE-015` reports a prefix
+  length or an index type, SQLite keeps no comment, per `BR-LITE-002`, and
+  `ignored` is false on every SQLite index. A rowid-alias key therefore carries
+  what a primary key read from an index of origin `pk` carries, so a template
+  reads the key's properties the same way whichever kind of primary key a
+  table has.
+
+  *Rejected: `unique` `null`, because no index reports it.* It presents as
+  unknown a uniqueness SQLite guarantees, and a template testing the key's
+  `unique` would branch differently on the commonest primary key of a SQLite
+  table than on any other. *Rejected: `type` `BTREE`, because the rowid is the
+  key of the table's B-tree.* `FR-LITE-030` gives `null` to every SQLite
+  index, which is a B-tree too, and one `sqlite` read would then carry two
+  answers to one question.
+
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the paragraph on
+  the remaining properties of a rowid-alias key is new. The requirement fixed
+  its name and the direction of its member, and the key has no index from
+  which `FR-LITE-030` could supply the rest; the technical specification
+  recorded a reading of them, which this paragraph adopts. The `unique` test
+  of `FR-ENV-041` consults the primary key as well as the index collection, so
+  a rowid-alias column satisfies it, as a MariaDB primary-key column does.
 
 - **FR-LITE-030**: For a `sqlite` read, a table's indexes SHALL be those
   `pragma_index_list` reports for it, less those `FR-LITE-021` excludes, each
@@ -1456,6 +1725,11 @@ two builds returned, in the same sense as those above.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Note added in the sixty-seventh edition,* for rmp `#314`. How the clause of
+  `NFR-PERF-004` is verified for a `sqlite` entry, and on which targets, is
+  stated in that requirement; how the count of `NFR-PERF-008` is verified for
+  one is stated in that requirement.
+
 ## The fixture
 
 - **FR-LITE-038**: The fixture of `scripts/sqlite/` SHALL build, from versioned
@@ -1536,10 +1810,18 @@ two builds returned, in the same sense as those above.
 - [privileges-and-completeness.md](privileges-and-completeness.md) —
   `FR-PRIV-002` through `FR-PRIV-008`, which `FR-LITE-035` applies.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, `70`, `74`,
-  `77` and `78`, and `FR-ERR-030`, which `FR-LITE-012` reaches.
+  `77` and `78`, and `FR-ERR-030`, which `FR-LITE-012` and `FR-LITE-040`
+  reach; and `FR-ERR-046`, which bounds a value of the file in a diagnostic
+  line.
+- [global-flags.md](global-flags.md) — `FR-GLOB-018`, which fixes what a
+  `cause` carries of what the library returned.
+- [project-and-discovery.md](project-and-discovery.md) — `FR-PROJ-024`, which
+  admits the two files of `FR-LITE-008`.
 - [security.md](security.md) — `FR-SEC-028`, which points here.
 - [cfg-commands.md](cfg-commands.md) — `FR-CFG-055` and `FR-CFG-056`.
-- [template-environment.md](template-environment.md) — `FR-ENV-048`.
+- [template-environment.md](template-environment.md) — `FR-ENV-048`, and
+  `FR-ENV-041`, whose `unique` test consults the primary key of
+  `FR-LITE-029`.
 - [performance-requirements.md](performance-requirements.md) — `NFR-PERF-001`
   through `NFR-PERF-004`, which `FR-LITE-037` applies.
 

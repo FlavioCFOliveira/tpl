@@ -76,6 +76,11 @@ states the rule that answers it.
   The child's stderr stays barred without exception, per `FR-CONF-032`, and so
   does its stdout, which is the password.
 
+  *Note added in the sixty-seventh edition.* For a `sqlite` entry, the result
+  code and the message the SQLite library returns are not the raw driver
+  error, and a `cause` line a requirement obliges to state them carries them
+  escaped; `FR-GLOB-018` states it.
+
   *The threat this leaves open is stated where it is created*, in
   `FR-CONF-033`: `${VAR}` cannot put a secret into the array, per
   `FR-CONF-017`, but a caller who writes one there literally sees it in the
@@ -208,19 +213,28 @@ states the rule that answers it.
 - **FR-SEC-028**: A SQLite database file SHALL be read only from a regular
   file, established before the library opens it, SHALL be opened read-only and
   never created, and SHALL be read under the hardening controls and limits
-  SQLite's own guidance gives for an untrusted file, each confirmed by reading
-  it back; a control that does not take effect ends the invocation with `70`
-  before any byte of the file is parsed. See `FR-LITE-005`, `FR-LITE-006`,
-  `FR-LITE-010` through `FR-LITE-014`, and `FR-LITE-017`.
+  SQLite's own guidance gives for an untrusted file, with the library's
+  temporary storage held in memory, each confirmed by reading it back; a
+  control that does not take effect ends the invocation with `70` before any
+  byte of the file is parsed. A value read from the file SHALL enter a
+  diagnostic line only within the bound of `FR-ERR-046`. See `FR-LITE-005`,
+  `FR-LITE-006`, `FR-LITE-010` through `FR-LITE-014`, `FR-LITE-017` and
+  `FR-ERR-046`.
 
   *Threat closed.* A FIFO in the place of the file must not hang the
   invocation, and a crafted file must not reach the library's parser without
   the checks the library offers: a schema that runs a function with side
   effects from a view or a constraint, a malformed page read without its cells
   checked, a page read through a memory map another process can change, an
-  extension loaded from a path, or a single value sized to exhaust memory.
+  extension loaded from a path, or a single value sized to exhaust memory. Nor
+  may it make the library write its content to a temporary file outside the
+  project, or flood with one name the diagnostic line a calling agent reads.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the temporary
+  storage of `FR-LITE-010` and the bound of `FR-ERR-046` are named, with the
+  two threats they close.
 
 ## Template containment
 

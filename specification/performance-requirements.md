@@ -2,7 +2,7 @@
 title: Performance Requirements
 status: approved
 last-reviewed: 2026-11-03
-related: [server-contract.md, cache-commands.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md, glossary.md]
+related: [server-contract.md, cache-commands.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md, glossary.md, sqlite-contract.md]
 ---
 
 # Performance Requirements
@@ -126,14 +126,24 @@ have:
 | Everything observed through the server's statement record or its connection record: `NFR-PERF-001`, `NFR-PERF-002`, `NFR-PERF-003`, `NFR-PERF-004`, `NFR-PERF-006`, and the connection clause of `NFR-PERF-005` | The fixture of `scripts/mariadb/` standing | Skips the assertion and states the reason |
 | The discovery clause and the configuration clause of `NFR-PERF-005`, observed by a differential run | A binary, and nothing else | Runs, on all four targets of `NFR-PERF-018` |
 | The same two clauses observed **as syscalls** | A host that affords the syscall trace, which is the two Linux targets | Skips the assertion and states the reason; the differential run is then the whole of the evidence, which `NFR-PERF-005` states in its own text |
+| `NFR-PERF-004` for a `sqlite` entry, observed as the opens of the database file | A host that affords the syscall trace, which is the two Linux targets | Skips the assertion and states the reason; no other instrument observes it, which `NFR-PERF-004` states in its own text |
+| `NFR-PERF-008` for a `sqlite` entry, counted against the statement record of `FR-LITE-018` | The fixture database of `FR-LITE-038`, which the test builds, and nothing else | Runs, on all four targets of `NFR-PERF-018` |
 
 **A skipped assertion is not a weakened requirement.** Every clause in the table
-above holds on all four targets and is verified on all four; what varies between
-runs is whether a given run can see it, and a run that cannot **skips the
-assertion with a stated reason and never passes it silently**. `NFR-PERF-018`'s
-parity clause is untouched, and the one place where the evidence is genuinely
-weaker on two targets is the file-open observation, which `NFR-PERF-005` names,
-bounds and states the consequence of.
+above holds on all four targets, and every one but the connection count of a
+`sqlite` entry is verified on all four; what varies between runs is whether a
+given run can see it, and a run that cannot **skips the assertion with a stated
+reason and never passes it silently**. `NFR-PERF-018`'s parity clause is
+untouched, and the two places where the evidence is genuinely weaker on two
+targets are the file-open observation, which `NFR-PERF-005` names, bounds and
+states the consequence of, and the connection count of a `sqlite` entry, which
+`NFR-PERF-004` does the same for.
+
+*Amended in the sixty-seventh edition,* for rmp `#314`: the last two rows of
+the table are new, and the paragraph above names the second place where the
+evidence is weaker. The technical specification reported that no requirement
+named an instrument for the connection count of a `sqlite` entry on the macOS
+targets, nor for its query count on any target.
 
 *Why this is narrowed rather than qualified.* The wider sentence was reported
 as a divergence by the technical specification, which records in
@@ -276,9 +286,56 @@ a summary.
 
 - **NFR-PERF-004**: One invocation SHALL open at most one connection.
 
+  For a `sqlite` entry, this requirement SHALL be verified by the syscall trace
+  of `NFR-PERF-007`, observing the opens of the database file the entry names,
+  on the two Linux targets of `NFR-PERF-018`. A run on either macOS target
+  SHALL skip the assertion and state the reason — that no instrument of
+  `NFR-PERF-007` observes the clause there — and SHALL NOT report it as
+  passed.
+
   *Note added in the sixty-fifth edition.* For a `sqlite` entry, a connection
   is one connection of the SQLite library to the database file, per
   `FR-LITE-037`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the paragraph on how
+  the requirement is verified for a `sqlite` entry is new. A SQLite connection
+  has no server, so neither record of the server is there to count it, and of
+  the two instruments left, the syscall trace sees a file open and the
+  differential run does not.
+
+  *Observed.* No instrument of `NFR-PERF-007` observes the clause on the
+  macOS targets. No outside instrument records the files a process opens on a
+  macOS host under its default protection, as `NFR-PERF-005` records with its
+  date and its commands. And no differential run can make a second connection
+  change the outcome: on 2026-11-03, through the Python library 3.54.1, two
+  read-only connections to one database, in rollback-journal mode and in
+  write-ahead-log mode, read the same rows as one connection and left the same
+  files with the same bytes beside it, so the exit code, stdout and the
+  artefacts left on disk would be those of one connection.
+
+  *Consequence, stated plainly, because the evidence is weaker on two targets
+  than the requirement's wording suggests.* The requirement holds on all four
+  targets and, for a `sqlite` entry, is observed on two. On
+  `x86_64-apple-darwin` and `aarch64-apple-darwin` nothing records how many
+  connections a `sqlite` invocation opens, so a build that opened the database
+  file twice there, and only there, would satisfy every observation those
+  targets afford and would not be caught. The Linux observation is not
+  credited to them, for the reason `NFR-PERF-005` gives for its own clause.
+  `NFR-PERF-018`'s parity clause is untouched: a failure observed on either
+  Linux target fails the change.
+
+  *Rejected: an in-process count of the connections the reader opens, as
+  `FR-LITE-018` takes the statement record in process.* That record is taken
+  inside the process because the statements a SQLite connection receives
+  cannot be seen from outside it on any target. A file open can be, on two
+  targets; and a count kept by the reader sees only the connections opened
+  through the route that keeps it, which is not the defect this requirement
+  exists to catch: a second connection opened by another route. A syscall
+  trace sees every open, whatever route makes it.
+
+  *What would change this.* An instrument that records the files a process
+  opens on a macOS host without lifting its default protection, or an
+  arrangement under which a second connection changes the observable outcome.
 
   *Note added in the forty-second edition.* `FR-RND-040` closes that
   connection, and shuts down the driver's runtime, before a render starts, so
@@ -540,6 +597,40 @@ a summary.
   equal. It needs the fixture standing, as the first row of the table under
   *Requirements of form* states for that record, and a run without it skips
   the assertion with a stated reason.
+
+  For a `sqlite` entry, the count SHALL be compared with the statement record
+  of `FR-LITE-018` for the same invocation, in place of the server's record,
+  and the invocation SHALL therefore run through the seam that record is
+  reached through. The catalogue queries the record shows SHALL be the
+  statements of the last row of `FR-LITE-015` that it reports without the
+  prefix `-- `; a [nested statement](glossary.md#nested-statement) is not one.
+  The comparison SHALL be made over the fixture database of `FR-LITE-038`,
+  and the two counts SHALL be equal. It needs no server, and runs on all four
+  targets of `NFR-PERF-018`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the paragraph on a
+  `sqlite` entry is new. A SQLite connection has no server whose record could
+  be the other side of the comparison, and the statement record of
+  `FR-LITE-018` is where the statements the library receives are recorded, for
+  the reason that requirement gives. The fixture database is named because it
+  holds views that do not compile, so the comparison reaches the path on
+  which `FR-LITE-035` reads each view in a statement of its own. The record's
+  limit, stated in `FR-LITE-018`, binds the comparison: a catalogue statement
+  that failed when it was prepared would be counted on the stream and absent
+  from the record.
+
+  *Observed, on 2026-11-03, through the Python library 3.54.1 and its
+  statement trace.* A statement reading the columns of every view, over a
+  database holding a view whose table is missing, and a statement reading the
+  columns of that view alone, each began running, was reported, and then
+  failed with `no such table`; a statement reading the columns of a view that
+  compiles was reported and succeeded. A statement that failed when it was
+  prepared was not reported, as `FR-LITE-018` records. The statements of
+  `FR-LITE-035` therefore reach the record on the fixture's views.
+
+  *Rejected: no instrument for a `sqlite` entry, leaving the count observable
+  and unverified.* `FR-GLOB-017` exists to make the count verifiable from
+  outside, and a comparison with no other side verifies nothing.
 
   *Added in the sixty-second edition,* for rmp `#230`. The requirement stated
   what must be observable and not how that is established, and

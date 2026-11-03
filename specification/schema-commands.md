@@ -2,7 +2,7 @@
 title: Schema Commands (First Arm)
 status: approved
 last-reviewed: 2026-11-03
-related: [cli-contract.md, cache-commands.md, output-formats.md, context-document.md, render-command.md]
+related: [cli-contract.md, cache-commands.md, output-formats.md, context-document.md, render-command.md, project-and-discovery.md]
 ---
 
 # Schema Commands (First Arm)
@@ -598,7 +598,11 @@ tpl schema dump                        The whole database as one JSON document
 
 - **BR-SCH-003**: The first arm is not read-only with respect to the filesystem.
   A cache miss writes to `.tpl/.cache/`, per `FR-CACHE-007`. Only
-  `--direct --no-cache` guarantees that no file is touched.
+  `--direct --no-cache` guarantees that no file is touched, save the two files
+  `FR-PROJ-024` admits beside a SQLite database in write-ahead-log mode.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the exception is
+  new, for the reason `FR-PROJ-024` gives.
 
 ## Dependencies
 

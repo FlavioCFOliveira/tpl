@@ -1,8 +1,8 @@
 ---
 title: Global Flags
 status: approved
-last-reviewed: 2026-09-24
-related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md, project-and-discovery.md, render-command.md]
+last-reviewed: 2026-11-03
+related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md, project-and-discovery.md, render-command.md, sqlite-contract.md]
 ---
 
 # Global Flags
@@ -360,6 +360,42 @@ which belongs to that command's module.
   obliges that line to name it — `FR-CONF-033` for a child that exits
   non-zero, `FR-CONF-031` for one that exceeds the output cap, and the `78`
   row of `FR-ERR-034` for the deadline of `FR-CONF-028`.
+
+  For a `sqlite` entry, the raw driver error is the error value of the driver
+  through which `tpl` reaches the SQLite library, in any rendering of it. Two
+  facts the library returns are not it: the
+  [result code](glossary.md#result-code), named as SQLite names it — the
+  extended code where the library returns one — and the message the library
+  gives with it. WHERE a requirement of this
+  specification obliges a `cause` line to state what the library returned —
+  `FR-LITE-007`, `FR-LITE-035`, `FR-LITE-040`, and the note on `FR-ERR-034`
+  for a `sqlite` entry — the line SHALL carry those two facts, each escaped
+  under `FR-ERR-024` and bounded under `FR-ERR-046`, and SHALL NOT carry the
+  driver's error value. Outside
+  such a line, this requirement bars the two facts with the raw driver error.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the paragraph on a
+  `sqlite` entry is new. `FR-LITE-007` and `FR-LITE-035` oblige the `cause` to
+  carry what the library returned, including the object and the reason, and
+  this requirement barred "the raw driver error" without saying what it is for
+  a library that runs inside the process; read at its widest, the bar emptied
+  the two obligations. The two facts are the library's own report of the
+  failure — a code SQLite documents, and a message that names the object and
+  the reason, as in `malformed database schema (t) - Expression tree is too
+  large (maximum depth 100)` — and without them the `cause` names a category
+  where an instance is available, which `FR-ERR-034` bans. The driver's error
+  value is the driver's rendering of the same failure, in a form the driver
+  chooses and may change with any of its releases, and it is what stays
+  barred. Each value is escaped because the message can carry the name of an
+  object of an untrusted file, per `FR-LITE-010`. Nothing a `mariadb` entry
+  writes changes, and the one exception above is unchanged: the two facts are
+  not an exception to the list, because they are not on it.
+
+  *Rejected: the result code alone.* It names neither the object nor the
+  reason, which `FR-LITE-007` obliges the `cause` to name. *Rejected: a second
+  exception to the list.* It would admit the driver's value and then have to
+  bound it, where stating what the list bars admits only the two facts the
+  requirements oblige.
 
   *Amended in the thirty-first edition: the one exception is stated, because
   three requirements in force contradicted this one.* `FR-CONF-033` requires

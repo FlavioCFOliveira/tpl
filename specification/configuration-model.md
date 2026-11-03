@@ -561,10 +561,13 @@ path     = "data/ledger.sqlite"
   SHALL refuse a value that contains `${`, as `FR-CONF-047` refuses one in
   `ca_file` or `ca_path`: with `64` on the command line, writing nothing, and
   with `78` at step 3 of `FR-ERR-006` in the file. A relative `path` SHALL be
-  resolved against the **project directory** — the directory that holds the
-  `.tpl` folder of the project the invocation uses, whether discovered or
-  named by `--tpl-dir` — and never against the working directory of the
-  invocation. The system SHALL store the value as written, and SHALL NOT
+  resolved against the [project directory](glossary.md#project-directory) —
+  the directory that holds the `.tpl` folder of the project the invocation
+  uses, whether discovered or named by `--tpl-dir` — and never against the
+  working directory of the invocation. WHERE the `.tpl` folder is reached
+  through a symbolic link, the project directory SHALL be the parent of the
+  folder's canonical path, per `FR-PROJ-009`, and not the directory that holds
+  the link. The system SHALL store the value as written, and SHALL NOT
   resolve it when a `cfg` command writes it.
 
   ```
@@ -601,6 +604,32 @@ path     = "data/ledger.sqlite"
   project directory; the help of the flag states the rule, per `FR-CFG-033`.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the sentence on a
+  `.tpl` folder reached through a symbolic link is new. "The directory that
+  holds the `.tpl` folder" has two readings there — the directory holding the
+  link, and the parent of its target — and they name different directories.
+  The parent of the canonical folder is chosen because it is the one path the
+  project holds once `FR-PROJ-009` has canonicalised it, and every other file
+  of the project already resolves under that folder: its configuration, which
+  the trust checks verify at the real target, its template root, per
+  `FR-TMPL-023`, and its cache, per `FR-CACHE-001`. A project reached through
+  two links then reads one database, as it reads one `.tpl/.cfg`, whichever
+  link the invocation came through. The technical specification recorded this
+  reading and asked for it to be settled.
+
+  *Rejected: the directory that holds the link.* Two links to one `.tpl`
+  folder would read two databases from one `.tpl/.cfg`, chosen by which link
+  the walk or `--tpl-dir` reached and by no line of the file, which is the
+  ground this requirement gives for refusing the working directory. A
+  `--tpl-dir` naming a link whose own name is not `.tpl`, which `FR-PROJ-027`
+  accepts for its canonical form, would also resolve against a directory that
+  is not the project's.
+
+  *Accepted cost.* A caller who keeps the database beside a link to a `.tpl`
+  folder kept elsewhere, and writes a relative `path`, reads the file beside
+  the folder's real location instead. The caller writes an absolute `path`,
+  or keeps the database beside the real folder.
 
 ## What an entry must describe
 

@@ -1035,7 +1035,8 @@ tpl cfg database test   <name>
      answered, whether or not it returns a row.
 
   The command SHALL exit `0`, `69`, `70`, `74` or `78`, under `FR-LITE-005`,
-  `FR-LITE-007`, `FR-LITE-009` and `FR-LITE-012`; it never exits `77`, and
+  `FR-LITE-007`, `FR-LITE-009`, `FR-LITE-012` and `FR-LITE-040`; it never
+  exits `77`, and
   `FR-CFG-043` does not reach it. Its `source` is `server`, per `FR-CFG-035`.
 
   *Why an answered probe is enough.* `FR-CFG-044` asks for a row because a
@@ -1052,6 +1053,10 @@ tpl cfg database test   <name>
   providers, per `FR-OUT-027`.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: `FR-LITE-040` joins
+  the requirements the exit codes are taken under, because it gives a code to
+  every result code the other four do not classify. The codes are unchanged.
 
 - **FR-CFG-025**: `tpl cfg database test` SHALL NOT read or write the cache, per
   `FR-CACHE-010`.

@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-six editions. All are in force;
+The specification has been written in sixty-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -5097,6 +5097,116 @@ this edition: neither root document, read at `349560e`, states extension
 loading, the statement trace, the length limit, the `CHECK` reading,
 shadow-table coverage or the release of the SQLite library.
 
+### Sixty-seventh edition — what the technical design of the second provider found
+
+rmp `#314`, reopened in sprint 27, settles the seven points the technical
+specification of the `sqlite` provider, written at `ad653f5`, recorded against
+this corpus and did not resolve: one question on result codes that held back
+a part of the reader, three passages that contradicted a requirement in force,
+and three facts no requirement fixed. Within the same edition the coordinator
+added four further defects of the SQLite specification, found while the
+seven were settled. Each is settled by the narrowest amendment that removes
+it, and no requirement changes its meaning for a `mariadb` entry.
+
+**Two identifiers are assigned: `FR-LITE-040` and `FR-ERR-046`.** None is
+retired and none is renumbered. [glossary.md](glossary.md) gains *result
+code* and amends *project directory* and *differential run*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Every SQLite result code has an exit code** — `FR-LITE-040`, new, in
+  [sqlite-contract.md](sqlite-contract.md). After `FR-LITE-012`,
+  `FR-LITE-035` and the rows of `FR-LITE-007`, now read by result code
+  wherever the library returns it, every primary result code SQLite publishes
+  is classified by whose the fault is: `70` where `tpl` misused the library,
+  the library failed itself, or the outcome needs an operation `tpl` never
+  performs; `74` where the host or the filesystem did not supply what the read
+  needed, memory included; `69` where another connection holds or changes the
+  database; and `70` for a primary result code published later. The split the
+  technical specification recommended is taken with two corrections, each by
+  `FR-ERR-002`: `SQLITE_PROTOCOL` and `SQLITE_SCHEMA` are `69`, not `74`, and
+  `SQLITE_LOCKED` is `70`. The `69` and `74` cells of `FR-ERR-001`, the note
+  on `FR-ERR-006` and a note on `FR-LITE-007` follow, and a note on
+  `FR-ERR-036` states that it governs a `mariadb` entry only.
+- **Two files outside `.tpl`** — by the user's decision of 2026-11-03,
+  `FR-LITE-008` stands. `FR-PROJ-024` in
+  [project-and-discovery.md](project-and-discovery.md) now admits a second
+  exception, the `-wal` and `-shm` files the library may create and write
+  beside a database in write-ahead-log mode, and `BR-PROJ-002`,
+  `FR-CACHE-016` in [cache-commands.md](cache-commands.md) and `BR-SCH-003`
+  in [schema-commands.md](schema-commands.md), which state the same pure read,
+  admit them beside it. A read was observed to write the shared-memory file,
+  so the exception admits writing as well as creating.
+- **What a `cause` carries from the library** — `FR-GLOB-018` in
+  [global-flags.md](global-flags.md) states what the raw driver error is for a
+  `sqlite` entry: the driver's error value, in any rendering. The result code
+  and the library's message are not it, and a `cause` a requirement obliges to
+  state them carries both, escaped under `FR-ERR-024`, and nothing of the
+  driver's value. `FR-SEC-005` points at it.
+- **A deadline that met no lock** — the note on `FR-ERR-034` for a `sqlite`
+  entry names a lock only where the library returned `SQLITE_BUSY`, and
+  otherwise the deadline and its resolved value.
+- **The project directory of a linked `.tpl`** — `FR-CONF-054` in
+  [configuration-model.md](configuration-model.md) resolves a relative `path`
+  against the parent of the canonical `.tpl` folder, the one path the project
+  holds after `FR-PROJ-009`, and not against the directory holding a link.
+- **A rowid-alias primary key** — `FR-LITE-029` fixes the rest of its
+  properties: `unique` true, as SQLite's documentation states of the rowid;
+  and the member's prefix length, `type`, the comment and `ignored` as
+  `FR-LITE-030` gives them to every SQLite index.
+- **Two assertions on a `sqlite` entry** — `NFR-PERF-004` in
+  [performance-requirements.md](performance-requirements.md) is verified by
+  the syscall trace on the two Linux targets and skipped, with its reason, on
+  the two macOS targets, where no instrument observes it; `NFR-PERF-008`
+  compares the diagnostic count with the statement record of `FR-LITE-018`
+  over the SQLite fixture, on all four targets. The table under
+  *Requirements of form* gains both rows, and `NFR-PERF-004` becomes the sixth
+  requirement whose limit is on the evidence, listed in
+  *[Writing conventions](#writing-conventions)*. `FR-LITE-037` points at both.
+- **The `unique` test and a rowid alias** — the `unique` test of `FR-ENV-041`
+  in [template-environment.md](template-environment.md) consults the table's
+  primary key as well as its unique indexes, so a rowid-alias column answers
+  true, as a MariaDB primary-key column does. Every MariaDB document answers
+  as before, because its primary key is always the unique index `PRIMARY`.
+- **A path that names nothing** — `FR-LITE-005` routes a path whose kind
+  cannot be established, because its lookup fails, to the first row of
+  `FR-LITE-007`, which now begins at the check of the kind: one rule gives it
+  `74` and its `cause`, whichever of the check and the open finds it.
+- **Temporary files** — `FR-LITE-010` gains an eighth control, `temp_store`
+  at `MEMORY`, confirmed by its read-back and by `PRAGMA compile_options`.
+  Observed on another build of the release the binary carries, a sorting
+  statement over a large schema wrote a temporary file in the host's
+  temporary directory, outside `.tpl`, and with the control it wrote none.
+  `FR-LITE-015`, `FR-LITE-017`, `FR-LITE-008` and `FR-SEC-028` follow.
+  `FR-PROJ-002` is not amended: such a file lies outside `.tpl`, so the
+  requirements it contradicted were `FR-PROJ-024` and `FR-LITE-008`, which
+  now hold.
+- **A name sized to flood a diagnostic** — `FR-ERR-046`, new, in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), bounds a value read
+  from a SQLite database file, or returned by its library, in any diagnostic
+  line: past 256 characters, its first and last 128 are kept around a marker
+  that counts what was left out. `FR-ERR-024`, `FR-GLOB-018`, the note on
+  `FR-ERR-034` and `FR-SEC-028` point at it. Stdout, a MariaDB server's
+  values, a `--context` document and the argument vector are not bounded.
+- **One list that had missed the new requirement** — `FR-CFG-056` in
+  [cfg-commands.md](cfg-commands.md) takes its exit codes under
+  `FR-LITE-040` as well; the codes are unchanged.
+
+`FR-LITE-009`, `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-018`, `FR-LITE-030`,
+`FR-LITE-035`, `FR-ERR-022`, `FR-ERR-027`, `FR-ERR-030`, `FR-ERR-032`,
+`FR-CAT-042`, `FR-CAT-043`, `FR-PROJ-002`, `FR-PROJ-009`, `FR-PROJ-023`,
+`FR-PROJ-027`, `FR-GLOB-017`, `NFR-PERF-005` and `NFR-PERF-007` were read
+against the changes. None conflicts with them, so none is amended. Every new
+statement of SQLite behaviour rests on SQLite's documentation, cited by page
+and date, or on an observation of 2026-11-03 through the Python library
+3.54.1 — the release the binary carries, built with the same `TEMP_STORE` —
+recorded beside the requirement it grounds. The fifth validation rule owes
+nothing new for this edition: both root documents were read at `ad653f5`
+against every requirement it amends, and the one passage each holds that an
+amendment reaches — the root `README.md` on writes outside `.tpl`, and the
+root `CLAUDE.md` on the disk writes `tpl` makes — is already held by
+`DIV-057` and `DIV-058`.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -5271,7 +5381,7 @@ because they constrain the whole module rather than one interaction.
   members cite each other. A limit on the **evidence** for a guarantee — the
   observation that cannot be made, rather than the promise that cannot be kept
   — takes the same note shapes, as many of them as it has content for, without
-  joining that family, because it qualifies a different kind of claim. Five
+  joining that family, because it qualifies a different kind of claim. Six
   requirements are written this way:
   `FR-ERR-031`, where no invocation of the distributed binary is observed
   returning `70`; `NFR-PERF-005`, where the file-open observation is made
@@ -5279,9 +5389,11 @@ because they constrain the whole module rather than one interaction.
   invocation is observed producing a schema read that returns no row;
   `FR-SRV-013`, where no server is observed producing a read-back that does not
   confirm the read-only session, so that half of it is exercised in process;
-  and `FR-LITE-018`, where a statement that fails when it is prepared, or is
-  never run, is absent from the statement trace. *The fifth was added in the
-  sixty-sixth edition.*
+  `FR-LITE-018`, where a statement that fails when it is prepared, or is
+  never run, is absent from the statement trace; and `NFR-PERF-004`, where the
+  connection count of a `sqlite` entry is observed on the Linux targets and
+  not on the macOS ones. *The fifth was added in the sixty-sixth edition, and
+  the sixth in the sixty-seventh.*
 
 ## Status legend
 

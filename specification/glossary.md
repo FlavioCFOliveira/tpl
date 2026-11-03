@@ -431,10 +431,14 @@ explicitly not a contract. See `FR-OUT-004`.
 ## project directory
 
 The directory that holds the `.tpl` folder of a project, whether the folder
-was discovered or named by `--tpl-dir`. A relative `path` of a `sqlite` entry
-resolves against it, per `FR-CONF-054`.
+was discovered or named by `--tpl-dir`; where the folder is reached through a
+symbolic link, the parent of the folder's canonical path. A relative `path` of
+a `sqlite` entry resolves against it, per `FR-CONF-054`.
 
 *Added in the sixty-fifth edition.*
+
+*Amended in the sixty-seventh edition.* The clause on a folder reached
+through a symbolic link is new, per `FR-CONF-054`.
 
 ## provider
 
@@ -512,14 +516,18 @@ survived, compared against the same invocation made in a state that has
 nothing for that operation to find. It is the fourth instrument of
 `NFR-PERF-007`, available on every target of `NFR-PERF-018` and needing no
 privilege on any of them, and it is what stands in for the syscall trace on the
-two macOS targets, where that instrument does not exist. It observes three
-things and no others: the invocation's exit code, the bytes on stdout, and the
-artefacts it leaves on disk. Stderr is not among them. The arrangements it is
-used in are named by `NFR-PERF-007`.
+two macOS targets, where that instrument does not exist, for the clauses of
+`NFR-PERF-005`. It observes three things and no others: the invocation's exit
+code, the bytes on stdout, and the artefacts it leaves on disk. Stderr is not
+among them. The arrangements it is used in are named by `NFR-PERF-007`.
 
 *Written here in the thirty-second edition*, from
 [performance-requirements.md](performance-requirements.md), where the
 eleventh edition defined it.
+
+*Amended in the sixty-seventh edition.* The clause it stands in for is named:
+for a `sqlite` entry the syscall trace also observes `NFR-PERF-004`, and no
+differential run stands in for it on the macOS targets, per that requirement.
 
 ## restricted
 
@@ -530,6 +538,19 @@ name never carries it, because that case fails with `77` instead; a document
 carrying it is refused as a `--context`; and an object carrying it is never
 written to the cache, per `FR-CACHE-037`. See `FR-PRIV-005`, `FR-PRIV-008`, and
 `FR-PRIV-016`.
+
+## result code
+
+The code by which the SQLite library reports the outcome of an operation: a
+**primary** result code, such as `SQLITE_BUSY`, and, where the library gives
+one, an **extended** result code that refines it, such as
+`SQLITE_READONLY_DIRECTORY`. SQLite names and documents them at
+`https://sqlite.org/rescode.html`. A result code is not an exit code: every
+one that reports a failure on a `sqlite` entry is given an exit code of
+`FR-ERR-001` by `FR-LITE-040`, and `FR-GLOB-018` fixes how a `cause` line
+names it.
+
+*Added in the sixty-seventh edition.*
 
 ## routine
 

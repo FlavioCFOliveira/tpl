@@ -313,8 +313,14 @@ read from the server on a miss.
   | `--direct --no-cache` | database | no |
 
 - **FR-CACHE-016**: `--direct --no-cache` SHALL be the pure read: it touches
-  neither the cache nor any other file, and is the form that works when `.tpl/`
-  is not writable.
+  neither the cache nor any other file, save the two files `FR-PROJ-024`
+  admits beside a SQLite database in write-ahead-log mode, and is the form that
+  works when `.tpl/` is not writable.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the exception is
+  new, for the reason `FR-PROJ-024` gives. It writes nothing inside `.tpl`,
+  so the form still works where `.tpl/` is not writable, and nothing a
+  `mariadb` entry does changes.
 
 - **FR-CACHE-017**: `--direct` and `--no-cache` SHALL be declared by exactly the
   eight `schema` subcommands, `tpl render`, and `tpl cache load`. Every other
