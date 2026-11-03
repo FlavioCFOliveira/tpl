@@ -208,9 +208,9 @@ SQLite has no privileges, so none of the three detections above runs on a
 
 | Obligation on the surface | Forced by |
 |---|---|
-| The one route to a connection applies the kind check, the read-only open, every control and limit with its read-back, and the probe, in that order and behind no condition | `FR-LITE-017`, `FR-LITE-014` |
-| Every statement is a constant of the crate, drawn from the closed list; no value read from the file enters a statement's text | `FR-LITE-015`, `FR-LITE-016` |
-| Only `main` is read, and coverage — the types `pragma_table_list` reports and the seven exclusions — is applied before any object is folded | `FR-LITE-019` … `FR-LITE-021` |
+| The one route to a connection applies the kind check, the read-only open, every control and limit with its read-back, and the probe, in that order and behind no condition; the check precedes every other catalogue statement | `FR-LITE-017`, `FR-LITE-014`, `FR-LITE-041` |
+| Every statement is a constant of the crate, drawn from the closed list, and none invokes `pragma_table_list`; no value read from the file enters a statement's text | `FR-LITE-015`, `FR-LITE-016` |
+| Only `main` is read; the objects are the rows of its schema table, told apart by type and root page, and the six exclusions are applied before any object is folded | `FR-LITE-019` … `FR-LITE-021` |
 | Every value keeps its storage class and a SQL `NULL` stays distinct; text is converted here, with U+FFFD substituted | `FR-LITE-004` step 2, `FR-OUT-017` |
 | One fact is read from stored text — a trigger's timing and event — and no other | `BR-LITE-002`, `FR-LITE-032` |
 | The result is the model alone: no object is marked, and no view's columns are read | `FR-LITE-033`, `FR-LITE-036` |
@@ -232,8 +232,10 @@ The table's rows follow the order of `FR-LITE-040`; the stages are
 | Stage 4 or 5 | Any result code, or a value read back that differs from the value set or from the row required | `70` | `FR-LITE-012`; `FR-LITE-040` step 1 |
 | The open, or any statement | A result code a row of `FR-LITE-007` names — `SQLITE_BUSY` whenever it is returned, `SQLITE_CANTOPEN` for a file beside the database as well | That row's code | `FR-LITE-007`; `FR-LITE-040` step 2 |
 | The open, or any statement | Any other result code, among them `SQLITE_ERROR` on any statement and `SQLITE_INTERRUPT` from the watchdog | The code `FR-LITE-040`'s table gives its primary code, or the extended code a row names; `70` for a primary code no row names | `FR-LITE-040` step 3, `FR-LITE-009` |
+| The check: statement 1 of the plan, or step 4 of `tpl cfg database test` | A row of a kind the check refuses | `78` | `FR-LITE-041`, the three rows of `FR-LITE-007` that name it |
+| Statements 3 to 7 | A value of the schema table of a class the check refuses, which only a file changed after the check can hold | `78`, as the check's | `FR-LITE-040`, its paragraph on values; `FR-LITE-041` |
 | The fold | A trigger header without one timing and one event | `70` | `FR-LITE-032` |
-| Anywhere | A driver error carrying no result code — a pragma value of a class the library does not document for it among them — or a version without two dot-separated parts | `70` | `FR-ERR-030` |
+| Anywhere | A driver error carrying no result code — a value of a pragma function of a class the library does not document for it among them — or a version without two dot-separated parts | `70` | `FR-ERR-030` |
 
 **No `sqlite` read reaches `77`.** No object is marked, so the named-object
 verdict finds no short object, and a view whose definition does not compile is
@@ -242,11 +244,11 @@ amended in the sixty-eighth edition).
 
 **`tpl cfg database test` for a `sqlite` entry** reports the four steps of
 `FR-CFG-056` in the fields of `FR-CFG-039`: stages 1 and 2 are `connected`;
-stages 4 and 5 are `read_only_session`; stage 6 is `server`; and one `SELECT`
-against `sqlite_schema` of `main`, whose rows are not read, answers
-`can_read_catalogue`, true whenever it is answered. The document keeps one
-shape for both providers (`FR-OUT-027`), and the command touches no cache
-(`FR-CFG-025`).
+stages 4 and 5 are `read_only_session`; stage 6 is `server`; and the check,
+whose rows are judged and never read as model content, answers
+`can_read_catalogue`: true when it is answered and refuses no row, and `78`
+under `FR-LITE-041` when it refuses one. The document keeps one shape for both
+providers (`FR-OUT-027`), and the command touches no cache (`FR-CFG-025`).
 
 **Discharged in the sixty-seventh edition — the three readings this section
 recorded.** A path whose kind cannot be established is the first row of
@@ -275,7 +277,7 @@ and the rejected options are not restated here.
 | One condition reachable over **two populations** is two variants, not one, where a single `cause` would carry wording that is false on one of them. An object sought in a catalogue read names the database entry it was read through; sought in a `--context` document it has no entry to name, because `FR-RND-019` resolves none and `FR-RND-022` opens no connection, so the document's **path** stands where the entry stands. Both name the database | `FR-ERR-034`, `FR-RND-032`, `FR-SCH-010`, `FR-RND-019`, `FR-RND-022` |
 | A repetition the specification **permits** is not the repetition `FR-CLI-014` refuses: `--set` is repeatable, so a second occurrence is correct and a second occurrence of the same **key** is the fault, reported with both values | `FR-RND-008`, `FR-RND-014`, `FR-CLI-014`, `FR-ERR-034` |
 | Each render bound is a variant of its own carrying the resolved value, so the `cause` names the bound, the value and the key that raises it, and the `hint` names the `tpl cfg set` that raises it | `FR-RND-036`, `FR-RND-037`, `FR-RND-039`, `FR-ERR-034` row `65`, `FR-ERR-009` |
-| A `sqlite` condition carries the path as resolved, the stage, statement or check of the file's kind that failed, and what the library returned — the result code's name and its message, the message carried as a value of the file — or, for the check of the kind, what the filesystem returned; never the driver's error value. A `74` or `78` carries the entry for the `hint` the corpus fixes. A `70` of `FR-LITE-012` carries the control or limit, the value set and the value read back. A `69` carries which of three things ended the statement — `SQLITE_BUSY`, with the resolved deadline where the bound was spent when it returned; the watchdog's interrupt, with the resolved deadline; or `SQLITE_PROTOCOL` or `SQLITE_SCHEMA` — so that its `cause` names a lock in the first case alone | `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-012`, `FR-LITE-040`, `FR-GLOB-018`, the notes on `FR-ERR-034` for a `sqlite` entry, `FR-ERR-045` note; [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
+| A `sqlite` condition carries the path as resolved, the stage, statement or check of the file's kind that failed, and what the library returned — the result code's name and its message, the message carried as a value of the file — or, for the check of the kind, what the filesystem returned; never the driver's error value. A `74` or `78` carries the entry for the `hint` the corpus fixes. A `70` of `FR-LITE-012` carries the control or limit, the value set and the value read back. A `69` carries which of three things ended the statement — `SQLITE_BUSY`, with the resolved deadline where the bound was spent when it returned; the watchdog's interrupt, with the resolved deadline; or `SQLITE_PROTOCOL` or `SQLITE_SCHEMA` — so that its `cause` names a lock in the first case alone. A `78` of the check carries the refused row's `type` and `name`, as values of the file — a text or a BLOB as its bytes read as text with U+FFFD substituted, an integer or a real in digits, `NULL` as `NULL` — and its kind: the column and the storage class it holds, or the root page and whether the text creates a virtual table | `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-012`, `FR-LITE-040`, `FR-LITE-041`, `FR-GLOB-018`, the notes on `FR-ERR-034` for a `sqlite` entry, `FR-ERR-045` note; [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
 
 `main.rs` reads the exit status and returns it; it performs no classification of
 its own, and the eight-step validation order that decides which code wins when
@@ -305,7 +307,7 @@ stderr. It holds transformations, not a taxonomy.
 | Four labelled lines, in one order, and they are the whole of what a caller receives | `FR-ERR-008`, `FR-ERR-033` |
 | `cause` is factual, specific, never a restatement of `error`, and never wording that would be equally true of a different failure; its per-code content is obliged row by row | `FR-ERR-010`, `FR-ERR-034` |
 | `hint` carries a runnable command wherever one exists, built only from literals and from names matching the admitted character set; a candidate outside it is presented in **no** form and the generic hint stands alone | `FR-ERR-009`, `FR-ERR-022`, `FR-ERR-023` |
-| Every interpolated value is escaped — newline, carriage return, **tab**, and every C0 control — and the renderer escapes each composed line as a whole rather than each interpolation | `FR-ERR-024`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
+| Every interpolated value is escaped — newline, carriage return, **tab**, every C0 control, every C1 control and every bidirectional formatting character, in the forms [The document emitter](#the-document-emitter) tabulates — and the renderer escapes each composed line as a whole rather than each interpolation | `FR-ERR-024`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
 | A value of a SQLite database file, or of its library, is bounded wherever it is interpolated, at every verbosity, and no other value is | `FR-ERR-046` |
 | No credential, resolved DSN, argument vector, child stderr, raw driver error or `.cfg` content reaches the stream at any verbosity | `FR-ERR-013`, `BR-ERR-003`, `FR-GLOB-018` |
 
@@ -320,7 +322,7 @@ modules ([`OD-05`](open-decisions.md#od-05--the-module-decomposition)).
 |---|---|---|
 | What is bounded | Every value of the library a `sqlite` condition carries — its message, a value read back — and every name or value taken from a model a `sqlite` read produced, from the file or served from its cache, wherever a diagnostic line interpolates it — a `cause`, a suggestion, a warning, a render failure | `FR-ERR-046`; the cache is the reading below |
 | How it is marked | Such a value enters an error value, or a warning's emission function, as a type of its own, built only from the library's report in `sqlite/fault.rs` and from a model whose `database.provider` is `sqlite` and which was not read from a `--context` document. A value of a `mariadb` read, of a `--context` document or of the argument vector is never that type, so none is bounded | `FR-ERR-046`, `FR-CTX-043`, `FR-CDOC-018` |
-| Where it is cut | At the interpolation: the value is escaped under `FR-ERR-024`, and then, past 256 characters, replaced by at most 128 leading characters, the marker `[... <n> characters omitted ...]` and at most 128 trailing characters. A cut that would fall inside `\n`, `\r`, `\t` or `\u{XX}` moves to that sequence's edge outside the kept part. The result holds no C0 control, so the escape of the whole line leaves it unchanged and `OD-06`'s guarantee stands | `FR-ERR-046`, `FR-ERR-024`; `src/diagnostics/escape.rs`, read at `f8e2e34` |
+| Where it is cut | At the interpolation: the value is escaped under `FR-ERR-024`, and then, past 256 characters, replaced by at most 128 leading characters, the marker `[... <n> characters omitted ...]` and at most 128 trailing characters. A cut that would fall inside `\n`, `\r`, `\t` or a `\u{…}` escape moves to that sequence's edge outside the kept part. The result holds no character the escape of the whole line rewrites, so that escape leaves it unchanged and `OD-06`'s guarantee stands | `FR-ERR-046`, `FR-ERR-024`; `src/diagnostics/escape.rs`, read at `f8e2e34` |
 | What a character is | A Unicode scalar value — a Rust `char` — the unit `diagnostics/` already counts in for `FR-ERR-039`; `<n>` counts the escaped characters left out | `FR-ERR-046`, `FR-ERR-039` |
 
 **Recorded reading — a value served from the cache of a `sqlite` read.**
@@ -442,14 +444,29 @@ and is the one field carrying the omission attribute (`FR-PRIV-016`). Both are
 settled in
 [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions).
 
-**C0 escaping has two paths and they differ.** In `text` read output `output/`
+**Escaping has two paths and they differ.** In `text` read output `output/`
 escapes every interpolated value whatever its source, excepting tab, because the
-aligned columns are laid out with it; in `json` the format admits no raw control
-character, so the escape the format defines is what satisfies the rule and the
-encoder supplies it (`FR-OUT-018`, `FR-OUT-006`, `FR-OUT-019`). Two outputs are
-exempt and are emitted byte for byte: a rendered result and a printed template
-source (`FR-OUT-019`, `FR-TMPL-015`). `text` is not a contract and may change
-without a version bump (`FR-OUT-004`, `FR-OUT-005`, `FR-SCH-027`).
+aligned columns are laid out with it; in `json` the format admits no raw C0
+control, so the escape the format defines is what satisfies the rule for C0 and
+the encoder supplies it (`FR-OUT-018`, `FR-OUT-006`, `FR-OUT-019`). Two outputs
+are exempt and are emitted byte for byte: a rendered result and a printed
+template source (`FR-OUT-019`, `FR-TMPL-015`). `text` is not a contract and may
+change without a version bump (`FR-OUT-004`, `FR-OUT-005`, `FR-SCH-027`).
+
+**The escaped set past C0, and its forms**, for both providers (`FR-ERR-024`,
+`FR-OUT-018`, as amended in the sixty-ninth edition):
+
+| Where | A C1 control (U+0080–U+009F) or a [bidirectional formatting character](../../specification/glossary.md#bidirectional-formatting-character) is written as | Ground |
+|---|---|---|
+| A diagnostic line | `\u{`, the code point in lowercase hexadecimal of at least two digits, `}` — the form of a C0 control: `\u{9b}`, `\u{202e}` | `FR-ERR-024` |
+| `text` read output | The same form; the width a column is laid out with counts its characters | `FR-OUT-018`, `FR-OUT-006` |
+| `json` read output | `\u` and four lowercase hexadecimal digits — `\u009b`, `\u202e` — the case `serde_json` writes a C0 escape in, so a parser reads back the same string | `FR-OUT-018`; the formatter of [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) |
+
+One predicate decides membership, and `diagnostics/escape.rs`,
+`output/escape.rs` and the JSON formatter each call it; they differ in the form
+they write and never in what they escape. None of these characters is a byte
+below `0x20` in UTF-8, so the paths that let a value or a line with no C0 byte
+through unchanged test the predicate as well.
 
 **The writer knows whether it is inside a document.** `output/` writes through
 one buffered writer that records whether any byte of a JSON document has been

@@ -44,7 +44,7 @@ raw.
 | 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
 | 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
-| 7 | A SQLite database file | `sqlite/` | Its kind is established without opening it; it is opened read-only and never created, and the library is confirmed hardened before any statement reads it; its values are converted and coverage applied at that one boundary, and none reaches a statement | `FR-SEC-028`, `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` … `FR-LITE-017`, `FR-OUT-017` |
+| 7 | A SQLite database file | `sqlite/` | Its kind is established without opening it; it is opened read-only and never created, and the library is confirmed hardened before any statement reads it; a schema table that could forge the catalogue is refused before any statement reads through a pragma function; its values are converted and coverage applied at that one boundary, and none reaches a statement | `FR-SEC-028`, `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` … `FR-LITE-017`, `FR-LITE-041`, `FR-OUT-017` |
 
 Rows 1, 4 and 5 are the populations `FR-ERR-024` and `FR-OUT-019` name as
 sources of an interpolated value — row 7's values reach output as catalogue
@@ -343,7 +343,7 @@ closed by the design; the seventh is stated rather than closed.
 | A variable moving a connection's host, port or database | The parse-expand-encode order of *The environment* above | `FR-SEC-009`, `FR-CONF-018` |
 | A shell interpreting a value from an untrusted `.cfg` | Direct execution from an argument array; no shell exists on the path | `FR-SEC-011`, `FR-CONF-024` |
 | A catalogue name formatted into a runnable suggestion | A `hint` is built from literals and from names inside the admitted character set; a candidate outside it is presented in no form, and the generic hint stands alone | `FR-SEC-019`, `FR-ERR-022`, `FR-ERR-023` |
-| A control character rewriting a terminal, or forging a line of the four-line diagnostic format | C0 escaping applied in `output/` and in `diagnostics/`, by the two rules that differ between them, with the two emissions that are exempt and byte-for-byte | `FR-SEC-020`, `FR-OUT-018`, `FR-OUT-019`, `FR-ERR-024` |
+| A control character rewriting a terminal, a bidirectional formatting character showing a name other than the one printed, or a line forged in the four-line diagnostic format | The escaping of C0, C1 and bidirectional formatting characters, applied in `output/` and in `diagnostics/` by the two rules that differ between them over tab, with the two emissions that are exempt and byte-for-byte ([interfaces.md](interfaces.md#the-document-emitter)) | `FR-SEC-020`, `FR-OUT-018`, `FR-OUT-019`, `FR-ERR-024` |
 | A caller's pattern reaching the server | The pattern is matched in memory against names already read and is never sent | `FR-SCH-013` |
 | A path chosen from catalogue data | There is no file-writing surface to choose a path for | `FR-RND-028`, `BR-RND-003` |
 
@@ -381,6 +381,7 @@ which control closes which threat, and how the build confirms each.
 | A read-only open that creates nothing | The open's flags | `is_readonly` on `main` | Any write through the connection; a database created at a mistyped path | `FR-LITE-006` |
 | `query_only` on | Its pragma | Its pragma, read | A write the open did not refuse, as defence in depth | `FR-LITE-010` |
 | Defensive mode on, `trusted_schema` off | The configuration interface | The configuration interface, read | Corruption by ordinary SQL; a function or module not marked innocuous run from a view or a schema expression | `FR-LITE-010` |
+| Views disabled | The configuration interface | The configuration interface, read | As defence in depth, what a statement that named a view would open: a view expanded through the views it names, and a view taking the place of a pragma function | `FR-LITE-010` |
 | Extension loading absent | The build ([`ADR-013`](../adr/adr-013-sqlite-driver.md)) | `PRAGMA compile_options` returning `OMIT_LOAD_EXTENSION`, before anything reads the file | Code loaded from a path a schema or a statement names | `FR-LITE-010` |
 | `cell_size_check` on, `mmap_size` `0` | Their pragmas | Their pragmas, read | A malformed page read unchecked; a page read through a map another process can change | `FR-LITE-010` |
 | `temp_store` at `MEMORY` | Its pragma | Its pragma, read back as `2`, and `PRAGMA compile_options` returning a `TEMP_STORE` row of `1`, `2` or `3`, because the build decides whether the pragma is obeyed | Content of the file written to a temporary file outside `.tpl`, in a directory the host chooses | `FR-LITE-010` |
@@ -401,27 +402,38 @@ A link in it is followed, on the ground `FR-LITE-005` gives: the path is the
 caller's own, in a file only the caller may write (`FR-PROJ-010`,
 `FR-PROJ-011`).
 
-**No statement carries a value from the file, and none compiles a view.**
-Every statement is a constant, and none is issued per object, so none needs a
-name read from the file (`FR-LITE-016`, `FR-LITE-037`;
-[architecture.md](architecture.md#the-sqlite-reader)). No statement reads from
-a view or passes a view's name to a pragma function, so nothing a view's
-definition names runs during the read (`FR-LITE-015`, `FR-LITE-033`). A nested
-statement the library runs for a pragma function or a module is bounded by the
-read-only open and `query_only` (`FR-LITE-018`); module code still runs where
-the read connects a virtual table to list it, per the observation under
-`FR-LITE-033`.
+**A schema table that could forge the catalogue is refused before it is
+read.** The check, the first catalogue statement, refuses with `78` a table or
+a view in the namespace of the pragma functions, a value of a storage class the
+schema table's contract excludes, and a table row whose root page contradicts
+its text, before any statement reads through a pragma function (`FR-SEC-028`,
+`FR-LITE-017`, `FR-LITE-041`). How the verdict is reached is
+[architecture.md](architecture.md#the-sqlite-reader)'s.
+
+**No statement carries a value from the file, and none compiles a view or
+connects a virtual table.** Every statement is a constant, and none is issued
+per object, so none needs a name read from the file (`FR-LITE-016`,
+`FR-LITE-037`; [architecture.md](architecture.md#the-sqlite-reader)). No
+statement invokes `pragma_table_list`, reads from a view, or passes the name of
+a view or of a virtual table to a pragma function, so nothing a view's
+definition names and no module's code runs during the read (`FR-LITE-015`,
+`FR-LITE-033`). A nested statement the library runs for a pragma function is
+bounded by the read-only open and `query_only` (`FR-LITE-018`).
 
 **A value of the file reaches a diagnostic line only bounded**, so a name sized
 by a crafted file cannot flood the line a calling agent reads (`FR-SEC-028`,
 `FR-ERR-046`). Which values are bounded, where and how is
 [interfaces.md](interfaces.md#the-diagnostic-renderer)'s.
 
-**Three residuals, each stated by its requirement and none closed here.**
+**Four residuals, each stated by its requirement and none closed here.**
 
 - A file replaced by a FIFO between the lookup and the open blocks the open,
   and no deadline interrupts it; arranging it needs write access to the
   directory that holds the database (`FR-LITE-005`).
+- The library's loading of the schema at the probe grows faster than the
+  number of objects the file declares, so a crafted file can end a read with
+  `69` at the catalogue-query deadline; it cannot make one outlast it, because
+  the watchdog's interrupt ends the probe (`FR-LITE-009`, *Consequence*).
 - A database in write-ahead-log mode may leave `<file>-wal` and `<file>-shm`
   beside it, created and written by the library; `FR-PROJ-024` admits both
   (`FR-LITE-008`; [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)).

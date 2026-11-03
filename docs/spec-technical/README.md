@@ -31,6 +31,27 @@ blocks is a statement, not a document. Every other entry is settled. `OD-30`,
 the one entry that was settled and **interim**, was discharged on 2026-09-22,
 when the last leaf of the tree was implemented.
 
+**Changes of 2026-11-03, fourth pass**, for rmp `#317` and `#321` — against
+the sixty-ninth edition of `/specification` (`f2d1753`): the check of
+`FR-LITE-041`, views disabled as a ninth control, a read with no
+`pragma_table_list`, and C1 and bidirectional formatting characters escaped for
+both providers. The code at `f2d1753` implements the sixty-eighth edition.
+
+- `architecture.md`: stage 5 disables views; the plan is seven statements, the
+  check first and none through `pragma_table_list`; the check's verdict is
+  `sqlite/catalogue/check.rs`'s; the fold indexes by name, a discrepancy with
+  the code recorded.
+- `interfaces.md`: the fault table gains the check's `78`; `tpl cfg database
+  test` probes with the check; the escaped set past C0 and its three forms.
+- `open-decisions.md`: `OD-18` escapes through a formatter of the crate on the
+  `json` path; `OD-36` saturates the busy timeout; `OD-37` builds seven more
+  databases.
+- `verification.md`: rows 28 to 31 carry tests at `f2d1753`; rows 32 and 33
+  are new and owed; the tests the edition changes are named.
+- `security.md`, `technology-stack.md`, `data-model.md`,
+  `quality-attributes.md`, `traceability.md` and this file's summaries follow;
+  `traceability.md` harvests the edition.
+
 **Changes of 2026-11-03, third pass**, for rmp `#317` — against the
 sixty-eighth edition of `/specification` (`325e125`), which withdraws
 `FR-LITE-035`: a SQLite view is read like a MariaDB view, no view's columns are
@@ -332,7 +353,8 @@ render bounds, their composition, and the poll interval of the memory limit.
 Lazy initialisation. The
 synchronous process and the runtime boundary inside `mariadb/`. The provider
 dispatch, and the SQLite reader: its submodules, its six connection stages, its
-fixed plan and its close. The module map
+fixed plan, the check that opens it, the fold's indexing and its close. The
+module map
 and the layout conventions. The division inside `project/` and the four
 decisions that produce it: reading apart from resolving, reading apart from
 writing, the environment as a parameter, and a credential as a type. The
@@ -369,7 +391,8 @@ the per-code obligation on the `cause` line. The diagnostic renderer, its
 escaping, the bound on a value of a SQLite file, and suggestion selection. The
 document emitter: one envelope,
 seventeen payload shapes, fixed key order, the two omissions, the compact and
-indented forms, C0 escaping, lossy UTF-8, the pipe state. The ordering rule and
+indented forms, the escaping of C0, C1 and bidirectional formatting characters
+and its forms, lossy UTF-8, the pipe state. The ordering rule and
 its seven exceptions. The help surface as built: the two sources the renderer
 reads, the five facts of a flag it introspects and the sixth it does not, the
 six forms that reach one renderer, and the runtime-introspected command tree
@@ -417,7 +440,8 @@ injection surfaces. Transport, including the mode set explicitly on every
 connection, the trust material that widens rather than narrows, and how a
 directory of trust material is resolved and when it refuses. The
 read-only promise in its two parts, and in the three of a `sqlite` entry. The
-controls a SQLite database file is read under. The four template capability
+controls a SQLite database file is read under, and the check that refuses a
+schema able to forge the catalogue. The four template capability
 prohibitions.
 
 **Must not contain.** A second statement of any rule. Each entry cites its

@@ -38,12 +38,18 @@ them. **This whole document was re-audited against the tree at commit `243c4d6`
 on 2026-09-21**: every count, every per-file breakdown and every statement that
 a component is a later sprint's was re-measured rather than carried forward.
 
-**Twenty-six of the thirty-one rows of the register below carry at least one
-test; row 8 and rows 28 to 31 carry none.** Rows 28 to 30 were added on
-2026-11-03, for the SQLite provider, whose reader and fixture do not exist at
-`7738619`; [The SQLite provider](#the-sqlite-provider) prescribes them. Row 31
-was added the same day, for rmp `#317`, against the sixty-eighth edition; the
-reader at `325e125` still reads the columns of views. Row 27 was added on 2026-09-23, with
+**Thirty of the thirty-three rows of the register below carry at least one
+test; row 8 and rows 32 and 33 carry none.** Rows 28 to 30 were added on
+2026-11-03, for the SQLite provider, and row 31 the same day, for rmp `#317`,
+against the sixty-eighth edition; all four carry a test at `f2d1753`, written
+against that edition. Rows 29 and 31 are whole:
+`tests/sqlite_provider.rs::fr_lite_018_a_read_leaves_the_database_and_every_file_outside_tpl_as_found`
+and
+`src/sqlite/tests.rs::fr_lite_018_the_read_compiles_no_view_and_succeeds_over_the_views_that_do_not_compile`,
+whose name predates the sixty-ninth edition's reading that the read's success
+shows that no statement **names** a view. Rows 32 and 33 were added the same
+day, against the sixty-ninth edition, which the reader and the fixture at
+`f2d1753` do not yet implement. Row 27 was added on 2026-09-23, with
 `FR-RND-040`, and is whole. Row 2 is a unit test over the seam
 `FR-ERR-031` requires, and it asserts what that row asserts: the guard produces
 the condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires. Rows 3
@@ -60,8 +66,9 @@ whole**, and each is named where it falls short rather than counted as answered:
 | 22 | The shipped example's text, as a **unit** test in `src/project/init.rs` | The render against a table of a supported series, which the row makes a server test |
 | 23 | The key invariant, as **unit** tests in `src/model/table.rs` | The server form the row names |
 | 24 | Context strictness, as a **unit** test in `src/render/predicate.rs` | The integration form the row names |
-| 28 to 30 | Nothing | Every test of each: the SQLite reader and its fixture are prescribed and not built |
-| 31 | Nothing | The read succeeding over the views of item 10 that do not compile: the reader at `325e125` reads the columns of views, under the withdrawn `FR-LITE-035` |
+| 28 | `src/sqlite/tests.rs::fr_lite_018_the_statements_issued_are_the_closed_list_in_the_order_of_fr_lite_017`, over the main fixture database and an empty file | The sixty-ninth edition's list: the test checks the record against the crate's own constants, which at `f2d1753` hold statements invoking `pragma_table_list` and no check |
+| 30 | `src/sqlite/tests.rs::fr_lite_037_the_plan_issues_as_many_statements_over_the_fixture_as_over_an_empty_file` | The count of the sixty-ninth edition: the test asserts six catalogue statements, and the plan is seven |
+| 32, 33 | Nothing | Every test of each: the fixture at `f2d1753` builds neither database, and the reader has no check |
 
 **The suite reaches the containers.** `tests/outside_the_process.rs` carries
 fifteen tests: eleven are driven once per series of `FR-SRV-015` and gated on
@@ -242,7 +249,9 @@ produce the behaviour, on the same footing as the behaviour itself.
 | 28 | The SQLite statement record | Over the main fixture database and over an empty file: every statement the trace reports without the prefix `-- ` is in the closed list of `FR-LITE-015`, in the order of `FR-LITE-017`; every one reported with it is nested, and is neither checked nor counted | Unit, through the seam of `FR-ERR-031` | `FR-LITE-018` |
 | 29 | The SQLite read-only promise, from outside the process | Over a read of the main fixture database in rollback-journal mode, the file's bytes, size and modification time are unchanged, and no file appears in its directory | Integration, over the SQLite fixture | `FR-LITE-018`, `BR-LITE-001` |
 | 30 | The SQLite statement count | The catalogue statements row 28 records are as many over the main fixture database as over an empty file | Unit, the same record | `FR-LITE-037`, `NFR-PERF-001` |
-| 31 | No view compiled | The read of the main fixture database succeeds over the three views of item 10 that do not compile; a statement that compiled one would end the read with `70` | Unit, over the SQLite fixture | `FR-LITE-018` (sixty-eighth edition), `FR-LITE-038` |
+| 31 | No view named | The read of the main fixture database succeeds over the three views of item 10 that do not compile; a statement that named one would end the read with `70` | Unit, over the SQLite fixture | `FR-LITE-018` (sixty-eighth edition, as amended in the sixty-ninth), `FR-LITE-038` |
+| 32 | No view compiled, no module run | Over the database of `FR-LITE-038` holding an `fts5` table and a view over it that compiles, the record of row 28 holds no nested statement but one beginning `-- PRAGMA ` | Unit, the same record | `FR-LITE-018` (sixty-ninth edition), `FR-LITE-038` |
+| 33 | A schema the check refuses | A read of each of the six databases of `FR-LITE-038` named like a pragma function or written under `writable_schema` ends with `78`, the `cause` naming the row and its kind | Unit, over the SQLite fixture | `FR-LITE-038`, `FR-LITE-041` |
 
 **Recorded change — the kind of rows 4 to 6.** This document gave the three
 tests of `BR-HELP-003` as integration tests; they are written as unit tests, and
@@ -1015,8 +1024,13 @@ each value of the gate.
 
 ## The SQLite provider
 
-**Nothing below exists at `7738619`.** It is what the tests of the SQLite
-provider must assert and what each needs, prescribed for the implementation.
+What the tests of the SQLite provider must assert and what each needs. **At
+`f2d1753` the fixture and a test for every row below exist, written against the
+sixty-eighth edition**: the library's unit tests in `src/sqlite/tests.rs` and
+beside each submodule of `sqlite/`, the integration tests in
+`tests/sqlite_provider.rs`, and the fixture builder in `tests/support/sqlite.rs`.
+What the sixty-ninth edition adds or changes is owed, and
+[Owed to the sixty-ninth edition](#owed-to-the-sixty-ninth-edition) names it.
 
 ### The fixture, and the kind of test it admits
 
@@ -1025,7 +1039,10 @@ in the test's own process and into a temporary directory of its own, every
 artefact `FR-LITE-038` lists: the main database of items 1 to 13, its
 write-ahead-log copy, the empty, text and truncated files, the directory, the
 FIFO, the link to the main database and the dangling one, the length-limit
-database and the database of internal tables alone
+database and the database of internal tables alone; and, since the sixty-ninth
+edition, the databases holding a view named `pragma_table_list` and a table
+named `PRAGMA_TABLE_XINFO`, the four whose schema table is written under
+`writable_schema`, and the `fts5` database of row 32
 ([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)).
 **A SQLite test is of kind Vector, Unit or Integration, and never Server**: it
 needs no container and no gate, and runs on all four targets in both workflows
@@ -1043,15 +1060,16 @@ Every test is named for the requirement it verifies, per
 | `FR-LITE-005` | A directory and a FIFO are `78`, and the FIFO is never opened; the link to the main database is read through | Integration | The directory, the FIFO, the link |
 | `FR-LITE-006`, `FR-LITE-007` | A path naming nothing and the dangling link are `74`, nothing is created at either, and the `cause` names the check of the kind and what the filesystem returned; the text file, the truncated file and the length-limit database are `78`; the write-ahead-log copy in a directory refusing writes is `74`; each `cause` names the resolved path and what the library returned | Integration | The artefacts named |
 | `FR-LITE-008` | The write-ahead-log copy is read, and no file but its two is created | Integration | The write-ahead-log copy |
-| `FR-LITE-009` | A database held by an exclusive transaction of the test process, under `core.query_timeout` of `1`, is `69` within the bound, and the `cause` names the lock and the resolved deadline | Integration | The main database, in rollback-journal mode |
-| `FR-LITE-010` … `FR-LITE-012` | Every control and limit reads back as set, `temp_store` with the `TEMP_STORE` row of `PRAGMA compile_options`; the comparison, given a value read back that differs or a `TEMP_STORE` row of `0` or none, is the `70` naming the control, the value set and the value read | Unit | The main database |
+| `FR-LITE-009` | A database held by an exclusive transaction of the test process, under `core.query_timeout` of `1`, is `69` within the bound, and the `cause` names the lock and the resolved deadline; a remaining bound past `i32::MAX` milliseconds sets the busy timeout to that maximum and does not panic ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | Integration; Unit | The main database, in rollback-journal mode |
+| `FR-LITE-010` … `FR-LITE-012` | Every control and limit reads back as set — views disabled among them, since the sixty-ninth edition — `temp_store` with the `TEMP_STORE` row of `PRAGMA compile_options`; the comparison, given a value read back that differs or a `TEMP_STORE` row of `0` or none, is the `70` naming the control, the value set and the value read | Unit | The main database |
+| `FR-LITE-041` | The verdict of `sqlite/catalogue/check.rs` over every kind: a `pragma_` name on a table and on a view, in each letter case, as text and as a BLOB, refused, and on an index and on a trigger, which pass; each excluded storage class in each column; both contradictions of the root page, with `VIRTUAL` after a block comment and after a line comment, and a table named `"virtual"`, which passes. Through the reader, row 33 | Vector; Unit | The six databases of row 33 |
 | `FR-LITE-040` | The classification of `sqlite/fault.rs`, over each stage and statement kind: every row of `FR-LITE-007` and of `FR-LITE-040`'s table, with an extended code under each primary that has one, `SQLITE_READONLY` with and without one, and a primary code SQLite has not published | Vector | — |
 | `FR-ERR-046` | A value of the file of 256 characters is written whole, one of 257 is cut with the marker counting what was left out, and a cut that would fall inside each escape form keeps the form whole outside the kept part; the same value from a `mariadb` read or a `--context` document is written whole | Vector; Unit | — |
 | `FR-ENV-041` | Over a context from the main database, a rowid-alias column, an `INTEGER PRIMARY KEY DESC` column and a column of a `WITHOUT ROWID` key each satisfy `primary_key` and `unique`; every answer of row 18 over a `mariadb` document is unchanged | Unit | The main database |
 | `FR-LITE-002`, `FR-LITE-003` | The `server` object carries the library's version, its `<major>.<minor>`, and `supported` | Unit | Any |
-| `FR-LITE-019` … `FR-LITE-034` | One test per case of items 1 to 13 over the fold; the trigger header reader over every header form of item 11, as a vector | Unit; Vector | The main database |
+| `FR-LITE-019` … `FR-LITE-034` | One test per case of items 1 to 13 over the fold — since the sixty-ninth edition, the five shadow tables of item 12 covered as `BASE TABLE`, the `ANY` column of item 2 as `numeric`, and `WITHOUT ROWID` as `pragma_index_info` reports it; the trigger header reader over every header form of item 11, as a vector | Unit; Vector | The main database |
 | `FR-LITE-018`, `FR-LITE-033`, `FR-LITE-036`; `FR-LITE-035`, withdrawn in the sixty-eighth edition, is verified by nothing | The read of the main database succeeds over the three views of item 10 that do not compile, marks no object, and presents every view with the nine properties of `FR-CAT-047` and no columns; naming one of the three exits `0` | Unit; Integration | The main database |
-| `FR-CFG-056` | The four fields over the main database; `78` over the text file | Integration | The main database, the text file |
+| `FR-CFG-056` | The four fields over the main database; `78` over the text file, and over a database the check refuses | Integration | The main database, the text file, a database of row 33 |
 | `FR-CONF-051` … `FR-CONF-054`, `FR-CFG-055` | Each refusal, at its step and with its code; a relative `path` read from a subdirectory of the project resolves against the project directory, and, through a `.tpl` reached by a link, against the parent of the canonical folder | Integration | The main database |
 | `FR-CTX-043`, `FR-CDOC-018` | A document without `provider` reads as `mariadb` and one with a third value is `65`; a cache record without `provider` is served as `mariadb`, and a served read carries the record's provider after the entry's changed | Unit | — |
 
@@ -1060,7 +1078,31 @@ Every test is named for the requirement it verifies, per
 `PRAGMA compile_options` lists `OMIT_LOAD_EXTENSION` and no
 `ENABLE_LOAD_EXTENSION` option, and that the library answering
 `sqlite_version()` is the one compiled in, asserting no literal release. It is
-a unit test, so it runs wherever the suite runs, on all four targets.
+written as the two tests of `tests/sqlite_library.rs`, which open an in-memory
+database and launch no process, so they run wherever the suite runs, on all
+four targets.
+
+### Owed to the sixty-ninth edition
+
+The tests the rows above name for the sixty-ninth edition are owed to the next
+code round. Six tests at `f2d1753` assert what that edition changes:
+
+| Test, at `f2d1753` | What it asserts | What the edition makes it |
+|---|---|---|
+| `src/sqlite/tests.rs::fr_lite_019_the_read_covers_main_and_its_tables_and_views_and_no_routine` | The five shadow tables of `cargo_note` excluded | Covered as `BASE TABLE` (`FR-LITE-020`, `FR-LITE-021`) |
+| `src/sqlite/tests.rs::fr_lite_026_the_type_is_the_declared_text_and_its_affinity` | `manifest_line.payload`, `STRICT` and `ANY`, as `blob` | `numeric` (`FR-LITE-026`) |
+| `src/sqlite/tests.rs::fr_lite_037_the_plan_issues_as_many_statements_over_the_fixture_as_over_an_empty_file` | Six catalogue statements | Seven, the check first (`FR-LITE-037`) |
+| `src/sqlite/tests.rs::fr_lite_010_every_control_and_limit_reads_back_as_set_on_the_connection` | Eight controls read back | Nine, views disabled among them (`FR-LITE-010`) |
+| `src/sqlite/catalogue/statements.rs::fr_lite_015_no_statement_passes_a_view_to_a_pragma_function` | Every join through `pragma_table_list` restricted to type `table` | No statement names `pragma_table_list`, and every join through the schema table is restricted to type `table` and a root page other than `0` (`FR-LITE-015`) |
+| `src/output/escape.rs::fr_out_018_a_character_above_the_c0_range_is_left_alone` | U+009B written unescaped in `text` | Escaped, as every C1 control is (`FR-OUT-018`) |
+
+**The escaping of the sixty-ninth edition is owed tests on every path, for both
+providers**: a C1 control and a bidirectional formatting character escaped in a
+diagnostic line, in `text` output and in `json` output, in the forms
+[interfaces.md](interfaces.md#the-document-emitter) tabulates; the `json`
+document parsing back to the same string; a value carrying neither left
+unchanged; and the bound of `FR-ERR-046` cutting outside each new escape
+(`FR-ERR-024`, `FR-OUT-018`, `FR-ERR-046`). None exists at `f2d1753`.
 
 ### The requirements of form, for a `sqlite` entry
 

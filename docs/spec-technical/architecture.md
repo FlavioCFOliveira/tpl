@@ -447,8 +447,10 @@ which is all `FR-LITE-037` asks of a named read.
 a `sqlite` entry (`FR-LITE-015`, `FR-LITE-016`). It is shaped like `mariadb/`
 and shares nothing with it; both write `model/` and both are bounded through
 `deadline.rs`. It is prescribed by
-[`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)
-and does not exist at `7738619`.
+[`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader).
+The reader at `cb99236` implements the sixty-eighth edition; what the
+sixty-ninth changes below — the views control, the check, the plan without
+`pragma_table_list`, and the fold's indexing — is prescribed and not built.
 
 | Part | What it owns | Forced by |
 |---|---|---|
@@ -459,12 +461,14 @@ and does not exist at `7738619`.
 | `sqlite/fault.rs` | Where the library's result stops and a condition of `FR-ERR-001` begins: one pure function over the stage or statement and the result code, and the table of SQLite's names for the codes | `FR-LITE-040`, `FR-LITE-007`, `FR-LITE-012`, `FR-GLOB-018`, [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
 | `sqlite/catalogue.rs` | The plan, and the read that owns its values | `FR-LITE-015`, `FR-LITE-037` |
 | `sqlite/catalogue/statements.rs` | The text of every statement, one constant each | `FR-LITE-015`, `FR-LITE-016` |
+| `sqlite/catalogue/check.rs` | The verdict of the check over one row of the schema table | `FR-LITE-041` |
 | `sqlite/catalogue/fold.rs` | The values into the model: coverage, affinity, default, rowid alias, keys, order | `FR-LITE-019` … `FR-LITE-034` |
-| `sqlite/catalogue/trigger.rs` | The timing and the event, read from a trigger's stored header | `FR-LITE-032` |
+| `sqlite/catalogue/trigger.rs` | The timing and the event, read from a trigger's stored header, and the reading of SQLite's comment syntax the check shares | `FR-LITE-032`, `FR-LITE-041` |
 
 **The connection start, in the order `FR-LITE-017` fixes.** No byte of the file
 is parsed before stage 5 has confirmed every control; the probe at stage 6 is
-the first statement that reads the file (`FR-LITE-002`, observed there).
+the first statement that reads the file (`FR-LITE-002`, observed there), and
+the check of `FR-LITE-041`, the first statement of the plan below, follows it.
 
 | # | Stage | Through | Statements | Refused with |
 |---|---|---|---|---|
@@ -472,7 +476,7 @@ the first statement that reads the file (`FR-LITE-002`, observed there).
 | 2 | The open | `Connection::open_with_flags` with `SQLITE_OPEN_READ_ONLY`, `SQLITE_OPEN_NO_MUTEX` and `SQLITE_OPEN_EXRESCODE`, and without `SQLITE_OPEN_CREATE`, `SQLITE_OPEN_URI` or `SQLITE_OPEN_NOFOLLOW` | none | `74` for `SQLITE_CANTOPEN` (`FR-LITE-006`, `FR-LITE-007`); any other result code by `FR-LITE-040` |
 | 3 | The statement bound | The busy timeout replaced, and the watchdog started ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | none | — |
 | 4 | The build | `PRAGMA compile_options`, which must return the row `OMIT_LOAD_EXTENSION`, for extension loading, and one of `TEMP_STORE=1`, `TEMP_STORE=2` and `TEMP_STORE=3`, for temporary storage | 1 | `70` (`FR-LITE-010`, `FR-LITE-012`) |
-| 5 | The other controls, and the limits | The read-only open read back through `is_readonly` on `main`; defensive mode on and `trusted_schema` off, through `set_db_config` and read back through `db_config`; `query_only` on, `cell_size_check` on, `mmap_size` `0` and `temp_store` `MEMORY`, read back as `2`, each set and read back through its pragma; the three limits through `set_limit`, read back through `limit` | 8 | `70` (`FR-LITE-010` … `FR-LITE-012`) |
+| 5 | The other controls, and the limits | The read-only open read back through `is_readonly` on `main`; defensive mode on, `trusted_schema` off and views disabled, through `set_db_config` and read back through `db_config`; `query_only` on, `cell_size_check` on, `mmap_size` `0` and `temp_store` `MEMORY`, read back as `2`, each set and read back through its pragma; the three limits through `set_limit`, read back through `limit` | 8 | `70` (`FR-LITE-010` … `FR-LITE-012`) |
 | 6 | The version probe | `SELECT sqlite_version()` | 1 | By `FR-LITE-040`: `69`, `74` or `78` under the rows of `FR-LITE-007`, and the code its own table gives any other result code |
 
 Why each flag of stage 2 is set or left out:
@@ -485,42 +489,63 @@ Why each flag of stage 2 is set or left out:
 | `SQLITE_OPEN_URI` | Left out, and not needed to keep the path literal | The bundled build defines `SQLITE_USE_URI` (`libsqlite3-sys` 0.39.1, `build.rs`, consulted 2026-11-03), under which a filename beginning with `file:` is a URI whatever the flags; the open is handed the absolute path of `FR-CONF-054`, which begins with `/`, and SQLite "interprets any filename that does not begin with "file:" as an ordinary filename" (`https://sqlite.org/uri.html`, consulted 2026-11-03) |
 | `SQLITE_OPEN_NO_MUTEX` | Set | The connection is used from one thread; it is `rusqlite`'s own default mode (`OpenFlags`, as above) |
 
-**Two controls go through the configuration interface and four through their
-pragma.** `rusqlite`'s `DbConfig` carries `SQLITE_DBCONFIG_DEFENSIVE` and
-`SQLITE_DBCONFIG_TRUSTED_SCHEMA`, set by `set_db_config` and read back by
-`db_config` without a statement (docs.rs, `rusqlite` 0.41.1, consulted
-2026-11-03); `FR-LITE-015` admits the `trusted_schema` pragma without obliging
-it. `query_only`, `cell_size_check`, `mmap_size` and `temp_store` have no
-variant there, so each is a pair of statements of `FR-LITE-015`'s first row.
+**Three controls go through the configuration interface and four through their
+pragma.** `rusqlite`'s `DbConfig` carries `SQLITE_DBCONFIG_DEFENSIVE`,
+`SQLITE_DBCONFIG_TRUSTED_SCHEMA` and `SQLITE_DBCONFIG_ENABLE_VIEW`, set by
+`set_db_config` and read back by `db_config` without a statement
+([technology-stack.md](technology-stack.md#the-sqlite-driver-and-the-library-it-carries));
+`FR-LITE-015` admits the `trusted_schema` pragma without obliging it, and names
+no statement for views. `query_only`, `cell_size_check`, `mmap_size` and
+`temp_store` have no variant there, so each is a pair of statements of
+`FR-LITE-015`'s first row.
 Temporary storage is in effect only where both its read-back at stage 5 and the
 `TEMP_STORE` row of stage 4 hold (`FR-LITE-010`). The limits use the `limits`
 feature [`ADR-013`](../adr/adr-013-sqlite-driver.md) enables.
 
-**The catalogue plan.** Six statements follow the probe, fixed before the
+**The catalogue plan.** Seven statements follow the probe, fixed before the
 first is sent, which is `FR-LITE-037` by construction (`FR-LITE-015`, observed
-there, for the sixty-eighth edition, as seven with the probe).
+there, for the sixty-ninth edition, as eight with the probe). No statement
+invokes `pragma_table_list`.
 
 | # | Reads | Through | Forced by |
 |---|---|---|---|
-| 1 | The encoding | `pragma_encoding` | `FR-LITE-023` |
-| 2 | The objects of `main`, with their type, `wr` and `strict` | `pragma_table_list` | `FR-LITE-019` … `FR-LITE-021`, `FR-LITE-028` |
-| 3 | The columns of every covered table | `pragma_table_list` joined to `pragma_table_xinfo` | `FR-LITE-025` … `FR-LITE-029` |
-| 4 | The indexes of every covered table, and their members | `pragma_table_list` joined to `pragma_index_list` and `pragma_index_xinfo` | `FR-LITE-028` … `FR-LITE-030` |
-| 5 | The foreign keys of every covered table | `pragma_table_list` joined to `pragma_foreign_key_list` | `FR-LITE-031` |
-| 6 | The stored text of every view and trigger | `sqlite_schema` of `main` | `FR-LITE-032`, `FR-LITE-033` |
+| 1 | The check: every row of the schema table, each of its five values as stored | `main.sqlite_schema` | `FR-LITE-041`, `FR-LITE-017` |
+| 2 | The encoding | `pragma_encoding` | `FR-LITE-023` |
+| 3 | The rows of type `table` and `view`, with their name, type and root page; for a table, whether `pragma_index_info` returns a row for its name | `main.sqlite_schema` joined to `pragma_index_info` | `FR-LITE-019` … `FR-LITE-021`, `FR-LITE-028` |
+| 4 | The columns of every table | `main.sqlite_schema` joined to `pragma_table_xinfo` | `FR-LITE-025` … `FR-LITE-029` |
+| 5 | The indexes of every table, and their members | `main.sqlite_schema` joined to `pragma_index_list` and `pragma_index_xinfo` | `FR-LITE-028` … `FR-LITE-030` |
+| 6 | The foreign keys of every table | `main.sqlite_schema` joined to `pragma_foreign_key_list` | `FR-LITE-031` |
+| 7 | The stored text of every view and trigger | `main.sqlite_schema` | `FR-LITE-032`, `FR-LITE-033` |
 
-Three rules bind the text of every statement:
+Four rules bind the text of every statement:
 
-- **Each join restricts `pragma_table_list` to `main` and to the covered types
-  before the function it joins is reached**, so a virtual table whose module
-  the library lacks is never asked for its columns (`FR-LITE-019`,
-  `FR-LITE-021`, observed there).
+- **A pragma function that takes a name is passed the schema `main` and only
+  the name of a row of type `table` whose root page is not `0`**, the row
+  restricted in the statement before the function is reached, so no view's or
+  virtual table's name is passed to one, no view is compiled and no virtual
+  table is connected
+  (`FR-LITE-015`, `FR-LITE-019`, `FR-LITE-020`; verified by row 32 of the
+  [register](verification.md#mandated-by-the-corpus)).
+- **The check comes first.** Every statement that reads through a pragma
+  function follows it, so a table or a view that would replace one has been
+  refused before one runs (`FR-LITE-017`, `FR-LITE-041`).
 - **No value read from the file enters a statement's text.**
-- **The plan is a constant, and compiles no view.** No path adds a statement
-  (`FR-LITE-037`), and no statement reads from a view or passes a view's name
-  to a pragma function (`FR-LITE-015`): a view is read from statements 2 and 6
-  alone, so one whose definition does not compile is read whole and unmarked
+- **The plan is a constant.** No path adds a statement (`FR-LITE-037`), and no
+  statement reads from a view: a view is read from statements 3 and 7 alone, so
+  one whose definition does not compile is read whole and unmarked
   (`FR-LITE-033`, `FR-LITE-036`).
+
+**The check is one constant with two callers**: statement 1 of every read, and
+the whole of step 4 of `tpl cfg database test` (`FR-CFG-056`). Its verdict is
+decided in `tpl`, not in the statement's text.
+
+| Question | Decision | Ground |
+|---|---|---|
+| Where the verdict is decided | `sqlite/catalogue/check.rs`: a pure function over one row's five values as `ValueRef`s, testable as a vector | `FR-LITE-041`; the third kind needs the word after `CREATE` under SQLite's comment syntax, which `trigger.rs` already reads for `FR-LITE-032`, so one reading of that syntax serves both |
+| The `pragma_` prefix | The first seven bytes of the name, of a text or a BLOB, compared with `pragma_` ignoring ASCII case. An integer or a real is written in digits and cannot begin with it | `FR-LITE-041`, first kind: "whatever its storage class" |
+| The root page of the third kind | Compared with the integer `0`. A `NULL` root page, which the library refuses at the probe, is not `0` | `FR-LITE-041`, third kind; `FR-LITE-020`, *Source* |
+| Which row is reported | The first refused row in the order the statement returns rows, under the first kind it meets in the order of `FR-LITE-041`'s table | `FR-LITE-041`: the `cause` names one row and one kind |
+| What is held | Each row is judged as it is stepped; only a refused row is kept | `CLAUDE.md`, *Implementation rules*: streaming wherever the operation allows it |
 
 **The read owns its values, typed and converted at the boundary.** A `rusqlite`
 row borrows its statement, so every value is copied out as it is read, and the
@@ -528,9 +553,13 @@ statements are dropped before the connection closes. Each is read through its
 SQLite storage class and never coerced, a SQL `NULL` kept apart from every
 value (`FR-LITE-004`, step 2); a pragma field of a class the library does not
 document for it is a violated internal invariant, `70` (`FR-ERR-030`), as a
-catalogue shape the model cannot represent is in `mariadb/`. Text is read as
-bytes and converted with U+FFFD substituted, at this boundary and nowhere else
-(`FR-OUT-017`).
+catalogue shape the model cannot represent is in `mariadb/`. A value of the
+schema table read by statements 3 to 7 holds the class the check confirmed;
+one that does not — the file changed after the check — is the `78` of the
+check, never the `70` of a pragma field (`FR-LITE-040`, its paragraph on
+values). Text is read
+as bytes and converted with U+FFFD substituted, at this boundary and nowhere
+else (`FR-OUT-017`).
 
 **The fold** applies `FR-LITE-019` … `FR-LITE-034` to the owned values through
 the one constructor a table has, so `FR-CAT-044` is checked here as on every
@@ -541,6 +570,19 @@ probe's answer becomes the `server` object through a constructor of its own,
 deriving `series` from the first two dot-separated parts (`FR-LITE-002`); an
 answer without them is the `70` of `FR-ERR-030`, on the ground `FR-LITE-012`
 gives a control: the library is part of the binary.
+
+**The fold indexes before it looks up.** Every collection the fold reads by a
+name — the column, index and key rows by their table, an index's members by
+their index, the stored rows by their name, the covered tables and a table's
+columns by name, exactly and ignoring ASCII case — is grouped once into a map
+keyed by that name, and no object is found by scanning another collection. The
+fold runs after the last statement, outside every statement's bound
+([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)),
+so a lookup that scanned would let a file of many objects cost time growing
+with their square where the statements' grows with their number (`FR-LITE-009`,
+*Consequence*; `FR-LITE-020`, *Provenance*). **Recorded discrepancy:** the fold
+at `cb99236` scans, in `table()`, `keys()`, `indexes()`, `views()` and the
+placement of triggers.
 
 **The close.** Every statement is dropped, the watchdog is stopped and joined,
 and then the connection is closed — before any render starts (`FR-RND-040`). A
@@ -558,7 +600,7 @@ sources on 2026-11-03. Neither is copied; both were studied.
 
 | Practice | Project | Taken or refused | Ground |
 |---|---|---|---|
-| `pragma_table_list` as the source of an object's type, `WITHOUT ROWID` and `STRICT`, rather than `sqlite_master` alone | Atlas | **Taken**, as the coverage source | `FR-LITE-020`, `FR-LITE-028` |
+| `pragma_table_list` as the source of an object's type, `WITHOUT ROWID` and `STRICT`, rather than `sqlite_master` alone | Atlas | **Refused** in the sixty-ninth edition; taken until then | No statement invokes it, by the user's decision recorded under `FR-LITE-020`; the schema table is the source (`FR-LITE-015`, `FR-LITE-020`, `FR-LITE-028`) |
 | `table_xinfo` rather than `table_info`, so that `hidden` tells a generated column | Both | **Taken** | `FR-LITE-025` |
 | `index_xinfo` rather than `index_info`, for `key` and `desc` | Atlas | **Taken** | `FR-LITE-029`, `FR-LITE-030` |
 | The rows of `foreign_key_list` merged into one key per `id` | `sea-schema` | **Taken** | `FR-LITE-031` |

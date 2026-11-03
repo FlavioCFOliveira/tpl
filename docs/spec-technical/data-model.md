@@ -238,9 +238,10 @@ column's type, a member's prefix length, `referenced_key` and a trigger's
 
 | Fact | Rule | Lives in |
 |---|---|---|
-| `data_type` | The five affinity rules, in order, over the declared type; `blob` for a `STRICT` column declared `ANY` | `sqlite/catalogue/fold.rs` (`FR-LITE-026`); the families are `FR-ENV-048`'s, applied by `render/` |
+| Which rows are tables and views | A schema-table row's type and root page; a shadow table is covered as a `BASE TABLE`, so a virtual table's data appears as the tables its module keeps it in | `sqlite/catalogue/fold.rs` (`FR-LITE-020`, `FR-LITE-021`) |
+| `data_type` | The five affinity rules, in order, over the declared type, for every column; a `STRICT` column declared `ANY` takes `numeric`, because no statement reports that a table is `STRICT` | `sqlite/catalogue/fold.rs` (`FR-LITE-026`); the families are `FR-ENV-048`'s, applied by `render/` |
 | A column default | The eight ordered rows over `dflt_value` and the column's nullability, into the discriminant `model/column_default.rs` already carries | `sqlite/catalogue/fold.rs` (`FR-LITE-027`); the apostrophe rule is the one `model.rs` holds |
-| The rowid alias | `wr` `0`, one `pk` column, and no index of origin `pk`; the keyword is never read | `sqlite/catalogue/fold.rs` (`FR-LITE-028`) |
+| The rowid alias | `pragma_index_info` returns no row for the table's name, one `pk` column, and no index of origin `pk`; the keyword is never read | `sqlite/catalogue/fold.rs` (`FR-LITE-028`) |
 | A trigger's timing and event | The tokens between its name and `ON` | `sqlite/catalogue/trigger.rs` (`FR-LITE-032`) |
 | A foreign key's referenced columns where `to` is `NULL` | The referenced table's primary key, in the order of `FR-LITE-029` | `sqlite/catalogue/fold.rs` (`FR-LITE-031`), after every table's key is known |
 
@@ -270,8 +271,8 @@ rowid-alias key.** This section recorded them as a reading of `BR-LITE-002`;
 
 **What a `sqlite` read never produces.** A routine (`FR-LITE-022`), a `CHECK`
 constraint (`FR-LITE-034`), a view's columns (`FR-LITE-033`), a `restricted`
-marking on any object (`FR-LITE-036`), and a value the four treatments above
-would act on. `SET DEFAULT`, which a MariaDB read cannot report
+marking on any object (`FR-LITE-036`), a model of a file the check of
+`FR-LITE-041` refuses, and a value the four treatments above would act on. `SET DEFAULT`, which a MariaDB read cannot report
 (`FR-CAT-033`), is carried as the value `FR-CAT-055` gives an unrecorded rule.
 
 ## The model in memory

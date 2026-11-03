@@ -340,7 +340,10 @@ graph, and the correction applied to `CLAUDE.md`; and **2026-09-23** for the
 rest on, and for the readings of `src/` behind the amendments of `OD-05` and
 `OD-10`; and **2026-11-03** for the `rusqlite` 0.41.1, `libsqlite3-sys` 0.39.1
 and SQLite behaviour `OD-35` … `OD-38` rest on, and for the reading of `src/`
-at `7738619` behind them. Anything not verified says so
+at `7738619` behind them, and again for the `serde_json` 1.0.151, `rusqlite`
+0.41.1 and SQLite behaviour the amendments of `OD-18`, `OD-36` and `OD-37` for
+the sixty-ninth edition rest on, and for the reading of `src/` at `f2d1753`
+behind them. Anything not verified says so
 in its own text. No claim rests on recollection.
 
 The engine behaviour `OD-14` records has a source of a different kind, and it is
@@ -1694,6 +1697,31 @@ and the options it rejected are unchanged**; a claim about the dependency graph
 was standing in for a claim about one crate's features, and only the claim
 moves.
 
+**Amended on 2026-11-03, for rmp `#321`, against the sixty-ninth edition: the
+`json` path escapes past C0 through a formatter of the crate.** `FR-OUT-018`
+now has a C1 control and a bidirectional formatting character emitted in `json`
+as `\u` and four hexadecimal digits, and `serde_json` writes both raw: its
+escape table covers `0x00`–`0x1F`, `"` and `\` and no non-ASCII byte; it hands
+each run it does not escape to `Formatter::write_string_fragment`, "Writes a
+string fragment that doesn't need any escaping to the specified writer", whose
+default writes the bytes unchanged, map keys included; `to_writer` uses
+`CompactFormatter`, whose `impl Formatter` is empty; and a C0 escape is written
+in lowercase hexadecimal (docs.rs, `serde_json` 1.0.151, `ser::Formatter` and
+`src/ser.rs`, read 2026-11-03). Both forms are therefore written through a
+formatter of the crate — the compact one with the trait's default layout, the
+indented one `Indented` — and each overrides `write_string_fragment`, writing a
+character of the two sets as `\u` and four lowercase hexadecimal digits and the
+rest of the fragment unchanged. The last sentence of *C0 escaping*, under *Why
+the two arguments for a bespoke writer do not hold* — that neither path needs a
+serialiser wrapper — no longer holds for `json`; the decision does: the derive
+still states the key order once, and the formatter changes how a string's
+characters are written, never which keys or values are emitted. The forms are
+[interfaces.md](interfaces.md#the-document-emitter)'s. *Rejected — rewriting the
+encoded bytes afterwards*: a second pass over every document, which has to tell
+a string from the rest of the JSON, as the encoder already does. *Rejected —
+escaping in the model*: the parsed value would change, which `FR-OUT-018`
+forbids, and the cache and the render context would carry the escape.
+
 **`--pretty`.** `FR-OUT-008` fixes a two-space indent, which is
 `serde_json`'s own default — "construct a pretty printer formatter that
 defaults to using two spaces for indentation" (docs.rs
@@ -2823,6 +2851,27 @@ documentation**, which is why point 4 does not rely on it.
 render's watchdog: it performs no work of the invocation, makes nothing faster,
 and exists only on the path that opens a database file.
 
+**Amended on 2026-11-03, for rmp `#317`: the bound handed to the busy timeout
+saturates.** `Connection::busy_timeout` converts its `Duration` to milliseconds
+through checked arithmetic and `try_into` an `i32`, and ends the chain with
+`.expect("too big")` (docs.rs, `rusqlite` 0.41.1, `src/busy.rs`, read
+2026-11-03), because `sqlite3_busy_timeout(sqlite3*, int ms)` takes an `int`
+(`https://sqlite.org/c3ref/busy_timeout.html`, checked 2026-11-03). A remaining
+bound past `i32::MAX` milliseconds — a `core.query_timeout` above 2 147 483
+seconds, which `FR-CONF-002` admits as a positive integer — panics there, and a
+panic is a `70` for a configuration the corpus accepts. Point 2 therefore hands
+the call the smaller of the remaining bound and `i32::MAX` milliseconds; the
+watchdog of point 3 keeps the whole bound. A wait for a lock then ends at the
+library's maximum, within the bound, which is what `FR-LITE-009` asks: "within
+that deadline and no longer". It is the `SQLITE_BUSY` row of `FR-LITE-007`,
+`69`, with no deadline named, because the bound was not spent
+([interfaces.md](interfaces.md#the-error-type-and-the-exit-code)). *Rejected —
+refusing a `core.query_timeout` past the maximum*: `FR-CONF-002` declares no
+upper bound, and this folder cannot add one. *Rejected — leaving the call as it
+is*: a valid configuration would be reported as a defect of `tpl`
+(`FR-ERR-030`). **Recorded discrepancy:** `sqlite.rs` at `cb99236` hands the
+call the remaining bound unchanged.
+
 ---
 
 ## OD-37 — The SQLite fixture, and the statement record
@@ -2893,6 +2942,18 @@ and `TraceEvent::Stmt(StmtRef, &str)`, carrying the statement's text (docs.rs,
 - **A harness script, on the model of `scripts/mariadb/`.** There is no
   container to start, verify or stop, and a script would add a process and a
   host tool to what the test process does itself.
+
+**Amended on 2026-11-03, for rmp `#317`, against the sixty-ninth edition:
+seven more databases, built the same way.** `FR-LITE-038` adds a view named
+`pragma_table_list`, a table named `PRAGMA_TABLE_XINFO`, four schema tables
+written under `writable_schema`, and a database holding an `fts5` table, a view
+over it that compiles and no view that does not. The decision is unchanged:
+each is built from SQL text by `tests/support/sqlite.rs`, on a plain
+connection. The four `writable_schema` databases add one requirement on that
+connection: its defensive mode is off, set and read back by the builder,
+because defensive mode refuses "The PRAGMA writable_schema=ON statement"
+(`https://sqlite.org/c3ref/c_dbconfig_defensive.html`, checked 2026-11-03).
+**At `f2d1753` the builder makes none of the seven.**
 
 ---
 

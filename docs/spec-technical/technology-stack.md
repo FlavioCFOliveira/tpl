@@ -98,7 +98,7 @@ rejected option and cites the argument rather than reproducing it.
 | `rusqlite` | Opens a SQLite database file read-only, applies and reads back the hardening of `FR-LITE-010` and `FR-LITE-011`, and issues the closed list of `FR-LITE-015`, for a `sqlite` entry; carries the SQLite library itself, compiled in (`FR-LITE-001`) | [`ADR-013`](../adr/adr-013-sqlite-driver.md) — selected by the rule of `FR-LITE-004` | [`ADR-013`](../adr/adr-013-sqlite-driver.md): the crate `sqlite`, the SQLite driver of `sqlx`, `turso`, a patched `rusqlite`, and `rusqlite` 0.39.0 |
 | `tokio` | The current-thread runtime the asynchronous driver requires, and the timers four of the six deadlines use; never built for a `sqlite` entry | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
 | `serde` | The derive that fixes the key order of `FR-OUT-013` in the type. It is **not** how `.tpl/.cfg` is read: [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) records why a derive cannot answer `FR-CONF-034` or `FR-CONF-035` | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | A bespoke writer, and a distinct type per absence rule ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
-| `serde_json` | Encodes the seventeen payload shapes and the envelope of `FR-OUT-024`; its pretty printer answers `FR-OUT-008` | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | `preserve_order`, and with it `indexmap`, which would contradict `NFR-DET-002` ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
+| `serde_json` | Encodes the seventeen payload shapes and the envelope of `FR-OUT-024`; its pretty printer answers `FR-OUT-008`; its `Formatter` trait is where `tpl` escapes what `FR-OUT-018` adds past C0 | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | `preserve_order`, and with it `indexmap`, which would contradict `NFR-DET-002` ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
 | `toml` | The read path over `.tpl/.cfg`, through its document tree — spanned keys and spanned values — rather than through a `serde` derive | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which would put an editing document on the path that reads untrusted input; and a `serde` derive, which cannot name the offending key or its position |
 | `toml_edit` | The write path over `.tpl/.cfg`, preserving comments, spacing and the relative order of items | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml` alone, which would delete the commented example `FR-PROJ-018` requires on the first write |
 | `thiserror` | Derives the one public error enum and its `Display` | [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) | `anyhow` in the library; per-module enums composed by `From`; an exit code stored as a field ([`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)) |
@@ -300,10 +300,10 @@ record pins (docs.rs, `rusqlite` 0.41.1, consulted 2026-11-03).
 |---|---|---|---|
 | `Connection::open_with_flags(path, flags)` | The read-only open, with the flags [architecture.md](architecture.md#the-sqlite-reader) names. `OpenFlags`' default, which the plain open uses, includes `SQLITE_OPEN_CREATE` and `SQLITE_OPEN_URI`, so that open is not used | — | `FR-LITE-006` |
 | `Connection::is_readonly(db_name)`, "Determine if a database is read-only", on `main` | The read-back of the read-only open. **Whether it issues a statement is not confirmed in the official documentation**; the statement record of `FR-LITE-018` would report one | — | `FR-LITE-010` |
-| `Connection::set_db_config` and `db_config`, over `DbConfig::SQLITE_DBCONFIG_DEFENSIVE` and `SQLITE_DBCONFIG_TRUSTED_SCHEMA` | Two controls, set and read back without a statement | — | `FR-LITE-010` |
+| `Connection::set_db_config` and `db_config`, over `DbConfig::SQLITE_DBCONFIG_DEFENSIVE`, `SQLITE_DBCONFIG_TRUSTED_SCHEMA` and `SQLITE_DBCONFIG_ENABLE_VIEW` ("Enable or disable views") | Three controls, set and read back without a statement. `db_config` passes `-1` to `sqlite3_db_config` (`src/config.rs`, read at docs.rs on 2026-11-03), which SQLite reads as leaving the setting unchanged and reporting it (`https://sqlite.org/c3ref/c_dbconfig_defensive.html`, checked 2026-11-03) | — | `FR-LITE-010` |
 | `Connection::pragma_update` and `pragma_query_value` | `query_only`, `cell_size_check`, `mmap_size` and `temp_store`, set and read back | — | `FR-LITE-010`, `FR-LITE-015` |
 | `Connection::set_limit` and `limit` | The three limits, set and read back | `limits` | `FR-LITE-011` |
-| `Connection::busy_timeout` and `get_interrupt_handle` | The statement bound of [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) | — | `FR-LITE-009` |
+| `Connection::busy_timeout` and `get_interrupt_handle` | The statement bound of [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection), which also records where `busy_timeout` panics and why the bound handed to it saturates | — | `FR-LITE-009` |
 | `Connection::prepare` | Every other statement of the closed list. `prepare_cached` needs the `cache` feature, which `ADR-013` leaves off with the defaults | — | `FR-LITE-015` |
 | `Connection::trace_v2` with `SQLITE_TRACE_STMT` | The statement record, from the test configuration alone ([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)) | `trace`, on the `[dev-dependencies]` entry alone | `FR-LITE-018` |
 | `Connection::close` | The close, "functionally equivalent to the `Drop` implementation" except that it returns the error | — | `FR-RND-040` |
@@ -322,8 +322,9 @@ wildcard arm is the last row of `FR-LITE-040`
 `SQLITE_DEFAULT_FOREIGN_KEYS=1` (`build.rs`, read at docs.rs on 2026-11-03).
 Two bear on a requirement: `SQLITE_USE_URI` is why the open is handed an
 absolute path ([architecture.md](architecture.md#the-sqlite-reader)), and the
-two modules decide which tables `FR-LITE-020` covers and which functions
-item 10 of `FR-LITE-038` can call.
+two modules decide which functions item 10 of `FR-LITE-038` can call and let
+the fixture build the `fts5` table its databases hold. Which tables
+`FR-LITE-020` covers no longer depends on them: the schema table decides it.
 
 **`rusqlite` is declared twice, and `trace` reaches the test build alone**,
 through a `[dev-dependencies]` entry. The two entries and their features, why
