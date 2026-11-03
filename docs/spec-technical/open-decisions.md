@@ -10,15 +10,16 @@ related: [README.md, traceability.md]
 ## What this is
 
 Thirty-eight entries, each a decision the repository could not settle on its
-own. **Thirty-six are settled. Two, `OD-33` and `OD-38`, are open.**
+own. **Thirty-seven are settled. One, `OD-33`, is open.**
 
 **Four entries were added on 2026-11-03**, for rmp `#316`, when the sixty-fifth
 and sixty-sixth editions of `/specification` gave `tpl` a second provider and
 [`ADR-013`](../adr/adr-013-sqlite-driver.md) chose its driver: `OD-35`, the
 provider dispatch and the SQLite reader; `OD-36`, the deadline of a statement on
 a SQLite connection; `OD-37`, the SQLite fixture and the statement record; and
-`OD-38`, open, a SQLite result code the contract does not classify. `OD-05`,
-`OD-11` and `OD-12` are amended, and one correction is owed to `CLAUDE.md`.
+`OD-38`, a SQLite result code the contract did not classify, settled the same
+day by the sixty-seventh edition (`FR-LITE-040`). `OD-05`, `OD-11` and `OD-12`
+are amended, and one correction is owed to `CLAUDE.md`.
 
 Nineteen were settled by
 the product owner in the interview of 2026-09-10, by the establishment of the
@@ -238,7 +239,7 @@ the last edition of this folder.
 this folder cites and does not own, so an amendment to one triggers the same
 re-read as an edit to `CLAUDE.md` does. Two were amended on 2026-09-22 and both
 were read against every passage of this folder that cites them; the outcomes are
-the last two rows below.
+the rows of `ADR-002` and `ADR-007` dated that day below.
 
 | Target | Re-read at | Date | Outcome |
 |---|---|---|---|
@@ -252,6 +253,9 @@ the last two rows below.
 | [`ADR-007`](../adr/adr-007-msrv.md) | Working tree over HEAD `455e48d`; the amendment is **not yet committed** | 2026-09-22 | Nothing this folder states moved. Its fifteen citations, in three files, name the rule and the figure it yields, and neither changed; what the amendment moved — the dependency-floor table and the graph's crate counts — this folder has never restated |
 | [`ADR-003`](../adr/adr-003-database-driver.md) | `7738619` | 2026-11-03 | The form in which the package consumes the driver moved: `sqlx-core` and `sqlx-mysql` in place of the facade. [technology-stack.md](technology-stack.md) named the facade as a direct dependency and listed its features, and both passages are restated against the record. The citations in `OD-04`, `OD-11` and `OD-12` name the pin and the driver's behaviour, which did not move |
 | [`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) | `7738619` | 2026-11-03 | Nothing this folder states moved. Three sentences of the record now name the driver rather than the facade; the passages of this folder that cite it name the vendored crate, the patch and its retiring condition |
+| [`ADR-013`](../adr/adr-013-sqlite-driver.md) | `f8e2e34` | 2026-11-03 | `trace` moved from the dependency the binary is built from to a `[dev-dependencies]` entry. [technology-stack.md](technology-stack.md#the-sqlite-driver-and-the-library-it-carries) recorded the feature as compiled into the shipped graph and the question as the record's; both passages now cite the amendment, as `OD-37` does. The record's account of the eighth control moved nothing this folder states beyond what the sixty-seventh edition moved |
+| [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | `f8e2e34` | 2026-11-03 | The record now states that the runtime is MariaDB's alone and which deadlines may use its timers. [architecture.md](architecture.md#the-synchronous-process-and-the-runtime-boundary) restated its decision and that sentence, against rule R3; the section now cites the record. `OD-11`'s amendment cites it directly. `OD-12` and `OD-36`, which the record cites, did not move |
+| [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) | `f8e2e34` | 2026-11-03 | Nothing this folder states moved. The record names its type `sqlx_mysql::MySqlSslMode`; the one path of that module this folder names, `sqlx::mysql::MySqlConnectOptions` in `OD-12`, is a dated source citation of a type the record states is the same |
 
 ## Status legend
 
@@ -262,7 +266,7 @@ the last two rows below.
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
 | **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. **No entry carries this status today**: `OD-30`'s arrangement was discharged on 2026-09-22 |
-| **Open** | Not decided. The entry names the options and the owner. **`OD-33` carries it since 2026-09-22, and `OD-38` since 2026-11-03** |
+| **Open** | Not decided. The entry names the options and the owner. **`OD-33` is the one entry carrying it**, since 2026-09-22; `OD-38` carried it on 2026-11-03 until the sixty-seventh edition answered it |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
 ## Index
@@ -306,11 +310,11 @@ the last two rows below.
 | [OD-35](#od-35--the-provider-dispatch-and-the-sqlite-reader) | The provider dispatch and the SQLite reader | Settled | — |
 | [OD-36](#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) | The deadline of a statement on a SQLite connection | Settled | — |
 | [OD-37](#od-37--the-sqlite-fixture-and-the-statement-record) | The SQLite fixture, and the statement record | Settled | — |
-| [OD-38](#od-38--a-sqlite-result-code-the-contract-does-not-classify) | A SQLite result code the contract does not classify | Open | `specification-manager` |
+| [OD-38](#od-38--a-sqlite-result-code-the-contract-does-not-classify) | A SQLite result code the contract does not classify | Settled | — |
 
-Thirty-five entries are settled outright; `OD-19` alone carries an observation
-owed, and `OD-33` and `OD-38` are open. Thirty-five, one and two are the whole
-of the thirty-eight. `OD-30` was settled and **interim** until 2026-09-22, when
+Thirty-six entries are settled outright; `OD-19` alone carries an observation
+owed, and `OD-33` is open. Thirty-six, one and one are the whole of the
+thirty-eight. `OD-30` was settled and **interim** until 2026-09-22, when
 its last arm was removed; it is now settled outright.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
@@ -1041,10 +1045,10 @@ suite, where another test's connection on another thread is not this
 invocation's; the runtime is current-thread and the counted values are not
 `Send`, so the per-thread count is exact.
 
-**Amended on 2026-11-03 — the SQLite path builds no runtime.** `rusqlite` is
-synchronous, so a command that reads a `sqlite` entry reaches nothing in
-`mariadb/` and builds no runtime; `ADR-005` is kept by construction
-([`ADR-013`](../adr/adr-013-sqlite-driver.md), *Consequences*). The quiescence
+**Amended on 2026-11-03 — the SQLite path builds no runtime.** That the
+runtime is MariaDB's alone is
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md)'s, as amended in place that
+day, and is not restated. The quiescence
 `FR-RND-040` requires is answered over both readers by `provider.rs`
 ([`OD-35`](#od-35--the-provider-dispatch-and-the-sqlite-reader)).
 
@@ -2863,11 +2867,16 @@ record taken?
 4. **The record is taken in process.** A `#[cfg(test)]` hook in `sqlite/`
    installs `trace_v2` with `SQLITE_TRACE_STMT` on the connection immediately
    after the open and before the first statement, and records every text the
-   trace reports. A text beginning with `-- ` is a nested statement: it is kept
-   apart, neither checked nor counted (`FR-LITE-018`). The hook is compiled
-   under the test configuration alone — the seam `FR-ERR-031` names and
+   trace reports, per thread, as the quiescence count is kept, so that tests
+   running in parallel never share a record. A text beginning with `-- ` is a
+   nested statement: it is kept apart, neither checked nor counted
+   (`FR-LITE-018`). The hook is compiled under the test configuration alone —
+   the seam `FR-ERR-031` names and
    [`OD-21`](#od-21--two-test-seams-that-must-not-be-on-the-published-surface)
-   settles — so the distributed binary carries no call to it.
+   settles — and the feature `trace` it calls is enabled by a
+   `[dev-dependencies]` entry alone, so the distributed binary carries neither
+   the call nor the binding
+   ([`ADR-013`](../adr/adr-013-sqlite-driver.md), point 1 and *Consequences*).
 
 Source: `Connection::trace_v2(&mut self, mask: TraceEventCodes, trace_fn:
 Option<F>)`, gated on the feature `trace`; `TraceEventCodes::SQLITE_TRACE_STMT`;
@@ -2892,30 +2901,78 @@ and `TraceEvent::Stmt(StmtRef, &str)`, carrying the statement's text (docs.rs,
 
 ## OD-38 — A SQLite result code the contract does not classify
 
-**Status: open.** Owner: `specification-manager`, because the answer is an exit
-code, which `FR-ERR-001` makes contract.
+**Status: settled.** Opened for rmp `#316` on 2026-11-03 and owned by
+`specification-manager`, because the answer is an exit code, which `FR-ERR-001`
+makes contract. **The sixty-seventh edition answered it the same day with
+`FR-LITE-040`**, which classifies every result code SQLite publishes. The
+question, the three options this entry stated, and the corpus's two departures
+from the one it recommended are that requirement's text and are not restated.
+What is decided here is how `sqlite/fault.rs` applies it.
 
-**The question.** `FR-LITE-007` classifies the library's failures by condition,
-and `FR-LITE-009`, `FR-LITE-012` and `FR-LITE-035` add the deadline, a control
-not in effect and a view that does not compile. The library reports other
-result codes too — `rusqlite`'s `ErrorCode` names twenty-four (docs.rs,
-`rusqlite` 0.41.1, consulted 2026-11-03). Which exit code does a failure carry
-that none of those classifies: `SQLITE_NOMEM`, `SQLITE_PERM`,
-`SQLITE_PROTOCOL`, `SQLITE_LOCKED`, `SQLITE_READONLY` other than its directory
-variant, `SQLITE_MISUSE`, or `SQLITE_ERROR` on a statement other than the one
-reading every view's columns?
+**Decision.**
 
-| Option | Ground | Cost |
-|---|---|---|
-| **A — `70` for every one** | `FR-ERR-030`: the system declines to continue past an outcome it was not built to classify | A host out of memory, or a file whose locking protocol fails, is reported as a defect of `tpl` |
-| **B — `74` for every one** | The `74` row of `FR-ERR-001`: a read of a file the entry names failed | Library misuse, or an error in a statement `tpl` wrote, is reported as a fault of the caller's filesystem |
-| **C — split by who is at fault** | `70` where the library reports misuse or an error in a statement `tpl` wrote — `SQLITE_MISUSE`, `SQLITE_ERROR` outside `FR-LITE-035`; `74` for the rest | One more row in the table of `FR-LITE-007` |
+1. **The classification is keyed on the integer the library returned**, never
+   on `rusqlite`'s `ErrorCode`. The integer is the `extended_code` of the
+   driver's `ffi::Error` — an extended code, because the open sets
+   `SQLITE_OPEN_EXRESCODE` ([architecture.md](architecture.md#the-sqlite-reader))
+   — and the primary code is its low eight bits. Both are matched against the
+   constants `rusqlite::ffi` re-exports.
+2. **Two variants of the driver's error carry that value**, and both are
+   matched: `Error::SqliteFailure`, and `Error::SqlInputError`, which the driver
+   returns in its place when the library fails to prepare a statement with a
+   code the driver maps to `Unknown` and reports an offset into the statement.
+3. **`FR-LITE-040`'s four steps are applied in their order**, over the stage or
+   the statement that failed and the two codes: stages 4 and 5
+   (`FR-LITE-012`); `SQLITE_ERROR` on statement 7 or a per-view statement
+   (`FR-LITE-035`); the rows of `FR-LITE-007`; then the requirement's own
+   table, whose last row — a primary code it does not name — is the match's
+   wildcard arm, `70`. The function is pure, so every row is testable as a
+   vector ([verification.md](verification.md#the-sqlite-provider)).
+4. **A driver error that carries no result code** — any other variant of
+   `rusqlite::Error`, which the driver marks non-exhaustive — is a violated
+   internal invariant, the `70` of `FR-ERR-030`, as a pragma field of a class
+   the library does not document for it already is.
+5. **The `cause` carries the two facts `FR-GLOB-018` names and nothing of the
+   driver's rendering.** The code's name comes from a table in
+   `sqlite/fault.rs` of every primary and extended code
+   `https://sqlite.org/rescode.html` lists, because neither the library nor the
+   driver supplies a symbolic name; an extended code missing from the table is
+   written as its primary code's name and its number. The message is the text
+   `SqliteFailure` carries, or the `msg` of `SqlInputError`; where the driver
+   hands none, the `cause` says that the library gave none. Both are escaped
+   and bounded on the way out
+   ([interfaces.md](interfaces.md#the-diagnostic-renderer)).
 
-**Recommended: C**, because each code then reaches the row whose next step fits
-it, which is what `FR-ERR-002` asks of a code. **Nothing is assigned
-meanwhile.** The reader's fault mapping classifies exactly the outcomes the
-corpus names; its arm for every other result code is the one part of `sqlite/`
-that waits on this entry.
+**Sources, consulted 2026-11-03 at docs.rs.** `libsqlite3-sys` 0.39.1,
+`src/error.rs`: `ErrorCode` is non-exhaustive, of twenty-four variants;
+`Error::new` matches `result_code & 0xff`, sends `SQLITE_ERROR`, `SQLITE_EMPTY`,
+`SQLITE_FORMAT`, `SQLITE_NOTICE` and `SQLITE_WARNING` to `Unknown` through its
+wildcard arm, and keeps the unmasked code in `extended_code`; `Display` writes
+`Error code <n>: ` and the description `sqlite3_errstr` returns.
+`SQLITE_READONLY_DIRECTORY` is the constant `1544` of its bindings. `rusqlite`
+0.41.1: the crate root re-exports `libsqlite3_sys` as `ffi`; `Error` is
+non-exhaustive; in `src/error.rs`, `sqlite_error()`, and through it
+`sqlite_extended_error_code()`, answers for `SqliteFailure` alone;
+`error_with_offset` returns `SqlInputError` where the handle is not null, the
+code maps to `Unknown` and `sqlite3_error_offset` is not negative; the message
+is `sqlite3_errmsg` where the handle's last code is the one returned, and
+`sqlite3_errstr` otherwise; and `Display` of `SqlInputError` writes the message,
+the statement's text and the offset. `src/inner_connection.rs`: `prepare`
+calls `error_with_offset` when `sqlite3_prepare_v3` fails.
+
+**Rejected.**
+
+- **Matching `ErrorCode`.** `Unknown` stands for five primary codes that
+  `FR-LITE-040` sends two ways on a view statement — `SQLITE_ERROR` marks the
+  view, the other four are `70` — and the enumeration drops the extended code,
+  on which the rows of `SQLITE_READONLY` turn.
+- **`Error::sqlite_extended_error_code()`.** It answers nothing for
+  `SqlInputError`, so a statement the library failed to prepare would reach the
+  arm of point 4.
+- **The driver's `Display`, or the description of `sqlite3_errstr`, as the
+  `cause`.** The first is the driver's error value in a rendering, which
+  `FR-GLOB-018` bars, and for `SqlInputError` it writes the whole statement. The
+  second describes the code and is not the library's message.
 
 ---
 
@@ -2936,15 +2993,19 @@ left hunting for an open defect.
 
 ## What remains
 
-Two entries are open, one obligation stands, and one correction is owed. Each
-blocks one statement or one arm, and none blocks another.
+One entry is open, one obligation stands, and one correction is owed. Each
+blocks one statement, and none blocks another.
 
 | Order | What | Owner | Blocks |
 |---|---|---|---|
 | 1 | `OD-19`'s owed observation — `ADR-009`'s *owned copy* against a value whose members are borrowed, and the peak-memory consequence the record draws from that word | `adr-guardian` | No document of this folder may read *owned copy* as settling how an embedded value holds its members |
 | 2 | `OD-33`'s question — whether `UC-013` joins the acceptance skeleton, on the two options that entry states | user | No document of this folder may present its flow count as closed against the corpus; the twelve stand as written and `UC-013` is neither added to them nor named as excluded until this is answered |
-| 3 | `OD-38`'s question — the exit code of a SQLite result code the contract does not classify | `specification-manager` | The one arm of `sqlite/`'s fault mapping that handles such a code |
-| 4 | The correction owed to `CLAUDE.md` for `ADR-013` and `ADR-003`, recorded under [Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd) | user | Nothing in this folder, which cites the two records directly |
+| 3 | The correction owed to `CLAUDE.md` for `ADR-013` and `ADR-003`, recorded under [Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd) | user | Nothing in this folder, which cites the two records directly |
+
+`OD-38`'s question, which stood third in this table, was answered by the
+sixty-seventh edition on 2026-11-03 (`FR-LITE-040`); the entry records how
+`sqlite/fault.rs` applies the answer.
+
 `OD-14`'s obligation, which stood first in this table, was discharged on
 2026-09-21: the observation was made, it went the other way, and the entry
 records both the answer and what in `render/` now carries the two requirements
@@ -2966,7 +3027,7 @@ reasoned; the second, one test per mapped `clap::ErrorKind` (`OD-08`), was
 discharged at commit `f8f335d` of 2026-09-15. Each is recorded as discharged in
 its own entry.
 
-**One correction is owed outside this folder**, row 4 above, prepared on
+**One correction is owed outside this folder**, row 3 above, prepared on
 2026-11-03. The six corrections this register prepared before it are applied,
 and each records where and when under
 [Corrections owed to `CLAUDE.md`](#corrections-owed-to-claudemd).

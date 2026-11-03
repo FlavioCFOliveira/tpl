@@ -49,7 +49,8 @@ raw.
 Rows 1, 4 and 5 are the populations `FR-ERR-024` and `FR-OUT-019` name as
 sources of an interpolated value — row 7's values reach output as catalogue
 values, row 4's population, and the library's messages about the file reach a
-`cause` ([interfaces.md](interfaces.md#the-sqlite-reader)) — which is why escaping is a property of the
+`cause` ([interfaces.md](interfaces.md#the-sqlite-reader)), each bounded under
+`FR-ERR-046` — which is why escaping is a property of the
 emitting and the diagnostic paths and not of these boundaries.
 
 **Recorded gap — the cache is not one of the six.** `.tpl/.cache/` holds
@@ -139,7 +140,7 @@ which keeps the forbidden values out of the error type.
 | 2 | The resolved DSN | It is produced by the third read path above and consumed by `mariadb/`; no variant of the error type carries it | `FR-GLOB-018`, `FR-SEC-005`, `BR-ERR-003`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
 | 3 | The `password_command` | Nothing emits it as diagnostic content; the stored array is named in the `cause` of a child failure, which `FR-CONF-033` obliges and admits because `FR-CONF-017` keeps that array unexpanded | `FR-GLOB-018`, `FR-SEC-005` |
 | 4 | The child's standard error | It is directed to the null device, so the bytes never exist in the process to be written | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-032`, `FR-SEC-024` |
-| 5 | The raw driver error | It is classified at the `mariadb/` boundary and the original value is dropped; with no subscriber installed, what the driver itself emits is discarded before it exists | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-17`](open-decisions.md#od-17--observability) |
+| 5 | The raw driver error | It is classified at the `mariadb/` or the `sqlite/` boundary and the original value is dropped; with no subscriber installed, what the driver itself emits is discarded before it exists. For a `sqlite` entry the result code's name and the library's message are not the raw driver error, and a `cause` obliged to state them carries them ([`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)) | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-17`](open-decisions.md#od-17--observability) |
 | 6 | The contents of `.tpl/.cfg` | The reader hands `error.rs` the key and the position of a fault, never the text of the file. For the two keys whose value may itself be a credential it hands on the value's **type** where it would otherwise hand on the value, and the choice is made from the key space rather than at the call site | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-034`, `FR-CONF-035`, `FR-ERR-013` |
 
 Two prohibitions bound the whole set rather than one category: no credential
@@ -382,6 +383,7 @@ which control closes which threat, and how the build confirms each.
 | Defensive mode on, `trusted_schema` off | The configuration interface | The configuration interface, read | Corruption by ordinary SQL; a function or module not marked innocuous run from a view or a schema expression | `FR-LITE-010` |
 | Extension loading absent | The build ([`ADR-013`](../adr/adr-013-sqlite-driver.md)) | `PRAGMA compile_options` returning `OMIT_LOAD_EXTENSION`, before anything reads the file | Code loaded from a path a schema or a statement names | `FR-LITE-010` |
 | `cell_size_check` on, `mmap_size` `0` | Their pragmas | Their pragmas, read | A malformed page read unchecked; a page read through a map another process can change | `FR-LITE-010` |
+| `temp_store` at `MEMORY` | Its pragma | Its pragma, read back as `2`, and `PRAGMA compile_options` returning a `TEMP_STORE` row of `1`, `2` or `3`, because the build decides whether the pragma is obeyed | Content of the file written to a temporary file outside `.tpl`, in a directory the host chooses | `FR-LITE-010` |
 | Length, statement length and attachments limited | `set_limit` | `limit` | A value sized to exhaust memory; a second file attached | `FR-LITE-011` |
 
 **Every control is confirmed before any byte of the file is parsed**, and one
@@ -407,14 +409,19 @@ library runs for a pragma function or a module is bounded by the read-only open
 and `query_only`, and which module may run from a view by `trusted_schema` off
 (`FR-LITE-018`).
 
+**A value of the file reaches a diagnostic line only bounded**, so a name sized
+by a crafted file cannot flood the line a calling agent reads (`FR-SEC-028`,
+`FR-ERR-046`). Which values are bounded, where and how is
+[interfaces.md](interfaces.md#the-diagnostic-renderer)'s.
+
 **Three residuals, each stated by its requirement and none closed here.**
 
 - A file replaced by a FIFO between the lookup and the open blocks the open,
   and no deadline interrupts it; arranging it needs write access to the
   directory that holds the database (`FR-LITE-005`).
 - A database in write-ahead-log mode may leave `<file>-wal` and `<file>-shm`
-  beside it (`FR-LITE-008`); the discrepancy this opens against `FR-PROJ-024` is
-  recorded in [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers).
+  beside it, created and written by the library; `FR-PROJ-024` admits both
+  (`FR-LITE-008`; [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)).
 - Damage confined to pages the catalogue read never touches is not detected,
   because no integrity check runs (`FR-LITE-013`).
 

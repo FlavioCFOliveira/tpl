@@ -571,9 +571,10 @@ These are the limits the requirements state. This document cites them and
 invents none of its own.
 
 **`FR-LITE-018` reaches the SQLite statement trace through the same seam.** The
-hook that installs the trace is a `#[cfg(test)]` construct of `sqlite/`, so the
-record of row 28 is taken by a unit test and the distributed binary carries no
-call to it ([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)).
+hook that installs the trace is a `#[cfg(test)]` construct of `sqlite/`, and the
+feature it calls is enabled for tests alone, so the record of row 28 is taken by
+a unit test and the distributed binary carries neither the call nor the binding
+([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)).
 It adds no third seam: the mechanism, and the two reasons it stays off the
 surface, are the table's.
 
@@ -1036,15 +1037,18 @@ Every test is named for the requirement it verifies, per
 | Requirements | Test | Kind | Fixture case |
 |---|---|---|---|
 | `FR-LITE-005` | A directory and a FIFO are `78`, and the FIFO is never opened; the link to the main database is read through | Integration | The directory, the FIFO, the link |
-| `FR-LITE-006`, `FR-LITE-007` | A path naming nothing and the dangling link are `74`, and nothing is created at either; the text file, the truncated file and the length-limit database are `78`; the write-ahead-log copy in a directory refusing writes is `74`; each `cause` names the resolved path and what the library returned | Integration | The artefacts named |
+| `FR-LITE-006`, `FR-LITE-007` | A path naming nothing and the dangling link are `74`, nothing is created at either, and the `cause` names the check of the kind and what the filesystem returned; the text file, the truncated file and the length-limit database are `78`; the write-ahead-log copy in a directory refusing writes is `74`; each `cause` names the resolved path and what the library returned | Integration | The artefacts named |
 | `FR-LITE-008` | The write-ahead-log copy is read, and no file but its two is created | Integration | The write-ahead-log copy |
-| `FR-LITE-009` | A database held by an exclusive transaction of the test process, under `core.query_timeout` of `1`, is `69` within the bound | Integration | The main database, in rollback-journal mode |
-| `FR-LITE-010` … `FR-LITE-012` | Every control and limit reads back as set; the comparison, given a value read back that differs, is the `70` naming the control, the value set and the value read | Unit | The main database |
+| `FR-LITE-009` | A database held by an exclusive transaction of the test process, under `core.query_timeout` of `1`, is `69` within the bound, and the `cause` names the lock and the resolved deadline | Integration | The main database, in rollback-journal mode |
+| `FR-LITE-010` … `FR-LITE-012` | Every control and limit reads back as set, `temp_store` with the `TEMP_STORE` row of `PRAGMA compile_options`; the comparison, given a value read back that differs or a `TEMP_STORE` row of `0` or none, is the `70` naming the control, the value set and the value read | Unit | The main database |
+| `FR-LITE-040` | The classification of `sqlite/fault.rs`, over each stage and statement kind: every row of `FR-LITE-007` and of `FR-LITE-040`'s table, with an extended code under each primary that has one, `SQLITE_READONLY` with and without one, and a primary code SQLite has not published | Vector | — |
+| `FR-ERR-046` | A value of the file of 256 characters is written whole, one of 257 is cut with the marker counting what was left out, and a cut that would fall inside each escape form keeps the form whole outside the kept part; the same value from a `mariadb` read or a `--context` document is written whole | Vector; Unit | — |
+| `FR-ENV-041` | Over a context from the main database, a rowid-alias column, an `INTEGER PRIMARY KEY DESC` column and a column of a `WITHOUT ROWID` key each satisfy `primary_key` and `unique`; every answer of row 18 over a `mariadb` document is unchanged | Unit | The main database |
 | `FR-LITE-002`, `FR-LITE-003` | The `server` object carries the library's version, its `<major>.<minor>`, and `supported` | Unit | Any |
 | `FR-LITE-019` … `FR-LITE-034` | One test per case of items 1 to 13 over the fold; the trigger header reader over every header form of item 11, as a vector | Unit; Vector | The main database |
 | `FR-LITE-035`, `FR-LITE-036` | The three views of item 10 that do not compile are marked and the others are whole; naming one is `77` and its `cause` carries the library's reason; the fallback issues one statement per view | Unit; Integration | The main database |
 | `FR-CFG-056` | The four fields over the main database; `78` over the text file | Integration | The main database, the text file |
-| `FR-CONF-051` … `FR-CONF-054`, `FR-CFG-055` | Each refusal, at its step and with its code; a relative `path` read from a subdirectory of the project resolves against the project directory | Integration | The main database |
+| `FR-CONF-051` … `FR-CONF-054`, `FR-CFG-055` | Each refusal, at its step and with its code; a relative `path` read from a subdirectory of the project resolves against the project directory, and, through a `.tpl` reached by a link, against the parent of the canonical folder | Integration | The main database |
 | `FR-CTX-043`, `FR-CDOC-018` | A document without `provider` reads as `mariadb` and one with a third value is `65`; a cache record without `provider` is served as `mariadb`, and a served read carries the record's provider after the entry's changed | Unit | — |
 
 **One test is mandated by a decision record rather than by the corpus.**
@@ -1064,16 +1068,21 @@ the server's two instruments have no counterpart here.
 |---|---|---|
 | `NFR-PERF-001`, `NFR-PERF-002` | The in-process statement record of `FR-LITE-018`, row 30 | All four targets |
 | `NFR-PERF-003`, `NFR-PERF-006` | A differential run: once the cache is filled, the database file is removed, and a cached read still exits `0` with the same stdout; its inversion, the same read under `--direct`, exits `74` | All four targets |
-| `NFR-PERF-004` | A syscall trace counting the opens of the database path | The two Linux targets |
+| `NFR-PERF-004` | A syscall trace counting the opens of the database path | The two Linux targets; on the two macOS targets the assertion skips with the reason `NFR-PERF-004` states, and is never reported as passed |
 | `NFR-PERF-005` | Unchanged: the four commands reach no reader | As for a `mariadb` entry |
+| `NFR-PERF-008` | A unit test drives one invocation, `schema dump --direct --no-cache -v` with `--tpl-dir` naming a project whose entry reads the main fixture database, through `run_from` on its own thread; a `#[cfg(test)]` capture in `diagnostics/emit.rs` keeps the lines that thread writes, and the count carrying the per-query token equals the statements the record of row 28 reports without `-- `. The verbosity level is process-wide (`diagnostics/verbosity.rs`), so every unit test that sets it holds one shared lock for as long as it depends on the level | All four targets |
+
+**Discharged in the sixty-seventh edition — two gaps this section recorded.**
+`NFR-PERF-004` now names the syscall trace as its instrument for a `sqlite`
+entry and states the skip on the macOS targets, and `NFR-PERF-008` names the
+record of `FR-LITE-018` as the other side of its comparison; the two rows above
+apply them.
 
 ### What is not established
 
 | Open | Why it is not answered here |
 |---|---|
-| **`NFR-PERF-004` for a `sqlite` entry on either Darwin target.** The one instrument that sees a file open from outside the process is the syscall trace, which `NFR-PERF-005` and `NFR-PERF-007` bind to the two Linux targets | The limit is the platform's, as it is for `NFR-PERF-005`'s syscall clause; the gap is reported to the functional owner |
-| **`NFR-PERF-008` for a `sqlite` entry.** The reader writes the line of `FR-GLOB-017` for each catalogue statement as `mariadb/` does, and nothing outside the process records the statements to count those lines against | No requirement names a SQLite instrument for it; reported to the functional owner |
-| **A statement that fails when it is prepared, or is prepared and never run**, is absent from the record of row 28 | `FR-LITE-018` states it as the record's limit; `FR-LITE-015` and `FR-LITE-016` bind such a statement all the same |
+| **A statement that fails when it is prepared, or is prepared and never run**, is absent from the record of row 28, while the line of `FR-GLOB-017` for it is written | `FR-LITE-018` and `NFR-PERF-008` state it as the record's limit; `FR-LITE-015` and `FR-LITE-016` bind such a statement all the same |
 | **A file swapped for a FIFO between the lookup and the open** | `FR-LITE-005`'s accepted cost; no test can produce the race deterministically |
 
 ## What this document defers, and to what

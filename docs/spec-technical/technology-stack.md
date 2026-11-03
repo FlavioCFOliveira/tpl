@@ -301,19 +301,20 @@ record pins (docs.rs, `rusqlite` 0.41.1, consulted 2026-11-03).
 | `Connection::open_with_flags(path, flags)` | The read-only open, with the flags [architecture.md](architecture.md#the-sqlite-reader) names. `OpenFlags`' default, which the plain open uses, includes `SQLITE_OPEN_CREATE` and `SQLITE_OPEN_URI`, so that open is not used | — | `FR-LITE-006` |
 | `Connection::is_readonly(db_name)`, "Determine if a database is read-only", on `main` | The read-back of the read-only open. **Whether it issues a statement is not confirmed in the official documentation**; the statement record of `FR-LITE-018` would report one | — | `FR-LITE-010` |
 | `Connection::set_db_config` and `db_config`, over `DbConfig::SQLITE_DBCONFIG_DEFENSIVE` and `SQLITE_DBCONFIG_TRUSTED_SCHEMA` | Two controls, set and read back without a statement | — | `FR-LITE-010` |
-| `Connection::pragma_update` and `pragma_query_value` | `query_only`, `cell_size_check` and `mmap_size`, set and read back | — | `FR-LITE-010`, `FR-LITE-015` |
+| `Connection::pragma_update` and `pragma_query_value` | `query_only`, `cell_size_check`, `mmap_size` and `temp_store`, set and read back | — | `FR-LITE-010`, `FR-LITE-015` |
 | `Connection::set_limit` and `limit` | The three limits, set and read back | `limits` | `FR-LITE-011` |
 | `Connection::busy_timeout` and `get_interrupt_handle` | The statement bound of [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) | — | `FR-LITE-009` |
 | `Connection::prepare` | Every other statement of the closed list. `prepare_cached` needs the `cache` feature, which `ADR-013` leaves off with the defaults | — | `FR-LITE-015` |
-| `Connection::trace_v2` with `SQLITE_TRACE_STMT` | The statement record, from the test configuration alone ([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)) | `trace` | `FR-LITE-018` |
+| `Connection::trace_v2` with `SQLITE_TRACE_STMT` | The statement record, from the test configuration alone ([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)) | `trace`, on the `[dev-dependencies]` entry alone | `FR-LITE-018` |
 | `Connection::close` | The close, "functionally equivalent to the `Drop` implementation" except that it returns the error | — | `FR-RND-040` |
 
-**`ErrorCode` and `TraceEvent` are non-exhaustive** (docs.rs, as above), so the
-match that classifies a result code and the one that reads a trace event each
+**`rusqlite::Error` and `TraceEvent` are non-exhaustive** (docs.rs, as above),
+so the match over the driver's error and the one that reads a trace event each
 carry a wildcard arm. The rule against one in `CLAUDE.md` *Types and errors*
-governs an enumeration of the crate itself, which neither is; the wildcard of
-the classifying match is the arm [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)
-leaves unassigned.
+governs an enumeration of the crate itself, which neither is. The result code
+is matched as an integer, not through the driver's `ErrorCode`, and its
+wildcard arm is the last row of `FR-LITE-040`
+([`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)).
 
 **The bundled build defines more than the controls touch.** `libsqlite3-sys`
 0.39.1 compiles the library with, among others, `SQLITE_USE_URI`,
@@ -324,10 +325,16 @@ absolute path ([architecture.md](architecture.md#the-sqlite-reader)), and the
 two modules decide which tables `FR-LITE-020` covers and which functions
 item 10 of `FR-LITE-038` can call.
 
-**The `trace` feature is compiled into the shipped graph**, as `ADR-013` point 1
-enables it on the dependency, while only a `#[cfg(test)]` hook calls it
-(`FR-LITE-018`). Whether a dev-dependency feature would serve instead is a
-question for that record, recorded here and not settled.
+**`rusqlite` is declared twice, and `trace` reaches the test build alone**,
+through a `[dev-dependencies]` entry. The two entries and their features, why
+feature unification keeps `trace` out of `cargo build --release`, and why the
+dev entry also turns the defaults off are
+[`ADR-013`](../adr/adr-013-sqlite-driver.md) point 1, amended in place on
+2026-11-03, and are not restated. The one caller of the feature is the
+`#[cfg(test)]` hook of
+[`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)
+in `sqlite/`; a call outside `#[cfg(test)]` does not compile in the release
+build, so the boundary is enforced by the compiler (`ADR-013`, *Consequences*).
 
 ## The argument parser
 

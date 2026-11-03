@@ -217,20 +217,24 @@ SQLite has no privileges, so none of the three detections above runs on a
 | The `server` object describes the carried library, and `standing` is `supported` with no window consulted | `FR-LITE-002`, `FR-LITE-003` |
 
 **Where the library's result becomes a condition.** `sqlite/fault.rs`
-classifies by the stage and the result code, and never by a message's text.
+classifies by the stage or statement and the integer result code, and never by
+a message's text; how it obtains the code from the driver, and why not through
+the driver's own enumeration, is
+[`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)'s.
+The table's rows follow the order of `FR-LITE-040`; the stages are
+[architecture.md](architecture.md#the-sqlite-reader)'s.
 
 | Where | Returned | Exit | Forced by |
 |---|---|---|---|
 | Stage 1 | Anything but a regular file | `78` | `FR-LITE-005` |
-| Stage 1 or 2 | Nothing at the path, a dangling link, a refused lookup, or `SQLITE_CANTOPEN` | `74` | `FR-LITE-007` |
-| Stage 4 or 5 | A control or a limit not applied, or not confirmed by its read-back, whatever the library returned | `70` | `FR-LITE-012` |
-| Any later statement | `SQLITE_NOTADB`; `SQLITE_CORRUPT`, a schema that cannot be loaded included; `SQLITE_TOOBIG` | `78` | `FR-LITE-007` |
-| Any later statement | `SQLITE_READONLY_DIRECTORY`; `SQLITE_IOERR` under any extended code | `74` | `FR-LITE-007`, `FR-LITE-008` |
-| Any statement | `SQLITE_BUSY` at the bound, or `SQLITE_INTERRUPT` from the watchdog | `69` | `FR-LITE-009`, `FR-ERR-027` |
-| Statement 7, or a per-view statement | `SQLITE_ERROR` | The view is marked; a request naming it is `77` | `FR-LITE-035`, `FR-PRIV-003` |
+| Stage 1 | A lookup that fails: nothing at the path, a dangling link, a refused lookup | `74`, the first row of `FR-LITE-007` | `FR-LITE-005`, `FR-LITE-007` |
+| Before any statement | The statement's bound already spent | `69` | `FR-ERR-027`, [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) |
+| Stage 4 or 5 | Any result code, or a value read back that differs from the value set or from the row required | `70` | `FR-LITE-012`; `FR-LITE-040` step 1 |
+| Statement 7, or a per-view statement | `SQLITE_ERROR` | The view is marked; a request naming it is `77` | `FR-LITE-035`, `FR-PRIV-003`; `FR-LITE-040` step 2 |
+| The open, or any statement | A result code a row of `FR-LITE-007` names — `SQLITE_BUSY` whenever it is returned, `SQLITE_CANTOPEN` for a file beside the database as well | That row's code | `FR-LITE-007`; `FR-LITE-040` step 3 |
+| The open, or any statement | Any other result code, `SQLITE_INTERRUPT` from the watchdog included | The code `FR-LITE-040`'s table gives its primary code, or the extended code a row names; `70` for a primary code no row names | `FR-LITE-040` step 4, `FR-LITE-009` |
 | The fold | A trigger header without one timing and one event | `70` | `FR-LITE-032` |
-| The fold, or the probe | A pragma value of a class the library does not document for it, or a version without two dot-separated parts | `70` | `FR-ERR-030` |
-| Anywhere | Any other result code | **Not assigned** | [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
+| Anywhere | A driver error carrying no result code — a pragma value of a class the library does not document for it among them — or a version without two dot-separated parts | `70` | `FR-ERR-030` |
 
 **The named view.** A view a `sqlite` read marked is `77` when a request names
 it (`FR-PRIV-003`, `FR-LITE-035`). The verdict names the view, the property
@@ -248,29 +252,14 @@ against `sqlite_schema` of `main`, whose rows are not read, answers
 shape for both providers (`FR-OUT-027`), and the command touches no cache
 (`FR-CFG-025`).
 
-**Three readings this folder records**, each reported to the functional owner
-with both readings, as this folder records every such reading:
-
-- **A failure at stage 1 is `FR-LITE-007`'s first condition.** That requirement
-  classifies failures "once the kind of the file is established"; a path whose
-  kind cannot be established because it names nothing, or names a dangling
-  link, names nothing whichever of the lookup and the open finds it, and the
-  caller's next step is the same `--path` repair.
-- **The library's message in a `cause`.** `FR-LITE-007` and `FR-LITE-035`
-  oblige the `cause` to carry what the library returned, the object and the
-  reason; `FR-GLOB-018` bars "the raw driver error" from every diagnostic
-  stream. This folder takes the specific requirements as governing, as
-  [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers) does for the
-  temporary files: the condition carries the result code's name and the
-  library's message text, escaped under `FR-ERR-024`, and never the driver's
-  error value or its `Display`.
-- **A deadline that expires without a lock.** The sixty-fifth edition's note to
-  `FR-ERR-034` has a `sqlite` `69` name "that the catalogue-query deadline
-  expired while the database was locked". The watchdog can end a statement that
-  met no lock, and a `cause` naming a lock would then be false, which
-  `FR-ERR-010` forbids. This folder's reading: the `cause` names a lock only
-  where the library returned `SQLITE_BUSY`, and otherwise names the path, the
-  statement and the resolved deadline.
+**Discharged in the sixty-seventh edition — the three readings this section
+recorded.** A path whose kind cannot be established is the first row of
+`FR-LITE-007`, by `FR-LITE-005`'s last sentence; what a `cause` carries of the
+library is the result code's name and the library's message, never the
+driver's error value, by `FR-GLOB-018`; and a `69` names a lock only where the
+library returned `SQLITE_BUSY`, by the note on `FR-ERR-034`. Each requirement
+now states the reading this folder had taken, and the rows above and in
+[The error type and the exit code](#the-error-type-and-the-exit-code) cite it.
 
 ## The error type and the exit code
 
@@ -290,7 +279,7 @@ and the rejected options are not restated here.
 | One condition reachable over **two populations** is two variants, not one, where a single `cause` would carry wording that is false on one of them. An object sought in a catalogue read names the database entry it was read through; sought in a `--context` document it has no entry to name, because `FR-RND-019` resolves none and `FR-RND-022` opens no connection, so the document's **path** stands where the entry stands. Both name the database | `FR-ERR-034`, `FR-RND-032`, `FR-SCH-010`, `FR-RND-019`, `FR-RND-022` |
 | A repetition the specification **permits** is not the repetition `FR-CLI-014` refuses: `--set` is repeatable, so a second occurrence is correct and a second occurrence of the same **key** is the fault, reported with both values | `FR-RND-008`, `FR-RND-014`, `FR-CLI-014`, `FR-ERR-034` |
 | Each render bound is a variant of its own carrying the resolved value, so the `cause` names the bound, the value and the key that raises it, and the `hint` names the `tpl cfg set` that raises it | `FR-RND-036`, `FR-RND-037`, `FR-RND-039`, `FR-ERR-034` row `65`, `FR-ERR-009` |
-| A `sqlite` condition carries the path as resolved, the stage or statement, and what the library returned — the result code's name and its message — and never the driver's error value; a `74` or `78` carries the entry for the `hint` the corpus fixes. A `70` of `FR-LITE-012` carries the control or limit, the value set and the value read back | `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-012`, `FR-ERR-034` and its sixty-fifth-edition notes, `FR-ERR-045` note; the reading on `FR-GLOB-018` is [The SQLite reader](#the-sqlite-reader)'s |
+| A `sqlite` condition carries the path as resolved, the stage, statement or check of the file's kind that failed, and what the library returned — the result code's name and its message, the message carried as a value of the file — or, for the check of the kind, what the filesystem returned; never the driver's error value. A `74` or `78` carries the entry for the `hint` the corpus fixes. A `70` of `FR-LITE-012` carries the control or limit, the value set and the value read back. A `69` carries which of three things ended the statement — `SQLITE_BUSY`, with the resolved deadline where the bound was spent when it returned; the watchdog's interrupt, with the resolved deadline; or `SQLITE_PROTOCOL` or `SQLITE_SCHEMA` — so that its `cause` names a lock in the first case alone | `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-012`, `FR-LITE-040`, `FR-GLOB-018`, the notes on `FR-ERR-034` for a `sqlite` entry, `FR-ERR-045` note; [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
 
 `main.rs` reads the exit status and returns it; it performs no classification of
 its own, and the eight-step validation order that decides which code wins when
@@ -321,11 +310,30 @@ stderr. It holds transformations, not a taxonomy.
 | `cause` is factual, specific, never a restatement of `error`, and never wording that would be equally true of a different failure; its per-code content is obliged row by row | `FR-ERR-010`, `FR-ERR-034` |
 | `hint` carries a runnable command wherever one exists, built only from literals and from names matching the admitted character set; a candidate outside it is presented in **no** form and the generic hint stands alone | `FR-ERR-009`, `FR-ERR-022`, `FR-ERR-023` |
 | Every interpolated value is escaped — newline, carriage return, **tab**, and every C0 control — and the renderer escapes each composed line as a whole rather than each interpolation | `FR-ERR-024`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
+| A value of a SQLite database file, or of its library, is bounded wherever it is interpolated, at every verbosity, and no other value is | `FR-ERR-046` |
 | No credential, resolved DSN, argument vector, child stderr, raw driver error or `.cfg` content reaches the stream at any verbosity | `FR-ERR-013`, `BR-ERR-003`, `FR-GLOB-018` |
 
 Tab is escaped here and excepted in `text` read output; the two rules are
 deliberately different, which is why `output/` and `diagnostics/` are two
 modules ([`OD-05`](open-decisions.md#od-05--the-module-decomposition)).
+
+**The bound of `FR-ERR-046` is decided by a value's type and applied in
+`diagnostics/`.**
+
+| Question | Decision | Ground |
+|---|---|---|
+| What is bounded | Every value of the library a `sqlite` condition carries — its message, a value read back — and every name or value taken from a model a `sqlite` read produced, from the file or served from its cache, wherever a diagnostic line interpolates it — a `cause`, a suggestion, a warning, a render failure | `FR-ERR-046`; the cache is the reading below |
+| How it is marked | Such a value enters an error value, or a warning's emission function, as a type of its own, built only from the library's report in `sqlite/fault.rs` and from a model whose `database.provider` is `sqlite` and which was not read from a `--context` document. A value of a `mariadb` read, of a `--context` document or of the argument vector is never that type, so none is bounded | `FR-ERR-046`, `FR-CTX-043`, `FR-CDOC-018` |
+| Where it is cut | At the interpolation: the value is escaped under `FR-ERR-024`, and then, past 256 characters, replaced by at most 128 leading characters, the marker `[... <n> characters omitted ...]` and at most 128 trailing characters. A cut that would fall inside `\n`, `\r`, `\t` or `\u{XX}` moves to that sequence's edge outside the kept part. The result holds no C0 control, so the escape of the whole line leaves it unchanged and `OD-06`'s guarantee stands | `FR-ERR-046`, `FR-ERR-024`; `src/diagnostics/escape.rs`, read at `f8e2e34` |
+| What a character is | A Unicode scalar value — a Rust `char` — the unit `diagnostics/` already counts in for `FR-ERR-039`; `<n>` counts the escaped characters left out | `FR-ERR-046`, `FR-ERR-039` |
+
+**Recorded reading — a value served from the cache of a `sqlite` read.**
+`FR-ERR-046` bounds "a value the system read from a SQLite database file" and
+excludes a `--context` document, the argument vector, a MariaDB server's
+values and stdout; it names no cache. A cached `sqlite` read holds the file's
+names at the lengths the file chose, and its record names the provider
+(`FR-CDOC-018`), so this folder bounds them as values of the file. Both readings
+are recorded; the wording is the functional owner's to settle.
 
 **Suggestion selection.** At most three candidates within an edit distance of
 two, ordered by distance and then by name, over eight populations; where no
@@ -336,7 +344,8 @@ candidate qualifies the suggestion is omitted rather than weakened
 its cost as a measured path is
 [quality-attributes.md](quality-attributes.md#the-failure-path-is-a-measurement-point).
 The **population** is supplied by whichever component owns it — object names by
-`mariadb/`, template names by `render/`, entry and key names by
+the reader, `mariadb/` or `sqlite/`, the latter's as values of the file under
+`FR-ERR-046`, template names by `render/`, entry and key names by
 `project/config.rs`, command and flag names by `cli/` — and `diagnostics/` owns
 only the selection. One population is narrowed by its own requirement: a failing
 segment of a help path suggests over the **children of the node reached**, not
@@ -861,6 +870,19 @@ context fails the render rather than answering `false`, whether the column came
 from a server or from a supplied document (`FR-ENV-017`, `FR-ENV-043`,
 `FR-SEM-017`, `FR-SEM-018`). The other five consult the operand alone.
 
+**Both read the table's key from its `primary_key`, never from an index
+named `PRIMARY`.** `primary_key` answers whether the column is a member of that
+key; `unique`, whether it is a member of that key or of an index the model
+reports unique (`FR-ENV-041`, as amended in the sixty-seventh edition). A
+`sqlite` key is named after its index of origin, or carries no name and no
+index where it is the rowid alias (`FR-LITE-029`), so a name cannot find it;
+`primary_key` is the one place the model holds every table's key
+([data-model.md](data-model.md#a-sqlite-read)). On a `mariadb` document that
+value is the index `PRIMARY`, so neither test changes an answer there. As built
+at `f8e2e34`, `src/render/predicate.rs` reads `indexes` alone and matches the
+name `PRIMARY` for `primary_key`, which holds for a `mariadb` document and is
+what the second provider changes.
+
 The engine supplies the access: "A read only reference is passed to filter
 functions and similar objects to allow limited interfacing with the engine", and
 its lookup method "Looks up a variable by name in the context" (docs.rs
@@ -897,7 +919,7 @@ division, and why the two paths are two modules, are
 | Expansion reaches six fields only, is a single pass, and inside a DSN parses the URL **first**, expands within the delimited field, then percent-encodes; an unclosed form and an undefined variable are both `78` | `FR-CONF-015` … `FR-CONF-022` |
 | `provider` takes one of two values, an absent key meaning `mariadb`, and any other value in any entry is `78` at step 3; a `path` holding `${` is `78` at step 3; `path` is never expanded, and is held as written | `FR-CONF-051`, `FR-CONF-054`, `FR-CONF-015` |
 | For the selected entry alone, at entry resolution: a key its provider refuses, then a missing or empty `path`, is `78`, decided before any expansion and before the child; the `cause` states whether the provider was written or taken from an absent key | `FR-CONF-052`, `FR-CONF-053` |
-| A relative `path` resolves against the project directory and never against the working directory, and the result handed to `sqlite/` is absolute; the reading for a `.tpl` reached through a link is [data-model.md](data-model.md#tplcfg)'s | `FR-CONF-054` |
+| A relative `path` resolves against the project directory — the parent of the canonical `.tpl` folder where that folder is reached through a link — and never against the working directory, and the result handed to `sqlite/` is absolute | `FR-CONF-054`, `FR-PROJ-009` |
 
 **Three read paths over one file produce three different outputs**, and they are
 three code paths rather than one with a flag:

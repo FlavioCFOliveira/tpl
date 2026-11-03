@@ -258,14 +258,15 @@ alias is written. A cached table is decoded under the provider its entry's
 `database.json` records (`FR-CDOC-018`)
 ([`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)).
 
-**Recorded reading — the remaining properties of a rowid-alias key.**
-`FR-LITE-029` fixes the name, the member and its direction, and the key has no
-index for `FR-LITE-030` to supply the rest. This folder reads `BR-LITE-002` for
-them: `unique` is true, because SQLite documents that the rowid "uniquely
-identifies the row within its table" (`https://sqlite.org/lang_createtable.html`,
-last updated 2025-04-30, consulted 2026-11-03); `type` is `null`; the comment is
-the empty string; and `ignored` is false, as `FR-LITE-030` gives every SQLite
-index. The reading is reported to the functional owner.
+**The rowid-alias key carries what a key read from an index of origin `pk`
+carries**: the fold sets on the key it builds the remaining properties
+`FR-LITE-029` fixes, as amended in the sixty-seventh edition, `unique` true
+among them. The two tests that read a key answer from that value
+([interfaces.md](interfaces.md#context-access-from-a-filter-or-a-test)).
+
+**Discharged in the sixty-seventh edition — the remaining properties of a
+rowid-alias key.** This section recorded them as a reading of `BR-LITE-002`;
+`FR-LITE-029` now states the same values.
 
 **What a `sqlite` read never produces.** A routine (`FR-LITE-022`), a `CHECK`
 constraint (`FR-LITE-034`), a `restricted` marking on anything but a view's
@@ -302,8 +303,11 @@ versioned and what is not. Two of the three parts are local to the machine and
 are dotfiles; the one part that travels with the repository is not
 (`FR-CACHE-001`).
 
-`FR-PROJ-023` names five writers and no others, and `FR-PROJ-024` admits one
-exception outside `.tpl`:
+`FR-PROJ-023` names five writers and no others. `FR-PROJ-024` admits two
+exceptions outside `.tpl`: the destination of `tpl init`, below, and the two
+files beside a SQLite database in write-ahead-log mode, which the library the
+binary carries may create and write and no writer below writes
+(`FR-LITE-008`).
 
 | Writer | What it writes |
 |---|---|
@@ -314,22 +318,25 @@ exception outside `.tpl`:
 | `tpl cache clean` | Removes from `.tpl/.cache/` what `FR-CACHE-023` and `FR-CACHE-041` name, and rewrites `meta.json` under `FR-CACHE-043` |
 
 The fourth writer is why `BR-PROJ-002` denies that a read command is read-only
-with respect to the filesystem unless it is invoked with `--direct --no-cache`.
+with respect to the filesystem unless it is invoked with `--direct --no-cache`;
+even so invoked, a read of a `sqlite` entry may write the two files of
+`FR-LITE-008`, and nothing else (`BR-PROJ-002`, `FR-CACHE-016`, `BR-SCH-003`).
 `DIV-005` is the register entry that carried this count against the root
 coordination document, discharged by commit `0ea5624`; it is cited, not
 restated.
 
-**Recorded discrepancy — the files a SQLite read leaves outside `.tpl`.**
-`FR-PROJ-024` admits exactly one exception to "no file outside `.tpl`", the
-destination of `tpl init`, and `BR-PROJ-002` makes `--direct --no-cache` the
-read that writes nothing. `FR-LITE-008` lets the library create `<file>-wal`
-and `<file>-shm` beside a database in write-ahead-log mode, and leave them, on
-any read of it — under `--direct --no-cache` too. Neither of the first two was
-amended by the sixty-fifth edition. Both readings are recorded. This folder
-takes `FR-LITE-008` as governing, because it is specific and states the
-alternatives it rejected; nothing in `tpl` writes either file, and no
-`sqlite/` code may create, change or remove any other file outside `.tpl`
-(`FR-LITE-008`). The wording is the functional owner's to settle.
+**No `sqlite/` code creates, changes or removes a file outside `.tpl`**, and
+the library writes none but the two files above: the `temp_store` control keeps
+the temporary data of a sort, a materialised subquery or a transient index in
+memory, where it would otherwise go to the host's temporary directory
+(`FR-LITE-008`, `FR-LITE-010`;
+[architecture.md](architecture.md#the-sqlite-reader), stages 4 and 5).
+
+**Discharged in the sixty-seventh edition — the files a SQLite read leaves
+outside `.tpl`.** This section recorded `FR-LITE-008` against `FR-PROJ-024` and
+`BR-PROJ-002`, and took the first as governing; the user decided on 2026-11-03
+that it stands, and the other two, with `FR-CACHE-016` and `BR-SCH-003`, now
+admit the two files.
 
 **Recorded discrepancy — the temporary files.** `FR-PROJ-002` reads that `.tpl`
 holds *"exactly the artefacts above and nothing else that `tpl` reads or
@@ -398,18 +405,14 @@ untouched. [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-p
 records the choice and what it costs.
 
 **A relative `path` is resolved at entry resolution, against the project
-directory** — the directory holding the `.tpl` folder (`FR-CONF-054`) — and
-`sqlite/` receives the absolute result. The file keeps the value as written.
+directory** — the parent of the `.tpl` folder's canonical path, which is the one
+path the project holds after step 2, whether or not the folder was reached
+through a link (`FR-CONF-054`, `FR-PROJ-009`) — and `sqlite/` receives the
+absolute result. The file keeps the value as written.
 
-**Recorded reading — the project directory of a `.tpl` reached through a
-link.** `FR-PROJ-009` canonicalises the `.tpl` folder before any check, and the
-glossary's *project directory* is "the directory that holds the `.tpl` folder";
-where `.tpl` is a symbolic link, the directory holding the link and the parent
-of its target differ. This folder resolves against the parent of the canonical
-`.tpl` — the one path the project holds after step 2 — because the template
-root of `FR-TMPL-023` and the cache of `FR-CACHE-001` already resolve under the
-canonical folder, and `FR-CONF-054` names template resolution as its analogy.
-Both readings are recorded; the wording is the functional owner's to settle.
+**Discharged in the sixty-seventh edition — the project directory of a `.tpl`
+reached through a link.** This section recorded the canonical parent as a
+reading; `FR-CONF-054` now states it.
 
 **A file written for the second provider cannot be read by an older binary.**
 `FR-CONF-034` refuses a key it does not know, so a `.tpl/.cfg` naming

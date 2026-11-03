@@ -100,8 +100,10 @@ directly.
 **The sixty-fifth and sixty-sixth editions are harvested ahead of the gap**, on
 2026-11-03 for rmp `#316`, whole and out of order, because the second provider
 had no technical answer in this folder: section 27 is new, and rows move in
-sections 2, 9, 10, 11, 14, 15, 18, 19, 23 and 26. Counting both, the mapping is
-behind by forty editions, the same forty as before.
+sections 2, 9, 10, 11, 14, 15, 18, 19, 23 and 26. **The sixty-seventh is
+harvested on the same terms the same day**: rows move in sections 3, 5, 11, 12,
+14, 19, 23 and 27. Counting all three, the mapping is behind by forty editions,
+the same forty as before.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -203,6 +205,7 @@ that honours it.
 | A timeout exits with the code of the **phase**, so the deadline machinery must know which phase it is in | `FR-GLOB-013`, `FR-ERR-027` | `architecture`, `interfaces` (`OD-12`) |
 | Four diagnostic levels, one line per catalogue query at `INFO`, **distinguishable from every other line**, and cache hit/miss at `DEBUG`; the count of those lines at `-v` must equal the catalogue statements the server's statement record shows | `FR-GLOB-014` … `FR-GLOB-017`, `NFR-PERF-008` (sixty-second edition) | `operations` (`OD-17`), `verification` |
 | Six categories of content must never reach any diagnostic stream at any level: argv, resolved DSN, `password_command` and its stderr, raw driver error, `.cfg` contents. A raw driver error is what a naive `tracing` call on an `Err` emits | `FR-GLOB-018`, `FR-SEC-005` | `security`, `operations` (`OD-17`) |
+| For a `sqlite` entry the raw driver error is the driver's error value in any rendering; a `cause` obliged to state what the library returned carries the result code's name and the library's message, escaped and bounded, so the reader must take both from the driver without its rendering | `FR-GLOB-018` (sixty-seventh edition) | `interfaces`, `security` (`OD-38`) |
 | Five short forms exist in the whole tool and no local flag may declare one | `FR-GLOB-024` | `interfaces` |
 | The refusal of `-q` with `-v` is stated **where both flags are declared**, so an implementer resolving the pair meets it without reading another file; no precedence is admitted, because quiet-over-verbose and last-wins both make the result depend on how a script grew | `FR-GLOB-015` (twentieth edition), `FR-CLI-015`, `FR-CLI-014` | `interfaces` |
 
@@ -237,7 +240,7 @@ that honours it.
 | The dump is one JSON document, complete by construction: `--pattern` on it is `64`, and it must round-trip through `--context` byte-identically against a live read | `FR-SCH-016`, `FR-SCH-021`, `FR-SCH-022`, `BR-SCH-004` | `verification`, `interfaces` (`OD-19`); [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md) |
 | A `--context` document must carry the whole envelope; a bare `data` object is refused | `FR-SCH-036` | `interfaces` |
 | `text` listings are aligned columns under a header row and are **not** contract; only `--format json` is | `FR-SCH-026`, `FR-SCH-027`, `FR-OUT-004` | `interfaces` |
-| A read command **writes** to `.tpl/.cache/` on a miss; only `--direct --no-cache` touches no file | `BR-SCH-003`, `FR-CACHE-016` | `architecture`, `operations` |
+| A read command **writes** to `.tpl/.cache/` on a miss; only `--direct --no-cache` touches no file, save the two files the SQLite library may write beside a database in write-ahead-log mode | `BR-SCH-003`, `FR-CACHE-016` (sixty-seventh edition) | `architecture`, `operations`, `data-model` |
 
 ---
 
@@ -362,7 +365,7 @@ that honours it.
 | The `musl` static linkage changes DNS behaviour, and the `cause` line owes the caller the distinction | `FR-CONF-005` note; `NFR-PERF-018` | `operations`, `interfaces` |
 | Every entry has a **provider** that decides which reader reads it; an absent key is `mariadb`, so every older file keeps its meaning — the provider is one closed type, matched exhaustively | `FR-CONF-051` | `architecture`, `data-model` (`OD-35`) |
 | The keys a provider refuses are decided at entry resolution, for the selected entry only, before any expansion or child | `FR-CONF-052`, `FR-CONF-053` | `architecture`, `interfaces` |
-| `path` is literal, never expanded, and resolved against the **project directory**, never the working directory | `FR-CONF-054` | `data-model`, `security` |
+| `path` is literal, never expanded, and resolved against the **project directory** — the parent of the canonical `.tpl` folder, whichever link reached it — never the working directory | `FR-CONF-054` (sixty-seventh edition), `FR-PROJ-009` | `data-model`, `security`, `interfaces` |
 
 ---
 
@@ -378,7 +381,7 @@ that honours it.
 | `tpl init` creates five artefacts, `.cfg` at `0600`, missing parents included, and refuses an existing `.tpl` with `73` changing nothing | `FR-PROJ-013` … `FR-PROJ-019` | `interfaces`, `operations` |
 | Two artefacts are **shipped content**: `example.jinja` and `rust/_types.jinja`; the example must render against any table of any supported series and use at least one filter and one test | `FR-PROJ-017`, `FR-PROJ-021`, `FR-ENV-011` | `operations`, `verification` |
 | The generated `.cfg` carries a **commented-out** example entry — the file must survive later rewrites with its comments | `FR-PROJ-017`, `FR-PROJ-018` | `data-model` (`OD-09`) |
-| Exactly five writers inside `.tpl`, and exactly one file-system exception outside it | `FR-PROJ-023`, `FR-PROJ-024` | `architecture`, `security` |
+| Exactly five writers inside `.tpl`, and exactly two file-system exceptions outside it: the destination of `tpl init`, and the two files the SQLite library may write beside a database in write-ahead-log mode, which no writer of `tpl` writes | `FR-PROJ-023`, `FR-PROJ-024` (sixty-seventh edition), `BR-PROJ-002` | `architecture`, `security`, `data-model` |
 | A nested project warns on stderr and exits `0` | `FR-PROJ-016` | `interfaces` |
 | An **absent** `.cfg` passes the trust checks and reads as an empty configuration: there is nothing to own and nothing to grant, the project is the folder, and the write surface may create the file again | `FR-PROJ-001`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-004` | `architecture`, `security` |
 | Ownership is judged **before** the mode, because a file belonging to another user is refused whatever its mode says | `FR-PROJ-010`, `FR-PROJ-011` | `architecture` |
@@ -425,6 +428,8 @@ that honours it.
 | `EPIPE` is `0` normally and `74` if a JSON document was mid-flight: the writer must know whether it is inside a document | `FR-ERR-025`, `FR-ERR-026` | `architecture`, `interfaces` |
 | Nine codes carry at least one integration test, part of the definition of done; `70` is the single exception and is exercised in process | `BR-ERR-001` | `verification` |
 | A render bound's `cause` names the bound, its resolved value and the key that raises it, so each bound is its own variant; a bound an abandoned render crosses is step 8's `65`, with no return to the cache-or-connection step | `FR-ERR-034` row `65`, `FR-ERR-001`, `FR-ERR-006` (forty-second edition) | `interfaces`, `architecture` |
+| For a `sqlite` entry, step 6 is the kind check, the open, the hardening and the probe, ending `69`, `70`, `74` or `78`; the `cause` names the path and what the library or, for the kind check, the filesystem returned, and no host or port. A `69` names a lock only where the library returned `SQLITE_BUSY`, so the error value records what ended the statement | `FR-ERR-006`, `FR-ERR-045` (sixty-fifth edition notes); `FR-ERR-034` note (sixty-seventh edition) | `interfaces` (`OD-38`) |
+| A value read from a SQLite file, or returned by its library, is bounded at 256 characters in every diagnostic line, ends kept around a counted marker, and no other value is: the bound needs to know where a value came from, so it is a property of the value's type and is applied after escaping | `FR-ERR-046` | `interfaces`, `security` |
 
 **Two contradictions recorded, both from the harvest of editions ten to
 twenty.**
@@ -433,7 +438,6 @@ twenty.**
 |---|---|
 | *each distinct condition has its own code and is not collapsed* | The **twentieth edition** amended `FR-ERR-002` and stated that the sentence was refuted three times over: by `FR-ERR-006`, which routes every parsing fault to `64` by design; by the hundred and twelve requirements outside that file that name a code; and by `FR-ERR-035`, which routes one key to three codes *because* three next steps differ. The obligation that survives is one code per condition, named by the owning requirement |
 | *built only from literals and `[A-Za-z0-9_]{1,64}`* | The **twentieth edition** found `FR-ERR-021` and `FR-ERR-022` in outright contradiction: no key of `FR-CONF-002` matches the set, because all fifteen key forms carry a dot — eighteen since the forty-second edition, all dotted — so two of the eight populations `FR-ERR-021` names could never be suggested. Widening the set was rejected; the distinction between a literal and a value is what replaced it |
-| For a `sqlite` entry, step 6 is the kind check, the open, the hardening and the probe, ending `69`, `70`, `74` or `78`; the `cause` names the path and what the library returned, and no host or port | `FR-ERR-006`, `FR-ERR-034` and `FR-ERR-045` (sixty-fifth edition notes) | `interfaces` (`OD-38`) |
 
 Neither row is overwritten silently: what each asserted is recorded here beside
 what replaced it.
@@ -528,6 +532,7 @@ what replaced it.
 | `sql_type` is a read of `data_type` and nothing else — no parsing, no consulting `column_type` | `FR-ENV-039` | `interfaces` |
 | Seven tests accept a **column object and nothing else**; a wrong operand fails, never answers `false` | `FR-ENV-040`, `FR-SEM-005`, `FR-SEM-007` | `interfaces` |
 | `primary_key` and `unique` resolve `table_name` **against the render context**, so a filter/test needs access to the context, and an absent table is `65` | `FR-ENV-015`, `FR-ENV-017`, `FR-ENV-043` | `architecture`, `interfaces` |
+| `unique` also answers for a member of the table's primary key, which a rowid alias carries without an index, so both tests read the key the table holds rather than an index name | `FR-ENV-041` (sixty-seventh edition), `FR-LITE-029` | `interfaces`, `data-model` |
 | Three disjoint type families over an exact 39-value partition; a value in none satisfies none and does not fail | `FR-ENV-042`, `FR-ENV-046` | `interfaces`, `data-model` |
 | Fourteen inherited filters, closed; everything else the engine offers is group 3 and unguaranteed | `FR-ENV-018`, `FR-ENV-019` | `technology-stack`, `interfaces` |
 | Five global functions and no more; four capability prohibitions — no environment, no file, no network, no clock | `FR-ENV-020` … `FR-ENV-025`, `BR-ENV-004` | `security`, `architecture` |
@@ -612,6 +617,7 @@ what replaced it.
 | Three reference workloads and a byte scalar, `WL-001` kept separate from the correctness fixture so that one does not hide an N+1 in the other. `seed-bench.sql` carries it, and was written on 2026-09-21 | `WL-001` … `WL-003`, `BR-PERF-002`, `BR-PERF-007` | `verification` (`OD-27`) |
 | The failure path is a measurement point because nearest match computes an edit distance against every existing name; that it should cost what `tpl --version` costs is a **design expectation** to be checked against a reading, never an obligation on a figure | `BR-PERF-004` | `quality-attributes` (`OD-20`) |
 | The six hold for a `sqlite` entry, a connection being the library's to the file; the count is taken in process, and the fallback for a view that does not compile is the one path where it grows | `FR-LITE-037`; `NFR-PERF-001`, `NFR-PERF-004` (sixty-fifth edition notes) | `quality-attributes`, `verification` |
+| For a `sqlite` entry the connection count is observed by the syscall trace on the two Linux targets and skipped, with its reason, on the two macOS targets; the query-count lines are compared with the in-process statement record over the fixture, on all four, so the comparison runs in process | `NFR-PERF-004`, `NFR-PERF-008` (sixty-seventh edition) | `quality-attributes`, `verification` |
 
 ---
 
@@ -674,10 +680,11 @@ is named only where a row would otherwise imply a correction is outstanding.
 | The binary carries its own library, chosen by a closed rule and the most recent secure release the chosen driver carries; the release lives in the decision register and nowhere else | `FR-LITE-001`, `FR-LITE-004`, `FR-LITE-039` | `technology-stack` ([`ADR-013`](../adr/adr-013-sqlite-driver.md)) |
 | The `server` object describes the library; `standing` is always `supported`, with no window and no refusal | `FR-LITE-002`, `FR-LITE-003` | `architecture`, `interfaces` |
 | The file's kind is established before the open, without opening it; the open is read-only and creates nothing | `FR-LITE-005`, `FR-LITE-006` | `architecture`, `security` |
-| A failure to read the file has a code per condition and is never an empty database | `FR-LITE-007`, `FR-LITE-036` | `interfaces` (`OD-38`) |
-| A database in write-ahead-log mode may leave two files beside it, against the one exception outside `.tpl` that `FR-PROJ-024` admits | `FR-LITE-008` | `data-model`, `security` |
+| A failure to read the file has a code per condition and is never an empty database; a path whose kind cannot be established is the first such condition | `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-036` (sixty-seventh edition) | `interfaces`, `architecture` |
+| Every result code the library can return ends the invocation with exactly one code, by an ordered classification over the stage and the result code, extended codes included — so the reader classifies the integer the library returned and not a driver's coarser enumeration, with a wildcard for a code published later | `FR-LITE-040` | `interfaces`, `technology-stack` (`OD-38`) |
+| A database in write-ahead-log mode may leave two files beside it, which `FR-PROJ-024` admits as its second exception | `FR-LITE-008`, `FR-PROJ-024` (sixty-seventh edition) | `data-model`, `security` |
 | Every statement runs under the catalogue-query deadline, with no runtime to time it | `FR-LITE-009` | `architecture` (`OD-36`) |
-| Seven controls and three limits applied and read back on every connection, one of them a property of the build confirmed by a statement that reads nothing from the file; one not in effect is `70` before the file is parsed | `FR-LITE-010` … `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-017` | `architecture`, `security` |
+| Eight controls and three limits applied and read back on every connection; two depend on the build and are confirmed by a statement that reads nothing from the file, one of them by its read-back as well; one not in effect is `70` before the file is parsed | `FR-LITE-010` … `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-017` (sixty-seventh edition) | `architecture`, `security` |
 | No integrity check runs | `FR-LITE-013` | `security` |
 | A closed statement list, its order, and its verification through the library's trace from the test seam, nested statements apart; the read-only promise observed from outside the process | `FR-LITE-015` … `FR-LITE-018`, `BR-LITE-001` | `verification` (`OD-37`) |
 | The read covers `main`, through the types `pragma_table_list` reports, with seven exclusions and no routines | `FR-LITE-019` … `FR-LITE-022` | `architecture`, `data-model` |

@@ -25,13 +25,35 @@ Every document listed below is **written**. A document not yet written would be
 listed as *waiting*, where it waits on a named entry of `open-decisions.md`, or
 as *unblocked*, where no entry stands against it; none is either today.
 
-As of 2026-11-03 two entries of `open-decisions.md` are open — `OD-33`,
-whether `UC-013` joins the acceptance skeleton, and `OD-38`, the exit code of a
-SQLite result code the contract does not classify — and **no document waits**:
-what each blocks is a statement or one arm of the implementation, not a
-document. Every other entry is settled. `OD-30`, the one entry that was settled
-and **interim**, was discharged on 2026-09-22, when the last leaf of the tree
-was implemented.
+As of 2026-11-03 one entry of `open-decisions.md` is open — `OD-33`, whether
+`UC-013` joins the acceptance skeleton — and **no document waits**: what it
+blocks is a statement, not a document. Every other entry is settled. `OD-30`,
+the one entry that was settled and **interim**, was discharged on 2026-09-22,
+when the last leaf of the tree was implemented.
+
+**Changes of 2026-11-03, second pass**, for rmp `#316` — against the
+sixty-seventh edition of `/specification` (`5805b5d`) and
+[`ADR-013`](../adr/adr-013-sqlite-driver.md),
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md) and
+[`ADR-002`](../adr/adr-002-tls-mode-mapping.md) as amended at `f8e2e34`:
+
+- `open-decisions.md`: `OD-38` is settled by `FR-LITE-040` and records how
+  `sqlite/fault.rs` applies it; `OD-37` records the test-only `trace` feature;
+  `OD-11` cites `ADR-005`; the three amended records are re-read.
+- `architecture.md`: the connection start confirms the build's `TEMP_STORE` and
+  sets `temp_store`; the section on the synchronous process cites `ADR-005`
+  rather than restating it, per rule R3.
+- `interfaces.md`: the fault mapping follows `FR-LITE-040`; the diagnostic
+  renderer applies the bound of `FR-ERR-046`, with one recorded reading on the
+  cache; `primary_key` and `unique` read the key the table holds
+  (`FR-ENV-041`); the first pass's three readings are discharged.
+- `data-model.md`: its reading on a rowid-alias key, its discrepancy on the
+  files outside `.tpl` and its reading on a linked `.tpl` are discharged.
+- `technology-stack.md`, `security.md`, `quality-attributes.md`,
+  `verification.md`, `overview.md` and `traceability.md` follow.
+  `verification.md` discharges its two gaps on `NFR-PERF-004` and
+  `NFR-PERF-008`; `traceability.md` harvests the edition and moves a row of
+  section 14 into the table it belongs to.
 
 **Changes of 2026-11-03**, for rmp `#316` — the second provider, against the
 sixty-fifth and sixty-sixth editions of `/specification`,
@@ -248,7 +270,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: thirty-six settled entries, each carrying its rejected options or citing the record that holds them, and two open — `OD-33` and `OD-38` — each carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: thirty-seven settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | written |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | written |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | written |
@@ -328,7 +350,8 @@ The SQLite reader's surface, where its results become exit codes, and the named
 view's `77`.
 The three privilege cross-checks. The error type, its exit-code derivation, and
 the per-code obligation on the `cause` line. The diagnostic renderer, its
-escaping, and suggestion selection. The document emitter: one envelope,
+escaping, the bound on a value of a SQLite file, and suggestion selection. The
+document emitter: one envelope,
 seventeen payload shapes, fixed key order, the two omissions, the compact and
 indented forms, C0 escaping, lossy UTF-8, the pipe state. The ordering rule and
 its seven exceptions. The help surface as built: the two sources the renderer

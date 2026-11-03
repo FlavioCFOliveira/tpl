@@ -103,6 +103,20 @@ nested, and is not counted (`FR-LITE-018`): the pragma functions run one for
 each table or index, and counting them would make the count grow with the
 objects.
 
+**`NFR-PERF-008` compares the `FR-GLOB-017` lines of a `sqlite` read with the
+statement record of `FR-LITE-018`**, over the statements of `FR-LITE-015`'s
+last row (`NFR-PERF-008`, as amended in the sixty-seventh edition). `sqlite/`
+therefore writes the line once for each statement of that row it issues — the
+catalogue plan, the per-view fallback and the probe of `FR-CFG-056` — once the
+statement's bound is checked and before it is prepared, as `mariadb/` writes it
+before a statement is sent; it writes none for a control, a limit or the version
+probe, and a nested statement is the library's and has none. A statement the
+library fails to prepare is then counted on the stream and absent from the
+record, the limit `FR-LITE-018` states.
+`NFR-PERF-004` for a `sqlite` entry is observed on the two Linux targets alone,
+which that requirement states. How both are verified is
+[verification.md](verification.md#the-sqlite-provider)'s.
+
 ## Determinism
 
 `NFR-DET-001` fixes the extent of the contract: **stdout**, byte-identical for

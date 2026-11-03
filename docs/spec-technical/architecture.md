@@ -456,7 +456,7 @@ and does not exist at `7738619`.
 | `sqlite/open.rs` | The kind of the file, and the read-only open | `FR-LITE-005`, `FR-LITE-006` |
 | `sqlite/harden.rs` | Each control and limit, set and read back, and the comparison of the two as a function separable from any connection | `FR-LITE-010` … `FR-LITE-012` |
 | `sqlite/watch.rs` | The busy timeout and the watchdog that bound every statement | `FR-LITE-009`, [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) |
-| `sqlite/fault.rs` | Where the library's result stops and a condition of `FR-ERR-001` begins | `FR-LITE-007`, `FR-LITE-009`, `FR-LITE-012`, [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
+| `sqlite/fault.rs` | Where the library's result stops and a condition of `FR-ERR-001` begins: one pure function over the stage or statement and the result code, and the table of SQLite's names for the codes | `FR-LITE-040`, `FR-LITE-007`, `FR-LITE-012`, `FR-GLOB-018`, [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
 | `sqlite/catalogue.rs` | The plan, the read that owns its values, and the per-view fallback | `FR-LITE-015`, `FR-LITE-035`, `FR-LITE-037` |
 | `sqlite/catalogue/statements.rs` | The text of every statement, one constant each | `FR-LITE-015`, `FR-LITE-016` |
 | `sqlite/catalogue/fold.rs` | The values into the model: coverage, affinity, default, rowid alias, keys, order | `FR-LITE-019` … `FR-LITE-034` |
@@ -468,12 +468,12 @@ the first statement that reads the file (`FR-LITE-002`, observed there).
 
 | # | Stage | Through | Statements | Refused with |
 |---|---|---|---|---|
-| 1 | The kind of the file | `std::fs::metadata` on the resolved path, which "will traverse symbolic links" and "currently corresponds to the `stat` function on Unix" (Rust standard library documentation, consulted 2026-11-03), so it opens nothing and a FIFO does not block | none | `78` for anything but a regular file (`FR-LITE-005`); `74` for a path that names nothing, a dangling link or a refused lookup — the first condition of `FR-LITE-007` |
-| 2 | The open | `Connection::open_with_flags` with `SQLITE_OPEN_READ_ONLY`, `SQLITE_OPEN_NO_MUTEX` and `SQLITE_OPEN_EXRESCODE`, and without `SQLITE_OPEN_CREATE`, `SQLITE_OPEN_URI` or `SQLITE_OPEN_NOFOLLOW` | none | `74`, `SQLITE_CANTOPEN` (`FR-LITE-006`, `FR-LITE-007`) |
+| 1 | The kind of the file | `std::fs::metadata` on the resolved path, which "will traverse symbolic links" and "currently corresponds to the `stat` function on Unix" (Rust standard library documentation, consulted 2026-11-03), so it opens nothing and a FIFO does not block | none | `78` for anything but a regular file; a lookup that fails — the path names nothing, a link on it dangles, the filesystem refuses it — opens nothing and is `74` under the first row of `FR-LITE-007`, to which `FR-LITE-005` routes it, the `cause` naming what the filesystem returned |
+| 2 | The open | `Connection::open_with_flags` with `SQLITE_OPEN_READ_ONLY`, `SQLITE_OPEN_NO_MUTEX` and `SQLITE_OPEN_EXRESCODE`, and without `SQLITE_OPEN_CREATE`, `SQLITE_OPEN_URI` or `SQLITE_OPEN_NOFOLLOW` | none | `74` for `SQLITE_CANTOPEN` (`FR-LITE-006`, `FR-LITE-007`); any other result code by `FR-LITE-040` |
 | 3 | The statement bound | The busy timeout replaced, and the watchdog started ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | none | — |
-| 4 | Extension loading | `PRAGMA compile_options`, which must return the row `OMIT_LOAD_EXTENSION` | 1 | `70` (`FR-LITE-010`, `FR-LITE-012`) |
-| 5 | The other controls, and the limits | The read-only open read back through `is_readonly` on `main`; defensive mode on and `trusted_schema` off, through `set_db_config` and read back through `db_config`; `query_only` on, `cell_size_check` on and `mmap_size` `0`, each set and read back through its pragma; the three limits through `set_limit`, read back through `limit` | 6 | `70` (`FR-LITE-010` … `FR-LITE-012`) |
-| 6 | The version probe | `SELECT sqlite_version()` | 1 | `69`, `74` or `78`, by the condition of `FR-LITE-007` |
+| 4 | The build | `PRAGMA compile_options`, which must return the row `OMIT_LOAD_EXTENSION`, for extension loading, and one of `TEMP_STORE=1`, `TEMP_STORE=2` and `TEMP_STORE=3`, for temporary storage | 1 | `70` (`FR-LITE-010`, `FR-LITE-012`) |
+| 5 | The other controls, and the limits | The read-only open read back through `is_readonly` on `main`; defensive mode on and `trusted_schema` off, through `set_db_config` and read back through `db_config`; `query_only` on, `cell_size_check` on, `mmap_size` `0` and `temp_store` `MEMORY`, read back as `2`, each set and read back through its pragma; the three limits through `set_limit`, read back through `limit` | 8 | `70` (`FR-LITE-010` … `FR-LITE-012`) |
+| 6 | The version probe | `SELECT sqlite_version()` | 1 | By `FR-LITE-040`: `69`, `74` or `78` under the rows of `FR-LITE-007`, and the code its own table gives any other result code |
 
 Why each flag of stage 2 is set or left out:
 
@@ -485,14 +485,16 @@ Why each flag of stage 2 is set or left out:
 | `SQLITE_OPEN_URI` | Left out, and not needed to keep the path literal | The bundled build defines `SQLITE_USE_URI` (`libsqlite3-sys` 0.39.1, `build.rs`, consulted 2026-11-03), under which a filename beginning with `file:` is a URI whatever the flags; the open is handed the absolute path of `FR-CONF-054`, which begins with `/`, and SQLite "interprets any filename that does not begin with "file:" as an ordinary filename" (`https://sqlite.org/uri.html`, consulted 2026-11-03) |
 | `SQLITE_OPEN_NO_MUTEX` | Set | The connection is used from one thread; it is `rusqlite`'s own default mode (`OpenFlags`, as above) |
 
-**Two controls go through the configuration interface and three through their
+**Two controls go through the configuration interface and four through their
 pragma.** `rusqlite`'s `DbConfig` carries `SQLITE_DBCONFIG_DEFENSIVE` and
 `SQLITE_DBCONFIG_TRUSTED_SCHEMA`, set by `set_db_config` and read back by
 `db_config` without a statement (docs.rs, `rusqlite` 0.41.1, consulted
 2026-11-03); `FR-LITE-015` admits the `trusted_schema` pragma without obliging
-it. `query_only`, `cell_size_check` and `mmap_size` have no variant there, so
-each is a pair of statements of `FR-LITE-015`'s first row. The limits use the
-`limits` feature [`ADR-013`](../adr/adr-013-sqlite-driver.md) enables.
+it. `query_only`, `cell_size_check`, `mmap_size` and `temp_store` have no
+variant there, so each is a pair of statements of `FR-LITE-015`'s first row.
+Temporary storage is in effect only where both its read-back at stage 5 and the
+`TEMP_STORE` row of stage 4 hold (`FR-LITE-010`). The limits use the `limits`
+feature [`ADR-013`](../adr/adr-013-sqlite-driver.md) enables.
 
 **The catalogue plan.** Seven statements follow the probe, fixed before the
 first is sent, which is `FR-LITE-037` by construction (`FR-LITE-015`, observed
@@ -525,8 +527,8 @@ generic code SQLite uses "when no other more specific error code is available"
 (`https://sqlite.org/rescode.html`), one statement per view reads that view's
 columns. A view whose statement fails the same way is marked
 `"restricted":["columns"]` and its library message is kept for the
-named-object verdict; any other failure fails the read under `FR-LITE-007`
-(`FR-LITE-035`, `FR-LITE-036`). **That the three causes `FR-LITE-035` names
+named-object verdict; any other failure fails the read with the code
+`FR-LITE-040` gives it (`FR-LITE-035`, `FR-LITE-036`). **That the three causes `FR-LITE-035` names
 report `SQLITE_ERROR` is not confirmed in the official documentation**; item 10
 of the fixture of `FR-LITE-038` is the observation that asserts it.
 
@@ -998,33 +1000,16 @@ the four instruments reaches which absence, and on which targets, is
 
 ## The synchronous process, and the runtime boundary
 
-The process is synchronous. Nothing outside `mariadb/` is asynchronous — `sqlite/`
-included — and no signature elsewhere in the crate returns a future; the runtime is built lazily
-inside `mariadb/`, is a current-thread runtime, and is entered at that one
-boundary. The decision, the requirements it serves and the three rejected shapes
-are [`ADR-005`](../adr/adr-005-async-runtime-scope.md), registered as
+That the process is synchronous, where the asynchronous runtime is built, that
+it serves a `mariadb` entry alone, and which deadlines may use its timers are
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md)'s, registered as
 [`OD-11`](open-decisions.md#od-11--the-scope-of-the-async-runtime), and are not
-restated.
-
-Two consequences bear on the rest of this document:
-
-- **The module that owns the runtime is the module `NFR-PERF-004` constrains**,
-  so at most one connection and exactly one runtime have one owner, and neither
-  outlives the read that needed it (`FR-RND-040`).
-- **The runtime's timers are available only inside the boundary**, which is what
-  divides the six deadlines of
-  [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) into
-  the four enforced with them and the two enforced with a thread of the crate's
-  own. A deadline mechanism that needed a runtime timer outside `mariadb/` would
-  contradict [`ADR-005`](../adr/adr-005-async-runtime-scope.md) and would be the
-  defect, and it is why the child of `project/password.rs` is bounded by a
-  thread and a polling loop and not by a task.
-- **The SQLite path is synchronous and builds no runtime.** `rusqlite` blocks on
-  the calling thread, so a command that reads a `sqlite` entry reaches nothing
-  in `mariadb/`, and `ADR-005` holds by construction
-  ([`ADR-013`](../adr/adr-013-sqlite-driver.md), *Consequences*). Its statements
-  are bounded by a thread for the reason the child is
-  ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)).
+restated. In this document they decide the *Bounded by* column of
+[The six phase deadlines](#the-six-phase-deadlines), whose mechanisms are
+[`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and, for
+a `sqlite` entry,
+[`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection),
+and the runtime's row of [Lazy initialisation](#lazy-initialisation).
 
 ## Two exits that do not return through `main.rs`
 
