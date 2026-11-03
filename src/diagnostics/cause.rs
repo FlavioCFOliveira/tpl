@@ -1445,11 +1445,6 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 location.line()
             ),
         }),
-        // FR-LITE-035: the view, the property and the reason the library gave.
-        Error::ViewColumnsUnreadable { view, reason, .. } => Cow::Owned(format!(
-            "the definition of view '{view}' does not compile, so its columns could not be read: \
-             the library returned {reason}"
-        )),
     }
 }
 

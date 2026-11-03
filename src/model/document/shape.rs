@@ -135,28 +135,6 @@ pub(crate) struct DatabaseDocument<'a> {
     /// The routines of `FR-CAT-008`, ordered by name.
     #[serde(borrow)]
     pub(crate) routines: Cow<'a, [Routine<'a>]>,
-
-    /// The views a `sqlite` read could not read the columns of, each with the
-    /// reason the library gave (`FR-LITE-035`).
-    ///
-    /// It travels **beside** the document rather than in it: the contract
-    /// carries no such key, so it is never serialised and never read back, and
-    /// it is filled on a live read alone. No other path needs it — a marked
-    /// object is never cached (`FR-CACHE-037`) and a marked document is refused
-    /// as a context (`FR-PRIV-008`) — and the named-object verdict reads it to
-    /// give the library's reason a request naming such a view is owed (`OD-35`).
-    #[serde(skip)]
-    pub(crate) unreadable: Vec<UnreadableView>,
-}
-
-/// A view whose columns a `sqlite` read could not read, and why
-/// (`FR-LITE-035`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct UnreadableView {
-    /// The view, as the file names it.
-    pub(crate) name: String,
-    /// What the library returned when its columns were read.
-    pub(crate) reason: crate::error::LibraryReport,
 }
 
 /// A table at the first hop: its references are embedded objects.
@@ -365,7 +343,6 @@ impl ToStatic for DatabaseDocument<'_> {
             tables: self.tables.to_static(),
             views: self.views.to_static(),
             routines: self.routines.to_static(),
-            unreadable: self.unreadable.clone(),
         }
     }
 }

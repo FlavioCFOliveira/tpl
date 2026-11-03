@@ -82,7 +82,6 @@ fn database<'a>(database: &'a Database<'a>) -> Result<DatabaseDocument<'a>, Erro
         tables,
         views: order::by_name(&database.views),
         routines: order::by_name(&database.routines),
-        unreadable: Vec::new(),
     })
 }
 

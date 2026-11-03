@@ -597,19 +597,14 @@ impl<'a> Reader<'a> {
         // freed or copied (this module's documentation).
         match self.ending {
             Ending::Process => {
-                let read = leak(read);
-                let model = leak(read.model()?);
-                let mut served = document::context(model)?;
-                served.unreadable = read.unreadable().to_vec();
+                let model = leak(leak(read).model()?);
 
-                hand(Served::leaked(leak(served)))
+                hand(Served::leaked(leak(document::context(model)?)))
             }
             Ending::Caller => {
                 let model = read.model()?;
-                let mut served = document::context(&model)?;
-                served.unreadable = read.unreadable().to_vec();
 
-                hand(Served::borrowed(&served))
+                hand(Served::borrowed(&document::context(&model)?))
             }
         }
     }

@@ -2,16 +2,16 @@
 //! (`FR-LITE-015`, `FR-LITE-016`).
 //!
 //! The list is closed by construction: no other module of `sqlite/` composes
-//! SQL, no value read from the file enters a statement's text — the one name
-//! the per-view fallback needs is a bound parameter — and [`CLOSED_LIST`] is
-//! the list the statement record of `FR-LITE-018` is checked against.
+//! SQL, no value read from the file enters a statement's text, and
+//! [`CLOSED_LIST`] is the list the statement record of `FR-LITE-018` is
+//! checked against.
 //!
 //! | Row of `FR-LITE-015` | Constants |
 //! |---|---|
 //! | The five controls applied by a statement, each set and read back | [`SET_QUERY_ONLY`] … [`READ_TEMP_STORE`] |
 //! | `PRAGMA compile_options` | [`COMPILE_OPTIONS`] |
 //! | The version probe | [`PROBE`] |
-//! | `SELECT` against `sqlite_schema` and the pragma functions, restricted to `main` | [`ENCODING`] … [`VIEW_COLUMNS`], [`ONE_VIEW_COLUMNS`], [`CATALOGUE_PROBE`] |
+//! | `SELECT` against `sqlite_schema` and the pragma functions, restricted to `main` | [`ENCODING`] … [`STORED`], [`CATALOGUE_PROBE`] |
 //!
 //! **Each join restricts `pragma_table_list` to `main` and to the covered
 //! types before the function it joins is reached** (architecture, *The SQLite
@@ -19,6 +19,12 @@
 //! table-valued function of the inner loop is called for a row, so a virtual
 //! table whose module the library lacks is never asked for its columns
 //! (`FR-LITE-021`, observed there).
+//!
+//! **No statement reads from a view or compiles one** (`FR-LITE-015`,
+//! `FR-LITE-033`). Every join to a pragma function that takes a table's name
+//! restricts `pragma_table_list` to the type `table`, so no view's name is
+//! passed to one; a view is read from [`OBJECTS`], which names it, and from
+//! [`STORED`], which holds its stored text, and from nothing else.
 
 /// The confirmation of the extension-loading control, and of the build the
 /// temporary-storage control depends on (`FR-LITE-010`).
@@ -95,21 +101,6 @@ pub(crate) const STORED: &str = "SELECT s.type, s.name, s.tbl_name, s.sql \
      WHERE s.type IN ('view', 'trigger') \
      ORDER BY s.name";
 
-/// Statement 7: the columns of every view (`FR-LITE-033`, `FR-LITE-035`).
-pub(crate) const VIEW_COLUMNS: &str = "SELECT t.name, c.cid, c.name, c.type, c.\"notnull\", \
-     c.dflt_value, c.pk, c.hidden \
-     FROM pragma_table_list AS t \
-     JOIN pragma_table_xinfo(t.name, t.schema) AS c \
-     WHERE t.schema = 'main' AND t.type = 'view' \
-     ORDER BY t.name, c.cid";
-
-/// The per-view fallback of `FR-LITE-035`: one view's columns, its name a
-/// bound parameter.
-pub(crate) const ONE_VIEW_COLUMNS: &str = "SELECT c.cid, c.name, c.type, c.\"notnull\", \
-     c.dflt_value, c.pk, c.hidden \
-     FROM pragma_table_xinfo(?1, 'main') AS c \
-     ORDER BY c.cid";
-
 /// The catalogue probe of `FR-CFG-056`, step 4: one `SELECT` against
 /// `sqlite_schema` of `main`, whose rows are not read as model content.
 pub(crate) const CATALOGUE_PROBE: &str = "SELECT count(*) FROM main.sqlite_schema";
@@ -118,7 +109,7 @@ pub(crate) const CATALOGUE_PROBE: &str = "SELECT count(*) FROM main.sqlite_schem
 /// `FR-LITE-017` and the plan fix them: the connection start, then the
 /// catalogue.
 #[cfg(test)]
-pub(crate) const CLOSED_LIST: [&str; 19] = [
+pub(crate) const CLOSED_LIST: [&str; 17] = [
     COMPILE_OPTIONS,
     SET_QUERY_ONLY,
     READ_QUERY_ONLY,
@@ -135,8 +126,6 @@ pub(crate) const CLOSED_LIST: [&str; 19] = [
     INDEXES,
     FOREIGN_KEYS,
     STORED,
-    VIEW_COLUMNS,
-    ONE_VIEW_COLUMNS,
     CATALOGUE_PROBE,
 ];
 
@@ -156,17 +145,16 @@ pub(crate) const CONNECTION_START: [&str; 10] = [
     PROBE,
 ];
 
-/// The seven statements of the catalogue plan, in the order they are issued
-/// (`FR-LITE-037`).
+/// The six statements of the catalogue plan, in the order they are issued
+/// (`FR-LITE-015`, `FR-LITE-037`).
 #[cfg(test)]
-pub(crate) const PLAN: [&str; 7] = [
+pub(crate) const PLAN: [&str; 6] = [
     ENCODING,
     OBJECTS,
     TABLE_COLUMNS,
     INDEXES,
     FOREIGN_KEYS,
     STORED,
-    VIEW_COLUMNS,
 ];
 
 #[cfg(test)]
@@ -214,6 +202,34 @@ mod tests {
         for statement in CONNECTION_START.iter().chain(PLAN.iter()) {
             assert!(CLOSED_LIST.contains(statement), "{statement}");
         }
-        assert_eq!(PLAN.len(), 7);
+        assert_eq!(PLAN.len(), 6);
+    }
+
+    #[test]
+    fn fr_lite_015_no_statement_passes_a_view_to_a_pragma_function() {
+        // FR-LITE-015 as amended in the sixty-eighth edition: no statement
+        // reads from a view or passes a view's name to a pragma function, so
+        // none makes the library compile a view's definition. Every function
+        // that takes a table's name is reached only through a row of
+        // `pragma_table_list` restricted to the type `table`.
+        for statement in CLOSED_LIST {
+            for function in [
+                "pragma_table_info(",
+                "pragma_table_xinfo(",
+                "pragma_index_list(",
+                "pragma_foreign_key_list(",
+            ] {
+                if statement.contains(function) {
+                    assert!(
+                        statement.contains("t.type = 'table'"),
+                        "{statement} reaches {function} for an object that is not a table"
+                    );
+                }
+            }
+            assert!(
+                !statement.contains("t.type = 'view'"),
+                "{statement} selects the views of pragma_table_list for a join"
+            );
+        }
     }
 }

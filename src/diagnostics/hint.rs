@@ -1775,10 +1775,6 @@ fn bare(error: &Error) -> Cow<'static, str> {
         Error::SqliteControlNotInEffect { .. } | Error::SqliteDefect { .. } => {
             Cow::Borrowed(SOFTWARE_DEFECT)
         }
-        Error::ViewColumnsUnreadable { .. } => Cow::Borrowed(
-            "repair the view in the database file, or name another object; list the views with: \
-             tpl schema views",
-        ),
     }
 }
 

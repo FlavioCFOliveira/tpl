@@ -2,7 +2,7 @@
 //! (`FR-LITE-040`, `FR-LITE-007`, `FR-LITE-012`, `FR-GLOB-018`, `OD-38`).
 //!
 //! One pure function, [`classify`], over the stage or statement that failed
-//! and the integer the library returned, applies the four steps of
+//! and the integer the library returned, applies the three steps of
 //! `FR-LITE-040` in their order; [`condition`] turns its answer into the
 //! [`Error`] the caller reads. The classification is keyed on the extended
 //! code the driver's `ffi::Error` carries — the open sets
@@ -25,8 +25,8 @@ use rusqlite::ffi;
 use crate::deadline::Bound;
 use crate::error::{Error, FileValue, LibraryReport, SqliteAt, SqliteEnd};
 
-/// Where on a connection a failure arose, which `FR-LITE-040` steps 1 and 2
-/// classify by.
+/// Where on a connection a failure arose, which `FR-LITE-040` step 1
+/// classifies by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Stage {
     /// The read-only open (stage 2).
@@ -39,10 +39,6 @@ pub(crate) enum Stage {
     Probe,
     /// A catalogue statement, described as the `cause` names it.
     Catalogue(&'static str),
-    /// Statement 7, the columns of every view.
-    Views,
-    /// The per-view fallback of `FR-LITE-035`.
-    View,
 }
 
 impl Stage {
@@ -54,8 +50,6 @@ impl Stage {
             Self::Control => SqliteAt::Statement("a hardening control of the connection"),
             Self::Probe => SqliteAt::Statement("the version probe SELECT sqlite_version()"),
             Self::Catalogue(statement) => SqliteAt::Statement(statement),
-            Self::Views => SqliteAt::Statement("the statement reading the columns of every view"),
-            Self::View => SqliteAt::Statement("the statement reading the columns of one view"),
         }
     }
 
@@ -74,8 +68,6 @@ pub(crate) enum Class {
     /// Step 1: a control or a limit did not take effect — `70`
     /// (`FR-LITE-012`).
     Control,
-    /// Step 2: a view does not compile — marked, per `FR-LITE-035`.
-    MarkView,
     /// The rows of `FR-LITE-007` and of the table that give `74`.
     Unreadable,
     /// The rows of `FR-LITE-007` that give `78`.
@@ -96,7 +88,9 @@ pub(crate) enum Class {
 /// The invariant a misuse of the library breaks.
 const MISUSE: &str = "tpl uses the SQLite library only in ways the library supports";
 
-/// The invariant `SQLITE_ERROR` outside the view statements breaks.
+/// The invariant `SQLITE_ERROR` breaks, on any statement: no statement that
+/// remains reads a view's columns or compiles a view (`FR-LITE-015`,
+/// `FR-LITE-033`), so none can fail on a view that does not compile.
 const STATEMENT_ERROR: &str =
     "every statement of FR-LITE-015 runs without error over a file whose schema has loaded";
 
@@ -114,7 +108,7 @@ const UNUSED: &str = "the SQLite library returns no code it documents as unused"
 const UNPUBLISHED: &str = "the SQLite library returns only result codes SQLite has published";
 
 /// Classifies a failure by the stage it arose at and the code the library
-/// returned (`FR-LITE-040`), applying the four steps in their order.
+/// returned (`FR-LITE-040`), applying the three steps in their order.
 ///
 /// `code` is the extended code; its low eight bits are the primary one.
 pub(crate) const fn classify(stage: Stage, code: i32) -> Class {
@@ -125,12 +119,7 @@ pub(crate) const fn classify(stage: Stage, code: i32) -> Class {
         return Class::Control;
     }
 
-    // Step 2: FR-LITE-035, SQLITE_ERROR on a statement reading view columns.
-    if primary == ffi::SQLITE_ERROR && matches!(stage, Stage::Views | Stage::View) {
-        return Class::MarkView;
-    }
-
-    // Step 3: the rows of FR-LITE-007, by result code, wherever returned.
+    // Step 2: the rows of FR-LITE-007, by result code, wherever returned.
     if code == ffi::SQLITE_READONLY_DIRECTORY {
         return Class::Unreadable;
     }
@@ -141,7 +130,7 @@ pub(crate) const fn classify(stage: Stage, code: i32) -> Class {
         _ => {}
     }
 
-    // Step 4: the table of FR-LITE-040, by the primary code.
+    // Step 3: the table of FR-LITE-040, by the primary code.
     match primary {
         ffi::SQLITE_MISUSE | ffi::SQLITE_RANGE | ffi::SQLITE_NOTFOUND => Class::Defect(MISUSE),
         ffi::SQLITE_ERROR => Class::Defect(STATEMENT_ERROR),
@@ -212,9 +201,7 @@ pub(crate) struct Timing {
 /// The condition a failure of the library is, under [`classify`]
 /// (`FR-LITE-040`).
 ///
-/// `timing` is the statement's bound, which a `69` names where it was spent;
-/// [`Class::MarkView`] is not a condition and reaches here only where a
-/// caller has no view to mark, and is then the `70` of a statement error.
+/// `timing` is the statement's bound, which a `69` names where it was spent.
 #[track_caller]
 pub(crate) fn condition(
     place: Place<'_>,
@@ -281,7 +268,6 @@ pub(crate) fn condition(
                 Some(report),
             ),
         },
-        Class::MarkView => defect(place, stage, STATEMENT_ERROR, Some(report)),
         Class::Defect(invariant) => defect(place, stage, invariant, Some(report)),
     }
 }
@@ -468,7 +454,7 @@ mod tests {
     use super::{Class, Stage, classify, name};
     use rusqlite::ffi;
 
-    /// Every stage that is neither a control nor a view statement.
+    /// Every stage outside step 1: neither the build nor a control.
     const ORDINARY: [Stage; 3] = [Stage::Open, Stage::Probe, Stage::Catalogue("statement 3")];
 
     #[test]
@@ -487,35 +473,31 @@ mod tests {
     }
 
     #[test]
-    fn fr_lite_035_sqlite_error_on_a_view_statement_marks_the_view_and_nothing_else_does() {
-        // FR-LITE-040 step 2.
-        assert_eq!(classify(Stage::Views, ffi::SQLITE_ERROR), Class::MarkView);
-        assert_eq!(classify(Stage::View, ffi::SQLITE_ERROR), Class::MarkView);
-        assert_eq!(
-            classify(Stage::View, ffi::SQLITE_ERROR_MISSING_COLLSEQ),
-            Class::MarkView
-        );
+    fn fr_lite_040_sqlite_error_on_any_statement_is_a_defect_of_tpl() {
+        // FR-LITE-040 as amended in the sixty-eighth edition: the step that
+        // gave SQLITE_ERROR on a view statement to FR-LITE-035 is removed, and
+        // the SQLITE_ERROR row takes every one with 70, under any extended
+        // code, wherever it is returned outside step 1.
         for stage in ORDINARY {
-            assert!(matches!(
-                classify(stage, ffi::SQLITE_ERROR),
-                Class::Defect(_)
-            ));
-        }
-        // The other four codes the driver sends to `Unknown` are not marks.
-        for code in [
-            ffi::SQLITE_EMPTY,
-            ffi::SQLITE_FORMAT,
-            ffi::SQLITE_NOTICE,
-            ffi::SQLITE_WARNING,
-        ] {
-            assert!(matches!(classify(Stage::Views, code), Class::Defect(_)));
+            for code in [
+                ffi::SQLITE_ERROR,
+                ffi::SQLITE_ERROR_MISSING_COLLSEQ,
+                ffi::SQLITE_ERROR_RETRY,
+                ffi::SQLITE_ERROR_SNAPSHOT,
+            ] {
+                assert_eq!(
+                    classify(stage, code),
+                    Class::Defect(super::STATEMENT_ERROR),
+                    "{code} at {stage:?}"
+                );
+            }
         }
     }
 
     #[test]
     fn fr_lite_007_each_row_is_read_by_its_result_code_wherever_it_is_returned() {
-        // FR-LITE-040 step 3, over every stage but the two of step 1.
-        for stage in ORDINARY.iter().copied().chain([Stage::Views, Stage::View]) {
+        // FR-LITE-040 step 2, over every stage but the two of step 1.
+        for stage in ORDINARY {
             assert_eq!(classify(stage, ffi::SQLITE_CANTOPEN), Class::Unreadable);
             assert_eq!(
                 classify(stage, ffi::SQLITE_CANTOPEN_ISDIR),
@@ -538,7 +520,7 @@ mod tests {
 
     #[test]
     fn fr_lite_040_every_other_published_code_takes_the_code_its_row_gives() {
-        // FR-LITE-040 step 4.
+        // FR-LITE-040 step 3.
         for stage in ORDINARY {
             for code in [
                 ffi::SQLITE_MISUSE,

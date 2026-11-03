@@ -576,10 +576,10 @@ pub enum TplDirFault {
 /// the type and not remembered at each interpolation: its
 /// [`Display`](fmt::Display) writes the value escaped under `FR-ERR-024` and,
 /// past 256 characters, cut to its first and last 128 around a marker that
-/// counts what was left out. It is built only from the library's report in
-/// the SQLite reader and from a model a `sqlite` read produced; a value of a
-/// `mariadb` read, of a `--context` document or of the argument vector is
-/// never this type, so none of them is bounded.
+/// counts what was left out. It is built only in the SQLite reader, from what
+/// the library returned; a value of a `mariadb` read, of a `--context`
+/// document or of the argument vector is never this type, so none of them is
+/// bounded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileValue(String);
 
@@ -1915,19 +1915,6 @@ pub enum Error {
         property: &'static str,
     },
 
-    /// A view a `sqlite` read could not read the columns of, because its
-    /// definition does not compile, was requested by name (`FR-LITE-035`,
-    /// `FR-PRIV-003`).
-    #[error("the columns of view '{view}' could not be read")]
-    ViewColumnsUnreadable {
-        /// The entry the read was made through.
-        entry: String,
-        /// The view, as the file names it.
-        view: FileValue,
-        /// The reason the library gave.
-        reason: LibraryReport,
-    },
-
     // ---------------------------------------------------------------- 78 ---
     /// The walk reached the boundary of `FR-PROJ-005` without finding a `.tpl`
     /// folder (`FR-PROJ-006`).
@@ -2941,9 +2928,7 @@ impl Error {
             | Self::SqliteFileUnreadable { .. } => 74,
 
             // 77 EX_NOPERM
-            Self::AuthenticationRefused { .. }
-            | Self::PropertyNotReadable { .. }
-            | Self::ViewColumnsUnreadable { .. } => 77,
+            Self::AuthenticationRefused { .. } | Self::PropertyNotReadable { .. } => 77,
 
             // 78 EX_CONFIG
             Self::ProjectNotFound { .. }
@@ -2997,7 +2982,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 104;
+    const VARIANT_COUNT: usize = 103;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -3815,14 +3800,6 @@ mod tests {
                 74,
             ),
             (
-                Error::ViewColumnsUnreadable {
-                    entry: "ledger".to_owned(),
-                    view: super::FileValue::new("v_broken"),
-                    reason: report(1),
-                },
-                77,
-            ),
-            (
                 Error::ProviderRefusesKeys {
                     entry: "ledger".to_owned(),
                     file: path(),
@@ -3965,7 +3942,6 @@ mod tests {
             Error::SqliteDefect { .. } => "SqliteDefect",
             Error::SqliteFileLookup { .. } => "SqliteFileLookup",
             Error::SqliteFileUnreadable { .. } => "SqliteFileUnreadable",
-            Error::ViewColumnsUnreadable { .. } => "ViewColumnsUnreadable",
             Error::ProviderRefusesKeys { .. } => "ProviderRefusesKeys",
             Error::SqliteNotRegularFile { .. } => "SqliteNotRegularFile",
             Error::SqliteFileRefused { .. } => "SqliteFileRefused",

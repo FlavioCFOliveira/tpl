@@ -12,7 +12,7 @@
 //! | `harden` | Each control and limit, set and read back, and the comparison of the two | `FR-LITE-010` … `FR-LITE-012` |
 //! | `watch` | The watchdog that bounds every statement | `FR-LITE-009`, `OD-36` |
 //! | `fault` | Where the library's result becomes a condition of `FR-ERR-001` | `FR-LITE-040`, `OD-38` |
-//! | `catalogue` | The plan, the read that owns its values, the per-view fallback, and the fold | `FR-LITE-015`, `FR-LITE-019` … `FR-LITE-037` |
+//! | `catalogue` | The plan, the read that owns its values, and the fold | `FR-LITE-015`, `FR-LITE-019` … `FR-LITE-037` |
 //!
 //! **The one route to a connection is [`open`]**, and it runs the six stages
 //! of `FR-LITE-017` in order and behind no condition: the kind of the file,
@@ -44,7 +44,7 @@ use std::time::Instant;
 use rusqlite::config::DbConfig;
 use rusqlite::limits::Limit;
 use rusqlite::types::ValueRef;
-use rusqlite::{Connection, Row, ToSql};
+use rusqlite::{Connection, Row};
 
 use crate::deadline::{Clock, Phase, Seconds};
 use crate::diagnostics::emit::{self, CatalogueSource};
@@ -220,9 +220,7 @@ pub(crate) fn open(settings: &FileSettings, clock: &Clock) -> Result<Session, Er
     session.harden()?;
 
     // Stage 6: the version probe, the first statement that reads the file.
-    let version = session.rows(Stage::Probe, statements::PROBE, &[], false, |row| {
-        text(row, 0)
-    });
+    let version = session.rows(Stage::Probe, statements::PROBE, false, |row| text(row, 0));
     let version = session.answered(Stage::Probe, version)?;
     let version = version
         .into_iter()
@@ -269,7 +267,6 @@ impl Session {
         let answered = self.rows(
             Stage::Catalogue("the catalogue probe of tpl cfg database test"),
             statements::CATALOGUE_PROBE,
-            &[],
             true,
             |_| Ok(()),
         );
@@ -298,13 +295,9 @@ impl Session {
             |error: rusqlite::Error| fault::condition(place, Stage::Control, &error, None);
 
         // Stage 4: the build.
-        let options = self.rows(
-            Stage::Build,
-            statements::COMPILE_OPTIONS,
-            &[],
-            false,
-            |row| text(row, 0),
-        );
+        let options = self.rows(Stage::Build, statements::COMPILE_OPTIONS, false, |row| {
+            text(row, 0)
+        });
         let options = self.answered(Stage::Build, options)?;
         harden::build(&options).map_err(refused)?;
 
@@ -364,12 +357,10 @@ impl Session {
                 2,
             ),
         ] {
-            let applied = self.rows(Stage::Control, set_statement, &[], false, |_| Ok(()));
+            let applied = self.rows(Stage::Control, set_statement, false, |_| Ok(()));
             self.answered(Stage::Control, applied)?;
 
-            let read = self.rows(Stage::Control, read_statement, &[], false, |row| {
-                integer(row, 0)
-            });
+            let read = self.rows(Stage::Control, read_statement, false, |row| integer(row, 0));
             let read = self.answered(Stage::Control, read)?;
             let read_back = read.first().copied().ok_or_else(|| {
                 refused(harden::Mismatch {
@@ -452,7 +443,6 @@ impl Session {
         &self,
         stage: Stage,
         sql: &str,
-        parameters: &[&dyn ToSql],
         catalogue: bool,
         mut read: F,
     ) -> Result<Vec<T>, Failed>
@@ -489,7 +479,7 @@ impl Session {
 
         let outcome = (|| -> Result<Vec<T>, Unread> {
             let mut statement = connection.prepare(sql)?;
-            let mut rows = statement.query(parameters)?;
+            let mut rows = statement.query([])?;
             let mut collected = Vec::new();
             while let Some(row) = rows.next()? {
                 collected.push(read(row).map_err(Unread::Shape)?);

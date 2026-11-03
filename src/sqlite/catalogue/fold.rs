@@ -15,7 +15,7 @@
 //! | The indexes | Those `pragma_index_list` reports, less an index with an expression member | `FR-LITE-030`, `FR-LITE-021` |
 //! | The foreign keys | One per `id`, unnamed; `to` `NULL` read as the parent's primary key; a key whose parent is not columns of a covered table excluded | `FR-LITE-031`, `FR-LITE-021` |
 //! | The triggers | The rows of type `trigger` on a covered table, their timing and event from the header | `FR-LITE-032` |
-//! | The views | Their name and their whole stored statement; a view that does not compile marked on `columns` | `FR-LITE-033`, `FR-LITE-035` |
+//! | The views | Their name and their whole stored statement, and `null` for the seven server fields; no columns, and no marking | `FR-LITE-033`, `FR-LITE-036` |
 //!
 //! **Names are matched as SQLite matches them.** SQLite compares identifiers
 //! ignoring ASCII case, and a foreign key or a trigger names its table as its
@@ -38,7 +38,6 @@ use crate::model::foreign_key::{
     ForeignKey, ForeignKeyColumn, IncomingForeignKey, ReferentialAction,
 };
 use crate::model::index::{Index, IndexColumn, PrimaryKey, SortDirection};
-use crate::model::restricted::Restricted;
 use crate::model::table::{Table, TableParts, TableType};
 use crate::model::trigger::{Trigger, TriggerEvent, TriggerTiming};
 use crate::model::view::View;
@@ -68,9 +67,6 @@ const VIRTUAL_GENERATED: i64 = 2;
 
 /// The `hidden` value of a stored generated column.
 const STORED_GENERATED: i64 = 3;
-
-/// The property of a view that could not be read (`FR-LITE-035`).
-const COLUMNS: &str = "columns";
 
 /// The invariant a trigger header that yields no timing and event breaks.
 const HEADER: &str =
@@ -360,7 +356,7 @@ fn indexes(rows: &[&IndexRow]) -> Vec<Index<'static>> {
         .collect()
 }
 
-/// One column of a table or a view (`FR-LITE-025` … `FR-LITE-028`).
+/// One column of a table (`FR-LITE-025` … `FR-LITE-028`).
 fn column(row: &ColumnRow, table: &str, strict: bool, alias: bool) -> Column<'static> {
     let nullable = !row.not_null;
 
@@ -585,8 +581,9 @@ fn carried(table: &TableParts<'_>, column: &str) -> Option<String> {
         .map(|carried| carried.name.to_string())
 }
 
-/// The views, with their stored statement, marked where their columns could
-/// not be read (`FR-LITE-033`, `FR-LITE-035`).
+/// The views: each one's name and whole stored statement, and nothing a view
+/// whose definition does not compile could lack (`FR-LITE-033`,
+/// `FR-LITE-036`).
 fn views(catalogue: &Catalogue) -> Vec<View<'static>> {
     let mut views: Vec<View<'static>> = catalogue
         .objects
@@ -599,10 +596,6 @@ fn views(catalogue: &Catalogue) -> Vec<View<'static>> {
                 .find(|row| row.kind == VIEW && row.name == object.name)
                 .and_then(|row| row.sql.clone())
                 .unwrap_or_default();
-            let marked = catalogue
-                .unreadable
-                .iter()
-                .any(|unreadable| unreadable.name == object.name);
 
             View {
                 name: Cow::Owned(object.name.clone()),
@@ -614,11 +607,7 @@ fn views(catalogue: &Catalogue) -> Vec<View<'static>> {
                 character_set_client: None,
                 collation_connection: None,
                 algorithm: None,
-                restricted: if marked {
-                    Restricted::new(vec![Cow::Borrowed(COLUMNS)])
-                } else {
-                    None
-                },
+                restricted: None,
             }
         })
         .collect();

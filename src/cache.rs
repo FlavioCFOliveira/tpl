@@ -269,7 +269,6 @@ impl Loaded {
             tables: decode(&self.tables)?,
             views: Cow::Owned(decode(&self.views)?),
             routines: Cow::Owned(decode(&self.routines)?),
-            unreadable: Vec::new(),
         };
 
         match &self.requested {
@@ -348,7 +347,6 @@ impl Shelved {
             tables: Vec::new(),
             views: Cow::Owned(Vec::new()),
             routines: Cow::Owned(Vec::new()),
-            unreadable: Vec::new(),
         })
     }
 

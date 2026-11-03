@@ -29,6 +29,7 @@
 //! | `FR-LITE-008`, `FR-LITE-018`, `BR-LITE-001` | A read leaves a rollback-journal database and every file outside `.tpl` as found; a write-ahead-log read adds at most the two files of the mode |
 //! | `FR-LITE-014` | No configuration key names a control of `FR-LITE-010` or a limit of `FR-LITE-011` |
 //! | `FR-LITE-003`, `FR-LITE-023`, `FR-LITE-024` | The `database` and `table` objects a caller reads carry the values those requirements fix |
+//! | `FR-LITE-033`, `FR-LITE-036` | Naming a view that does not compile exits `0` with its nine properties, and a dump marks nothing |
 //! | `NFR-PERF-003` | A cache hit on a `sqlite` entry reaches no file: the database removed, the hit answers the same bytes |
 //! | `NFR-PERF-004` | A `sqlite` invocation opens the database file once, observed by the syscall trace on Linux |
 
@@ -333,6 +334,73 @@ fn fr_lite_024_a_table_of_a_sqlite_read_carries_the_values_it_fixes() {
     assert_eq!(table["collation"], serde_json::Value::Null);
     assert_eq!(table["comment"], "");
     assert_eq!(table["check_constraints"], serde_json::json!([]));
+}
+
+#[test]
+fn fr_lite_036_naming_a_view_that_does_not_compile_exits_0_and_nothing_is_marked() {
+    // FR-LITE-033 and FR-LITE-036 as amended in the sixty-eighth edition, and
+    // FR-PRIV-003 with them: each of the three views of item 10 of FR-LITE-038
+    // that do not compile is returned whole at exit 0, carrying the nine keys
+    // of FR-CAT-047 and no other, and a dump of the database marks no object.
+    const NINE: [&str; 9] = [
+        "algorithm",
+        "character_set_client",
+        "check_option",
+        "collation_connection",
+        "definer",
+        "definition",
+        "is_updatable",
+        "name",
+        "security_type",
+    ];
+    let sandbox = project("data/freight.sqlite");
+
+    for name in ["v_document_paths", "v_quay_schedule", "v_ranked_notes"] {
+        let printed = sandbox.run(&[
+            "schema",
+            "view",
+            name,
+            "--format",
+            "json",
+            "--direct",
+            "--no-cache",
+        ]);
+        let document: serde_json::Value =
+            serde_json::from_str(&succeeded(&printed, &format!("tpl schema view {name}")))
+                .expect("the output is JSON");
+        let view = document["data"]["view"]
+            .as_object()
+            .expect("the view is an object");
+
+        let mut keys: Vec<&str> = view.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, NINE, "{name}");
+        assert_eq!(view["name"], name);
+        assert!(
+            view["definition"]
+                .as_str()
+                .is_some_and(|definition| definition.starts_with("CREATE VIEW ")),
+            "{name}: {}",
+            view["definition"]
+        );
+    }
+
+    let printed = sandbox.run(&["schema", "dump", "--direct", "--no-cache"]);
+    let document: serde_json::Value =
+        serde_json::from_str(&succeeded(&printed, "tpl schema dump")).expect("the output is JSON");
+    let database = &document["data"]["database"];
+    let views = database["views"].as_array().expect("views is an array");
+    assert_eq!(views.len(), 5);
+    for object in views
+        .iter()
+        .chain(database["tables"].as_array().expect("tables is an array"))
+    {
+        assert!(
+            object.get("restricted").is_none(),
+            "{} is marked",
+            object["name"]
+        );
+    }
 }
 
 // ----------------------------------------------- FR-CONF-054, the path ---

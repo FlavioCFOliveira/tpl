@@ -6,9 +6,10 @@
 //! test builds the fixture into a scratch directory of its own.
 
 use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 
-use rusqlite::Connection;
 use rusqlite::config::DbConfig;
+use rusqlite::{Connection, OpenFlags};
 
 use super::catalogue::statements;
 use super::fixture::{self, Artefacts};
@@ -69,6 +70,33 @@ fn table<'d>(database: &'d Database<'static>, name: &str) -> &'d Table<'static> 
         .find(|table| table.name() == name)
         .unwrap_or_else(|| panic!("the model carries {name}"))
 }
+
+/// The five views of item 10 of `FR-LITE-038`, ordered by name.
+const VIEWS: [&str; 5] = [
+    "v_document_paths",
+    "v_port_country",
+    "v_quay_schedule",
+    "v_ranked_notes",
+    "v_vessel_fleet",
+];
+
+/// The three views of item 10 whose definition does not compile: one selects
+/// from a missing table, one calls a function the carried library does not
+/// hold, and one calls a function `trusted_schema` off refuses.
+const UNCOMPILABLE: [&str; 3] = ["v_document_paths", "v_quay_schedule", "v_ranked_notes"];
+
+/// The nine keys `FR-CAT-047` gives a view, and no other.
+const VIEW_KEYS: [&str; 9] = [
+    "algorithm",
+    "character_set_client",
+    "check_option",
+    "collation_connection",
+    "definer",
+    "definition",
+    "is_updatable",
+    "name",
+    "security_type",
+];
 
 /// The column `name` of `table`.
 fn column<'t>(table: &'t Table<'static>, name: &str) -> &'t crate::model::column::Column<'static> {
@@ -178,17 +206,11 @@ fn fr_lite_018_the_statements_issued_are_the_closed_list_in_the_order_of_fr_lite
             );
         }
 
-        // The connection start first, in its order, then the plan, then the
-        // per-view fallback where statement 7 failed.
+        // The connection start first, in its order, then the plan, and
+        // nothing after it.
         let start = statements::CONNECTION_START.len();
         assert_eq!(&issued[..start], statements::CONNECTION_START);
-        let plan = statements::PLAN.len();
-        assert_eq!(&issued[start..start + plan], statements::PLAN);
-        assert!(
-            issued[start + plan..]
-                .iter()
-                .all(|text| *text == statements::ONE_VIEW_COLUMNS)
-        );
+        assert_eq!(&issued[start..], statements::PLAN);
 
         for text in texts.iter().filter(|text| text.starts_with(record::NESTED)) {
             assert!(!issued.contains(&text.as_str()));
@@ -198,39 +220,32 @@ fn fr_lite_018_the_statements_issued_are_the_closed_list_in_the_order_of_fr_lite
 
 #[test]
 fn fr_lite_037_the_plan_issues_as_many_statements_over_the_fixture_as_over_an_empty_file() {
-    // FR-LITE-037 and NFR-PERF-001, counted under FR-LITE-018: the seven
-    // statements of the plan over the fixture and over an empty file alike.
-    // The one exception FR-LITE-037 admits is the fallback of FR-LITE-035
-    // after statement 7 failed, which issues one statement per view and is
-    // counted apart.
+    // FR-LITE-037 and NFR-PERF-001, counted under FR-LITE-018: the probe and
+    // the six statements of the plan, over the fixture and over an empty file
+    // alike, without exception — the fixture's views that do not compile add
+    // no statement.
     let (_scratch, artefacts) = built();
-    let plan = |path: &std::path::Path| {
+    let counted = |path: &std::path::Path| {
         let (answered, texts) = record::recorded(|| read(path).map(drop));
         answered.expect("the file reads");
-        let issued = record::issued(&texts)
-            .into_iter()
-            .map(str::to_owned)
-            .collect::<Vec<_>>();
-        let fallback = issued
+        let issued = record::issued(&texts);
+        let probe = issued
             .iter()
-            .filter(|text| *text == statements::ONE_VIEW_COLUMNS)
+            .filter(|text| **text == statements::PROBE)
             .count();
         let catalogue = issued
             .iter()
-            .filter(|text| statements::PLAN.contains(&text.as_str()))
+            .filter(|text| statements::PLAN.contains(text))
             .count();
-        (catalogue, fallback)
+        (probe, catalogue, issued.len())
     };
 
-    let (over_fixture, fallback) = plan(&artefacts.main);
-    let (over_empty, none) = plan(&artefacts.empty);
+    let over_fixture = counted(&artefacts.main);
+    let over_empty = counted(&artefacts.empty);
 
     assert_eq!(over_fixture, over_empty);
-    assert_eq!(over_fixture, 7);
-    assert_eq!(none, 0);
-    // The fixture holds five views, three of which do not compile, so the
-    // fallback read each of the five once.
-    assert_eq!(fallback, 5);
+    assert_eq!(over_fixture.0, 1);
+    assert_eq!(over_fixture.1, 6);
 }
 
 #[test]
@@ -285,11 +300,11 @@ fn nfr_perf_008_the_query_lines_equal_the_catalogue_statements_the_record_shows(
         .count();
     let catalogue = record::issued(&texts)
         .into_iter()
-        .filter(|text| statements::PLAN.contains(text) || *text == statements::ONE_VIEW_COLUMNS)
+        .filter(|text| statements::PLAN.contains(text))
         .count();
 
     assert_eq!(counted, catalogue);
-    assert!(catalogue >= statements::PLAN.len());
+    assert_eq!(catalogue, statements::PLAN.len());
 }
 
 #[test]
@@ -347,16 +362,7 @@ fn fr_lite_019_the_read_covers_main_and_its_tables_and_views_and_no_routine() {
             .all(|table| table.table_type() == TableType::Base)
     );
     let views: Vec<&str> = database.views.iter().map(|view| &*view.name).collect();
-    assert_eq!(
-        views,
-        [
-            "v_document_paths",
-            "v_port_country",
-            "v_quay_schedule",
-            "v_ranked_notes",
-            "v_vessel_fleet"
-        ]
-    );
+    assert_eq!(views, VIEWS);
 }
 
 #[test]
@@ -773,28 +779,57 @@ fn fr_lite_032_the_triggers_on_tables_carry_their_timing_event_and_whole_stateme
 }
 
 #[test]
-fn fr_lite_033_a_view_carries_its_whole_statement_and_null_for_the_server_fields() {
+fn fr_lite_033_every_view_carries_exactly_the_nine_properties_and_no_columns() {
+    // FR-LITE-033 as amended in the sixty-eighth edition: every view of the
+    // main database, the three of item 10 that do not compile among them,
+    // carries the nine properties of FR-CAT-047 and no other key — its name,
+    // its whole stored statement unchanged, and null for the seven server
+    // fields. No view carries its columns.
     let (_scratch, artefacts) = built();
     let database = model(&artefacts);
-    let fleet = database
-        .views
-        .iter()
-        .find(|view| view.name == "v_vessel_fleet")
-        .expect("the view is carried");
 
-    assert!(
-        fleet
-            .definition
-            .starts_with("CREATE VIEW v_vessel_fleet AS")
-    );
-    assert_eq!(fleet.check_option, None);
-    assert_eq!(fleet.is_updatable, None);
-    assert_eq!(fleet.definer, None);
-    assert_eq!(fleet.security_type, None);
-    assert_eq!(fleet.character_set_client, None);
-    assert_eq!(fleet.collation_connection, None);
-    assert_eq!(fleet.algorithm, None);
-    assert_eq!(fleet.restricted, None);
+    // The stored text, read apart from the reader.
+    let stored: BTreeMap<String, String> = {
+        let connection =
+            Connection::open_with_flags(&artefacts.main, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("the fixture opens");
+        let mut statement = connection
+            .prepare("SELECT name, sql FROM main.sqlite_schema WHERE type = 'view'")
+            .expect("the schema table is read");
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .expect("the schema table is read")
+            .collect::<Result<_, _>>()
+            .expect("every view has a name and a statement")
+    };
+    assert_eq!(stored.keys().map(String::as_str).collect::<Vec<_>>(), VIEWS);
+    let nine: BTreeSet<&str> = VIEW_KEYS.into_iter().collect();
+
+    for view in &database.views {
+        let name = &*view.name;
+        assert_eq!(
+            Some(&*view.definition),
+            stored.get(name).map(String::as_str)
+        );
+        assert!(view.definition.starts_with("CREATE VIEW "), "{name}");
+        assert_eq!(view.check_option, None, "{name}");
+        assert_eq!(view.is_updatable, None, "{name}");
+        assert_eq!(view.definer, None, "{name}");
+        assert_eq!(view.security_type, None, "{name}");
+        assert_eq!(view.character_set_client, None, "{name}");
+        assert_eq!(view.collation_connection, None, "{name}");
+        assert_eq!(view.algorithm, None, "{name}");
+        assert_eq!(view.restricted, None, "{name}");
+
+        let serialised = serde_json::to_value(view).expect("a view serialises");
+        let keys: BTreeSet<&str> = serialised
+            .as_object()
+            .expect("a view serialises as an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(keys, nine, "{name}");
+    }
 }
 
 #[test]
@@ -820,58 +855,66 @@ fn fr_lite_034_no_check_constraint_is_read_and_the_table_holding_one_is_read() {
 }
 
 #[test]
-fn fr_lite_035_exactly_the_views_that_do_not_compile_are_marked_with_the_library_reason() {
+fn fr_lite_036_a_read_of_the_main_database_is_complete_and_marks_nothing() {
+    // FR-LITE-036 as amended in the sixty-eighth edition: a `sqlite` read is
+    // complete or fails, and no object it presents carries a `restricted`
+    // marking. The three views of item 10 that do not compile are presented,
+    // whole and unmarked (FR-LITE-038).
     let (_scratch, artefacts) = built();
-    let catalogue = read(&artefacts.main).expect("the file reads");
-    let database = catalogue.model().expect("it folds");
+    let database = model(&artefacts);
 
-    let marked: Vec<&str> = database
-        .views
-        .iter()
-        .filter(|view| view.restricted.is_some())
-        .map(|view| &*view.name)
-        .collect();
-    assert_eq!(
-        marked,
-        ["v_document_paths", "v_quay_schedule", "v_ranked_notes"]
+    assert!(
+        database
+            .tables
+            .iter()
+            .all(|table| table.restricted().is_none())
     );
-    for view in database
-        .views
-        .iter()
-        .filter(|view| view.restricted.is_some())
-    {
-        assert_eq!(
-            view.restricted
-                .as_ref()
-                .expect("marked")
-                .properties()
-                .iter()
-                .map(|property| &**property)
-                .collect::<Vec<_>>(),
-            ["columns"]
+    assert!(database.views.iter().all(|view| view.restricted.is_none()));
+    for name in UNCOMPILABLE {
+        assert!(
+            database.views.iter().any(|view| view.name == name),
+            "{name} is presented"
         );
     }
 
-    let reasons: Vec<(&str, i32)> = catalogue
-        .unreadable()
-        .iter()
-        .map(|unreadable| (unreadable.name.as_str(), unreadable.reason.code & 0xff))
-        .collect();
-    assert_eq!(
-        reasons,
-        [
-            ("v_document_paths", rusqlite::ffi::SQLITE_ERROR),
-            ("v_quay_schedule", rusqlite::ffi::SQLITE_ERROR),
-            ("v_ranked_notes", rusqlite::ffi::SQLITE_ERROR),
-        ]
-    );
-    let quay = &catalogue.unreadable()[1];
-    assert!(
-        quay.reason
-            .message
-            .as_ref()
-            .is_some_and(|message| message.as_str().contains("quay_schedule"))
-    );
+    // The document a dump writes carries the marking nowhere.
+    let dumped = crate::model::document::dump(&database, crate::output::Source::Server)
+        .expect("the document builds");
+    let bytes = serde_json::to_string(&dumped).expect("it serialises");
+    assert!(!bytes.contains("\"restricted\""), "{bytes}");
+}
+
+#[test]
+fn fr_lite_018_the_read_compiles_no_view_and_succeeds_over_the_views_that_do_not_compile() {
+    // FR-LITE-018 (sixty-eighth edition) and FR-LITE-038: the read of the main
+    // database succeeds over the three views of item 10 that do not compile,
+    // and the record holds the six statements of the plan and nothing else,
+    // none of which names a view. The outcome of the read is the instrument:
+    // the control below shows that a statement compiling any of the three on
+    // the reader's own hardened connection fails, so a read that compiled one
+    // would have failed with it.
+    let (_scratch, artefacts) = built();
+    let clock = settings::clock(None);
+    let session = super::open(&over(&artefacts.main), &clock).expect("the file opens");
+
+    let (answered, texts) = record::recorded(|| super::read(&session).map(drop));
+    answered.expect("the read succeeds over the views that do not compile");
+
+    let issued = record::issued(&texts);
+    assert_eq!(issued, statements::PLAN);
+    for text in &issued {
+        for view in VIEWS {
+            assert!(!text.contains(view), "{text} names the view {view}");
+        }
+    }
+
+    // The control: each of the three, compiled on the same connection, fails.
+    let connection = session.connection().expect("the connection is open");
+    for view in UNCOMPILABLE {
+        let compiled = connection.prepare(&format!("SELECT * FROM main.\"{view}\""));
+        assert!(compiled.is_err(), "{view} compiles");
+    }
+    session.close();
 }
 
 #[test]

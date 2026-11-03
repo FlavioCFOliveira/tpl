@@ -628,7 +628,6 @@ fn only<'d>(
         tables,
         views: Cow::Owned(views),
         routines: Cow::Owned(routines),
-        unreadable: Vec::new(),
     }
 }
 

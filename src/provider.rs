@@ -19,7 +19,6 @@ use crate::deadline::Clock;
 use crate::error::Error;
 use crate::mariadb::{self, Target, catalogue};
 use crate::model::database::Database;
-use crate::model::document::shape::UnreadableView;
 use crate::model::server::Server;
 use crate::project::settings::FileSettings;
 use crate::sqlite;
@@ -58,15 +57,6 @@ impl Read {
         match self {
             Self::Server(catalogue) => catalogue.model(),
             Self::File(catalogue) => catalogue.model(),
-        }
-    }
-
-    /// The views whose columns a `sqlite` read could not read, and why
-    /// (`FR-LITE-035`); none for a `mariadb` read.
-    pub(crate) fn unreadable(&self) -> &[UnreadableView] {
-        match self {
-            Self::Server(_) => &[],
-            Self::File(catalogue) => catalogue.unreadable(),
         }
     }
 }
