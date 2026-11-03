@@ -2,570 +2,618 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-É **coordenação de agentes**: diz o que o projecto é, onde vive a verdade sobre ele, e como o trabalho é executado aqui. **Não contém requisitos funcionais.**
+It is **agent coordination**: it states what the project is, where the truth about it lives, and how work is executed here. **It contains no functional requirements.**
 
 ---
 
-> # ⛔ REGRA ZERO — UM SUBAGENTE DE CADA VEZ
+> # ⛔ RULE ZERO — ONE SUBAGENT AT A TIME
 >
-> **NÃO ESTÁS AUTORIZADO A CORRER MAIS DO QUE UM SUBAGENTE EM SIMULTÂNEO.**
+> **YOU ARE NOT AUTHORISED TO RUN MORE THAN ONE SUBAGENT AT THE SAME TIME.**
 >
-> O padrão é **um único subagente em paralelo à conversa principal**. Usam-se **todos** os subagentes
-> que o objectivo exigir, mas **em série** — nunca em paralelo.
+> The default is **a single subagent running alongside the main conversation**. Use **every** subagent
+> the objective requires, but **in series** — never in parallel.
 >
-> **O paralelismo exige uma única condição: autorização expressa e clara do utilizador**, dada para
-> o pedido em causa. Sem ela, é proibido.
+> **Parallelism has one condition only: the user's express and clear authorisation**, given for the
+> request at hand. Without it, parallelism is forbidden.
 >
-> Dada a autorização, o paralelismo é **excepção**: vale só para o pedido em causa e a autorização
-> **é sempre revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização
-> de paralelismo não abre precedente para as tarefas seguintes.
+> Once authorised, parallelism is an **exception**: it holds for that request only, and the authorisation
+> **is always revoked at the end of the task**, restoring the serial default at once. An authorisation
+> sets no precedent for later tasks.
 >
-> **Antes de lançar um subagente, verificar que nenhum outro está vivo.** A verificação é por
-> **listagem dos agentes**, não pela memória do que foi lançado nem pela notificação do anterior:
-> um agente pode ficar com trabalho de fundo próprio e **retomar sozinho** depois de notificar.
-> Havendo outro vivo — **PARAR** e esperar.
+> **Before launching a subagent, verify that no other is alive.** Verify by **listing the agents** — not
+> from memory of what was launched, nor from the previous agent's notification: an agent can keep
+> background work of its own and **resume by itself** after notifying. If another is alive — **STOP** and wait.
 >
-> Esta regra **precede todas as outras deste ficheiro** e sobrepõe-se a qualquer heurística por
-> defeito que favoreça paralelismo. O desenvolvimento está em `Um de cada vez — nunca em paralelo`.
+> This rule **precedes every other rule in this file** and overrides any default heuristic that favours
+> parallelism. It is developed in *One at a time — never in parallel*.
 
 ---
 
-## Visão Geral
+## Overview
 
-`tpl` é uma **aplicação de linha de comandos escrita em Rust** que lê a estrutura (DDL / schema) de bases de dados **MariaDB** e aplica **templates MiniJinja** para produzir texto ou código a partir dessa estrutura.
+`tpl` is a **command-line application written in Rust** that reads the structure (DDL / schema) of **MariaDB** databases and applies **MiniJinja templates** to produce text or code from that structure.
 
-O modelo de interacção é **inspirado no `git`**: um único executável, subcomandos, aliases curtos, e comandos de leitura com saída estável, pensados para composição em pipelines.
+The interaction model is **inspired by `git`**: a single executable, subcommands, short aliases, and read commands with stable output, designed for composition in pipelines.
 
-**Âmbito do produto.** O `tpl` explora a base de dados, explora os templates do projecto, e renderiza um a partir do outro. É **read-only** sobre a base de dados, e a única escrita que faz em disco é a que lhe for explicitamente pedida na linha de comando, além da gestão da própria pasta de projecto. Uma funcionalidade que não caiba nisto não pertence ao `tpl`.
+**Product scope.** `tpl` explores the database, explores the project's templates, and renders one from the other. It is **read-only** on the database, and the only disk writes it makes are those explicitly requested on the command line, plus the management of its own project folder. A feature that does not fit this does not belong in `tpl`.
 
-**Consumidor primário: agentes de IA.** O utilizador esperado não é uma pessoa numa shell interactiva — é um agente (Claude Code, Codex e equivalentes) a invocar a ferramenta programaticamente e a ler o resultado. Um agente dispõe de três canais para perceber uma CLI, e só três: o **texto de ajuda**, o **exit code** e o **stdout/stderr**. Isto é um requisito de design de primeira ordem e é a razão de a ajuda, os exit codes, os formatos de saída e o determinismo serem tratados como contrato. **O conteúdo desse contrato é da especificação, não deste ficheiro.**
+**Primary consumer: AI agents.** The expected user is not a person at an interactive shell — it is an agent (Claude Code, Codex and equivalents) invoking the tool programmatically and reading the result. An agent has three channels to understand a CLI, and only three: the **help text**, the **exit code**, and **stdout/stderr**. This is a first-order design requirement, and the reason help, exit codes, output formats and determinism are treated as contract. **The content of that contract belongs to the specification, not to this file.**
 
-## Fontes de Verdade
+## Sources of Truth
 
-O projecto tem quatro fontes de verdade, com âmbitos que não se sobrepõem. Confundi-las é o erro previsível:
+The project has four sources of truth, with scopes that do not overlap. Confusing them is the predictable mistake:
 
-| Fonte | Responde a | Dono |
+| Source | Answers | Owner |
 |---|---|---|
-| `/specification` | **O que** o `tpl` faz — requisitos, regras, casos de uso | subagente `specification-manager` |
-| `rmp` | **Quando e por quem** — sprints, tarefas, estado, decisões | skill `roadmap-manager` |
-| Knowledge Graph | **Onde** — que código existe, como se articula, e que requisito cada componente satisfaz | skill `knowledge-authority` |
-| `docs/spec-technical/` | **Como** o `tpl` é construído — arquitectura, interfaces, dados, segurança, operação, qualidade | subagente `technical-writer` |
+| `/specification` | **What** `tpl` does — requirements, rules, use cases | subagent `specification-manager` |
+| `rmp` | **When and by whom** — sprints, tasks, status, decisions | skill `roadmap-manager` |
+| Knowledge Graph | **Where** — what code exists, how it fits together, and which requirement each component satisfies | skill `knowledge-authority` |
+| `docs/spec-technical/` | **How** `tpl` is built — architecture, interfaces, data, security, operations, quality | subagent `technical-writer` |
 
-Uma tarefa no `rmp` implementa um requisito da especificação; não o substitui. Um facto no grafo descreve o código que existe; não legitima código que a especificação não pediu. A especificação técnica prescreve como se constrói o que a especificação funcional pede; onde discordarem, governa `/specification`. Os registos de decisão de arquitectura, em `docs/adr/`, não acrescentam uma quinta fonte: fundamentam a quarta, e nenhum é autoridade para um requisito.
+A task in `rmp` implements a requirement of the specification; it does not replace it. A fact in the graph describes the code that exists; it does not legitimise code the specification did not ask for. The technical specification prescribes how to build what the functional specification asks for; where they disagree, `/specification` governs. The architecture decision records, in `docs/adr/`, add no fifth source: they ground the fourth, and none is an authority for a requirement.
 
-**Este ficheiro não é fonte de verdade funcional.** Não descreve comandos, flags, formatos de saída, exit codes, variáveis de contexto, filtros, nem a estrutura da configuração. Perante qualquer pergunta sobre *o que* o `tpl` faz, ler a especificação — nunca responder a partir deste ficheiro, e nunca reintroduzir aqui o que ela já diz. Uma segunda cópia deixa de ser verdadeira sem dar sinal disso.
+**This file is not a source of functional truth.** It does not describe commands, flags, output formats, exit codes, context variables, filters, or the structure of the configuration. For any question about *what* `tpl` does, read the specification — never answer from this file, and never reintroduce here what the specification already says. A second copy stops being true without giving any sign of it.
 
-### Onde procurar cada assunto
+### Where to look for each subject
 
-O índice completo e actual está em `specification/README.md`, e é por aí que se começa. Os assuntos que este ficheiro deixou de descrever estão distribuídos assim:
+The complete, current index is `specification/README.md`, and that is where to start. The subjects this file no longer describes are distributed as follows:
 
-| Assunto | Ficheiro |
+| Subject | File |
 |---|---|
-| Gramática de invocação, árvore de comandos, aliases, argumentos | `specification/cli-contract.md` |
-| Flags globais, variáveis de ambiente, precedência de configuração | `specification/global-flags.md` |
-| Formas de ajuda, estrutura do texto de ajuda, árvore de comandos em JSON, versão | `specification/help-and-version.md` |
-| Exploração da base de dados | `specification/schema-commands.md` |
-| Exploração dos templates | `specification/template-commands.md` |
-| Renderização | `specification/render-command.md` |
-| Cache do catálogo | `specification/cache-commands.md`, `specification/cache-documents.md` |
-| Gestão da configuração e das entradas de base de dados | `specification/cfg-commands.md` |
-| Ficheiro de configuração do projecto: chaves, tipos, expansão, definições de ligação | `specification/configuration-model.md` |
-| A pasta do projecto, a sua descoberta e a inicialização | `specification/project-and-discovery.md` |
-| Saída em texto e em JSON, envelope, codificação, destino do output | `specification/output-formats.md` |
-| Exit codes, ordem de validação, formato das mensagens de erro, sugestões | `specification/errors-and-exit-codes.md` |
-| Regras transversais de segurança e tratamento de credenciais | `specification/security.md` |
-| O que entra no modelo a partir do catálogo, e o que fica de fora | `specification/catalogue-coverage.md` |
-| Estrutura do documento que transporta o modelo — o contexto de render | `specification/context-document.md` |
-| Filtros, testes e funções globais disponíveis ao template | `specification/template-environment.md` |
-| Semântica de render | `specification/render-semantics.md` |
-| Séries de MariaDB suportadas, diferenças entre séries, promessa de read-only | `specification/server-contract.md` |
-| Leituras incompletas por privilégios insuficientes | `specification/privileges-and-completeness.md` |
-| Propriedades de desempenho exigidas, cargas de referência, protocolo de medição | `specification/performance-requirements.md` |
-| Termos, casos de uso ponta a ponta, questões em aberto | `specification/glossary.md`, `specification/use-cases.md`, `specification/open-questions.md` |
+| Invocation grammar, command tree, aliases, arguments | `specification/cli-contract.md` |
+| Global flags, environment variables, configuration precedence | `specification/global-flags.md` |
+| Help forms, help-text structure, JSON command tree, version | `specification/help-and-version.md` |
+| Database exploration | `specification/schema-commands.md` |
+| Template exploration | `specification/template-commands.md` |
+| Rendering | `specification/render-command.md` |
+| Catalogue cache | `specification/cache-commands.md`, `specification/cache-documents.md` |
+| Managing the configuration and the database entries | `specification/cfg-commands.md` |
+| Project configuration file: keys, types, expansion, connection definitions | `specification/configuration-model.md` |
+| The project folder, its discovery and its initialisation | `specification/project-and-discovery.md` |
+| Text and JSON output, envelope, encoding, output destination | `specification/output-formats.md` |
+| Exit codes, validation order, error-message format, suggestions | `specification/errors-and-exit-codes.md` |
+| Cross-cutting security rules and credential handling | `specification/security.md` |
+| What enters the model from the catalogue, and what stays out | `specification/catalogue-coverage.md` |
+| Structure of the document that carries the model — the render context | `specification/context-document.md` |
+| Filters, tests and global functions available to the template | `specification/template-environment.md` |
+| Render semantics | `specification/render-semantics.md` |
+| Supported MariaDB series, differences between series, the read-only promise | `specification/server-contract.md` |
+| Incomplete reads caused by insufficient privileges | `specification/privileges-and-completeness.md` |
+| Required performance properties, reference workloads, measurement protocol | `specification/performance-requirements.md` |
+| Terms, end-to-end use cases, open questions | `specification/glossary.md`, `specification/use-cases.md`, `specification/open-questions.md` |
 
-## Regras Inegociáveis
+## Non-Negotiable Rules
 
-Estas regras não se ponderam caso a caso. Cada uma tem uma secção que a desenvolve; a tabela existe para que nenhuma se perca por estar longe.
+These rules are not weighed case by case. Each has a section that develops it; the table exists so that none is lost for being far away.
 
-| Regra | Se estiver prestes a quebrá-la |
+| Rule | If you are about to break it |
 |---|---|
-| Só se trabalha sobre **tarefa aberta**: no sprint `OPEN` e em `DOING` com `--commit-open` | **PARAR** e abri-la pela skill `roadmap-manager` |
-| **Nenhuma tarefa é executada directamente** — delega-se a um subagente, e a cada peça de trabalho o seu | **PARAR** e escolher o subagente |
-| **REGRA ZERO — um subagente de cada vez**, nunca em paralelo. Listar os agentes antes de cada lançamento | **PARAR** e serializar. O paralelismo exige **autorização expressa** do utilizador — única condição — e é excepção revogada no fim da tarefa |
-| A **procura de sinergia e convergência é por defeito**, nunca se espera do utilizador e **nunca é tarefa no `rmp`**; trabalho com **objectivos complementares** ou **proximidade funcional ou técnica substancial** faz-se num **único esforço**, e cada natureza de trabalho de uma só vez | **PARAR** e reagrupar. Juntar tarefas é planeamento, e exige confirmação do utilizador |
-| Escrita no Git **só** pela skill `gitflow` | **PARAR**. Nunca um `git commit` avulso, por trivial que seja |
-| Tarefas, sprints e comentários **só** pela skill `roadmap-manager` | **PARAR**. Nunca `rmp` invocado do Bash |
-| Conhecimento sobre o código **só** pela skill `knowledge-authority` | **PARAR**. Nunca `rmp graph …` directamente |
-| A **especificação precede a implementação**, e `/specification` só é escrita pelo subagente `specification-manager` | **PARAR** e formalizar o requisito primeiro |
-| `docs/spec-technical/` só é escrita pelo subagente `technical-writer`; `docs/adr/`, pelo `adr-guardian` | **PARAR** e delegar. Nenhuma se edita por iniciativa própria |
-| **Nada se lê, lista ou referencia fora da raiz do repositório** | **PARAR**. O que faltar pergunta-se ao utilizador |
-| **`unsafe` é proibido**; `#![forbid(unsafe_code)]` mantém-se no topo do crate | **PARAR** e resolver em Rust seguro |
-| O **pipeline de validação obrigatório** passa antes de o trabalho estar concluído | O trabalho **não está concluído**. Corrigir e repetir |
-| O `tpl` **nunca escreve na base de dados** | **PARAR**. A leitura do catálogo é só por `INFORMATION_SCHEMA` |
-| Templates carregam-se **em runtime**, nunca embebidos em tempo de compilação | **PARAR**. Motores compile-time estão excluídos |
-| Validação que precise de base de dados usa a **fixture do projecto**, operada pelo seu harness | **PARAR** e levantá-la pelo harness. Nunca à mão, nunca mocks nem instâncias externas |
-| **Nada se inicia que não tenha sido explicitamente pedido** | **PARAR**. Registar o achado e perguntar ao utilizador como proceder |
-| **Nenhum trabalho se entrega a meio** | O trabalho **não está concluído**. Terminar, ou dizer explicitamente o que ficou por fazer e porquê |
-| Toda a **documentação é escrita em inglês**, e toda a instrução é explícita, objectiva, fechada e concisa | **PARAR** e reescrever |
+| Work happens only on an **open task**: in the `OPEN` sprint and in `DOING` with `--commit-open` | **STOP** and open it through the `roadmap-manager` skill |
+| **No task is executed directly** — all work is delegated to the most suitable subagent, each piece of work to its own | **STOP** and choose the subagent |
+| **RULE ZERO — one subagent at a time**, never in parallel. List the agents before every launch | **STOP** and serialise. Parallelism requires the user's **express authorisation** — the only condition — and is an exception revoked at the end of the task |
+| **Synergy and convergence are sought by default**, never awaited from the user, and **never an `rmp` task**. Requested tasks with **complementary objectives** or **verifiable functional or technical proximity** are delivered as **one effort**, each kind of work done at once; the tasks themselves **stay separate** | **STOP** and regroup. Joining a task the user did not request requires the user's decision |
+| Git writes **only** through the `gitflow` skill | **STOP**. Never a stray `git commit`, however trivial |
+| Tasks, sprints and comments **only** through the `roadmap-manager` skill | **STOP**. Never `rmp` invoked from Bash |
+| Knowledge about the code **only** through the `knowledge-authority` skill | **STOP**. Never `rmp graph …` directly |
+| The **work log** is written in `rmp` comments as the work happens — on the sprint and on each task, each entry with the type that fits it | **STOP** and write the entry before going on |
+| The **specification precedes implementation**, and `/specification` is written only by the `specification-manager` subagent | **STOP** and formalise the requirement first |
+| `docs/spec-technical/` is written only by the `technical-writer` subagent; `docs/adr/`, only by `adr-guardian` | **STOP** and delegate. Neither is edited on one's own initiative |
+| **Look for open-source prior art before designing**; never reinvent what a reference project already solves | **STOP** and search |
+| **Nothing outside the repository root is read, listed or referenced** — except a reference open-source project at its public source | **STOP**. Ask the user for what is missing |
+| **`unsafe` is forbidden**; `#![forbid(unsafe_code)]` stays at the top of the crate | **STOP** and solve it in safe Rust |
+| **Every change carries the tests that prove it**, and the **validation tier the moment calls for** passes before the work is complete — no wider, no narrower | The work **is not complete**. Fix and repeat |
+| `tpl` **never writes to the database** | **STOP**. The catalogue is read only through `INFORMATION_SCHEMA` |
+| Templates load **at runtime**, never embedded at compile time | **STOP**. Compile-time engines are excluded |
+| Validation that needs a database uses the **project fixture**, operated by its harness | **STOP** and start it through the harness. Never by hand, never mocks or external instances |
+| **Nothing is started that was not explicitly requested** | **STOP**. Record the finding and ask the user how to proceed |
+| **No work is delivered half-done** | The work **is not complete**. Finish it, or state explicitly what was left undone and why |
+| All **documentation is written in English** — this file included — and every instruction is explicit, objective, closed and concise | **STOP** and rewrite |
 
-## Antes de Começar
+## Before Starting
 
-Correr esta verificação antes de qualquer trabalho. Um "não" em qualquer ponto interrompe o trabalho — não o autoriza a prosseguir com uma nota.
+Run this check before any work. A "no" at any point halts the work — it does not authorise proceeding with a note.
 
-1. **O requisito está na especificação?** Se não estiver, ou estiver ambíguo, incompleto ou contraditório — **PARAR**. A primeira tarefa é levá-lo ao subagente `specification-manager`.
-2. **Existe tarefa no `rmp` para este trabalho?** Se não — **PARAR** e criá-la pela skill `roadmap-manager`. Não se executa trabalho sem tarefa.
-3. **A tarefa está no sprint `OPEN`?** Se está em `BACKLOG`, ou num sprint `PENDING` ou `CLOSED` — **PARAR**. Trazê-la para o sprint aberto é acção de planeamento e **exige confirmação do utilizador**.
-4. **A tarefa está em `DOING`, aberta com `--commit-open <hash>`?** Se não, abrir agora, com o hash real de `git rev-parse HEAD`.
-5. **Há sinergia ou convergência por aproveitar?** Verificar **sempre**, sem esperar que o utilizador o peça, se outras tarefas — no `rmp` ou fora dele — têm objectivos complementares ou proximidade funcional ou técnica substancial com esta. Havendo, **PARAR**: propor ao utilizador juntá-las num único esforço e esperar pela decisão. A verificação **não gera tarefa própria** — é **A procura não é tarefa**, mais abaixo.
-6. **Que subagente executa cada peça do trabalho?** Decompor a tarefa e escolher por peça, avaliando os agentes efectivamente instalados. Sem especialista óbvio, o de propósito geral — **nunca** execução directa.
-7. **O âmbito está fechado?** O briefing é o que a tarefa define — título, descrição, requisitos, comentários — e mais nada. O que se descobrir fora dele **regista-se; não se executa**.
-8. **Durante o trabalho**, escrever o log à medida: `DECISION` com as opções rejeitadas, `FINDING` com o que se descobriu, `TEST` com a verificação e o resultado.
-9. **Ao fechar**, commit primeiro pela skill `gitflow`, depois `--commit-close <hash>` com o hash real desse commit.
+1. **Is the requirement in the specification?** If not, or if it is ambiguous, incomplete or contradictory — **STOP**. The first task is to take it to the `specification-manager` subagent.
+2. **Does an `rmp` task exist for this work?** If not — **STOP** and create it through the `roadmap-manager` skill. No work is executed without a task.
+3. **Is the task in the `OPEN` sprint?** If it is in `BACKLOG`, or in a `PENDING` or `CLOSED` sprint — **STOP**. Bringing it into the open sprint is a planning action and **requires the user's confirmation**.
+4. **Is the task in `DOING`, opened with `--commit-open <hash>`?** If not, open it now, with the real hash from `git rev-parse HEAD`.
+5. **Is there synergy or convergence to exploit?** Check **always**, without waiting for the user to ask, which tasks — in `rmp` or requested ad hoc — have complementary objectives or verifiable functional or technical proximity to this one. Tasks the user requested are joined into one effort; a task the user did not request is proposed, never started. The check **creates no task of its own** — see *The search is not a task*.
+6. **What is the shortest path?** Determine the strategy that reaches the objective with the least work and no loss of quality, counting synergies, convergences, and reference open-source projects that already solve the problem (*Open Source and Prior Art*). Then follow it.
+7. **Which subagent executes each piece of the work?** Decompose the work by nature and choose per piece, evaluating the agents actually installed. With no obvious specialist, the general-purpose one — **never** direct execution.
+8. **Is the scope closed?** The briefing is what the task defines — title, description, requirements, comments — and nothing else. Whatever is found outside it **is recorded; it is not executed**.
+9. **During the work**, write the work log as it happens, on the task and on the sprint (*The work log*).
+10. **On closing**, commit first through the `gitflow` skill, then `--commit-close <hash>` with the real hash of that commit.
 
-## Sinergia e Convergência do Esforço
+## Synergy and Convergence of Effort
 
-> **Rentabilizar o esforço, entregando o máximo com o mínimo de trabalho.**
+> **Make the effort pay off: deliver the most with the least work.**
 
-**A procura de sinergia e de convergência é o modo de trabalho por defeito**, é permanente, e vale em toda a forma de trabalhar neste projecto. Antes de planear, antes de decompor e antes de delegar, a pergunta é a mesma: que trabalho pode ser feito **de uma só vez**, em benefício de mais do que uma tarefa?
+**Seeking synergy and convergence is the default way of working.** It is permanent, and it applies to every way of working in this project. Before planning, before decomposing and before delegating, the question is the same: what work can be done **at once**, to the benefit of more than one task?
 
-**Um objectivo atinge-se no menor número de tarefas ou de iterações possível**, maximizando os recursos internos disponíveis, para que a entrega seja mais rápida e custe menos ao utilizador.
+**Objectives are reached in the fewest possible tasks and iterations**, making the most of the internal resources available, so that delivery is faster and costs the user less.
 
-**NÃO DEVE SER NECESSÁRIO o utilizador pedir para procurar convergências e sinergias.** A procura nunca se espera dele: dar por si a executar tarefa a tarefa sem ter procurado o que as junta é motivo para **PARAR** e procurar. O que continua a exigir **confirmação do utilizador** é **juntar** as tarefas, nos termos de **Entre tarefas**, mais abaixo — procurar é por defeito, decidir é dele.
+**The user MUST NOT have to ask for synergy and convergence to be sought.** Catching yourself executing task by task without having looked for what joins the tasks is reason to **STOP** and look.
 
-### A procura não é tarefa
+### The search is not a task
 
-**A procura de sinergia e de convergência NUNCA se regista como tarefa no `rmp`.** É modo de trabalho, não é trabalho: corre dentro do que já está aberto, não consome tarefa própria, não abre sprint e não precisa de autorização para acontecer. Estar prestes a criar uma tarefa para "procurar sinergias" é motivo para **PARAR**.
+**Seeking synergy and convergence is NEVER recorded as a task in `rmp`.** It is a way of working, not work: it runs inside what is already open, consumes no task of its own, opens no sprint, and needs no authorisation to happen. Being about to create a task to "look for synergies" is reason to **STOP**.
 
-Regista-se o **resultado**, e só havendo um: a proposta de juntar tarefas leva-se ao utilizador, e o que ele decidir regista-se pela skill `roadmap-manager` nas tarefas que o esforço junta. **Nenhum trabalho fora de uma tarefa aberta** governa o trabalho — não a procura, que o precede.
+What is recorded is the **result**, and only when there is one: a `DECISION` comment on each task the effort joins, naming the other tasks and the convergence that joins them. *No work outside an open task* governs the work — not the search, which precedes it.
 
-### A sinergia melhora o trabalho — nunca o piora
+### Synergy improves the work — never worsens it
 
-O esforço agrupado entrega trabalho **melhor** do que a execução tarefa a tarefa, e **NUNCA pior**: mais rápido **sem custar qualidade**. Agrega-se o trabalho da mesma natureza onde isso **encurta o trabalho sem prejudicar a entrega**; onde prejudicasse, não se agrega.
+The grouped effort delivers **better** work than task-by-task execution, and **NEVER worse**: faster **without costing quality**. Work of the same nature is aggregated where that **shortens the work without harming the delivery**; where it would harm it, it is not aggregated.
 
-### Entre tarefas
+### Across tasks
 
-**A convergência procura-se nos objectivos individuais de cada tarefa.** Objectivos complementares, proximidade funcional e proximidade técnica convertem-se, todos, num **único esforço optimizado**.
+**Convergence is sought in the individual objectives of each task.** Complementary objectives, functional proximity and technical proximity are all turned into **one optimised effort**.
 
-Identificadas tarefas — no `rmp` ou fora dele — cujos **objectivos são complementares** ou cuja **proximidade funcional ou técnica é substancial**, juntam-se num **único esforço de desenvolvimento**, para que um trabalho sirva várias. Deixar tarefas próximas seguirem caminhos separados é desperdício, e é motivo para **PARAR** e reagrupar.
+When tasks — in `rmp` or requested ad hoc by the user — have **complementary objectives** or **verifiable functional or technical proximity**, they are joined into **one development effort**, so that one piece of work serves several. Letting close tasks follow separate paths is waste, and reason to **STOP** and regroup.
 
-Juntar tarefas é **acção de planeamento** e **exige confirmação do utilizador**: propõe-se, identificando as tarefas e a convergência ou proximidade que as junta, e espera-se pela decisão. Identificar sinergia **NUNCA** é autorização para começar o trabalho das outras tarefas — é **Proactividade**, mais abaixo, e vale aqui sem alteração.
+**The tasks stay separate; only the effort joins them.** Each task keeps its own identity, definition, work log and closing gate in `rmp`. No task is merged into another or replaced by a combined task. The joining exists only in development and in testing.
 
-As condições de **Nenhum trabalho fora de uma tarefa aberta** não se dispensam: cada tarefa do esforço pertence ao sprint `OPEN` e está em `DOING`, aberta com `--commit-open <hash>`.
+**Within the requested work, joining is the default** and needs no further confirmation: the tasks the user asked to execute — by naming them, or by naming the sprint that holds them — are joined whenever they converge. **A task the user did not request is never joined on one's own initiative**: it is proposed to the user, naming it and the convergence that would join it, and its work starts only on the user's decision — *Initiative*, below.
 
-Autorizado o esforço, o seu âmbito é a **união dos âmbitos das tarefas que o compõem**, e essa união é ela própria fechada.
+The conditions of *No work outside an open task* are not waived: every task in the effort belongs to the `OPEN` sprint and is in `DOING`, opened with `--commit-open <hash>`.
 
-### Dentro da tarefa
+The effort's scope is the **union of the scopes of its tasks**, and that union is itself closed.
 
-Dentro de uma tarefa a exigência é a mesma: **agrupar o trabalho por natureza e executar cada natureza de uma só vez.** Escrever **todo** o código de uma vez e testar **tudo** de uma vez, em lugar de escrever um troço, testá-lo, escrever o seguinte e testá-lo — a alternância multiplica delegações, contextos e validações sem acrescentar nada.
+### Within a task
 
-O mesmo vale para a documentação, e para qualquer outra natureza de trabalho: trata-se **toda de uma vez**. Sendo o âmbito grande de mais para uma só passagem, **identificam-se blocos** e trata-se cada bloco por inteiro, de uma só vez — nunca peça a peça.
+Within a task the demand is the same: **group the work by nature and execute each nature at once.** Write **all** the code at once — for every task in the effort — and test **all** the changes at once, instead of writing a fragment, testing it, writing the next and testing it. The alternation multiplies delegations, contexts and validations, and adds nothing.
 
-O pipeline de validação obrigatório, definido em **Desenvolvimento**, corre sobre o esforço completo, e não depois de cada fragmento.
+The same holds for documentation, and for every other nature of work: it is handled **all at once**. When the scope is too large for a single pass, **blocks are identified** and each block is handled whole, at once — never piece by piece.
 
-### Sinergia não é paralelismo
+The validation of the *Test execution policy* runs over the complete effort, not after each fragment.
 
-A sinergia ganha-se com **menos delegações e maiores** — nunca com delegações simultâneas. **Um de cada vez — nunca em paralelo**, mais abaixo, mantém-se intacto, e nada nesta secção o afrouxa.
+### Synergy is not parallelism
 
-### O esforço só está concluído quando todas as suas tarefas estão
+Synergy is gained through **fewer, larger delegations** — never through simultaneous ones. *One at a time — never in parallel*, below, stays intact, and nothing in this section loosens it. Making the most of the internal resources never means running subagents concurrently.
 
-Um esforço que junte várias tarefas cumpre **Completude** por inteiro: nenhuma tarefa se dá por concluída enquanto o trabalho que lhe pertence não estiver feito e validado. Cada uma fecha pelo seu próprio gate, nos termos de **Fecho: primeiro o commit, depois a tarefa**.
+### The effort is complete only when all its tasks are
 
-## Execução de Tarefas por Subagentes
+An effort that joins several tasks satisfies *Completeness* in full: no task is declared complete while the work that belongs to it is not done and validated. Each closes through its own gate, under *Closing: commit first, then the task*.
 
-**Nenhuma tarefa é executada directamente.** Sempre que uma tarefa começa, é delegada a um **subagente especializado**, escolhido por ser o mais adequado ao propósito dessa tarefa concreta. Dar por si a executar directamente é motivo para **PARAR** e delegar.
+## Task Execution by Subagents
 
-### Escolha do subagente
+**No task is executed directly.** **All** work in this project is delegated to the **specialised subagent** best suited to the objective the task must reach. Catching yourself executing directly is reason to **STOP** and delegate.
 
-O conjunto de subagentes disponíveis **é avaliado no momento**, no computador onde o trabalho decorre. Não existe aqui uma lista fixa, e **NUNCA** passará a existir: os agentes instalados mudam, e uma lista escrita neste ficheiro ficaria desactualizada sem dar sinal disso. Antes de delegar, verificar **SEMPRE** quem está efectivamente disponível e escolher em função do propósito da tarefa.
+### Choosing the subagent
 
-Se nenhum subagente for claramente o mais adequado, escolher o de propósito geral. A ausência de uma escolha óbvia **NUNCA** é autorização para executar directamente.
+The set of available subagents **is evaluated at the moment**, on the machine where the work takes place. There is no fixed list here, and there **NEVER** will be: installed agents change, and a list written in this file would go stale without giving any sign of it. Before delegating, **ALWAYS** check which agents are actually available and choose the most suitable one for the task's purpose.
 
-As indicações de agente já escritas noutras secções deste ficheiro — `rust-elite-developer` para código Rust, `rust-perf-engineer` e `extreme-code-profiler` para desempenho, `security-researcher` para superfície de ataque, `specification-manager` para a especificação — são casos particulares desta regra, não excepções a ela.
+If no subagent is clearly the most suitable, choose the general-purpose one. The absence of an obvious choice is **NEVER** authorisation to execute directly.
 
-### A regra vale para cada peça de trabalho
+The agent indications written in other sections of this file — `rust-elite-developer` for Rust code, `rust-perf-engineer` and `extreme-code-profiler` for performance, `security-researcher` for attack surface, `specification-manager` for the specification — are particular cases of this rule, not exceptions to it.
 
-**A delegação não é só por tarefa — é por cada peça de trabalho dentro dela.** Aberta a tarefa, o trabalho que ela contém é **decomposto**, e para **cada peça** escolhe-se o subagente mais adequado, avaliado contra os agentes efectivamente instalados na máquina nesse momento, nos termos da secção anterior.
+### The rule applies to every piece of work
 
-**A decomposição é por natureza do trabalho, nunca por fragmento.** Todo o trabalho da mesma natureza vai numa **única delegação** ao mesmo subagente — nunca em delegações sucessivas sobre pedaços do mesmo problema. É o que **Sinergia e Convergência do Esforço** exige.
+**Delegation is not only per task — it is per piece of work within it.** Once the task is open, its work is **decomposed**, and for **each piece** the most suitable subagent is chosen, evaluated against the agents actually installed on the machine at that moment, as in the previous section.
 
-Uma tarefa que atravesse vários tipos de trabalho — especificação, código, testes, desempenho, segurança, documentação — usa **vários subagentes**, um por tipo, cada um com **todo** o trabalho desse tipo, e **SEMPRE em série**, nos termos de **Um de cada vez — nunca em paralelo**, mais abaixo.
+**Decomposition is by nature of work, never by fragment.** All work of the same nature goes in **one delegation** to the same subagent — never in successive delegations over pieces of the same problem. That is what *Synergy and Convergence of Effort* demands.
 
-**A escolha do subagente de cada peça é registada na tarefa**, através da skill `roadmap-manager`, para que a execução fique rastreável a quem a fez.
+A task that spans several kinds of work — specification, code, tests, performance, security, documentation — uses **several subagents**, one per kind, each with **all** the work of that kind, and **ALWAYS in series**, under *One at a time — never in parallel*, below.
 
-Por peça valem, sem alteração, as duas regras de **Escolha do subagente**: avaliar os agentes efectivamente instalados no momento, e recorrer ao de propósito geral quando não houver especialista óbvio.
+**The subagent chosen for each piece is recorded on the task**, through the `roadmap-manager` skill, so that the execution is traceable to whoever did it.
 
-### Âmbito fechado
+### Closed scope
 
-Cada tarefa é executada sob um **âmbito fechado, objectivo e focado exclusivamente no seu propósito**. O briefing entregue ao subagente é delimitado pelo que a tarefa define — **título, descrição, requisitos e comentários** — e por mais nada.
+Each task is executed under a **closed, objective scope, focused exclusively on its purpose**. The briefing given to the subagent is bounded by what the task defines — **title, description, requirements and comments** — and by nothing else. The briefing also states the validation tier that applies (*Test execution policy*); without it, a subagent runs the full battery by default.
 
-O subagente **NUNCA** alarga o âmbito, **NUNCA** aproveita a passagem para corrigir o que encontra pelo caminho, e **NUNCA** antecipa a tarefa seguinte. O que descobrir fora do âmbito regista-se como comentário ou como nova tarefa, através da skill `roadmap-manager`; não se executa. Perante a tentação de o corrigir já, **PARAR** e registar.
+The subagent **NEVER** widens the scope, **NEVER** uses the pass to fix what it finds along the way, and **NEVER** anticipates the next task. What it finds outside the scope is recorded as a comment or as a new task, through the `roadmap-manager` skill; it is not executed. Faced with the temptation to fix it now, **STOP** and record.
 
-Um esforço que junte várias tarefas tem por âmbito a união dos âmbitos delas, fixada no momento em que o utilizador o autoriza e fechada a partir daí. **Sinergia e Convergência do Esforço** decide-se antes de executar; durante a execução **NUNCA** é porta para alargar âmbito.
+An effort that joins several tasks has as its scope the union of their scopes, fixed when the effort is formed and closed from then on. *Synergy and Convergence of Effort* is decided before executing; during execution it is **NEVER** a door to widen the scope.
 
-O que aqui se exige ao subagente, **Proactividade**, mais abaixo, exige à sessão inteira.
+What this section demands of the subagent, *Initiative*, below, demands of the whole session.
 
-### Um de cada vez — nunca em paralelo
+### One at a time — never in parallel
 
-> Esta secção desenvolve a **REGRA ZERO**, no topo deste ficheiro. Onde parecerem divergir, governa a Regra Zero.
+> This section develops **RULE ZERO**, at the top of this file. Where they seem to diverge, Rule Zero governs.
 
-**NUNCA correr mais do que um subagente em simultâneo.** **Devem** usar-se todos os subagentes que o objectivo exigir, mas SEMPRE **em série**: lançar um, esperar que termine, avaliar o resultado, e só então lançar o seguinte. Dar por si prestes a lançar dois — **PARAR** e serializar.
+**NEVER run more than one subagent at the same time.** Use every subagent the objective requires, but ALWAYS **in series**: launch one, wait for it to finish, evaluate the result, and only then launch the next. Catching yourself about to launch two — **STOP** and serialise.
 
-#### O gate de lançamento
+#### The launch gate
 
-Antes de **cada** delegação, sem excepção e por trivial que pareça:
+Before **every** delegation, without exception and however trivial it seems:
 
-1. **Listar os agentes** e confirmar que **nenhum** está em execução.
-2. Só então lançar.
+1. **List the agents** and confirm that **none** is running.
+2. Only then launch.
 
-**A notificação de conclusão do agente anterior não basta.** Um agente pode parar com trabalho de fundo próprio ainda a correr e **retomar sozinho** depois de ter notificado — caso em que passam a existir dois agentes activos sem que nenhuma decisão o tenha querido. Confiar na notificação é confiar num facto que pode deixar de ser verdadeiro; a listagem é o estado real, no momento.
+**The previous agent's completion notification is not enough.** An agent can stop with background work of its own still running and **resume by itself** after notifying — in which case two agents are active without any decision having wanted it. Trusting the notification is trusting a fact that can stop being true; the listing is the real state, at that moment.
 
-Encontrado outro agente vivo — **PARAR** e esperar que termine. **NUNCA** lançar "só mais um" enquanto se espera.
+If another agent is alive — **STOP** and wait for it to finish. **NEVER** launch "just one more" while waiting.
 
-Esta regra sobrepõe-se a qualquer heurística por defeito que favoreça paralelismo, incluindo o hábito de agrupar várias invocações independentes na mesma mensagem para correrem em concorrência, e a orquestração por workflows, que faz fan-out de agentes. Neste projecto o padrão é execução em série, e é o padrão que prevalece na dúvida.
+This rule overrides any default heuristic that favours parallelism, including the habit of grouping several independent invocations in the same message so that they run concurrently, and workflow orchestration, which fans agents out. In this project the default is serial execution, and it is the default that prevails in doubt.
 
-Só o utilizador pode autorizar execução em paralelo, e essa **autorização expressa e clara, dada para o pedido em causa, é a única condição** que levanta a proibição — é o que fixa a **REGRA ZERO**. Sem ela, a série mantém-se, seja qual for o argumento.
+Only the user can authorise parallel execution, and that **express and clear authorisation, given for the request at hand, is the only condition** that lifts the prohibition — as **RULE ZERO** fixes. Without it, the series stands, whatever the argument.
 
-Dada a autorização, o paralelismo é ainda **excepcional**: cumpre-se para o pedido em causa, e a autorização **é revogada no fim da tarefa**, retomando-se de imediato o padrão em série. Uma autorização de paralelismo não abre precedente para as tarefas seguintes.
+Once authorised, parallelism is still **exceptional**: it holds for the request at hand, and the authorisation **is revoked at the end of the task**, restoring the serial default at once. An authorisation of parallelism sets no precedent for later tasks.
 
-**Nunca invocar o custo como argumento para paralelizar.** A regra existe para proteger o custo do utilizador; usá-la ao contrário — *é mais rápido, logo mais barato* — é quebrá-la.
+**Never invoke cost as an argument for parallelising.** The rule exists to protect the user's cost; using it the other way round — *it is faster, therefore cheaper* — is breaking it.
 
-## Linguagem
+## Language
 
-A linguagem é instrumento de coordenação: o que aqui se escreve é o que outro agente vai executar. Uma frase vaga produz trabalho vago. As quatro exigências valem em tudo o que se **escreve** e em tudo o que se **interpreta** — briefings a subagentes, títulos e descrições de tarefas, comentários do log, mensagens de commit, respostas ao utilizador e documentação:
+Language is an instrument of coordination: what is written here is what another agent will execute. A vague sentence produces vague work. The four demands apply to everything that is **written** and everything that is **interpreted** — briefings to subagents, task titles and descriptions, work-log comments, commit messages, answers to the user, and documentation:
 
-| Exigência | O que impõe |
+| Demand | What it imposes |
 |---|---|
-| **Explícito** | Dizer o que se pretende, por inteiro. Nada fica implícito, subentendido ou entregue à inferência de quem lê |
-| **Objectivo** | Dizer o que há a executar, em termos verificáveis. Nada de intenções genéricas nem de formulações que não se saiba se foram cumpridas |
-| **Fechado** | Delimitar o âmbito: o que entra e, quando não for evidente, o que fica de fora. Uma instrução sem fronteira é uma instrução por escrever |
-| **Conciso** | Poucas palavras. Cortar o que não acrescenta — nunca o que delimita |
+| **Explicit** | State what is intended, in full. Nothing is left implicit, understood, or to the reader's inference |
+| **Objective** | State what is to be executed, in verifiable terms. No generic intentions, no wording whose fulfilment cannot be checked |
+| **Closed** | Bound the scope: what is in and, when not evident, what is out. An instruction without a boundary is an instruction not yet written |
+| **Concise** | Few words. Cut what adds nothing — never what bounds |
 
-Estar prestes a escrever uma instrução que admita duas leituras é motivo para **PARAR** e reescrevê-la. Perante uma instrução **recebida** que admita duas leituras, **PARAR** e perguntar ao utilizador: **NUNCA** escolher uma delas por conta própria.
+Being about to write an instruction that admits two readings is reason to **STOP** and rewrite it. Faced with a **received** instruction that admits two readings, **STOP** and ask the user: **NEVER** pick one of them on your own.
 
-### Língua
+### English
 
-**Toda a documentação é escrita em inglês** — o README, a especificação funcional, a especificação técnica, os registos de decisão, o CHANGELOG e os doc comments do código, sem excepção. Exige-se inglês impecável: ortografia, gramática e sintaxe sem erro, e tom profissional.
+**All documentation is written in English** — the README, this `CLAUDE.md`, the functional specification, the technical specification, the decision records, the CHANGELOG and the code's doc comments, without exception. Flawless English is required: spelling, grammar and syntax without error, in a professional tone.
 
-As quatro exigências acima aplicam-se à documentação com o mesmo peso. Um texto em inglês correcto mas vago **não** cumpre o requisito.
+The four demands above apply to documentation with the same weight. Correct but vague English **does not** meet the requirement.
 
-## Proactividade
+## Initiative
 
-**A actuação é dirigida ao objectivo do trabalho em curso, e a nada mais.** É **proibido** iniciar por iniciativa própria qualquer trabalho que não tenha sido **explicitamente pedido**. Não há correcção pequena de mais, óbvia de mais nem oportuna de mais para escapar a esta regra.
+**Action is directed at the objective of the work in progress, and at nothing else.** Starting on your own initiative any work that was not **explicitly requested** is **forbidden**. No fix is too small, too obvious or too timely to escape this rule.
 
-Identificada uma necessidade fora do âmbito do trabalho em execução:
+When a need outside the scope of the work in progress is identified:
 
-1. **PARAR.** Não se começa.
-2. **Registar** o achado pela skill `roadmap-manager`, como comentário na tarefa ou como tarefa nova.
-3. **Perguntar ao utilizador** como proceder, e esperar pela resposta.
+1. **STOP.** It is not started.
+2. **Record** the finding through the `roadmap-manager` skill, as a comment on the task or as a new task.
+3. **Ask the user** how to proceed, and wait for the answer.
 
-Retomar o trabalho em curso é o comportamento por defeito; iniciar o trabalho descoberto exige decisão do utilizador. Aproveitar a passagem para corrigir o que se encontra pelo caminho, antecipar a tarefa seguinte e acrescentar o que ninguém pediu são violações da mesma regra.
+Resuming the work in progress is the default behaviour; starting the discovered work requires the user's decision. Using the pass to fix what is found along the way, anticipating the next task, and adding what nobody asked for are violations of the same rule.
 
-**Procurar sinergia e convergência não é iniciar trabalho**, e por isso não cai nesta proibição: procura-se **sempre**, por defeito, sem esperar que o utilizador o peça. O que exige decisão dele é **juntar** as tarefas e **executar** o que se descobriu, nos termos de **Sinergia e Convergência do Esforço**.
+**Seeking synergy and convergence is not starting work**, and so does not fall under this prohibition: it is done **always**, by default, without waiting for the user to ask. What requires the user's decision is joining a task **the user did not request**, under *Synergy and Convergence of Effort*.
 
-## Completude
+## Completeness
 
-**É proibido entregar trabalho parcial.** O que se inicia executa-se na sua plenitude: **NUNCA** deixar uma tarefa a meio, **NUNCA** dar por concluído o que está por acabar.
+**Delivering partial work is forbidden.** What is started is executed in full: **NEVER** leave a task half-done, **NEVER** declare complete what is unfinished.
 
-Isto impõe três coisas, e nenhuma se dispensa:
+This imposes three things, and none is waived:
 
-- **Não se declara concluído o que não está.** O trabalho termina quando tudo o que a tarefa define está feito e o pipeline de validação obrigatório, definido em **Desenvolvimento**, passa.
-- **Não se entrega um esqueleto.** Nada de `todo!()`, `unimplemented!()`, ramos por escrever, testes por escrever ou documentação por actualizar, deixados para depois.
-- **Não se estreita o âmbito em silêncio.** Bloqueada uma parte do trabalho, executa-se **tudo** o resto e diz-se **explicitamente** o que ficou por fazer e porquê. Reduzir o âmbito é decisão do utilizador, nunca de quem executa.
+- **Nothing is declared complete that is not.** Work ends when everything the task defines is done, the tests that prove it exist, and the validation tier the moment calls for passes (*Test execution policy*).
+- **No skeleton is delivered.** No `todo!()`, `unimplemented!()`, unwritten branches, unwritten tests, or documentation left un-updated for later.
+- **The scope is not narrowed in silence.** When part of the work is blocked, **all** the rest is executed, and what was left undone, and why, is stated **explicitly**. Reducing the scope is the user's decision, never the executor's.
 
-Um trabalho que não caiba por inteiro no âmbito da tarefa não se entrega pela metade: **PARAR** e levar a questão ao utilizador.
+Work that does not fit entirely in the task's scope is not delivered by halves: **STOP** and take the question to the user.
 
-Um esforço que junte várias tarefas só está concluído quando **todas** elas estão: **Sinergia e Convergência do Esforço** agrupa o trabalho, nunca dispensa parte dele.
+An effort that joins several tasks is complete only when **all** of them are: *Synergy and Convergence of Effort* groups the work, never waives part of it.
 
-## Skills Obrigatórias
+## Development Policy
 
-Três domínios deste projecto **NUNCA** são operados directamente: têm uma skill dedicada que é a única via de acesso. A regra é a mesma nos três casos — **NUNCA invocar a CLI subjacente a partir do Bash**; invocar a skill, que a opera. Estar prestes a escrever uma destas CLI no Bash é motivo para **PARAR** e chamar a skill.
+Development follows every policy in this file, and is focused and objective: it serves the purpose of the task or of the user's request, and nothing else.
 
-| Domínio | Skill | CLI que a skill opera |
+- **Tasks are written and read objectively, specifically and concretely**, without digressions or assumptions. This applies equally to generating tasks and to interpreting them; it is *Language* applied to tasks.
+- **Shortest path first.** Before any development, determine the shortest path to the objective and its requirements — the strategy with the least work that does not reduce the quality of the delivery — weighing synergies, convergences and open-source prior art. Only then proceed, along that path.
+
+## Open Source and Prior Art
+
+### Look for a reference open-source solution
+
+At every moment of analysis, exploration and development, check whether an open-source project already implements or solves what is needed. Use it to copy from — in full or in part, where its licence allows, and with the notices that licence requires — or to study as an example. Look for the **reference** projects in the domain.
+
+**Only reference projects are used**: projects that are demonstrably useful and trustworthy for the specific contribution sought. A project that is not, is not used.
+
+### Do not reinvent
+
+When analysing an existing problem, a new feature, or the refactoring of an existing feature, do not invent a solution from scratch. Start from the information already at hand, and use — wherever possible — the knowledge, engineering, architecture or approach of an open-source project that already solves the problem, as a whole or in part. Copying and studying such projects is authorised.
+
+The source project is only the **starting point**. `tpl` takes from it what benefits `tpl` and is never bound to the original code: what is taken is adapted to the specification and to this file's rules.
+
+### Boundaries
+
+- **Open source informs *how*, never *what*.** A behaviour found in another project is not a requirement until `/specification` states it — *Functional Specification*.
+- **Taken code obeys this file in full**: the Rust conventions, the `unsafe` prohibition, the implementation invariants and the *Test execution policy*.
+- **Adopting a project as a dependency** passes the dependency budget (*Performance and Efficiency*) and, when it changes the *Stack* table, is an architecture decision recorded before it is implemented.
+- **Reading a reference project at its public source** — its official repository, documentation or published package — is the single exception to *Working Scope*.
+
+## Investigation and Optimisation
+
+When investigating the cause of a problem in the code, or optimising a component, first decide which technique — or combination of techniques — will identify and locate it: profiling, tracing, metrics, logs, benchmarks. Then dissect the problem until its cause is entirely clear. A cause that is not yet clear has not yet been found.
+
+- **These techniques are means of investigation**, and none changes the *Stack*: tracing a process does not add `tracing` to the crate.
+- **The performance instruments, and the agents for this work**, are in *Measurement discipline*.
+
+## Mandatory Skills
+
+Three domains of this project are **NEVER** operated directly: each has a dedicated skill that is the only way in. The rule is the same in all three — **NEVER invoke the underlying CLI from Bash**; invoke the skill, which operates it. Being about to write one of these CLIs in Bash is reason to **STOP** and call the skill.
+
+| Domain | Skill | CLI the skill operates |
 |---|---|---|
-| Escrita no Git | `gitflow` | `git` (operações de escrita) |
-| Sprints, tarefas e comentários | `roadmap-manager` | `rmp`, em todos os comandos excepto `rmp graph …` |
-| Conhecimento sobre o projecto | `knowledge-authority` | `rmp graph …` |
+| Git writes | `gitflow` | `git` (write operations) |
+| Sprints, tasks and comments | `roadmap-manager` | `rmp`, every command except `rmp graph …` |
+| Knowledge about the project | `knowledge-authority` | `rmp graph …` |
 
 ### 1. Git — skill `gitflow`
 
-**Todas as operações de escrita no Git passam pela skill `gitflow`.** Isto inclui, sem excepção: `commit`, `add`, criação e remoção de branches, `merge`, `rebase`, `tag`, `push`, `stash` e qualquer reescrita de histórico.
+**All Git write operations go through the `gitflow` skill**, following the good practices of that branching methodology. This includes, without exception: `commit`, `add`, creating and deleting branches, `merge`, `rebase`, `tag`, `push`, `stash`, and any history rewrite.
 
-O repositório segue o modelo **gitflow** (Vincent Driessen): abertura e fecho de sprints, registo de uma tarefa fechada como commit, criação de releases e de hotfixes — tudo isso é decisão da skill, não improviso.
+The repository follows the **gitflow** model (Vincent Driessen): opening and closing sprints, recording a closed task as a commit, creating releases and hotfixes — all of that is the skill's decision, not improvisation.
 
-Leitura é livre: `git status`, `git log`, `git diff`, `git show` e equivalentes podem ser executados directamente, porque não alteram estado.
+Reading is free: `git status`, `git log`, `git diff`, `git show` and equivalents may be run directly, because they change no state.
 
-**NUNCA** fazer commits directamente em `main`.
+**NEVER** commit directly to `main`.
 
-### 2. Sprints, tarefas e comentários — skill `roadmap-manager`
+### 2. Sprints, tasks and comments — skill `roadmap-manager`
 
-**Toda a gestão e coordenação de sprints, tarefas e comentários passa pela skill `roadmap-manager`**, que é a única operadora da CLI `rmp` (Groadmap) em **todos os comandos excepto `rmp graph …`**, esses da skill `knowledge-authority`. Isto abrange criar, listar, inspeccionar e editar tarefas; o ciclo de vida dos sprints (planear, iniciar, fechar, reabrir); transições de estado; prioridades e severidades; dependências e subtarefas; reordenação; o log de auditoria e as estatísticas; e o log tipado de comentários (`FINDING`, `HYPOTHESIS`, `TEST`, `DECISION`, `PROGRESS`, `UPDATE`, `NOTE`).
+**All management and coordination of sprints, tasks and comments goes through the `roadmap-manager` skill**, the only operator of the `rmp` CLI (Groadmap) for **every command except `rmp graph …`**, which belong to the `knowledge-authority` skill. This covers creating, listing, inspecting and editing tasks; the sprint lifecycle (plan, start, close, reopen); status transitions; priorities and severities; dependencies and subtasks; reordering; the audit log and statistics; and the typed comment log.
 
-O `rmp` é a **única fonte de verdade** para o planeamento e execução das tarefas deste projecto. **NUNCA** usar ficheiros ad-hoc, listas no chat, TODOs no código ou qualquer outra ferramenta como substituto.
+`rmp` is the **only source of truth** for planning and executing this project's tasks. **NEVER** use ad-hoc files, chat lists, TODOs in the code or any other tool as a substitute.
 
-**Roadmap deste projecto:** `tpl`.
+**This project's roadmap:** `tpl`.
 
-#### Nenhum trabalho fora de uma tarefa aberta
+#### No work outside an open task
 
-**Todo o trabalho é executado sobre uma tarefa aberta no `rmp`, e só sobre ela.** Começar trabalho numa tarefa que não foi aberta é uma **violação de processo**, não um atalho — e não se justifica por a alteração ser pequena, óbvia ou urgente.
+**All work is executed on an open task in `rmp`, and only on it.** Starting work on a task that was not opened is a **process violation**, not a shortcut — and it is not justified by the change being small, obvious or urgent.
 
-**Os dois conjuntos de estados não se confundem.** `OPEN` é estado de *sprint*, nunca de tarefa:
+**The two sets of states are not confused.** `OPEN` is a *sprint* state, never a task state:
 
-| Entidade | Estados |
+| Entity | States |
 |---|---|
-| Tarefa | `BACKLOG`, `SPRINT`, `DOING`, `TESTING`, `COMPLETED` |
+| Task | `BACKLOG`, `SPRINT`, `DOING`, `TESTING`, `COMPLETED` |
 | Sprint | `PENDING`, `OPEN`, `CLOSED` |
 
-Uma tarefa é executável quando **ambas** as condições se verificam:
+A task is executable when **both** conditions hold:
 
-1. Pertence ao sprint cujo estado é `OPEN`.
-2. Foi ela própria transitada para `DOING` com `--commit-open <hash>`.
+1. It belongs to the sprint whose state is `OPEN`.
+2. It was itself moved to `DOING` with `--commit-open <hash>`.
 
-Falhar uma das duas basta para a tarefa **não** ser executável. Em concreto:
+Failing either is enough for the task **not** to be executable. Concretely:
 
-- Uma tarefa em `BACKLOG` **NUNCA** se executa.
-- Uma tarefa num sprint `PENDING` ou `CLOSED` **NUNCA** se executa.
-- Trazer uma tarefa para o sprint aberto é uma **acção de planeamento** e **exige confirmação do utilizador**. **NUNCA** se faz por iniciativa própria para desbloquear trabalho.
+- A task in `BACKLOG` is **NEVER** executed.
+- A task in a `PENDING` or `CLOSED` sprint is **NEVER** executed.
+- Bringing a task into the open sprint is a **planning action** and **requires the user's confirmation**. It is **NEVER** done on one's own initiative to unblock work.
 
-Falhando qualquer uma das duas condições, **PARAR** e regularizar a tarefa pela skill `roadmap-manager` antes de escrever a primeira linha.
+If either condition fails, **STOP** and regularise the task through the `roadmap-manager` skill before writing the first line.
 
-**Trabalho descoberto a meio que não tenha tarefa própria regista-se como tarefa ou como comentário — nunca se executa.** É **Âmbito fechado**, em *Execução de Tarefas por Subagentes*, e vale aqui sem alteração.
+**Work discovered midway that has no task of its own is recorded as a task or as a comment — it is never executed.** That is *Closed scope*, in *Task Execution by Subagents*, and it applies here unchanged.
 
-**Esta regra governa o trabalho, não a procura.** Procurar sinergia e convergência não é trabalho, não se regista como tarefa e não passa por este gate — é **A procura não é tarefa**, em *Sinergia e Convergência do Esforço*.
+**This rule governs the work, not the search.** Seeking synergy and convergence is not work, is not recorded as a task, and does not go through this gate — that is *The search is not a task*, in *Synergy and Convergence of Effort*.
 
-O ciclo de vida da tarefa **NUNCA** é excepção à regra do topo desta secção: toda a transição de estado e todo o comentário passam pela skill `roadmap-manager`.
+The task lifecycle is **NEVER** an exception to the rule at the top of this section: every status transition and every comment goes through the `roadmap-manager` skill.
 
-#### Fecho: primeiro o commit, depois a tarefa
+#### Closing: commit first, then the task
 
-O gate de commit impõe a ordem, e a ordem não se inverte:
+The commit gate imposes the order, and the order is not inverted:
 
-1. O trabalho é **registado em commit**, através da skill `gitflow`.
-2. A tarefa é **fechada** com `--commit-close <hash>`, com o hash real desse commit.
+1. The work is **recorded in a commit**, through the `gitflow` skill.
+2. The task is **closed** with `--commit-close <hash>`, with the real hash of that commit.
 
-O hash vem do commit efectivamente criado. **NUNCA inventar, adivinhar ou reaproveitar um hash** para satisfazer o gate: sem commit criado, **PARAR** e criá-lo pela skill `gitflow`.
+The hash comes from the commit actually created. **NEVER invent, guess or reuse a hash** to satisfy the gate: with no commit created, **STOP** and create it through the `gitflow` skill.
 
-Num esforço que junte várias tarefas, cada uma fecha com o hash do commit que **regista o trabalho dela**; sendo um só commit a registar o de várias, é esse hash que fecha cada uma. O que a regra proíbe é o hash de um commit que não contém o trabalho da tarefa.
+In an effort that joins several tasks, each closes with the hash of the commit that **records its work**; when a single commit records the work of several, that hash closes each of them. What the rule forbids is the hash of a commit that does not contain the task's work.
 
-#### O log escreve-se durante o trabalho
+#### The work log
 
-O log tipado de comentários é escrito **à medida que o trabalho acontece**, não reconstruído no fim:
+The typed `rmp` comments are this project's **work log**. They are written **as the work happens**, never reconstructed at the end, so that what was done — and why — can later be recovered from them alone.
 
-| Tipo | Quando se escreve |
-|---|---|
-| `DECISION` | Toda a escolha não óbvia, com as opções rejeitadas e a razão da rejeição |
-| `FINDING` | O que foi descoberto |
-| `TEST` | A verificação feita e o resultado que deu |
+- **On the sprint in progress**: its progression towards the sprint's purpose — material advances, sprint-level decisions, findings that affect more than one task, and changes to its scope with their reason.
+- **On each task**: the progression of that task.
 
-Uma tarefa cujo trabalho envolveu escolhas e cujo log está vazio **não está pronta para fechar**: **PARAR** e escrever o log antes do fecho.
+Every entry uses the type that matches what it records — never `NOTE` where another type applies. The `roadmap-manager` skill owns the lexicon; the types are:
 
-### 3. Conhecimento do projecto — skill `knowledge-authority`
+| Type | Task | Sprint | Written when |
+|---|---|---|---|
+| `HYPOTHESIS` | yes | no | Before testing a proposition: the proposition, and what would confirm or refute it |
+| `TEST` | yes | no | A test, benchmark or verification ran: the exact command, and what it showed |
+| `FINDING` | yes | yes | Something was discovered: behaviour observed, a cause identified, a hypothesis refuted |
+| `DECISION` | yes | yes | A choice was made between viable options: the choice, the reasoning, and the options rejected |
+| `PROGRESS` | yes | yes | The work advanced materially: what is done, and what remains |
+| `UPDATE` | yes | yes | The definition of the task or sprint changed: why it changed |
+| `NOTE` | yes | no | Something worth keeping fits no other type: context, a pointer, an out-of-scope follow-up |
 
-**Toda a consulta e gestão de conhecimento sobre o projecto passa pela skill `knowledge-authority`**, que é a única operadora de `rmp graph …` e do grafo de conhecimento que lhe está associado.
+A task is **not ready to close** until its log holds a `DECISION` for every non-obvious choice, a `TEST` for the verification of its acceptance criteria, a `FINDING` for whatever a future reader would need, and an `UPDATE` for every change to its definition. **STOP** and write what is missing before closing.
 
-É o **primeiro sítio a consultar** perante qualquer pergunta factual sobre o código deste repositório — que ficheiro ou função implementa uma funcionalidade, que módulos, tipos, testes ou dependências existem, o que depende de quê, como se articula a arquitectura, qual o alcance e o impacto de uma alteração. Consultar **SEMPRE** o grafo **antes** de ler ficheiros, mesmo quando a resposta pareça estar a um `grep` de distância. Estar prestes a abrir um ficheiro para responder a uma pergunta factual sem ter consultado o grafo é motivo para **PARAR** e consultá-lo.
+### 3. Project knowledge — skill `knowledge-authority`
 
-Usar também para sincronizar, refrescar ou auditar o grafo após um commit ou quando os ficheiros do projecto mudarem, e para manter o `./knowledge-model.md` — ficheiro escrito exclusivamente por esta skill.
+**All querying and management of knowledge about the project goes through the `knowledge-authority` skill**, the only operator of `rmp graph …` and of the knowledge graph behind it. The graph is managed **exclusively** by this skill.
 
-### Fronteiras entre as três
+It is the **first place to consult** for any factual question about this repository's code — which file or function implements a feature, which modules, types, tests or dependencies exist, what depends on what, how the architecture fits together, the reach and impact of a change. **ALWAYS** consult the graph **before** reading files, even when the answer seems one `grep` away. Being about to open a file to answer a factual question without having consulted the graph is reason to **STOP** and consult it.
 
-As três skills não se substituem umas às outras, e a confusão entre elas é o erro habitual:
+Use it also to sync, refresh or audit the graph after a commit or when the project's files change, and to maintain `./knowledge-model.md` — a file written exclusively by this skill.
 
-- A fronteira entre `roadmap-manager` e `knowledge-authority` é o subcomando: `rmp graph …` é `knowledge-authority`, todo o restante `rmp` é `roadmap-manager`.
-- Gerir tarefas e sprints é `roadmap-manager` — **nunca** `knowledge-authority`, ainda que ambas usem o binário `rmp`.
-- Consultar o grafo de conhecimento é `knowledge-authority` — **nunca** `roadmap-manager`.
-- Registar trabalho em Git é `gitflow` — **nunca** um `git commit` avulso, mesmo que a alteração seja trivial.
+### Boundaries between the three
 
-## Especificação Funcional
+The three skills do not substitute for each other, and confusing them is the usual mistake:
 
-**Todo o trabalho assenta numa especificação.** Nenhuma funcionalidade é implementada, alterada ou removida sem estar primeiro descrita na especificação funcional do projecto, em `/specification`.
+- The boundary between `roadmap-manager` and `knowledge-authority` is the subcommand: `rmp graph …` is `knowledge-authority`; all the rest of `rmp` is `roadmap-manager`.
+- Managing tasks and sprints is `roadmap-manager` — **never** `knowledge-authority`, even though both use the `rmp` binary.
+- Querying the knowledge graph is `knowledge-authority` — **never** `roadmap-manager`.
+- Recording work in Git is `gitflow` — **never** a stray `git commit`, even when the change is trivial.
 
-A especificação é a **única fonte de verdade funcional** do `tpl`: o que lá não está não é requisito, e **NUNCA** se implementa por iniciativa própria, por analogia com outro projecto, por parecer óbvio ou por estar mencionado de passagem numa conversa. Perante um pedido que a especificação não cobre, **PARAR** e formalizá-lo primeiro.
+## Functional Specification
 
-### Coordenação
+**All work rests on a specification.** No feature is implemented, changed or removed without first being described in the project's functional specification, in `/specification`.
 
-A coordenação da especificação é responsabilidade **exclusiva** do subagente `specification-manager`. É o único que escreve em `/specification`, e todo o trabalho sobre essa pasta passa por ele:
+The specification is `tpl`'s **only source of functional truth**: what is not there is not a requirement, and is **NEVER** implemented on one's own initiative, by analogy with another project, because it seems obvious, or because it was mentioned in passing in a conversation. Faced with a request the specification does not cover, **STOP** and formalise it first.
 
-- bootstrap da estrutura e manutenção do `README.md` de navegação;
-- criação e alteração de módulos funcionais, regras de negócio, actores, casos de uso e glossário;
-- atribuição e manutenção dos identificadores estáveis de requisito;
-- detecção de inconsistências, ambiguidades, contradições e lacunas entre ficheiros;
-- manutenção das referências cruzadas;
-- depreciação e arquivo de conteúdo obsoleto;
-- auditorias estruturadas.
+### Coordination
 
-**Nenhum outro agente edita `/specification`** — nem sequer para corrigir uma gralha.
+Coordinating the specification is the **exclusive** responsibility of the `specification-manager` subagent. It is the only one that writes in `/specification`, and all work on that folder goes through it:
 
-### A especificação precede a implementação
+- bootstrapping the structure and maintaining the navigation `README.md`;
+- creating and changing functional modules, business rules, actors, use cases and the glossary;
+- assigning and maintaining stable requirement identifiers;
+- detecting inconsistencies, ambiguities, contradictions and gaps between files;
+- maintaining cross-references;
+- deprecating and archiving obsolete content;
+- structured audits.
 
-Sem excepção:
+**No other agent edits `/specification`** — not even to fix a typo.
 
-1. Chega o pedido. Verificar se está **coberto pela especificação**.
-2. Se não estiver — ou se estiver de forma ambígua, incompleta ou contraditória — **PARAR**: a **primeira** tarefa é levar o subagente `specification-manager` a formalizá-lo. Só depois se implementa.
-3. Implementar exactamente o que a especificação define: nem menos, nem mais.
-4. Se durante a implementação se descobrir que a especificação está errada ou incompleta, **PARAR**. Corrigi-la através do subagente `specification-manager` e só então retomar. **NUNCA** implementar contra a especificação, e **NUNCA** deixar código e especificação a divergir.
+### The specification precedes implementation
 
-Esta é a etapa 1 do Fluxo de Trabalho, e a razão de ser a primeira.
+Without exception:
 
-## Especificação Técnica e Registos de Decisão
+1. The request arrives. Check whether it is **covered by the specification**.
+2. If it is not — or is covered ambiguously, incompletely or contradictorily — **STOP**: the **first** task is to have the `specification-manager` subagent formalise it. Only then is it implemented.
+3. Implement exactly what the specification defines: no less, no more.
+4. If, during implementation, the specification turns out to be wrong or incomplete, **STOP**. Correct it through the `specification-manager` subagent, and only then resume. **NEVER** implement against the specification, and **NEVER** leave code and specification diverging.
 
-A especificação funcional diz **o que** o `tpl` faz; **como** é construído vive em `docs/spec-technical/`, escrita **exclusivamente** pelo subagente `technical-writer`. **Nenhum outro agente a edita** — nem para corrigir uma gralha.
+This is step 1 of the *Workflow*, and the reason it is first.
 
-Nada aí é requisito: cada afirmação traça para um requisito de `/specification` ou para uma restrição explícita. Onde as duas discordarem, a divergência é um defeito a reportar — **nunca** se fecha reescrevendo a especificação funcional, e **nunca** se deixa de pé. O índice, o que cada documento responde e por onde se começa estão em `docs/spec-technical/README.md`; lê-se lá, e não se copia para aqui.
+## Technical Specification and Decision Records
 
-### Registos de decisão de arquitectura — `docs/adr/`
+The functional specification says **what** `tpl` does; **how** it is built lives in `docs/spec-technical/`, written **exclusively** by the `technical-writer` subagent. **No other agent edits it** — not even to fix a typo.
 
-Os registos de decisão de arquitectura (`ADR-NNN`, em `docs/adr/`) guardam o **porquê** de uma decisão e as alternativas que foram rejeitadas — a fundamentação que a especificação técnica não carrega. Escreve-os o subagente `adr-guardian`, e mais ninguém.
+Nothing there is a requirement: every statement traces to a requirement in `/specification` or to an explicit constraint. Where the two disagree, the divergence is a defect to report — it is **never** closed by rewriting the functional specification, and **never** left standing. The index, what each document answers, and where to start are in `docs/spec-technical/README.md`; read them there — they are not copied here.
 
-**Exige-se um registo** em dois casos: quando um requisito em vigor delega o facto para fora da especificação funcional, e quando a decisão é de arquitectura e as alternativas rejeitadas têm de sobreviver à escolha. Fora deles não se abre registo — a decisão fica em `docs/spec-technical/`. A admissão é estreita de propósito, e quem a fixa é a regra R4 de `docs/adr/README.md`.
+### Architecture decision records — `docs/adr/`
 
-**O que um registo guarda não se repete em mais lado nenhum.** Este ficheiro cita `ADR-NNN` — como já fazem as linhas da **Stack** e a do perfil de release — e nunca reescreve o que o registo diz. Estar prestes a trazer para aqui uma versão, um número ou uma justificação que um registo já guarda é motivo para **PARAR** e citar.
+The architecture decision records (`ADR-NNN`, in `docs/adr/`) keep the **why** of a decision and the alternatives that were rejected — the rationale the technical specification does not carry. The `adr-guardian` subagent writes them, and nobody else.
 
-O ciclo de vida de um registo, os seus estados, a numeração, o formato e as quatro regras que o governam estão em `docs/adr/README.md`. Lê-se lá — e **não se copia para aqui**.
+**A record is required** in two cases: when a requirement in force delegates the fact outside the functional specification, and when the decision is architectural and the rejected alternatives must survive the choice. Outside these cases no record is opened — the decision stays in `docs/spec-technical/`. Admission is narrow on purpose, and rule R4 of `docs/adr/README.md` fixes it.
 
-## Fluxo de Trabalho
+**What a record keeps is repeated nowhere else.** This file cites `ADR-NNN` — as the *Stack* rows and the release-profile rule already do — and never rewrites what the record says. Being about to bring here a version, a figure or a rationale that a record already keeps is reason to **STOP** and cite.
 
-1. **Especificar** — formalizar o requisito na especificação funcional, através do subagente `specification-manager`. Nenhuma etapa seguinte começa sem esta.
-2. **Implementar** — escrever o código que o satisfaz.
-3. **Testar** — validar contra MariaDB real quando o requisito toque no catálogo.
-4. **Documentar** — actualizar README, doc comments e CHANGELOG.
+The lifecycle of a record, its states, numbering, format, and the four rules that govern it are in `docs/adr/README.md`. Read them there — **they are not copied here**.
 
-As etapas correm por esta ordem e **NUNCA** se salta nenhuma. Dar por si a implementar sem a etapa 1 cumprida — **PARAR** e voltar a ela.
+## Workflow
 
-As quatro etapas correm sobre o **esforço inteiro**, não sobre cada fragmento: especifica-se tudo o que ele exige, implementa-se tudo, testa-se tudo, documenta-se tudo. A ordem não se altera por isso.
+1. **Specify** — formalise the requirement in the functional specification, through the `specification-manager` subagent. No later step starts without this one.
+2. **Implement** — write the code that satisfies it, with the tests that prove it.
+3. **Test** — run the validation tier the moment calls for (*Test execution policy*), against real MariaDB when the requirement touches the catalogue.
+4. **Document** — update the README, doc comments and CHANGELOG.
 
-## Âmbito de Trabalho
+The steps run in this order and **NEVER** is one skipped. Catching yourself implementing without step 1 done — **STOP** and go back to it.
 
-**O âmbito deste projecto restringe-se à pasta de raiz do repositório.**
+The four steps run over the **whole effort**, not over each fragment: everything it requires is specified, then everything is implemented, then everything is tested, then everything is documented. The order does not change because of this.
 
-**NUNCA** ler, listar, pesquisar, inspeccionar ou referenciar nada fora de `tpl/`. Isto inclui directorias irmãs, outros projectos do utilizador, e qualquer caminho acima da raiz do repositório. **NUNCA** há excepções para "procurar convenções", "ver como outro projecto resolveu isto" ou "confirmar um padrão".
+## Working Scope
 
-Toda a informação necessária ao trabalho vive dentro deste repositório. Se algo não estiver aqui, **PARAR** e perguntar ao utilizador — **NUNCA** se vai procurar lá fora.
+**This project's scope is restricted to the repository's root folder.**
 
-## Invariantes de Implementação
+**NEVER** read, list, search, inspect or reference anything outside `tpl/`. This includes sibling directories, the user's other projects, and any path above the repository root. Looking for conventions, seeing how another of the user's projects solved something, or confirming a pattern are **NEVER** exceptions.
 
-Duas restrições permanentes sobre as escolhas de implementação. Têm prioridade sobre qualquer outra consideração de design, e nenhuma se negoceia caso a caso.
+**The single exception** is reading a reference open-source project at its public source, under *Open Source and Prior Art*. It never extends to the user's own projects or directories.
 
-### 1. Read-only absoluto
+Every other piece of information the work needs lives in this repository. If something is missing, **STOP** and ask the user — **NEVER** go looking for it elsewhere.
 
-O `tpl` **nunca** emite DDL, DML ou qualquer statement de escrita contra a base de dados a que se liga, e não existe flag que desligue este comportamento. A leitura do catálogo é feita através do `INFORMATION_SCHEMA` — nunca através de `mysqldump` ou de qualquer processo externo.
+## Implementation Invariants
 
-O detalhe da garantia — como o modo read-only é imposto na sessão, o que acontece quando não pode ser imposto, e que statements são admissíveis — pertence a `specification/server-contract.md` e lê-se lá.
+Two permanent constraints on implementation choices. They take priority over any other design consideration, and neither is negotiated case by case.
 
-### 2. Renderização em runtime, com MiniJinja
+### 1. Absolute read-only
 
-Os templates são **ficheiros em disco, carregados e compilados no momento do render** — nunca embebidos no binário em tempo de compilação. O motor é o **[MiniJinja](https://docs.rs/minijinja)** (`minijinja` + `minijinja-contrib`).
+`tpl` **never** issues DDL, DML or any write statement against the database it connects to, and no flag turns this behaviour off. The catalogue is read through `INFORMATION_SCHEMA` — never through `mysqldump` or any external process.
 
-**Não usar Askama, Tera, Handlebars, `std::fmt`, nem qualquer outro motor.** O Askama em particular está explicitamente excluído por ser *compile-time*: obrigaria a recompilar o `tpl` sempre que um template mudasse, o que contraria a razão de ser desta ferramenta.
+The detail of the guarantee — how read-only mode is imposed on the session, what happens when it cannot be imposed, and which statements are admissible — belongs to `specification/server-contract.md` and is read there.
 
-A configuração exigida ao `Environment` — loader, comportamento perante variáveis indefinidas, auto-escape, fronteira de resolução de caminhos e conteúdo de um erro de render — pertence a `specification/template-environment.md` e `specification/render-semantics.md`.
+### 2. Runtime rendering, with MiniJinja
+
+Templates are **files on disk, loaded and compiled at render time** — never embedded in the binary at compile time. The engine is **[MiniJinja](https://docs.rs/minijinja)** (`minijinja` + `minijinja-contrib`).
+
+**Do not use Askama, Tera, Handlebars, `std::fmt`, or any other engine.** Askama in particular is explicitly excluded for being *compile-time*: it would force `tpl` to be recompiled whenever a template changed, which defeats the reason this tool exists.
+
+The configuration required of the `Environment` — loader, behaviour on undefined variables, auto-escape, path-resolution boundary, and the content of a render error — belongs to `specification/template-environment.md` and `specification/render-semantics.md`.
 
 ## Stack
 
-Registo das escolhas tecnológicas vinculativas. Qualquer alteração a esta tabela é uma decisão de arquitectura e deve ser registada antes de ser implementada.
+The record of binding technology choices. Any change to this table is an architecture decision and must be recorded before it is implemented.
 
-| Área | Escolha | Notas |
+| Area | Choice | Notes |
 |---|---|---|
-| Linguagem | Rust (edition 2024) | MSRV fixado em `ADR-007`, em `docs/adr/` |
-| CLI | `clap` v4 (derive) | Árvore de comandos, aliases, `--help` por subcomando |
-| Templates | `minijinja` + `minijinja-contrib` | Runtime, sempre |
-| Acesso MariaDB | `sqlx` + `tokio` | Versões, âmbito do runtime e candidato rejeitado: `ADR-003` e `ADR-005`, em `docs/adr/` |
-| Serialização | `serde` + `serde_json` | O contexto de render é `serde`-serializável |
-| Configuração | `toml` + `serde` na leitura; `toml_edit` na escrita | A escrita preserva comentários e ordem; `OD-09`, em `docs/spec-technical/open-decisions.md` |
-| Erros | `thiserror` na biblioteca; o binário não carrega tipo de erro próprio | O `main.rs` lê o `exit_code` da biblioteca e devolve-o; `OD-32`, em `docs/spec-technical/open-decisions.md` |
-| Logging | Diagnósticos próprios, sem subscriber instalado | Sem `tracing` nem `tracing-subscriber`; controlado pela flag de verbosidade; `OD-17`, em `docs/spec-technical/open-decisions.md` |
-| uid do processo, grupo do helper e operações de ficheiro relativas a directório | `rustix`, `default-features = false`, `features = ["fs", "process"]` | `getuid`, `kill_process_group`, `waitid`, `openat`, `unlinkat`, `renameat` e `mkdirat` seguros, e aberturas `O_NOFOLLOW`/`O_NONBLOCK`; via `libc` exigiriam `unsafe`; `OD-24` e `OD-12`, em `docs/spec-technical/open-decisions.md` |
-| Contagem de heap | `cap` sobre `std::alloc::System`, como `#[global_allocator]` | Limite de memória do render (`FR-RND-039`), lido pelo thread do prazo; versão, política de limite rígido e alternativas rejeitadas: `ADR-011`, em `docs/adr/` |
+| Language | Rust (edition 2024) | MSRV fixed in `ADR-007`, in `docs/adr/` |
+| CLI | `clap` v4 (derive) | Command tree, aliases, `--help` per subcommand |
+| Templates | `minijinja` + `minijinja-contrib` | Runtime, always |
+| MariaDB access | `sqlx` + `tokio` | Versions, runtime scope and the rejected candidate: `ADR-003` and `ADR-005`, in `docs/adr/` |
+| Serialisation | `serde` + `serde_json` | The render context is `serde`-serialisable |
+| Configuration | `toml` + `serde` for reading; `toml_edit` for writing | Writing preserves comments and order; `OD-09`, in `docs/spec-technical/open-decisions.md` |
+| Errors | `thiserror` in the library; the binary carries no error type of its own | `main.rs` reads the library's `exit_code` and returns it; `OD-32`, in `docs/spec-technical/open-decisions.md` |
+| Logging | Own diagnostics, no subscriber installed | No `tracing` or `tracing-subscriber`; controlled by the verbosity flag; `OD-17`, in `docs/spec-technical/open-decisions.md` |
+| Process uid, helper process group, and directory-relative file operations | `rustix`, `default-features = false`, `features = ["fs", "process"]` | Safe `getuid`, `kill_process_group`, `waitid`, `openat`, `unlinkat`, `renameat` and `mkdirat`, and `O_NOFOLLOW`/`O_NONBLOCK` opens; through `libc` they would require `unsafe`; `OD-24` and `OD-12`, in `docs/spec-technical/open-decisions.md` |
+| Heap accounting | `cap` over `std::alloc::System`, as `#[global_allocator]` | Render memory limit (`FR-RND-039`), read by the deadline thread; version, hard-limit policy and rejected alternatives: `ADR-011`, in `docs/adr/` |
 
-> **Decisão fechada — driver MariaDB.** A escolha, a regra que a decidiu, o candidato rejeitado e a medição que confirmou a escolha — desmentindo a suspeita que aqui estava escrita — estão em `ADR-003`, em `docs/adr/`. O âmbito do runtime está em `ADR-005`.
+> **Closed decision — MariaDB driver.** The choice, the rule that decided it, the rejected candidate, and the measurement that confirmed the choice — refuting the suspicion that used to be written here — are in `ADR-003`, in `docs/adr/`. The runtime scope is in `ADR-005`.
 
-## Plataformas Suportadas
+## Supported Platforms
 
-O `tpl` é uma ferramenta **Unix**. É essa a família de sistemas para que se escreve, e é a fronteira que delimita o que o código pode assumir.
+`tpl` is a **Unix** tool. That is the family of systems it is written for, and the boundary of what the code may assume.
 
-Os sistemas suportados e verificados são o **Linux** e o **macOS**, nas arquitecturas **arm64** (`aarch64`, incluindo Apple Silicon) e **amd64** (`x86_64`). Outros Unix — os BSD, por exemplo — devem funcionar, porque nada no `tpl` depende de um sistema em concreto para além do que a `std` já abstrai, mas **não são testados nem garantidos**: não entram na matriz, não correm em validação, e um problema que só neles se manifeste não reprova uma alteração.
+The supported and verified systems are **Linux** and **macOS**, on the **arm64** (`aarch64`, Apple Silicon included) and **amd64** (`x86_64`) architectures. Other Unix systems — the BSDs, for example — should work, since nothing in `tpl` depends on a specific system beyond what `std` already abstracts, but they are **neither tested nor guaranteed**: they are not in the matrix, they do not run in validation, and a problem that shows only on them does not fail a change.
 
-**O Windows está fora do âmbito.** Não é alvo, não se escreve código para o acomodar, e não se aceita uma dependência por causa dele.
+**Windows is out of scope.** It is not a target, no code is written to accommodate it, and no dependency is accepted because of it.
 
-A matriz concreta de alvos — target triples, escolha de libc e linkagem — está fixada em `NFR-PERF-018`, em `specification/performance-requirements.md`, que regista também a consequência observável da ligação estática ao `musl` na resolução de nomes. O caminho de build de cada alvo é `ADR-008`, e a validação e a forma de empacotar os artefactos distribuídos são `ADR-012`, ambos em `docs/adr/`. **Não se repetem aqui.**
+The concrete target matrix — target triples, libc choice and linkage — is fixed in `NFR-PERF-018`, in `specification/performance-requirements.md`, which also records the observable consequence of static linking against `musl` on name resolution. The build path of each target is `ADR-008`, and the validation and packaging of the distributed artefacts are `ADR-012`, both in `docs/adr/`. **They are not repeated here.**
 
-### Regras que decorrem disto
+### Rules that follow
 
-- **Nenhum alvo é de segunda classe.** O que passa no pipeline de validação obrigatório definido em **Desenvolvimento** tem de passar em todos os alvos suportados; uma falha num deles reprova a alteração, seja qual for o alvo.
-- **Código específico de plataforma é a excepção**, e fica isolado atrás de `#[cfg(unix)]`. `#[cfg(windows)]` não tem lugar no crate. As permissões restritivas exigidas ao ficheiro de configuração dependem de `std::os::unix::fs::PermissionsExt` e são, por si só, razão bastante para a fronteira ser o Unix.
-- **Caminhos sempre por `Path` e `PathBuf`**, nunca por concatenação de strings com o separador escrito à mão.
-- **Sem assumir características do CPU.** Nada de `target-cpu=native` no perfil de release: quebraria a portabilidade e a reprodutibilidade do binário distribuído.
-- **Dependências têm de compilar e passar testes em todos os alvos.** Um crate que não suporte `aarch64` não entra — critério que acresce ao orçamento de dependências e não o substitui.
-- **Uma baseline de desempenho identifica sempre o alvo em que foi medida.** Números medidos em alvos diferentes não se comparam entre si.
+- **No target is second-class.** What passes the full battery (*Test execution policy*) must pass on every supported target; a failure on any of them fails the change, whatever the target.
+- **Platform-specific code is the exception**, and is isolated behind `#[cfg(unix)]`. `#[cfg(windows)]` has no place in the crate. The restrictive permissions required of the configuration file depend on `std::os::unix::fs::PermissionsExt`, and are on their own reason enough for the boundary to be Unix.
+- **Paths always through `Path` and `PathBuf`**, never through string concatenation with a hand-written separator.
+- **No CPU features assumed.** No `target-cpu=native` in the release profile: it would break the portability and reproducibility of the distributed binary.
+- **Dependencies must compile and pass tests on every target.** A crate that does not support `aarch64` does not enter — a criterion added to the dependency budget, not a replacement for it.
+- **A performance baseline always identifies the target it was measured on.** Figures measured on different targets are not compared.
 
-## Estrutura do Projecto
+## Project Structure
 
 ```
 tpl/
 ├── Cargo.toml
-├── BENCHMARKS.md            # registo de leituras de desempenho, com o alvo em que foram medidas
-├── knowledge-model.md       # modelo do grafo — só a skill knowledge-authority escreve
+├── BENCHMARKS.md            # record of performance readings, with the target each was measured on
+├── knowledge-model.md       # graph model — written only by the knowledge-authority skill
 ├── src/
-│   ├── main.rs              # entrypoint: parse, dispatch, mapeamento de exit codes
-│   ├── cli/                 # árvore clap — um módulo por comando porcelain
-│   ├── project/             # descoberta da pasta de projecto e leitura da configuração
-│   ├── mariadb/             # leitor de INFORMATION_SCHEMA (read-only)
-│   ├── model/               # o modelo lido do catálogo
-│   ├── render/              # Environment MiniJinja, loader, filtros, testes, funções
-│   └── error.rs             # tipo de erro + exit codes
-├── templates/               # templates de arranque
-├── tests/                   # testes de integração (CLI end-to-end)
+│   ├── main.rs              # entry point: parse, dispatch, exit-code mapping
+│   ├── cli/                 # clap tree — one module per porcelain command
+│   ├── project/             # project-folder discovery and configuration reading
+│   ├── mariadb/             # INFORMATION_SCHEMA reader (read-only)
+│   ├── model/               # the model read from the catalogue
+│   ├── render/              # MiniJinja Environment, loader, filters, tests, functions
+│   └── error.rs             # error type + exit codes
+├── templates/               # starter templates
+├── tests/                   # integration tests (end-to-end CLI)
 ├── benches/                 # benchmarks
-├── scripts/mariadb/         # fixture MariaDB: imagens, SQL, material TLS, harness
-├── examples/                # pipelines completos: schema → template → output
-├── specification/           # especificação funcional
-└── docs/                    # especificação técnica e registos de decisão (ADR)
+├── scripts/mariadb/         # MariaDB fixture: images, SQL, TLS material, harness
+├── examples/                # complete pipelines: schema → template → output
+├── specification/           # functional specification
+└── docs/                    # technical specification and decision records (ADR)
 ```
 
-O `model/` é a fronteira do projecto: é simultaneamente o resultado da introspecção e o que um template vê. A sua forma não se decide no código — é a especificação que a fixa (`specification/catalogue-coverage.md` e `specification/context-document.md`); o `model/` implementa-a. O contrato é esse documento, não os tipos que o produzem: as structs do `model/` não são superfície pública, e a biblioteca não carrega promessa de compatibilidade — `DIV-032`, em `specification/upstream-divergences.md`, e `docs/spec-technical/overview.md`.
+`model/` is the project's boundary: it is at once the result of introspection and what a template sees. Its shape is not decided in code — the specification fixes it (`specification/catalogue-coverage.md` and `specification/context-document.md`), and `model/` implements it. The contract is that document, not the types that produce it: the `model/` structs are not public surface, and the library carries no compatibility promise — `DIV-032`, in `specification/upstream-divergences.md`, and `docs/spec-technical/overview.md`.
 
-## Convenções de Código Rust
+## Rust Code Conventions
 
-O código deste projecto — e a forma como está organizado — segue as **boas práticas e as convenções idiomáticas da linguagem Rust**. Não é uma preferência de estilo: é regra do projecto, e vale tanto para o que se escreve de novo como para o que se refactoriza.
+The code of this project — and the way it is organised — follows the **good practices and idiomatic conventions of the Rust language**. This is not a style preference: it is a project rule, and it applies to new code as much as to refactored code.
 
-### Organização
+### Organisation
 
-- **Módulos.** Nomes em `snake_case`, sem abreviaturas obscuras e sem repetir o nome do pai (`mariadb::reader`, nunca `mariadb::mariadb_reader`). Um módulo por conceito, alinhado com a árvore da secção anterior.
-- **Um só estilo de ficheiro-módulo.** Usar sempre a forma `foo.rs` acompanhada da directoria `foo/`; **não** usar `mod.rs`. Misturar os dois estilos na mesma árvore é proibido.
-- **Visibilidade mínima.** Por omissão tudo é privado. `pub(crate)` para o que atravessa módulos, `pub(super)` para o que só o pai precisa, e `pub` reservado ao que a biblioteca publica — o `model/`, o `error.rs` e as quatro funções de entrada (`docs/spec-technical/interfaces.md`, *The library shape*), sem promessa de estabilidade, por `DIV-032`.
-- **Re-exports deliberados.** O `lib.rs` re-exporta uma API coerente com `pub use`; não se re-exporta um módulo inteiro só para poupar um caminho de `use`.
-- **Biblioteca e binário separados.** A lógica vive na biblioteca e é testável sem lançar processo; o `main.rs` limita-se a fazer parse, despachar e mapear o erro para exit code.
+- **Modules.** Names in `snake_case`, without obscure abbreviations and without repeating the parent's name (`mariadb::reader`, never `mariadb::mariadb_reader`). One module per concept, aligned with the tree in the previous section.
+- **One module-file style.** Always use the `foo.rs` form together with the `foo/` directory; do **not** use `mod.rs`. Mixing the two styles in the same tree is forbidden.
+- **Minimal visibility.** Everything is private by default. `pub(crate)` for what crosses modules, `pub(super)` for what only the parent needs, and `pub` reserved for what the library publishes — `model/`, `error.rs` and the four entry functions (`docs/spec-technical/interfaces.md`, *The library shape*), with no stability promise, per `DIV-032`.
+- **Deliberate re-exports.** `lib.rs` re-exports a coherent API with `pub use`; a whole module is not re-exported just to save a `use` path.
+- **Library and binary separated.** The logic lives in the library and is testable without launching a process; `main.rs` only parses, dispatches, and maps the error to an exit code.
 
-### Nomenclatura
+### Naming
 
-Conformidade com as [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) e a RFC 430:
+Conformance with the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) and RFC 430:
 
-- `snake_case` para funções, variáveis, campos e módulos; `UpperCamelCase` para tipos, traits e variantes; `SCREAMING_SNAKE_CASE` para constantes e estáticos.
-- Convenções de conversão, escolhidas pelo custo: `as_` (empréstimo barato), `to_` (custa, aloca), `into_` (consome o receptor).
-- Getters sem prefixo `get_`: `table.name()`, nunca `table.get_name()`.
-- Iteradores pelo trio convencional: `iter`, `iter_mut`, `into_iter`.
+- `snake_case` for functions, variables, fields and modules; `UpperCamelCase` for types, traits and variants; `SCREAMING_SNAKE_CASE` for constants and statics.
+- Conversion conventions, chosen by cost: `as_` (cheap borrow), `to_` (costly, allocates), `into_` (consumes the receiver).
+- Getters without a `get_` prefix: `table.name()`, never `table.get_name()`.
+- Iterators through the conventional trio: `iter`, `iter_mut`, `into_iter`.
 
-### Tipos e erros
+### Types and errors
 
-- **`Result` e `Option` com o operador `?`.** `unwrap`/`expect` fora de testes só com a invariante documentada na própria mensagem. O tipo de erro segue a tabela da Stack: `thiserror` na biblioteca, e o binário não carrega tipo de erro próprio.
-- **Newtypes para invariantes** — um nome de tabela já validado não é uma `String` qualquer.
-- **Genéricos ou `impl Trait`** em vez de indirecção desnecessária; `Box<dyn Trait>` só quando a heterogeneidade for real.
-- **Conversões por `From`/`TryFrom`**, e não por funções avulsas quando o trait serve.
-- **Traits da `std` implementados quando fazem sentido**: `Debug` sempre, e `Display`, `Default`, `FromStr`, `AsRef` onde o tipo o justifique.
-- **Assinaturas em tipos emprestados** — `&str`, `&[T]`, `&Path` em parâmetros, nunca `String`, `Vec<T>` ou `PathBuf`. É também o que a regra de alocação mínima exige.
+- **`Result` and `Option` with the `?` operator.** `unwrap`/`expect` outside tests only with the invariant documented in the message itself. The error type follows the *Stack* table: `thiserror` in the library, and the binary carries no error type of its own.
+- **Newtypes for invariants** — an already validated table name is not just any `String`.
+- **Generics or `impl Trait`** instead of needless indirection; `Box<dyn Trait>` only when the heterogeneity is real.
+- **Conversions through `From`/`TryFrom`**, not through stray functions when the trait serves.
+- **`std` traits implemented where they make sense**: `Debug` always, and `Display`, `Default`, `FromStr`, `AsRef` where the type justifies it.
+- **Signatures in borrowed types** — `&str`, `&[T]`, `&Path` in parameters, never `String`, `Vec<T>` or `PathBuf`. It is also what the minimal-allocation rule demands.
 
-### Expressão
+### Expression
 
-- **Iteradores e combinadores** em vez de loops indexados com acumulador mutável, quando não custem clareza nem desempenho.
-- **Pattern matching exaustivo**, sem um `_ =>` que engula silenciosamente variantes futuras de um `enum` do próprio crate.
-- **`#[non_exhaustive]`** nos tipos públicos que se prevê virem a crescer — tipicamente o `enum` de erro e as structs do `model/`. É convenção de código, não promessa de compatibilidade.
-- **Derives em vez de implementações manuais** sempre que sejam equivalentes.
+- **Iterators and combinators** instead of indexed loops with a mutable accumulator, when they cost neither clarity nor performance.
+- **Exhaustive pattern matching**, without a `_ =>` that silently swallows future variants of an `enum` of the crate itself.
+- **`#[non_exhaustive]`** on public types expected to grow — typically the error `enum` and the `model/` structs. It is a code convention, not a compatibility promise.
+- **Derives instead of manual implementations** whenever they are equivalent.
 
-### Ferramentas como árbitro
+### Tools as arbiter
 
-O `rustfmt` com a configuração por defeito é a autoridade de formatação, e o `clippy` com `-D warnings` é a autoridade de idiomática. Ambos correm no pipeline de validação obrigatório definido em **Desenvolvimento**, e a sua decisão não se discute caso a caso.
+`rustfmt` with the default configuration is the formatting authority, and `clippy` with `-D warnings` is the idiom authority. Both run in the validation tiers of the *Test execution policy*, and their verdict is not debated case by case.
 
-Na dúvida, a referência é a convenção da linguagem e as Rust API Guidelines — nunca o hábito trazido de outra linguagem.
+In doubt, the reference is the language's convention and the Rust API Guidelines — never habit brought from another language.
 
-## Desenvolvimento
+## Development
 
 ```bash
 cargo build
@@ -573,9 +621,24 @@ cargo run -- --help
 cargo test
 ```
 
-### Pipeline de validação obrigatório
+### Test execution policy
 
-Nenhum trabalho está concluído sem que todos estes comandos passem, por esta ordem:
+**Every delivered change carries the tests that prove its conformance to the requirements it implements** — unit, integration, end-to-end, or whichever kind the case calls for.
+
+**Tests run logically and efficiently.** What runs is chosen by what changed and by the moment: close to development, only the code the change touched; at sprint close and before a release, the whole. A test that the change cannot make fail is not run, and the time it would take is saved.
+
+| Moment | What changed | What runs |
+|---|---|---|
+| Development | Documentation only — Markdown files, with no change to source, tests, manifests, templates, scripts or fixture | **Nothing.** No code changed, so there is nothing to test |
+| Development | Rust code (`src/`, `tests/`, `benches/`) or the Cargo manifests | `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features -- -D warnings`; the tests that exercise the changed code, selected by test target and name filter; `cargo audit` only when `Cargo.toml` or `Cargo.lock` changed |
+| Development | Anything else — templates, examples, scripts, fixture | The tests that exercise what changed |
+| Sprint close, `git push`, pre-release | — | **The full battery**, below |
+
+A doc comment inside a `.rs` file is Rust code: it compiles, and may hold a doctest. Tests that need the fixture run in the development tiers only when the changed code reaches the server.
+
+#### The full battery
+
+On sprint close, before `git push`, and before a release, these commands run in this order and all must pass:
 
 ```bash
 cargo fmt --all -- --check
@@ -585,85 +648,85 @@ cargo test --all-features
 cargo audit
 ```
 
-**Nada de desempenho acresce a este pipeline.** Uma alteração a um caminho quente — leitura de catálogo, construção do contexto, render, arranque do processo — é ocasião para tirar uma leitura e registá-la, nos termos da **Disciplina de medição**; nunca é condição para o trabalho estar concluído.
+**Nothing performance-related is added to any tier.** A change to a hot path — catalogue reading, context construction, render, process start-up — is an occasion to take a reading and record it, under *Measurement discipline*; it is never a condition for the work to be complete.
 
-`clippy` com `-D warnings` não é negociável. Um lint que se justifique suprimir exige `#[allow(...)]` local acompanhado de um comentário com a razão — nunca uma supressão ao nível do crate.
+`clippy` with `-D warnings` is not negotiable. A lint whose suppression is justified requires a local `#[allow(...)]` with a comment stating the reason — never a crate-level suppression.
 
-### Desenvolvimento em Rust
+### Rust development
 
-Usar **sempre** o agente `rust-elite-developer` para tarefas de programação em Rust: criar, editar, refactorizar ou rever código. Para trabalho de performance em caminhos quentes, usar `rust-perf-engineer`. Para análise de superfície de ataque (parsing de input não confiável, credenciais, execução de comandos externos), usar `security-researcher`.
+**Always** use the `rust-elite-developer` agent for Rust programming tasks: creating, editing, refactoring or reviewing code. For performance work on hot paths, use `rust-perf-engineer`. For attack-surface analysis (parsing untrusted input, credentials, executing external commands), use `security-researcher`.
 
-`unsafe` é proibido neste projecto. Manter `#![forbid(unsafe_code)]` no topo do crate.
+`unsafe` is forbidden in this project. Keep `#![forbid(unsafe_code)]` at the top of the crate.
 
-## Desempenho e Eficiência
+## Performance and Efficiency
 
-O desempenho e a economia de recursos são exigências de **desenho e de arquitectura**: pesam em cada decisão de construção do `tpl` — o que faz no arranque, quantas vezes vai ao servidor, quanto retém em memória. O `tpl` é uma ferramenta de linha de comandos, invocada repetidamente e frequentemente dentro de loops e pipelines de build — cada milissegundo é pago muitas vezes, e é para esse uso que se constrói rápido e frugal.
+Performance and economy of resources are **design and architecture** demands: they weigh on every construction decision of `tpl` — what it does at start-up, how often it goes to the server, how much it holds in memory. `tpl` is a command-line tool, invoked repeatedly and often inside loops and build pipelines — every millisecond is paid many times, and it is for that use that it is built fast and frugal.
 
-**Nenhum número reprova uma alteração.** Nenhuma figura da especificação, e nenhuma leitura registada em `BENCHMARKS.md`, reprova, bloqueia ou trava uma alteração, uma release ou uma peça de trabalho — é `BR-PERF-008`, em `specification/performance-requirements.md`. As regras desta secção são de construção, não de aceitação.
+**No figure fails a change.** No figure in the specification, and no reading recorded in `BENCHMARKS.md`, fails, blocks or holds back a change, a release or a piece of work — that is `BR-PERF-008`, in `specification/performance-requirements.md`. The rules in this section are construction rules, not acceptance rules.
 
-**Os números não vivem aqui.** As propriedades exigidas, as cargas de referência, os pontos de medição e o protocolo pertencem a `specification/performance-requirements.md`; as leituras efectivamente medidas vivem em `BENCHMARKS.md`.
+**The figures do not live here.** The required properties, the reference workloads, the measurement points and the protocol belong to `specification/performance-requirements.md`; the readings actually measured live in `BENCHMARKS.md`.
 
-**O que reprova são os requisitos de forma.** Contagens e ausências determinísticas — as queries ao catálogo não dependem do número de objectos, um acerto de cache não abre ligação, uma invocação abre no máximo uma ligação — são invariantes de correcção, afirmadas pela suite de testes onde o instrumento de que cada asserção precisa está ao alcance da execução: as que se observam do lado do servidor exigem a fixture de pé, e a forma em syscalls das cláusulas de descoberta e de configuração exige um host que permita o trace, o que nenhum dos alvos Darwin permite — é `NFR-PERF-007` e a secção *What an assertion needs in order to run*, em `specification/performance-requirements.md`. Uma asserção saltada não é um requisito enfraquecido: cada cláusula vale nos quatro alvos e é verificada nos quatro, e uma execução que não alcança o instrumento salta a asserção declarando a razão, e nunca a dá por passada em silêncio. Quebrá-las é defeito funcional, não execução lenta.
+**What fails a change are the shape requirements.** Deterministic counts and absences — catalogue queries do not depend on the number of objects, a cache hit opens no connection, an invocation opens at most one connection — are correctness invariants, asserted by the test suite wherever the instrument each assertion needs is within the run's reach: those observed on the server side need the fixture up, and the syscall shape of the discovery and configuration clauses needs a host that allows tracing, which none of the Darwin targets does — that is `NFR-PERF-007` and the section *What an assertion needs in order to run*, in `specification/performance-requirements.md`. A skipped assertion is not a weakened requirement: every clause holds on all four targets and is verified on all four, and a run that cannot reach the instrument skips the assertion stating the reason, and never reports it as passed in silence. Breaking them is a functional defect, not a slow run.
 
-### Regras de implementação
+### Implementation rules
 
-- **Os round-trips ao catálogo não escalam com o número de objectos.** Um `N+1` no leitor de catálogo é um defeito, não uma questão de estilo.
-- **Cada template é parseado uma única vez por processo.** O `Environment` do MiniJinja guarda o template compilado e reutiliza-o; reparsear por iteração é proibido.
-- **Nada de trabalho no arranque que não seja necessário ao comando invocado.** Sem inicialização estática pesada, sem construir o `Environment` para uma invocação que não renderiza, sem ligar à base de dados para um comando que não a use. Inicialização preguiçosa por defeito.
-- **I/O agregado.** Escrita através de writers com buffer; nunca um syscall por linha.
-- **Alocação mínima nos caminhos quentes.** Emprestar em vez de clonar; `&str` em vez de `String`; `Cow<'_, str>` quando evita mesmo uma cópia. Um `.clone()` num caminho quente exige justificação.
-- **Pré-dimensionar colecções** cuja cardinalidade já é conhecida (`with_capacity`).
-- **Streaming sempre que a operação o permita.** A memória deve escalar com o maior objecto individual, não com a base de dados inteira, em tudo o que não exija o documento completo.
-- **Uma só ligação à base de dados**, aberta o mais tarde possível e fechada assim que a leitura termina. Sem pool: o processo é efémero e faz um punhado de queries.
-- **Orçamento de dependências.** Cada crate tem de justificar a sua presença. Preferir a `std`. Antes de acrescentar uma dependência, verificar o que ela arrasta (`cargo tree`) e o que custa (`cargo bloat`, tempo de arranque). Uma dependência que só se usa para uma função trivial não entra.
-- **Perfil de release** afinado no `Cargo.toml`: as cinco definições, e a composição com o panic hook que satisfaz `FR-ERR-030`, estão em `ADR-004`, em `docs/adr/`.
-- **Sem paralelismo especulativo.** Concorrência só entra com benefício medido, em benchmark, sobre carga representativa. Paralelizar porque é possível é proibido — o custo de sincronização e de arranque de threads é real, e em cargas pequenas perde.
+- **Catalogue round-trips do not scale with the number of objects.** An `N+1` in the catalogue reader is a defect, not a matter of style.
+- **Each template is parsed once per process.** MiniJinja's `Environment` keeps the compiled template and reuses it; reparsing per iteration is forbidden.
+- **No start-up work that the invoked command does not need.** No heavy static initialisation, no building the `Environment` for an invocation that does not render, no connecting to the database for a command that does not use it. Lazy initialisation by default.
+- **Aggregated I/O.** Writing through buffered writers; never one syscall per line.
+- **Minimal allocation on hot paths.** Borrow instead of cloning; `&str` instead of `String`; `Cow<'_, str>` when it actually avoids a copy. A `.clone()` on a hot path requires justification.
+- **Pre-size collections** whose cardinality is already known (`with_capacity`).
+- **Streaming wherever the operation allows it.** Memory must scale with the largest single object, not with the whole database, in everything that does not require the complete document.
+- **A single database connection**, opened as late as possible and closed as soon as the read ends. No pool: the process is ephemeral and makes a handful of queries.
+- **Dependency budget.** Every crate must justify its presence. Prefer `std`. Before adding a dependency, check what it pulls in (`cargo tree`) and what it costs (`cargo bloat`, start-up time). A dependency used only for a trivial function does not enter.
+- **Release profile** tuned in `Cargo.toml`: the five settings, and the composition with the panic hook that satisfies `FR-ERR-030`, are in `ADR-004`, in `docs/adr/`.
+- **No speculative parallelism.** Concurrency enters only with a benefit measured, in a benchmark, on a representative workload. Parallelising because it is possible is forbidden — the cost of synchronisation and of starting threads is real, and on small workloads it loses.
 
-### Disciplina de medição
+### Measurement discipline
 
-**Nenhuma afirmação de desempenho sem números, e nenhuma optimização sem medição antes e depois.** Intuição sobre o que é rápido não é evidência. Os instrumentos abaixo são informativos: respondem a perguntas, a pedido de quem as faz, e não reprovam nada.
+**No performance claim without figures, and no optimisation without measuring before and after.** Intuition about what is fast is not evidence. The instruments below are informative: they answer questions, at the request of whoever asks them, and fail nothing.
 
-| Ferramenta | Uso |
+| Tool | Use |
 |---|---|
-| `hyperfine` | Wall time end-to-end da CLI, incluindo arranque |
-| `criterion` | Micro-benchmarks de funções (parsing, mapeamento de tipos, render) |
-| `dhat-rs` | Perfil de alocações e pico de heap |
-| `samply` / `cargo flamegraph` | Atribuição de CPU a call sites |
-| `cargo bloat` | Contribuição de cada crate para o tamanho do binário |
+| `hyperfine` | End-to-end wall time of the CLI, start-up included |
+| `criterion` | Function micro-benchmarks (parsing, type mapping, render) |
+| `dhat-rs` | Allocation profile and heap peak |
+| `samply` / `cargo flamegraph` | Attribution of CPU to call sites |
+| `cargo bloat` | Each crate's contribution to the binary size |
 
-Os benchmarks vivem em `benches/` e correm contra o dataset dos containers MariaDB, para serem reproduzíveis. As leituras são registadas em `BENCHMARKS.md`, identificando sempre o alvo em que foram medidas, e números medidos em alvos diferentes não se comparam entre si. **`BENCHMARKS.md` é um registo de observações** — informativo, consultado a pedido, e nunca um gate.
+Benchmarks live in `benches/` and run against the dataset of the MariaDB containers, so that they are reproducible. Readings are recorded in `BENCHMARKS.md`, always identifying the target they were measured on, and figures measured on different targets are not compared. **`BENCHMARKS.md` is a record of observations** — informative, consulted on request, and never a gate.
 
-Para trabalho de optimização, usar o agente `rust-perf-engineer`; para investigação de causa-efeito entre implementação e comportamento medido (RAM, CPU, código vácuo ou redundante), usar `extreme-code-profiler`.
+For optimisation work, use the `rust-perf-engineer` agent; for cause-and-effect investigation between implementation and measured behaviour (RAM, CPU, vacuous or redundant code), use `extreme-code-profiler`. The choice of technique follows *Investigation and Optimisation*.
 
-## Testes contra MariaDB
+## Testing against MariaDB
 
-Testes ou validações que necessitem de uma base de dados real **têm** de usar a fixture definida em `scripts/mariadb/`. **Nunca** usar instâncias externas, mocks ou stubs como substituto.
+Tests or validations that need a real database **must** use the fixture defined in `scripts/mariadb/`. **Never** use external instances, mocks or stubs as a substitute.
 
-`scripts/mariadb/` não contém só imagens de servidor e SQL: os servidores apresentam o certificado TLS versionado em `scripts/mariadb/tls/`, e ao lado deles corre um servidor que não oferece TLS nenhum. O que lá está, como se lança e como se verifica está em `scripts/mariadb/README.md` — **lê-se lá, e não se copia para aqui**.
+`scripts/mariadb/` does not hold only server images and SQL: the servers present the TLS certificate versioned in `scripts/mariadb/tls/`, and beside them runs a server that offers no TLS at all. What is there, how it is launched and how it is verified is in `scripts/mariadb/README.md` — **read it there; it is not copied here**.
 
-**A fixture não se opera à mão.** Traz o seu próprio harness — um conjunto de scripts que a levanta e verifica servidor a servidor, que a termina e prova que nada ficou para trás, que responde se está de pé antes de um teste dependente de servidor correr, e que instrumenta as observações que a especificação exige que sejam feitas fora do processo. É por eles que a fixture se opera, sempre: um comando Docker escrito à mão no lugar do harness é motivo para **PARAR**. Quais são, como se invocam e o que cada um faz lê-se aí.
+**The fixture is not operated by hand.** It brings its own harness — a set of scripts that starts it and verifies it server by server, stops it and proves that nothing was left behind, answers whether it is up before a server-dependent test runs, and instruments the observations the specification requires to be made outside the process. The fixture is always operated through them: a hand-written Docker command in place of the harness is reason to **STOP**. Which scripts they are, how they are invoked and what each does is read there.
 
-O `tpl` suporta **mais do que uma série de MariaDB**. Quais são, e o que uma diferença entre séries obriga, pertence a `specification/server-contract.md` e **não se copia para aqui**.
+`tpl` supports **more than one MariaDB series**. Which series, and what a difference between series obliges, belongs to `specification/server-contract.md` and **is not copied here**.
 
-Sempre que for preciso confirmar o conteúdo, a estrutura ou os tipos devolvidos por uma query ao `INFORMATION_SCHEMA`:
+Whenever the content, structure or types returned by an `INFORMATION_SCHEMA` query must be confirmed:
 
-1. Levantar a fixture pelo harness, em **todas as séries suportadas**, e confirmar por ele que todas responderam.
-2. Executar a query real em cada série e observar a resposta efectiva.
-3. Confirmar o comportamento na documentação oficial do MariaDB.
-4. Documentar o código em conformidade com o que foi observado **e** confirmado.
-5. Terminar a fixture pelo harness, que confirma que nada dela ficou a correr.
+1. Start the fixture through the harness, on **every supported series**, and confirm through it that all of them responded.
+2. Run the real query on each series and observe the actual response.
+3. Confirm the behaviour in the official MariaDB documentation.
+4. Document the code according to what was observed **and** confirmed.
+5. Stop the fixture through the harness, which confirms that nothing of it was left running.
 
-**Uma divergência entre séries é ela própria um achado** e regista-se como tal. É a razão de o `tpl` ler mais do que uma versão, e é o que a especificação exige que seja tratado — não uma nota de rodapé.
+**A divergence between series is itself a finding** and is recorded as such. It is the reason `tpl` reads more than one version, and it is what the specification requires to be handled — not a footnote.
 
-**É proibido** assumir, inferir ou documentar o comportamento do catálogo sem executar estes passos. Conhecimento genérico sobre MySQL não é suficiente: as divergências entre MariaDB e MySQL no `INFORMATION_SCHEMA` são reais e relevantes.
+**It is forbidden** to assume, infer or document the catalogue's behaviour without executing these steps. Generic knowledge of MySQL is not enough: the divergences between MariaDB and MySQL in `INFORMATION_SCHEMA` are real and relevant.
 
-Os scripts `scripts/mariadb/setup.sql` e `seed.sql` devem cobrir exaustivamente a superfície de catálogo que o `tpl` lê: todos os tipos de dados nativos do MariaDB, chaves primárias simples e compostas, índices únicos e compostos, chaves estrangeiras com regras `ON UPDATE`/`ON DELETE` distintas, colunas geradas, vistas, procedimentos e funções, triggers e comentários. O domínio modelado deve ser realista, nunca `id=1, name='test'`. O DDL tem de ser aceite por **todas** as séries suportadas.
+The scripts `scripts/mariadb/setup.sql` and `seed.sql` must exhaustively cover the catalogue surface `tpl` reads: every native MariaDB data type, simple and composite primary keys, unique and composite indexes, foreign keys with distinct `ON UPDATE`/`ON DELETE` rules, generated columns, views, procedures and functions, triggers, and comments. The modelled domain must be realistic, never `id=1, name='test'`. The DDL must be accepted by **every** supported series.
 
-A exigência de exaustividade não acaba no catálogo: vale igualmente para a superfície de transporte, e é `FR-CONF-038`, em `specification/configuration-model.md`, que fixa o que o material TLS e o servidor sem TLS têm de tornar demonstrável.
+The demand for exhaustiveness does not end at the catalogue: it applies equally to the transport surface, and it is `FR-CONF-038`, in `specification/configuration-model.md`, that fixes what the TLS material and the server without TLS must make demonstrable.
 
-## Documentação
+## Documentation
 
-- A língua e as exigências de escrita são as de **Linguagem**: inglês impecável, explícito, objectivo, fechado e conciso. Lê-se lá, e não se repete aqui.
-- O registo é técnico e destina-se a leitores humanos.
-- A documentação tem de ser **fiel ao código**: nunca descrever comandos, flags, filtros ou estruturas que não estejam implementados exactamente como descritos. Enquanto a implementação não existir, o README tem de o dizer explicitamente.
-- Todo o item público (`pub`) leva doc comment. `#![warn(missing_docs)]` no crate.
+- The language and the writing demands are those of *Language*: flawless English, explicit, objective, closed and concise. Read them there; they are not repeated here.
+- The register is technical and addressed to human readers.
+- Documentation must be **faithful to the code**: never describe commands, flags, filters or structures that are not implemented exactly as described. While the implementation does not exist, the README must say so explicitly.
+- Every public (`pub`) item carries a doc comment. `#![warn(missing_docs)]` in the crate.
