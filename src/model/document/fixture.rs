@@ -122,7 +122,7 @@ pub(crate) fn index(name: &'static str, columns: &[&'static str]) -> Index<'stat
                 prefix_length: None,
             })
             .collect(),
-        index_type: Cow::Borrowed("BTREE"),
+        index_type: Some(Cow::Borrowed("BTREE")),
         comment: Cow::Borrowed(""),
         ignored: false,
     }
@@ -135,7 +135,7 @@ pub(crate) fn key(
     pairs: &[(&'static str, &'static str)],
 ) -> ForeignKey<'static> {
     ForeignKey {
-        name: Cow::Borrowed(name),
+        name: Some(Cow::Borrowed(name)),
         columns: pairs
             .iter()
             .map(|(column, referenced)| ForeignKeyColumn {
@@ -168,18 +168,18 @@ pub(crate) fn trigger(name: &'static str) -> Trigger<'static> {
         name: Cow::Borrowed(name),
         event: TriggerEvent::Insert,
         timing: TriggerTiming::Before,
-        action_order: 1,
+        action_order: Some(1),
         statement: Some(Cow::Borrowed(
             "BEGIN SET NEW.reference = upper(NEW.reference); END",
         )),
         orientation: Cow::Borrowed("ROW"),
         old_row_alias: Cow::Borrowed("OLD"),
         new_row_alias: Cow::Borrowed("NEW"),
-        sql_mode: Cow::Borrowed("STRICT_TRANS_TABLES"),
+        sql_mode: Some(Cow::Borrowed("STRICT_TRANS_TABLES")),
         definer: Some(Cow::Borrowed("freight_owner@localhost")),
-        character_set_client: Cow::Borrowed("utf8mb4"),
-        collation_connection: Cow::Borrowed("utf8mb4_uca1400_ai_ci"),
-        database_collation: Cow::Borrowed("utf8mb4_unicode_520_ci"),
+        character_set_client: Some(Cow::Borrowed("utf8mb4")),
+        collation_connection: Some(Cow::Borrowed("utf8mb4_uca1400_ai_ci")),
+        database_collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
     }
 }
 
@@ -197,13 +197,13 @@ pub(crate) fn view(name: &'static str) -> View<'static> {
     View {
         name: Cow::Borrowed(name),
         definition: Cow::Borrowed("select `freight`.`consignment`.`reference` AS `reference`"),
-        check_option: Cow::Borrowed("NONE"),
-        is_updatable: false,
-        definer: Cow::Borrowed("freight_owner@localhost"),
-        security_type: Cow::Borrowed("DEFINER"),
-        character_set_client: Cow::Borrowed("utf8mb4"),
-        collation_connection: Cow::Borrowed("utf8mb4_uca1400_ai_ci"),
-        algorithm: Cow::Borrowed("UNDEFINED"),
+        check_option: Some(Cow::Borrowed("NONE")),
+        is_updatable: Some(false),
+        definer: Some(Cow::Borrowed("freight_owner@localhost")),
+        security_type: Some(Cow::Borrowed("DEFINER")),
+        character_set_client: Some(Cow::Borrowed("utf8mb4")),
+        collation_connection: Some(Cow::Borrowed("utf8mb4_uca1400_ai_ci")),
+        algorithm: Some(Cow::Borrowed("UNDEFINED")),
         restricted: Restricted::new(vec![Cow::Borrowed("definition")]),
     }
 }
@@ -246,79 +246,88 @@ pub(crate) fn routine(name: &'static str) -> Routine<'static> {
 
 /// `consignment`: the referenced end of the fixture's one relation.
 pub(crate) fn consignment() -> Table<'static> {
-    Table::assemble(TableParts {
-        engine: Some(Cow::Borrowed("InnoDB")),
-        collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
-        comment: Cow::Borrowed("one consignment per row"),
-        columns: vec![
-            column("consignment", "consignment_id", 1, identifier()),
-            // The three forms of `FR-CTX-012`, one per column, so that the
-            // round trip carries all three.
-            Column {
-                default: ColumnDefault::classify(Some("'EUR'")),
-                ..column("consignment", "reference", 2, varchar(64))
-            },
-            Column {
-                nullable: true,
-                default: ColumnDefault::classify(Some("NULL")),
-                ..column("consignment", "status", 3, status())
-            },
-            Column {
-                default: ColumnDefault::classify(Some("current_timestamp()")),
-                ..column("consignment", "booked_at", 4, timestamp())
-            },
-        ],
-        indexes: vec![
-            index(PRIMARY_KEY_NAME, &["consignment_id"]),
-            index("uq_consignment_reference", &["reference"]),
-        ],
-        referenced_by: vec![incoming(
-            "consignment_leg",
-            key(
-                "fk_leg_consignment",
-                "consignment",
-                &[("consignment_id", "consignment_id")],
-            ),
-        )],
-        triggers: vec![trigger("trg_consignment_stamp")],
-        check_constraints: vec![check("ck_consignment_reference")],
-        ..TableParts::new(Cow::Borrowed("consignment"), TableType::Base)
-    })
+    Table::assemble(
+        TableParts {
+            engine: Some(Cow::Borrowed("InnoDB")),
+            collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
+            comment: Cow::Borrowed("one consignment per row"),
+            columns: vec![
+                column("consignment", "consignment_id", 1, identifier()),
+                // The three forms of `FR-CTX-012`, one per column, so that the
+                // round trip carries all three.
+                Column {
+                    default: ColumnDefault::classify(Some("'EUR'")),
+                    ..column("consignment", "reference", 2, varchar(64))
+                },
+                Column {
+                    nullable: true,
+                    default: ColumnDefault::classify(Some("NULL")),
+                    ..column("consignment", "status", 3, status())
+                },
+                Column {
+                    default: ColumnDefault::classify(Some("current_timestamp()")),
+                    ..column("consignment", "booked_at", 4, timestamp())
+                },
+            ],
+            indexes: vec![
+                index(PRIMARY_KEY_NAME, &["consignment_id"]),
+                index("uq_consignment_reference", &["reference"]),
+            ],
+            referenced_by: vec![incoming(
+                "consignment_leg",
+                key(
+                    "fk_leg_consignment",
+                    "consignment",
+                    &[("consignment_id", "consignment_id")],
+                ),
+            )],
+            triggers: vec![trigger("trg_consignment_stamp")],
+            check_constraints: vec![check("ck_consignment_reference")],
+            ..TableParts::new(Cow::Borrowed("consignment"), TableType::Base)
+        }
+        .with_primary_index(),
+    )
     .expect("every key of the fixture names a column its table carries")
 }
 
 /// `consignment_leg`: the referencing end.
 pub(crate) fn consignment_leg() -> Table<'static> {
-    Table::assemble(TableParts {
-        engine: Some(Cow::Borrowed("InnoDB")),
-        collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
-        comment: Cow::Borrowed(""),
-        columns: vec![
-            column("consignment_leg", "leg_id", 1, identifier()),
-            column("consignment_leg", "consignment_id", 2, identifier()),
-        ],
-        indexes: vec![index(PRIMARY_KEY_NAME, &["leg_id"])],
-        foreign_keys: vec![key(
-            "fk_leg_consignment",
-            "consignment",
-            &[("consignment_id", "consignment_id")],
-        )],
-        ..TableParts::new(Cow::Borrowed("consignment_leg"), TableType::Base)
-    })
+    Table::assemble(
+        TableParts {
+            engine: Some(Cow::Borrowed("InnoDB")),
+            collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
+            comment: Cow::Borrowed(""),
+            columns: vec![
+                column("consignment_leg", "leg_id", 1, identifier()),
+                column("consignment_leg", "consignment_id", 2, identifier()),
+            ],
+            indexes: vec![index(PRIMARY_KEY_NAME, &["leg_id"])],
+            foreign_keys: vec![key(
+                "fk_leg_consignment",
+                "consignment",
+                &[("consignment_id", "consignment_id")],
+            )],
+            ..TableParts::new(Cow::Borrowed("consignment_leg"), TableType::Base)
+        }
+        .with_primary_index(),
+    )
     .expect("every key of the fixture names a column its table carries")
 }
 
 /// `carrier`: a table that references nothing and is referenced by nothing.
 pub(crate) fn carrier() -> Table<'static> {
-    Table::assemble(TableParts {
-        engine: Some(Cow::Borrowed("InnoDB")),
-        columns: vec![
-            column("carrier", "carrier_id", 1, identifier()),
-            column("carrier", "scac", 2, varchar(4)),
-        ],
-        indexes: vec![index(PRIMARY_KEY_NAME, &["carrier_id"])],
-        ..TableParts::new(Cow::Borrowed("carrier"), TableType::Base)
-    })
+    Table::assemble(
+        TableParts {
+            engine: Some(Cow::Borrowed("InnoDB")),
+            columns: vec![
+                column("carrier", "carrier_id", 1, identifier()),
+                column("carrier", "scac", 2, varchar(4)),
+            ],
+            indexes: vec![index(PRIMARY_KEY_NAME, &["carrier_id"])],
+            ..TableParts::new(Cow::Borrowed("carrier"), TableType::Base)
+        }
+        .with_primary_index(),
+    )
     .expect("every key of the fixture names a column its table carries")
 }
 
@@ -328,7 +337,8 @@ pub(crate) fn database() -> Database<'static> {
     Database {
         name: Cow::Borrowed("freight"),
         charset: Cow::Borrowed("utf8mb4"),
-        collation: Cow::Borrowed("utf8mb4_unicode_520_ci"),
+        collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
+        provider: crate::model::database::Provider::Mariadb,
         server: server(),
         tables: vec![consignment(), consignment_leg()],
         views: vec![view("v_consignment_manifest")],

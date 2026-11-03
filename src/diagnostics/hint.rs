@@ -38,9 +38,10 @@ use super::restate::{self, Edit, Replacement};
 use super::suggest;
 use crate::error::{
     CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    LookupKind, Missing, NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, TplDirFault,
-    Unresolved,
+    LookupKind, Missing, NetworkPhase, ReadOnlyFault, RenderReason, SqliteEnd, TlsFault,
+    TplDirFault, Unresolved,
 };
+use crate::model::database::Provider;
 use crate::project::config::keys::ValueType;
 
 /// The longest a name the character set of `FR-ERR-022` governs may be.
@@ -412,7 +413,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // FR-CFG-020 fixes this line: every flag of FR-CFG-027.
         Error::NothingToUpdate { .. } => Cow::Borrowed(
             "give at least one of --dsn, --host, --port, --user, --schema, --tls, \
-             --password-command, --ca-file, --ca-path",
+             --password-command, --ca-file, --ca-path, --provider, --path",
         ),
         // FR-CFG-007 fixes both halves: the entry's own `show` where the key
         // names an entry the file defines, and the listing otherwise.
@@ -602,6 +603,12 @@ fn bare(error: &Error) -> Cow<'static, str> {
                         "write the command as one command line, e.g.: --password-command {LINE}"
                     )),
                 }
+            }
+            // FR-CONF-051 item 1: the form with a placeholder.
+            (parameter, _) if super::cause::is_provider(parameter) && admits_key(parameter) => {
+                Cow::Owned(format!(
+                    "give one of the two: tpl cfg set {parameter} <provider>"
+                ))
             }
             (_, "cfg set") => {
                 Cow::Borrowed("show every key and the value it takes with: tpl help cfg set")
@@ -1665,6 +1672,140 @@ fn bare(error: &Error) -> Cow<'static, str> {
             "repoint the entry at a supported server: {}",
             repoint(entry, *by_dsn)
         )),
+
+        // ---------------------------------------------- the provider ---
+        // FR-CFG-055: the invocation with the flags of one provider only, with
+        // placeholders where the values are the caller's.
+        Error::FlagRefusedByProvider {
+            command,
+            entry,
+            provider: Provider::Sqlite,
+            ..
+        } => Cow::Owned(format!(
+            "give the database file: tpl {command} {} --provider sqlite --path <path>",
+            entry_or_placeholder(entry)
+        )),
+        Error::FlagRefusedByProvider {
+            command,
+            entry,
+            provider: Provider::Mariadb,
+            ..
+        } => Cow::Owned(format!(
+            "describe the server: tpl {command} {} --host <host> --user <user> --schema \
+             <database>; or register a database file: tpl {command} {} --provider sqlite --path \
+             <path>",
+            entry_or_placeholder(entry),
+            entry_or_placeholder(entry)
+        )),
+        Error::PathRequired { entry } => Cow::Owned(format!(
+            "give the database file: tpl cfg database add {} --provider sqlite --path <path>",
+            entry_or_placeholder(entry)
+        )),
+        // FR-CFG-048 as amended: a new entry, with a placeholder for its name,
+        // carrying the provider and the value asked for, and no command that
+        // removes a key (BR-ERR-005).
+        Error::ProviderIncoherentWrite {
+            provider,
+            written,
+            value,
+            ..
+        } => {
+            let leaf = written.rsplit('.').next().unwrap_or(written);
+            let (flag, placeholder) = flag_of(leaf);
+            let given = value.as_deref().filter(|value| admits(value));
+            match (provider, leaf) {
+                (Provider::Sqlite, _) => Cow::Borrowed(
+                    "register the database file as a new entry: tpl cfg database add <name> \
+                     --provider sqlite --path <path>",
+                ),
+                (Provider::Mariadb, "provider") => Cow::Borrowed(
+                    "register the server as a new entry: tpl cfg database add <name> --provider \
+                     mariadb --host <host> --user <user> --schema <database>",
+                ),
+                (Provider::Mariadb, _) => Cow::Owned(format!(
+                    "register the server as a new entry: tpl cfg database add <name> {flag} {}",
+                    given.unwrap_or(placeholder)
+                )),
+            }
+        }
+        // FR-CONF-052: show the entry, and nothing that removes a key or
+        // changes the provider (BR-ERR-005).
+        Error::ProviderRefusesKeys { entry, .. } => Cow::Owned(format!(
+            "show the entry and the keys it carries with: tpl cfg database show {}",
+            entry_or_placeholder(entry)
+        )),
+
+        // ------------------------------------------------ the SQLite file ---
+        // FR-LITE-005, FR-LITE-007: the command that repoints the entry.
+        Error::SqliteNotRegularFile { entry, .. } | Error::SqliteFileRefused { entry, .. } => {
+            Cow::Owned(format!(
+                "point the entry at a SQLite database file: {}",
+                repoint_file(entry)
+            ))
+        }
+        Error::SqliteFileLookup { entry, .. } | Error::SqliteFileUnreadable { entry, .. } => {
+            Cow::Owned(format!(
+                "check that the file and its directory are readable, and that the host has free \
+                 space and memory, then run the command again; or point the entry at another \
+                 file: {}",
+                repoint_file(entry)
+            ))
+        }
+        Error::SqliteUnavailable { ended, .. } => match ended {
+            SqliteEnd::Locked {
+                waited: Some((DeadlineBound::Overall, _)),
+                ..
+            }
+            | SqliteEnd::Deadline {
+                bound: DeadlineBound::Overall,
+                ..
+            } => Cow::Borrowed(OVERALL_BUDGET),
+            SqliteEnd::Locked { .. } | SqliteEnd::Deadline { .. } => Cow::Borrowed(
+                "the read is read-only and can be repeated: run the command again once nothing \
+                 holds the database, or wait longer with: tpl cfg set core.query_timeout \
+                 <seconds>",
+            ),
+            SqliteEnd::Contended { .. } => Cow::Borrowed(
+                "the read is read-only and can be repeated: run the command again once nothing \
+                 else is writing the database",
+            ),
+        },
+        // FR-ERR-032: a 70 is a defect in tpl and is not correctable by the
+        // caller.
+        Error::SqliteControlNotInEffect { .. } | Error::SqliteDefect { .. } => {
+            Cow::Borrowed(SOFTWARE_DEFECT)
+        }
+        Error::ViewColumnsUnreadable { .. } => Cow::Borrowed(
+            "repair the view in the database file, or name another object; list the views with: \
+             tpl schema views",
+        ),
+    }
+}
+
+/// The command of `FR-LITE-005`, `FR-LITE-007` and `FR-CONF-053` that points
+/// a `sqlite` entry at another file, per the note on `FR-ERR-045`.
+fn repoint_file(entry: &str) -> String {
+    format!(
+        "tpl cfg database update {} --path <path>",
+        entry_or_placeholder(entry)
+    )
+}
+
+/// The flag of `FR-CFG-027` that writes the key `leaf`, and its placeholder.
+///
+/// `password` has no flag (`FR-CFG-030`), so the host's stands for a new
+/// server entry.
+const fn flag_of(leaf: &str) -> (&'static str, &'static str) {
+    match leaf.as_bytes() {
+        b"dsn" => ("--dsn", "<url>"),
+        b"port" => ("--port", "<port>"),
+        b"user" => ("--user", "<user>"),
+        b"database" => ("--schema", "<database>"),
+        b"tls" => ("--tls", "<mode>"),
+        b"password_command" => ("--password-command", "<command>"),
+        b"ca_file" => ("--ca-file", "<path>"),
+        b"ca_path" => ("--ca-path", "<path>"),
+        _ => ("--host", "<host>"),
     }
 }
 
@@ -1858,12 +1999,20 @@ fn invalid_reference(parameter: &str) -> Cow<'static, str> {
     }
 }
 
-/// The hint of an empty host or database given on the command line
-/// (`FR-CONF-050`): the flag or the key with a placeholder.
+/// The hint of an empty host, database or database file given on the command
+/// line (`FR-CONF-050`, `FR-CONF-053`): the flag or the key with a placeholder.
 fn empty_value(parameter: &str) -> Cow<'static, str> {
     let (what, placeholder, meaning, ids): (&str, &str, &str, &[&str]) =
         if parameter.ends_with("host") {
             ("host", "<host>", "the host of the server", &["host"])
+        } else if super::cause::names_database_path(parameter) {
+            // FR-CONF-053: the empty path is refused as an empty host is.
+            (
+                "database file",
+                "<path>",
+                "the path of the database file",
+                &["path"],
+            )
         } else {
             (
                 "database",
@@ -1905,13 +2054,19 @@ fn path_itself(parameter: &str) -> Cow<'static, str> {
     let ids: &[&str] = match parameter {
         "--ca-file" => &["ca_file"],
         "--ca-path" => &["ca_path"],
+        "--path" => &["path"],
         _ => &["value"],
+    };
+    let meaning = if parameter == "--path" || parameter.ends_with(".path") {
+        "the path of the database file itself"
+    } else {
+        "the path of the trust material itself"
     };
     let edit = Edit::Value {
         ids,
         to: Replacement::Placeholder {
             text: "<path>",
-            meaning: "the path of the trust material itself",
+            meaning,
         },
     };
 

@@ -22,6 +22,7 @@
 use std::path::Path;
 
 use crate::error::{EntryRepair, Error};
+use crate::model::database::Provider;
 use crate::project::config::entry::Combination;
 use crate::project::config::keys::{EntryKey, Key};
 use crate::project::config::{Configuration, dsn};
@@ -30,20 +31,27 @@ use crate::project::config::{Configuration, dsn};
 /// (`FR-CFG-048`).
 ///
 /// `command` is the command path below `tpl` that writes it, `written` the keys
-/// the invocation names, and `dsn` the `dsn` value it writes, where it writes
-/// one. Nothing here reads the file again: `configuration` is the document step
-/// 3 of `FR-ERR-006` has already validated.
+/// the invocation names, `dsn` the `dsn` value it writes, where it writes one,
+/// and `provider` the `provider` value it writes, where it writes one. Nothing
+/// here reads the file again: `configuration` is the document step 3 of
+/// `FR-ERR-006` has already validated.
+///
+/// Two rules are applied, in this order, to the one combination: `FR-CONF-007`
+/// and, since the sixty-fifth edition, `FR-CONF-052`.
 ///
 /// # Errors
 ///
 /// Returns [`Error::IncoherentEntryWrite`] naming both members of the refused
-/// pair, with the repair whose runnable command makes the write legal.
+/// pair, with the repair whose runnable command makes the write legal; and
+/// [`Error::ProviderIncoherentWrite`] where the entry would carry a key its
+/// provider refuses.
 pub(super) fn refuse(
     configuration: &Configuration,
     command: &'static str,
     name: &str,
     written: &[EntryKey],
     dsn: Option<&str>,
+    provider: Option<Provider>,
 ) -> Result<(), Error> {
     let carried = configuration.entry(name);
 
@@ -51,6 +59,9 @@ pub(super) fn refuse(
     let mut combination = carried_combination;
     for field in written {
         combination.declare(*field, true);
+    }
+    if let Some(provider) = provider {
+        combination = combination.with_provider(Some(provider));
     }
 
     // The DSN in force after the write: the one the invocation writes, or the
@@ -70,7 +81,7 @@ pub(super) fn refuse(
     }));
 
     let Some(pair) = combination.refused() else {
-        return Ok(());
+        return by_provider(name, combination, written, provider, dsn);
     };
 
     // The pair is reported in the order `FR-CFG-048` states it: the key the
@@ -89,6 +100,75 @@ pub(super) fn refuse(
         written: qualified(name, writes),
         conflicting: qualified(name, conflicting),
         repair: repair(command, carried_combination, written, conflicting, dsn),
+    })
+}
+
+/// The rule of `FR-CONF-052` over the entry as it would stand after the write
+/// (`FR-CFG-048`, as amended in the sixty-fifth edition).
+///
+/// The provider after the write is the one the entry would carry, or `mariadb`
+/// where it would carry none. The refusal names the provider the written key
+/// belongs to, the key, and the keys of the entry the other provider takes.
+///
+/// # Errors
+///
+/// Returns [`Error::ProviderIncoherentWrite`] where the entry would carry a key
+/// its provider refuses.
+fn by_provider(
+    name: &str,
+    combination: Combination,
+    written: &[EntryKey],
+    provider: Option<Provider>,
+    dsn: Option<&str>,
+) -> Result<(), Error> {
+    let refused = combination.refused_by_provider();
+    if refused.is_empty() {
+        return Ok(());
+    }
+
+    // The key the invocation writes that the rule turns on: the provider where
+    // it writes one, and otherwise the first refused key it writes.
+    let (key, target) = if written.contains(&EntryKey::Provider) {
+        (EntryKey::Provider, combination.provider())
+    } else {
+        let key = refused
+            .iter()
+            .copied()
+            .find(|key| written.contains(key))
+            .unwrap_or(refused[0]);
+        let target = if key.taken_by(Provider::Sqlite) {
+            Provider::Sqlite
+        } else {
+            Provider::Mariadb
+        };
+        (key, target)
+    };
+
+    // The keys the entry carries that the provider the write turns on does not
+    // take, the written key apart.
+    let carried: Vec<&'static str> = EntryKey::ALL
+        .into_iter()
+        .filter(|field| {
+            *field != key
+                && *field != EntryKey::Provider
+                && combination.declares(*field)
+                && !field.taken_by(target)
+        })
+        .map(EntryKey::leaf)
+        .collect();
+
+    let value = match key {
+        EntryKey::Provider => provider.map(|provider| provider.name().to_owned()),
+        EntryKey::Dsn => dsn.map(str::to_owned),
+        _ => None,
+    };
+
+    Err(Error::ProviderIncoherentWrite {
+        entry: name.to_owned(),
+        provider: target,
+        written: qualified(name, key),
+        carried,
+        value,
     })
 }
 

@@ -35,6 +35,7 @@ use toml_edit::{Array, DocumentMut, Item, Table, Value, value};
 use super::config::entry::{PasswordCommand, TlsMode};
 use super::config::keys::{EntryKey, Key, Target, ValueType};
 use crate::error::{Error, Position};
+use crate::model::database::Provider;
 use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
 
 /// The mode `FR-PROJ-019` creates `.tpl/.cfg` with and `FR-CFG-034` keeps.
@@ -354,8 +355,10 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
             });
         }
 
-        // FR-CONF-050: an empty string names no host and no database.
-        if matches!(field, EntryKey::Host | EntryKey::Database)
+        // FR-CONF-050: an empty string names no host and no database; and
+        // FR-CONF-053 refuses an empty `path` as item 1 of FR-CONF-050
+        // refuses an empty host.
+        if matches!(field, EntryKey::Host | EntryKey::Database | EntryKey::Path)
             && super::config::keys::is_blank(supplied)
         {
             return Err(Error::EmptyValue {
@@ -445,6 +448,19 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
             // FR-CONF-047: `ca_file` and `ca_path` are read as literal paths,
             // so a `${` is refused rather than stored as a file name.
             if expects == ValueType::Path && (supplied.is_empty() || supplied.contains("${")) {
+                return Err(refused());
+            }
+            value(supplied)
+        }
+        // FR-CONF-051 item 1: exactly one of the two values, compared exactly.
+        ValueType::Provider => {
+            let provider = Provider::from_name(supplied).ok_or_else(refused)?;
+            value(provider.name())
+        }
+        // FR-CONF-054: a literal path, stored as written and never resolved;
+        // a `${` is refused rather than stored, as for `ca_file`.
+        ValueType::DatabasePath => {
+            if supplied.contains("${") {
                 return Err(refused());
             }
             value(supplied)

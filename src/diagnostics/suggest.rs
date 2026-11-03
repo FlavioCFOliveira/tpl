@@ -826,6 +826,7 @@ mod tests {
             name: "ordrs".to_owned(),
             entry: "shop".to_owned(),
             database: "shop".to_owned(),
+            provider: crate::model::database::Provider::Mariadb,
             nearest: Vec::new(),
         };
         let selected = suggestions("ordrs", ["orders", "customers"], Population::Names);

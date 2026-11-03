@@ -83,8 +83,8 @@
 
 use std::panic::Location;
 
-use sqlx::Row as _;
-use sqlx::mysql::MySqlRow;
+use sqlx_core::row::Row as _;
+use sqlx_mysql::MySqlRow;
 
 use crate::error::Error;
 

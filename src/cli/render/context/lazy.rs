@@ -112,10 +112,11 @@ use crate::render::Query;
 /// The keys of the `database` object, in the declaration order of
 /// [`DatabaseDocument`], which is the order `FR-CTX-036` writes them in and the
 /// order a template iterates them in.
-const DATABASE_KEYS: [&str; 7] = [
+const DATABASE_KEYS: [&str; 8] = [
     "name",
     "charset",
     "collation",
+    "provider",
     "server",
     "tables",
     "views",
@@ -288,6 +289,11 @@ impl Store {
         &self.head.name
     }
 
+    /// The provider of the read the cache files record (`FR-CDOC-018`).
+    pub(in crate::cli::render) fn provider(&self) -> crate::model::database::Provider {
+        self.head.provider
+    }
+
     /// What was read before the render started.
     pub(in crate::cli::render) const fn shelved(&self) -> &Shelved {
         &self.shelved
@@ -422,7 +428,7 @@ fn settled<S>(
     }
 }
 
-/// The `database` object: seven members, each converted when first read.
+/// The `database` object: eight members, each converted when first read.
 struct Database {
     /// Where the members are read from.
     contents: Contents,
@@ -440,9 +446,10 @@ impl Database {
             0 => Value::from_serialize(&head.name),
             1 => Value::from_serialize(&head.charset),
             2 => Value::from_serialize(&head.collation),
-            3 => Value::from_serialize(&head.server),
-            4 => Members::value(&self.contents, Collection::Tables),
-            5 => Members::value(&self.contents, Collection::Views),
+            3 => Value::from_serialize(head.provider),
+            4 => Value::from_serialize(&head.server),
+            5 => Members::value(&self.contents, Collection::Tables),
+            6 => Members::value(&self.contents, Collection::Views),
             _ => Members::value(&self.contents, Collection::Routines),
         }
     }

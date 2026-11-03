@@ -46,8 +46,8 @@ use std::fmt;
 use std::path::Path;
 use std::time::Instant;
 
-use sqlx::Connection as _;
-use sqlx::mysql::{MySqlConnectOptions, MySqlConnection, MySqlSslMode};
+use sqlx_core::connection::Connection as _;
+use sqlx_mysql::{MySqlConnectOptions, MySqlConnection, MySqlSslMode};
 use tokio::net::lookup_host;
 use tokio::runtime::Runtime;
 use tokio::time::timeout;
@@ -392,7 +392,7 @@ impl DriverOptions {
     }
 
     /// Opens the connection these options describe.
-    async fn connect(&self) -> Result<MySqlConnection, sqlx::Error> {
+    async fn connect(&self) -> Result<MySqlConnection, sqlx_core::Error> {
         MySqlConnection::connect_with(&self.0).await
     }
 
@@ -576,7 +576,7 @@ mod tests {
     use crate::project::config::entry::TlsMode;
     use crate::project::scratch::Scratch;
     use crate::project::settings::{self, Settings};
-    use sqlx::mysql::MySqlSslMode;
+    use sqlx_mysql::MySqlSslMode;
 
     /// A lookup that defines nothing, which every document below is written
     /// to need nothing from.
@@ -596,6 +596,8 @@ mod tests {
             &nothing,
         )
         .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry")
     }
 
     /// A driver variant as a value two of them can be compared by.

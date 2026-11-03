@@ -357,13 +357,13 @@ mod tests {
         View {
             name: Cow::Borrowed("v_consignment_manifest"),
             definition: Cow::Borrowed(definition),
-            check_option: Cow::Borrowed("NONE"),
-            is_updatable: false,
-            definer: Cow::Borrowed("root@localhost"),
-            security_type: Cow::Borrowed("DEFINER"),
-            character_set_client: Cow::Borrowed("utf8mb4"),
-            collation_connection: Cow::Borrowed("utf8mb4_uca1400_ai_ci"),
-            algorithm: Cow::Borrowed("UNDEFINED"),
+            check_option: Some(Cow::Borrowed("NONE")),
+            is_updatable: Some(false),
+            definer: Some(Cow::Borrowed("root@localhost")),
+            security_type: Some(Cow::Borrowed("DEFINER")),
+            character_set_client: Some(Cow::Borrowed("utf8mb4")),
+            collation_connection: Some(Cow::Borrowed("utf8mb4_uca1400_ai_ci")),
+            algorithm: Some(Cow::Borrowed("UNDEFINED")),
             restricted,
         }
     }

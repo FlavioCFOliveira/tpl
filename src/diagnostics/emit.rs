@@ -49,10 +49,36 @@ const WARNING_TOKEN: &str = "warning:";
 /// A generous first guess at the size of one emitted line, in bytes.
 const LINE_CAPACITY: usize = 160;
 
+/// What a catalogue query reads, which is the one word its line names
+/// (`FR-GLOB-017`).
+///
+/// A typed argument rather than text, per `OD-17`: the line of a `mariadb`
+/// read stays byte-identical, and a `sqlite` read says what it read instead
+/// of a catalogue it never reached.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CatalogueSource {
+    /// `INFORMATION_SCHEMA` of a MariaDB server.
+    InformationSchema,
+    /// The schema of a SQLite database file (`FR-LITE-015`).
+    SqliteSchema,
+}
+
+impl CatalogueSource {
+    /// What the line says was read.
+    const fn read(self) -> &'static str {
+        match self {
+            Self::InformationSchema => " read INFORMATION_SCHEMA",
+            Self::SqliteSchema => " read the SQLite schema",
+        }
+    }
+}
+
 /// Writes the one line `FR-GLOB-017` requires for a catalogue query.
 ///
-/// Called once per query issued against `INFORMATION_SCHEMA`, so that the
-/// count of lines carrying [`CATALOGUE_QUERY_TOKEN`] is the count of queries.
+/// Called once per catalogue query issued — against `INFORMATION_SCHEMA` for a
+/// `mariadb` entry, and for a `sqlite` entry once per statement of the last
+/// row of `FR-LITE-015` — so that the count of lines carrying
+/// [`CATALOGUE_QUERY_TOKEN`] is the count of queries (`NFR-PERF-008`).
 ///
 /// The line carries the token and no identity of the query. `FR-GLOB-017`
 /// constrains the existence of the line and its distinguishability, not its
@@ -65,14 +91,14 @@ const LINE_CAPACITY: usize = 160;
 /// composed into the line but a literal. The statement text is not carried
 /// either — it would be the one thing a caller could mistake for the contract
 /// `NFR-DET-001` puts outside stderr.
-pub(crate) fn catalogue_query() {
+pub(crate) fn catalogue_query(source: CatalogueSource) {
     if !emits(Level::Info) {
         return;
     }
 
     let mut composed = String::with_capacity(LINE_CAPACITY);
     composed.push_str(CATALOGUE_QUERY_TOKEN);
-    composed.push_str(" read INFORMATION_SCHEMA");
+    composed.push_str(source.read());
 
     write_line(&composed);
 }
@@ -142,6 +168,10 @@ pub(crate) enum ServerDatabase<'a> {
     /// clause would advise overwriting the server database with that name
     /// (condition 3 of `FR-CFG-051`, the fifty-third edition).
     NamesEntry,
+    /// The invocation uses or targets a `sqlite` entry: its database file is
+    /// set with `--path` (condition 4 of `FR-CFG-051`, the sixty-fifth
+    /// edition).
+    File,
     /// Neither: the database is set with `--schema`, and the value given to
     /// `-d/--database` is the likely one.
     Schema(&'a str),
@@ -168,6 +198,9 @@ fn database_line(command: &str, server: ServerDatabase<'_>) -> String {
         ServerDatabase::Dsn => "; the database on the server is the path part of --dsn".to_owned(),
         ServerDatabase::SchemaGiven => String::new(),
         ServerDatabase::NamesEntry => "; the name argument already names the entry".to_owned(),
+        ServerDatabase::File => {
+            "; the database file of a sqlite entry is set with --path".to_owned()
+        }
         ServerDatabase::Schema(given) => {
             let schema = if super::hint::admits(given) {
                 given
@@ -349,9 +382,58 @@ fn write_line(composed: &str) {
     let mut out = String::with_capacity(composed.len() + 1);
     escape::push_line(&mut out, composed);
 
+    #[cfg(test)]
+    if capture::keep(&out) {
+        return;
+    }
+
     let mut stderr = std::io::stderr().lock();
     let _ = stderr.write_all(out.as_bytes());
     let _ = stderr.flush();
+}
+
+/// The lines one thread writes, kept for a unit test instead of written
+/// (`NFR-PERF-008`, verification, *The requirements of form, for a `sqlite`
+/// entry*).
+///
+/// The capture is per thread, so a test that drives one invocation on a
+/// thread of its own reads that invocation's lines and no other test's. It is
+/// compiled under the test configuration alone.
+#[cfg(test)]
+pub(crate) mod capture {
+    use std::cell::RefCell;
+
+    thread_local! {
+        /// The lines kept on this thread, while capturing.
+        static KEPT: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
+    }
+
+    /// Keeps `line` where this thread is capturing, and answers whether it
+    /// did.
+    pub(super) fn keep(line: &str) -> bool {
+        KEPT.with(|kept| match kept.borrow_mut().as_mut() {
+            Some(kept) => {
+                kept.push(line.to_owned());
+                true
+            }
+            None => false,
+        })
+    }
+
+    /// Runs `run` while capturing, and answers what it answered and every line
+    /// this thread wrote meanwhile.
+    pub(crate) fn captured<T>(run: impl FnOnce() -> T) -> (T, Vec<String>) {
+        KEPT.with(|kept| *kept.borrow_mut() = Some(Vec::new()));
+        let answered = run();
+        let lines = KEPT.with(|kept| kept.borrow_mut().take().unwrap_or_default());
+
+        (answered, lines)
+    }
+
+    /// Whether `line` is the one line of a catalogue query (`FR-GLOB-017`).
+    pub(crate) fn is_catalogue_query(line: &str) -> bool {
+        line.starts_with(super::CATALOGUE_QUERY_TOKEN)
+    }
 }
 
 #[cfg(test)]

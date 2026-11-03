@@ -154,10 +154,6 @@ pub(super) fn column_of(table: &Value, name: &str) -> Option<Value> {
 }
 
 /// The indexes of a table, in the order the document carries them.
-///
-/// The collection carries the primary key among the others, per `FR-CAT-010`
-/// and `FR-CAT-043`, which is why both `primary_key` and `unique` answer from
-/// this one collection and from no second source.
 pub(super) fn indexes(table: &Value) -> impl Iterator<Item = Value> {
     table
         .get_attr("indexes")
@@ -165,6 +161,18 @@ pub(super) fn indexes(table: &Value) -> impl Iterator<Item = Value> {
         .and_then(|indexes| indexes.try_iter().ok())
         .into_iter()
         .flatten()
+}
+
+/// The primary key of a table, where the table carries one (`FR-CAT-011`,
+/// `FR-LITE-029`).
+///
+/// A `null` key, and a table that carries no such attribute, are both
+/// [`None`]: neither names any column.
+pub(super) fn primary_key(table: &Value) -> Option<Value> {
+    table
+        .get_attr("primary_key")
+        .ok()
+        .filter(|key| key.kind() == ValueKind::Map)
 }
 
 /// Whether an index names `column` among its columns.

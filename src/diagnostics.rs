@@ -51,6 +51,7 @@ pub(crate) use restate::destination;
 pub(crate) use restate::record as record_invocation;
 
 pub(crate) use cause::invoked;
+pub(crate) use escape::bounded;
 pub(crate) use render::report;
 
 #[cfg(test)]

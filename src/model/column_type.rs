@@ -291,6 +291,31 @@ impl<'a> ColumnType<'a> {
         }
     }
 
+    /// The type of a column of a `sqlite` read (`FR-LITE-026`): the declared
+    /// type exactly as stored, and its type affinity as `data_type`.
+    ///
+    /// Every other part is `null`: SQLite ignores the numbers after a type
+    /// name and enforces no length, precision or scale, has no `unsigned`, no
+    /// column character set, and reports no `COLLATE` clause through the
+    /// statements it is read with, and it has no member list. The affinity is
+    /// one of the five SQLite names, which [`ColumnType::decompose`] does not
+    /// recognise and would send to `FR-CTX-018`; this is the constructor that
+    /// carries it.
+    #[must_use]
+    pub(crate) fn affinity(declared: Cow<'a, str>, affinity: &'static str) -> Self {
+        Self {
+            column_type: declared,
+            data_type: Some(Cow::Borrowed(affinity)),
+            precision: None,
+            scale: None,
+            length: None,
+            unsigned: None,
+            charset: None,
+            collation: None,
+            values: None,
+        }
+    }
+
     /// The raw string of `FR-CTX-018`: every part `null`, the type unchanged.
     fn unrecognised(column_type: &'a str) -> Self {
         Self {

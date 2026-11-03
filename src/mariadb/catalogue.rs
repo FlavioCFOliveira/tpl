@@ -88,7 +88,7 @@ pub(crate) mod fixture;
 
 use std::panic::Location;
 
-use sqlx::mysql::MySqlRow;
+use sqlx_mysql::MySqlRow;
 use tokio::time::timeout;
 
 use super::Session;
@@ -343,7 +343,7 @@ fn issue(
     target: &Target<'_>,
     clock: &Clock,
     statement: &Statement<'_>,
-) -> Result<Result<Vec<MySqlRow>, sqlx::Error>, Error> {
+) -> Result<Result<Vec<MySqlRow>, sqlx_core::Error>, Error> {
     let bound = clock.bound(target.deadlines().of(Phase::CatalogueQuery));
     let expired = || {
         fault::expired(
@@ -373,9 +373,11 @@ fn issue(
     // exactly the reads a caller most wants to see. A statement the bound
     // refused was never sent and is never counted, which is why the check comes
     // first.
-    crate::diagnostics::emit::catalogue_query();
+    crate::diagnostics::emit::catalogue_query(
+        crate::diagnostics::emit::CatalogueSource::InformationSchema,
+    );
 
-    let mut query = sqlx::query::<sqlx::MySql>(statement.sql());
+    let mut query = sqlx_core::query::query::<sqlx_mysql::MySql>(statement.sql());
 
     for bind in statement.binds() {
         query = query.bind(bind);
@@ -479,6 +481,8 @@ mod tests {
             &|_: &str| None,
         )
         .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry")
     }
 
     /// Reads `scope` from one fixture server as `account`, and closes the
@@ -864,10 +868,14 @@ mod tests {
                 assert_eq!(stored, 6, "{}", server.name());
 
                 for generated in &generated {
-                    assert!(!generated.expression.is_empty());
-                    assert!(!generated.expression.contains(" AS "));
-                    assert!(!generated.expression.contains("VIRTUAL"));
-                    assert!(!generated.expression.contains("STORED"));
+                    let expression = generated
+                        .expression
+                        .as_deref()
+                        .expect("a MariaDB read carries every generation expression");
+                    assert!(!expression.is_empty());
+                    assert!(!expression.contains(" AS "));
+                    assert!(!expression.contains("VIRTUAL"));
+                    assert!(!expression.contains("STORED"));
                 }
             },
         );
@@ -933,7 +941,7 @@ mod tests {
 
                 let primary = tariff.primary_key().expect("tariff has a primary key");
 
-                assert_eq!(primary.name, PRIMARY_KEY_NAME);
+                assert_eq!(primary.name.as_deref(), Some(PRIMARY_KEY_NAME));
                 assert_eq!(primary.columns.len(), 1);
                 assert_eq!(primary.columns[0].name, "tariff_id");
 
@@ -1097,7 +1105,7 @@ mod tests {
                 }
 
                 for trigger in &triggers {
-                    assert_eq!(trigger.action_order, 1);
+                    assert_eq!(trigger.action_order, Some(1));
                     assert_eq!(trigger.orientation, "ROW");
                     assert_eq!(trigger.old_row_alias, "OLD");
                     assert_eq!(trigger.new_row_alias, "NEW");
@@ -1135,21 +1143,38 @@ mod tests {
 
                 for view in &model.views {
                     assert!(!view.definition.is_empty());
-                    assert!(!view.definer.is_empty());
-                    assert_eq!(view.algorithm, "UNDEFINED");
-                    assert_eq!(view.character_set_client, "utf8mb4");
+                    assert!(
+                        view.definer
+                            .as_deref()
+                            .is_some_and(|definer| !definer.is_empty())
+                    );
+                    assert_eq!(view.algorithm.as_deref(), Some("UNDEFINED"));
+                    assert_eq!(view.character_set_client.as_deref(), Some("utf8mb4"));
                     assert!(view.restricted.is_none());
                 }
 
                 for option in ["NONE", "LOCAL", "CASCADED"] {
                     assert!(
-                        model.views.iter().any(|view| view.check_option == option),
+                        model
+                            .views
+                            .iter()
+                            .any(|view| view.check_option.as_deref() == Some(option)),
                         "{option} is absent"
                     );
                 }
 
-                assert!(model.views.iter().any(|view| view.is_updatable));
-                assert!(model.views.iter().any(|view| !view.is_updatable));
+                assert!(
+                    model
+                        .views
+                        .iter()
+                        .any(|view| view.is_updatable == Some(true))
+                );
+                assert!(
+                    model
+                        .views
+                        .iter()
+                        .any(|view| view.is_updatable == Some(false))
+                );
             },
         );
     }
@@ -1264,7 +1289,7 @@ mod tests {
 
                 assert_eq!(model.name, SCHEMA);
                 assert_eq!(model.charset, "utf8mb4");
-                assert_eq!(model.collation, "utf8mb4_unicode_520_ci");
+                assert_eq!(model.collation.as_deref(), Some("utf8mb4_unicode_520_ci"));
                 assert!(model.server.version().contains("MariaDB"));
                 assert_eq!(model.server.series(), server.name());
             },
@@ -1350,7 +1375,7 @@ mod tests {
                         &table
                             .foreign_keys()
                             .iter()
-                            .map(|key| key.name.as_ref())
+                            .map(|key| key.name.as_deref().unwrap_or_default())
                             .collect::<Vec<_>>(),
                     );
                 }
@@ -1991,8 +2016,8 @@ mod tests {
                 assert_eq!(pairs, 17, "{name}");
 
                 for key in &keys {
-                    assert!(key.referenced_key.is_some(), "{name}: {}", key.name);
-                    assert!(key.referenced_table.is_some(), "{name}: {}", key.name);
+                    assert!(key.referenced_key.is_some(), "{name}: {:?}", key.name);
+                    assert!(key.referenced_table.is_some(), "{name}: {:?}", key.name);
 
                     // The sixth field is settled by the read's population
                     // rather than by a value: FR-CAT-045 restricts the read to
@@ -2002,7 +2027,7 @@ mod tests {
                     for pair in &key.columns {
                         assert!(
                             !pair.referenced_column.is_empty(),
-                            "{name}: {} names an empty referenced column",
+                            "{name}: {:?} names an empty referenced column",
                             key.name
                         );
                     }
@@ -2045,7 +2070,7 @@ mod tests {
 
                         assert!(
                             carried.contains(&referenced),
-                            "{name}: {} names {referenced}, which this read does not carry —                              a key FR-CAT-057 should have excluded reached the model",
+                            "{name}: {:?} names {referenced}, which this read does not carry —                              a key FR-CAT-057 should have excluded reached the model",
                             key.name
                         );
                     }

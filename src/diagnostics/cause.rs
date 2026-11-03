@@ -23,8 +23,9 @@ use std::borrow::Cow;
 use crate::error::{
     ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
     KeyAbsence, Missing, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RenderReason,
-    TlsFault, TplDirFault, Unresolved, context_name, password_pair,
+    SqliteEnd, TlsFault, TplDirFault, Unresolved, context_name, password_pair,
 };
+use crate::model::database::Provider;
 
 /// The separator between two links of a template-engine error chain.
 const CHAIN_SEPARATOR: &str = ": caused by ";
@@ -71,7 +72,8 @@ const DATABASE_IS_NOT_A_FIELD_OF_ANY_FORM: &str = "; -d/--database was given, an
                                                    entry for commands that connect, not a \
                                                    field; the database on the server is set \
                                                    with --schema, or is the path part of --dsn \
-                                                   for an entry defined by dsn";
+                                                   for an entry defined by dsn; the database \
+                                                   file of a sqlite entry is set with --path";
 
 /// The content of the `cause` line for `error`, without its label.
 ///
@@ -155,8 +157,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             database_given,
         } => Cow::Owned(format!(
             "no --dsn, and none of --host, --port, --user or --schema, was given for entry \
-             '{entry}'; --tls, --password-command, --ca-file and --ca-path do not say where to \
-             connect{}",
+             '{entry}', and no --provider sqlite with --path; --tls, --password-command, \
+             --ca-file and --ca-path do not say where to connect{}",
             if *database_given {
                 DATABASE_IS_NOT_A_FIELD
             } else {
@@ -283,6 +285,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{value}' was supplied for '{parameter}', which takes {expected}; a ${{VAR}} may \
              stand for one part of the URL, never for the whole of it"
         )),
+        // FR-CONF-051 item 1: the key and the two values; the value given is
+        // reproduced only under the set of FR-ERR-022, and described otherwise.
+        Error::MalformedValue {
+            parameter, value, ..
+        } if is_provider(parameter) => {
+            Cow::Owned(if crate::project::config::keys::is_entry_name(value) {
+                format!("{parameter} takes mariadb or sqlite; the value given is {value}")
+            } else {
+                format!(
+                    "{parameter} takes mariadb or sqlite; the value given holds characters \
+                     outside letters, digits and underscores, or is longer than 64"
+                )
+            })
+        }
         Error::MalformedValue {
             parameter,
             value,
@@ -341,6 +357,9 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "{parameter} is empty or holds only whitespace; an entry must name {}",
             if parameter.ends_with("host") {
                 "a host"
+            } else if names_database_path(parameter) {
+                // FR-CONF-053: the empty path is refused as an empty host is.
+                "a database file"
             } else {
                 "a database"
             }
@@ -435,6 +454,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{value}' begins with '-' and was written as a token of its own, so tpl read it as a \
              flag rather than as the value of '{flag}'"
         )),
+        // FR-CONF-051 item 1: the value given is reproduced only under the set
+        // of FR-ERR-022.
+        Error::ValueOutsideEnumeration {
+            flag,
+            value,
+            permitted,
+            ..
+        } if flag == "--provider" && !crate::project::config::keys::is_entry_name(value) => {
+            Cow::Owned(format!(
+                "{flag} takes {}; the value given holds characters outside letters, digits and \
+                 underscores, or is longer than 64",
+                alternatives(permitted)
+            ))
+        }
         Error::ValueOutsideEnumeration {
             flag,
             value,
@@ -625,11 +658,24 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 None => format!("the cache of entry '{entry}' holds no {sought} named '{name}'"),
             })
         }
+        // A `sqlite` read searched the schema of a file, not a catalogue.
         Error::CatalogueObjectNotFound {
             kind,
             name,
             entry,
             database,
+            provider: Provider::Sqlite,
+            ..
+        } => Cow::Owned(format!(
+            "the schema '{database}' of the SQLite database read through database entry \
+             '{entry}' holds no {kind} named '{name}'"
+        )),
+        Error::CatalogueObjectNotFound {
+            kind,
+            name,
+            entry,
+            database,
+            provider: Provider::Mariadb,
             ..
         } => Cow::Owned(format!(
             "no row of INFORMATION_SCHEMA matches {kind} '{name}' in database '{database}', read \
@@ -1226,7 +1272,198 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              '{series}', which is outside the supported window; tpl supports {}",
             listed(supported)
         )),
+
+        // ---------------------------------------------- the provider ---
+        // FR-CFG-055: the flags that cannot stand together, and the provider
+        // that decides it.
+        Error::FlagRefusedByProvider {
+            flag,
+            provider: Provider::Sqlite,
+            ..
+        } => Cow::Owned(format!(
+            "a sqlite entry is described by --path alone; {flag} belongs to a mariadb entry"
+        )),
+        Error::FlagRefusedByProvider {
+            flag,
+            provider: Provider::Mariadb,
+            given,
+            ..
+        } => Cow::Owned(format!(
+            "{flag} belongs to a sqlite entry, and {}",
+            if *given {
+                "--provider mariadb makes this a mariadb entry"
+            } else {
+                "without --provider sqlite the entry is a mariadb entry"
+            }
+        )),
+        Error::PathRequired { .. } => Cow::Borrowed(
+            "a sqlite entry names its database file with --path, and the invocation gave none",
+        ),
+        // FR-CFG-048 as amended: the provider, the key written, every key
+        // the entry carries that the other provider takes, and that a change
+        // of provider requires removing them.
+        Error::ProviderIncoherentWrite {
+            entry,
+            provider,
+            written,
+            carried,
+            ..
+        } => {
+            let other = match provider {
+                Provider::Mariadb => Provider::Sqlite,
+                Provider::Sqlite => Provider::Mariadb,
+            };
+            let leaf = written.rsplit('.').next().unwrap_or(written);
+            if leaf == "provider" {
+                Cow::Owned(format!(
+                    "entry '{entry}' carries {}, which only a {other} entry takes; changing its \
+                     provider requires removing them",
+                    conjoined(carried)
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "entry '{entry}' is a {other} entry and carries {}, which only a {other} entry \
+                     takes, and {leaf} belongs to a {provider} entry; changing its provider \
+                     requires removing them",
+                    conjoined(carried)
+                ))
+            }
+        }
+        // FR-CONF-052: the file, the entry, its provider and how it is known,
+        // and every key the provider refuses.
+        Error::ProviderRefusesKeys {
+            entry,
+            file,
+            provider,
+            written,
+            keys,
+        } => Cow::Owned(format!(
+            "{} gives database entry '{entry}' the provider {provider}{}, and that provider does \
+             not take {}",
+            file.display(),
+            if *written {
+                ""
+            } else {
+                ", taken from an absent provider key"
+            },
+            conjoined(keys)
+        )),
+
+        // ------------------------------------------------ the SQLite file ---
+        // FR-LITE-005: the path as resolved, the kind found, and the rule.
+        Error::SqliteNotRegularFile { path, kind, .. } => Cow::Owned(format!(
+            "{} is a {kind}, and a SQLite database is read only from a regular file",
+            path.display()
+        )),
+        // FR-LITE-005 and the first row of FR-LITE-007: the check of the kind,
+        // and what the filesystem returned.
+        Error::SqliteFileLookup { path, returned, .. } => Cow::Owned(format!(
+            "checking the kind of {} failed: {}",
+            path.display(),
+            os(returned)
+        )),
+        // FR-LITE-007 and FR-LITE-040: the path, the operation and what the
+        // library returned, in the form FR-GLOB-018 fixes.
+        Error::SqliteFileUnreadable {
+            path, at, report, ..
+        }
+        | Error::SqliteFileRefused {
+            path, at, report, ..
+        } => Cow::Owned(format!(
+            "{at} of {} failed: the library returned {report}",
+            path.display()
+        )),
+        // The note on FR-ERR-034 for a `sqlite` entry: the path, the statement
+        // and what ended it, naming a lock only on the library's word.
+        Error::SqliteUnavailable {
+            path,
+            statement,
+            ended,
+            ..
+        } => match ended {
+            SqliteEnd::Locked {
+                report,
+                waited: Some((bound, limit)),
+            } => Cow::Owned(format!(
+                "the database {} was locked while {statement} ran: the library returned {report} \
+                 once {} of {} expired while it waited",
+                path.display(),
+                sqlite_bound(*bound),
+                seconds(*limit)
+            )),
+            SqliteEnd::Locked {
+                report,
+                waited: None,
+            } => Cow::Owned(format!(
+                "the database {} was locked while {statement} ran: the library returned {report}",
+                path.display()
+            )),
+            SqliteEnd::Deadline { bound, limit } => Cow::Owned(format!(
+                "{statement} on {} did not finish within {} of {}",
+                path.display(),
+                sqlite_bound(*bound),
+                seconds(*limit)
+            )),
+            SqliteEnd::Contended { report } => Cow::Owned(format!(
+                "{statement} on {} was ended by another connection: the library returned \
+                 {report}",
+                path.display()
+            )),
+        },
+        // FR-LITE-012: the control or limit, the value set and the value read
+        // back; FR-ERR-034's row for 70 is the invariant and where.
+        Error::SqliteControlNotInEffect {
+            path,
+            control,
+            set,
+            read_back,
+            ..
+        } => Cow::Owned(format!(
+            "the SQLite library the binary carries did not confirm {control} on {}: it was set \
+             to {set} and read back {read_back}, so nothing was read from the file",
+            path.display()
+        )),
+        Error::SqliteDefect {
+            path,
+            at,
+            invariant,
+            report,
+            location,
+            ..
+        } => Cow::Owned(match report {
+            Some(report) => format!(
+                "{invariant}: {at} of {} failed and the library returned {report} (detected at \
+                 {}:{})",
+                path.display(),
+                location.file(),
+                location.line()
+            ),
+            None => format!(
+                "{invariant}, at {at} of {} (detected at {}:{})",
+                path.display(),
+                location.file(),
+                location.line()
+            ),
+        }),
+        // FR-LITE-035: the view, the property and the reason the library gave.
+        Error::ViewColumnsUnreadable { view, reason, .. } => Cow::Owned(format!(
+            "the definition of view '{view}' does not compile, so its columns could not be read: \
+             the library returned {reason}"
+        )),
     }
+}
+
+/// Which bound of `FR-GLOB-012` ended a SQLite statement, in words.
+const fn sqlite_bound(bound: crate::error::DeadlineBound) -> &'static str {
+    match bound {
+        crate::error::DeadlineBound::Phase => "the catalogue-query deadline",
+        crate::error::DeadlineBound::Overall => "the overall budget of --timeout",
+    }
+}
+
+/// A duration as a number of seconds, the unit every deadline key takes.
+fn seconds(limit: std::time::Duration) -> String {
+    format!("{} s", limit.as_secs())
 }
 
 /// The rule of `FR-CONF-007` a pair of password sources breaks.
@@ -1341,10 +1578,16 @@ pub(super) fn is_port_reference(parameter: &str, value: &str) -> bool {
 /// Whether `value`, given for `ca_file` or `ca_path` or for their flags,
 /// holds `${`, which `FR-CONF-047` refuses in either key.
 pub(crate) fn is_path_reference(parameter: &str, value: &str) -> bool {
-    (matches!(parameter, "--ca-file" | "--ca-path")
+    (matches!(parameter, "--ca-file" | "--ca-path" | "--path")
         || parameter.ends_with(".ca_file")
-        || parameter.ends_with(".ca_path"))
+        || parameter.ends_with(".ca_path")
+        || parameter.ends_with(".path"))
         && value.contains("${")
+}
+
+/// Whether `parameter` writes the provider of an entry (`FR-CONF-051`).
+pub(super) fn is_provider(parameter: &str) -> bool {
+    parameter == "--provider" || parameter.ends_with(".provider")
 }
 
 /// What is wrong with an entry name `FR-CONF-048` refuses, described rather
@@ -1399,6 +1642,13 @@ pub(super) fn is_whole_dsn_reference(parameter: &str, value: &str) -> bool {
 /// string: the flag of `FR-CFG-046`, or the key of `FR-CONF-002`.
 pub(super) fn is_password_command(parameter: &str) -> bool {
     parameter == "--password-command" || parameter.ends_with(".password_command")
+}
+
+/// Whether `parameter` is one that names the database file of a `sqlite`
+/// entry: the flag of `FR-CFG-055`, or the key of `FR-CONF-053`. `ca_path`
+/// ends in `path` too, and is not one.
+pub(super) fn names_database_path(parameter: &str) -> bool {
+    parameter == "--path" || parameter.ends_with(".path")
 }
 
 /// What the step of an expression rooted at a bound variable found

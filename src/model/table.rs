@@ -7,7 +7,7 @@
 //! | `FR-CAT-002` — every table states which of the two it is | [`Table::table_type`] |
 //! | `FR-CAT-009` — columns, generated and invisible ones included | [`Table::columns`] |
 //! | `FR-CAT-010` — an index is one object with an ordered column list | [`Table::indexes`], folded in [`super::index`] |
-//! | `FR-CAT-011`, `FR-CAT-043` — the primary key, from the index catalogue and no other source | [`Table::primary_key`], which **is** the index named `PRIMARY` in that same collection |
+//! | `FR-CAT-011`, `FR-CAT-043` — the primary key, from the index catalogue and no other source | [`Table::primary_key`], set by the producer: for a MariaDB read, the index named `PRIMARY` in that same collection ([`TableParts::with_primary_index`]); for a SQLite read, the key of `FR-LITE-029` |
 //! | `FR-CAT-012`, `FR-CAT-013` — both directions of a foreign key | [`Table::foreign_keys`] and [`Table::referenced_by`] |
 //! | `FR-CAT-014`, `FR-CAT-015` — triggers and `CHECK` constraints | [`Table::triggers`] and [`Table::check_constraints`] |
 //! | `FR-CAT-044` — no key names a column the table does not carry | [`Table::assemble`] is the only constructor and it refuses one |
@@ -22,13 +22,14 @@
 //! type is cheap; relying on the catalogue to omit them is wrong on three
 //! series out of four.
 //!
-//! *The primary key is not a second copy.* `FR-CAT-043` presents the index
-//! named `PRIMARY` both in the index collection and as the table's primary key,
-//! so that a template need not find it by matching a name. Storing it twice
-//! would make the two able to disagree; [`Table::primary_key`] reads it out of
-//! the collection instead, which is also the strongest form of *from the index
-//! catalogue table and from no other source* — there is no other field for
-//! another source to be written into.
+//! *The primary key is a value the producer sets* (`OD-35`). `FR-CAT-043`
+//! presents the index named `PRIMARY` both in the index collection and as the
+//! table's primary key, so that a template need not find it by matching a
+//! name; a SQLite rowid alias is a primary key with no index at all
+//! (`FR-LITE-029`), so no index name can stand for every key. The MariaDB
+//! producers set the key from the index named `PRIMARY` and from nothing else,
+//! through [`TableParts::with_primary_index`], so the two cannot disagree on
+//! that path; the SQLite fold sets the key it read from the `pk` field.
 
 use std::borrow::Cow;
 
@@ -38,7 +39,7 @@ use thiserror::Error;
 use super::check_constraint::CheckConstraint;
 use super::column::Column;
 use super::foreign_key::{ForeignKey, IncomingForeignKey};
-use super::index::Index;
+use super::index::{Index, PrimaryKey};
 use super::restricted::Restricted;
 use super::trigger::Trigger;
 
@@ -155,6 +156,12 @@ pub struct TableParts<'a> {
     /// The indexes, including the one named `PRIMARY`.
     pub indexes: Vec<Index<'a>>,
 
+    /// The primary key, or [`None`] where the table has none.
+    ///
+    /// It is set by the producer: a MariaDB producer through
+    /// [`TableParts::with_primary_index`], a SQLite one from `FR-LITE-029`.
+    pub primary_key: Option<PrimaryKey<'a>>,
+
     /// The outgoing foreign keys.
     pub foreign_keys: Vec<ForeignKey<'a>>,
 
@@ -187,12 +194,32 @@ impl<'a> TableParts<'a> {
             comment: Cow::Borrowed(""),
             columns: Vec::new(),
             indexes: Vec::new(),
+            primary_key: None,
             foreign_keys: Vec::new(),
             referenced_by: Vec::new(),
             triggers: Vec::new(),
             check_constraints: Vec::new(),
             restricted: None,
         }
+    }
+}
+
+impl TableParts<'_> {
+    /// The same parts, with the primary key set to the index named `PRIMARY`,
+    /// or to none where no index carries that name (`FR-CAT-011`,
+    /// `FR-CAT-043`).
+    ///
+    /// It is how every MariaDB producer — the fold of a server read and the
+    /// read-back of a `mariadb` document — sets the key: from the index
+    /// collection and from no other source.
+    #[must_use]
+    pub fn with_primary_index(mut self) -> Self {
+        self.primary_key = self
+            .indexes
+            .iter()
+            .find(|index| index.is_primary_key())
+            .map(PrimaryKey::from);
+        self
     }
 }
 
@@ -226,6 +253,9 @@ pub struct Table<'a> {
 
     /// The indexes (`FR-CAT-010`), including the primary key.
     indexes: Vec<Index<'a>>,
+
+    /// The primary key (`FR-CAT-011`, `FR-CAT-043`, `FR-LITE-029`).
+    primary_key: Option<PrimaryKey<'a>>,
 
     /// The outgoing foreign keys (`FR-CAT-012`).
     foreign_keys: Vec<ForeignKey<'a>>,
@@ -282,15 +312,25 @@ impl<'a> Table<'a> {
             }
         }
 
+        if let Some(key) = &parts.primary_key {
+            for member in &key.columns {
+                Self::require_column(&parts, key_name(key.name.as_deref()), &member.name)?;
+            }
+        }
+
         for key in &parts.foreign_keys {
             for member in &key.columns {
-                Self::require_column(&parts, &key.name, &member.column)?;
+                Self::require_column(&parts, key_name(key.name.as_deref()), &member.column)?;
             }
         }
 
         for incoming in &parts.referenced_by {
             for member in &incoming.key.columns {
-                Self::require_column(&parts, &incoming.key.name, &member.referenced_column)?;
+                Self::require_column(
+                    &parts,
+                    key_name(incoming.key.name.as_deref()),
+                    &member.referenced_column,
+                )?;
             }
         }
 
@@ -302,6 +342,7 @@ impl<'a> Table<'a> {
             comment,
             columns,
             indexes,
+            primary_key,
             foreign_keys,
             referenced_by,
             triggers,
@@ -317,6 +358,7 @@ impl<'a> Table<'a> {
             comment,
             columns,
             indexes,
+            primary_key,
             foreign_keys,
             referenced_by,
             triggers,
@@ -396,14 +438,15 @@ impl<'a> Table<'a> {
         &self.indexes
     }
 
-    /// The primary key — the index named `PRIMARY` (`FR-CAT-011`,
-    /// `FR-CAT-043`).
+    /// The primary key (`FR-CAT-011`, `FR-CAT-043`, `FR-LITE-029`), or
+    /// [`None`] where the table has none.
     ///
-    /// [`None`] where the table has none. The answer is an element of
-    /// [`Table::indexes`] and not a copy of one, so the two cannot disagree.
+    /// On a MariaDB read it is the index named `PRIMARY`, set from the index
+    /// collection by [`TableParts::with_primary_index`]; on a SQLite read it is
+    /// the key of `FR-LITE-029`, which may have no index of its own.
     #[must_use]
-    pub fn primary_key(&self) -> Option<&Index<'a>> {
-        self.indexes.iter().find(|index| index.is_primary_key())
+    pub const fn primary_key(&self) -> Option<&PrimaryKey<'a>> {
+        self.primary_key.as_ref()
     }
 
     /// The outgoing foreign keys (`FR-CAT-012`).
@@ -442,6 +485,15 @@ impl<'a> Table<'a> {
     }
 }
 
+/// How a key with no name is named where `FR-CAT-044` reports it.
+///
+/// A SQLite foreign key and a rowid-alias primary key carry no name
+/// (`FR-LITE-029`, `FR-LITE-031`), and the refusal still has to say which key
+/// named the column.
+fn key_name(name: Option<&str>) -> &str {
+    name.unwrap_or("(unnamed)")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Table, TableParts, TableType};
@@ -450,7 +502,7 @@ mod tests {
     use crate::model::foreign_key::{
         ForeignKey, ForeignKeyColumn, IncomingForeignKey, ReferentialAction,
     };
-    use crate::model::index::{Index, IndexColumn, PRIMARY_KEY_NAME, SortDirection};
+    use crate::model::index::{Index, IndexColumn, PRIMARY_KEY_NAME, PrimaryKey, SortDirection};
     use crate::model::restricted::Restricted;
     use std::borrow::Cow;
 
@@ -492,7 +544,7 @@ mod tests {
                     prefix_length: None,
                 })
                 .collect(),
-            index_type: Cow::Borrowed("BTREE"),
+            index_type: Some(Cow::Borrowed("BTREE")),
             comment: Cow::Borrowed(""),
             ignored: false,
         }
@@ -500,7 +552,7 @@ mod tests {
 
     fn foreign_key<'a>(name: &'a str, column: &'a str, referenced: &'a str) -> ForeignKey<'a> {
         ForeignKey {
-            name: Cow::Borrowed(name),
+            name: Some(Cow::Borrowed(name)),
             columns: vec![ForeignKeyColumn {
                 column: Cow::Borrowed(column),
                 referenced_column: Cow::Borrowed(referenced),
@@ -521,6 +573,7 @@ mod tests {
             indexes: vec![index(PRIMARY_KEY_NAME, &["tariff_id"])],
             ..TableParts::new(Cow::Borrowed(TARIFF), TableType::SystemVersioned)
         }
+        .with_primary_index()
     }
 
     #[test]
@@ -556,24 +609,27 @@ mod tests {
     }
 
     #[test]
-    fn fr_cat_043_the_primary_key_is_the_index_named_primary_and_is_not_a_second_copy_of_it() {
+    fn fr_cat_043_the_primary_key_is_the_index_named_primary_and_nothing_else() {
         // FR-CAT-043: the index catalogue table is the authoritative source,
         // and the primary key is the index it reports under the name PRIMARY.
-        // The answer is an element of the index collection, so the two cannot
-        // disagree.
+        // OD-35: the MariaDB producer sets it from that index, field for
+        // field, so the two cannot disagree.
         let table = Table::assemble(parts()).expect("the fixture assembles");
         let primary = table.primary_key().expect("tariff has a primary key");
 
-        assert_eq!(primary.name, PRIMARY_KEY_NAME);
-        assert!(std::ptr::eq(primary, &table.indexes()[0]));
+        assert_eq!(primary.name.as_deref(), Some(PRIMARY_KEY_NAME));
+        assert_eq!(*primary, PrimaryKey::from(&table.indexes()[0]));
     }
 
     #[test]
     fn fr_cat_043_a_table_with_no_index_named_primary_has_no_primary_key() {
-        let table = Table::assemble(TableParts {
-            indexes: vec![index("uq_tariff_code", &["tariff_id"])],
-            ..parts()
-        })
+        let table = Table::assemble(
+            TableParts {
+                indexes: vec![index("uq_tariff_code", &["tariff_id"])],
+                ..parts()
+            }
+            .with_primary_index(),
+        )
         .expect("the key names a column the table carries");
 
         assert_eq!(table.primary_key(), None);
@@ -587,15 +643,62 @@ mod tests {
         // and the column catalogue carries no row for `row_end` on any table.
         // A model built from that source would carry an internally
         // inconsistent table; this is what stops it.
-        let refused = Table::assemble(TableParts {
-            indexes: vec![index(PRIMARY_KEY_NAME, &["tariff_id", "row_end"])],
-            ..parts()
-        })
+        let refused = Table::assemble(
+            TableParts {
+                indexes: vec![index(PRIMARY_KEY_NAME, &["tariff_id", "row_end"])],
+                ..parts()
+            }
+            .with_primary_index(),
+        )
         .expect_err("row_end is absent from the column list");
 
         assert_eq!(refused.table, TARIFF);
         assert_eq!(refused.key, PRIMARY_KEY_NAME);
         assert_eq!(refused.column, "row_end");
+    }
+
+    #[test]
+    fn fr_lite_029_a_primary_key_the_producer_sets_is_carried_without_an_index_and_checked() {
+        // FR-LITE-029 and OD-35: a rowid alias is a primary key with no name
+        // and no index, so the table carries the key the producer set; and
+        // FR-CAT-044 holds over it like over every other key.
+        let rowid = PrimaryKey {
+            name: None,
+            unique: true,
+            columns: vec![IndexColumn {
+                name: Cow::Borrowed("tariff_id"),
+                direction: Some(SortDirection::Ascending),
+                prefix_length: None,
+            }],
+            index_type: None,
+            comment: Cow::Borrowed(""),
+            ignored: false,
+        };
+        let table = Table::assemble(TableParts {
+            indexes: Vec::new(),
+            primary_key: Some(rowid.clone()),
+            ..parts()
+        })
+        .expect("the key names the one column the table carries");
+
+        assert_eq!(table.primary_key(), Some(&rowid));
+        assert!(table.indexes().is_empty());
+
+        let refused = Table::assemble(TableParts {
+            indexes: Vec::new(),
+            primary_key: Some(PrimaryKey {
+                columns: vec![IndexColumn {
+                    name: Cow::Borrowed("absent"),
+                    direction: None,
+                    prefix_length: None,
+                }],
+                ..rowid
+            }),
+            ..parts()
+        })
+        .expect_err("the key names a column the table does not carry");
+
+        assert_eq!(refused.column, "absent");
     }
 
     #[test]

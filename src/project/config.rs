@@ -52,6 +52,7 @@ use toml::de::{DeTable, DeValue};
 use crate::deadline::Seconds;
 use crate::diagnostics::suggest::{self, Population};
 use crate::error::{Error, Position};
+use crate::model::database::Provider;
 use crate::project::secret::Redacted;
 use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
 
@@ -713,11 +714,56 @@ fn read_entry(block: &DeTable<'_>, text: &str, entry: &str, file: &Path) -> Resu
             EntryKey::CaPath => {
                 read.ca_path = Some(PathBuf::from(literal_path(value, text, &key, file)?));
             }
+            EntryKey::Provider => read.provider = Some(provider(value, text, &key, file)?),
+            // FR-CONF-054: read as a literal path, and a `${` refused here, at
+            // step 3, as FR-CONF-047 refuses one in `ca_file`.
+            EntryKey::Path => {
+                read.path = Some(PathBuf::from(literal_path(value, text, &key, file)?));
+            }
         }
     }
 
     Ok(read)
 }
+
+/// The provider `value` holds (`FR-CONF-051`), compared exactly.
+///
+/// A value that names neither provider is the `78` of item 2 of
+/// `FR-CONF-051`, at step 3 of `FR-ERR-006`, whichever entry carries it. The
+/// value found enters the `cause` only where it matches the set of
+/// `FR-ERR-022`; a value outside it is described rather than reproduced.
+fn provider(
+    value: &Spanned<DeValue<'_>>,
+    text: &str,
+    key: &str,
+    file: &Path,
+) -> Result<Provider, Error> {
+    let expected = ValueType::Provider.expected();
+
+    if let Some(provider) = value.get_ref().as_str().and_then(Provider::from_name) {
+        return Ok(provider);
+    }
+
+    let found = match value.get_ref().as_str() {
+        Some(written) if keys::is_entry_name(written) => written.to_owned(),
+        Some(_) => OUTSIDE_THE_SET.to_owned(),
+        None => value.get_ref().type_str().to_owned(),
+    };
+
+    Err(Error::ConfigurationValueMalformed {
+        key: key.to_owned(),
+        file: file.to_owned(),
+        position: at(text, value),
+        found,
+        expected,
+        expanded_from: None,
+    })
+}
+
+/// How the `cause` of `FR-CONF-051` describes a provider value it does not
+/// reproduce, because the value falls outside the set of `FR-ERR-022`.
+const OUTSIDE_THE_SET: &str =
+    "a string holding characters outside letters, digits and underscores, or longer than 64";
 
 /// Applies `FR-CONF-006` and `FR-CONF-007` to one entry, and the DSN grammar of
 /// `FR-CONF-009` through `FR-CONF-012` to the DSN it may carry.

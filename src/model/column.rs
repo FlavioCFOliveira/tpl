@@ -90,9 +90,11 @@ pub struct Generated<'a> {
     /// The generation expression, as the catalogue rewrote it: identifiers
     /// backtick-quoted, function names lower-cased, carrying no `AS`, no
     /// enclosing parentheses, and neither the `VIRTUAL` nor the `STORED`
-    /// keyword.
+    /// keyword — or [`None`] for a `sqlite` read, which keeps the
+    /// expression only in the stored `CREATE TABLE` text (`FR-LITE-025`,
+    /// `BR-LITE-002`).
     #[serde(borrow)]
-    pub expression: Cow<'a, str>,
+    pub expression: Option<Cow<'a, str>>,
 
     /// Whether the value is stored, read from the attribute field and never
     /// from the is-generated field.
@@ -840,9 +842,9 @@ mod tests {
         // expression is the fixture's, as the catalogue rewrote it.
         let generated = Column {
             generated: Some(Generated {
-                expression: Cow::Borrowed(
+                expression: Some(Cow::Borrowed(
                     "round(`declared_value` * coalesce(`insurance_rate`,0),2)",
-                ),
+                )),
                 storage: GeneratedStorage::Stored,
             }),
             ..column("insured_value")
@@ -854,7 +856,12 @@ mod tests {
             .expect("the column was built generated");
 
         assert_eq!(carried.storage, GeneratedStorage::Stored);
-        assert!(carried.expression.contains("coalesce"));
+        assert!(
+            carried
+                .expression
+                .as_deref()
+                .is_some_and(|expression| expression.contains("coalesce"))
+        );
     }
 
     #[test]
@@ -982,7 +989,7 @@ mod tests {
                 auto_increment: false,
                 invisible: true,
                 generated: Some(Generated {
-                    expression: Cow::Borrowed("concat(`a`,'b')"),
+                    expression: Some(Cow::Borrowed("concat(`a`,'b')")),
                     storage: GeneratedStorage::Virtual,
                 }),
                 on_update: Some(Cow::Borrowed("on update current_timestamp()")),

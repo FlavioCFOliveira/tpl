@@ -1479,10 +1479,11 @@ fn fr_cache_024_the_cache_arm_names_a_routine_by_the_same_rules_the_schema_arm_d
 // ------------------------------------------------- the reduction of info ---
 
 #[test]
-fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() {
+fn fr_sch_031_info_carries_five_members_and_does_not_emit_what_the_dump_emits() {
     // FR-SCH-031 as the twenty-seventh edition amended it: `data.database` is
-    // a **named subset** — `name`, `charset`, `collation` and the `server`
-    // object — and it does not carry the three collections of FR-CTX-035. The
+    // a **named subset** — `name`, `charset`, `collation`, `provider` (since
+    // the sixty-fifth edition) and the `server` object — and it does not carry
+    // the three collections of FR-CTX-035. The
     // requirement states the consequence in its own text: `tpl schema info
     // --format json` and `tpl schema dump` SHALL NOT emit the same bytes.
     //
@@ -1491,7 +1492,7 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
     // subcommands indistinguishable to a caller that reads only the bytes.
     let _guard = fixture::exclusive();
     let Some(series) = fixture::series(
-        "fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits",
+        "fr_sch_031_info_carries_five_members_and_does_not_emit_what_the_dump_emits",
     ) else {
         return;
     };
@@ -1515,9 +1516,10 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
             .as_object()
             .unwrap_or_else(|| panic!("{name}: data.database is not an object: {info}"));
 
-        // Exactly four members, and the four FR-SCH-031 names. The count is
-        // asserted beside the membership because a fifth member is the defect
-        // the amendment removed.
+        // Exactly five members, and the five FR-SCH-031 names: the sixty-fifth
+        // edition adds the `provider` of FR-CTX-043 as a fourth metadata
+        // field. The count is asserted beside the membership because a member
+        // beyond them is the defect the twenty-seventh edition removed.
         //
         // The membership is read from the parsed document and the **order**
         // from the bytes below: `preserve_order` is off, per FR-OUT-013, so a
@@ -1527,8 +1529,8 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
 
         assert_eq!(
             members,
-            ["charset", "collation", "name", "server"],
-            "{name}: FR-SCH-031 fixes exactly these four members"
+            ["charset", "collation", "name", "provider", "server"],
+            "{name}: FR-SCH-031 fixes exactly these five members"
         );
 
         for absent in ["tables", "views", "routines"] {
@@ -1543,7 +1545,7 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
         // half of what FR-SCH-031 promises a caller.
         let dump = document(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
 
-        for shared in ["name", "charset", "collation", "server"] {
+        for shared in ["name", "charset", "collation", "provider", "server"] {
             assert_eq!(
                 info["data"]["database"][shared], dump["data"]["database"][shared],
                 "{name}: {shared} differs between the two commands"
@@ -1569,7 +1571,13 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
         // from the end, per OD-18 — read where it is observable, in the bytes.
         let mut at = 0;
 
-        for key in ["\"name\"", "\"charset\"", "\"collation\"", "\"server\""] {
+        for key in [
+            "\"name\"",
+            "\"charset\"",
+            "\"collation\"",
+            "\"provider\"",
+            "\"server\"",
+        ] {
             let found = info_bytes[at..]
                 .find(key)
                 .unwrap_or_else(|| panic!("{name}: {key} is out of order in {info_bytes}"));

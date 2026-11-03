@@ -30,7 +30,8 @@ use std::path::Path;
 
 use crate::cache::Shelf;
 use crate::diagnostics::suggest::{self, Population};
-use crate::error::{CatalogueObjectKind, Error};
+use crate::error::{CatalogueObjectKind, Error, FileValue};
+use crate::model::database::Provider;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::Named;
 use crate::model::document::shape::TableDocument;
@@ -154,13 +155,19 @@ fn lower(kind: &RoutineKind<'_>) -> Option<&'static str> {
 /// connection and `FR-RND-019` resolves no entry.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Sought<'a> {
-    /// A catalogue read, served by the cache or by a server.
+    /// A catalogue read, served by the cache or by a server or a database
+    /// file.
     Catalogue {
         /// The database entry of `.tpl/.cfg` the read was made through.
         entry: &'a str,
 
-        /// The server-side database the object was sought in (`FR-CONF-041`).
+        /// The server-side database the object was sought in (`FR-CONF-041`),
+        /// or `main` for a `sqlite` read (`FR-LITE-019`).
         database: &'a str,
+
+        /// The provider of the read, which decides what a `cause` says was
+        /// searched (`FR-CTX-043`).
+        provider: Provider,
     },
 
     /// A `--context` document (`FR-RND-016`).
@@ -205,6 +212,25 @@ pub(crate) fn view<'a, 'd>(
     at: Sought<'_>,
 ) -> Result<&'a View<'d>, Error> {
     let (_, found) = member(&document.views, CatalogueObjectKind::View, name, at)?;
+
+    // FR-LITE-035: a view a `sqlite` read could not read the columns of is
+    // `77`, and the `cause` carries the reason the library gave, which travels
+    // beside the document from a live read.
+    if found.restricted.is_some()
+        && let Some(unreadable) = document
+            .unreadable
+            .iter()
+            .find(|unreadable| unreadable.name == found.name)
+    {
+        return Err(Error::ViewColumnsUnreadable {
+            entry: match at {
+                Sought::Catalogue { entry, .. } => entry.to_owned(),
+                Sought::Document { .. } => String::new(),
+            },
+            view: FileValue::new(found.name.as_ref()),
+            reason: unreadable.reason.clone(),
+        });
+    }
 
     crate::mariadb::catalogue::completeness::of_view(found)?;
 
@@ -325,7 +351,9 @@ pub(crate) fn routine_member<'m, M: RoutineMember>(
 
     if matched.next().is_some() {
         return Err(match at {
-            Sought::Catalogue { entry, database } => Error::AmbiguousRoutineName {
+            Sought::Catalogue {
+                entry, database, ..
+            } => Error::AmbiguousRoutineName {
                 name: name.to_owned(),
                 entry: entry.to_owned(),
                 database: database.to_owned(),
@@ -360,11 +388,16 @@ where
     let nearest: Vec<String> = nearest.names().map(str::to_owned).collect();
 
     match at {
-        Sought::Catalogue { entry, database } => Error::CatalogueObjectNotFound {
+        Sought::Catalogue {
+            entry,
+            database,
+            provider,
+        } => Error::CatalogueObjectNotFound {
             kind,
             name: name.to_owned(),
             entry: entry.to_owned(),
             database: database.to_owned(),
+            provider,
             nearest,
         },
         Sought::Document { path, database } => Error::ContextObjectNotFound {
@@ -491,6 +524,7 @@ mod tests {
         Sought::Catalogue {
             entry: "shop",
             database: "freight",
+            provider: crate::model::database::Provider::Mariadb,
         }
     }
 
@@ -584,5 +618,106 @@ mod tests {
         let refused = super::view(&document, "v_sales", at()).expect_err("the view is marked");
 
         assert_eq!(refused.exit_code(), 77);
+    }
+
+    /// The SQLite fixture of `FR-LITE-038`, read through the provider
+    /// dispatch, under a scratch directory the caller keeps alive.
+    fn sqlite_read(
+        build: impl FnOnce(&std::path::Path) -> std::path::PathBuf,
+    ) -> (crate::project::scratch::Scratch, crate::provider::Read) {
+        let scratch = crate::project::scratch::Scratch::new();
+        let root = scratch.directory("fixture");
+        let path = build(&root);
+        let settings = crate::project::settings::FileSettings::new(
+            "ledger",
+            &path,
+            crate::deadline::Deadlines::default(),
+        );
+        let read = crate::provider::read(
+            crate::provider::Source::File(&settings),
+            &crate::project::settings::clock(None),
+        )
+        .expect("the file reads");
+
+        (scratch, read)
+    }
+
+    /// Where a lookup over a `sqlite` read was made.
+    fn in_file() -> Sought<'static> {
+        Sought::Catalogue {
+            entry: "ledger",
+            database: "main",
+            provider: crate::model::database::Provider::Sqlite,
+        }
+    }
+
+    #[test]
+    fn fr_lite_035_naming_a_view_that_does_not_compile_is_77_with_the_reason() {
+        // FR-LITE-035 and FR-PRIV-003: the view, the property and the reason
+        // the library gave, which travels beside the document from the read.
+        let (_scratch, read) = sqlite_read(|root| crate::sqlite::fixture::build(root).main.clone());
+        let database = read.model().expect("it folds");
+        let mut document = context(&database).expect("the document builds");
+        document.unreadable = read.unreadable().to_vec();
+
+        let refused = super::view(&document, "v_quay_schedule", in_file()).expect_err("77");
+        assert_eq!(refused.exit_code(), 77);
+        let Error::ViewColumnsUnreadable { view, reason, .. } = &refused else {
+            panic!("{refused:?}");
+        };
+        assert_eq!(view.as_str(), "v_quay_schedule");
+        assert_eq!(reason.name(), "SQLITE_ERROR");
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(rendered.contains("v_quay_schedule"), "{rendered}");
+        assert!(rendered.contains("no such table"), "{rendered}");
+        assert!(!rendered.contains("privilege"), "{rendered}");
+
+        assert!(super::view(&document, "v_vessel_fleet", in_file()).is_ok());
+    }
+
+    #[test]
+    fn fr_lite_022_a_routine_named_on_a_sqlite_read_is_66_and_names_no_catalogue() {
+        // FR-LITE-022: SQLite has no routines, and a routine named is answered
+        // as one a server's database does not hold — without naming the
+        // INFORMATION_SCHEMA a SQLite read never reached.
+        let (_scratch, read) = sqlite_read(|root| crate::sqlite::fixture::build(root).main.clone());
+        let database = read.model().expect("it folds");
+        let document = context(&database).expect("the document builds");
+
+        let refused = super::routine(&document, &Wanted::Bare("calc_vat"), in_file(), INVOCATION)
+            .expect_err("SQLite has no routines");
+        assert_eq!(refused.exit_code(), 66);
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(!rendered.contains("INFORMATION_SCHEMA"), "{rendered}");
+        assert!(rendered.contains("SQLite"), "{rendered}");
+    }
+
+    #[test]
+    fn fr_err_046_a_name_of_the_file_is_bounded_in_a_diagnostic_and_whole_in_the_model() {
+        // FR-ERR-046: a view whose name is 300 characters long, refused by its
+        // columns; the model carries the name whole and the diagnostic bounds
+        // it where it interpolates it.
+        let long = "w".repeat(300);
+        let created = long.clone();
+        let (_scratch, read) = sqlite_read(move |root| {
+            let path = root.join("long.sqlite");
+            let connection = rusqlite::Connection::open(&path).expect("the database opens");
+            connection
+                .execute_batch(&format!(
+                    "CREATE VIEW \"{created}\" AS SELECT * FROM \"missing_{created}\""
+                ))
+                .expect("the view is created");
+            path
+        });
+        let database = read.model().expect("it folds");
+        assert_eq!(database.views[0].name.len(), 300);
+        let mut document = context(&database).expect("the document builds");
+        document.unreadable = read.unreadable().to_vec();
+
+        let refused = super::view(&document, &long, in_file()).expect_err("77");
+        let rendered = crate::diagnostics::rendered(&refused);
+
+        assert!(rendered.contains("characters omitted ..."), "{rendered}");
+        assert!(!rendered.contains(&long), "{rendered}");
     }
 }

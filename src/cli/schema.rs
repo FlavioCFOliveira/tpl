@@ -47,6 +47,7 @@ use super::local::{self, Format};
 use super::source::Reader;
 use crate::cache::{Look, Summary, paths::Collection};
 use crate::error::Error;
+use crate::model::database::Provider;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::shape::TableDocument;
 use crate::model::routine::Routine;
@@ -297,20 +298,25 @@ struct DatabaseMetadata<'a, 'd> {
     /// The schema's default character set.
     charset: &'a str,
 
-    /// The schema's default collation.
-    collation: &'a str,
+    /// The schema's default collation, `null` for a `sqlite` read.
+    collation: Option<&'a str>,
+
+    /// The provider the read was made through (`FR-CTX-043`), the fourth
+    /// metadata field (`FR-SCH-031`).
+    provider: Provider,
 
     /// The server the read was made against (`FR-CTX-031`).
     server: &'a Server<'d>,
 }
 
 impl<'a, 'd> DatabaseMetadata<'a, 'd> {
-    /// The four members of `summary` this command presents.
+    /// The five members of `summary` this command presents.
     fn of(summary: &'a Summary<'d>) -> Self {
         Self {
             name: &summary.name,
             charset: &summary.charset,
-            collation: &summary.collation,
+            collation: summary.collation.as_deref(),
+            provider: summary.provider,
             server: &summary.server,
         }
     }
@@ -587,6 +593,7 @@ fn sought<'a>(entry: &'a str, document: &'a DatabaseDocument<'_>) -> named::Soug
     named::Sought::Catalogue {
         entry,
         database: &document.name,
+        provider: document.provider,
     }
 }
 

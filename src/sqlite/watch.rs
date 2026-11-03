@@ -1,0 +1,218 @@
+//! The bound on every statement of a SQLite connection (`FR-LITE-009`,
+//! `OD-36`).
+//!
+//! Two means bound a statement, because each bounds what the other cannot: the
+//! library's own wait for a lock, whose timeout is set to what remains of the
+//! statement's bound before it runs, replacing `rusqlite`'s 5000 ms default
+//! (`ADR-013`, *Consequences*); and one watchdog thread per connection, which
+//! holds the connection's interrupt handle and interrupts a statement still
+//! running when its bound expires.
+//!
+//! **Disarming is a rendezvous.** The thread interrupts only while it is
+//! armed, under the lock [`Watchdog::disarm`] takes, so an interrupt reaches
+//! the statement it was armed for or none: once `disarm` has returned, nothing
+//! issued for that statement can reach the next. An interrupt issued after
+//! the statement returned and before it was disarmed reaches no statement, by
+//! SQLite's own rule — a call "when there are no running SQL statements is a
+//! no-op" (`https://sqlite.org/c3ref/interrupt.html`, consulted 2026-11-03).
+//!
+//! **The thread is stopped and joined before the connection is closed**, so
+//! no interrupt is ever issued against a closed connection, which the same
+//! page states is not safe.
+//!
+//! The thread is not speculative parallelism, on the ground `OD-12` gives the
+//! render's watchdog: it performs no work of the invocation and exists only on
+//! the path that opens a database file.
+
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+
+use rusqlite::InterruptHandle;
+
+/// What the watchdog is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum State {
+    /// No statement is running under it.
+    Idle,
+    /// A statement is running, and must be interrupted at this instant.
+    Armed(Instant),
+    /// The statement it was armed for was interrupted.
+    Fired,
+    /// The connection is about to close; the thread ends.
+    Stopped,
+}
+
+/// The state shared between the connection's thread and the watchdog's.
+#[derive(Debug)]
+struct Shared {
+    /// The state, under the lock every transition takes.
+    state: Mutex<State>,
+    /// Woken on every transition.
+    changed: Condvar,
+}
+
+impl Shared {
+    /// The state, locked; a poisoned lock still holds a valid state, because
+    /// every transition writes a whole value.
+    fn lock(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// One watchdog, for one connection.
+#[derive(Debug)]
+pub(crate) struct Watchdog {
+    /// The state it shares with its thread.
+    shared: Arc<Shared>,
+    /// The thread, joined when the watchdog stops.
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Watchdog {
+    /// Starts the watchdog of the connection whose interrupt handle is
+    /// `handle`.
+    ///
+    /// # Errors
+    ///
+    /// Returns what the operating system returned where it could not start the
+    /// thread.
+    pub(crate) fn start(handle: InterruptHandle) -> std::io::Result<Self> {
+        let shared = Arc::new(Shared {
+            state: Mutex::new(State::Idle),
+            changed: Condvar::new(),
+        });
+        let watched = Arc::clone(&shared);
+        let thread = std::thread::Builder::new()
+            .name("tpl-sqlite-watchdog".to_owned())
+            .spawn(move || watch(&watched, &handle))?;
+
+        Ok(Self {
+            shared,
+            thread: Some(thread),
+        })
+    }
+
+    /// Arms the watchdog for a statement that may run for `remaining`.
+    pub(crate) fn arm(&self, remaining: Duration) {
+        let mut state = self.shared.lock();
+        *state = State::Armed(Instant::now() + remaining);
+        self.shared.changed.notify_all();
+    }
+
+    /// Disarms it once the statement returned, and answers whether it
+    /// interrupted the statement.
+    pub(crate) fn disarm(&self) -> bool {
+        let mut state = self.shared.lock();
+        let fired = *state == State::Fired;
+        *state = State::Idle;
+        self.shared.changed.notify_all();
+        fired
+    }
+
+    /// Stops the thread and joins it (`OD-36`, point 4).
+    pub(crate) fn stop(mut self) {
+        self.halt();
+    }
+
+    /// Stops and joins the thread, once.
+    fn halt(&mut self) {
+        {
+            let mut state = self.shared.lock();
+            *state = State::Stopped;
+            self.shared.changed.notify_all();
+        }
+        if let Some(thread) = self.thread.take() {
+            // The thread panics on nothing it does; a join that reports one
+            // has nothing left to stop.
+            let _ = thread.join();
+        }
+    }
+}
+
+impl Drop for Watchdog {
+    /// A watchdog dropped without [`Watchdog::stop`] — on an early return — is
+    /// stopped and joined here, before the connection beside it is dropped.
+    fn drop(&mut self) {
+        self.halt();
+    }
+}
+
+/// The watchdog's thread: waits for each armed instant and interrupts the
+/// statement still running at it.
+fn watch(shared: &Shared, handle: &InterruptHandle) {
+    let mut state = shared.lock();
+
+    loop {
+        match *state {
+            State::Stopped => return,
+            State::Idle | State::Fired => {
+                state = shared
+                    .changed
+                    .wait(state)
+                    .unwrap_or_else(PoisonError::into_inner);
+            }
+            State::Armed(at) => {
+                let now = Instant::now();
+                if now >= at {
+                    // The interrupt is issued under the lock disarm takes, so
+                    // it reaches the statement it was armed for or none.
+                    handle.interrupt();
+                    *state = State::Fired;
+                    shared.changed.notify_all();
+                } else {
+                    state = shared
+                        .changed
+                        .wait_timeout(state, at - now)
+                        .map_or_else(|poisoned| poisoned.into_inner().0, |(state, _)| state);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Watchdog;
+    use rusqlite::Connection;
+    use std::time::Duration;
+
+    #[test]
+    fn fr_lite_009_a_statement_past_its_bound_is_interrupted_and_one_within_it_is_not() {
+        let connection = Connection::open_in_memory().expect("a memory database opens");
+        let watchdog =
+            Watchdog::start(connection.get_interrupt_handle()).expect("the thread starts");
+
+        // A statement that finishes well within its bound.
+        watchdog.arm(Duration::from_secs(30));
+        let answered: i64 = connection
+            .query_row("SELECT 1", [], |row| row.get(0))
+            .expect("the statement answers");
+        assert_eq!(answered, 1);
+        assert!(!watchdog.disarm());
+
+        // A statement that runs past a bound of 50 ms.
+        watchdog.arm(Duration::from_millis(50));
+        let interrupted = connection.query_row(
+            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n) SELECT count(*) FROM n",
+            [],
+            |row| row.get::<_, i64>(0),
+        );
+        assert!(watchdog.disarm(), "the watchdog fired");
+        let code = match interrupted {
+            Err(rusqlite::Error::SqliteFailure(failure, _)) => failure.extended_code,
+            other => panic!("the statement was not interrupted: {other:?}"),
+        };
+        assert_eq!(code, rusqlite::ffi::SQLITE_INTERRUPT);
+
+        // The next statement is not reached by the interrupt.
+        watchdog.arm(Duration::from_secs(30));
+        let after: i64 = connection
+            .query_row("SELECT 2", [], |row| row.get(0))
+            .expect("the next statement answers");
+        assert_eq!(after, 2);
+        assert!(!watchdog.disarm());
+
+        watchdog.stop();
+    }
+}

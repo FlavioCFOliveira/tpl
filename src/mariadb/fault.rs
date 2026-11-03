@@ -118,7 +118,7 @@
 #[cfg(test)]
 use super::catalogue::fixture;
 
-use sqlx::mysql::MySqlDatabaseError;
+use sqlx_mysql::MySqlDatabaseError;
 
 use crate::deadline::Bound;
 use crate::error::{CatalogueObjectKind, Error, NetworkPhase, TlsFault};
@@ -154,7 +154,7 @@ pub(crate) const METADATA: &str = "metadata";
 /// the reason and on the evidence this module's own documentation records.
 pub(crate) fn connecting(
     entry: &str,
-    error: &sqlx::Error,
+    error: &sqlx_core::Error,
     host: &str,
     port: u16,
     user: &str,
@@ -165,7 +165,7 @@ pub(crate) fn connecting(
     // presented and the database named. Both are `77` (`EX_NOPERM`) and
     // neither is an availability failure; which of the two it was decides
     // which `cause` the caller reads.
-    if let sqlx::Error::Database(returned) = error {
+    if let sqlx_core::Error::Database(returned) = error {
         if let (Some(database), true) = (database, about_the_database(returned.as_ref())) {
             return Error::PropertyNotReadable {
                 kind: CatalogueObjectKind::Database,
@@ -193,7 +193,7 @@ pub(crate) fn connecting(
 /// SQLSTATE — which this module's documentation records as the coarser
 /// reading. A packet the driver reports without a number of this type is not
 /// one of the two, and falls to the credential refusal.
-fn about_the_database(returned: &dyn sqlx::error::DatabaseError) -> bool {
+fn about_the_database(returned: &dyn sqlx_core::error::DatabaseError) -> bool {
     returned
         .try_downcast_ref::<MySqlDatabaseError>()
         .is_some_and(|packet| matches!(packet.number(), DATABASE_ACCESS_DENIED | UNKNOWN_DATABASE))
@@ -206,7 +206,7 @@ fn about_the_database(returned: &dyn sqlx::error::DatabaseError) -> bool {
 /// connection, and the caller that knows which statement it issued classifies
 /// that outcome itself — the read-only pair of `FR-SRV-008` and `FR-SRV-009`
 /// is `78`, not `69`, whatever the server said.
-pub(crate) fn speaking(entry: &str, error: &sqlx::Error, host: &str, port: u16) -> Error {
+pub(crate) fn speaking(entry: &str, error: &sqlx_core::Error, host: &str, port: u16) -> Error {
     if let Some(fault) = tls(error) {
         return Error::TlsHandshakeFailed {
             entry: entry.to_owned(),
@@ -241,10 +241,10 @@ pub(crate) fn speaking(entry: &str, error: &sqlx::Error, host: &str, port: u16) 
 /// the TLS layer refusing before a certificate was judged — a server offering
 /// none among them — and `InvalidData` is the TLS implementation's verdict on
 /// the certificate the server presented.
-fn tls(error: &sqlx::Error) -> Option<TlsFault> {
+fn tls(error: &sqlx_core::Error) -> Option<TlsFault> {
     match error {
-        sqlx::Error::Tls(_) => Some(TlsFault::Refused),
-        sqlx::Error::Io(returned) if returned.kind() == std::io::ErrorKind::InvalidData => {
+        sqlx_core::Error::Tls(_) => Some(TlsFault::Refused),
+        sqlx_core::Error::Io(returned) if returned.kind() == std::io::ErrorKind::InvalidData => {
             Some(TlsFault::CertificateRejected)
         }
         _ => None,
@@ -292,19 +292,19 @@ mod tests {
     const DATABASE: &str = "freight";
 
     /// A driver error of the kind an unreachable server produces.
-    fn unreachable() -> sqlx::Error {
-        sqlx::Error::Io(io::Error::from(io::ErrorKind::ConnectionRefused))
+    fn unreachable() -> sqlx_core::Error {
+        sqlx_core::Error::Io(io::Error::from(io::ErrorKind::ConnectionRefused))
     }
 
     /// A driver error of the kind a refused TLS negotiation produces.
-    fn refused_tls() -> sqlx::Error {
-        sqlx::Error::Tls("server does not support TLS".into())
+    fn refused_tls() -> sqlx_core::Error {
+        sqlx_core::Error::Tls("server does not support TLS".into())
     }
 
     /// A driver error of the kind a certificate the trust material does not
     /// vouch for produces, as observed on 2026-09-18.
-    fn untrusted_certificate() -> sqlx::Error {
-        sqlx::Error::Io(io::Error::new(
+    fn untrusted_certificate() -> sqlx_core::Error {
+        sqlx_core::Error::Io(io::Error::new(
             io::ErrorKind::InvalidData,
             "invalid peer certificate: UnknownIssuer",
         ))
@@ -351,7 +351,7 @@ mod tests {
             io::ErrorKind::UnexpectedEof,
             io::ErrorKind::BrokenPipe,
         ] {
-            let driver = sqlx::Error::Io(io::Error::from(kind));
+            let driver = sqlx_core::Error::Io(io::Error::from(kind));
 
             assert!(
                 matches!(
@@ -375,7 +375,7 @@ mod tests {
     fn fr_glob_018_no_driver_message_survives_the_classification() {
         // FR-GLOB-018 and OD-06: the driver's own text reaches no stream,
         // because the value it lived on is dropped at this boundary.
-        let driver = sqlx::Error::Tls("a message the driver composed".into());
+        let driver = sqlx_core::Error::Tls("a message the driver composed".into());
         let condition = connecting("shop", &driver, HOST, PORT, "alice", Some(DATABASE));
 
         assert!(!format!("{condition}").contains("a message the driver composed"));
@@ -473,7 +473,9 @@ mod tests {
             &settings::clock(None),
             &|_: &str| None,
         )
-        .expect("the entry resolves");
+        .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry");
         let target = Target::of(&resolved).expect("the entry names a host");
 
         crate::mariadb::open(&target, &settings::clock(None)).map(super::super::Session::close)

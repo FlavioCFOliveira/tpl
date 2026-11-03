@@ -307,6 +307,20 @@ impl Clock {
         }
     }
 
+    /// A clock whose overall budget is already spent, so that every bound it
+    /// composes has nothing left (`FR-GLOB-012`).
+    #[cfg(test)]
+    pub(crate) fn spent() -> Self {
+        let started = Instant::now()
+            .checked_sub(Duration::from_secs(2))
+            .unwrap_or_else(Instant::now);
+
+        Self {
+            started,
+            budget: Some(Seconds::new(std::num::NonZeroU64::MIN)),
+        }
+    }
+
     /// How long this invocation has been running.
     pub(crate) fn elapsed(&self) -> Duration {
         self.started.elapsed()

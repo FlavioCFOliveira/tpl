@@ -61,8 +61,9 @@ use super::order::Named;
 use crate::model::ToStatic;
 use crate::model::check_constraint::CheckConstraint;
 use crate::model::column::Column;
+use crate::model::database::Provider;
 use crate::model::foreign_key::{ForeignKeyColumn, ReferentialAction};
-use crate::model::index::Index;
+use crate::model::index::{Index, PrimaryKey};
 use crate::model::restricted::Restricted;
 use crate::model::routine::Routine;
 use crate::model::server::Server;
@@ -90,10 +91,10 @@ pub(crate) struct ContextData<'a> {
 /// The `database` object (`FR-CTX-035`, `FR-CTX-036`).
 ///
 /// ```json
-/// {"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{…},"tables":[…],"views":[…],"routines":[…]}
+/// {"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","provider":"mariadb","server":{…},"tables":[…],"views":[…],"routines":[…]}
 /// ```
 ///
-/// Three metadata fields, the `server` object, and the three collections — in
+/// Four metadata fields, the `server` object, and the three collections — in
 /// the order `FR-CTX-036` writes them, which is therefore the order of the
 /// fields below.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -106,9 +107,18 @@ pub(crate) struct DatabaseDocument<'a> {
     #[serde(borrow)]
     pub(crate) charset: Cow<'a, str>,
 
-    /// The schema's default collation.
+    /// The schema's default collation, `null` for a `sqlite` read
+    /// (`FR-LITE-023`).
     #[serde(borrow)]
-    pub(crate) collation: Cow<'a, str>,
+    pub(crate) collation: Option<Cow<'a, str>>,
+
+    /// The provider the read was made through (`FR-CTX-043`).
+    ///
+    /// A `--context` document may omit it, and is then read as a `mariadb`
+    /// document (`FR-CTX-043`, item 3): the one key of the contract whose
+    /// absence is not a fault. Every document this binary writes carries it.
+    #[serde(default)]
+    pub(crate) provider: Provider,
 
     /// The server the read was made against (`FR-CTX-031`).
     #[serde(borrow)]
@@ -125,6 +135,28 @@ pub(crate) struct DatabaseDocument<'a> {
     /// The routines of `FR-CAT-008`, ordered by name.
     #[serde(borrow)]
     pub(crate) routines: Cow<'a, [Routine<'a>]>,
+
+    /// The views a `sqlite` read could not read the columns of, each with the
+    /// reason the library gave (`FR-LITE-035`).
+    ///
+    /// It travels **beside** the document rather than in it: the contract
+    /// carries no such key, so it is never serialised and never read back, and
+    /// it is filled on a live read alone. No other path needs it — a marked
+    /// object is never cached (`FR-CACHE-037`) and a marked document is refused
+    /// as a context (`FR-PRIV-008`) — and the named-object verdict reads it to
+    /// give the library's reason a request naming such a view is owed (`OD-35`).
+    #[serde(skip)]
+    pub(crate) unreadable: Vec<UnreadableView>,
+}
+
+/// A view whose columns a `sqlite` read could not read, and why
+/// (`FR-LITE-035`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UnreadableView {
+    /// The view, as the file names it.
+    pub(crate) name: String,
+    /// What the library returned when its columns were read.
+    pub(crate) reason: crate::error::LibraryReport,
 }
 
 /// A table at the first hop: its references are embedded objects.
@@ -183,22 +215,24 @@ pub(crate) struct TableShape<'a, F, I> {
     #[serde(borrow)]
     pub(crate) indexes: Cow<'a, [Index<'a>]>,
 
-    /// The primary key — the index named `PRIMARY` (`FR-CAT-011`,
-    /// `FR-CAT-043`), or `null` where the table has none.
+    /// The primary key (`FR-CAT-011`, `FR-CAT-043`, `FR-LITE-029`), or `null`
+    /// where the table has none.
     ///
-    /// It is a projection of [`TableShape::indexes`] and not a second source.
-    /// The read-back path takes the primary key from the index collection, as
-    /// `FR-CAT-043` requires, and does not read this key: presenting it is what
-    /// spares a template a match on a name, and reading it back would give the
-    /// model a second place the two could disagree from.
+    /// For a `mariadb` document it is a projection of [`TableShape::indexes`] —
+    /// the index named `PRIMARY` — and not a second source: the read-back path
+    /// takes the key from the index collection, as `FR-CAT-043` requires, and
+    /// does not read this key. For a `sqlite` document it is the one place a
+    /// rowid alias is written, so it is the key read back (`OD-35`).
     #[serde(borrow)]
-    pub(crate) primary_key: Option<Index<'a>>,
+    pub(crate) primary_key: Option<PrimaryKey<'a>>,
 
-    /// The outgoing foreign keys, ordered by name (`FR-CAT-012`).
+    /// The outgoing foreign keys (`FR-CAT-012`), ordered by name — and, for a
+    /// `sqlite` document, whose keys have none, by content (`FR-LITE-031`).
     pub(crate) foreign_keys: Vec<F>,
 
     /// The incoming foreign keys (`FR-CAT-013`), ordered by the referencing
-    /// table's name and then by the constraint's.
+    /// table's name and then by the constraint's — and, for a `sqlite`
+    /// document, by content (`FR-LITE-031`).
     pub(crate) referenced_by: Vec<I>,
 
     /// The triggers, ordered by name (`FR-CAT-014`).
@@ -255,9 +289,10 @@ pub(crate) type NamedKey<'a> = ForeignKeyShape<'a, Option<Cow<'a, str>>>;
 /// from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ForeignKeyShape<'a, R> {
-    /// The constraint name the DDL gave.
+    /// The constraint name the DDL gave, `null` for a `sqlite` read
+    /// (`FR-LITE-031`).
     #[serde(borrow)]
-    pub(crate) name: Cow<'a, str>,
+    pub(crate) name: Option<Cow<'a, str>>,
 
     /// The referencing and referenced columns, **paired by position** and in
     /// the order the catalogue states — an exception of `NFR-DET-002`.
@@ -286,8 +321,10 @@ pub(crate) struct ForeignKeyShape<'a, R> {
 }
 
 impl<R> Named for ForeignKeyShape<'_, R> {
+    /// The constraint name, and the empty string for a key that has none — a
+    /// `sqlite` key, which the default rule does not order (`FR-LITE-031`).
     fn name(&self) -> &str {
-        &self.name
+        self.name.as_deref().unwrap_or_default()
     }
 }
 
@@ -323,10 +360,12 @@ impl ToStatic for DatabaseDocument<'_> {
             name: self.name.to_static(),
             charset: self.charset.to_static(),
             collation: self.collation.to_static(),
+            provider: self.provider,
             server: self.server.to_static(),
             tables: self.tables.to_static(),
             views: self.views.to_static(),
             routines: self.routines.to_static(),
+            unreadable: self.unreadable.clone(),
         }
     }
 }

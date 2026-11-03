@@ -62,11 +62,12 @@ use super::super::source;
 use super::{Supplied, form, project};
 use crate::cli::local::Format;
 use crate::error::Error;
-use crate::mariadb::{self, Target, catalogue};
+use crate::mariadb::Target;
 use crate::model::server::Server;
 use crate::output::{self, Document, Order, Source, Table};
 use crate::project::config::expand;
-use crate::project::settings;
+use crate::project::settings::{self, Resolved};
+use crate::provider;
 
 /// The flag of `FR-CFG-027` that writes `database.<name>.host`.
 ///
@@ -150,47 +151,44 @@ pub(crate) fn test<W: Write>(
     // Step 5 of FR-ERR-006. The entry is the operand rather than `-d`: this
     // command tests the entry it was given a name for, so nothing here consults
     // `core.database`.
-    let settings = settings::resolve(&configuration, Some(name), &clock, &expand::environment)?;
+    let resolved = settings::resolve(&configuration, Some(name), &clock, &expand::environment)?;
 
-    source::connection_keys(&settings, &configuration)?;
+    // The four steps, by the entry's provider: FR-CFG-024 for a `mariadb`
+    // entry and FR-CFG-056 for a `sqlite` one.
+    let tested = match &resolved {
+        Resolved::Mariadb(settings) => {
+            source::connection_keys(settings, &configuration)?;
 
-    // FR-CONF-040 has just refused an entry that names no host, so the arm
-    // below is this type's own totality rather than a reachable condition.
-    let target = Target::of(&settings).ok_or_else(|| Error::EntryKeyMissing {
-        entry: settings.entry().to_owned(),
-        key: format!("database.{}.host", settings.entry()),
-        file: configuration.file().to_owned(),
-        flag: HOST_FLAG,
-        placeholder: HOST_PLACEHOLDER,
-        absence: crate::error::KeyAbsence::Absent,
-    })?;
-    // FR-CONF-041 has just refused an entry that names no database, on the same
-    // terms.
-    let database = settings.database().unwrap_or_default();
-    let target = target.without_database();
+            // FR-CONF-040 has just refused an entry that names no host, so the
+            // arm below is this type's own totality rather than a reachable
+            // condition.
+            let target = Target::of(settings).ok_or_else(|| Error::EntryKeyMissing {
+                entry: settings.entry().to_owned(),
+                key: format!("database.{}.host", settings.entry()),
+                file: configuration.file().to_owned(),
+                flag: HOST_FLAG,
+                placeholder: HOST_PLACEHOLDER,
+                absence: crate::error::KeyAbsence::Absent,
+            })?;
+            // FR-CONF-041 has just refused an entry that names no database, on
+            // the same terms.
+            let database = settings.database().unwrap_or_default();
 
-    // Steps 1, 2 and 3 of FR-CFG-024, in the order FR-SRV-042 and FR-ERR-006
-    // fix between them.
-    let mut session = mariadb::open(&target, &clock)?;
-
-    // Step 4. Its answer is a boolean and never a row: FR-CACHE-010 keeps this
-    // command out of the model, and FR-CFG-044 reads the statement's outcome
-    // for two facts and nothing else.
-    let can_read_catalogue = catalogue::probe(&mut session, &target, &clock, database);
-
-    // The session is closed whichever way the probe went: the connection of
-    // NFR-PERF-004 is released as soon as the last statement has been answered,
-    // and a condition on the way out is reported after the socket is gone
-    // rather than while it is held.
-    let server = session.server().clone();
-    session.close();
+            // Steps 1, 2 and 3 of FR-CFG-024, in the order FR-SRV-042 and
+            // FR-ERR-006 fix between them, then the probe of step 4, whose
+            // answer is a boolean and never a row; the session is closed
+            // whichever way the probe went.
+            provider::test(provider::Source::Server { target, database }, &clock)?
+        }
+        Resolved::Sqlite(file) => provider::test(provider::Source::File(file), &clock)?,
+    };
 
     let report = Report {
-        entry: settings.entry(),
+        entry: resolved.entry(),
         connected: true,
         read_only_session: true,
-        server: &server,
-        can_read_catalogue: can_read_catalogue?,
+        server: &tested.server,
+        can_read_catalogue: tested.can_read_catalogue,
     };
 
     match supplied.format() {

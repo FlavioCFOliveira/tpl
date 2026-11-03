@@ -1814,10 +1814,11 @@ fn fr_cfg_020_an_update_that_names_no_field_is_64_and_lists_every_field_flag() {
         line(&written, "cause: "),
         "no field flag was given for entry 'shop'"
     );
+    // The sixty-fifth edition adds --provider and --path to FR-CFG-027.
     assert_eq!(
         line(&written, "hint:  "),
         "give at least one of --dsn, --host, --port, --user, --schema, --tls, \
-         --password-command, --ca-file, --ca-path"
+         --password-command, --ca-file, --ca-path, --provider, --path"
     );
     assert_eq!(sandbox.configuration(), before, "the file was written");
 
@@ -2155,10 +2156,13 @@ fn fr_cfg_051_a_refusal_at_step_one_writes_no_warning_and_its_cause_names_the_fl
     const CLAUSE: &str = "; -d/--database was given, and it selects the entry for commands \
                           that connect, not a field; the database on the server is set with \
                           --schema";
+    // The sixty-fifth edition names --path as the third form, for a sqlite
+    // entry, and adds --provider and --path to the hint.
     const UPDATE_CLAUSE: &str = "; -d/--database was given, and it selects the entry for \
                                  commands that connect, not a field; the database on the server \
                                  is set with --schema, or is the path part of --dsn for an entry \
-                                 defined by dsn";
+                                 defined by dsn; the database file of a sqlite entry is set with \
+                                 --path";
     let sandbox = Sandbox::new();
     sandbox.project(SHOP);
     let before = sandbox.configuration();
@@ -2176,7 +2180,7 @@ fn fr_cfg_051_a_refusal_at_step_one_writes_no_warning_and_its_cause_names_the_fl
     assert_eq!(
         line(&written, "hint:  "),
         "give at least one of --dsn, --host, --port, --user, --schema, --tls, \
-         --password-command, --ca-file, --ca-path"
+         --password-command, --ca-file, --ca-path, --provider, --path"
     );
 
     let written = assert_refused(
@@ -3628,7 +3632,8 @@ fn fr_conf_047_a_reference_written_into_ca_file_in_the_file_is_78() {
 
 #[test]
 fn fr_cfg_033_the_help_of_the_trust_flags_states_the_refusal() {
-    // FR-CFG-033 as amended in the forty-eighth edition.
+    // FR-CFG-033 as amended in the forty-eighth edition, and in the
+    // sixty-fifth, which adds --path to the flags whose help states it.
     let sandbox = Sandbox::new();
 
     let printed = sandbox.run(&["help", "cfg", "database", "add"]);
@@ -3639,7 +3644,7 @@ fn fr_cfg_033_the_help_of_the_trust_flags_states_the_refusal() {
         .join(" ");
     assert_eq!(
         help.matches("a value containing ${ is refused").count(),
-        2,
+        3,
         "{help}"
     );
 }
@@ -5320,20 +5325,21 @@ fn fr_cache_041_a_refused_removal_is_74_with_no_warning() {
 #[test]
 fn fr_help_036_each_description_states_the_cache_fact_with_d_name() {
     // Findings AC-01 and AC-03 of the twelfth re-audit of rmp #263, and AD-01
-    // of the thirteenth; AE-01 and AE-02 of the fourteenth.
+    // of the thirteenth; AE-01 and AE-02 of the fourteenth. The sixty-fifth
+    // edition adds provider and path, and --provider and --path, to three rows.
     let sandbox = Sandbox::new();
     let facts: [(&[&str], &str); 8] = [
         (
             &["cfg", "set"],
-            "After writing host, port, user, database, tls or dsn of an entry, any data cached \
-             for it under .tpl/.cache/NAME/ is kept and still served; clear it with tpl -d NAME \
-             cache clean.",
+            "After writing host, port, user, database, tls, dsn, provider or path of an entry, \
+             any data cached for it under .tpl/.cache/NAME/ is kept and still served; clear it \
+             with tpl -d NAME cache clean.",
         ),
         (
             &["cfg", "unset"],
-            "Where KEY is host, port, user, database, tls or dsn of an entry, after removing it \
-             any data cached for the entry under .tpl/.cache/NAME/ is kept and still served; \
-             clear it with tpl -d NAME cache clean.",
+            "Where KEY is host, port, user, database, tls, dsn, provider or path of an entry, \
+             after removing it any data cached for the entry under .tpl/.cache/NAME/ is kept and \
+             still served; clear it with tpl -d NAME cache clean.",
         ),
         (
             &["cfg", "database", "remove"],
@@ -5358,8 +5364,9 @@ fn fr_help_036_each_description_states_the_cache_fact_with_d_name() {
         ),
         (
             &["cfg", "database", "update"],
-            "After changing --host, --port, --user, --schema, --tls or --dsn, any data cached \
-             for the entry is kept and still served; clear it with tpl -d NAME cache clean.",
+            "After changing --host, --port, --user, --schema, --tls, --dsn, --provider or \
+             --path, any data cached for the entry is kept and still served; clear it with tpl -d \
+             NAME cache clean.",
         ),
         (
             &["cache", "clean"],

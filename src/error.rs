@@ -569,6 +569,131 @@ pub enum TplDirFault {
     NotTplFolder,
 }
 
+/// A value read from a SQLite database file, or returned by its library — an
+/// object name, a value read back, the library's message (`FR-ERR-046`).
+///
+/// It is a type of its own so that the bound of `FR-ERR-046` is decided by
+/// the type and not remembered at each interpolation: its
+/// [`Display`](fmt::Display) writes the value escaped under `FR-ERR-024` and,
+/// past 256 characters, cut to its first and last 128 around a marker that
+/// counts what was left out. It is built only from the library's report in
+/// the SQLite reader and from a model a `sqlite` read produced; a value of a
+/// `mariadb` read, of a `--context` document or of the argument vector is
+/// never this type, so none of them is bounded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileValue(String);
+
+impl FileValue {
+    /// The value, as read.
+    pub(crate) fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// The value as read, unbounded — for a comparison, never for a line.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for FileValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&crate::diagnostics::bounded(&self.0))
+    }
+}
+
+/// What the SQLite library returned for a failure: the result code and the
+/// message (`FR-GLOB-018`, `FR-LITE-007`, `FR-LITE-040`).
+///
+/// It is the two facts `FR-GLOB-018` admits into a `cause`, and never the
+/// driver's error value, which is dropped where the library's report is
+/// classified.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryReport {
+    /// The code the library returned: the extended code where it returned
+    /// one, whose low eight bits are the primary code.
+    pub code: i32,
+    /// The library's message, or [`None`] where the driver handed none.
+    pub message: Option<FileValue>,
+}
+
+impl LibraryReport {
+    /// SQLite's name for the code — `SQLITE_NOTADB`,
+    /// `SQLITE_READONLY_DIRECTORY` — or the primary code's name and the number
+    /// for an extended code the table does not hold (`FR-GLOB-018`).
+    ///
+    /// It is derived from the code rather than carried beside it, which keeps
+    /// [`enum@Error`] within the size `clippy::result_large_err` admits.
+    #[must_use]
+    pub fn name(&self) -> String {
+        crate::sqlite::code_name(self.code)
+    }
+}
+
+impl fmt::Display for LibraryReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.message {
+            Some(message) => write!(f, "{} ({}): {message}", self.name(), self.code),
+            None => write!(
+                f,
+                "{} ({}), with no message from the library",
+                self.name(),
+                self.code
+            ),
+        }
+    }
+}
+
+/// Where a SQLite read failed: the open, or a statement the reader issued
+/// (`FR-LITE-007`, `FR-LITE-040`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SqliteAt {
+    /// The read-only open of `FR-LITE-006`.
+    Open,
+    /// A statement of `FR-LITE-015`, described as the `cause` names it.
+    Statement(&'static str),
+}
+
+impl fmt::Display for SqliteAt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Open => f.write_str("the read-only open of the file"),
+            Self::Statement(statement) => f.write_str(statement),
+        }
+    }
+}
+
+/// What ended a statement on a SQLite connection with `69` (`FR-LITE-009`,
+/// `FR-LITE-040`, the note on `FR-ERR-034` for a `sqlite` entry).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SqliteEnd {
+    /// The library returned `SQLITE_BUSY`: the database was locked. `waited`
+    /// is the resolved deadline where the bound was spent when it returned.
+    Locked {
+        /// What the library returned, boxed so that [`enum@Error`] stays
+        /// within the size `clippy::result_large_err` admits.
+        report: Box<LibraryReport>,
+        /// The bound and its resolved value, where the wait spent it.
+        waited: Option<(DeadlineBound, Duration)>,
+    },
+    /// The catalogue-query deadline ended a statement for which the library
+    /// returned no `SQLITE_BUSY`: the watchdog's interrupt, or a bound
+    /// already spent before the statement began.
+    Deadline {
+        /// Which of the two bounds of `FR-GLOB-012` expired.
+        bound: DeadlineBound,
+        /// Its resolved value.
+        limit: Duration,
+    },
+    /// `SQLITE_PROTOCOL` or `SQLITE_SCHEMA`: another connection kept winning
+    /// the locks, or kept changing the schema (`FR-LITE-040`).
+    Contended {
+        /// What the library returned, boxed for the reason
+        /// [`SqliteEnd::Locked`] gives.
+        report: Box<LibraryReport>,
+    },
+}
+
 /// Every condition `tpl` reports as a failure.
 ///
 /// One variant per distinct condition the specification names, each carrying
@@ -1128,6 +1253,51 @@ pub enum Error {
         command: String,
     },
 
+    /// `tpl cfg database add` or `update` combines a flag with a provider
+    /// that refuses it, which the command line alone decides (`FR-CFG-055`,
+    /// items 1 and 2).
+    #[error("{}", flag_refused(.flag, *.provider, *.given))]
+    FlagRefusedByProvider {
+        /// The command, `cfg database add` or `cfg database update`.
+        command: &'static str,
+        /// The entry the invocation names.
+        entry: String,
+        /// The flag the provider refuses, as a literal of `FR-CFG-027`.
+        flag: &'static str,
+        /// The provider that decides it: the one given, or `mariadb` where
+        /// `--provider` was not given.
+        provider: crate::model::database::Provider,
+        /// Whether `--provider` was given.
+        given: bool,
+    },
+
+    /// `tpl cfg database add --provider sqlite` was not given `--path`
+    /// (`FR-CFG-055`, item 1).
+    #[error("tpl cfg database add --provider sqlite needs --path")]
+    PathRequired {
+        /// The entry the invocation names.
+        entry: String,
+    },
+
+    /// A `cfg` write would leave an entry carrying a key its provider refuses
+    /// (`FR-CFG-048`, as amended in the sixty-fifth edition, `FR-CONF-052`).
+    /// `.tpl/.cfg` is left unchanged.
+    #[error("cannot give entry '{entry}' {}", provider_write(*.provider, .written))]
+    ProviderIncoherentWrite {
+        /// The entry the write would leave in that state.
+        entry: String,
+        /// The provider the entry would carry after the write.
+        provider: crate::model::database::Provider,
+        /// The key the invocation writes, fully qualified.
+        written: String,
+        /// Every key the entry would carry that the other provider takes,
+        /// as leaves of `FR-CONF-002`.
+        carried: Vec<&'static str>,
+        /// The value the invocation asked for, where it is one a `hint` may
+        /// carry under `FR-ERR-022`.
+        value: Option<String>,
+    },
+
     // ---------------------------------------------------------------- 65 ---
     /// A template the engine could not parse (`FR-TMPL-020`, `FR-RND-030`).
     #[error("template '{template}' has a syntax error at {position}")]
@@ -1252,8 +1422,13 @@ pub enum Error {
         /// The database entry of `.tpl/.cfg` the read was made through — half
         /// of the population `FR-ERR-034` obliges.
         entry: String,
-        /// The server-side database it was sought in — the other half.
+        /// The server-side database it was sought in — the other half; `main`
+        /// for a `sqlite` read (`FR-LITE-019`).
         database: String,
+        /// The provider the read was made through, which decides what the
+        /// `cause` says was searched: the catalogue of a server, or the schema
+        /// of a database file (`FR-CTX-043`).
+        provider: crate::model::database::Provider,
         /// The nearest matches among the objects of that kind the database
         /// does hold, selected by `FR-ERR-019` and ordered as it fixes. Empty
         /// where nothing qualified, per `FR-ERR-020`. `FR-SCH-010` obliges the
@@ -1489,6 +1664,21 @@ pub enum Error {
         limit: Duration,
     },
 
+    /// A statement on a SQLite connection was ended by a lock, the
+    /// catalogue-query deadline, or another connection (`FR-LITE-009`,
+    /// `FR-LITE-040`).
+    #[error("the SQLite database {} could not be read now, for database entry '{entry}'", .path.display())]
+    SqliteUnavailable {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The statement that was running.
+        statement: &'static str,
+        /// What ended it.
+        ended: SqliteEnd,
+    },
+
     // ---------------------------------------------------------------- 70 ---
     /// An internal invariant was violated and the system declines to continue
     /// past it (`FR-ERR-030`).
@@ -1502,6 +1692,45 @@ pub enum Error {
         invariant: &'static str,
         /// Where it was detected — the "where" of the `70` row of
         /// `FR-ERR-034`, which is the location the condition arose at.
+        location: &'static Location<'static>,
+    },
+
+    /// A hardening control or limit of a SQLite connection did not take
+    /// effect, or its read-back did not confirm it (`FR-LITE-012`). Nothing is
+    /// read from the file.
+    #[error("the SQLite control {control} did not take effect, for database entry '{entry}'")]
+    SqliteControlNotInEffect {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The control or limit, as `FR-LITE-010` and `FR-LITE-011` name it.
+        control: &'static str,
+        /// The value set, or the row required.
+        set: &'static str,
+        /// The value read back, or what the library returned where applying
+        /// or reading it failed.
+        read_back: FileValue,
+    },
+
+    /// The SQLite library reported a failure only a defect of `tpl` or of
+    /// the library the binary carries can produce, or a fact of the read broke
+    /// an invariant the reader holds (`FR-LITE-040`, `FR-LITE-032`,
+    /// `FR-ERR-030`).
+    #[error("reading the SQLite database {} hit a defect in tpl, for database entry '{entry}'", .path.display())]
+    SqliteDefect {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The open or the statement that failed.
+        at: SqliteAt,
+        /// The invariant that was violated, as a literal.
+        invariant: &'static str,
+        /// What the library returned, where the defect is a result code,
+        /// boxed for the reason [`SqliteEnd::Locked`] gives.
+        report: Option<Box<LibraryReport>>,
+        /// Where it was detected.
         location: &'static Location<'static>,
     },
 
@@ -1613,6 +1842,34 @@ pub enum Error {
     #[error("standard output closed part-way through a JSON document")]
     StdoutClosedMidDocument,
 
+    /// The kind of the SQLite database path could not be established,
+    /// because its lookup failed (`FR-LITE-005`, the first row of
+    /// `FR-LITE-007`). Nothing is opened and nothing is created.
+    #[error("the SQLite database {} could not be found, for database entry '{entry}'", .path.display())]
+    SqliteFileLookup {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// What the filesystem returned.
+        returned: io::Error,
+    },
+
+    /// A read of the SQLite database file, or of a file the library needs
+    /// beside it, failed for want of something the host or the filesystem did
+    /// not supply (`FR-LITE-007`, `FR-LITE-040`).
+    #[error("the SQLite database {} could not be read, for database entry '{entry}'", .path.display())]
+    SqliteFileUnreadable {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The open or the statement that failed.
+        at: SqliteAt,
+        /// What the library returned.
+        report: LibraryReport,
+    },
+
     // ---------------------------------------------------------------- 77 ---
     /// The server refused the credentials (`FR-ERR-001`, the `77` row).
     ///
@@ -1656,6 +1913,19 @@ pub enum Error {
         /// Which property could not be read, as a literal — `FR-PRIV-013`
         /// obliges the `cause` line to state it.
         property: &'static str,
+    },
+
+    /// A view a `sqlite` read could not read the columns of, because its
+    /// definition does not compile, was requested by name (`FR-LITE-035`,
+    /// `FR-PRIV-003`).
+    #[error("the columns of view '{view}' could not be read")]
+    ViewColumnsUnreadable {
+        /// The entry the read was made through.
+        entry: String,
+        /// The view, as the file names it.
+        view: FileValue,
+        /// The reason the library gave.
+        reason: LibraryReport,
     },
 
     // ---------------------------------------------------------------- 78 ---
@@ -2088,6 +2358,50 @@ pub enum Error {
         has_entries: bool,
     },
 
+    /// The selected entry carries a key its provider refuses (`FR-CONF-052`).
+    /// No connection is opened and no file.
+    #[error("database entry '{entry}' carries keys its provider does not take")]
+    ProviderRefusesKeys {
+        /// The entry.
+        entry: String,
+        /// The file the entry is declared in.
+        file: PathBuf,
+        /// The entry's provider.
+        provider: crate::model::database::Provider,
+        /// Whether the provider is written, or taken from an absent key.
+        written: bool,
+        /// Every key the entry carries that the provider refuses, as leaves of
+        /// `FR-CONF-002`, in the order it states them.
+        keys: Vec<&'static str>,
+    },
+
+    /// The path a `sqlite` entry names is not a regular file (`FR-LITE-005`).
+    /// It is not opened.
+    #[error("{} is not a regular file, for database entry '{entry}'", .path.display())]
+    SqliteNotRegularFile {
+        /// The entry.
+        entry: String,
+        /// The path, as resolved.
+        path: PathBuf,
+        /// The kind of file found: a directory, a FIFO, a socket, a character
+        /// or a block device.
+        kind: &'static str,
+    },
+
+    /// The file a `sqlite` entry names is not a SQLite database, is damaged,
+    /// or holds a schema the library cannot load (`FR-LITE-007`).
+    #[error("{} cannot be read as a SQLite database, for database entry '{entry}'", .path.display())]
+    SqliteFileRefused {
+        /// The entry.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The open or the statement that failed.
+        at: SqliteAt,
+        /// What the library returned.
+        report: LibraryReport,
+    },
+
     /// The server is reachable and authenticated and is not MariaDB
     /// (`FR-SRV-003`). The catalogue is not read.
     #[error("the server reached by database entry '{entry}' is not MariaDB")]
@@ -2380,6 +2694,44 @@ fn configuration_entry_name(file: &std::path::Path, core: bool) -> String {
     }
 }
 
+/// The `error:` line of [`Error::FlagRefusedByProvider`]: the flags that
+/// cannot stand together, as the invocation gave them (`FR-CFG-055`).
+///
+/// `provider` is the provider that decides it. Where `--provider` was not
+/// given, the line names the flag that decided it instead: `--path`, beside a
+/// flag of a `mariadb` entry, or the absent `--provider sqlite`.
+fn flag_refused(flag: &str, provider: crate::model::database::Provider, given: bool) -> String {
+    use crate::model::database::Provider;
+
+    match (provider, given) {
+        (_, true) => format!("{flag} cannot be given with --provider {provider}"),
+        (Provider::Sqlite, false) => format!("{flag} cannot be given with --path"),
+        (Provider::Mariadb, false) => format!("{flag} cannot be given without --provider sqlite"),
+    }
+}
+
+/// The `error:` line of [`Error::ProviderIncoherentWrite`], in the words
+/// `FR-CFG-048` shows: the provider where the write gives one, and the key
+/// otherwise.
+///
+/// `provider` is the provider the written key belongs to. Where the write is a
+/// key rather than the provider, the entry's own provider is the other one —
+/// there are two, and the entry's refuses the key — and that is the provider
+/// the line names.
+fn provider_write(provider: crate::model::database::Provider, written: &str) -> String {
+    use crate::model::database::Provider;
+
+    if written.ends_with(".provider") {
+        format!("the provider {provider}")
+    } else {
+        let own = match provider {
+            Provider::Mariadb => Provider::Sqlite,
+            Provider::Sqlite => Provider::Mariadb,
+        };
+        format!("the key {written}, which its provider {own} does not take")
+    }
+}
+
 /// The `error:` line of [`Error::EntryKeyMissing`].
 ///
 /// `database.<name>.database` names the word three times over, which is how the
@@ -2390,6 +2742,8 @@ fn entry_key_missing(entry: &str, key: &str) -> String {
         "no server database name"
     } else if key.ends_with(".host") {
         "no host"
+    } else if key.ends_with(".path") {
+        "no database file"
     } else {
         "a required key missing"
     };
@@ -2535,7 +2889,10 @@ impl Error {
             | Self::InitDestinationIsTplFolder { .. }
             | Self::InvalidEntryName { .. }
             | Self::InvalidReference { .. }
-            | Self::EmptyValue { .. } => 64,
+            | Self::EmptyValue { .. }
+            | Self::FlagRefusedByProvider { .. }
+            | Self::PathRequired { .. }
+            | Self::ProviderIncoherentWrite { .. } => 64,
 
             // 65 EX_DATAERR
             Self::TemplateSyntax { .. }
@@ -2562,10 +2919,13 @@ impl Error {
             Self::NameNotResolved { .. }
             | Self::ConnectionRefused { .. }
             | Self::TlsHandshakeFailed { .. }
-            | Self::NetworkDeadlineExceeded { .. } => 69,
+            | Self::NetworkDeadlineExceeded { .. }
+            | Self::SqliteUnavailable { .. } => 69,
 
             // 70 EX_SOFTWARE
-            Self::InternalInvariant { .. } => 70,
+            Self::InternalInvariant { .. }
+            | Self::SqliteControlNotInEffect { .. }
+            | Self::SqliteDefect { .. } => 70,
 
             // 73 EX_CANTCREAT
             Self::ProjectAlreadyExists { .. } | Self::ProjectNotCreated { .. } => 73,
@@ -2576,10 +2936,14 @@ impl Error {
             | Self::TrustMaterialUnreadable { .. }
             | Self::ProjectFileUnwritable { .. }
             | Self::StdoutUnwritable { .. }
-            | Self::StdoutClosedMidDocument => 74,
+            | Self::StdoutClosedMidDocument
+            | Self::SqliteFileLookup { .. }
+            | Self::SqliteFileUnreadable { .. } => 74,
 
             // 77 EX_NOPERM
-            Self::AuthenticationRefused { .. } | Self::PropertyNotReadable { .. } => 77,
+            Self::AuthenticationRefused { .. }
+            | Self::PropertyNotReadable { .. }
+            | Self::ViewColumnsUnreadable { .. } => 77,
 
             // 78 EX_CONFIG
             Self::ProjectNotFound { .. }
@@ -2610,7 +2974,10 @@ impl Error {
             | Self::EntryKeyMissing { .. }
             | Self::NoDatabaseEntrySelected { .. }
             | Self::ServerNotMariaDb { .. }
-            | Self::SeriesNotSupported { .. } => 78,
+            | Self::SeriesNotSupported { .. }
+            | Self::ProviderRefusesKeys { .. }
+            | Self::SqliteNotRegularFile { .. }
+            | Self::SqliteFileRefused { .. } => 78,
         }
     }
 }
@@ -2630,7 +2997,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 92;
+    const VARIANT_COUNT: usize = 104;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2978,6 +3345,7 @@ mod tests {
                     name: "ordrs".to_owned(),
                     entry: "shop".to_owned(),
                     database: "shop".to_owned(),
+                    provider: crate::model::database::Provider::Mariadb,
                     nearest: Vec::new(),
                 },
                 66,
@@ -3369,7 +3737,127 @@ mod tests {
                 },
                 78,
             ),
+            // The provider, and the SQLite read (FR-CONF-051 … FR-LITE-040).
+            (
+                Error::FlagRefusedByProvider {
+                    command: "cfg database add",
+                    entry: "ledger".to_owned(),
+                    flag: "--host",
+                    provider: crate::model::database::Provider::Sqlite,
+                    given: true,
+                },
+                64,
+            ),
+            (
+                Error::PathRequired {
+                    entry: "ledger".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::ProviderIncoherentWrite {
+                    entry: "shop".to_owned(),
+                    provider: crate::model::database::Provider::Sqlite,
+                    written: "database.shop.provider".to_owned(),
+                    carried: vec!["host", "port"],
+                    value: Some("sqlite".to_owned()),
+                },
+                64,
+            ),
+            (
+                Error::SqliteUnavailable {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    statement: "the version probe",
+                    ended: super::SqliteEnd::Deadline {
+                        bound: DeadlineBound::Phase,
+                        limit: Duration::from_secs(1),
+                    },
+                },
+                69,
+            ),
+            (
+                Error::SqliteControlNotInEffect {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    control: "temp_store",
+                    set: "MEMORY (2)",
+                    read_back: super::FileValue::new("1"),
+                },
+                70,
+            ),
+            (
+                Error::SqliteDefect {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    at: super::SqliteAt::Open,
+                    invariant: "an invariant",
+                    report: None,
+                    location: Location::caller(),
+                },
+                70,
+            ),
+            (
+                Error::SqliteFileLookup {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    returned: io::Error::from(io::ErrorKind::NotFound),
+                },
+                74,
+            ),
+            (
+                Error::SqliteFileUnreadable {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    at: super::SqliteAt::Open,
+                    report: report(14),
+                },
+                74,
+            ),
+            (
+                Error::ViewColumnsUnreadable {
+                    entry: "ledger".to_owned(),
+                    view: super::FileValue::new("v_broken"),
+                    reason: report(1),
+                },
+                77,
+            ),
+            (
+                Error::ProviderRefusesKeys {
+                    entry: "ledger".to_owned(),
+                    file: path(),
+                    provider: crate::model::database::Provider::Sqlite,
+                    written: true,
+                    keys: vec!["host"],
+                },
+                78,
+            ),
+            (
+                Error::SqliteNotRegularFile {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger"),
+                    kind: "directory",
+                },
+                78,
+            ),
+            (
+                Error::SqliteFileRefused {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    at: super::SqliteAt::Statement("the version probe"),
+                    report: report(26),
+                },
+                78,
+            ),
         ]
+    }
+
+    /// A report of the SQLite library, for a sample.
+    fn report(code: i32) -> super::LibraryReport {
+        super::LibraryReport {
+            code,
+            message: Some(super::FileValue::new("a message")),
+        }
     }
 
     /// The variant's name, by an exhaustive match with no wildcard arm: a
@@ -3469,6 +3957,18 @@ mod tests {
             Error::ProjectDirUnusable { .. } => "ProjectDirUnusable",
             Error::ServerNotMariaDb { .. } => "ServerNotMariaDb",
             Error::SeriesNotSupported { .. } => "SeriesNotSupported",
+            Error::FlagRefusedByProvider { .. } => "FlagRefusedByProvider",
+            Error::PathRequired { .. } => "PathRequired",
+            Error::ProviderIncoherentWrite { .. } => "ProviderIncoherentWrite",
+            Error::SqliteUnavailable { .. } => "SqliteUnavailable",
+            Error::SqliteControlNotInEffect { .. } => "SqliteControlNotInEffect",
+            Error::SqliteDefect { .. } => "SqliteDefect",
+            Error::SqliteFileLookup { .. } => "SqliteFileLookup",
+            Error::SqliteFileUnreadable { .. } => "SqliteFileUnreadable",
+            Error::ViewColumnsUnreadable { .. } => "ViewColumnsUnreadable",
+            Error::ProviderRefusesKeys { .. } => "ProviderRefusesKeys",
+            Error::SqliteNotRegularFile { .. } => "SqliteNotRegularFile",
+            Error::SqliteFileRefused { .. } => "SqliteFileRefused",
         }
     }
 
@@ -3520,13 +4020,23 @@ mod tests {
     }
 
     #[test]
-    fn fr_err_030_code_70_is_confined_to_the_internal_error_variant() {
+    fn fr_err_030_code_70_is_confined_to_the_defect_variants() {
         // FR-ERR-030: 70 is a defect in `tpl`, never something a caller
         // provokes. The other producing condition, a panic, never becomes an
-        // Error value.
+        // Error value. FR-LITE-012 and FR-LITE-040 detect two more violated
+        // invariants on a `sqlite` read — a control of the library the binary
+        // carries that did not take effect, and a result code only a defect
+        // produces — each with a variant that carries what its `cause` names.
         for (error, _) in samples() {
             if error.exit_code() == 70 {
-                assert_eq!(variant_name(&error), "InternalInvariant");
+                assert!(
+                    matches!(
+                        variant_name(&error),
+                        "InternalInvariant" | "SqliteControlNotInEffect" | "SqliteDefect"
+                    ),
+                    "{} produces 70",
+                    variant_name(&error)
+                );
             }
         }
     }
@@ -3581,6 +4091,7 @@ mod tests {
                 name: "ordrs".to_owned(),
                 entry: "shop".to_owned(),
                 database: "shop".to_owned(),
+                provider: crate::model::database::Provider::Mariadb,
                 nearest: Vec::new(),
             }
             .to_string(),

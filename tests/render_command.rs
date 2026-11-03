@@ -2092,9 +2092,10 @@ fn z_01_an_undefined_member_of_any_context_variable_names_the_step_that_found_no
         (
             "db",
             "reads 'database.nme', and 'database' has no attribute 'nme'",
+            // FR-CTX-043, sixty-fifth edition: `provider` follows `collation`.
             "did you mean 'name'? 'database' has no attribute 'nme'; its attributes are name, \
-             charset, collation, server, tables, views, routines; correct the template, then \
-             print the template's source with: tpl template show db.jinja",
+             charset, collation, provider, server, tables, views, routines; correct the \
+             template, then print the template's source with: tpl template show db.jinja",
         ),
         (
             "past",

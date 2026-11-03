@@ -150,11 +150,12 @@ pub struct Index<'a> {
     pub columns: Vec<IndexColumn<'a>>,
 
     /// The index type, carried verbatim — `BTREE`, `FULLTEXT` and `SPATIAL`
-    /// were observed, and no `HASH` row appeared.
+    /// were observed, and no `HASH` row appeared — or [`None`] for a `sqlite`
+    /// read, whose statements report no index type (`FR-LITE-030`).
     ///
     /// The document key is `type`, which is not a name a Rust field can take.
     #[serde(rename = "type", borrow)]
-    pub index_type: Cow<'a, str>,
+    pub index_type: Option<Cow<'a, str>>,
 
     /// The text written with `COMMENT` on the key, and the **empty string**
     /// where none was given.
@@ -177,6 +178,75 @@ impl Index<'_> {
     #[must_use]
     pub fn is_primary_key(&self) -> bool {
         self.name == PRIMARY_KEY_NAME
+    }
+}
+
+/// A table's primary key, as the table carries it (`FR-CAT-011`,
+/// `FR-CAT-043`, `FR-LITE-029`).
+///
+/// It has the keys of [`Index`], in the same order, so a template reads a
+/// primary key the same way whichever provider read it; the one difference is
+/// that [`PrimaryKey::name`] may be absent. A MariaDB primary key **is** the
+/// index named `PRIMARY`, copied here by the producer (`FR-CAT-043`); a SQLite
+/// one is named after its index of origin `pk`, or carries no name where it is
+/// the rowid alias, which has no index (`FR-LITE-029`). No index name can stand
+/// for the second, which is why the table holds its key as a value the
+/// producer sets rather than finding it by name (`OD-35`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct PrimaryKey<'a> {
+    /// The key's name: `PRIMARY` on a MariaDB read, the name of the index of
+    /// origin `pk` on a SQLite one, and [`None`] for a rowid alias.
+    #[serde(borrow)]
+    pub name: Option<Cow<'a, str>>,
+
+    /// Whether the key is unique — true on every key either provider reads.
+    pub unique: bool,
+
+    /// The key's columns, in the order the catalogue states — `pk` for a
+    /// SQLite read (`NFR-DET-002`).
+    #[serde(borrow)]
+    pub columns: Vec<IndexColumn<'a>>,
+
+    /// The index type, as [`Index::index_type`] carries it.
+    #[serde(rename = "type", borrow)]
+    pub index_type: Option<Cow<'a, str>>,
+
+    /// The comment, the empty string where none was given.
+    #[serde(borrow)]
+    pub comment: Cow<'a, str>,
+
+    /// Whether the key's index is ignored.
+    pub ignored: bool,
+}
+
+impl<'a> From<&Index<'a>> for PrimaryKey<'a> {
+    /// The primary key an index is, field for field (`FR-CAT-043`).
+    fn from(index: &Index<'a>) -> Self {
+        Self {
+            name: Some(index.name.clone()),
+            unique: index.unique,
+            columns: index.columns.clone(),
+            index_type: index.index_type.clone(),
+            comment: index.comment.clone(),
+            ignored: index.ignored,
+        }
+    }
+}
+
+/// A copy that borrows nothing, for the render context of `FR-RND-023`.
+impl ToStatic for PrimaryKey<'_> {
+    type Static = PrimaryKey<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        PrimaryKey {
+            name: self.name.to_static(),
+            unique: self.unique,
+            columns: self.columns.to_static(),
+            index_type: self.index_type.to_static(),
+            comment: self.comment.to_static(),
+            ignored: self.ignored,
+        }
     }
 }
 
@@ -227,7 +297,7 @@ mod tests {
             name: Cow::Borrowed(name),
             unique: true,
             columns,
-            index_type: Cow::Borrowed("BTREE"),
+            index_type: Some(Cow::Borrowed("BTREE")),
             comment: Cow::Borrowed(""),
             ignored: false,
         }

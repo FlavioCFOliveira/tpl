@@ -623,10 +623,12 @@ fn only<'d>(
         name: document.name.clone(),
         charset: document.charset.clone(),
         collation: document.collation.clone(),
+        provider: document.provider,
         server: document.server.clone(),
         tables,
         views: Cow::Owned(views),
         routines: Cow::Owned(routines),
+        unreadable: Vec::new(),
     }
 }
 
@@ -636,5 +638,6 @@ fn sought<'a>(opened: &'a Opened, document: &'a DatabaseDocument<'_>) -> named::
     named::Sought::Catalogue {
         entry: opened.entry(),
         database: &document.name,
+        provider: document.provider,
     }
 }

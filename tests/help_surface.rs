@@ -1448,11 +1448,13 @@ fn rmp_274_the_help_states_what_the_second_re_audit_found_it_left_out() {
     }
     assert!(!render.contains("Acts on this one"), "{render}");
 
-    // S-02: what an entry needs before it can connect.
+    // S-02: what an entry needs before it can connect. Since the sixty-fifth
+    // edition of the specification a sqlite entry needs --path instead
+    // (FR-CONF-053), so the sentence names the provider it holds for.
     let add = prose(&["cfg", "database", "add"]);
     assert!(
         add.contains(
-            "To connect, the entry needs --host and --schema, or a --dsn that names both; --port \
+            "To connect, a MariaDB entry needs --host and --schema, or a --dsn that names both; --port \
              defaults to 3306 and --user is optional. An entry without them is stored, but every \
              later command that connects with it exits 78."
         ),

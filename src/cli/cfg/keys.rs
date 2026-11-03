@@ -197,8 +197,13 @@ pub(crate) fn set(supplied: &Supplied<'_>, key: &str, value: &str) -> Result<(),
     // already been validated, and the file is still untouched.
     if let Key::Entry { entry, field } = &parsed {
         let dsn = (*field == EntryKey::Dsn).then_some(value);
+        // The value has passed the declared type of FR-CFG-010 above, so a
+        // provider written here is one of the two.
+        let provider = (*field == EntryKey::Provider)
+            .then(|| crate::model::database::Provider::from_name(value))
+            .flatten();
 
-        coherence::refuse(&configuration, SET, entry, &[*field], dsn)?;
+        coherence::refuse(&configuration, SET, entry, &[*field], dsn, provider)?;
     }
 
     let mut editor = project.editor()?;

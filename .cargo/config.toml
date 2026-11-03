@@ -1,0 +1,8 @@
+# Every build of `tpl` compiles the bundled SQLite of `rusqlite` without
+# extension loading (`FR-LITE-001`): the `-U` undoes the
+# `SQLITE_ENABLE_LOAD_EXTENSION=1` that `libsqlite3-sys` defines, and the `-D`
+# omits the loader. `force` makes this value win over one already set in the
+# environment. Cargo reads this file only when it is invoked from inside this
+# directory tree, so the read-back of `FR-LITE-010` stays the guarantee.
+[env]
+LIBSQLITE3_FLAGS = { value = "-USQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_OMIT_LOAD_EXTENSION", force = true }
