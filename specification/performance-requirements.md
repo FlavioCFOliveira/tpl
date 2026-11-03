@@ -218,11 +218,14 @@ a summary.
   *Note added in the sixty-fifth edition.* This requirement holds for a
   `sqlite` entry, with the catalogue statements of `FR-LITE-015` counted under
   `FR-LITE-018` and the equality taken over the SQLite fixture and an empty
-  database file, per `FR-LITE-037`. One path is excepted, and it is the only
-  path on which a count depends on the objects: after the single statement
-  reading the columns of every view has failed because a view does not compile,
-  `FR-LITE-035` reads each view in a statement of its own, so that only the
-  views that fail are marked, which `FR-PRIV-006` and `FR-PRIV-007` require.
+  database file, per `FR-LITE-037`, and no path is excepted.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The note excepted one
+  path, on which `FR-LITE-035` read each view in a statement of its own after
+  the statement reading the columns of every view had failed. That
+  requirement is withdrawn by the user's decision recorded under
+  `FR-LITE-033`, no statement reads the columns of views, and the count of a
+  `sqlite` read no longer depends on the objects on any path.
 
 - **NFR-PERF-002**: The number of catalogue queries the system issues to read
   one named object SHALL NOT depend on the number of objects in the database.
@@ -637,6 +640,15 @@ a summary.
   `NFR-PERF-007` no longer reaches it. The comparison reads the stream
   against the server's own record, so neither side is a number written
   twice.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The statements the
+  comparison counts for a `sqlite` entry no longer include one reading the
+  columns of views, nor the per-view statements of `FR-LITE-035`, which is
+  withdrawn by the user's decision recorded under `FR-LITE-033`. The
+  requirement is unchanged: the fixture database stays the one the
+  comparison is made over, because it holds every case `FR-LITE-038` lists,
+  and the reason the sixty-seventh edition's note gave for naming it — the
+  path of `FR-LITE-035` — no longer exists.
 
 - **BR-PERF-001**: A requirement of form is preferred to a figure wherever both
   would catch the same defect, because a figure has to be re-measured on every

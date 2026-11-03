@@ -221,11 +221,13 @@ two builds returned, in the same sense as those above.
   and the number never enters this corpus.
 
   *What reachable includes.* The schema of the file is SQL its author wrote.
-  The library parses every `CREATE` statement when it loads the schema, and
-  compiles a view whenever its columns are read, per `FR-LITE-033`. A fault
-  that needs an attacker's SQL is therefore reachable wherever parsing or
-  compiling that SQL reaches it, although `tpl` itself issues only the
-  statements of `FR-LITE-015`.
+  The library parses every `CREATE` statement when it loads the schema. No
+  statement of `FR-LITE-015` compiles a view, per `FR-LITE-033`, and listing
+  the objects connects a virtual table, whose module then runs code of its
+  own, as the observation under that requirement records for `fts5`. A fault
+  that needs an attacker's SQL is therefore reachable wherever parsing that
+  SQL, or a module the read connects, reaches it, although `tpl` itself
+  issues only the statements of `FR-LITE-015`.
 
   *Why reachability and not presence.* The vulnerability page states, for
   most of its entries, the conditions a fault needs — SQL the attacker
@@ -250,6 +252,12 @@ two builds returned, in the same sense as those above.
   `FR-LITE-004`.
 
   *Added in the sixty-sixth edition,* for rmp `#319`.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`: the note on what
+  reachable includes said that the library compiles a view whenever its
+  columns are read. No statement reads them now, per `FR-LITE-033`, so the
+  note names what the read still reaches: the parse of the schema, and the
+  module of a virtual table the read connects. The requirement is unchanged.
 
 ## Selecting the driver
 
@@ -497,27 +505,24 @@ two builds returned, in the same sense as those above.
 - **FR-LITE-040**: For a `sqlite` entry, every
   [result code](glossary.md#result-code) by which the library reports a
   failure SHALL be classified, and the failure SHALL end the invocation with
-  exactly one code of `FR-ERR-001`, save where `FR-LITE-035` marks a view
-  instead. The classification SHALL be the first of the following that names
-  the result code:
+  exactly one code of `FR-ERR-001`. The classification SHALL be the first of
+  the following that names the result code:
 
   1. `FR-LITE-012`, at the stage that applies or confirms a control or a
      limit, whatever the library returned there;
-  2. `FR-LITE-035`, for `SQLITE_ERROR` on a statement that reads the columns
-     of views;
-  3. the rows of `FR-LITE-007`, each by its result code, at the open or at any
+  2. the rows of `FR-LITE-007`, each by its result code, at the open or at any
      statement. The *Observed as* column records where a code was observed and
      does not bound where its row applies, so the row of `SQLITE_CANTOPEN`
      also takes a file beside the database that the library cannot open, and
      the row of `SQLITE_BUSY` a lock the library returns without waiting out
      the catalogue-query deadline;
-  4. the table below, by the primary result code, under any extended code
+  3. the table below, by the primary result code, under any extended code
      unless a row names one.
 
   | Result code | What the library reports | Code |
   |---|---|---|
   | `SQLITE_MISUSE`, `SQLITE_RANGE`, `SQLITE_NOTFOUND` | A use of the library by `tpl` that the library refuses: an interface called in a way it does not support, a parameter or column number out of range, or an operation code it does not recognise | `70` (`EX_SOFTWARE`) |
-  | `SQLITE_ERROR`, anywhere but on a statement of `FR-LITE-035` | An error in a statement of `FR-LITE-015`, which `tpl` wrote and issued over a file whose schema has loaded, or in how `tpl` opened the connection | `70` |
+  | `SQLITE_ERROR` | An error in a statement of `FR-LITE-015`, which `tpl` wrote and issued over a file whose schema has loaded, or in how `tpl` opened the connection | `70` |
   | `SQLITE_INTERNAL` | A malfunction inside the library the binary carries, per `FR-LITE-001` | `70` |
   | `SQLITE_ABORT`, `SQLITE_AUTH`, `SQLITE_CONSTRAINT`, `SQLITE_LOCKED`, `SQLITE_MISMATCH`, and `SQLITE_READONLY` with no extended code of its own | An outcome that only an operation `tpl` does not perform produces: a write or a constraint on one, an abort or a rollback it requests, an authorisation callback, a plan a virtual-table module refuses, or a conflict inside its one connection or with a second connection sharing its cache | `70` |
   | `SQLITE_EMPTY`, `SQLITE_FORMAT`, `SQLITE_NOTICE`, `SQLITE_WARNING` | A code the library documents as not used, or as returned by no interface | `70` |
@@ -573,9 +578,12 @@ two builds returned, in the same sense as those above.
   last row of `FR-LITE-015` names, written for the observation, read its
   tables, columns, indexes, index members, foreign keys and schema rows
   without error. On a file whose schema has loaded, only a statement that
-  reads the columns of views was observed to fail with `SQLITE_ERROR`, which
-  is `FR-LITE-035`'s case; that is the ground for reading `SQLITE_ERROR`
-  anywhere else as an error in the statement and not in the file.
+  reads the columns of views was observed to fail with `SQLITE_ERROR`, and no
+  statement of `FR-LITE-015` reads them since the sixty-eighth edition, per
+  `FR-LITE-033`, under whose observation the statements that remain read a
+  database holding views that do not compile without error. That is the
+  ground for reading `SQLITE_ERROR` as an error in the statement and not in
+  the file.
 
   *Rationale for the two departures from the split the technical
   specification recommended,* `70` for a misuse of the library by `tpl` and
@@ -594,8 +602,8 @@ two builds returned, in the same sense as those above.
   entry.* That requirement's condition is a session that stops answering,
   which a library inside the process cannot do, and its `69` would tell a
   caller to repeat a read that fails on a defect every time. *Rejected: `78`
-  for `SQLITE_ERROR` outside `FR-LITE-035`, as a fault of the file.* Per the
-  observation above, no file whose schema loads makes those statements fail.
+  for `SQLITE_ERROR`, as a fault of the file.* Per the observation above, no
+  file whose schema loads makes those statements fail.
 
   *Consequence, stated plainly.* A malfunction of the library that a crafted
   file provokes is reported with `70`, as a defect of the binary, and it is
@@ -608,6 +616,15 @@ two builds returned, in the same sense as those above.
   *Added in the sixty-seventh edition,* for rmp `#314`. The technical
   specification recorded that no requirement gave these result codes an exit
   code, and left that one arm of the reader's fault mapping open on it.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The second step of
+  the classification, which gave `SQLITE_ERROR` on a statement reading the
+  columns of views to `FR-LITE-035`, is removed with that requirement, and the
+  steps after it are renumbered. No statement that remains reads a view's
+  columns or compiles a view, per `FR-LITE-015` and `FR-LITE-033`, so none can
+  produce the error that step took, and the `SQLITE_ERROR` row takes every
+  `SQLITE_ERROR` with `70`: a statement that compiled a view would be a defect
+  of `tpl`. No other row moves.
 
 ## Hardening against an untrusted file
 
@@ -714,8 +731,9 @@ two builds returned, in the same sense as those above.
   *What `trusted_schema` off costs, and where.* Observed on the builds 3.51.3
   and 3.54.1, with defensive mode on and with it off: a view calling a
   function the library holds and does not mark innocuous failed to compile,
-  with `unsafe use of bm25()` and `unsafe use of rtreedepth()`, which is
-  `FR-LITE-035`'s case. A `CHECK` constraint, a `DEFAULT` and a trigger body
+  with `unsafe use of bm25()` and `unsafe use of rtreedepth()`; no statement
+  of `FR-LITE-015` compiles a view, per `FR-LITE-033`, so a read meets
+  neither failure. A `CHECK` constraint, a `DEFAULT` and a trigger body
   calling such a function did not affect the read: the schema loaded and the
   table's columns were read. Creating such a `CHECK` was refused with
   `unsafe use of rtreedepth()` on a connection with `trusted_schema` off and
@@ -740,8 +758,9 @@ two builds returned, in the same sense as those above.
   note rests on the readings of the sixty-sixth edition.
 
   *Rejected: disabling views, as the guidance offers for an application that
-  uses none.* The columns of a view are read by compiling it, per
-  `FR-LITE-033`. *Rejected: disabling triggers.* No statement this system
+  uses none.* No statement this system issues reads from a view or compiles
+  one, per `FR-LITE-015`, so the control would close nothing that is open —
+  the ground given for triggers. *Rejected: disabling triggers.* No statement this system
   issues can fire one, per `FR-LITE-016`, and reading a trigger's definition
   compiles nothing; the control would close nothing that is open.
 
@@ -814,6 +833,13 @@ two builds returned, in the same sense as those above.
   new control, at `MEMORY`, confirmed by its read-back and by
   `PRAGMA compile_options`, for the reasons in the notes on temporary storage
   above. The other controls are unchanged.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The rejection of
+  disabling views rested on reading a view's columns, which compiles it, and
+  no statement reads them now, per `FR-LITE-033`; the rejection rests instead
+  on the ground it already gave for triggers. The note on what
+  `trusted_schema` off costs states that a read no longer meets the failure of
+  a view it refuses. The controls are unchanged.
 
 - **FR-LITE-011**: On every connection, before the version probe, the system
   SHALL set the following run-time limits of the library and SHALL confirm
@@ -922,6 +948,11 @@ two builds returned, in the same sense as those above.
   | `SELECT sqlite_version()`, reading nothing else | The version probe of `FR-LITE-002` | Once, at connection start |
   | `SELECT` against the schema table `sqlite_schema` and the pragma table-valued functions `pragma_table_list`, `pragma_table_xinfo`, `pragma_index_list`, `pragma_index_xinfo`, `pragma_foreign_key_list` and `pragma_encoding`, restricted to the schema `main` | Reading the catalogue, and the probe of `FR-CFG-056` | As the command requires |
 
+  No statement of the last row SHALL read from a view, pass a view's name to a
+  pragma function, or otherwise make the library compile a view's definition.
+  `pragma_table_list` names the views, and `sqlite_schema` holds their stored
+  text, which is all `FR-LITE-033` reads of a view.
+
   A control the system applies through the library's configuration interface
   rather than by a statement issues no statement, and the list admits the five
   pragmas of the first row without obliging their use; the pragma of the
@@ -936,6 +967,14 @@ two builds returned, in the same sense as those above.
   of zero bytes. Each joins `pragma_table_list` to the function it reads
   through, so its count does not depend on the number of objects.
 
+  *Observed again, for the sixty-eighth edition,* under `FR-LITE-033`: the six
+  catalogue statements that remain once the columns of views are no longer
+  read — the encoding, the covered objects, the columns of every table, the
+  indexes and their columns, the foreign keys, and the stored definitions of
+  the views and triggers — read a database holding views that do not compile
+  without error, and the same seven statements, the probe with them, read an
+  empty database of zero bytes.
+
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
   *Amended in the sixty-sixth edition,* for rmp `#319`: the second row is
@@ -946,6 +985,13 @@ two builds returned, in the same sense as those above.
   `PRAGMA temp_store`, and the second the confirmation of the build it
   depends on, for the control `FR-LITE-010` adds. Both read nothing from the
   file, per the observation under that requirement.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`: the paragraph after
+  the table is new. The statement reading the columns of every view, and the
+  statement reading one view's columns, which `FR-LITE-035` issued, go with
+  that requirement, by the user's decision recorded under `FR-LITE-033`. The
+  rows of the table are unchanged: the last row still admits
+  `pragma_table_xinfo`, for the columns of a table.
 
 - **FR-LITE-016**: The system SHALL NOT issue any other statement for a
   `sqlite` entry. It SHALL issue no DDL, no DML, no `ATTACH` or `DETACH`, no
@@ -1015,6 +1061,14 @@ two builds returned, in the same sense as those above.
   file's bytes, its size and its modification time SHALL be unchanged and no
   file SHALL appear in its directory.
 
+  That no statement compiles a view, per `FR-LITE-015`, SHALL be verified by
+  the read of the fixture database of `FR-LITE-038`, which holds views that do
+  not compile: the read SHALL succeed. A statement that compiled one of them
+  would fail, per the observation under `FR-LITE-033`, whether it failed when
+  prepared or when run, and would end the read with `70` under `FR-LITE-040`.
+  The outcome of the read is the instrument here, not the record, so the
+  limit of the record stated below does not reach this assertion.
+
   *Why the statement record is taken in process.* `BR-SRV-003` observes the
   statements a server receives, from the server's side. A SQLite connection
   has no other side: the library that receives the statements runs inside the
@@ -1026,8 +1080,9 @@ two builds returned, in the same sense as those above.
   the trace reported a statement when it began running. Two statements whose
   preparation failed — `SELECT * FROM no_such_table`, and a `SELECT` from a
   view that names a missing table — and a statement prepared and never run
-  were not reported; the statement of `FR-LITE-035` that reads the columns of
-  every view, which began running and then failed, was. The library's own
+  were not reported; a statement reading the columns of every view, which
+  `FR-LITE-035` issued until the sixty-eighth edition, began running, then
+  failed, and was. The library's own
   reading of the schema table, when it loaded the schema, was not reported.
   Every pragma table-valued function of `FR-LITE-015` ran a statement of its
   own for each invocation, reported with the prefix: `-- PRAGMA encoding`,
@@ -1039,7 +1094,10 @@ two builds returned, in the same sense as those above.
   over an `fts5` table ran, in addition,
   `-- SELECT k, v FROM 'main'.'<table>_config'`: the module's own code,
   reading a table of the file. A view whose definition did not compile
-  produced no prefixed statement of its own. The documentation of the event,
+  produced no prefixed statement of its own. *Observed again, for the
+  sixty-eighth edition,* under `FR-LITE-033`: the first statement invoking
+  `pragma_table_list` ran the same nested statement, with no view read, once
+  the library connected the `fts5` table to list it. The documentation of the event,
   at `https://sqlite.org/c3ref/c_trace.html`, checked 2026-11-03, states that
   it fires "when a prepared statement first begins running" and that a text
   beginning with `--` marks the invocation of a trigger; it does not state the
@@ -1055,10 +1113,9 @@ two builds returned, in the same sense as those above.
   functions run one for each table or index, and a count that grows with the
   objects is the dependence `NFR-PERF-001` forbids. What a nested statement
   can do to the file is bounded by the controls that bound the connection —
-  the read-only open and `query_only` — and which module may run from a view
-  is bounded by `trusted_schema` off, under which the view calling `bm25()`
-  did not compile; the read-only promise is verified from outside the process,
-  whatever ran inside it.
+  the read-only open and `query_only` — and no view is compiled, per
+  `FR-LITE-015`, so nothing a view names runs during the read; the read-only
+  promise is verified from outside the process, whatever ran inside it.
 
   *Rejected: admitting nested statements to the list of `FR-LITE-015`.* The
   list would be closed over the fixture and open over every other file.
@@ -1086,6 +1143,14 @@ two builds returned, in the same sense as those above.
   `FR-LITE-015` does not name, so the requirement now states what the record
   holds, what the test asserts of each kind of statement in it, and what the
   record does not show.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The record no longer
+  holds a statement reading the columns of views, which the user's decision
+  under `FR-LITE-033` removes. The paragraph verifying that no statement
+  compiles a view is new, the note on what bounds a nested statement says
+  that no view is compiled, and the observation records where the `fts5`
+  module's nested statement runs now that no view's columns are read. The two
+  assertions on the record are unchanged.
 
 ## The part of the database a read covers
 
@@ -1604,25 +1669,97 @@ two builds returned, in the same sense as those above.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
-- **FR-LITE-033**: For a `sqlite` read, a view SHALL carry `name`; `definition`,
-  the `sql` field of its `sqlite_schema` row — the whole stored
-  `CREATE VIEW` statement, unchanged; its columns, read from
-  `pragma_table_xinfo` and decomposed as `FR-LITE-025` through `FR-LITE-027`
-  decompose a table's; and `null` for `check_option`, `is_updatable`,
+- **FR-LITE-033**: For a `sqlite` read, a view SHALL carry exactly the nine
+  properties `FR-CAT-047` gives a view, and no other: `name`; `definition`, the
+  `sql` field of its `sqlite_schema` row — the whole stored `CREATE VIEW`
+  statement, unchanged; and `null` for `check_option`, `is_updatable`,
   `definer`, `security_type`, `character_set_client`, `collation_connection`
-  and `algorithm`.
+  and `algorithm`. A view SHALL NOT carry its columns, and the system SHALL
+  NOT read them: no statement reads from a view or compiles one, per
+  `FR-LITE-015`. A view whose definition does not compile SHALL be read as
+  every other view is, and SHALL NOT be marked, per `FR-LITE-036`.
 
-  *Observed.* A view's columns are known only by compiling it. A column
-  selected directly from a table reported that column's declared type —
-  `VARCHAR(80)` for `country_name` — and an aggregate reported the empty
-  string; every view column read `notnull` `0`.
+  **The view object is the same on both providers.** A `mariadb` read carries
+  no column of a view either: `FR-CAT-047` gives a view nine properties and no
+  columns, and the rows the column catalogue returns for a view are presented
+  nowhere, per the note on `FR-CAT-052`. A template reads the same keys from a
+  view whichever provider the document names, and only their values differ.
 
   *Why the whole statement.* The `SELECT` follows an optional column list and
   the keyword `AS`, and the stored text is the only text SQLite keeps. MariaDB
   rewrites its own definition, per `FR-CAT-047`, so neither provider gives a
   template the author's body.
 
+  *Provenance.* The user's decision of 2026-11-03, relayed for rmp `#317`, to
+  read no view's columns and to mark no view, on four grounds:
+
+  1. **Parity with MariaDB.** No requirement asks a `mariadb` read whether a
+     view compiles. The one marking a view takes there is `FR-PRIV-011`'s, for
+     a definition the reader cannot see.
+  2. **Nothing is missing from the document.** Every property this requirement
+     gives a view is read, whether the view compiles or not.
+  3. **No statement of the read compiles a view.** A view's definition is SQL
+     the file's author wrote, and the library no longer resolves the tables,
+     functions and modules it names during a read. What `FR-LITE-039` counts
+     as reachable narrows to the parse of the schema and the modules the read
+     connects; module code is not removed with the compile, per the
+     observation below.
+  4. **The cache and `--context` treat the read as any complete read.** No
+     object is marked, so the read holds nothing `FR-CACHE-037` keeps out of
+     the cache, and `FR-PRIV-008` accepts its dump as a `--context`.
+
+  *Observed, on 2026-11-03, through the Python library 3.54.1, on a read-only
+  connection with `trusted_schema` off.* Over a database holding a view that
+  selects from a missing table, one that calls a function the library lacks,
+  one that calls `bm25()`, which `trusted_schema` off refuses, and one over an
+  `fts5` table, the probe and the six catalogue statements the read issues
+  each succeeded. `pragma_table_list` reported a column count of `0` for
+  every view, the one that compiles included, so listing a view does not
+  compile it; a statement reading the columns of the views failed with
+  `unsafe use of bm25()`. The first statement invoking `pragma_table_list` ran
+  the nested statement `-- SELECT k, v FROM 'main'.'docs_config'`: the library
+  connected the `fts5` table to list it, and its module read a table of the
+  file, with no view read. A statement reading the columns of the view over
+  that table, on a connection that had not yet listed the objects, ran the
+  same nested statement. Ground 3 therefore removes the compile of a view's
+  definition, and not a virtual table's module code.
+
+  *Rejected: keeping the marking of the sixty-fifth edition, with the column
+  read it rested on.* A document that lacks nothing would be refused as a
+  `--context`, per `FR-PRIV-008`, and its read would never be recorded whole
+  in the cache, per `FR-CACHE-037`, for a view every property of which was
+  read; and the read would compile SQL from an untrusted file to learn a fact
+  the model does not carry.
+
+  *Rejected: a `columns` key on the view object of both providers.* It adds a
+  key to every view of every MariaDB document, which `FR-CTX-043` makes the
+  change of `provider` alone — the ground `BR-LITE-002` gives for not carrying
+  `WITHOUT ROWID` and `STRICT`. *Rejected: a `columns` key on a view of a
+  `sqlite` read alone.* One object would take two shapes by provider, against
+  the Overview of this file: a template reading `view.columns` would fail the
+  render under `FR-SEM-012` on every MariaDB document, and reading a view
+  would first need a test of `provider`, which `FR-CTX-043` provides for a
+  template to branch on, not as a condition of reading an object.
+
+  *Accepted cost, stated because it is silent.* A view that does not compile
+  is no longer flagged. It is presented as every other view is, at exit `0`,
+  in a listing, in a dump and in answer to a request that names it, and
+  nothing in the document tells it from a view that compiles. A template that
+  emits code querying it produces code that fails at the database, not at
+  `tpl`.
+
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The requirement gave a
+  view its columns, read from `pragma_table_xinfo` and decomposed as
+  `FR-LITE-025` through `FR-LITE-027` decompose a table's, and the view object
+  of `FR-CAT-047` has no key to carry them, for either provider. By the user's
+  decision above, a view carries the nine properties alone, which is what the
+  Overview of this file already stated, and the system no longer reads a
+  view's columns at all; `FR-LITE-035`, whose marking that read served, is
+  withdrawn. The observations of what a view's column reports, and that a
+  view's columns are known only by compiling it, ground nothing now and are
+  removed.
 
 - **FR-LITE-034**: For a `sqlite` read, every table's `CHECK` constraints SHALL
   be `[]`. The system SHALL NOT read a `CHECK` constraint from the stored
@@ -1647,55 +1784,24 @@ two builds returned, in the same sense as those above.
 
 ## Completeness
 
-- **FR-LITE-035**: A view whose columns cannot be read because its definition
-  does not compile — it names a table or a function the database or the
-  library does not hold, or calls a function `trusted_schema` off refuses —
-  SHALL be **incomplete** under `FR-PRIV-002`, with `columns` the property
-  that could not be read. A listing or a dump SHALL present it marked
-  `"restricted":["columns"]` and SHALL succeed, per `FR-PRIV-005`; a request
-  that names it SHALL exit `77` (`EX_NOPERM`), per `FR-PRIV-003`, and the
-  `cause` SHALL name the view, the property, and the reason the library gave.
+- **FR-LITE-035**: *Withdrawn in the sixty-eighth edition,* for rmp `#317`.
+  This requirement read the columns of every view to learn whether its
+  definition compiled, marked a view that did not with
+  `"restricted":["columns"]` in a listing or a dump, answered a request naming
+  it with `77`, and read each view in a statement of its own when the
+  statement reading them all failed. By the user's decision of 2026-11-03,
+  recorded under `FR-LITE-033`, the system reads no view's columns and
+  compiles no view, per `FR-LITE-015`, so a view that does not compile is read
+  whole and marked nowhere, per `FR-LITE-036`. The identifier is retired and
+  SHALL NOT be reused.
 
-  The system SHALL read the columns of every view in one statement. IF that
-  statement fails because a view does not compile, THEN the system SHALL read
-  each view's columns in a statement of its own, so that exactly the views
-  that fail are marked, per `FR-PRIV-006` and `FR-PRIV-007`.
-
-  *Observed.* A view selecting from a missing table failed with
-  `no such table: main.no_such_table`, a view calling a function the library
-  lacks with `no such function: realpath`, and a view calling a function
-  `trusted_schema` off refuses with `unsafe use of realpath()`. The first and
-  the third, each beside other views, made the single statement reading every
-  view's columns fail whole, while the other views' columns read correctly in a
-  statement that left the failing view out.
-
-  *Rationale.* `FR-PRIV-002` makes an object incomplete whatever the reason,
-  and `BR-PRIV-001` is the asymmetry that applies: a listing that refused to
-  answer because one view is broken would be less useful than one that answers
-  and marks it, and a named view returned without its columns is the partial
-  object `FR-PRIV-004` forbids. `77` is the code `FR-PRIV-003` gives every
-  named object that comes back incomplete, so a caller branches the same way
-  on both providers, and the `cause` says the view does not compile rather
-  than that a privilege is missing.
-
-  *Rejected: `78` for the named view.* The entry and the file are correct, and
-  that row sends the caller to `.tpl/.cfg`. *Rejected: marking every view when
-  the single statement fails.* It marks complete views, which `FR-PRIV-007`
-  forbids. *Rejected: failing the read.* One broken view would make every table
-  unreadable.
-
-  *Consequence, stated plainly.* The statement count is constant except on a
-  database holding a view that does not compile, where it grows with the
-  number of views, per the note on `NFR-PERF-001`. A dump marking a view is
-  refused as a `--context`, per `FR-PRIV-008`.
-
-  *Added in the sixty-fifth edition,* for rmp `#314`.
-
-- **FR-LITE-036**: Apart from `FR-LITE-035`, a `sqlite` read SHALL be complete
-  or SHALL fail. A fault that prevents the schema from loading SHALL fail the
-  whole read under `FR-LITE-007`, and SHALL NOT be presented as an object with
-  a `restricted` marking. SQLite has no privileges, so no property is withheld
-  from the reader, and the cross-checks of
+- **FR-LITE-036**: A `sqlite` read SHALL be complete or SHALL fail, and no
+  object it presents SHALL carry a `restricted` marking. A fault that prevents
+  the schema from loading SHALL fail the whole read under `FR-LITE-007`, and
+  SHALL NOT be presented as an object with a `restricted` marking. A view
+  whose definition does not compile SHALL be presented whole and unmarked:
+  every property `FR-LITE-033` gives it is read. SQLite has no privileges, so
+  no property is withheld from the reader, and the cross-checks of
   [privileges-and-completeness.md](privileges-and-completeness.md) have no
   case to detect.
 
@@ -1704,16 +1810,21 @@ two builds returned, in the same sense as those above.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The requirement
+  excepted the view `FR-LITE-035` marked, and that requirement is withdrawn by
+  the user's decision recorded under `FR-LITE-033`. A `sqlite` read now
+  presents no incomplete object, and the sentence on a view that does not
+  compile states the case the exception used to take.
+
 ## Requirements of form
 
 - **FR-LITE-037**: For a `sqlite` entry, the requirements of form of
   [performance-requirements.md](performance-requirements.md) SHALL hold as
   they hold for a server: the number of catalogue statements a full read and a
-  named read issue SHALL NOT depend on the number of objects, save on the path
-  `FR-LITE-035` takes after a failed statement; an invocation SHALL open at
-  most one connection to the file, per `NFR-PERF-004`; and a cache hit SHALL
-  open none and issue none, per `NFR-PERF-003`. A **connection** here is one
-  connection of the library to the database file.
+  named read issue SHALL NOT depend on the number of objects; an invocation
+  SHALL open at most one connection to the file, per `NFR-PERF-004`; and a
+  cache hit SHALL open none and issue none, per `NFR-PERF-003`. A
+  **connection** here is one connection of the library to the database file.
 
   The equality of `NFR-PERF-001` SHALL be verified, for a `sqlite` entry, over
   the fixture database of `FR-LITE-038` and over an empty database file, with
@@ -1721,7 +1832,10 @@ two builds returned, in the same sense as those above.
 
   *Observed.* Eight statements — the probe and seven catalogue statements —
   read the observation database of 32 schema objects and an empty file of zero
-  bytes alike, per `FR-LITE-015`.
+  bytes alike, per `FR-LITE-015`. *Observed again, for the sixty-eighth
+  edition,* under `FR-LITE-033`: seven statements — the probe and the six
+  catalogue statements that remain — read a database holding views that do
+  not compile and an empty file of zero bytes alike.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
@@ -1729,6 +1843,13 @@ two builds returned, in the same sense as those above.
   `NFR-PERF-004` is verified for a `sqlite` entry, and on which targets, is
   stated in that requirement; how the count of `NFR-PERF-008` is verified for
   one is stated in that requirement.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The count is constant
+  without exception: the path on which `FR-LITE-035` read each view in a
+  statement of its own, the one path on which the count grew with the
+  objects, is gone with that requirement. A full read issues the probe and
+  six catalogue statements, one fewer than before, because no statement reads
+  the columns of views.
 
 ## The fixture
 
@@ -1775,6 +1896,13 @@ two builds returned, in the same sense as those above.
   `FR-LITE-011`, written by a connection that does not set that limit; and a
   database whose only objects are the internal tables.
 
+  The three views of item 10 that do not compile are the cases of
+  `FR-LITE-033` and `FR-LITE-036`: a read of the main database SHALL succeed
+  over them, mark none of them, and present each with its nine properties.
+  Because a statement that compiled one of them would fail, per `FR-LITE-018`,
+  that success also shows that no statement compiles a view, and therefore
+  that the function `trusted_schema` off refuses is never run.
+
   *Rationale.* This is the obligation `FR-CONF-038` and the root `CLAUDE.md`
   place on `scripts/mariadb/` for the catalogue a server reads, written for
   the catalogue a file holds. A database built from text is reviewable in a
@@ -1796,6 +1924,13 @@ two builds returned, in the same sense as those above.
   holds the constraint is read. Item 10 gains the view that `trusted_schema`
   off refuses, the third cause `FR-LITE-035` names, which no case exercised.
 
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The paragraph on the
+  views of item 10 that do not compile is new. They stay in the fixture, and
+  what they exercise changes with the user's decision recorded under
+  `FR-LITE-033`: they no longer prove a marking, which `FR-LITE-035` made and
+  which is withdrawn, but that the read succeeds over them, marks nothing,
+  and compiles no view.
+
 ## Dependencies
 
 - [configuration-model.md](configuration-model.md) — `FR-CONF-051` through
@@ -1806,13 +1941,17 @@ two builds returned, in the same sense as those above.
   adopts, and `FR-SRV-019`, whose form `FR-LITE-039` adopts.
 - [catalogue-coverage.md](catalogue-coverage.md) and
   [context-document.md](context-document.md) — the model and the document
-  this file fills, and `FR-CTX-043`, the `provider` field.
+  this file fills, `FR-CAT-047`, the view object `FR-LITE-033` fills, and
+  `FR-CTX-043`, the `provider` field.
 - [privileges-and-completeness.md](privileges-and-completeness.md) —
-  `FR-PRIV-002` through `FR-PRIV-008`, which `FR-LITE-035` applies.
-- [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, `70`, `74`,
-  `77` and `78`, and `FR-ERR-030`, which `FR-LITE-012` and `FR-LITE-040`
-  reach; and `FR-ERR-046`, which bounds a value of the file in a diagnostic
-  line.
+  `FR-PRIV-001`, under which `FR-LITE-022` and `FR-LITE-036` hold a `sqlite`
+  read complete, and `FR-PRIV-008`, which accepts its dump as a `--context`
+  because nothing in it is marked.
+- [cache-commands.md](cache-commands.md) — `FR-CACHE-037`, which keeps no
+  object of a `sqlite` read out of the cache, because none is marked.
+- [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, `70`, `74` and
+  `78`, and `FR-ERR-030`, which `FR-LITE-012` and `FR-LITE-040` reach; and
+  `FR-ERR-046`, which bounds a value of the file in a diagnostic line.
 - [global-flags.md](global-flags.md) — `FR-GLOB-018`, which fixes what a
   `cause` carries of what the library returned.
 - [project-and-discovery.md](project-and-discovery.md) — `FR-PROJ-024`, which

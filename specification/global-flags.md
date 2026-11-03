@@ -368,8 +368,8 @@ which belongs to that command's module.
   extended code where the library returns one — and the message the library
   gives with it. WHERE a requirement of this
   specification obliges a `cause` line to state what the library returned —
-  `FR-LITE-007`, `FR-LITE-035`, `FR-LITE-040`, and the note on `FR-ERR-034`
-  for a `sqlite` entry — the line SHALL carry those two facts, each escaped
+  `FR-LITE-007`, `FR-LITE-040`, and the note on `FR-ERR-034` for a `sqlite`
+  entry — the line SHALL carry those two facts, each escaped
   under `FR-ERR-024` and bounded under `FR-ERR-046`, and SHALL NOT carry the
   driver's error value. Outside
   such a line, this requirement bars the two facts with the raw driver error.
@@ -422,6 +422,11 @@ which belongs to that command's module.
   and what would change it: `FR-CONF-017` keeps `${VAR}` out of the array, so
   the environment cannot inject a secret into it, and a caller who writes one
   there literally sees it printed.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`: the list of
+  requirements that oblige a `cause` to state what the library returned no
+  longer names `FR-LITE-035`, which is withdrawn by the user's decision
+  recorded under `FR-LITE-033`. The rule is unchanged.
 
 ### `-h`, `--help` and `-V`, `--version`
 

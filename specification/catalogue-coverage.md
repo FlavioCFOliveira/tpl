@@ -1636,6 +1636,14 @@ that is not written down is an omission.
   `v_consignment_manifest.charged_total` reads `decimal(36,2)`, a precision
   that appears nowhere in the DDL.
 
+  *Note added in the sixty-eighth edition,* for rmp `#317`. Not excluded by
+  this requirement is not carried. The sentence above says only that coverage
+  is not the ground on which a view's columns are left out. The view object is
+  the nine properties of `FR-CAT-047`, none of which holds columns, so the
+  model carries none of these rows and presents no column of a view. A `sqlite`
+  read carries none either, per `FR-LITE-033`. Nothing about a `mariadb` read
+  changes.
+
 - **BR-CAT-003**: The order matters because it is what makes a count
   explainable. A caller comparing the number of tables it sees against the
   number the server holds must be able to attribute every difference to either

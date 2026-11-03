@@ -24,9 +24,15 @@ says so.
 *Note added in the sixty-fifth edition.* SQLite has no privileges. For a
 `sqlite` entry the rules of this file on complete and incomplete reads, on a
 named object, on a listing and a dump, and on a marked dump apply unchanged;
-the one way a `sqlite` read comes back incomplete is a view whose definition
-does not compile, per `FR-LITE-035`, and the cross-checks of *Absence versus
-privilege* have no case to detect, per `FR-LITE-036`.
+a `sqlite` read is complete or fails, so it presents no incomplete object, and
+the cross-checks of *Absence versus privilege* have no case to detect, per
+`FR-LITE-036`.
+
+*Amended in the sixty-eighth edition,* for rmp `#317`. The note named a view
+whose definition does not compile as the one way a `sqlite` read came back
+incomplete. `FR-LITE-035`, which marked it, is withdrawn by the user's
+decision recorded under `FR-LITE-033`, and such a view is read whole and
+unmarked. No requirement of this file changes.
 
 ## Scope
 
@@ -65,10 +71,14 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   `tpl schema view`, `tpl schema routine`, or a `tpl render` object flag — comes
   back incomplete, THEN the system SHALL exit `77` (`EX_NOPERM`).
 
-  *Note added in the sixty-fifth edition.* For a `sqlite` entry the incomplete
-  named object is a view that does not compile, and the `cause` of the `77`
-  names the reason the library gave rather than a privilege, per
-  `FR-LITE-035`.
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry no named object
+  comes back incomplete, per `FR-LITE-036`, so this requirement has no case to
+  apply to.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`. The note named a view
+  that does not compile as the incomplete named object of a `sqlite` entry,
+  answered with `77` under `FR-LITE-035`; that requirement is withdrawn, and
+  such a view is returned whole at exit `0`, per `FR-LITE-033`.
 
 - **FR-PRIV-004**: The system SHALL NOT return a partial object in answer to a
   request that named it.

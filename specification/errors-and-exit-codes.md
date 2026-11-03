@@ -50,7 +50,7 @@ Out of scope: the wording of any individual message.
   | `70` | `EX_SOFTWARE` | Internal error — a defect in `tpl` | Report it; not fixable by the caller |
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
   | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, a SQLite database file an entry names together with the files and the memory the library needs to read it, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space, and, for a SQLite read, free memory |
-  | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue; or an object requested by name that comes back incomplete, per `FR-PRIV-003` | Fix the credentials, or request read access; for a SQLite view, repair the view |
+  | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue; or an object requested by name that comes back incomplete, per `FR-PRIV-003` | Fix the credentials, or request read access |
   | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported; a `provider` outside its two values, or an entry key its provider refuses; a SQLite path that is not a regular file, or a file that is not a SQLite database or whose schema cannot be loaded | Fix `.tpl/.cfg`, or run `tpl init` |
 
   The codes are a closed set and the *Condition* column is not. *And no
@@ -150,6 +150,13 @@ Out of scope: the wording of any individual message.
   the binary is at fault, which its cell already characterises as a defect in
   `tpl`. Nothing a `mariadb` entry produces moves; the code set is unchanged
   and the column still characterises rather than enumerates.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`: the `77` cell no
+  longer tells the caller to repair a SQLite view. A view that does not
+  compile reached `77` under `FR-LITE-035`, which is withdrawn by the user's
+  decision recorded under `FR-LITE-033`; a `sqlite` entry now reaches `77`
+  through no condition, per `FR-LITE-036`. The cell's condition is unchanged,
+  and nothing a `mariadb` entry produces moves.
 
   *Amended in the forty-eighth edition: the `78` cell names three conditions
   the class already held.* `FR-PROJ-027` refuses a `--tpl-dir` that names a
@@ -668,12 +675,17 @@ Out of scope: the wording of any individual message.
   `FR-CONF-053`; and step 6, the connection, is the kind check, the open, the
   hardening and the probe of `FR-LITE-017`, which can end with `69`, `70`, `74`
   or `78`, per `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-009`, `FR-LITE-012` and
-  `FR-LITE-040`. Step 7 reaches `77` for a named view that does not compile,
-  per `FR-LITE-035`. The order of the steps is unchanged.
+  `FR-LITE-040`. Step 7 reaches no `77`: a `sqlite` read presents no
+  incomplete object, per `FR-LITE-036`. The order of the steps is unchanged.
 
   *Amended in the sixty-seventh edition,* for rmp `#314`: `FR-LITE-040`
   joins the list, because it gives a code to every result code the other four
   do not classify. The codes step 6 can end with are unchanged.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`: step 7 reached `77`
+  for a named view that does not compile, under `FR-LITE-035`, which is
+  withdrawn by the user's decision recorded under `FR-LITE-033`. Such a view
+  is returned whole at exit `0`. The order of the steps is unchanged.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.

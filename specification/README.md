@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-seven editions. All are in force;
+The specification has been written in sixty-eight editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -5206,6 +5206,77 @@ against every requirement it amends, and the one passage each holds that an
 amendment reaches — the root `README.md` on writes outside `.tpl`, and the
 root `CLAUDE.md` on the disk writes `tpl` makes — is already held by
 `DIV-057` and `DIV-058`.
+
+### Sixty-eighth edition — a view read for what nothing carried
+
+rmp `#317`, of sprint 27, corrects one defect the implementation of the
+`sqlite` provider found. `FR-LITE-033` gave a SQLite view its columns, and the
+view object of `FR-CAT-047` has nine properties and no key for columns, for
+either provider; adding one would change every MariaDB document. The
+implementation read a view's columns only to learn whether the view compiles,
+for the marking of `FR-LITE-035`. By the user's decision of 2026-11-03, `tpl`
+reads no view's columns and marks no view, as on MariaDB. No requirement
+changes its meaning for a `mariadb` entry.
+
+**One identifier is withdrawn: `FR-LITE-035`.** It keeps its heading with a
+withdrawal note, and is retired and never reused. None is assigned or
+renumbered. [glossary.md](glossary.md) is unchanged. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The view object** — `FR-LITE-033` in
+  [sqlite-contract.md](sqlite-contract.md) gives a SQLite view exactly the
+  nine properties of `FR-CAT-047`, states the parity with a `mariadb` read,
+  which carries no column of a view either, and forbids reading a view's
+  columns. It records the user's decision on four grounds: parity with
+  MariaDB, where no requirement asks whether a view compiles; nothing missing
+  from the document; no statement of the read compiling a view's definition;
+  and the cache and `--context` treating the read as any complete read. Three
+  options are recorded as rejected: keeping the marking, under which a
+  document that lacks nothing was refused as a `--context` and never recorded
+  whole in the cache; a `columns` key on the view of both providers; and one
+  on a SQLite view alone. The accepted cost is stated: a view that does not
+  compile is no longer flagged. A note on `FR-CAT-052` in
+  [catalogue-coverage.md](catalogue-coverage.md) states that a view's columns,
+  not excluded by coverage, are not carried either.
+- **What the read no longer does** — `FR-LITE-015` forbids a statement that
+  reads from a view or makes the library compile one; the read is the probe
+  and six catalogue statements, one fewer, with no per-view statement.
+  `FR-LITE-035` is withdrawn, and `FR-LITE-036` holds a `sqlite` read complete
+  or failed without exception, a view that does not compile presented whole
+  and unmarked. `FR-LITE-037` drops the one path on which the count grew with
+  the objects. `FR-LITE-018` verifies that no statement compiles a view by
+  the read of the fixture succeeding, and `FR-LITE-038` keeps the views that
+  do not compile in the fixture for that purpose. `FR-LITE-040` loses the
+  step that gave `SQLITE_ERROR` on a view read to `FR-LITE-035`: no statement
+  that remains can produce it, and the `SQLITE_ERROR` row takes every one
+  with `70`. `FR-LITE-010` keeps disabling views rejected, on the ground it
+  gives for triggers, and `FR-LITE-039` names what the read still reaches.
+- **What one reason reaches, observed** — the decision's ground on attack
+  surface holds for the compile of a view's definition and not for module
+  code. Observed on 2026-11-03 through the Python library 3.54.1: listing
+  the objects reported a column count of `0` for every view, one that
+  compiles included, so it compiles none; and the first statement invoking `pragma_table_list` connected an `fts5` table
+  and ran its module's read of `<table>_config`, with no view read.
+  `FR-LITE-033` records the ground as narrowed, and `FR-LITE-018` records
+  where the nested statement now runs.
+- **The cross-references** — the note on `FR-PRIV-003` and the Overview of
+  [privileges-and-completeness.md](privileges-and-completeness.md), the `77`
+  cell of `FR-ERR-001` and the note on `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), `FR-GLOB-018` in
+  [global-flags.md](global-flags.md), and the note on `NFR-PERF-001` and
+  `NFR-PERF-008` in [performance-requirements.md](performance-requirements.md)
+  no longer describe a marked view or a `77` for one. A `sqlite` entry now
+  reaches `77` through no condition.
+
+`FR-CAT-047`, `FR-CTX-043`, `BR-LITE-002`, `FR-LITE-017`, `FR-PRIV-001` to
+`FR-PRIV-008`, `FR-PRIV-016`, `FR-CACHE-037`, `BR-CDOC-006` and `FR-ERR-030`
+were read against the changes. None conflicts with them, so none is amended:
+`FR-LITE-017` names no view statement in its order, and the definitions of a
+complete read and of the `restricted` array hold for a `sqlite` read without
+a sentence of their own. The fifth validation rule owes nothing for this
+edition: neither root document, read at `2fd98f8`, states a view's columns,
+a marking of a SQLite view, or the statements a SQLite read issues.
 
 ### Still out of scope
 
