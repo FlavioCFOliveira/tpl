@@ -24,6 +24,13 @@ driver is resolved — were taken on rmp `#315` on the same day, within those
 decisions, and were **confirmed by the user on 2026-11-03**, as was the
 condition that ends point 4. Every decision in this record is the user's.
 
+**Amended in place on 2026-11-03**, for rmp `#315`, by the user's decision of
+that day: `rusqlite`'s feature `trace` is enabled for tests alone, through a
+`[dev-dependencies]` entry, and not on the dependency the binary is built from.
+The driver, its release and the library carried did not move. The same pass
+brought the record's account of the hardening controls to the sixty-seventh
+edition of the specification, which added an eighth control, temporary storage.
+
 ## Context
 
 **Two requirements in force name this register, by role, as the home of a fact
@@ -48,8 +55,10 @@ SQLite's own value types and SQL `NULL` preserved. The rule may not be satisfied
 by removing a control.
 
 **Applied strictly, the rule first selected no driver.** rmp `#315` applied it
-on 2026-11-03, in compiled spikes under `#![forbid(unsafe_code)]`. No official
-driver exists. `rusqlite` failed one control, the crate `sqlite` five, the
+on 2026-11-03, in compiled spikes under `#![forbid(unsafe_code)]`, against the
+seven hardening controls and three limits of the specification's sixty-fifth
+edition. No official driver exists. `rusqlite` failed one control, the crate
+`sqlite` five, the
 SQLite driver of `sqlx` 0.9.0 six, and `turso` eight. `rusqlite`'s one failure
 was extension loading: its safe configuration interface, `DbConfig`, offers no
 `SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION`, so the switch could be set off and not
@@ -66,6 +75,16 @@ which a candidate issues through its safe interface. `FR-LITE-010` records why
 the control was not removed: the mechanism absent is a stronger setting than
 the mechanism off.
 
+**The sixty-seventh edition added an eighth control, after the evaluation.**
+`FR-LITE-010` now also sets `temp_store` to `MEMORY`, so that a statement's
+temporary data is not written to a file outside `.tpl`, and confirms it twice:
+`PRAGMA temp_store` must read back `2`, and `PRAGMA compile_options` must return
+the row `TEMP_STORE=1`, `TEMP_STORE=2` or `TEMP_STORE=3`, because how the
+library is built decides whether the pragma is obeyed. A control the evaluation
+did not apply can disqualify a candidate and cannot qualify one, so the outcome
+stands if the selected driver passes it. Point 1 records that it does, and
+point 2 what the carried build reports.
+
 **`FR-LITE-039` then constrains the release, and the MariaDB driver stood in
 the way.** The most recent SQLite release is 3.54.1, of 2026-10-16, and the
 `rusqlite` release that carries it, 0.41.1, requires `libsqlite3-sys`
@@ -81,18 +100,48 @@ requires; the newest `rusqlite` that resolved beside it, 0.39.0, bundles 3.51.3.
 
 ## Decision
 
-1. **The driver is `rusqlite` 0.41.1**, with its default features off and three
-   features on: `bundled`, which compiles the SQLite source `libsqlite3-sys`
-   carries into the binary, as `FR-LITE-001` requires; `limits`, the interface
-   that sets and reads back the limits of `FR-LITE-011`; and `trace`, the
-   statement trace `FR-LITE-018` records through. `load_extension` stays off: it
-   binds the two library interfaces the omission removes.
+1. **The driver is `rusqlite` 0.41.1**, with its default features off. The
+   build the binary is made from enables two features: `bundled`, which
+   compiles the SQLite source `libsqlite3-sys` carries into the binary, as
+   `FR-LITE-001` requires; and `limits`, the interface that sets and reads back
+   the limits of `FR-LITE-011`. Tests alone enable a third, `trace`, the
+   statement trace `FR-LITE-018` records through. `load_extension` stays off:
+   it binds the two library interfaces the omission removes.
+
+   ```toml
+   [dependencies]
+   rusqlite = { version = "0.41.1", default-features = false, features = ["bundled", "limits"] }
+
+   [dev-dependencies]
+   rusqlite = { version = "0.41.1", default-features = false, features = ["trace"] }
+   ```
+
+   **`trace` reaches the test build and not the shipped one.** The package's
+   edition, 2024, makes its resolver `"3"`, whose one stated change from `"2"`
+   is the default of `resolver.incompatible-rust-versions`; under the feature
+   resolution of `"2"`, features enabled on a dev-dependency "will not be
+   unified when those same dependencies are used as a normal dependency, unless
+   those dev-dependencies are currently being built". `cargo test`,
+   `cargo clippy --all-targets` and `cargo build --all-targets` therefore
+   compile `rusqlite` with `trace`, and `cargo build --release`, from whose
+   output `ADR-012`'s release workflow packages the binary, compiles it with
+   `bundled` and `limits` alone. The hook that installs the trace is
+   `#[cfg(test)]` (`OD-37`). The dev entry keeps `default-features = false`
+   because the two entries' features are unified in every test build: without
+   it, the tests would also compile `rusqlite`'s defaults, `cache` and the
+   crate `hashlink` it brings, which the shipped build does not.
 
    Under `FR-LITE-004`: step 0 selects nothing, because no Rust driver is
    published by the SQLite developers; step 1 disqualifies the crate `sqlite`,
-   `sqlx`'s SQLite driver and `turso`, and `rusqlite` passes it once the control
-   of `FR-LITE-010` is the compile-time omission; step 2 is passed by `rusqlite`,
-   the one candidate left. No choice among survivors remains for this register.
+   `sqlx`'s SQLite driver and `turso`, and `rusqlite` passes it once the
+   extension-loading control of `FR-LITE-010` is the compile-time omission.
+   The temporary-storage control is applied and confirmed by statements alone —
+   `PRAGMA temp_store`, set and read back, and `PRAGMA compile_options` — which
+   `rusqlite` issues through its safe interface, `pragma_update`,
+   `pragma_query_value` and `prepare`, as it issues the confirmation of the
+   omission; it leaves `rusqlite` passing step 1. Step 2 is passed by
+   `rusqlite`, the one candidate left. No choice among survivors remains for
+   this register.
 
 2. **The library carried is SQLite 3.54.1**, the source `libsqlite3-sys` 0.39.1
    bundles, built with extension loading omitted. `.cargo/config.toml` carries
@@ -116,6 +165,17 @@ requires; the newest `rusqlite` that resolved beside it, 0.39.0, bundles 3.51.3.
    requires at every open: a binary built without the option ends every
    `sqlite` read in `70`, and reads nothing from the file.
 
+   **The build sets no `SQLITE_TEMP_STORE`, and the temporary-storage control
+   needs none.** The build script of `libsqlite3-sys` defines it only under its
+   feature `bundled-sqlcipher` and for Android, and this build reaches neither,
+   so the carried library keeps SQLite's default `1`, under which the pragma
+   decides. The amalgamation defines that default before it compiles the list
+   `PRAGMA compile_options` reports, so the list carries `TEMP_STORE=1`, a row
+   `FR-LITE-010` admits. That is read from the source and not observed through
+   the build; as for the omission, the guarantee is the read-back at every
+   open, and a build that answered otherwise would end every `sqlite` read in
+   `70`.
+
    **The judgement `FR-LITE-039` requires.** Clause 1: 3.54.1 is the most recent
    release in SQLite's release history. Clause 2: `rusqlite` 0.41.1 carries it
    and satisfies every step of `FR-LITE-004`, per point 1. Clause 3: SQLite's
@@ -125,9 +185,10 @@ requires; the newest `rusqlite` that resolved beside it, 0.39.0, bundles 3.51.3.
    carried is the most recent one.
 
 3. **The release number lives in `Cargo.lock`, and the test does not restate
-   it.** The manifest requires `rusqlite` `0.41.1`; the lock file resolves it,
-   and `libsqlite3-sys` 0.39.1 beneath it, which fixes the SQLite release. No
-   `=` requirement is placed on `libsqlite3-sys`. The test that guards the build
+   it.** Both manifest entries of point 1 require `rusqlite` `0.41.1`; the lock
+   file resolves it, and `libsqlite3-sys` 0.39.1 beneath it, which fixes the
+   SQLite release. No `=` requirement is placed on `libsqlite3-sys`. The test
+   that guards the build
    asserts that `PRAGMA compile_options` lists `OMIT_LOAD_EXTENSION` and no
    `ENABLE_LOAD_EXTENSION` option, and that the library answering
    `sqlite_version()` is the one compiled in; it asserts no literal release, so
@@ -163,6 +224,13 @@ requires; the newest `rusqlite` that resolved beside it, 0.39.0, bundles 3.51.3.
 
 - **Switching extension loading off without reading it back.** Refused by the
   user as the weakest option: it leaves the one control nothing confirms.
+
+- **`trace` on the normal dependency**, the form this record first gave.
+  Refused by the user on 2026-11-03. Only the `#[cfg(test)]` hook of `OD-37`
+  calls the trace, from the seam `FR-LITE-018` names and from no invocation of
+  the distributed binary, so the feature on the normal entry would compile into
+  the shipped build an interface nothing in it calls. The dev entry of point 1
+  gives the tests the feature at no cost to that build.
 
 - **A patched `rusqlite` that reads the switch back.** Refused by the user: it
   is a maintained fork, and it moves the `unsafe` code into the fork rather than
@@ -251,6 +319,11 @@ graph, `cargo tree -e normal,build` with features, taken once per target of
 - leave every other crate at its version and features. `sqlx-core` and
   `sqlx-mysql` compile with the features they had in the binary.
 
+Those readings were taken with `trace` on the normal entry. `trace` enables no
+other feature of `rusqlite` and no dependency, so moving it to the test build
+removes it from `rusqlite`'s own feature list in the shipped graph and changes
+none of the readings above.
+
 The lock file falls from 182 packages to 154: the facade's unused drivers, and
 what only they pulled in, leave it. The package's suite passed, 1392 tests and
 none failed; the 120 tests that need the MariaDB fixture were skipped in that
@@ -260,6 +333,19 @@ reaches the server — its import paths — and the root coordination document's
 test policy runs the fixture tests for such a change. The figures in
 `BENCHMARKS.md` were taken on a binary without SQLite; a figure taken after the
 change comes from a different artefact.
+
+**The suite tests the library the binary carries.** `trace` reaches no feature
+of `libsqlite3-sys`, and no flag its build script passes depends on the
+profile, so the test build compiles the SQLite library with the compile-time
+options of the shipped one, and the test of point 3 and every observation over
+the fixture of `FR-LITE-038` read the options the binary carries. The feature
+gates `rusqlite`'s binding, its module `trace`; SQLite's own trace interface is
+compiled into the library in both builds, whose options do not omit it.
+
+**The compiler keeps the trace out of the shipped build.** The module `trace`
+exists only where the feature is enabled, so a call to it outside
+`#[cfg(test)]` fails to compile under `cargo build --release`, and the boundary
+`OD-37` draws is enforced rather than observed.
 
 **The two MariaDB crates are ones upstream marks not for direct use.** Their
 crates.io descriptions read "Not intended to be used directly" (`sqlx-core`) and
@@ -290,9 +376,9 @@ are against crates of the MariaDB TLS path that this change does not move, and
 are not this record's subject.
 
 **A move of the release carried is an edit to this record.** The manifest's
-requirement admits later `0.41` releases of `rusqlite`, and `rusqlite` admits
-later `0.39` releases of `libsqlite3-sys`, so a lock-file update can move the
-SQLite release. That moves this record's parameter: it is an edit in place with
+two `rusqlite` entries admit later `0.41` releases, and `rusqlite` admits later
+`0.39` releases of `libsqlite3-sys`, so a lock-file update can move the SQLite
+release. A move of the requirement itself edits both entries. That moves this record's parameter: it is an edit in place with
 a new `decided` date, with the judgement of point 2 made again. `FR-LITE-039`
 separately requires the choice to be re-verified against SQLite's release
 history and vulnerability page before every release of `tpl`.
@@ -311,14 +397,21 @@ driver is consumed is `ADR-003`'s.
 | Points 3 and 4 were decided on the task; the alternatives of each | rmp `#315` work log, `DECISION` entries of 2026-11-03 (comments 1418 and 1419) | 2026-11-03 |
 | The user confirmed points 3 and 4, and chose the return to the facade at the release named in point 4 | The user's answers of 2026-11-03, relayed by the session coordinator for rmp `#315` | 2026-11-03 |
 | The selection rule, the extension-loading control and its read-back, the limits, the trace, the recency rule and its clauses | `specification/sqlite-contract.md`, `FR-LITE-001`, `FR-LITE-004`, `FR-LITE-010`, `FR-LITE-011`, `FR-LITE-012`, `FR-LITE-018`, `FR-LITE-039` | 2026-11-03 |
+| The sixty-fifth edition's seven controls; the sixty-seventh edition's eighth, `temp_store` at `MEMORY`, confirmed by its read-back of `2` and by a row `TEMP_STORE=1`, `TEMP_STORE=2` or `TEMP_STORE=3` of `PRAGMA compile_options` | `specification/sqlite-contract.md`, `FR-LITE-010`, at `349560e` and at `5805b5d` | 2026-11-03 |
+| `trace` is enabled for tests alone, through a `[dev-dependencies]` entry, and not on the normal dependency | The user's decision of 2026-11-03, relayed by the session coordinator for rmp `#315` | 2026-11-03 |
+| Edition 2024 defaults to resolver `"3"`, whose stated change from `"2"` is the default of `resolver.incompatible-rust-versions`; the resolver is a workspace-wide option taken from the top-level package; features enabled on dev-dependencies "will not be unified when those same dependencies are used as a normal dependency, unless those dev-dependencies are currently being built", and `cargo test` or `cargo build --all-targets` unify them | The Cargo Book, *Dependency Resolution*, *Feature resolver version 2* and *Resolver versions*; *Features*, *Feature resolver version 2* (`doc.rust-lang.org/cargo/reference/`) | 2026-11-03 |
+| With the two entries of point 1 under edition 2024, `rusqlite` resolves with `bundled`, `limits` and `modern_sqlite` when no dev-dependency is built and with `trace` besides when one is; `libsqlite3-sys` 0.39.1 has the same features in both; a dev entry without `default-features = false` adds `cache`, `default`, `ffi-sqlite-wasm-rs` and `hashlink` | `cargo tree -e normal` and `-e normal,dev`, `-f '{p} [{f}]'`, cargo 1.99.1 on `aarch64-apple-darwin`, over a throwaway package declaring only those entries | 2026-11-03 |
+| `trace` gates `rusqlite`'s module `trace`, which holds `Connection::trace_v2`; `pragma_update` and `pragma_query_value` are not gated | The published `.crate` of `rusqlite` 0.41.1, sha256 `da9bba6f…d91a594`: `src/lib.rs`, `src/pragma.rs`, `src/trace.rs` | 2026-11-03 |
+| The hook that installs the trace is `#[cfg(test)]` in `sqlite/` | `docs/spec-technical/open-decisions.md`, `OD-37`, at `ad653f5` | 2026-11-03 |
+| `release.yml` packages `target/<target>/release/tpl`, which `build --release` produces; its `test` step runs without `--release` | `.github/workflows/release.yml` at `5805b5d` | 2026-11-03 |
 | No Rust driver is published by the SQLite developers: the source tree's `ext/` holds the language bindings `jni` and `wasm` and none for Rust; the owners of `rusqlite` and `libsqlite3-sys` (Thom Chiovoloni, gwenn), `sqlite` (Ivan Ukhov), `sqlx-sqlite` (Austin Bonander, Ryan Leckey) and `sqlite3` (Jovansonlee Cesar) are not SQLite developers | `https://sqlite.org/src/dir?ci=trunk&name=ext`; crates.io API, `/owners` of each crate | 2026-11-03 |
 | Step 1 and step 2 per candidate: controls failed (`rusqlite` 1, `sqlite` 5, `sqlx` 6, `turso` 8); catalogue readings with value types and `NULL` preserved; `sqlx` always sends `PRAGMA foreign_keys`; the build with the omission answering `3.54.1`, listing `OMIT_LOAD_EXTENSION` and refusing `load_extension()`; no `sqlite3_load_extension` symbol in either `musl` build, taken with zig 0.17.0; 1392 tests passed and 120 needing the fixture skipped | rmp `#315` work log, `TEST` and `FINDING` entries of 2026-11-03 (comments 1401, 1402, 1404, 1417 and 1420) | 2026-11-03 |
 | `DbConfig` has 21 variants and no `SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION`; `limit` and `set_limit` require the `limits` feature and `trace_v2` the `trace` feature; `get_interrupt_handle` returns an `InterruptHandle` whose `interrupt` interrupts the query running on another thread; new connections "currently have a default busy timeout of 5000ms" | docs.rs, `rusqlite` 0.41.1, `config::DbConfig`, `Connection`, `InterruptHandle` | 2026-11-03 |
-| `rusqlite` 0.41.1, published 2026-10-28, is the maximum stable release; it declares `rust-version` 1.89.0; features `bundled`, `limits`, `trace` and `load_extension` exist, and the default set is `cache` and `ffi-sqlite-wasm-rs`; it requires `libsqlite3-sys` `^0.39.0` | crates.io API, `rusqlite` 0.41.1, version, features and dependencies | 2026-11-03 |
-| `libsqlite3-sys` 0.39.1, published 2026-10-25, is the maximum stable release, declares `rust-version` 1.88.0 and `links = "sqlite3"`; it bundles the amalgamation `sqlite3/sqlite3.c` with `SQLITE_VERSION` `3.54.1`, source identifier `2026-10-16 14:45:20 555e07ef…`; its build script defines `SQLITE_ENABLE_LOAD_EXTENSION=1` and `SQLITE_ENABLE_FTS5`, and appends each `-D` or `-U` token of `LIBSQLITE3_FLAGS` after its own flags; the amalgamation contains no `zipfile` | The published `.crate`, sha256 `14a5f01b…f9a2b3`: `Cargo.toml`, `build.rs`, `sqlite3/sqlite3.h`, `sqlite3/sqlite3.c` | 2026-11-03 |
+| `rusqlite` 0.41.1, published 2026-10-28, is the maximum stable release; it declares `rust-version` 1.89.0; features `bundled`, `limits`, `trace` and `load_extension` exist, and the default set is `cache` and `ffi-sqlite-wasm-rs`; `trace` enables no other feature and no dependency, and `cache` enables `hashlink`; it requires `libsqlite3-sys` `^0.39.0` | crates.io API, `rusqlite` 0.41.1, version, features and dependencies | 2026-11-03 |
+| `libsqlite3-sys` 0.39.1, published 2026-10-25, is the maximum stable release, declares `rust-version` 1.88.0 and `links = "sqlite3"`; it bundles the amalgamation `sqlite3/sqlite3.c` with `SQLITE_VERSION` `3.54.1`, source identifier `2026-10-16 14:45:20 555e07ef…`; its build script defines `SQLITE_ENABLE_LOAD_EXTENSION=1` and `SQLITE_ENABLE_FTS5`, and appends each `-D` or `-U` token of `LIBSQLITE3_FLAGS` after its own flags; it defines `SQLITE_TEMP_STORE` only under the feature `bundled-sqlcipher` and for Android, and no flag it passes depends on the profile; the amalgamation contains no `zipfile`, and defines the default `SQLITE_TEMP_STORE` `1` before `ctime.c`, whose list carries `TEMP_STORE=` and the value wherever the macro is defined | The published `.crate`, sha256 `14a5f01b…f9a2b3`: `Cargo.toml`, `build.rs`, `sqlite3/sqlite3.h`, `sqlite3/sqlite3.c` | 2026-11-03 |
 | 3.54.1, of 2026-10-16, is the most recent SQLite release | `https://sqlite.org/changes.html` | 2026-11-03 |
 | The vulnerability page was last updated 2026-08-01; the latest release it names as a fix is 3.53.2; `CVE-2026-11822` and `CVE-2026-11824` need arbitrary SQL, `SQLITE_DBCONFIG_DEFENSIVE` disabled and FTS5, fixed in 3.53.2; `CVE-2025-70873` is in the `zipfile` extension, fixed in 3.52.0 | `https://sqlite.org/cves.html` | 2026-11-03 |
-| `SQLITE_OMIT_LOAD_EXTENSION` "omits the entire extension loading mechanism", including `sqlite3_enable_load_extension()` and `sqlite3_load_extension()`; the `SQLITE_OMIT_*` options "are mostly unsupported" and "may not work with the amalgamation". Page last updated 2026-10-01 | `https://sqlite.org/compile.html` | 2026-11-03 |
+| `SQLITE_OMIT_LOAD_EXTENSION` "omits the entire extension loading mechanism", including `sqlite3_enable_load_extension()` and `sqlite3_load_extension()`; the `SQLITE_OMIT_*` options "are mostly unsupported" and "may not work with the amalgamation". Page last updated 2026-10-01. `SQLITE_TEMP_STORE` `1` is the default and means "Use files by default but allow the PRAGMA temp_store command to override" | `https://sqlite.org/compile.html` | 2026-11-03 |
 | Cargo probes for configuration in the current directory and its parents; an `[env]` value does not override the environment unless `force` is set; `cargo install` ignores local configuration unless installing with `--path` | The Cargo Book, *Configuration* (hierarchical structure, `[env]`) and *cargo install* (configuration discovery) | 2026-11-03 |
 | For the purpose of generating `Cargo.lock`, the resolver builds the graph as if all features of all workspace members were enabled; it admits one package per `links` name and otherwise fails | The Cargo Book, *Dependency Resolution*, *Features* and *links* | 2026-11-03 |
 | `Cargo.lock` carries `libsqlite3-sys` 0.37.0, and `cargo tree -e normal,build -i libsqlite3-sys` prints nothing | This repository at `833bc35` | 2026-11-03 |
