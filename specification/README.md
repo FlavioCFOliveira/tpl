@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-eight editions. All are in force;
+The specification has been written in sixty-nine editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -5278,6 +5278,125 @@ a sentence of their own. The fifth validation rule owes nothing for this
 edition: neither root document, read at `2fd98f8`, states a view's columns,
 a marking of a SQLite view, or the statements a SQLite read issues.
 
+### Sixty-ninth edition — a catalogue a file could forge, views compiled after all, and controls past C0
+
+rmp `#317`, of sprint 27, closes four defects a security review of the
+SQLite reader at `cb99236` found, and rmp `#321` closes a fifth for both
+providers. Two user decisions of 2026-11-03 shape it: the objects of a
+`sqlite` read are read from the schema table alone, and C1 and bidirectional
+formatting characters are escaped, in `json` with JSON's own escape. Every
+new statement of SQLite behaviour rests on SQLite's documentation, cited by
+page and date, on an observation of 2026-11-03 through the Python library
+3.54.1 — the release of the library the binary carries — or through the
+release build of `tpl` at `cb99236`, or on the library's own source as the
+driver's published package bundles it, read at that public source. No
+requirement changes its meaning for a `mariadb` entry, save the escaping the
+user decided for both providers.
+
+**One identifier is assigned: `FR-LITE-041`.** None is withdrawn or
+renumbered. [glossary.md](glossary.md) gains *bidirectional formatting
+character* and *storage class*, and amends *SQLite table kinds*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+the index of [open-questions.md](open-questions.md) stays empty, and the one
+item of *[Maintenance debt](#maintenance-debt)* is discharged.
+
+- **A name that replaces a function** — SQLite resolves a name among the
+  file's tables and views before a pragma table-valued function of that name,
+  ignoring ASCII case. A view named `pragma_table_list` made `tpl` list a
+  forged table at exit `0`, and a table named `PRAGMA_TABLE_XINFO` made it
+  end with a false `70`. `FR-LITE-041`, new, in
+  [sqlite-contract.md](sqlite-contract.md), issues one statement against the
+  schema table after the probe and before every other catalogue statement,
+  and refuses with `78` a file whose schema holds a table or a view whose
+  name begins with `pragma_`: the prefix is SQLite's own namespace for those
+  functions, and a list of the names the read uses would age with
+  `FR-LITE-015`. Rejected: Unicode case folding, which SQLite does not apply;
+  qualifying the functions with `temp.`, which SQLite documents as not
+  working; and refusing indexes and triggers, which replace nothing. The
+  accepted cost is stated: a table named `pragma_settings` is refused.
+  `FR-LITE-015`, `FR-LITE-017` and `FR-LITE-007` place the check and give it
+  its rows, and `FR-CFG-056` in [cfg-commands.md](cfg-commands.md) makes it
+  the catalogue probe of `tpl cfg database test`, so that a file every read
+  refuses is not reported as readable.
+- **The objects read from the schema table** — `PRAGMA table_list` compiled
+  inside the library every view and connected every virtual table whose
+  column count it did not know, discarding the outcome, and restarted its scan
+  of the schema after each, whatever its argument: 6.4 s over 40 000 views,
+  past every deadline over the review's mutually nested views. By the user's
+  decision, recorded under `FR-LITE-020`, on the criterion that the provider
+  be the most secure, **no statement invokes `pragma_table_list`**:
+  `FR-LITE-015` drops it from the closed list and admits `pragma_index_info`,
+  every catalogue statement joins `main.sqlite_schema`, and no statement
+  compiles a view or connects a virtual table. `FR-LITE-020` recognises a view
+  by its row's type, a virtual table by a root page of `0`, and a
+  `WITHOUT ROWID` table by `pragma_index_info` returning its primary key,
+  which agreed with the old reading on every table observed. The two costs the
+  user accepted are written in: a shadow table is covered as a `BASE TABLE`,
+  per `FR-LITE-020` and `FR-LITE-021`, and a `STRICT` table's `ANY` column
+  takes `numeric` and loses `blob`, per `FR-LITE-026`. The rejected option,
+  keeping the function with its cost stated as a limit, is recorded beside
+  them. `BR-LITE-002`, `FR-LITE-003`, `FR-LITE-019`, `FR-LITE-024` and
+  `FR-LITE-028` follow. Observed: the review's file of 16 KB reads in
+  0.0022 s, 80 000 views in 0.11 s, and 320 000 in 0.61 s; `FR-LITE-009`
+  records the figures, and that the one part that grows faster, the
+  library's loading of the schema at the probe, is ended by the deadline
+  within 0.07 s. `FR-LITE-018` verifies by its statement record, over a new
+  fixture database holding an `fts5` table and a view over it, that no
+  module runs. The sixty-eighth edition's reading that listing compiles no
+  view is withdrawn in `FR-LITE-015` and `FR-LITE-033`, whose third ground now
+  holds by the closed list.
+- **Views disabled, as defence in depth** — `FR-LITE-010` gains a ninth
+  control, views disabled, confirmed by its read-back, and its rejection of
+  disabling views is reversed. With the statements of `FR-LITE-015` the
+  control closes nothing: every statement returned the same rows in the same
+  time with views enabled and disabled. It is kept because it closes, as
+  observed, what a defective statement would open: a view's name passed to a
+  pragma function failed in 0.002 s instead of running past 25 s, and a view
+  named `pragma_encoding` failed instead of forging the encoding.
+- **A value or a root page that contradicts the schema table** — a view's
+  `sql` stored as a BLOB made `tpl` report a defect of its own with `70`, and
+  a trigger's `type` stored as a BLOB removed the trigger from the read at
+  exit `0`. `FR-LITE-041` refuses with `78` a `type`, `name` or `tbl_name`
+  that is not text, an `sql` that is neither text nor `NULL`, a `rootpage`
+  that is neither an integer nor `NULL`, and, because the read now trusts the
+  root page, a table row whose root page contradicts its text — read from the
+  first word after `CREATE`, which agreed with the library on all 26 table
+  rows observed. `FR-LITE-040` states that such a value is a damaged schema
+  and not a defect of `tpl`. `FR-LITE-038` gains the fixture databases.
+- **Escaping past C0** — `FR-ERR-024` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and `FR-OUT-018` in
+  [output-formats.md](output-formats.md) escape the C1 range, U+0080 to
+  U+009F, and the twelve bidirectional formatting characters of Unicode's
+  `Bidi_Control` property, as they escape C0, for both providers. Observed:
+  U+009B and U+202E left `tpl` unescaped in `text`, in `json` and in a
+  diagnostic. In `json` they take JSON's own `\u` escape, by the user's
+  decision, so the parsed document is unchanged. A MariaDB value changes only
+  where it holds one of these characters. `FR-ERR-046` applies unchanged: it
+  counts characters after escaping and never cuts an escape. Rejected: a
+  backlog task; the `sqlite` provider alone; Unicode's whole format category.
+  `FR-SEC-020` in [security.md](security.md) and a note on `NFR-DET-004` in
+  [cli-contract.md](cli-contract.md) follow, and the item the twentieth
+  edition recorded is discharged.
+- **The cross-references** — the note on `FR-ERR-006` places the check in
+  step 6, `FR-SEC-028` names the check and the threats the edition closes,
+  and `FR-ERR-046` carries a note on the widened escaping.
+
+`FR-LITE-004`, `FR-LITE-012`, `FR-LITE-013`, `FR-LITE-014`, `FR-LITE-016`,
+`FR-LITE-029`, `FR-LITE-030`, `FR-LITE-031`, `FR-LITE-032`, `FR-LITE-036`,
+`FR-ERR-001`, `FR-ERR-002`, `FR-ERR-030`, `FR-ERR-034`, `FR-GLOB-018`,
+`FR-OUT-014`, `FR-OUT-019`, `FR-CFG-024`, `FR-ENV-041`, `FR-ENV-048`,
+`NFR-PERF-001` and `NFR-PERF-008` were read against the changes. None
+conflicts with them, so none is amended: the selected driver sets and reads
+back the views control through its safe configuration interface, so step 1
+of `FR-LITE-004` still holds; the check is a statement of the last row of
+`FR-LITE-015`, which `NFR-PERF-001` and `NFR-PERF-008` already count; the
+`cause` of the check is reached through the rows of `FR-LITE-007` that
+`FR-ERR-034` and `FR-GLOB-018` already name; and a shadow table is covered
+with the properties every table carries, under the requirements that give
+them. The fifth validation rule owes nothing for this edition: neither root
+document, read at `cb99236`, states the escaping of a value, the hardening of
+a SQLite read, what it covers, or the statements it issues.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -5553,14 +5672,14 @@ them; moving it to a paragraph below would leave the list looking open.
 
 ## Maintenance debt
 
-**One item is outstanding**, recorded by the twentieth edition and listed
-below. The eight items this section has held before it are all discharged; the
-most recent of those was recorded by the thirty-second edition and discharged
-by the thirty-third, inside one sprint. The item this section carried through
-the sixth edition — twenty catalogue field lists that no observation had
-recorded — was discharged by the
-seventh: the fixture was read against all four series of `FR-SRV-015` on
-2026-09-10, every field list was recorded verbatim, and each is now a
+**No item is outstanding.** The nine items this section has held are all
+discharged. The last, recorded by the twentieth edition, was discharged by the
+sixty-ninth; the one before it was recorded by the thirty-second edition and
+discharged by the thirty-third, inside one sprint. The item this section
+carried through the sixth edition — twenty catalogue field lists that no
+observation had recorded — was discharged by the seventh: the fixture was
+read against all four series of `FR-SRV-015` on 2026-09-10, every field list
+was recorded verbatim, and each is now a
 requirement in [catalogue-coverage.md](catalogue-coverage.md) or
 [context-document.md](context-document.md). The document shapes and the field
 lists are frozen, and implementation is no longer blocked on them.
@@ -6028,10 +6147,20 @@ eighth edition, it is work with an owner and a trigger, and every observation
 exists. No requirement of this corpus waits on any of the three, and the item
 below was untouched by the edition.
 
-The section therefore carries the item the twentieth edition recorded, and the
-eight it has held before are all accounted for below.
+The sixty-ninth edition adds no obligation inside this corpus and one outside
+it: the fixture of `scripts/sqlite/` gains the seven databases `FR-LITE-038`
+now lists, which, like the fixture obligations before it, is work with an
+owner and a trigger. It **discharges the item the twentieth edition
+recorded**, by the user's decision of 2026-11-03: `FR-ERR-024` and
+`FR-OUT-018` now escape the C1 range and the bidirectional formatting
+characters, for both providers.
 
-One item is outstanding.
+The section therefore carries no outstanding item, and the nine it has held
+are all accounted for below.
+
+Nine items recorded here have been discharged. The ninth is the first below,
+recorded by the twentieth edition and discharged by the sixty-ninth; the
+eighth is the sweep after it, recorded and discharged inside one sprint.
 
 - **Escaping stops at C0, and a C1 control can still reach a terminal.**
   Recorded by the twentieth edition. `FR-ERR-024` escapes `\n`, `\r`, `\t`
@@ -6052,10 +6181,13 @@ One item is outstanding.
   editorial tidy, which is why it is a task of its own, on the ground the
   thirteenth edition used for the two readings with no home. Nothing in this
   corpus is ambiguous while it stands: both requirements say exactly what they
-  escape, and a reader of either is told where the gap is.
-
-Eight items previously recorded here have been discharged. The eighth is the
-sweep below, recorded and discharged inside this sprint.
+  escape, and a reader of either is told where the gap is. **Discharged in the
+  sixty-ninth edition**, for rmp `#321`, by the user's decision of 2026-11-03
+  to close the gap in sprint 27 for both providers: `FR-ERR-024` and
+  `FR-OUT-018` escape the C1 range and the twelve bidirectional formatting
+  characters as they escape the C0 range, `text` keeps its tab exception,
+  `json` writes them as JSON's own `\u` escape so that the parsed document is
+  unchanged, and the byte-for-byte outputs of `FR-OUT-019` are untouched.
 
 - **The corpus has not been swept for terms defined outside the glossary.**
   Recorded by the thirty-second edition, which wrote the rule that every

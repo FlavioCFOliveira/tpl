@@ -216,10 +216,13 @@ states the rule that answers it.
   SQLite's own guidance gives for an untrusted file, with the library's
   temporary storage held in memory, each confirmed by reading it back; a
   control that does not take effect ends the invocation with `70` before any
-  byte of the file is parsed. A value read from the file SHALL enter a
+  byte of the file is parsed. A file whose schema holds a table or a view
+  named like a pragma table-valued function, or a schema-table value of a
+  storage class the table's contract excludes, SHALL be refused with `78`
+  before the catalogue is read. A value read from the file SHALL enter a
   diagnostic line only within the bound of `FR-ERR-046`. See `FR-LITE-005`,
-  `FR-LITE-006`, `FR-LITE-010` through `FR-LITE-014`, `FR-LITE-017` and
-  `FR-ERR-046`.
+  `FR-LITE-006`, `FR-LITE-010` through `FR-LITE-014`, `FR-LITE-017`,
+  `FR-LITE-041` and `FR-ERR-046`.
 
   *Threat closed.* A FIFO in the place of the file must not hang the
   invocation, and a crafted file must not reach the library's parser without
@@ -229,12 +232,22 @@ states the rule that answers it.
   extension loaded from a path, or a single value sized to exhaust memory. Nor
   may it make the library write its content to a temporary file outside the
   project, or flood with one name the diagnostic line a calling agent reads.
+  Nor may a table or a view of the file take the place of a function the read
+  reads through and forge the catalogue `tpl` presents at exit `0`, nor may a
+  read make the library compile a view or run a virtual table's module.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
   *Amended in the sixty-seventh edition,* for rmp `#314`: the temporary
   storage of `FR-LITE-010` and the bound of `FR-ERR-046` are named, with the
   two threats they close.
+
+  *Amended in the sixty-ninth edition,* for rmp `#317`: the check of
+  `FR-LITE-041` is named, and the threat closes the forgery it refuses and the
+  compile of a view and the run of a module, which no statement of
+  `FR-LITE-015` makes since the user's decision recorded under `FR-LITE-020`.
+  The views control `FR-LITE-010` adds, as defence in depth, is one of the
+  controls SQLite's guidance gives, which the first sentence already names.
 
 ## Template containment
 
@@ -325,15 +338,17 @@ states the rule that answers it.
   spelling of a command, a flag and a key, none of which a server, a file or a
   caller can influence.
 
-- **FR-SEC-020**: C0 control characters SHALL be escaped in every value the
-  system prints or interpolates, whatever its source. Two requirements own the
+- **FR-SEC-020**: C0 control characters, C1 control characters and
+  [bidirectional formatting characters](glossary.md#bidirectional-formatting-character)
+  SHALL be escaped in every value the system prints or interpolates, whatever
+  its source and whichever provider the entry names. Two requirements own the
   rule, and they differ in their treatment of one character:
 
   | Where | Rule | Owner |
   |---|---|---|
-  | The `text` output of a read command | C0 escaped, tab excepted | `FR-OUT-018` |
-  | The `json` output of a read command | C0 escaped, tab included as the escape JSON defines for it | `FR-OUT-018` |
-  | Any diagnostic message | C0 escaped, tab included | `FR-ERR-024` |
+  | The `text` output of a read command | C0, C1 and bidirectional formatting characters escaped, tab excepted | `FR-OUT-018` |
+  | The `json` output of a read command | C0 escaped, tab included, as the escape JSON defines for it; C1 and bidirectional formatting characters as JSON's `\u` escape | `FR-OUT-018` |
+  | Any diagnostic message | C0, C1 and bidirectional formatting characters escaped, tab included | `FR-ERR-024` |
 
   Two outputs are excluded and are emitted byte for byte: the result of
   `tpl render`, and the template source printed by `tpl template show`. See
@@ -341,7 +356,10 @@ states the rule that answers it.
 
   *Threat closed.* An escape sequence in a column comment cannot rewrite what
   the user sees, and a newline in a catalogue value cannot forge a whole
-  diagnostic line in the line-oriented error format.
+  diagnostic line in the line-oriented error format. The one-character
+  control sequence introducer, U+009B, cannot start a control sequence either,
+  and a bidirectional override cannot show a reader a name other than the one
+  printed.
 
   *Amended in the third edition.* The tab exception is now stated per rule
   rather than across both, because the first edition's single statement
@@ -355,6 +373,12 @@ states the rule that answers it.
   `text`, where a tab is column layout, and in `json` a tab arrives as the
   escape the format defines, so no value reaches a consumer as a raw tab on
   either path. The threat this requirement closes is unchanged.
+
+  *Amended in the sixty-ninth edition,* for rmp `#321`: the C1 range and the
+  bidirectional formatting characters join the rule, per the amendments to
+  `FR-ERR-024` and `FR-OUT-018`, by the user's decision recorded under the
+  first, for both providers. The two outputs emitted byte for byte are
+  unchanged.
 
 ## Transport
 

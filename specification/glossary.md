@@ -96,6 +96,23 @@ One of the three read-only capabilities `tpl` provides: exploring the database
 (`tpl render …`). Command groups that are not arms — `tpl cache …`,
 `tpl cfg …`, `tpl init`, `tpl help`, and `tpl version` — are auxiliary.
 
+## bidirectional formatting character
+
+One of the twelve code points to which the Unicode Character Database gives
+the property `Bidi_Control`: U+061C ARABIC LETTER MARK, U+200E LEFT-TO-RIGHT
+MARK, U+200F RIGHT-TO-LEFT MARK, U+202A to U+202E, the embeddings and
+overrides and the character that ends them, and U+2066 to U+2069, the
+isolates and the character that ends them. Each changes the order in which a
+reader sees the characters around it, and none changes the characters.
+`FR-ERR-024` escapes them in a diagnostic message, and `FR-OUT-018` in the
+output of a read command. The set is the one `PropList.txt` of Unicode
+18.0.0, dated 2026-08-07, lists at
+`https://www.unicode.org/Public/UCD/latest/ucd/PropList.txt`, checked
+2026-11-03; a Unicode version that changes the property is what obliges a
+re-check.
+
+*Added in the sixty-ninth edition.*
+
 ## measurement point
 
 One of the nine points at which `tpl` is measured, listed in `NFR-PERF-014`,
@@ -622,16 +639,34 @@ reaches a document — `FR-SRV-020` refuses it before the catalogue is read.
 SQLite's own terms, used where a `sqlite` read decides what it covers. An
 **internal table** is one whose name begins with `sqlite_`, in any letter case,
 a prefix SQLite reserves for itself. A **virtual table** is a table a module
-implements rather than SQLite stores. A **shadow table** is an ordinary table
-in which a virtual table's module keeps its data, and only a library that holds
-the module reports it as one. All three are excluded, per `FR-LITE-021`; a
-shadow table the carried library does not report as one is covered as a table,
-per `FR-LITE-020`.
+implements rather than SQLite stores; its row of the schema table has a root
+page of `0`. A **shadow table** is an ordinary table in which a virtual table's
+module keeps its data, and only a library that holds the module reports it as
+one. Internal and virtual tables are excluded, per `FR-LITE-021`; a shadow
+table is covered as a table, like any other, per `FR-LITE-020`.
 
 *Added in the sixty-fifth edition.*
 
 *Amended in the sixty-sixth edition.* The clause on a module the carried
 library does not hold is new.
+
+*Amended in the sixty-ninth edition.* A shadow table is no longer excluded,
+by the user's decision recorded under `FR-LITE-020`, and a virtual table is
+recognised by its root page.
+
+## storage class
+
+The class of a value SQLite stores, one of five: `NULL`, `INTEGER`, `REAL`,
+`TEXT` and `BLOB`, per `https://sqlite.org/datatype3.html`, checked
+2026-11-03. It belongs to the value and not to the column: the same page
+states that a column of `TEXT` affinity stores a value as `NULL`, `TEXT` or
+`BLOB`, and that a `BLOB` is stored as a `BLOB` whatever the column's
+affinity, so a column declared `text` can hold one. Not to be confused with
+[type affinity](#type-affinity), the classification of a column by how it
+stores a value. `FR-LITE-041` refuses a schema table that holds a value of a
+class its contract excludes.
+
+*Added in the sixty-ninth edition.*
 
 ## target
 

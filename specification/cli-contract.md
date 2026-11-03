@@ -582,6 +582,13 @@ tpl
   question for those two requirements, and it is recorded as an item in the
   [README](README.md#maintenance-debt).
 
+  *Note added in the sixty-ninth edition,* for rmp `#321`. The consequence the
+  paragraph above leaves standing is closed where it said the question
+  belonged: `FR-ERR-024` and `FR-OUT-018` now escape the C1 range, and the
+  bidirectional formatting characters with it, by the user's decision
+  recorded under the first, and the item is discharged. This requirement is
+  unchanged, and its subject is still colour and terminal decoration.
+
 - **NFR-DET-005**: The `now` render variable is the single documented source of
   non-reproducibility. A template that uses it produces output that differs
   between runs by design. Its form is fixed by `FR-CTX-028`.

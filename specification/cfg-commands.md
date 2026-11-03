@@ -1029,14 +1029,15 @@ tpl cfg database test   <name>
      `FR-LITE-011` — `read_only_session`;
   3. issue the version probe of `FR-LITE-002` — `server`, the object of that
      requirement;
-  4. issue the catalogue probe: exactly one `SELECT` against `sqlite_schema`
-     of the schema `main`, whose result the system SHALL NOT read as model
-     content. `can_read_catalogue` SHALL be true WHEN the statement is
-     answered, whether or not it returns a row.
+  4. issue the catalogue probe, which is the check of `FR-LITE-041`: exactly
+     one `SELECT` against `sqlite_schema` of the schema `main`, whose result
+     the system SHALL NOT read as model content. `can_read_catalogue` SHALL
+     be true WHEN the check is answered and returns no row that requirement
+     refuses; a row it refuses ends the command with `78` under it.
 
   The command SHALL exit `0`, `69`, `70`, `74` or `78`, under `FR-LITE-005`,
-  `FR-LITE-007`, `FR-LITE-009`, `FR-LITE-012` and `FR-LITE-040`; it never
-  exits `77`, and
+  `FR-LITE-007`, `FR-LITE-009`, `FR-LITE-012`, `FR-LITE-040` and
+  `FR-LITE-041`; it never exits `77`, and
   `FR-CFG-043` does not reach it. Its `source` is `server`, per `FR-CFG-035`.
 
   *Why an answered probe is enough.* `FR-CFG-044` asks for a row because a
@@ -1044,9 +1045,10 @@ tpl cfg database test   <name>
   privileges, per `FR-LITE-036`, and an empty database is a database: the
   schema table of a zero-byte file returns no row and the file is readable. A
   probe that fails is not `can_read_catalogue: false` but an exit code — `78`
-  for a file that is not a database or whose schema cannot load, `74` for a
-  read that fails, `69` for a lock that outlasts the deadline — so on every
-  `sqlite` test that exits `0` the field is true.
+  for a file that is not a database, whose schema cannot load, or whose
+  schema the check refuses, `74` for a read that fails, `69` for a lock that
+  outlasts the deadline — so on every `sqlite` test that exits `0` the field
+  is true.
 
   *Accepted cost.* The field carries no information for a `sqlite` entry, and
   it is kept so that the document of `FR-CFG-039` has one shape for both
@@ -1057,6 +1059,13 @@ tpl cfg database test   <name>
   *Amended in the sixty-seventh edition,* for rmp `#314`: `FR-LITE-040` joins
   the requirements the exit codes are taken under, because it gives a code to
   every result code the other four do not classify. The codes are unchanged.
+
+  *Amended in the sixty-ninth edition,* for rmp `#317`: the catalogue probe is
+  the check of `FR-LITE-041`, so that a file every read refuses with `78` is
+  not reported here as readable — the ground `FR-CFG-024` gives its third
+  step, that an entry every other command refuses must not be reported as
+  working. The probe stays one statement against the schema table, and the
+  steps, the fields and the codes are unchanged.
 
 - **FR-CFG-025**: `tpl cfg database test` SHALL NOT read or write the cache, per
   `FR-CACHE-010`.

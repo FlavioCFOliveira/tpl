@@ -670,13 +670,14 @@ Out of scope: the wording of any individual message.
 
   *Note added in the sixty-fifth edition.* For a `sqlite` entry the steps hold
   these conditions: step 3 refuses a `provider` outside its two values, per
-  `FR-CONF-051`, and a `path` holding `${`, per `FR-CONF-054`; step 5 refuses a
-  key the provider does not take, per `FR-CONF-052`, and a missing `path`, per
-  `FR-CONF-053`; and step 6, the connection, is the kind check, the open, the
-  hardening and the probe of `FR-LITE-017`, which can end with `69`, `70`, `74`
-  or `78`, per `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-009`, `FR-LITE-012` and
-  `FR-LITE-040`. Step 7 reaches no `77`: a `sqlite` read presents no
-  incomplete object, per `FR-LITE-036`. The order of the steps is unchanged.
+  `FR-CONF-051`, and a `path` holding `${`, per `FR-CONF-054`; step 5 refuses
+  a key the provider does not take, per `FR-CONF-052`, and a missing `path`,
+  per `FR-CONF-053`; and step 6, the connection, is the kind check, the open,
+  the hardening, the probe and the check of `FR-LITE-017`, which can end with
+  `69`, `70`, `74` or `78`, per `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-009`,
+  `FR-LITE-012`, `FR-LITE-040` and `FR-LITE-041`. Step 7 reaches no `77`: a
+  `sqlite` read presents no incomplete object, per `FR-LITE-036`. The order of
+  the steps is unchanged.
 
   *Amended in the sixty-seventh edition,* for rmp `#314`: `FR-LITE-040`
   joins the list, because it gives a code to every result code the other four
@@ -686,6 +687,10 @@ Out of scope: the wording of any individual message.
   for a named view that does not compile, under `FR-LITE-035`, which is
   withdrawn by the user's decision recorded under `FR-LITE-033`. Such a view
   is returned whole at exit `0`. The order of the steps is unchanged.
+
+  *Amended in the sixty-ninth edition,* for rmp `#317`: the check of
+  `FR-LITE-041`, which `FR-LITE-017` places after the probe, belongs to step 6
+  and can end it with `78`. The order of the steps is unchanged.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
@@ -1474,11 +1479,16 @@ Out of scope: the wording of any individual message.
   followed by `/.tpl` into its `hint`. The set is unchanged, and the suffix
   holds only characters of it.
 
-- **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, and every C0 control
-  character in every value it interpolates into a message — catalogue names,
-  comments, defaults, `--context` values, and the argument vector. This
-  requirement owns escaping in a diagnostic message; `FR-OUT-018` owns
-  escaping in the output of a read command, where tab is excepted in `text`.
+- **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, every C0 control
+  character, every C1 control character — U+0080 to U+009F — and every
+  [bidirectional formatting character](glossary.md#bidirectional-formatting-character)
+  in every value it interpolates into a message — catalogue names, comments,
+  defaults, `--context` values, and the argument vector — for a `mariadb` and
+  a `sqlite` entry alike. A C1 control character and a bidirectional
+  formatting character SHALL be escaped in the form a C0 control character
+  is. This requirement owns escaping in a diagnostic message; `FR-OUT-018`
+  owns escaping in the output of a read command, where tab is excepted in
+  `text`.
 
   *Rationale.* Escaping newlines separately protects the line-oriented
   `error:` / `cause:` / `hint:` / `exit:` format from having a whole diagnostic
@@ -1510,6 +1520,49 @@ Out of scope: the wording of any individual message.
 
   *Note added in the sixty-seventh edition.* `FR-ERR-046` bounds, as escaped
   here, a value read from a SQLite database file.
+
+  *Amended in the sixty-ninth edition,* for rmp `#321`: the C1 range and the
+  bidirectional formatting characters join the escaped set, by the user's
+  decision of 2026-11-03 to close the gap in sprint 27 for both providers.
+  The gap is the item of the README's
+  *[Maintenance debt](README.md#maintenance-debt)* that the note above
+  recorded and left to this requirement and `FR-OUT-018` together; both are
+  amended in this edition, and the item is discharged.
+
+  *Observed, on 2026-11-03, with the release build of `tpl` at `cb99236`.*
+  Over a SQLite database whose table holds a default carrying U+009B and a
+  column whose name begins with U+202E, `tpl schema table` wrote every C0
+  character of both values escaped, and wrote U+009B as the bytes `C2 9B` and
+  U+202E as `E2 80 AE`, unescaped, in its `text` and in its `json` output. A
+  table name carrying both, given on the command line and not found, came
+  back unescaped in the `error` and `cause` lines of the diagnostic.
+
+  *Rationale.* U+009B is the one-character form of the control sequence
+  introducer, which a terminal that honours 8-bit controls reads as `ESC [`,
+  the sequence that escaping `ESC` exists to stop; the rest of the C1 range
+  holds the other one-character controls of that family. A bidirectional
+  formatting character changes the order in which a reader sees the
+  characters around it: U+202E shows the rest of a name reversed, so the name
+  a reader sees is not the name the line holds. Escaping either keeps every
+  character of the value, written so that it is seen.
+
+  *What changes for a `mariadb` entry.* Only a value holding one of these
+  characters is written differently, and it is written as a value holding a
+  C0 character already is. A comment in a right-to-left script that carries a
+  directional mark shows the mark escaped.
+
+  *With `FR-ERR-046`.* That requirement applies unchanged: it counts the
+  characters of the value as escaped here, and neither cut falls inside an
+  escape, so the escape of a C1 or bidirectional formatting character is kept
+  whole or left out whole, as the escape of a C0 character is.
+
+  *Rejected: recording the gap as a task for a later sprint.* The user decided
+  to close it in this one. *Rejected: escaping these characters for a
+  `sqlite` entry alone.* The same character reaches the same line from a
+  MariaDB name or comment and from the argument vector, and the user decided
+  both providers. *Rejected: escaping every character of Unicode's format
+  category, `Cf`.* It holds characters a script needs in order to be
+  written, the zero-width joiner among them, which reorder nothing.
 
 - **FR-ERR-046**: A value the system read from a SQLite database file, or
   that the SQLite library returned — an object name, or the library's message
@@ -1570,6 +1623,11 @@ Out of scope: the wording of any individual message.
   not extended to it, so that no `--context` diagnostic changes.
 
   *Added in the sixty-seventh edition,* for rmp `#314`.
+
+  *Note added in the sixty-ninth edition,* for rmp `#321`. `FR-ERR-024` now
+  escapes the C1 range and the bidirectional formatting characters as well,
+  and this requirement applies unchanged: it counts the characters of the
+  value as escaped, and neither cut falls inside the escape of one of them.
 
 - **FR-ERR-045**: WHERE a `hint` carries a command that changes the host, the
   port, the user, the password or the database of an entry defined by `dsn`,
