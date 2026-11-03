@@ -40,8 +40,8 @@ to [configuration-model.md](configuration-model.md); the commands that write
 them, which belong to [cfg-commands.md](cfg-commands.md); the shape of the
 document, which belongs to [context-document.md](context-document.md); the
 choice of the driver and of the library release, which are architecture
-decisions recorded in the project's decision records, per `FR-LITE-001` and
-`FR-LITE-004`; and the text of
+decisions recorded in the project's decision records, under the rules of
+`FR-LITE-004` and `FR-LITE-039` and per `FR-LITE-001`; and the text of
 any statement beyond the names this file must give to make its list closed.
 
 Everything [server-contract.md](server-contract.md) states about a server —
@@ -87,6 +87,20 @@ records. A reading here is therefore a record of what two releases of the
 library returned, falsifiable by the fixture, in the sense of the fourth
 provenance of the [README](README.md#provenance).
 
+*Observed again on 2026-11-03, for the sixty-sixth edition,* against two
+builds of the library as a Rust driver bundles it: **3.51.3** and **3.54.1**,
+each compiled from the library's source and linked into a test program written
+without `unsafe` code, on `aarch64-apple-darwin`. Both releases were built
+with the options the driver sets and with the extension-loading mechanism
+omitted (`SQLITE_OMIT_LOAD_EXTENSION`), and 3.54.1 also without FTS5. The
+databases read were one built from DDL written for the driver evaluation of
+rmp `#315`, in the same freight domain and holding the kinds of object listed
+above, and further databases built for single questions. Wherever both
+releases were read the same way, the readings were identical save the version
+string. Which of the two the binary carries is decided in the project's
+decision records, under `FR-LITE-039`; these readings are records of what the
+two builds returned, in the same sense as those above.
+
 ## The library
 
 - **FR-LITE-001**: The binary SHALL carry its own SQLite library, linked at
@@ -103,6 +117,9 @@ provenance of the [README](README.md#provenance).
   this corpus.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Note added in the sixty-sixth edition.* Which release is carried is chosen
+  under `FR-LITE-039`.
 
 - **FR-LITE-002**: For a `sqlite` entry, the `server` object of `FR-CTX-031`
   SHALL describe the library: `version` SHALL be the string the version probe
@@ -162,6 +179,77 @@ provenance of the [README](README.md#provenance).
   features those are.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+- **FR-LITE-039**: When each release of `tpl` is built, the SQLite library the
+  binary carries, per `FR-LITE-001`, SHALL be the most recent SQLite release
+  obtainable through the driver selected under `FR-LITE-004`, and SHALL be
+  secure. The terms are fixed as follows:
+
+  1. *Most recent* SHALL be judged against the release history SQLite
+     publishes at `https://sqlite.org/changes.html`.
+  2. A release is *obtainable* WHEN a release of the selected driver carries
+     it and that driver release satisfies every step of `FR-LITE-004`.
+  3. The carried release SHALL NOT be affected by any vulnerability that
+     `https://sqlite.org/cves.html` lists as fixed in a later release and that
+     is reachable under the controls of `FR-LITE-010`, the limits of
+     `FR-LITE-011` and the statements of `FR-LITE-015`.
+  4. A release older than the most recent one SHALL be carried only WHERE the
+     newer release is not obtainable, or WHERE it carries such a reachable
+     vulnerability and the older release does not.
+
+  The project's decision records SHALL record, beside the release carried,
+  the judgement of clause 3 for every vulnerability listed with a fix later
+  than that release, and, WHERE clause 4 applies, the reason the newer release
+  is not carried. The choice SHALL be re-verified against both pages before
+  every release of `tpl`.
+
+  This requirement SHALL NOT override `FR-LITE-004`: it chooses among the
+  releases of the driver that rule selects and never among drivers, a driver
+  that a step of that rule disqualifies is not made eligible by the library it
+  carries, and the order of the rule stands. It governs the `sqlite` provider
+  alone, and nothing a `mariadb` entry does changes.
+
+  *Provenance.* The user's decision of 2026-11-03, relayed for rmp `#319`:
+  the library must be the most recent release possible, and secure. The two
+  pages are a published authority in the sense of the third provenance of the
+  [README](README.md#provenance), both checked 2026-11-03: the release history
+  states no date of its own, and the vulnerability page was last updated
+  2026-08-01. What they say changes with every SQLite release, so this
+  requirement names no release, and re-verifying the choice against them is
+  the obligation, in the form `FR-SRV-019` gives the supported-series table.
+  The release chosen is recorded in the decision records, per `FR-LITE-001`,
+  and the number never enters this corpus.
+
+  *What reachable includes.* The schema of the file is SQL its author wrote.
+  The library parses every `CREATE` statement when it loads the schema, and
+  compiles a view whenever its columns are read, per `FR-LITE-033`. A fault
+  that needs an attacker's SQL is therefore reachable wherever parsing or
+  compiling that SQL reaches it, although `tpl` itself issues only the
+  statements of `FR-LITE-015`.
+
+  *Why reachability and not presence.* The vulnerability page states, for
+  most of its entries, the conditions a fault needs — SQL the attacker
+  supplies, defensive mode off, an optional feature built in, or the
+  command-line shell alone — and a `sqlite` read meets only some of them:
+  defensive mode is on, per `FR-LITE-010`, and `tpl` runs no shell. A rule on
+  presence would refuse a release for a fault no `sqlite` read can reach; a
+  rule on reachability needs a judgement, so the judgement is recorded where
+  it can be checked.
+
+  *Rejected: naming a release in this corpus.* The number would decay with the
+  next SQLite release and nothing here would show it. *Rejected: the most
+  recent SQLite release, whatever the selected driver carries.* It can only be
+  met by carrying a library the driver was not released with, which is a
+  modified driver.
+
+  *Consequence, stated plainly.* WHERE no release obtainable through the
+  selected driver is free of a vulnerability that clause 3 names, no carried
+  library satisfies this requirement, and a release of `tpl` built in that
+  state does not conform to it. The remedy lies outside this requirement: a
+  driver release that carries the fix, or a new evaluation under
+  `FR-LITE-004`.
+
+  *Added in the sixty-sixth edition,* for rmp `#319`.
 
 ## Selecting the driver
 
@@ -255,7 +343,8 @@ provenance of the [README](README.md#provenance).
   |---|---|---|
   | The path names nothing, the filesystem refuses the open, or a link dangles | `SQLITE_CANTOPEN` | `74` (`EX_IOERR`) |
   | The file is not a SQLite database | `SQLITE_NOTADB`, at the version probe | `78` (`EX_CONFIG`) |
-  | The file is a SQLite database that is damaged, or whose schema the library cannot load — a corrupt page, a schema object the library cannot parse, or one the hardening of `FR-LITE-010` and `FR-LITE-011` refuses | `SQLITE_CORRUPT`, including `malformed database schema (<object>) - <reason>`, at the version probe or any later statement | `78` |
+  | The file is a SQLite database that is damaged, or whose schema the library cannot load — a corrupt page, or a schema object the library cannot parse within the limits it is built with | `SQLITE_CORRUPT`, including `malformed database schema (<object>) - <reason>`, at the version probe or any later statement | `78` |
+  | The file's schema holds a value longer than the length limit of `FR-LITE-011` | `SQLITE_TOOBIG`, `string or blob too big`, at the version probe | `78` |
   | The database is in write-ahead-log mode and its directory refuses the files that mode needs, per `FR-LITE-008` | `SQLITE_READONLY_DIRECTORY` | `74` |
   | A read of the file fails part-way | `SQLITE_IOERR` | `74` |
   | The database stays locked by a writer until the catalogue-query deadline expires, per `FR-LITE-009` | `SQLITE_BUSY` | `69` (`EX_UNAVAILABLE`) |
@@ -267,22 +356,27 @@ provenance of the [README](README.md#provenance).
 
   *Observed.* A text file failed with `file is not a database`; a file whose
   header bytes 16 to 19 were overwritten failed the same way; a file cut to
-  100 bytes failed with `database disk image is malformed`; a table whose
-  `CHECK` calls a function the library does not admit under
-  `trusted_schema` off made **every** statement fail with
-  `malformed database schema (t) - unsafe use of realpath() (11)`, and an
-  expression depth above the limit set did the same with
-  `Expression tree is too large`. A file that cannot be read is never an empty
-  database: an **empty file** of zero bytes, on the other hand, opened and
-  returned no schema row, which is SQLite's own reading of it, and it is read
-  as a database with no object.
+  100 bytes failed with `database disk image is malformed`; and a table whose
+  `CHECK` nests deeper than the expression-depth limit made **every**
+  statement fail with
+  `malformed database schema (t) - Expression tree is too large (maximum depth 100)`,
+  with that limit lowered to `100` for the reading, as `FR-LITE-011` records.
+  On the builds 3.51.3 and 3.54.1, with every control of `FR-LITE-010` and
+  every limit of `FR-LITE-011` in force, a file whose schema holds one
+  `CREATE TABLE` statement of 1 100 076 bytes failed at the version probe with
+  `string or blob too big` (`SQLITE_TOOBIG`, extended code 18). A file that
+  cannot be read is never an empty database: an **empty file** of zero bytes,
+  on the other hand, opened and returned no schema row, which is SQLite's own
+  reading of it, and it is read as a database with no object.
 
   *Why `78` for a file that is not a database.* The entry points at something
   `tpl` cannot read as a database, which is the reading `FR-SRV-003` gives `78`
   for a server that is not MariaDB, and the next step is the same: point the
   entry elsewhere. A damaged file and a schema the library cannot load share
   that next step, so `FR-ERR-002` admits them to the same code, and the `cause`
-  separates them. *Why `74` for a path that cannot be opened.* It is the
+  separates them. A schema longer than the length limit shares it too: no
+  flag or key relaxes the limit, per `FR-LITE-014`, so the file is one this
+  entry cannot read. *Why `74` for a path that cannot be opened.* It is the
   reading `FR-RND-035` gives a `--context` path that cannot be read: the caller
   looks at the path and at what the filesystem said, and a filesystem path is
   no population a `66` could suggest from.
@@ -294,6 +388,16 @@ provenance of the [README](README.md#provenance).
   presented at exit `0`.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-sixth edition,* for rmp `#319`. The length limit of
+  `FR-LITE-011` is a row of its own, because the library refuses an oversized
+  schema with `SQLITE_TOOBIG` and not with `SQLITE_CORRUPT`; the code is
+  unchanged. The damaged-schema row no longer names a schema the hardening of
+  `FR-LITE-010` refuses, and the *Observed* note no longer records that a
+  `CHECK` calling a function not marked innocuous stops the schema loading:
+  that reading is withdrawn, for the reason stated under `FR-LITE-010`. The
+  expression-depth reading was re-taken on the builds 3.51.3 and 3.54.1 and
+  holds.
 
 - **FR-LITE-008**: The system SHALL NOT write to the database file. WHERE the
   database is in write-ahead-log mode, the library MAY create the two files
@@ -352,7 +456,13 @@ provenance of the [README](README.md#provenance).
   the trust boundaries of [security.md](security.md). On every connection it
   opens, before the version probe, the system SHALL apply each of the
   following controls and SHALL confirm, by reading the setting back, that each
-  took effect:
+  took effect. Extension loading is the one control that is not a setting of
+  the connection: it is a property of the library the binary carries, applied
+  when the library is built, and its read-back is `PRAGMA compile_options`,
+  which the system SHALL issue before any statement that reads the file. The
+  control is in effect only WHERE that statement returns the row
+  `OMIT_LOAD_EXTENSION`; IF the row is absent, the control has not taken
+  effect, under `FR-LITE-012`.
 
   | Control | Setting | Closes |
   |---|---|---|
@@ -360,7 +470,7 @@ provenance of the [README](README.md#provenance).
   | `query_only` | on | any write the open itself did not refuse, as defence in depth |
   | Defensive mode | on | the features by which ordinary SQL can corrupt a database file |
   | `trusted_schema` | off | an SQL function or a virtual table that is not marked innocuous, run from a view, a trigger or a schema expression |
-  | Extension loading | off, for both the library interface and the `load_extension()` function | code loaded from a path a schema or a statement names |
+  | Extension loading | absent: the carried library is built with SQLite's compile-time option `SQLITE_OMIT_LOAD_EXTENSION`, which omits the mechanism, its library interface and the `load_extension()` function | code loaded from a path a schema or a statement names |
   | `cell_size_check` | on | a malformed page read without its cell sizes checked |
   | `mmap_size` | `0` | a page read through a memory map of a file another process can change |
 
@@ -374,7 +484,13 @@ provenance of the [README](README.md#provenance).
   the defensive flag, extension loading and the limits of `FR-LITE-011` are
   the options those pages give. A published authority, in the sense of the
   third provenance of the [README](README.md#provenance): what would oblige a
-  re-check is a change to that guidance.
+  re-check is a change to that guidance. *Added in the sixty-sixth edition:*
+  the compile-time options at `https://sqlite.org/compile.html`, last updated
+  2026-10-01 and checked 2026-11-03, state that `SQLITE_OMIT_LOAD_EXTENSION`
+  "omits the entire extension loading mechanism from SQLite", including its
+  two library interfaces; the pragma page states that `PRAGMA compile_options`
+  "returns the names of compile-time options used when building SQLite, one
+  option per row", without the `SQLITE_` prefix.
 
   *Observed.* Each setting read back as set, on a read-only connection: the
   pragmas `query_only` `1`, `trusted_schema` `0`, `cell_size_check` `1` and
@@ -384,16 +500,78 @@ provenance of the [README](README.md#provenance).
   `CREATE TABLE`, `INSERT` and `PRAGMA user_version=5` with
   `attempt to write a readonly database`.
 
-  *What `trusted_schema` off costs, and where.* Observed: a view calling a
-  function that is not innocuous failed to compile with
-  `unsafe use of realpath()`, which is `FR-LITE-035`'s case; a `CHECK`
-  constraint calling one made the whole schema fail to load, which is
-  `FR-LITE-007`'s; a `DEFAULT` and a trigger body calling one did not affect
-  the read. A function the library does not hold at all failed only the view
-  that called it, with `no such function: realpath`, and did not stop the
-  schema loading. Among the functions the shell held, those not marked
+  *Extension loading, observed.* On the builds 3.51.3 and 3.54.1 compiled
+  with `SQLITE_OMIT_LOAD_EXTENSION`, `PRAGMA compile_options` returned 51
+  rows, among them `OMIT_LOAD_EXTENSION`, and `load_extension()` failed with
+  `no such function: load_extension`. Compiled with the options the driver
+  sets, the same builds returned no such row, and `load_extension()` failed
+  with `not authorized`. `PRAGMA compile_options` answered alike over the
+  observation database, a text file, a truncated file and a schema longer than
+  the length limit, so it reads nothing from the file, and the statement trace
+  of `FR-LITE-018` reported it.
+
+  *Why the omission is read back at every open, although the build fixes it.*
+  SQLite's own page on compile-time options warns that the `SQLITE_OMIT_*`
+  options "may not work with the amalgamation", the single-file form in which
+  a driver bundles the library, and calls them "mostly unsupported". The
+  omission was observed to take effect on both builds, and that observation
+  is of two builds, not of every build the project will make. A build that
+  misses the option is a defect of the binary, and the read-back at every open
+  is what makes it end in `70` under `FR-LITE-012` rather than read a file with
+  the mechanism present.
+
+  *Provenance.* The user's decision of 2026-11-03, relayed for rmp `#319`,
+  taken after rmp `#315` found that the closest candidate driver could switch
+  extension loading off through the library interface without `unsafe` code
+  and could not read the switch back, and that the library as that driver
+  bundles it starts every connection with the switch on: compile the mechanism
+  out, confirm the omission at every open, and end the invocation with `70`,
+  like any other control not in effect. The control is not removed, which
+  `FR-LITE-004` forbids: the mechanism absent is a stronger setting than the
+  mechanism off, and a candidate confirms it with a statement, through no
+  `unsafe` code.
+
+  *Rejected: confirming the omission with
+  `SELECT sqlite_compileoption_used('OMIT_LOAD_EXTENSION')`.* Observed on both
+  builds: preparing it loads the schema, as preparing the probe does — over a
+  text file, a truncated file and an oversized schema it failed with
+  `file is not a database`, `database disk image is malformed` and
+  `string or blob too big`. It would parse the untrusted schema before the
+  confirmation answered, and over a file that is not a database a build that
+  missed the option would end with `78` instead of `70`, hiding the defect of
+  the binary that `FR-LITE-012` exists to report. *Rejected: a driver patched
+  to read the switch back.* It is a maintained fork, and moves the `unsafe`
+  code into it rather than removing it. *Rejected: switching extension
+  loading off without reading it back.* It leaves the one control nothing
+  confirms, and the user judged it the weakest option.
+
+  *What `trusted_schema` off costs, and where.* Observed on the builds 3.51.3
+  and 3.54.1, with defensive mode on and with it off: a view calling a
+  function the library holds and does not mark innocuous failed to compile,
+  with `unsafe use of bm25()` and `unsafe use of rtreedepth()`, which is
+  `FR-LITE-035`'s case. A `CHECK` constraint, a `DEFAULT` and a trigger body
+  calling such a function did not affect the read: the schema loaded and the
+  table's columns were read. Creating such a `CHECK` was refused with
+  `unsafe use of rtreedepth()` on a connection with `trusted_schema` off and
+  succeeded on one with it on, so a database holding one was written under
+  `trusted_schema` on. A function the library does not hold at all failed only
+  the view that called it, with `no such function: realpath`, and did not stop
+  the schema loading. Among the functions the shell held, those not marked
   innocuous were its own additions and a handful of aggregate, full-text and
   R-tree functions.
+
+  *Corrected in the sixty-sixth edition,* for rmp `#319`. The sixty-fifth
+  edition recorded, from the `sqlite3` shell 3.54.0, that a `CHECK` calling a
+  function not marked innocuous made the whole schema fail to load, and
+  `FR-LITE-007` and `FR-LITE-038` relied on it. The reading does not hold on
+  the two builds above, and it could not be reproduced on 2026-11-03 in that
+  shell either, nor in the Python library 3.54.1: over a database re-created
+  for the purpose, a `CHECK` calling `realpath()` written under
+  `trusted_schema` on, the schema loaded under `trusted_schema` off — in the
+  shell with defensive mode on and with it off, and in the Python library with
+  it off. The database the first reading was taken over was not kept, so that
+  reading can be neither re-taken nor explained. It is withdrawn, and this
+  note rests on the readings of the sixty-sixth edition.
 
   *Rejected: disabling views, as the guidance offers for an application that
   uses none.* The columns of a view are read by compiling it, per
@@ -402,6 +580,12 @@ provenance of the [README](README.md#provenance).
   compiles nothing; the control would close nothing that is open.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-sixth edition,* for rmp `#319`. Extension loading was
+  a switch set off and read back; no candidate could read it back without
+  `unsafe` code. It is now absent from the carried library and confirmed by
+  `PRAGMA compile_options` before the file is read. The observation of
+  `trusted_schema` off is corrected, in the note above.
 
 - **FR-LITE-011**: On every connection, before the version probe, the system
   SHALL set the following run-time limits of the library and SHALL confirm
@@ -438,6 +622,14 @@ provenance of the [README](README.md#provenance).
   bytes cannot be read, and is refused with `78` under `FR-LITE-007`.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Checked in the sixty-sixth edition, and unchanged.* The depth reading was
+  re-taken on the builds 3.51.3 and 3.54.1: at `100` the version probe failed
+  with
+  `malformed database schema (t) - Expression tree is too large (maximum depth 100)`,
+  and at `200` the schema loaded. The refusal the accepted cost names was
+  observed as `SQLITE_TOOBIG`, which `FR-LITE-007` now carries in a row of its
+  own.
 
 - **FR-LITE-012**: IF a control of `FR-LITE-010` or a limit of `FR-LITE-011`
   cannot be applied, or its read-back does not confirm the value set, THEN the
@@ -498,16 +690,18 @@ provenance of the [README](README.md#provenance).
   | Statement | Purpose | When |
   |---|---|---|
   | `PRAGMA query_only`, `PRAGMA trusted_schema`, `PRAGMA cell_size_check` and `PRAGMA mmap_size`, each in the form that sets the value `FR-LITE-010` fixes and in the form that reads it back | The controls of `FR-LITE-010` that a statement applies | Once each, at connection start |
+  | `PRAGMA compile_options`, in the form that reads the options | The confirmation of the extension-loading control of `FR-LITE-010` | Once, at connection start |
   | `SELECT sqlite_version()`, reading nothing else | The version probe of `FR-LITE-002` | Once, at connection start |
   | `SELECT` against the schema table `sqlite_schema` and the pragma table-valued functions `pragma_table_list`, `pragma_table_xinfo`, `pragma_index_list`, `pragma_index_xinfo`, `pragma_foreign_key_list` and `pragma_encoding`, restricted to the schema `main` | Reading the catalogue, and the probe of `FR-CFG-056` | As the command requires |
 
   A control the system applies through the library's configuration interface
   rather than by a statement issues no statement, and the list admits the four
-  pragmas without obliging their use. The table fixes membership and not
-  order; the order is `FR-LITE-017`.
+  pragmas of the first row without obliging their use; the pragma of the
+  second row is the one `FR-LITE-010` obliges. The table fixes membership and
+  not order; the order is `FR-LITE-017`.
 
   *Observed.* Over the observation database, the whole catalogue was read by
-  seven statements of the third row after the probe — the encoding, the
+  seven statements of the last row after the probe — the encoding, the
   covered objects, the columns of every table, the indexes and their columns,
   the foreign keys, the stored definitions of the views and triggers, and the
   columns of every view — and the same eight statements read an empty database
@@ -515,6 +709,10 @@ provenance of the [README](README.md#provenance).
   through, so its count does not depend on the number of objects.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-sixth edition,* for rmp `#319`: the second row is
+  new, for the confirmation `FR-LITE-010` now requires, and the catalogue row,
+  formerly the third, is named the last.
 
 - **FR-LITE-016**: The system SHALL NOT issue any other statement for a
   `sqlite` entry. It SHALL issue no DDL, no DML, no `ATTACH` or `DETACH`, no
@@ -527,9 +725,10 @@ provenance of the [README](README.md#provenance).
 
 - **FR-LITE-017**: WHEN the system opens a connection for a `sqlite` entry, it
   SHALL establish the kind of the file under `FR-LITE-005`, open it under
-  `FR-LITE-006`, apply and confirm every control of `FR-LITE-010` and every
-  limit of `FR-LITE-011`, and only then issue the version probe of
-  `FR-LITE-002`. Every catalogue statement SHALL follow the probe.
+  `FR-LITE-006`, apply and confirm every control of `FR-LITE-010` — the
+  extension-loading control by `PRAGMA compile_options` — and every limit of
+  `FR-LITE-011`, and only then issue the version probe of `FR-LITE-002`. Every
+  catalogue statement SHALL follow the probe.
 
   *Rationale.* The probe is the first statement that reads the file and loads
   its schema, per the observation under `FR-LITE-002`, so every control is in
@@ -538,6 +737,13 @@ provenance of the [README](README.md#provenance).
   before anything is read.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-sixth edition,* for rmp `#319`: the confirmation of
+  extension loading is named in the order. `PRAGMA compile_options` reads
+  nothing from the file, per the observation under `FR-LITE-010`, so the
+  probe stays the first statement that does, and a control fixed when the
+  library was built is confirmed, like the others, before the schema is
+  parsed.
 
 - **BR-LITE-001**: For a `sqlite` entry the read-only promise of `BR-SEC-002`
   has three parts, and two of them prevent. The read-only open of
@@ -551,14 +757,26 @@ provenance of the [README](README.md#provenance).
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
 - **FR-LITE-018**: The closed list of `FR-LITE-015` and the order of
-  `FR-LITE-017` SHALL be verified by an integration test that records every
-  statement the library prepares on the connection, through the library's own
-  trace interface, reached through the seam of `FR-ERR-031` and from no
-  invocation of the distributed binary. The read-only promise SHALL be
-  verified from outside the process: over a read of the fixture database of
-  `FR-LITE-038` in rollback-journal mode, the file's bytes, its size and its
-  modification time SHALL be unchanged and no file SHALL appear in its
-  directory.
+  `FR-LITE-017` SHALL be verified by an integration test that records, through
+  the library's statement trace — the event SQLite names `SQLITE_TRACE_STMT`
+  — every statement the trace reports on the connection from the first
+  statement the system issues after the open, reached through the seam of
+  `FR-ERR-031` and from no invocation of the distributed binary. Over the
+  fixture database of `FR-LITE-038` and over an empty database file, the test
+  SHALL assert that:
+
+  1. every statement the trace reports without the prefix `-- ` is a
+     statement of `FR-LITE-015`, and the statements so reported come in the
+     order of `FR-LITE-017`; and
+  2. every statement the trace reports with that prefix is a
+     [nested statement](glossary.md#nested-statement), which is not checked
+     against the list of `FR-LITE-015` and is not counted among the statements
+     the system issues, under `FR-LITE-037` or anywhere else.
+
+  The read-only promise SHALL be verified from outside the process: over a
+  read of the fixture database of `FR-LITE-038` in rollback-journal mode, the
+  file's bytes, its size and its modification time SHALL be unchanged and no
+  file SHALL appear in its directory.
 
   *Why the statement record is taken in process.* `BR-SRV-003` observes the
   statements a server receives, from the server's side. A SQLite connection
@@ -567,7 +785,70 @@ provenance of the [README](README.md#provenance).
   What the process does to the file — the promise a caller relies on — is
   observed from outside it.
 
+  *Observed.* On the builds 3.51.3 and 3.54.1, over the observation database:
+  the trace reported a statement when it began running. Two statements whose
+  preparation failed — `SELECT * FROM no_such_table`, and a `SELECT` from a
+  view that names a missing table — and a statement prepared and never run
+  were not reported; the statement of `FR-LITE-035` that reads the columns of
+  every view, which began running and then failed, was. The library's own
+  reading of the schema table, when it loaded the schema, was not reported.
+  Every pragma table-valued function of `FR-LITE-015` ran a statement of its
+  own for each invocation, reported with the prefix: `-- PRAGMA encoding`,
+  `-- PRAGMA table_list`, and, once for each table or index the join reached,
+  `-- PRAGMA 'main'.table_xinfo='<table>'`,
+  `-- PRAGMA 'main'.index_list='<table>'`,
+  `-- PRAGMA 'main'.index_xinfo='<index>'` and
+  `-- PRAGMA 'main'.foreign_key_list='<table>'`. Reading the columns of a view
+  over an `fts5` table ran, in addition,
+  `-- SELECT k, v FROM 'main'.'<table>_config'`: the module's own code,
+  reading a table of the file. A view whose definition did not compile
+  produced no prefixed statement of its own. The documentation of the event,
+  at `https://sqlite.org/c3ref/c_trace.html`, checked 2026-11-03, states that
+  it fires "when a prepared statement first begins running" and that a text
+  beginning with `--` marks the invocation of a trigger; it does not state the
+  prefix on a nested statement, which is observed here. No statement of the
+  system's fires a trigger, per `FR-LITE-016`, so every prefixed text in the
+  record is a nested statement.
+
+  *Why nested statements are neither checked nor counted.* The system does not
+  issue them, and their text is not `tpl`'s: a pragma function writes its own
+  `PRAGMA`, and a module writes statements named after the file's own tables,
+  so no list written in advance closes over what an untrusted file can make a
+  module run. Counting them would break `FR-LITE-037`, because the pragma
+  functions run one for each table or index, and a count that grows with the
+  objects is the dependence `NFR-PERF-001` forbids. What a nested statement
+  can do to the file is bounded by the controls that bound the connection —
+  the read-only open and `query_only` — and which module may run from a view
+  is bounded by `trusted_schema` off, under which the view calling `bm25()`
+  did not compile; the read-only promise is verified from outside the process,
+  whatever ran inside it.
+
+  *Rejected: admitting nested statements to the list of `FR-LITE-015`.* The
+  list would be closed over the fixture and open over every other file.
+  *Rejected: asserting the nested statements the fixture produces, as
+  recorded.* It binds the test to the library's internals: a library release
+  that changes how a pragma function or a module reads would fail a test of
+  `tpl`'s statements with `tpl` unchanged, and `FR-LITE-039` makes a new
+  release a routine event.
+
+  *Consequence, stated plainly.* A statement that fails when it is prepared,
+  or that is prepared and never run, does not appear in the record.
+  `FR-LITE-015` and `FR-LITE-016` bind it all the same, and this test cannot
+  find one. The read-only promise does not rest on the record: it is verified
+  from outside the process, above.
+
+  *What would change this.* An instrument that reports a statement when it is
+  prepared rather than when it runs, reachable on the terms of this
+  requirement.
+
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-sixth edition,* for rmp `#319`. The requirement said
+  the test records every statement the library prepares. The trace reports a
+  statement when it begins running, and it reports nested statements
+  `FR-LITE-015` does not name, so the requirement now states what the record
+  holds, what the test asserts of each kind of statement in it, and what the
+  record does not show.
 
 ## The part of the database a read covers
 
@@ -593,6 +874,11 @@ provenance of the [README](README.md#provenance).
   table SHALL carry `table_type` `BASE TABLE`, which is the value
   `FR-CAT-031` records for an ordinary table.
 
+  The covered set SHALL be the one the carried library reports. A table SHALL
+  be excluded as a shadow table only WHERE the carried library reports it as
+  `shadow`, and a shadow table of a module the carried library does not hold
+  SHALL be covered as a table.
+
   *Observed.* `pragma_table_list` reports four types — `table`, `view`,
   `virtual` and `shadow` — and the schema table `sqlite_schema` reports a
   virtual table and its shadow tables as `table`, with nothing to tell them
@@ -604,12 +890,38 @@ provenance of the [README](README.md#provenance).
   `BASE TABLE` names. Carrying SQLite's spelling would give one covered kind
   two values, and every template branching on it would test both.
 
-  *Bounded claim.* A table is reported as `shadow` by the module that owns it.
-  Every shadow table observed belonged to a module the reading library held —
-  `fts5` and `rtree` — and how a shadow table of a module the carried library
-  does not hold is reported was not observed.
+  *Observed, where the sixty-fifth edition stated a bounded claim.* A table is
+  reported as `shadow` by the module that owns it, and therefore only by a
+  library that holds that module. On a build of 3.54.1 without FTS5, for which
+  `sqlite_compileoption_used('ENABLE_FTS5')` returned `0`,
+  `pragma_table_list` reported the `fts5` table itself as `virtual` and its
+  five shadow tables — `<name>_config`, `_content`, `_data`, `_docsize` and
+  `_idx` — as `table`; the builds holding FTS5 reported the same five as
+  `shadow`. On the build without FTS5, the columns, indexes and keys of the
+  five were read like any other table's, and a view over the `fts5` table
+  failed to compile with `no such module: fts5`.
+
+  *Consequence, stated plainly.* Which tables a read covers depends on the
+  modules the carried library holds, and those are fixed by the options it is
+  built with. A shadow table of a module the carried library does not hold is
+  presented as a `BASE TABLE`, with its columns, indexes and keys, at exit
+  `0`, and nothing in the document says that a virtual table keeps its data
+  there.
+
+  *Rejected: recognising a shadow table by its name, as a virtual table's name
+  followed by a suffix.* The suffixes are the module's own, a module the
+  library does not hold publishes none to the library, and an ordinary table
+  may carry such a name; the mistake would be a table missing from the model
+  at exit `0`, which is worse than a table present that a template can skip by
+  name.
+
+  *What would change this.* A carried library built with the module.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-sixth edition,* for rmp `#319`. The bounded claim is
+  replaced by the observation that settles it, and the requirement now states
+  that the carried library's report decides the covered set.
 
 - **FR-LITE-021**: The model SHALL NOT cover, for a `sqlite` read, any of the
   following, and the system SHALL NOT read a further object to cover one:
@@ -1168,9 +1480,14 @@ provenance of the [README](README.md#provenance).
      on delete, a composite key, a key naming no parent column, a key declared
      `MATCH FULL`, a key naming a table the database does not hold, and a
      self-reference;
-  9. `CHECK` constraints at column and table level, one named;
-  10. views, one with a column list, one selecting from a missing table, and
-      one calling a function the carried library does not hold;
+  9. `CHECK` constraints at column and table level, one named, and one
+     calling a function the carried library holds and does not mark
+     innocuous, written under `trusted_schema` on;
+  10. views, one with a column list, one selecting from a missing table, one
+      calling a function the carried library does not hold, and one calling a
+      function the carried library holds and does not mark innocuous, which
+      `trusted_schema` off refuses — on the builds observed, `bm25()` over an
+      `fts5` table and `rtreedepth()` are two;
   11. triggers of each timing on each event, one with no timing written, one
       `UPDATE OF` a column list, one with a `WHEN` clause, one with a quoted
       name, and an `INSTEAD OF` trigger on a view;
@@ -1180,8 +1497,9 @@ provenance of the [README](README.md#provenance).
   It SHALL also produce, beside the main database: a copy in
   write-ahead-log mode; an empty file; a text file; a truncated database; a
   directory, a FIFO, a symbolic link to the main database and a dangling one;
-  a database whose `CHECK` makes the schema fail to load under `FR-LITE-010`
-  or `FR-LITE-011`; and a database whose only objects are the internal tables.
+  a database whose schema holds a statement longer than the length limit of
+  `FR-LITE-011`, written by a connection that does not set that limit; and a
+  database whose only objects are the internal tables.
 
   *Rationale.* This is the obligation `FR-CONF-038` and the root `CLAUDE.md`
   place on `scripts/mariadb/` for the catalogue a server reads, written for
@@ -1193,6 +1511,17 @@ provenance of the [README](README.md#provenance).
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Amended in the sixty-sixth edition,* for rmp `#319`. The database "whose
+  `CHECK` makes the schema fail to load" is replaced by the length-limit
+  database. A `CHECK` calling a function not marked innocuous does not stop
+  the schema loading on the library observed, per `FR-LITE-010`, so that
+  database could not have exercised the refusal it was listed for; the length
+  limit does stop it, per `FR-LITE-007`, and a connection that does not set
+  the limit can write it. The `CHECK` itself moves into the main database, as
+  a case of the corrected statement: the schema loads, and the table that
+  holds the constraint is read. Item 10 gains the view that `trusted_schema`
+  off refuses, the third cause `FR-LITE-035` names, which no case exercised.
+
 ## Dependencies
 
 - [configuration-model.md](configuration-model.md) — `FR-CONF-051` through
@@ -1200,7 +1529,7 @@ provenance of the [README](README.md#provenance).
   refuses, and how a relative `path` resolves.
 - [server-contract.md](server-contract.md) — the contract this file stands
   beside, and `FR-SRV-042`, `FR-SRV-011` and `BR-SRV-003`, whose grounds it
-  adopts.
+  adopts, and `FR-SRV-019`, whose form `FR-LITE-039` adopts.
 - [catalogue-coverage.md](catalogue-coverage.md) and
   [context-document.md](context-document.md) — the model and the document
   this file fills, and `FR-CTX-043`, the `provider` field.

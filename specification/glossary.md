@@ -244,12 +244,17 @@ and the module that owns a command owns the shape of its `data`. Fixed by
 
 ## hardening control
 
-A setting of the SQLite library that `tpl` applies, and confirms by reading it
-back, on every connection to a database file, so that a file treated as
+A setting of the SQLite library that `tpl` applies on every connection to a
+database file, or a property the carried library is built with, which `tpl`
+confirms by reading it back on every connection, so that a file treated as
 untrusted is read under the checks SQLite offers for one. The controls are
 `FR-LITE-010`, the limits `FR-LITE-011`.
 
 *Added in the sixty-fifth edition.*
+
+*Amended in the sixty-sixth edition.* A property of the build is a hardening
+control too: extension loading is absent from the carried library, and its
+read-back is `PRAGMA compile_options`.
 
 ## official driver
 
@@ -374,6 +379,17 @@ the key space, as `FR-CFG-009` already did for `tpl cfg set`.
 
 *Amended in the forty-sixth edition.* The prefix clause is new: `FR-ERR-042`
 also admits a command of which the supplied token is a proper prefix.
+
+## nested statement
+
+A statement the SQLite library runs while a statement `tpl` issued is running,
+to carry that statement out: the `PRAGMA` a pragma table-valued function runs
+for each invocation, or a statement a virtual-table module runs against its own
+tables. The library's statement trace reports it with the prefix `-- `. It is
+not a statement `tpl` issues: `FR-LITE-018` neither checks it against the
+closed list of `FR-LITE-015` nor counts it.
+
+*Added in the sixty-sixth edition.*
 
 ## normative budget
 
@@ -586,10 +602,15 @@ SQLite's own terms, used where a `sqlite` read decides what it covers. An
 **internal table** is one whose name begins with `sqlite_`, in any letter case,
 a prefix SQLite reserves for itself. A **virtual table** is a table a module
 implements rather than SQLite stores. A **shadow table** is an ordinary table
-in which a virtual table's module keeps its data. All three are excluded, per
-`FR-LITE-021`.
+in which a virtual table's module keeps its data, and only a library that holds
+the module reports it as one. All three are excluded, per `FR-LITE-021`; a
+shadow table the carried library does not report as one is covered as a table,
+per `FR-LITE-020`.
 
 *Added in the sixty-fifth edition.*
+
+*Amended in the sixty-sixth edition.* The clause on a module the carried
+library does not hold is new.
 
 ## target
 

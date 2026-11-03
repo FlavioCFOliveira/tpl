@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-five editions. All are in force;
+The specification has been written in sixty-six editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -5024,6 +5024,79 @@ for this edition: both root documents were read at `6203216` against every
 requirement the edition writes or amends, and the two entries it raises hold
 every divergence found.
 
+### Sixty-sixth edition — the library the binary carries, read again
+
+rmp `#319`, of sprint 27, amends the sixty-fifth edition after rmp `#315`
+applied `FR-LITE-004` to four candidate drivers in compiled spikes, and writes
+the user's requirement of 2026-11-03 that the SQLite library `tpl` carries be
+the most recent release possible, and secure. Every reading it relies on was
+re-taken on two builds of the library, 3.51.3 and 3.54.1, recorded with their
+conditions in [sqlite-contract.md](sqlite-contract.md#observations); the two
+returned the same readings wherever both were taken.
+
+**One identifier is assigned: `FR-LITE-039`.** None is retired and none is
+renumbered. [glossary.md](glossary.md) gains *nested statement* and amends
+*SQLite table kinds* and *hardening control*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The release the binary carries** — `FR-LITE-039` requires the most recent
+  SQLite release obtainable through the driver `FR-LITE-004` selects, judged
+  against SQLite's release history, and admits no release that a listed
+  vulnerability reachable under `tpl`'s controls affects. An older release
+  needs a reason in the decision records, and the choice is re-verified before
+  every release of `tpl`. It overrides neither `FR-LITE-004` nor anything a
+  `mariadb` entry does. `FR-LITE-001` and the file's scope point at it.
+- **Extension loading, compiled out** — by the user's decision of 2026-11-03,
+  `FR-LITE-010` makes extension loading absent from the carried library, built
+  with `SQLITE_OMIT_LOAD_EXTENSION`, instead of a switch set off that no
+  candidate driver could read back without `unsafe` code. `PRAGMA
+  compile_options`, which reads nothing from the file, confirms the omission
+  before the probe, and a missing `OMIT_LOAD_EXTENSION` row ends the
+  invocation with `70` under `FR-LITE-012`. The control is strengthened, not
+  removed, so `FR-LITE-004` stands. `FR-LITE-015` lists the pragma and
+  `FR-LITE-017` names it in the order. The read-back at every open answers
+  SQLite's own caveat that its `SQLITE_OMIT_*` options are unsupported with
+  the amalgamation; the omission was observed to take effect on both builds.
+  A `SELECT` of the same option was rejected: it loads the untrusted schema
+  before it answers.
+- **What the statement trace can verify** — `FR-LITE-018` now records what the
+  trace reports, a statement as it begins running, and asserts the list and
+  the order over the statements reported at top level. A nested statement,
+  which the library runs to carry out a pragma function or a module, is
+  neither checked nor counted, and a statement that fails when it is prepared,
+  or is never run, is stated as absent from the record.
+- **An oversized schema** — `FR-LITE-007` gives the length limit of
+  `FR-LITE-011` a row of its own: `SQLITE_TOOBIG`, with `78`.
+- **A `CHECK` that does not stop the read** — the sixty-fifth edition's
+  reading that a `CHECK` calling a function not marked innocuous makes the
+  schema fail to load under `trusted_schema` off is withdrawn: it does not
+  hold on the two builds, and could not be reproduced in the shell it was
+  taken from. `FR-LITE-010` records what `trusted_schema` off costs on the
+  builds, `FR-LITE-007` drops the case from its damaged-schema row, and
+  `FR-LITE-038` replaces the fixture database that relied on it with a
+  length-limit database and moves the `CHECK` into the main database. It also
+  gains a view that `trusted_schema` off refuses, the third cause
+  `FR-LITE-035` names, which no fixture case exercised. The expression-depth
+  reading of `FR-LITE-011` was re-taken and holds.
+- **Shadow tables of a module the library lacks** — the bounded claim of
+  `FR-LITE-020` is settled by observation: a library built without FTS5
+  reports the shadow tables of an `fts5` table as `table`. The requirement now
+  states that the carried library's report decides the covered set.
+- **The writing conventions** — `FR-LITE-018` is the fifth requirement whose
+  limit is on the evidence rather than on the guarantee, and the list in
+  *[Writing conventions](#writing-conventions)* names it.
+
+`FR-LITE-002`, `FR-LITE-004`, `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-016`,
+`FR-LITE-021`, `FR-LITE-034`, `FR-LITE-035`, `FR-LITE-036`, `FR-LITE-037`,
+`FR-SEC-028`, `FR-CFG-056`, `FR-ERR-001`, `FR-ERR-006` and `NFR-PERF-001` were
+read against the changes. None conflicts with them, so none is amended:
+`FR-CFG-056` reports every control of `FR-LITE-010` at its second step,
+whichever way each is confirmed. The fifth validation rule owes nothing for
+this edition: neither root document, read at `349560e`, states extension
+loading, the statement trace, the length limit, the `CHECK` reading,
+shadow-table coverage or the release of the SQLite library.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -5032,8 +5105,8 @@ every divergence found.
   database driver is part of this: `FR-CONF-036` states what one must be able
   to express, and no requirement names one. The SQLite driver is chosen by the
   rule of `FR-LITE-004`, which names none either, and the release of the
-  SQLite library the binary carries is recorded in the project's decision
-  records, per `FR-LITE-001`.
+  SQLite library the binary carries is chosen under `FR-LITE-039` and recorded
+  in the project's decision records, per `FR-LITE-001`.
 - The text of any catalogue query. What is read is specified; how it is read is
   not.
 - Every **measured** performance figure and every reading. Those live in
@@ -5198,14 +5271,17 @@ because they constrain the whole module rather than one interaction.
   members cite each other. A limit on the **evidence** for a guarantee — the
   observation that cannot be made, rather than the promise that cannot be kept
   — takes the same note shapes, as many of them as it has content for, without
-  joining that family, because it qualifies a different kind of claim. Four
+  joining that family, because it qualifies a different kind of claim. Five
   requirements are written this way:
   `FR-ERR-031`, where no invocation of the distributed binary is observed
   returning `70`; `NFR-PERF-005`, where the file-open observation is made
   on the Linux targets and not on the macOS ones; `FR-PRIV-021`, where no
-  invocation is observed producing a schema read that returns no row; and
+  invocation is observed producing a schema read that returns no row;
   `FR-SRV-013`, where no server is observed producing a read-back that does not
-  confirm the read-only session, so that half of it is exercised in process.
+  confirm the read-only session, so that half of it is exercised in process;
+  and `FR-LITE-018`, where a statement that fails when it is prepared, or is
+  never run, is absent from the statement trace. *The fifth was added in the
+  sixty-sixth edition.*
 
 ## Status legend
 
