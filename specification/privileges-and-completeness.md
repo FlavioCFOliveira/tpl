@@ -1,8 +1,8 @@
 ---
 title: Privileges and Completeness
 status: approved
-last-reviewed: 2026-09-20
-related: [catalogue-coverage.md, server-contract.md, context-document.md, errors-and-exit-codes.md]
+last-reviewed: 2026-11-03
+related: [catalogue-coverage.md, server-contract.md, context-document.md, errors-and-exit-codes.md, sqlite-contract.md]
 ---
 
 # Privileges and Completeness
@@ -20,6 +20,13 @@ half of it is a failure of the request. Listing what is there and finding that
 some of it is out of reach is a fact about the reader's privileges, and a
 listing that refuses to answer would be less useful than one that answers and
 says so.
+
+*Note added in the sixty-fifth edition.* SQLite has no privileges. For a
+`sqlite` entry the rules of this file on complete and incomplete reads, on a
+named object, on a listing and a dump, and on a marked dump apply unchanged;
+the one way a `sqlite` read comes back incomplete is a view whose definition
+does not compile, per `FR-LITE-035`, and the cross-checks of *Absence versus
+privilege* have no case to detect, per `FR-LITE-036`.
 
 ## Scope
 
@@ -57,6 +64,11 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
 - **FR-PRIV-003**: IF an object requested by name — `tpl schema table`,
   `tpl schema view`, `tpl schema routine`, or a `tpl render` object flag — comes
   back incomplete, THEN the system SHALL exit `77` (`EX_NOPERM`).
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry the incomplete
+  named object is a view that does not compile, and the `cause` of the `77`
+  names the reason the library gave rather than a privilege, per
+  `FR-LITE-035`.
 
 - **FR-PRIV-004**: The system SHALL NOT return a partial object in answer to a
   request that named it.

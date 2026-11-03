@@ -1,7 +1,7 @@
 ---
 title: Output Formats
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-11-03
 related: [cli-contract.md, schema-commands.md, errors-and-exit-codes.md, help-and-version.md]
 ---
 
@@ -250,6 +250,13 @@ owns the shape of its `data`.
   this requirement owns the position of the field and the set of values it
   takes. Adding a value to the set is not a breaking change, per `FR-OUT-014`
   and `FR-CDOC-010`.
+
+  *Note added in the sixty-fifth edition.* A read of the database file of a
+  `sqlite` entry on this invocation is `server`. The value says the read is
+  live, which is the question this field answers, and `database.provider`,
+  per `FR-CTX-043`, says what was read. *Rejected: a fifth value for a SQLite
+  read.* It would give one answer — live — two spellings, and every consumer
+  that branches on `server` would have to learn the second.
 
   *Rejected.* `null` wherever neither `server` nor `cache` applies, which would
   say "not known" where the truth is "not applicable", and would leave a caller

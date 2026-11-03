@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-03
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md]
 ---
 
@@ -46,12 +46,12 @@ Out of scope: the wording of any individual message.
   | `64` | `EX_USAGE` | Unknown command or flag, missing required argument, mutually exclusive flags, malformed flag value, unknown configuration key, per `FR-ERR-035` | Fix the invocation; consult `--help` |
   | `65` | `EX_DATAERR` | Template syntax error, render failure, malformed `--context` document, render deadline or render bound exceeded, template path escaping the root | Fix the template or the context |
   | `66` | `EX_NOINPUT` | A named object does not exist: table, view, routine, template, database entry, configuration key, per `FR-ERR-035` | List what exists and choose another name |
-  | `69` | `EX_UNAVAILABLE` | Server unreachable: DNS, connection refused, network deadline exceeded, TLS failure | Check host and network; the operation is read-only and therefore repeatable |
+  | `69` | `EX_UNAVAILABLE` | Server unreachable: DNS, connection refused, network deadline exceeded, TLS failure; or a SQLite database still locked when the catalogue-query deadline expires | Check host and network, or what holds the database; the operation is read-only and therefore repeatable |
   | `70` | `EX_SOFTWARE` | Internal error — a defect in `tpl` | Report it; not fixable by the caller |
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
-  | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space |
-  | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue | Fix the credentials, or request read access |
-  | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
+  | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, a SQLite database file an entry names, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space |
+  | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue; or an object requested by name that comes back incomplete, per `FR-PRIV-003` | Fix the credentials, or request read access; for a SQLite view, repair the view |
+  | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported; a `provider` outside its two values, or an entry key its provider refuses; a SQLite path that is not a regular file, or a file that is not a SQLite database or whose schema cannot be loaded | Fix `.tpl/.cfg`, or run `tpl init` |
 
   The codes are a closed set and the *Condition* column is not. *And no
   others* above fixes the list of codes; each *Condition* cell characterises
@@ -126,6 +126,18 @@ Out of scope: the wording of any individual message.
   The cell named the deadline and would otherwise have characterised the class
   as bounded in time alone. The code set is unchanged and the column still
   characterises rather than enumerates.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`: four cells name the
+  conditions a `sqlite` entry adds to their classes. The `69` cell names a
+  database still locked at the catalogue-query deadline, per `FR-LITE-009`;
+  the `74` cell a SQLite database file, per `FR-LITE-007`; the `78` cell the
+  provider and the file faults of `FR-CONF-051`, `FR-CONF-052`, `FR-LITE-005`
+  and `FR-LITE-007`; and the `77` cell the incomplete named object of
+  `FR-PRIV-003`, which a SQLite view that does not compile reaches, per
+  `FR-LITE-035`, with no privilege involved. `70` takes a hardening control
+  that does not take effect, per `FR-LITE-012`, which its cell already
+  characterises as a defect in `tpl`. The code set is unchanged and the column
+  still characterises rather than enumerates.
 
   *Amended in the forty-eighth edition: the `78` cell names three conditions
   the class already held.* `FR-PROJ-027` refuses a `--tpl-dir` that names a
@@ -637,6 +649,16 @@ Out of scope: the wording of any individual message.
   conditions of step 2, and a project without `.cfg` passes step 3 with an
   empty configuration, per `FR-PROJ-028`.
 
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry the steps hold
+  these conditions: step 3 refuses a `provider` outside its two values, per
+  `FR-CONF-051`, and a `path` holding `${`, per `FR-CONF-054`; step 5 refuses a
+  key the provider does not take, per `FR-CONF-052`, and a missing `path`, per
+  `FR-CONF-053`; and step 6, the connection, is the kind check, the open, the
+  hardening and the probe of `FR-LITE-017`, which can end with `69`, `70`, `74`
+  or `78`, per `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-009` and `FR-LITE-012`.
+  Step 7 reaches `77` for a named view that does not compile, per
+  `FR-LITE-035`. The order of the steps is unchanged.
+
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
 
@@ -769,6 +791,13 @@ Out of scope: the wording of any individual message.
   | `78` | The key and the file, with the value found and the value expected; or, where the fault is not a key, the specific condition — the directory the walk ended at without finding `.tpl`; or, WHERE `--tpl-dir` suppressed the walk, the path it named, why that path is not usable, and that no upward search was made, per `FR-PROJ-008`; the name of the undefined variable, or the series found and why it is not supported, per `FR-SRV-030` |
 
   `0` is the tenth code of `FR-ERR-001` and produces no message.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, no host or
+  port is attempted. A `69` `cause` SHALL name the path of the database file,
+  that the catalogue-query deadline expired while the database was locked, and
+  the resolved deadline; a `74` or `78` `cause` SHALL name the path and the
+  condition `FR-LITE-005` or `FR-LITE-007` states, with what the library
+  returned.
 
   *Rationale.* The exit code says which class of thing went wrong; the `cause`
   line is now the only place the instance can be named, because `FR-ERR-033`
@@ -1464,6 +1493,11 @@ Out of scope: the wording of any individual message.
   stored one may carry a password, which `BR-ERR-003` bars from every message.
 
   *Added in the fiftieth edition,* for rmp `#282`.
+
+  *Note added in the sixty-fifth edition.* A `hint` that repoints a `sqlite`
+  entry carries `tpl cfg database update <entry> --path <path>`, per
+  `FR-LITE-005`, `FR-LITE-007` and `FR-CONF-053`, and never a flag that
+  `FR-CFG-055` refuses for that provider.
 
 ## `EPIPE`
 

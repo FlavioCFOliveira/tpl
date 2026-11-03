@@ -1,8 +1,8 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-09-24
-related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md]
+last-reviewed: 2026-11-03
+related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md]
 ---
 
 # Security Rules Across the Surface
@@ -38,6 +38,10 @@ module, `BR-SEC-003` excepted.
 | Catalogue values | Table, column, and routine names and comments are free text on the server |
 | A `--context` document | An ordinary JSON file, from anywhere |
 | Files under `.tpl/templates/` | May arrive in a clone and be read before being reviewed |
+| A SQLite database file | Written by any program, possibly crafted; its schema is SQL the library parses and compiles |
+
+*Note added in the sixty-fifth edition.* The last row is new. `FR-SEC-028`
+states the rule that answers it.
 
 ## Credentials
 
@@ -85,6 +89,9 @@ module, `BR-SEC-003` excepted.
 
 - **FR-SEC-007**: `${VAR}` SHALL expand only in `dsn`, `host`, `port`, `user`,
   `password`, and `database`. See `FR-CONF-015`.
+
+  *Note added in the sixty-fifth edition.* `${VAR}` does not expand in `path`
+  either, and a reference there is refused, per `FR-CONF-054`.
 
 - **FR-SEC-008**: `${VAR}` SHALL NOT expand in `tls`, so that an injected value
   cannot turn off encryption; nor in `password_command`, so that the environment
@@ -195,6 +202,25 @@ module, `BR-SEC-003` excepted.
   *Note added in the forty-eighth edition.* `--tpl-dir` SHALL name a directory
   whose last segment is `.tpl`, per `FR-PROJ-027`, so that the flag names no
   folder the walk would not find.
+
+## SQLite database files
+
+- **FR-SEC-028**: A SQLite database file SHALL be read only from a regular
+  file, established before the library opens it, SHALL be opened read-only and
+  never created, and SHALL be read under the hardening controls and limits
+  SQLite's own guidance gives for an untrusted file, each confirmed by reading
+  it back; a control that does not take effect ends the invocation with `70`
+  before any byte of the file is parsed. See `FR-LITE-005`, `FR-LITE-006`,
+  `FR-LITE-010` through `FR-LITE-014`, and `FR-LITE-017`.
+
+  *Threat closed.* A FIFO in the place of the file must not hang the
+  invocation, and a crafted file must not reach the library's parser without
+  the checks the library offers: a schema that runs a function with side
+  effects from a view or a constraint, a malformed page read without its cells
+  checked, a page read through a memory map another process can change, an
+  extension loaded from a path, or a single value sized to exhaust memory.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
 
 ## Template containment
 
@@ -425,6 +451,12 @@ module, `BR-SEC-003` excepted.
   establish or confirm the session refuses the connection with `78`, per
   `FR-SRV-010`. There is no flag that disables either part, per `FR-SRV-011`.
   See [server-contract.md](server-contract.md), which owns both.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry the promise
+  has three parts, two of which prevent: the read-only open, the closed list of
+  `FR-LITE-015`, and `query_only` beside them. `BR-LITE-001` states it, and
+  `FR-LITE-008` states the files the library itself may create beside a
+  database in write-ahead-log mode.
 
 ## Dependencies
 

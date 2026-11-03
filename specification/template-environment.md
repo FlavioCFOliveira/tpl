@@ -1,7 +1,7 @@
 ---
 title: The Template Environment
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-11-03
 related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md]
 ---
 
@@ -624,8 +624,14 @@ row is a case the implementation SHALL satisfy.
   | `textual` | `char`, `enum`, `longtext`, `mediumtext`, `set`, `text`, `tinytext`, `varchar` |
   | none of the three | `binary`, `blob`, `geometry`, `geometrycollection`, `inet4`, `inet6`, `linestring`, `longblob`, `mediumblob`, `multilinestring`, `multipoint`, `multipolygon`, `point`, `polygon`, `tinyblob`, `uuid`, `varbinary` |
 
-  A `data_type` value that appears in none of the four rows SHALL satisfy none
-  of the three tests, per `FR-ENV-042`, and SHALL NOT fail the render.
+  A `data_type` value that appears in none of the four rows, nor in the table
+  of `FR-ENV-048`, SHALL satisfy none of the three tests, per `FR-ENV-042`,
+  and SHALL NOT fail the render.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The clause *nor in the
+  table of `FR-ENV-048`* is new. The four rows record what a MariaDB server
+  returns and are unchanged; the `data_type` values a `sqlite` read produces
+  are placed by that requirement.
 
   *Observed.* The fixture's 301 columns yielded **exactly 39 distinct
   `data_type` values**, byte-identical on all four series, and the four rows
@@ -656,6 +662,32 @@ row is a case the implementation SHALL satisfy.
   newer than the window introduces, which reaches `FR-CTX-018` and then this
   requirement's fall-through. Neither may be assigned to a family without an
   observation.
+
+- **FR-ENV-048**: The five `data_type` values a `sqlite` read produces, which
+  are the type affinities of `FR-LITE-026`, SHALL belong to the families of
+  `FR-ENV-041` as follows:
+
+  | Family | `data_type` values |
+  |---|---|
+  | `numeric` | `integer`, `numeric`, `real` |
+  | `temporal` | none |
+  | `textual` | `text` |
+  | none of the three | `blob` |
+
+  *Rationale.* An affinity names how SQLite stores a value, per
+  `https://sqlite.org/datatype3.html`: `integer`, `real` and `numeric` store
+  numbers, `text` stores text, and `blob` stores a value as received. The
+  families are disjoint, per `FR-ENV-042`, and the tests answer from the
+  column alone, so one table over every `data_type` value serves both
+  providers: `text` and `blob` are already where `FR-ENV-046` places them, and
+  `integer`, `numeric` and `real` are values no MariaDB read produces.
+
+  *Consequence, stated plainly.* SQLite has no date-and-time type, so
+  `temporal` is never true for a column of a `sqlite` read, and a column
+  declared `DATETIME` or `BOOLEAN` has `numeric` affinity and satisfies
+  `numeric`. A template that needs the declared type reads `column_type`.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
 
 - **FR-ENV-043**: `primary_key` and `unique` SHALL fail the render with `65`
   WHEN the table named by the operand's `table_name` is absent from the render

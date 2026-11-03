@@ -1,8 +1,8 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-25
-related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
+last-reviewed: 2026-11-03
+related: [glossary.md, cli-contract.md, catalogue-coverage.md, sqlite-contract.md, open-questions.md, upstream-divergences.md]
 ---
 
 # tpl Functional Specification
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-four editions. All are in force;
+The specification has been written in sixty-five editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4931,13 +4931,109 @@ The fifth validation rule is discharged for this edition: both root
 documents were read against every requirement amended since the register was
 last re-read.
 
+### Sixty-fifth edition — a second provider
+
+rmp `#314`, of sprint 27, gives `tpl` read support for SQLite. The user asked
+that each database engine be a distinct provider, abstracted through the
+configuration; that the provider set there decide how `tpl` behaves; that
+templates render from a SQLite database on the principles they render from a
+MariaDB one; and that MariaDB support not change. Three further decisions of
+the user, of 2026-11-03, fix how the SQLite driver is chosen.
+
+**Fifty identifiers are assigned**: `FR-LITE-001` through `FR-LITE-038`,
+`BR-LITE-001` and `BR-LITE-002`, in a new file; `FR-CONF-051` through
+`FR-CONF-054`; `FR-CFG-055` and `FR-CFG-056`; `FR-CTX-043`; `FR-CDOC-018`;
+`FR-ENV-048`; and `FR-SEC-028`. None is retired and none is renumbered.
+[glossary.md](glossary.md) gains eight entries — *connection*, *project
+directory*, *provider*, *rowid alias*, *SQLite table kinds*, *type affinity*,
+*hardening control* and *official driver* — and amends five. `DIV-057` and
+`DIV-058` are raised in [upstream-divergences.md](upstream-divergences.md),
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The SQLite contract** — [sqlite-contract.md](sqlite-contract.md), new,
+  beside [server-contract.md](server-contract.md). The binary carries its own
+  library, whose version, series and a `standing` that is always `supported`
+  fill the `server` object, with no window and no refusal
+  (`FR-LITE-001` to `FR-LITE-003`). The driver is chosen by a closed rule:
+  an official driver where one exists and passes the hardening, otherwise
+  security, then catalogue visibility (`FR-LITE-004`). The file is read only
+  if it is a regular file, opened read-only and never created, and refused
+  with `74`, `78` or `69` by condition (`FR-LITE-005` to `FR-LITE-009`); a
+  database in write-ahead-log mode may leave two files beside it
+  (`FR-LITE-008`). The file is untrusted: seven controls and three limits are
+  applied and read back on every connection, a control that does not take
+  effect is `70`, and no integrity check runs (`FR-LITE-010` to
+  `FR-LITE-014`). A closed statement list, its order and its verification
+  (`FR-LITE-015` to `FR-LITE-018`, `BR-LITE-001`). The read covers `main`,
+  with seven enumerated exclusions, and no routines (`FR-LITE-019` to
+  `FR-LITE-022`). Every model property's SQLite source or its absence, with
+  one derivation from stored text — a trigger's event and timing
+  (`BR-LITE-002`, `FR-LITE-023` to `FR-LITE-034`). A view that does not
+  compile is incomplete and marked; anything else is complete or fails
+  (`FR-LITE-035`, `FR-LITE-036`). The requirements of form and the fixture of
+  `scripts/sqlite/` (`FR-LITE-037`, `FR-LITE-038`).
+- **The provider in the configuration** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-051` gives every
+  entry a `provider`, `mariadb` where the key is absent, so every existing
+  `.tpl/.cfg` keeps its meaning; `FR-CONF-052` fixes the keys each provider
+  takes and refuses, at entry resolution; `FR-CONF-053` requires `path`; and
+  `FR-CONF-054` reads it as a literal path, never expanded, resolved against
+  the project directory. `FR-CONF-002` grows to twenty key forms.
+- **The commands** — [cfg-commands.md](cfg-commands.md). `--provider` and
+  `--path` join `FR-CFG-027`; `FR-CFG-055` fixes the flags each provider
+  admits; `FR-CFG-056` states the four steps of `tpl cfg database test` for a
+  `sqlite` entry. `FR-CFG-016`, `FR-CFG-020`, `FR-CFG-048`, `FR-CFG-051`,
+  `FR-CFG-053` and `FR-CFG-033` are amended, with `FR-CACHE-029` in
+  [cache-commands.md](cache-commands.md) and `FR-HELP-036` in
+  [help-and-version.md](help-and-version.md).
+- **The document** — [context-document.md](context-document.md).
+  `FR-CTX-043` adds `database.provider`, present for both providers, and it
+  is the only change a MariaDB document undergoes. `schema_version` does not
+  move, because adding a field is not breaking, and a `--context` document
+  without the field is read as a `mariadb` one. `FR-CTX-036` and `FR-SCH-031`
+  in [schema-commands.md](schema-commands.md) carry it as a fourth metadata
+  field; `FR-CDOC-018` in [cache-documents.md](cache-documents.md) records the
+  provider of a cached read.
+- **The model** — notes on `FR-CAT-015`, `FR-CAT-033` and `FR-CAT-055` in
+  [catalogue-coverage.md](catalogue-coverage.md); `FR-ENV-048` in
+  [template-environment.md](template-environment.md) places the five type
+  affinities in the type families; `NFR-DET-002` in
+  [cli-contract.md](cli-contract.md) orders the unnamed foreign keys.
+- **The scope of the MariaDB rules** — `FR-SRV-001` is scoped to a `mariadb`
+  entry, and [server-contract.md](server-contract.md) says once that it
+  governs that provider; nothing it requires of a `mariadb` entry changes.
+  The cells of `FR-ERR-001` and the steps of `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) name the `sqlite`
+  conditions, and notes reach
+  [privileges-and-completeness.md](privileges-and-completeness.md),
+  [performance-requirements.md](performance-requirements.md),
+  [output-formats.md](output-formats.md) and
+  [render-command.md](render-command.md). [security.md](security.md) gains
+  the trust boundary and `FR-SEC-028`.
+
+`FR-CONF-007`, `FR-CONF-034`, `FR-CONF-048`, `FR-CONF-050`, `FR-PROJ-030`,
+`FR-GLOB-024`, `FR-GLOB-026`, `FR-OUT-014`, `FR-OUT-038`, `FR-RND-022`,
+`FR-RND-042`, `FR-CACHE-028`, `BR-CACHE-004`, `FR-CTX-023`, `FR-CTX-042`,
+`FR-PRIV-008`, `FR-ERR-027`, `FR-ERR-030`, `FR-SRV-042` and `NFR-PERF-003`
+were read against the changes. None conflicts with them, so none is amended.
+Every statement of SQLite behaviour rests on an observation of 2026-11-03,
+recorded with its conditions in
+[sqlite-contract.md](sqlite-contract.md#observations), or on SQLite's
+documentation, cited by page and date. The fifth validation rule is discharged
+for this edition: both root documents were read at `6203216` against every
+requirement the edition writes or amends, and the two entries it raises hold
+every divergence found.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
   library API. Only the JSON document and the command line are contract, so the
   shape of the library is an architecture decision and not a requirement. The
   database driver is part of this: `FR-CONF-036` states what one must be able
-  to express, and no requirement names one.
+  to express, and no requirement names one. The SQLite driver is chosen by the
+  rule of `FR-LITE-004`, which names none either, and the release of the
+  SQLite library the binary carries is recorded in the project's decision
+  records, per `FR-LITE-001`.
 - The text of any catalogue query. What is read is specified; how it is read is
   not.
 - Every **measured** performance figure and every reading. Those live in
@@ -4978,6 +5074,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [template-environment.md](template-environment.md) | `ENV` | Filters, tests, global functions, and what is contract |
 | [render-semantics.md](render-semantics.md) | `SEM` | Whitespace, operands, null versus absence, boolean rendering, author-signalled failure |
 | [server-contract.md](server-contract.md) | `SRV` | The supported version window, differences between series, the closed statement list, the read-only promise |
+| [sqlite-contract.md](sqlite-contract.md) | `LITE` | The `sqlite` provider: the library, the driver selection, the database file, its hardening, the closed statement list, what a read covers, and how SQLite fills the model |
 | [privileges-and-completeness.md](privileges-and-completeness.md) | `PRIV` | Complete and incomplete reads, and how a short read is reported |
 | [cache-documents.md](cache-documents.md) | `CDOC` | Cache versions, completeness records, and the `source` field |
 | [performance-requirements.md](performance-requirements.md) | `PERF` | Requirements of form, reference workloads, measurement protocol, the measurement set |
@@ -5057,12 +5154,13 @@ because they constrain the whole module rather than one interaction.
   is named here so that it is not read as drift.** Where a requirement fixes an
   artefact of the repository rather than a behaviour of the binary, the
   artefact is the subject: `FR-CONF-038`'s second paragraph obliges the fixture
-  of `scripts/mariadb/`, and every requirement of [examples.md](examples.md)
-  obliges a worked example. The test is whether the statement could be
-  satisfied by a change to `tpl` at all; where it could not, `tpl` is the wrong
-  subject and naming it would make the requirement unsatisfiable rather than
-  conventional. *Stated in the thirty-fourth edition, which wrote the second of
-  the two.*
+  of `scripts/mariadb/`, `FR-LITE-038` the fixture of `scripts/sqlite/`, and
+  every requirement of [examples.md](examples.md) obliges a worked example.
+  The test is whether the statement could be satisfied by a change to `tpl` at
+  all; where it could not, `tpl` is the wrong subject and naming it would make
+  the requirement unsatisfiable rather than conventional. *Stated in the
+  thirty-fourth edition, which wrote the second of the two; the sixty-fifth
+  wrote the third.*
 - Exit codes are always written as the bare number and, on first mention in a
   section, with the `sysexits.h` name: `78` (`EX_CONFIG`).
 - Command lines are shown in fenced blocks without a shell prompt, unless the
@@ -5660,6 +5758,16 @@ are asserted **em cada `cargo test`**, which is the wider form this edition
 narrowed here, and whether an entry is owed for it is a judgement for a reading
 of that section. It is debt only in the sense `DIV-036` is, and it blocks
 nothing. The item below was untouched by this edition and stays outstanding.
+
+The sixty-fifth edition adds no obligation inside this corpus and **three
+outside it**. `DIV-057` and `DIV-058` are corrections owed to the two root
+documents, which the edition makes incomplete by giving `tpl` a second
+provider. The third is the fixture of `scripts/sqlite/`, which `FR-LITE-038`
+requires and which does not exist yet; like the fixture obligation of the
+eighth edition, it is work with an owner and a trigger, and every observation
+[sqlite-contract.md](sqlite-contract.md) records is re-taken against it when it
+exists. No requirement of this corpus waits on any of the three, and the item
+below was untouched by the edition.
 
 The section therefore carries the item the twentieth edition recorded, and the
 eight it has held before are all accounted for below.

@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-03
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md, security.md]
 ---
 
@@ -280,6 +280,9 @@ read from the server on a miss.
   rely on, is that nothing the command reads enters the model: no object, no
   field, nothing cacheable. This requirement now says that, so the three
   citations resolve to something that is the case.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, contacting the
+  server is opening the database file, per `FR-CFG-056`.
 
 - **FR-CACHE-011**: No `template` subcommand and no `cfg` subcommand other than
   `database test` SHALL contact a database or touch the cache.
@@ -787,12 +790,18 @@ tpl -d shop cache status
   cache the rationale of `FR-CACHE-008` rejects.
 
 - **FR-CACHE-029**: Changing where an entry points — `--host`, `--port`,
-  `--user`, `--schema`, `--tls`, or `--dsn` — SHALL NOT invalidate anything.
+  `--user`, `--schema`, `--tls`, `--dsn`, `--provider`, or `--path` — SHALL
+  NOT invalidate anything.
 
   ```
   tpl cfg database update shop --host db-staging.example.com
   tpl -d shop cache clean
   ```
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. `--provider` and
+  `--path` are new. An entry whose provider or database file changes keeps the
+  data cached under its name, and the document served from it states the
+  provider of the read that wrote it, per `FR-CDOC-018`.
 
 - **BR-CACHE-003**: The consequence is accepted and must be documented plainly:
   after repointing an entry, a read serves the previous server's catalogue with

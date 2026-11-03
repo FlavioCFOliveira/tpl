@@ -1,7 +1,7 @@
 ---
 title: Performance Requirements
 status: approved
-last-reviewed: 2026-09-23
+last-reviewed: 2026-11-03
 related: [server-contract.md, cache-commands.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md, glossary.md]
 ---
 
@@ -205,6 +205,15 @@ a summary.
   the number eleven; a later edition that widens coverage moves both counts
   together and leaves this requirement satisfied.
 
+  *Note added in the sixty-fifth edition.* This requirement holds for a
+  `sqlite` entry, with the catalogue statements of `FR-LITE-015` counted under
+  `FR-LITE-018` and the equality taken over the SQLite fixture and an empty
+  database file, per `FR-LITE-037`. One path is excepted, and it is the only
+  path on which a count depends on the objects: after the single statement
+  reading the columns of every view has failed because a view does not compile,
+  `FR-LITE-035` reads each view in a statement of its own, so that only the
+  views that fail are marked, which `FR-PRIV-006` and `FR-PRIV-007` require.
+
 - **NFR-PERF-002**: The number of catalogue queries the system issues to read
   one named object SHALL NOT depend on the number of objects in the database.
   The **rows** such a read returns MAY be the whole catalogue, and a read that
@@ -266,6 +275,10 @@ a summary.
   `FR-CACHE-039` is outside this requirement and within `NFR-PERF-004`.
 
 - **NFR-PERF-004**: One invocation SHALL open at most one connection.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, a connection
+  is one connection of the SQLite library to the database file, per
+  `FR-LITE-037`.
 
   *Note added in the forty-second edition.* `FR-RND-040` closes that
   connection, and shuts down the driver's runtime, before a render starts, so

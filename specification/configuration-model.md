@@ -1,8 +1,8 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-25
-related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
+last-reviewed: 2026-11-03
+related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md, sqlite-contract.md]
 ---
 
 # Configuration Model
@@ -12,13 +12,16 @@ related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.m
 `.tpl/.cfg` is the only configuration `tpl` reads. It is a TOML file in the
 project's `.tpl` folder, holding project options and the database entries
 available to the project. This file defines its key space, the type and default
-of each key, how `${VAR}` expands, how a DSN is parsed, and how a password is
-obtained without being written to disk.
+of each key, the provider each entry names and the keys each provider takes,
+how `${VAR}` expands, how a DSN is parsed, how a SQLite database file is named,
+and how a password is obtained without being written to disk.
 
 ## Scope
 
 In scope: the `.cfg` key space, value types and defaults, the strictness with
-which the file is read, entry shape, what an entry must describe for a
+which the file is read, entry shape, the provider of an entry and the keys
+each provider takes, the path of a SQLite database file and how it resolves,
+what an entry must describe for a
 connection and a read to be possible, DSN grammar, the five TLS modes and the
 behaviour by which they are distinguished, the trust material the two
 verifying modes read and how the directory holding it is resolved, timeouts,
@@ -81,9 +84,18 @@ tls      = "verify-identity"
   | `database.<name>.tls` | TLS mode, see `FR-CONF-013` | `verify-identity` |
   | `database.<name>.ca_file` | path to a certificate file | none |
   | `database.<name>.ca_path` | path to a certificate directory | none |
+  | `database.<name>.provider` | provider, `mariadb` or `sqlite`, see `FR-CONF-051` | `mariadb` |
+  | `database.<name>.path` | path to a SQLite database file, see `FR-CONF-054` | none |
 
   *Provenance.* The default port `3306` comes from the root `README.md` and is
   contradicted by no decision.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The rows
+  `database.<name>.provider` and `database.<name>.path` are new. The key space
+  grows from eighteen key forms to twenty, twelve of them per entry and eight
+  under `[core]`. Which keys an entry may carry depends on its provider, per
+  `FR-CONF-052`: the defaults of `port` and `tls` are defaults of a `mariadb`
+  entry, and a `sqlite` entry carries neither key.
 
   *Amended in the forty-second edition.* The three rows `core.render_fuel`,
   `core.render_output_limit` and `core.render_memory_limit` are new, as
@@ -140,6 +152,11 @@ tls      = "verify-identity"
   have the whole budget of `core.render_timeout`. The server read between them
   runs under the connection and catalogue-query deadlines above. The overall
   budget of `FR-GLOB-011` still bounds the whole invocation.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, DNS
+  resolution, TCP connect, TLS handshake and `password_command` do not run,
+  and every statement on the connection to the file runs under the
+  catalogue-query deadline, per `FR-LITE-009`.
 
   *Note added in the fifth edition.* The DNS phase is the one phase whose
   behaviour depends on how the binary was linked. The Linux targets of
@@ -305,6 +322,10 @@ tls      = "verify-identity"
   fields are `host`, `port`, `user`, `password`, and `database`.
   `password_command` SHALL NOT be one of them.
 
+  *Note added in the sixty-fifth edition.* This requirement and `FR-CONF-007`
+  describe a `mariadb` entry. A `sqlite` entry carries none of these keys and
+  is described by `path`, per `FR-CONF-052` and `FR-CONF-053`.
+
   *Amended in the third edition.* The list of discrete connection fields, and
   the exclusion of `password_command` from it, are new. The first edition said
   "the discrete fields" without enumerating them, which left it unstated
@@ -410,6 +431,177 @@ tls      = "verify-identity"
 
   *Added in the forty-ninth edition,* for rmp `#281`.
 
+## The provider of an entry
+
+```toml
+[database.shop]
+dsn = "mysql://alice:${SHOP_DB_PASSWORD}@db.example.com:3306/shop"
+
+[database.ledger]
+provider = "sqlite"
+path     = "data/ledger.sqlite"
+```
+
+- **FR-CONF-051**: Every database entry SHALL have a **provider**, named by its
+  `provider` key, which SHALL take exactly one of the two values `mariadb` and
+  `sqlite`. An entry that carries no `provider` key SHALL be a `mariadb` entry.
+  The provider SHALL decide how the entry is read: a `mariadb` entry through
+  the server contract of [server-contract.md](server-contract.md), and a
+  `sqlite` entry through the contract of
+  [sqlite-contract.md](sqlite-contract.md).
+
+  1. **On the command line.** IF the value given to `--provider` under
+     `FR-CFG-027`, or to `tpl cfg set database.<name>.provider`, is not one of
+     the two values, THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL
+     write nothing to `.tpl/.cfg`.
+  2. **In the file.** IF `.tpl/.cfg` declares a `provider` that is not one of
+     the two values, in any entry, THEN the system SHALL exit `78`
+     (`EX_CONFIG`) at step 3 of `FR-ERR-006`.
+
+  In both cases the `cause` SHALL name the key or the flag and SHALL state the
+  two values the key takes. The value found enters the `cause` only under the
+  set of `FR-ERR-022`; a value outside it is described, not reproduced. On the
+  command line the `hint` SHALL show the form with a placeholder, as in
+  `--provider <provider>`; in the file it SHALL name the file, the entry and
+  the edit to make, per `BR-ERR-004`. The comparison is exact: `SQLite` is not
+  `sqlite`.
+
+  ```
+  tpl cfg set database.ledger.provider postgres
+  error: invalid value for database.ledger.provider
+  cause: database.ledger.provider takes mariadb or sqlite; the value given is postgres
+  hint:  give one of the two: tpl cfg set database.ledger.provider <provider>
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code.
+
+  *Rationale.* The user's requirement is that each database engine is a
+  distinct provider, abstracted through the configuration, and that the
+  provider set in the configuration decides how `tpl` behaves. An absent key
+  means `mariadb` because every `.tpl/.cfg` written before this edition
+  describes a MariaDB server and carries no such key: each keeps its meaning,
+  and no project needs an edit. The two codes are those `FR-CONF-048` gives a
+  name outside its grammar, on the command line and in the file, and for the
+  same reasons.
+
+  *Rejected: requiring the key on every entry.* It refuses with `78` every
+  project written before this edition, at step 3, in every command. *Rejected:
+  inferring the provider from the keys the entry carries.* `BR-CONF-004`
+  refuses a reader that guesses, and an entry carrying `path` and `host`
+  together would have no answer.
+
+  *Accepted cost.* `FR-CONF-034` refuses a key it does not know, so a project
+  whose `.tpl/.cfg` names a provider cannot be read by a binary released
+  before this edition. A project that must be read by both keeps its MariaDB
+  entries free of the key, which reads the same in both.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+- **FR-CONF-052**: Each provider SHALL take only its own keys among the keys of
+  an entry:
+
+  | Provider | Keys it takes | Keys it refuses |
+  |---|---|---|
+  | `mariadb` | `provider`, `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` | `path` |
+  | `sqlite` | `provider`, `path` | `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` |
+
+  IF the entry an invocation selects carries a key its provider refuses, THEN
+  the system SHALL exit `78` (`EX_CONFIG`) at entry resolution, step 5 of
+  `FR-ERR-006`, and SHALL NOT open a connection or a file. The `cause` SHALL
+  name `.tpl/.cfg`, the entry, its provider — stating whether it is written or
+  taken from an absent key — and every key the provider refuses that the entry
+  carries. The `hint` SHALL carry `tpl cfg database show <entry>`, and SHALL
+  NOT carry a command that removes a key or changes the provider, per
+  `BR-ERR-005`. The `cfg` commands that write an entry refuse to produce such
+  an entry, with `64`, per `FR-CFG-048`.
+
+  *Rationale.* Each refused key describes a connection to a server — its
+  address, its credentials, its database or its transport — and a `sqlite`
+  entry reaches no server; `path` names a file, and a `mariadb` entry reads
+  none. A refused key left in an entry would look in force, which is the
+  ground `FR-CONF-007` gives for refusing two password sources: the file is
+  strict for the reason `BR-CONF-004` states.
+
+  *Why entry resolution and not step 3.* `FR-CONF-040` rejects refusing a
+  file at step 3 for an entry no invocation selected, because the `cfg`
+  command that repairs the entry would itself be refused. The commonest way to
+  reach this condition is a hand-written entry with `path` and no `provider`,
+  and `tpl cfg set database.<entry>.provider sqlite` is its repair.
+
+  *Why the `hint` shows and does not repair.* The two repairs are removing the
+  refused keys and changing the provider, and each deletes or overwrites a
+  value of `.tpl/.cfg` the invocation did not name, which `BR-ERR-005`
+  forbids a `hint` to carry. `tpl cfg database show` succeeds in the state the
+  invocation found, per `BR-ERR-004`, and shows the caller both.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+- **FR-CONF-053**: A `sqlite` entry SHALL name a database file in `path`. IF
+  the entry an invocation selects is a `sqlite` entry and carries no `path`,
+  or a `path` that is empty under the definition of `FR-CONF-050`, THEN the
+  system SHALL exit `78` (`EX_CONFIG`) at entry resolution, step 5 of
+  `FR-ERR-006`, and SHALL NOT open a file. The `cause` SHALL name `.tpl/.cfg`,
+  the entry, and `database.<name>.path` as the key the entry does not carry, or
+  state that it is empty. The `hint` SHALL carry
+  `tpl cfg database update <entry> --path <path>`. On the command line, an
+  empty value given to `--path` or to `tpl cfg set database.<name>.path` SHALL
+  be refused with `64` (`EX_USAGE`), writing nothing, as item 1 of
+  `FR-CONF-050` refuses an empty host.
+
+  *Rationale.* It is `FR-CONF-040` for the one fact a `sqlite` entry must
+  supply, decided at the same step for the same reason, and an empty value
+  takes the path of an absent one for the reason `FR-CONF-050` gives.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+- **FR-CONF-054**: `path` SHALL be read as a literal filesystem path. The
+  system SHALL NOT expand `${VAR}` in it, SHALL NOT expand a leading `~`, and
+  SHALL refuse a value that contains `${`, as `FR-CONF-047` refuses one in
+  `ca_file` or `ca_path`: with `64` on the command line, writing nothing, and
+  with `78` at step 3 of `FR-ERR-006` in the file. A relative `path` SHALL be
+  resolved against the **project directory** — the directory that holds the
+  `.tpl` folder of the project the invocation uses, whether discovered or
+  named by `--tpl-dir` — and never against the working directory of the
+  invocation. The system SHALL store the value as written, and SHALL NOT
+  resolve it when a `cfg` command writes it.
+
+  ```
+  /home/ana/freight/.tpl/.cfg       path = "data/ledger.sqlite"
+  /home/ana/freight/data/ledger.sqlite      the file read, from any directory under /home/ana/freight
+  ```
+
+  *Rationale for the project directory.* Discovery walks up from wherever the
+  caller stands, per `FR-PROJ-004`, so one project is used from many working
+  directories; a path resolved against the working directory would read a
+  different file from each. The file a project reads is the project's, and the
+  directory that holds `.tpl` is the root of the files the caller keeps beside
+  it, which is where a database the project generates from is kept. A
+  template name resolves against `.tpl/templates/` for the same reason, per
+  `FR-TMPL-006`: a relative name in the project resolves within the project.
+
+  *Rejected: resolving against the working directory.* It makes the database a
+  read covers depend on where the caller stands, which is a choice made on no
+  line of the file or the command, the defect `BR-CLI-002` names. *Rejected:
+  resolving against the `.tpl` folder itself.* A database kept beside `.tpl`
+  — the common case — would need `../` in every entry, and the folder holds
+  configuration and templates, not data.
+
+  *Why no expansion.* `BR-CONF-003` admits `${VAR}` so that a secret need not
+  be written to disk, and a path is not a secret. `.tpl/.cfg` is local to a
+  machine, per `FR-CONF-001`, so a path that differs between machines is
+  written on each, and an injected variable would choose the file a read
+  covers, the ground `FR-CONF-047` gives for `ca_file`. A leading `~` is
+  expanded by the shell, on a command line it parses, before `tpl` sees it.
+
+  *Accepted cost.* A path whose name contains `${` cannot be named; the caller
+  names it through a link. A path relative to the working directory, given as
+  `--path` from a subdirectory, is stored as written and resolved against the
+  project directory; the help of the flag states the rule, per `FR-CFG-033`.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
 ## What an entry must describe
 
 An entry must supply two facts that have no default: the host to connect to,
@@ -421,6 +613,11 @@ absences are reachable from a legal invocation. Both are decided at the
 entry-resolution step of `FR-ERR-006`, before any connection is opened, and
 neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 *invalid entry*.
+
+*Note added in the sixty-fifth edition.* This section describes a `mariadb`
+entry. A `sqlite` entry has no host and no server-side database; the one fact
+it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
+`FR-CONF-041` do not reach it.
 
 - **FR-CONF-040**: An entry SHALL name a host. IF the entry an invocation
   selects carries neither `dsn` nor `host`, THEN the system SHALL exit `78`
@@ -935,6 +1132,11 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   first is what an acceptance test for the default mode of `FR-CONF-013`
   requires; the second is the right-hand column of the table above.
 
+  *Note added in the sixty-fifth edition.* The fixture the tests of a
+  `sqlite` entry read is `FR-LITE-038`, in
+  [sqlite-contract.md](sqlite-contract.md). TLS does not reach a `sqlite`
+  entry, which carries no `tls` key, per `FR-CONF-052`.
+
   *Amended in the eighth edition: the fixture obligation is a requirement
   rather than a consequence.* The *Observed* note below records that `tpl`
   with default configuration could not reach the fixture over TCP on any
@@ -1061,6 +1263,9 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   *Note added in the forty-eighth edition.* A field outside this list is not
   expanded. For `ca_file` and `ca_path` a reference is also refused, per
   `FR-CONF-047`.
+
+  *Note added in the sixty-fifth edition.* `provider` and `path` are not
+  expanded. In `path` a reference is also refused, per `FR-CONF-054`.
 
   *Note added in the forty-ninth edition.* The six are fields of a database
   entry: `database` here is `database.<name>.database`. No key under `[core]`
@@ -1636,6 +1841,9 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   weighed against.
 - [schema-commands.md](schema-commands.md) — the arm `FR-CONF-041` supplies
   with the database every one of its subcommands reads.
+- [sqlite-contract.md](sqlite-contract.md) — how a `sqlite` entry is read,
+  which `FR-CONF-051` selects by its provider, and the file `FR-CONF-054`
+  names.
 
 ## Open questions
 
