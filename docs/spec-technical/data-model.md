@@ -269,9 +269,9 @@ rowid-alias key.** This section recorded them as a reading of `BR-LITE-002`;
 `FR-LITE-029` now states the same values.
 
 **What a `sqlite` read never produces.** A routine (`FR-LITE-022`), a `CHECK`
-constraint (`FR-LITE-034`), a `restricted` marking on anything but a view's
-`columns` (`FR-LITE-035`, `FR-LITE-036`), and a value the four treatments
-above would act on. `SET DEFAULT`, which a MariaDB read cannot report
+constraint (`FR-LITE-034`), a view's columns (`FR-LITE-033`), a `restricted`
+marking on any object (`FR-LITE-036`), and a value the four treatments above
+would act on. `SET DEFAULT`, which a MariaDB read cannot report
 (`FR-CAT-033`), is carried as the value `FR-CAT-055` gives an unrecorded rule.
 
 ## The model in memory

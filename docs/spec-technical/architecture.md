@@ -457,7 +457,7 @@ and does not exist at `7738619`.
 | `sqlite/harden.rs` | Each control and limit, set and read back, and the comparison of the two as a function separable from any connection | `FR-LITE-010` … `FR-LITE-012` |
 | `sqlite/watch.rs` | The busy timeout and the watchdog that bound every statement | `FR-LITE-009`, [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) |
 | `sqlite/fault.rs` | Where the library's result stops and a condition of `FR-ERR-001` begins: one pure function over the stage or statement and the result code, and the table of SQLite's names for the codes | `FR-LITE-040`, `FR-LITE-007`, `FR-LITE-012`, `FR-GLOB-018`, [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
-| `sqlite/catalogue.rs` | The plan, the read that owns its values, and the per-view fallback | `FR-LITE-015`, `FR-LITE-035`, `FR-LITE-037` |
+| `sqlite/catalogue.rs` | The plan, and the read that owns its values | `FR-LITE-015`, `FR-LITE-037` |
 | `sqlite/catalogue/statements.rs` | The text of every statement, one constant each | `FR-LITE-015`, `FR-LITE-016` |
 | `sqlite/catalogue/fold.rs` | The values into the model: coverage, affinity, default, rowid alias, keys, order | `FR-LITE-019` … `FR-LITE-034` |
 | `sqlite/catalogue/trigger.rs` | The timing and the event, read from a trigger's stored header | `FR-LITE-032` |
@@ -496,9 +496,9 @@ Temporary storage is in effect only where both its read-back at stage 5 and the
 `TEMP_STORE` row of stage 4 hold (`FR-LITE-010`). The limits use the `limits`
 feature [`ADR-013`](../adr/adr-013-sqlite-driver.md) enables.
 
-**The catalogue plan.** Seven statements follow the probe, fixed before the
+**The catalogue plan.** Six statements follow the probe, fixed before the
 first is sent, which is `FR-LITE-037` by construction (`FR-LITE-015`, observed
-there as eight with the probe).
+there, for the sixty-eighth edition, as seven with the probe).
 
 | # | Reads | Through | Forced by |
 |---|---|---|---|
@@ -508,7 +508,6 @@ there as eight with the probe).
 | 4 | The indexes of every covered table, and their members | `pragma_table_list` joined to `pragma_index_list` and `pragma_index_xinfo` | `FR-LITE-028` … `FR-LITE-030` |
 | 5 | The foreign keys of every covered table | `pragma_table_list` joined to `pragma_foreign_key_list` | `FR-LITE-031` |
 | 6 | The stored text of every view and trigger | `sqlite_schema` of `main` | `FR-LITE-032`, `FR-LITE-033` |
-| 7 | The columns of every view | `pragma_table_list` joined to `pragma_table_xinfo` | `FR-LITE-033`, `FR-LITE-035` |
 
 Three rules bind the text of every statement:
 
@@ -516,21 +515,12 @@ Three rules bind the text of every statement:
   before the function it joins is reached**, so a virtual table whose module
   the library lacks is never asked for its columns (`FR-LITE-019`,
   `FR-LITE-021`, observed there).
-- **No value read from the file enters a statement's text.** The name the
-  per-view fallback needs is a bound parameter.
-- **The plan is a constant.** The one path that adds statements is the per-view
-  fallback, which is the exception `FR-LITE-037` and `NFR-PERF-001`'s note
-  admit.
-
-**The per-view fallback.** WHEN statement 7 fails with `SQLITE_ERROR`, the
-generic code SQLite uses "when no other more specific error code is available"
-(`https://sqlite.org/rescode.html`), one statement per view reads that view's
-columns. A view whose statement fails the same way is marked
-`"restricted":["columns"]` and its library message is kept for the
-named-object verdict; any other failure fails the read with the code
-`FR-LITE-040` gives it (`FR-LITE-035`, `FR-LITE-036`). **That the three causes `FR-LITE-035` names
-report `SQLITE_ERROR` is not confirmed in the official documentation**; item 10
-of the fixture of `FR-LITE-038` is the observation that asserts it.
+- **No value read from the file enters a statement's text.**
+- **The plan is a constant, and compiles no view.** No path adds a statement
+  (`FR-LITE-037`), and no statement reads from a view or passes a view's name
+  to a pragma function (`FR-LITE-015`): a view is read from statements 2 and 6
+  alone, so one whose definition does not compile is read whole and unmarked
+  (`FR-LITE-033`, `FR-LITE-036`).
 
 **The read owns its values, typed and converted at the boundary.** A `rusqlite`
 row borrows its statement, so every value is copied out as it is read, and the

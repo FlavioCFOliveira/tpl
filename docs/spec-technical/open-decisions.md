@@ -2724,7 +2724,7 @@ and what shape does the second reader take?
 - **One `catalogue/` module both readers move into.** It moves `mariadb/`'s
   code, which point 5 excludes.
 
-**Four consequences for the model**, decided here because `FR-LITE-023` …
+**Three consequences for the model**, decided here because `FR-LITE-023` …
 `FR-LITE-033` make values `null` that no MariaDB read leaves `null`, and
 `FR-LITE-029` reads a key that has no index:
 
@@ -2748,14 +2748,11 @@ and what shape does the second reader take?
   rule in, and no variant is added** (`FR-LITE-031`). *Rejected — a variant of
   its own*: it would make the rule representable on the path `FR-CAT-033`
   governs, so that refusal would rest on the server rather than on the type.
-- **The library's reason for a view that does not compile travels beside the
-  document**, from the read to the named-object verdict, on the live-read path
-  alone (`FR-LITE-035`, `FR-PRIV-003`). No other path needs it: a marked
-  object is never cached (`FR-CACHE-037`) and a marked document is refused as a
-  context (`FR-PRIV-008`). *Rejected — a field of the model*: the document
-  contract carries none, and it would add a second omission attribute to the
-  one `OD-18` admits. *Rejected — inside the `restricted` marking*:
-  `FR-PRIV-016` fixes it as an array of property names.
+**Amended on 2026-11-03, for rmp `#317`, against the sixty-eighth edition.** A
+fourth consequence — the library's reason for a view that does not compile,
+carried beside the document to the named-object verdict — is withdrawn with
+`FR-LITE-035`, which it served. A `sqlite` read marks no object
+(`FR-LITE-036`), so nothing travels beside the model.
 
 ---
 
@@ -2921,12 +2918,14 @@ What is decided here is how `sqlite/fault.rs` applies it.
    matched: `Error::SqliteFailure`, and `Error::SqlInputError`, which the driver
    returns in its place when the library fails to prepare a statement with a
    code the driver maps to `Unknown` and reports an offset into the statement.
-3. **`FR-LITE-040`'s four steps are applied in their order**, over the stage or
-   the statement that failed and the two codes: stages 4 and 5
-   (`FR-LITE-012`); `SQLITE_ERROR` on statement 7 or a per-view statement
-   (`FR-LITE-035`); the rows of `FR-LITE-007`; then the requirement's own
+3. **`FR-LITE-040`'s three steps are applied in their order**, over the stage
+   or the statement that failed and the two codes: stages 4 and 5
+   (`FR-LITE-012`); the rows of `FR-LITE-007`; then the requirement's own
    table, whose last row — a primary code it does not name — is the match's
-   wildcard arm, `70`. The function is pure, so every row is testable as a
+   wildcard arm, `70`. *Amended on 2026-11-03, for rmp `#317`*: the step that
+   gave `SQLITE_ERROR` on a view statement to `FR-LITE-035` is gone with that
+   requirement, withdrawn in the sixty-eighth edition, and `SQLITE_ERROR` on
+   any statement is `70`. The function is pure, so every row is testable as a
    vector ([verification.md](verification.md#the-sqlite-provider)).
 4. **A driver error that carries no result code** — any other variant of
    `rusqlite::Error`, which the driver marks non-exhaustive — is a violated
@@ -2962,10 +2961,8 @@ calls `error_with_offset` when `sqlite3_prepare_v3` fails.
 
 **Rejected.**
 
-- **Matching `ErrorCode`.** `Unknown` stands for five primary codes that
-  `FR-LITE-040` sends two ways on a view statement — `SQLITE_ERROR` marks the
-  view, the other four are `70` — and the enumeration drops the extended code,
-  on which the rows of `SQLITE_READONLY` turn.
+- **Matching `ErrorCode`.** The enumeration drops the extended code, on which
+  the rows of `SQLITE_READONLY` turn.
 - **`Error::sqlite_extended_error_code()`.** It answers nothing for
   `SqlInputError`, so a statement the library failed to prepare would reach the
   arm of point 4.

@@ -103,7 +103,10 @@ had no technical answer in this folder: section 27 is new, and rows move in
 sections 2, 9, 10, 11, 14, 15, 18, 19, 23 and 26. **The sixty-seventh is
 harvested on the same terms the same day**: rows move in sections 3, 5, 11, 12,
 14, 19, 23 and 27. Counting all three, the mapping is behind by forty editions,
-the same forty as before.
+the same forty as before. **The sixty-eighth is harvested on the same terms the
+same day**, for rmp `#317`: the withdrawal of `FR-LITE-035` moves rows in
+sections 23 and 27, and the third verification it adds to `FR-LITE-018` moves
+the reverse mapping.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -616,7 +619,7 @@ what replaced it.
 | What does fail is the requirements of form, and the `WL-002` scalar with them: deterministic counts, absences and a size, where a breach is a **functional defect** and not a slow run | `NFR-PERF-001` … `NFR-PERF-006`, `WL-002`, `BR-PERF-008` | `quality-attributes`, `verification` |
 | Three reference workloads and a byte scalar, `WL-001` kept separate from the correctness fixture so that one does not hide an N+1 in the other. `seed-bench.sql` carries it, and was written on 2026-09-21 | `WL-001` … `WL-003`, `BR-PERF-002`, `BR-PERF-007` | `verification` (`OD-27`) |
 | The failure path is a measurement point because nearest match computes an edit distance against every existing name; that it should cost what `tpl --version` costs is a **design expectation** to be checked against a reading, never an obligation on a figure | `BR-PERF-004` | `quality-attributes` (`OD-20`) |
-| The six hold for a `sqlite` entry, a connection being the library's to the file; the count is taken in process, and the fallback for a view that does not compile is the one path where it grows | `FR-LITE-037`; `NFR-PERF-001`, `NFR-PERF-004` (sixty-fifth edition notes) | `quality-attributes`, `verification` |
+| The six hold for a `sqlite` entry, a connection being the library's to the file; the count is taken in process, and no path makes it grow with the objects | `FR-LITE-037` (sixty-eighth edition); `NFR-PERF-001`, `NFR-PERF-004` (sixty-fifth edition notes) | `quality-attributes`, `verification` |
 | For a `sqlite` entry the connection count is observed by the syscall trace on the two Linux targets and skipped, with its reason, on the two macOS targets; the query-count lines are compared with the in-process statement record over the fixture, on all four, so the comparison runs in process | `NFR-PERF-004`, `NFR-PERF-008` (sixty-seventh edition) | `quality-attributes`, `verification` |
 
 ---
@@ -689,7 +692,7 @@ is named only where a row would otherwise imply a correction is outstanding.
 | A closed statement list, its order, and its verification through the library's trace from the test seam, nested statements apart; the read-only promise observed from outside the process | `FR-LITE-015` … `FR-LITE-018`, `BR-LITE-001` | `verification` (`OD-37`) |
 | The read covers `main`, through the types `pragma_table_list` reports, with seven exclusions and no routines | `FR-LITE-019` … `FR-LITE-022` | `architecture`, `data-model` |
 | Every model property has a SQLite source or is `null`; one fact is read from stored text. The model's types make optional every field a SQLite read leaves `null`, and a table holds its primary key rather than deriving it from an index name | `BR-LITE-002`, `FR-LITE-023` … `FR-LITE-034` | `data-model` (`OD-35`) |
-| A view that does not compile is incomplete and marked, its library message carried to the `77` of a request that names it | `FR-LITE-035` | `interfaces` |
+| No view's columns are read and no view is compiled, so a view that does not compile is read whole and unmarked, and a `sqlite` read is complete or fails | `FR-LITE-015`, `FR-LITE-033`, `FR-LITE-036` (sixty-eighth edition); `FR-LITE-035`, withdrawn in that edition | `architecture`, `interfaces`, `verification` |
 | The requirements of form hold, with the count taken in process | `FR-LITE-037` | `quality-attributes`, `verification` |
 | A fixture built from versioned SQL text at test time, never committed as a binary | `FR-LITE-038` | `verification`, `operations` (`OD-37`) |
 
@@ -741,7 +744,7 @@ and each is the reason a document of this folder exists.
 | **One model, three sources.** A live read, a cached read and a `--context` document must present the same objects and fields, so the model is the single junction of three producers and three consumers — `text`, `json`, and the render | `catalogue-coverage.md` *Overview*; `BR-SCH-001`, `FR-SCH-022` | `architecture`, `interfaces` |
 | **Silent wrongness is the failure mode the corpus is written against.** Every fail-loud rule — no coercion, strict field access, `77` for a named short read, refusal of a marked context, exclusion of volatile fields — is one design stance applied repeatedly | `BR-SEM-004`, `BR-PRIV-001`, `BR-CAT-002`, `FR-SRV-003` | `overview`, `architecture` |
 | **The seventeen JSON documents share one envelope and one emitter.** Seventeen payload shapes, one outer shape, one ordering rule, one escaping rule, one encoding rule | `FR-OUT-024`, `BR-OUT-002` | `interfaces` |
-| **Eighteen mandated tests are part of the contract, not of the plan.** `BR-ERR-001`, `BR-HELP-001`, `BR-HELP-003` (three), `BR-SCH-004`, `BR-SEC-003`, `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-029` (two), `FR-SRV-035`, `FR-RND-040` (forty-second edition), `FR-LITE-018` (two) and `FR-LITE-037` (sixty-fifth edition), and the published test vectors of `FR-ENV-032`, `FR-ENV-033`, `FR-ENV-041` and `FR-ENV-046` | as cited | `verification` |
+| **Eighteen mandated tests are part of the contract, not of the plan.** `BR-ERR-001`, `BR-HELP-001`, `BR-HELP-003` (three), `BR-SCH-004`, `BR-SEC-003`, `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-029` (two), `FR-SRV-035`, `FR-RND-040` (forty-second edition), `FR-LITE-018` (three, the third from the sixty-eighth edition) and `FR-LITE-037` (sixty-fifth edition), and the published test vectors of `FR-ENV-032`, `FR-ENV-033`, `FR-ENV-041` and `FR-ENV-046` | as cited | `verification` |
 
 ## Editorial defects found while harvesting
 

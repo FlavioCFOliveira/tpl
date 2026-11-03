@@ -66,7 +66,7 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 34 | Whether anything of a catalogue read is alive | `mariadb/`; prescribed: `provider.rs`, over `mariadb/` and `sqlite/` | `cli/render.rs` | [The render bounds](#the-render-bounds) |
 | 35 | The read dispatched by the entry's provider | `provider.rs` | `cli/source.rs`, `cli/cfg/connectivity.rs` | [The SQLite reader](#the-sqlite-reader) |
 | 36 | The settings a `sqlite` entry resolves to: its absolute path | `project/settings.rs` | `provider.rs`, `sqlite/` | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
-| 37 | The library's reason for a view it marked | `sqlite/`, through `provider.rs` and `cli/source.rs` | the named-object verdict in `cli/` | [The SQLite reader](#the-sqlite-reader) |
+| 37 | *Withdrawn for rmp `#317`*: the library's reason for a view it marked, carried for `FR-LITE-035`, which the sixty-eighth edition withdrew. The number is not reused | — | — | — |
 | 38 | A statement bound on a SQLite connection | `deadline.rs` | `sqlite/watch.rs` | [The SQLite reader](#the-sqlite-reader) |
 
 ## The catalogue reader
@@ -213,7 +213,7 @@ SQLite has no privileges, so none of the three detections above runs on a
 | Only `main` is read, and coverage — the types `pragma_table_list` reports and the seven exclusions — is applied before any object is folded | `FR-LITE-019` … `FR-LITE-021` |
 | Every value keeps its storage class and a SQL `NULL` stays distinct; text is converted here, with U+FFFD substituted | `FR-LITE-004` step 2, `FR-OUT-017` |
 | One fact is read from stored text — a trigger's timing and event — and no other | `BR-LITE-002`, `FR-LITE-032` |
-| The result yields the model and, beside it, the library's message for every view it marked | `FR-LITE-035`, [`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader) |
+| The result is the model alone: no object is marked, and no view's columns are read | `FR-LITE-033`, `FR-LITE-036` |
 | The `server` object describes the carried library, and `standing` is `supported` with no window consulted | `FR-LITE-002`, `FR-LITE-003` |
 
 **Where the library's result becomes a condition.** `sqlite/fault.rs`
@@ -230,19 +230,15 @@ The table's rows follow the order of `FR-LITE-040`; the stages are
 | Stage 1 | A lookup that fails: nothing at the path, a dangling link, a refused lookup | `74`, the first row of `FR-LITE-007` | `FR-LITE-005`, `FR-LITE-007` |
 | Before any statement | The statement's bound already spent | `69` | `FR-ERR-027`, [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) |
 | Stage 4 or 5 | Any result code, or a value read back that differs from the value set or from the row required | `70` | `FR-LITE-012`; `FR-LITE-040` step 1 |
-| Statement 7, or a per-view statement | `SQLITE_ERROR` | The view is marked; a request naming it is `77` | `FR-LITE-035`, `FR-PRIV-003`; `FR-LITE-040` step 2 |
-| The open, or any statement | A result code a row of `FR-LITE-007` names — `SQLITE_BUSY` whenever it is returned, `SQLITE_CANTOPEN` for a file beside the database as well | That row's code | `FR-LITE-007`; `FR-LITE-040` step 3 |
-| The open, or any statement | Any other result code, `SQLITE_INTERRUPT` from the watchdog included | The code `FR-LITE-040`'s table gives its primary code, or the extended code a row names; `70` for a primary code no row names | `FR-LITE-040` step 4, `FR-LITE-009` |
+| The open, or any statement | A result code a row of `FR-LITE-007` names — `SQLITE_BUSY` whenever it is returned, `SQLITE_CANTOPEN` for a file beside the database as well | That row's code | `FR-LITE-007`; `FR-LITE-040` step 2 |
+| The open, or any statement | Any other result code, among them `SQLITE_ERROR` on any statement and `SQLITE_INTERRUPT` from the watchdog | The code `FR-LITE-040`'s table gives its primary code, or the extended code a row names; `70` for a primary code no row names | `FR-LITE-040` step 3, `FR-LITE-009` |
 | The fold | A trigger header without one timing and one event | `70` | `FR-LITE-032` |
 | Anywhere | A driver error carrying no result code — a pragma value of a class the library does not document for it among them — or a version without two dot-separated parts | `70` | `FR-ERR-030` |
 
-**The named view.** A view a `sqlite` read marked is `77` when a request names
-it (`FR-PRIV-003`, `FR-LITE-035`). The verdict names the view, the property
-`columns`, and the message the library gave, which it receives from the read;
-the privilege wording `mariadb/`'s verdict carries is not used. The message
-reaches `cli/schema/named.rs` and the object flags of `cli/render.rs` from
-`cli/source.rs`, beside the document, and only on a live read
-([`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)).
+**No `sqlite` read reaches `77`.** No object is marked, so the named-object
+verdict finds no short object, and a view whose definition does not compile is
+returned whole at exit `0` (`FR-LITE-036`; `FR-ERR-001` and `FR-ERR-006`, as
+amended in the sixty-eighth edition).
 
 **`tpl cfg database test` for a `sqlite` entry** reports the four steps of
 `FR-CFG-056` in the fields of `FR-CFG-039`: stages 1 and 2 are `connected`;

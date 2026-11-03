@@ -93,7 +93,7 @@ What each forces there:
 
 | Requirement | The design decision for a `sqlite` entry | Described in |
 |---|---|---|
-| `NFR-PERF-001`, `NFR-PERF-002` | A fixed plan of seven catalogue statements after the probe, each joining `pragma_table_list` to the function it reads, so the count over the fixture equals the count over an empty file. **One path is excepted**: after the statement reading every view's columns fails, one statement per view, so that exactly the views that fail are marked (`FR-LITE-035`) | [architecture.md](architecture.md#the-sqlite-reader) |
+| `NFR-PERF-001`, `NFR-PERF-002` | A fixed plan of six catalogue statements after the probe, each joining `pragma_table_list` to the function it reads where that function takes one object, so the count over the fixture equals the count over an empty file. No path is excepted (`FR-LITE-037`, as amended in the sixty-eighth edition) | [architecture.md](architecture.md#the-sqlite-reader) |
 | `NFR-PERF-003` | The cache sits in front of the dispatch, so a hit opens no file and issues no statement | [architecture.md](architecture.md#the-provider-dispatch) |
 | `NFR-PERF-004` | One connection, opened by `sqlite/` when it is about to read and closed when the read ends, before any render | [architecture.md](architecture.md#the-sqlite-reader) |
 | `NFR-PERF-005`, `NFR-PERF-006` | `sqlite/` is reached only through the dispatch, which a command needing no catalogue never reaches | [architecture.md](architecture.md#the-provider-dispatch) |
@@ -107,8 +107,8 @@ objects.
 statement record of `FR-LITE-018`**, over the statements of `FR-LITE-015`'s
 last row (`NFR-PERF-008`, as amended in the sixty-seventh edition). `sqlite/`
 therefore writes the line once for each statement of that row it issues — the
-catalogue plan, the per-view fallback and the probe of `FR-CFG-056` — once the
-statement's bound is checked and before it is prepared, as `mariadb/` writes it
+catalogue plan and the probe of `FR-CFG-056` — once the statement's bound is
+checked and before it is prepared, as `mariadb/` writes it
 before a statement is sent; it writes none for a control, a limit or the version
 probe, and a nested statement is the library's and has none. A statement the
 library fails to prepare is then counted on the stream and absent from the
@@ -349,7 +349,7 @@ under `NFR-PERF-020`. Neither gates anything (`BR-PERF-008`).
 | A cache file is never half-written, and a killed process leaves nothing locked | Each object is written through a temporary file in the same directory and renamed over the target; no lock is taken, so two writers yield one whole result or the other | `FR-CACHE-030`, `FR-CACHE-031` |
 | A cache failure is never an event in the contract | An unreadable file or an unknown format version is treated as a miss and reported neither as error nor as warning; an unwritable cache still answers from what was read, exits `0`, and changes no byte of stdout | `FR-CACHE-033`, `FR-CACHE-036` |
 | An interrupted load loses nothing already stored | An unreachable server during `tpl cache load` exits `69` and leaves stored objects unchanged | `FR-CACHE-032` |
-| A database file that cannot be read is never an empty database | Every failure to read it ends the invocation with the code of its condition; a fault that prevents the schema from loading fails the whole read, and only a view that does not compile is presented, marked | `FR-LITE-007`, `FR-LITE-035`, `FR-LITE-036` |
+| A database file that cannot be read is never an empty database | Every failure to read it ends the invocation with the code of its condition; a fault that prevents the schema from loading fails the whole read, and no object is presented marked: a view that does not compile is read whole (`FR-LITE-035` is withdrawn) | `FR-LITE-007`, `FR-LITE-033`, `FR-LITE-036` |
 | Each distinct condition has its own exit code, and the code is sufficient on its own to choose the next step | The classification is stated with the condition: a `69` is repeatable precisely because the operation is read-only | `FR-ERR-001`, `FR-ERR-002` |
 | Referential integrity is promised where it can be, and a snapshot is never promised | A server-read document contains every object referenced from another object in it; it does not promise to be point-in-time, and a cache-served document promises neither | `FR-CTX-023`, `FR-CTX-024`, `FR-CDOC-015` |
 

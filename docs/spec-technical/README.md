@@ -31,6 +31,23 @@ blocks is a statement, not a document. Every other entry is settled. `OD-30`,
 the one entry that was settled and **interim**, was discharged on 2026-09-22,
 when the last leaf of the tree was implemented.
 
+**Changes of 2026-11-03, third pass**, for rmp `#317` — against the
+sixty-eighth edition of `/specification` (`325e125`), which withdraws
+`FR-LITE-035`: a SQLite view is read like a MariaDB view, no view's columns are
+read and no view is compiled.
+
+- `architecture.md`: the catalogue plan is six statements, with no per-view
+  fallback.
+- `interfaces.md`: contract 37 is withdrawn; the fault mapping follows the three
+  steps of `FR-LITE-040`; no `sqlite` read reaches `77`.
+- `open-decisions.md`: `OD-35` loses its fourth consequence for the model, and
+  `OD-38` applies three steps.
+- `verification.md`: the register of mandated tests gains row 31, the third
+  verification of `FR-LITE-018`.
+- `data-model.md`, `security.md`, `quality-attributes.md`, `traceability.md`
+  and this file's summaries of `architecture.md` and `interfaces.md` follow;
+  `traceability.md` harvests the edition.
+
 **Changes of 2026-11-03, second pass**, for rmp `#316` — against the
 sixty-seventh edition of `/specification` (`5805b5d`) and
 [`ADR-013`](../adr/adr-013-sqlite-driver.md),
@@ -315,7 +332,7 @@ render bounds, their composition, and the poll interval of the memory limit.
 Lazy initialisation. The
 synchronous process and the runtime boundary inside `mariadb/`. The provider
 dispatch, and the SQLite reader: its submodules, its six connection stages, its
-fixed plan, its per-view fallback and its close. The module map
+fixed plan and its close. The module map
 and the layout conventions. The division inside `project/` and the four
 decisions that produce it: reading apart from resolving, reading apart from
 writing, the environment as a parameter, and a credential as a type. The
@@ -346,8 +363,7 @@ profile. The dependency budget, and the consequence of forbidding `unsafe`.
 ### `interfaces.md`
 
 **Answers.** The catalogue reader's surface and how a short read is reported.
-The SQLite reader's surface, where its results become exit codes, and the named
-view's `77`.
+The SQLite reader's surface, and where its results become exit codes.
 The three privilege cross-checks. The error type, its exit-code derivation, and
 the per-code obligation on the `cause` line. The diagnostic renderer, its
 escaping, the bound on a value of a SQLite file, and suggestion selection. The

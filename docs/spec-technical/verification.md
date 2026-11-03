@@ -38,15 +38,17 @@ them. **This whole document was re-audited against the tree at commit `243c4d6`
 on 2026-09-21**: every count, every per-file breakdown and every statement that
 a component is a later sprint's was re-measured rather than carried forward.
 
-**Twenty-six of the thirty rows of the register below carry at least one
-test; row 8 and rows 28 to 30 carry none.** Rows 28 to 30 were added on
+**Twenty-six of the thirty-one rows of the register below carry at least one
+test; row 8 and rows 28 to 31 carry none.** Rows 28 to 30 were added on
 2026-11-03, for the SQLite provider, whose reader and fixture do not exist at
-`7738619`; [The SQLite provider](#the-sqlite-provider) prescribes them. Row 27 was added on 2026-09-23, with
+`7738619`; [The SQLite provider](#the-sqlite-provider) prescribes them. Row 31
+was added the same day, for rmp `#317`, against the sixty-eighth edition; the
+reader at `325e125` still reads the columns of views. Row 27 was added on 2026-09-23, with
 `FR-RND-040`, and is whole. Row 2 is a unit test over the seam
 `FR-ERR-031` requires, and it asserts what that row asserts: the guard produces
 the condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires. Rows 3
 to 6 were written with the command surface, at commit `f8f335d` of 2026-09-15,
-and [Help](#help-snapshots-at-every-depth) names each. **Ten rows are not
+and [Help](#help-snapshots-at-every-depth) names each. **Eleven rows are not
 whole**, and each is named where it falls short rather than counted as answered:
 
 | Row | What is reached | What is not |
@@ -59,6 +61,7 @@ whole**, and each is named where it falls short rather than counted as answered:
 | 23 | The key invariant, as **unit** tests in `src/model/table.rs` | The server form the row names |
 | 24 | Context strictness, as a **unit** test in `src/render/predicate.rs` | The integration form the row names |
 | 28 to 30 | Nothing | Every test of each: the SQLite reader and its fixture are prescribed and not built |
+| 31 | Nothing | The read succeeding over the views of item 10 that do not compile: the reader at `325e125` reads the columns of views, under the withdrawn `FR-LITE-035` |
 
 **The suite reaches the containers.** `tests/outside_the_process.rs` carries
 fifteen tests: eleven are driven once per series of `FR-SRV-015` and gated on
@@ -239,6 +242,7 @@ produce the behaviour, on the same footing as the behaviour itself.
 | 28 | The SQLite statement record | Over the main fixture database and over an empty file: every statement the trace reports without the prefix `-- ` is in the closed list of `FR-LITE-015`, in the order of `FR-LITE-017`; every one reported with it is nested, and is neither checked nor counted | Unit, through the seam of `FR-ERR-031` | `FR-LITE-018` |
 | 29 | The SQLite read-only promise, from outside the process | Over a read of the main fixture database in rollback-journal mode, the file's bytes, size and modification time are unchanged, and no file appears in its directory | Integration, over the SQLite fixture | `FR-LITE-018`, `BR-LITE-001` |
 | 30 | The SQLite statement count | The catalogue statements row 28 records are as many over the main fixture database as over an empty file | Unit, the same record | `FR-LITE-037`, `NFR-PERF-001` |
+| 31 | No view compiled | The read of the main fixture database succeeds over the three views of item 10 that do not compile; a statement that compiled one would end the read with `70` | Unit, over the SQLite fixture | `FR-LITE-018` (sixty-eighth edition), `FR-LITE-038` |
 
 **Recorded change — the kind of rows 4 to 6.** This document gave the three
 tests of `BR-HELP-003` as integration tests; they are written as unit tests, and
@@ -1046,7 +1050,7 @@ Every test is named for the requirement it verifies, per
 | `FR-ENV-041` | Over a context from the main database, a rowid-alias column, an `INTEGER PRIMARY KEY DESC` column and a column of a `WITHOUT ROWID` key each satisfy `primary_key` and `unique`; every answer of row 18 over a `mariadb` document is unchanged | Unit | The main database |
 | `FR-LITE-002`, `FR-LITE-003` | The `server` object carries the library's version, its `<major>.<minor>`, and `supported` | Unit | Any |
 | `FR-LITE-019` … `FR-LITE-034` | One test per case of items 1 to 13 over the fold; the trigger header reader over every header form of item 11, as a vector | Unit; Vector | The main database |
-| `FR-LITE-035`, `FR-LITE-036` | The three views of item 10 that do not compile are marked and the others are whole; naming one is `77` and its `cause` carries the library's reason; the fallback issues one statement per view | Unit; Integration | The main database |
+| `FR-LITE-018`, `FR-LITE-033`, `FR-LITE-036`; `FR-LITE-035`, withdrawn in the sixty-eighth edition, is verified by nothing | The read of the main database succeeds over the three views of item 10 that do not compile, marks no object, and presents every view with the nine properties of `FR-CAT-047` and no columns; naming one of the three exits `0` | Unit; Integration | The main database |
 | `FR-CFG-056` | The four fields over the main database; `78` over the text file | Integration | The main database, the text file |
 | `FR-CONF-051` … `FR-CONF-054`, `FR-CFG-055` | Each refusal, at its step and with its code; a relative `path` read from a subdirectory of the project resolves against the project directory, and, through a `.tpl` reached by a link, against the parent of the canonical folder | Integration | The main database |
 | `FR-CTX-043`, `FR-CDOC-018` | A document without `provider` reads as `mariadb` and one with a third value is `65`; a cache record without `provider` is served as `mariadb`, and a served read carries the record's provider after the entry's changed | Unit | — |

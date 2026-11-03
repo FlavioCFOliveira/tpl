@@ -401,13 +401,16 @@ A link in it is followed, on the ground `FR-LITE-005` gives: the path is the
 caller's own, in a file only the caller may write (`FR-PROJ-010`,
 `FR-PROJ-011`).
 
-**No statement carries a value from the file.** Every statement is a constant,
-and the one name a statement needs — a view's, in the fallback of
-`FR-LITE-035` — is a bound parameter (`FR-LITE-016`;
-[architecture.md](architecture.md#the-sqlite-reader)). A nested statement the
-library runs for a pragma function or a module is bounded by the read-only open
-and `query_only`, and which module may run from a view by `trusted_schema` off
-(`FR-LITE-018`).
+**No statement carries a value from the file, and none compiles a view.**
+Every statement is a constant, and none is issued per object, so none needs a
+name read from the file (`FR-LITE-016`, `FR-LITE-037`;
+[architecture.md](architecture.md#the-sqlite-reader)). No statement reads from
+a view or passes a view's name to a pragma function, so nothing a view's
+definition names runs during the read (`FR-LITE-015`, `FR-LITE-033`). A nested
+statement the library runs for a pragma function or a module is bounded by the
+read-only open and `query_only` (`FR-LITE-018`); module code still runs where
+the read connects a virtual table to list it, per the observation under
+`FR-LITE-033`.
 
 **A value of the file reaches a diagnostic line only bounded**, so a name sized
 by a crafted file cannot flood the line a calling agent reads (`FR-SEC-028`,
