@@ -28,6 +28,15 @@ refusal, Decision point 3; what `tpl` does with it, point 4, including the
 outcome a `mariadb` entry keeps; and the module the reader lives in, for which
 `ADR-005` was amended in place the same day.
 
+**Decision point 3 was corrected in place on 2026-11-04**, for rmp `#329`, once
+the tree was vendored. It said the change was confined to `auth.rs` save one
+export from the crate root. The type cannot be exported from the root without a
+second line, a re-export in `src/connection/mod.rs`, because `auth` is a private
+module of `connection`; the point now names that line, the type, and the private
+function that builds the refusal. The guards, the type's purpose and the error
+it is boxed in did not change, so the decision did not change, and `decided` is
+unchanged.
+
 ## Context
 
 **The corpus names no driver for the `mysql` provider and hands the choice
@@ -142,8 +151,9 @@ options is set; the MariaDB path sets all four off
    `../LICENSE-MIT`, and was packaged from the same upstream revision as
    `sqlx-core` 0.9.0.
 
-3. **The change, in full.** It is confined to `src/connection/auth.rs`, save
-   one export:
+3. **The change, in full.** Two guards and one type in
+   `src/connection/auth.rs`, and the two lines that export the type. Line
+   numbers are those of the published files:
 
    - in `AuthPlugin::handle`, the arm for `perform_full_authentication`
      (`0x04`, lines 52–59): before `encrypt_rsa` is called, the arm returns the
@@ -151,18 +161,26 @@ options is set; the MariaDB path sets all four off
    - in `AuthPlugin::scramble`, the arm for `sha256_password` (line 26): the
      same, before its call to `encrypt_rsa`;
    - the refusal is `Error::Configuration` — the variant the published crate
-     already returns on this path when built without `rsa` — boxing a value of
-     an error type declared for this refusal alone, carrying the method's name as
-     `AuthPlugin::name` gives it (`src/protocol/auth.rs:16–23`). The type is
-     exported from the crate root, beside the exports of `src/lib.rs:40–51`.
+     already returns on this path when built without `rsa` — boxing a
+     `PublicKeyRequestRefused`. That public error type is declared in
+     `auth.rs` for this refusal alone. It carries the method's name as
+     `AuthPlugin::name` gives it (`src/protocol/auth.rs:16–23`) and returns it
+     from `plugin()`, and it implements `Display` and `std::error::Error`. One
+     private function beside it builds the boxed refusal for both guards;
+   - `src/connection/mod.rs` re-exports the type,
+     `pub use auth::PublicKeyRequestRefused;`, and `src/lib.rs` exports it from
+     the crate root, `pub use connection::PublicKeyRequestRefused;`, beside the
+     exports of lines 40–51. Both lines are needed: `auth` is a private module
+     of `connection` (`src/connection/mod.rs:18`), and the crate root can name
+     the type only through a re-export at that level.
 
    `encrypt_rsa` is not edited. Those two arms are its only callers, so after
    the change nothing writes a public-key request on a stream that is not TLS,
    and on a TLS stream every path runs as published. The refusal is returned
    before the request is written, so the connection ends without completing the
-   authentication, as `FR-MYSQL-045` requires. No other function, file, feature
-   or manifest entry differs from the published crate; any other difference is a
-   defect in the tree.
+   authentication, as `FR-MYSQL-045` requires. Nothing else differs from the
+   published crate — no other function, file, feature or manifest entry; any
+   other difference is a defect in the tree.
 
 4. **What `tpl` does with the refusal.** It recognises the refusal by its type,
    never by its text, as the boundary of `src/mariadb/fault.rs` reads the
@@ -309,6 +327,7 @@ it.
 | The constraints on the driver, and the corpus's statement that the choice is an architecture decision | `specification/mysql-contract.md`, seventy-fifth edition at `d4eaf76`: *Scope*, `FR-MYSQL-020`, `FR-MYSQL-021`, `FR-MYSQL-022`, `FR-MYSQL-045`, row 25 of `FR-MYSQL-040`; `specification/configuration-model.md`, `FR-CONF-036` | 2026-11-04 |
 | The rule applied | The session coordinator's brief for rmp `#327` | 2026-11-04 |
 | The user's decisions: the rule and its branch; the two guards, the typed refusal and its export; exit `78` for a `mysql` entry; exit `69` with the present message for a `mariadb` entry, and `78` refused there; the reader in `mysql/`, not inside `mariadb/` | The user's decision of 2026-11-04, relayed by the session coordinator for rmp `#327` | 2026-11-04 |
+| The vendored tree differs from the published crate in exactly the lines of Decision point 3: in `src/connection/auth.rs`, the two guards, `PublicKeyRequestRefused` with `plugin()`, `Display` and `std::error::Error`, and the private function that builds the refusal; `pub use auth::PublicKeyRequestRefused;` in `src/connection/mod.rs`; `pub use connection::PublicKeyRequestRefused;` in `src/lib.rs`. Every other file, the manifests, `.cargo_vcs_info.json` and the licence stubs included, is identical. `auth` is declared private in `connection`, and `connection` private in the crate | `diff -r` between `vendor/sqlx-mysql-0.9.0/` in the working tree over `90881b1`, before commit, and the published `.crate`, sha256 `90b8020f…acebea27`; `src/connection/mod.rs:18` and `src/lib.rs:19` of the published crate | 2026-11-04 |
 | The user's goal that nothing about MariaDB support changes | `specification/mysql-contract.md`, `FR-MYSQL-001`, *Provenance*, at `d4eaf76` | 2026-11-04 |
 | The tag `v0.9.0` of `transact-rs/sqlx` is a lightweight tag on commit `75bc0487eb661da811bb7a3c5d158f1bd463fef4`, "Release 0.9.0 (#4256)"; from `003b698e99e024f3621b8043a2426fde5b741171` to it, only `README.md` changes | `git ls-remote` of the repository; a clone at the tag; `git diff --stat` between the two commits | 2026-11-04 |
 | The published `sqlx-mysql` 0.9.0 has sha256 `90b8020f…acebea27`, the checksum `Cargo.lock` records; its `.cargo_vcs_info.json` names `003b698e…`; its `src/` and `Cargo.toml.orig` are identical to `sqlx-mysql/` at the tag | `static.crates.io`, `sqlx-mysql-0.9.0.crate`; `diff -r` against the clone; `Cargo.lock` at `d4eaf76` | 2026-11-04 |

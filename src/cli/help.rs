@@ -617,10 +617,10 @@ const CA_PATH: Documented = Documented {
 /// `--provider`, as every node that declares it states it.
 const PROVIDER: Documented = Documented {
     name: "--provider",
-    purpose: "Sets how the entry is read: mariadb, a MariaDB server described by --dsn or by \
-              --host, --port, --user, --schema, --tls, --password-command, --ca-file and \
-              --ca-path; or sqlite, a SQLite database file described by --path alone. An entry \
-              with no provider is a mariadb entry.",
+    purpose: "Sets how the entry is read: mariadb, a MariaDB server, or mysql, a MySQL server, \
+              each described by --dsn or by --host, --port, --user, --schema, --tls, \
+              --password-command, --ca-file and --ca-path; or sqlite, a SQLite database file \
+              described by --path alone. An entry with no provider is a mariadb entry.",
     excludes: &[],
 };
 /// `--path`, as every node that declares it states it.
@@ -2873,8 +2873,9 @@ const ENTRIES: [Entry; 35] = [
                     ),
                     row(
                         "database.<name>.provider",
-                        "mariadb or sqlite. Default mariadb. A sqlite entry takes path and no \
-                         other key; a mariadb entry takes every key above and not path.",
+                        "mariadb, mysql or sqlite. Default mariadb. A sqlite entry takes path \
+                         and no other key; a mariadb or a mysql entry takes every key above and \
+                         not path.",
                     ),
                     row(
                         "database.<name>.path",
@@ -2999,15 +3000,16 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database", "add"],
-        description: "Creates a database entry named NAME. For a MariaDB server, give --dsn, or at \
-                      least one of --host, --port, --user and --schema, but not both kinds; --tls, \
+        description: "Creates a database entry named NAME. For a MariaDB server, or a MySQL server \
+                      with --provider mysql, give --dsn, or at least one of --host, --port, --user \
+                      and --schema, but not both kinds; --tls, \
                       --password-command, --ca-file and --ca-path may be added to either. For a \
                       SQLite database file, give --provider sqlite and --path, and no other flag. \
                       A NAME already in use is refused; change an entry with tpl cfg database \
                       update. To connect, a MariaDB entry needs --host and --schema, or a --dsn \
                       that names both; --port defaults to 3306 and --user is optional. An entry \
                       without them is stored, but every later command that connects with it exits \
-                      78. -d/--database has no effect here: the database on the server is set \
+                      78. A MySQL entry needs the same. -d/--database has no effect here: the database on the server is set \
                       with --schema, or is the path part of --dsn for an entry defined by dsn. \
                       The database file of a sqlite entry is set with --path.",
         blocks: &[

@@ -79,4 +79,58 @@ to run.
 
 `ADR-010` retires on the first `sqlx` release whose `sqlx-core` carries PR
 `#4336`. On that release this directory is deleted, along with the
-`[patch.crates-io]` table and the `[workspace]` exclusion that point at it.
+`sqlx-core` entry of the `[patch.crates-io]` table and the `[workspace]`
+exclusion that point at it. The table itself, and the licence texts beside
+this directory, stay for as long as `sqlx-mysql-0.9.0/` stands; each vendored
+tree goes on its own condition.
+
+## `sqlx-mysql-0.9.0/`
+
+| | |
+|---|---|
+| Crate | `sqlx-mysql` |
+| Version | `0.9.0`, published 2026-05-21 |
+| Taken from | `sqlx-mysql-0.9.0.crate`, the crates.io release artefact at `https://static.crates.io/crates/sqlx-mysql/sqlx-mysql-0.9.0.crate`, sha256 `90b8020fe17c5f2c245bfa2505d7ef59c5604839527c740266ad2214acebea27` — the checksum this repository's `Cargo.lock` recorded for the registry source it replaces, verified before the tree was copied |
+| Upstream revision | `003b698e99e024f3621b8043a2426fde5b741171`, per the crate's own `.cargo_vcs_info.json` — the revision `sqlx-core-0.9.0/` was packaged from |
+| Upstream repository | `https://github.com/transact-rs/sqlx` |
+| Licence | `MIT OR Apache-2.0`, per the published manifest |
+| Why it is here | `ADR-014` — the published crate requests the server's RSA public key over a session TLS does not protect, which `FR-MYSQL-045` forbids |
+
+### The divergence, in full
+
+Two guards and one typed error, in `src/connection/auth.rs`:
+
+- in `AuthPlugin::scramble`, the arm for `sha256_password` returns the refusal
+  when the stream is not TLS, before it calls `encrypt_rsa`;
+- in `AuthPlugin::handle`, the arm for `perform_full_authentication` (`0x04`)
+  does the same;
+- the refusal is `Error::Configuration`, boxing `PublicKeyRequestRefused`, a
+  type declared beside the two guards for this refusal alone, which carries the
+  name `AuthPlugin::name` gives the method.
+
+The type is exported from the crate root, `src/lib.rs`, beside the crate's
+other exports. Rust's privacy rules require one more line for that export to
+compile: `auth` is a private module of `connection`, so `src/connection/mod.rs`
+re-exports the type with `pub use auth::PublicKeyRequestRefused;`, which the
+root then names. That line, and the root's own export line, are the whole of
+the change outside `auth.rs`.
+
+`encrypt_rsa` is not edited. The two arms are its only callers, so nothing
+writes a public-key request on a stream that is not TLS, and on a TLS stream
+every path runs as published. Nothing else in this tree differs from the
+published crate; any other difference is a defect in it.
+
+### Licence files
+
+`LICENSE-APACHE` and `LICENSE-MIT` inside `sqlx-mysql-0.9.0/` are the same
+17- and 14-byte stubs `sqlx-core-0.9.0/` carries, preserved byte for byte, and
+they resolve to the same two texts in this directory. The crate was packaged
+from the same upstream revision, so those texts carry its notices too.
+
+### When this directory goes
+
+`ADR-014` retires the patch on the first `sqlx` release whose `sqlx-mysql`
+lets a caller refuse the request. On that release this directory is deleted,
+along with the `sqlx-mysql` entry of the `[patch.crates-io]` table and its
+`[workspace]` exclusion. Until then, every move of `ADR-003`'s pin vendors this
+crate again at the release moved to and re-applies the change above.

@@ -337,10 +337,13 @@ impl<'a> Reader<'a> {
             &expand::environment,
         )?;
 
-        // FR-CONF-040 and FR-CONF-041 reach the `mariadb` arm alone: a `sqlite`
-        // entry carries neither key (FR-CONF-052).
+        // FR-CONF-040 and FR-CONF-041 reach the two server arms alone: a
+        // `sqlite` entry carries neither key (FR-CONF-052), and a `mysql` entry
+        // must name both as a `mariadb` entry must (FR-MYSQL-020).
         match &settings {
-            Resolved::Mariadb(server) => connection_keys(server, &configuration)?,
+            Resolved::Mariadb(server) | Resolved::Mysql(server) => {
+                connection_keys(server, &configuration)?;
+            }
             Resolved::Sqlite(_) => {}
         }
 
@@ -379,7 +382,7 @@ impl<'a> Reader<'a> {
     pub(super) fn fetch(&self, opened: &Opened) -> Result<Read, Error> {
         let clock = self.clock();
         let settings = match &opened.settings {
-            Resolved::Mariadb(settings) => settings,
+            Resolved::Mariadb(settings) | Resolved::Mysql(settings) => settings,
             Resolved::Sqlite(file) => {
                 return provider::read(provider::Source::File(file), &clock);
             }
@@ -402,7 +405,15 @@ impl<'a> Reader<'a> {
             return Err(missing("database", SCHEMA_FLAG, SCHEMA_PLACEHOLDER));
         };
 
-        provider::read(provider::Source::Server { target, database }, &clock)
+        // FR-CONF-051: the provider decides the contract; FR-MYSQL-020 has
+        // already resolved and composed a `mysql` entry as a `mariadb` one.
+        let source = if matches!(opened.settings, Resolved::Mysql(_)) {
+            provider::Source::Mysql { target, database }
+        } else {
+            provider::Source::Mariadb { target, database }
+        };
+
+        provider::read(source, &clock)
     }
 
     /// Reads the catalogue and hands the `database` object to `present`.

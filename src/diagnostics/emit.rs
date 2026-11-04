@@ -314,7 +314,7 @@ impl Reach {
     pub(crate) const fn of(provider_or_path: bool, provider: Provider) -> Self {
         match (provider_or_path, provider) {
             (true, _) | (false, Provider::Sqlite) => Self::Database,
-            (false, Provider::Mariadb) => Self::Server,
+            (false, Provider::Mariadb | Provider::Mysql) => Self::Server,
         }
     }
 

@@ -75,6 +75,17 @@ const DATABASE_IS_NOT_A_FIELD_OF_ANY_FORM: &str = "; -d/--database was given, an
                                                    for an entry defined by dsn; the database \
                                                    file of a sqlite entry is set with --path";
 
+/// The entries that take a key of one provider family (`FR-CONF-052`): the
+/// keys of a server, which a `mariadb` and a `mysql` entry take alike, or
+/// `path`, which a `sqlite` entry alone takes.
+const fn takers(server: bool) -> &'static str {
+    if server {
+        "a mariadb or a mysql entry"
+    } else {
+        "a sqlite entry"
+    }
+}
+
 /// The content of the `cause` line for `error`, without its label.
 ///
 /// The match is exhaustive and carries no wildcard arm, so a variant added to
@@ -285,16 +296,16 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{value}' was supplied for '{parameter}', which takes {expected}; a ${{VAR}} may \
              stand for one part of the URL, never for the whole of it"
         )),
-        // FR-CONF-051 item 1: the key and the two values; the value given is
+        // FR-CONF-051 item 1: the key and the three values; the value given is
         // reproduced only under the set of FR-ERR-022, and described otherwise.
         Error::MalformedValue {
             parameter, value, ..
         } if is_provider(parameter) => {
             Cow::Owned(if crate::project::config::keys::is_entry_name(value) {
-                format!("{parameter} takes mariadb or sqlite; the value given is {value}")
+                format!("{parameter} takes mariadb, mysql or sqlite; the value given is {value}")
             } else {
                 format!(
-                    "{parameter} takes mariadb or sqlite; the value given holds characters \
+                    "{parameter} takes mariadb, mysql or sqlite; the value given holds characters \
                      outside letters, digits and underscores, or is longer than 64"
                 )
             })
@@ -675,7 +686,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             name,
             entry,
             database,
-            provider: Provider::Mariadb,
+            provider: Provider::Mariadb | Provider::Mysql,
             ..
         } => Cow::Owned(format!(
             "no row of INFORMATION_SCHEMA matches {kind} '{name}' in database '{database}', read \
@@ -1187,14 +1198,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              trusts",
             path.display()
         )),
-        Error::ReadOnlySessionNotEnforced { entry, fault, .. } => match fault {
+        Error::ReadOnlySessionNotEnforced {
+            entry,
+            fault,
+            read_back,
+            ..
+        } => match fault {
             ReadOnlyFault::NotApplied => Cow::Owned(format!(
                 "the session opened for database entry '{entry}' did not accept the read-only \
                  setting, so tpl cannot guarantee that the session issues no write"
             )),
             ReadOnlyFault::ReadBackDisagreed => Cow::Owned(format!(
                 "the session opened for database entry '{entry}' accepted the read-only setting \
-                 and the read-back of @@session.tx_read_only did not confirm it"
+                 and the read-back of {read_back} did not confirm it"
             )),
         },
         // FR-CONF-040 and FR-CONF-041: the cause names the file, the entry and
@@ -1272,6 +1288,61 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              '{series}', which is outside the supported window; tpl supports {}",
             listed(supported)
         )),
+        // FR-MYSQL-008: the connection and the authentication succeeded, the
+        // product the server reported — MariaDB where the string carries the
+        // marker, and the string itself otherwise — and that a mysql entry
+        // reads MySQL only.
+        Error::ServerNotMysql { reported, .. } => Cow::Owned(
+            if reported.contains(crate::mysql::session::MARIADB_MARKER) {
+                format!(
+                    "connected and authenticated; the server reports {reported}, which is \
+                     MariaDB, and a mysql entry reads MySQL only"
+                )
+            } else {
+                format!(
+                    "connected and authenticated; the server reports '{reported}', which is not \
+                     a MySQL version string, and a mysql entry reads MySQL only"
+                )
+            },
+        ),
+        // FR-MYSQL-009: the connection and the authentication succeeded, why
+        // the series is not supported — the criterion of FR-MYSQL-002 it fails
+        // — and the series that are.
+        Error::MysqlSeriesNotSupported {
+            version,
+            series,
+            supported,
+            ..
+        } => Cow::Owned(format!(
+            "connected and authenticated; the server reports {version}, and {series} is not a \
+             MySQL LTS series under Oracle Premier or Extended Support, and is older than the \
+             newest that is. A mysql entry supports {}",
+            listed(supported)
+        )),
+        // FR-MYSQL-045: the connection succeeded and the authentication was not
+        // completed; the user, the host and the port, the tls mode in force and,
+        // under `preferred`, that the server offered no TLS; the method the
+        // server asked for; and that tpl does not request the key over a
+        // session TLS does not protect.
+        Error::PublicKeyRequestRefused {
+            user,
+            host,
+            port,
+            tls,
+            no_tls_offered,
+            method,
+            ..
+        } => Cow::Owned(format!(
+            "connected to {host}:{port} as user '{user}' under tls '{tls}'{}, so the session is \
+             not encrypted; the authentication was not completed: the server asks for the full \
+             {method} exchange, which needs its RSA public key, and tpl does not request that \
+             key over a session TLS does not protect",
+            if *no_tls_offered {
+                " and the server offered no TLS"
+            } else {
+                ""
+            }
+        )),
 
         // ---------------------------------------------- the provider ---
         // FR-CFG-055: the flags that cannot stand together, and the provider
@@ -1281,51 +1352,57 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             provider: Provider::Sqlite,
             ..
         } => Cow::Owned(format!(
-            "a sqlite entry is described by --path alone; {flag} belongs to a mariadb entry"
+            "a sqlite entry is described by --path alone; {flag} belongs to a mariadb or a mysql \
+             entry"
         )),
+        // FR-CFG-055 item 2, for either server provider: `--provider mysql`
+        // takes the flags `--provider mariadb` takes (FR-CONF-052).
         Error::FlagRefusedByProvider {
             flag,
-            provider: Provider::Mariadb,
+            provider: provider @ (Provider::Mariadb | Provider::Mysql),
             given,
             ..
-        } => Cow::Owned(format!(
-            "{flag} belongs to a sqlite entry, and {}",
-            if *given {
-                "--provider mariadb makes this a mariadb entry"
-            } else {
-                "without --provider sqlite the entry is a mariadb entry"
-            }
-        )),
+        } => Cow::Owned(if *given {
+            format!(
+                "{flag} belongs to a sqlite entry, and --provider {provider} makes this a {provider} entry"
+            )
+        } else {
+            format!(
+                "{flag} belongs to a sqlite entry, and without --provider sqlite the entry is a {provider} entry"
+            )
+        }),
         Error::PathRequired { .. } => Cow::Borrowed(
             "a sqlite entry names its database file with --path, and the invocation gave none",
         ),
         // FR-CFG-048 as amended: the provider, the key written, every key
         // the entry carries that the other provider takes, and that a change
         // of provider requires removing them.
+        // The cfg-commands note of the seventy-third edition: with three
+        // providers, the keys are named by the providers that take them, and
+        // a `mysql` entry takes exactly the keys a `mariadb` entry takes.
         Error::ProviderIncoherentWrite {
             entry,
             provider,
+            own,
             written,
             carried,
             ..
         } => {
-            let other = match provider {
-                Provider::Mariadb => Provider::Sqlite,
-                Provider::Sqlite => Provider::Mariadb,
-            };
             let leaf = written.rsplit('.').next().unwrap_or(written);
             if leaf == "provider" {
                 Cow::Owned(format!(
-                    "entry '{entry}' carries {}, which only a {other} entry takes; changing its \
-                     provider requires removing them",
-                    conjoined(carried)
+                    "entry '{entry}' carries {}, which only {} takes; changing its provider \
+                     requires removing them",
+                    conjoined(carried),
+                    takers(!provider.reads_a_server())
                 ))
             } else {
                 Cow::Owned(format!(
-                    "entry '{entry}' is a {other} entry and carries {}, which only a {other} entry \
-                     takes, and {leaf} belongs to a {provider} entry; changing its provider \
-                     requires removing them",
-                    conjoined(carried)
+                    "entry '{entry}' is a {own} entry and carries {}, which only {} takes, and \
+                     {leaf} belongs to {}; changing its provider requires removing them",
+                    conjoined(carried),
+                    takers(own.reads_a_server()),
+                    takers(provider.reads_a_server())
                 ))
             }
         }

@@ -426,6 +426,30 @@ states the rule that answers it.
   whose `hint` names `verify-identity`. See
   [mysql-contract.md](mysql-contract.md), which owns the requirement.
 
+  *Note added in the seventy-sixth edition,* for rmp `#329`. A `mariadb`
+  entry can meet the same path, and its outcome does not change. MariaDB's
+  documentation describes a server-side `caching_sha2_password` plugin,
+  "available from these versions: MariaDB Community Server 11.4.9 / 11.8.4 /
+  12.1", in the library `auth_mysql_sha2`, not installed by default, and
+  calls it MySQL-compatible
+  (`https://mariadb.com/docs/server/reference/plugins/authentication-plugins/authentication-plugin-caching_sha2_password`,
+  checked 2026-11-04). No server of the fixture of `scripts/mariadb/` offers
+  it, and nothing in this corpus has observed whether its login asks for the
+  server's RSA public key as MySQL's does. WHERE the login of a `mariadb`
+  entry, over a session TLS does not protect, needs that key, the system does
+  not request it, as it does not for a `mysql` entry, and the login ends at
+  exit `69` (`EX_UNAVAILABLE`), with the message the project's decision
+  records give the same login before the `mysql` provider existed: the
+  system gives the condition no code and no message of its own, and the one
+  difference is that the request is never sent.
+  `FR-MYSQL-045`, its `78` and its message govern a `mysql` entry alone.
+  *Rejected, by the user on 2026-11-04:* exit `78` with the message of
+  `FR-MYSQL-045` for a `mariadb` entry too. It would change what a `mariadb`
+  entry does, and the user's requirement for the `mysql` provider is that
+  nothing about MariaDB support changes, per the provenance of
+  `FR-MYSQL-001`. This note records the decision as the project's decision
+  records hold it; it amends no requirement of a `mariadb` entry.
+
 ## Availability
 
 - **FR-SEC-022**: Every blocking phase SHALL have a deadline. See `FR-CONF-005`

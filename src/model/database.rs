@@ -17,7 +17,7 @@
 //! first arm already presents them by.
 //!
 //! `provider` is the fourth metadata field (`FR-CTX-036`, `FR-CTX-043`): which
-//! of the two providers of `FR-CONF-051` made the read.
+//! of the three providers of `FR-CONF-051` made the read.
 //!
 //! *`charset` and `collation` are passed through verbatim, per `FR-SRV-039`,
 //! and this is one of the two places the divergence register of `FR-SRV-036`
@@ -59,21 +59,37 @@ pub enum Provider {
     #[default]
     Mariadb,
 
+    /// A MySQL server, read through the contract of `mysql-contract.md`
+    /// (`FR-MYSQL-001`).
+    Mysql,
+
     /// A SQLite database file, read through the contract of
     /// `sqlite-contract.md`.
     Sqlite,
 }
 
 impl Provider {
-    /// The two providers, in the order `FR-CONF-051` states them.
-    pub const ALL: [Self; 2] = [Self::Mariadb, Self::Sqlite];
+    /// The three providers, in the order `FR-CONF-051` states them.
+    pub const ALL: [Self; 3] = [Self::Mariadb, Self::Mysql, Self::Sqlite];
 
     /// The provider as the configuration and the document spell it.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
             Self::Mariadb => "mariadb",
+            Self::Mysql => "mysql",
             Self::Sqlite => "sqlite",
+        }
+    }
+
+    /// Whether the provider reads a server, as `mariadb` and `mysql` do, rather
+    /// than a database file (`FR-CONF-052`): the two take and refuse the same
+    /// keys (`FR-MYSQL-001`, `FR-MYSQL-020`).
+    #[must_use]
+    pub const fn reads_a_server(self) -> bool {
+        match self {
+            Self::Mariadb | Self::Mysql => true,
+            Self::Sqlite => false,
         }
     }
 

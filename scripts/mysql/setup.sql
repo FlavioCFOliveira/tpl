@@ -850,6 +850,48 @@ CREATE TABLE legacy_edi_field (
 ) ENGINE=InnoDB
   COMMENT='CASOS-LIMITE DE IDENTIFICADORES — mapeamento EDIFACT herdado; os nomes das colunas são deliberadamente hostis ao parser';
 
+-- -----------------------------------------------------------------------------
+-- equipment_survey
+-- -----------------------------------------------------------------------------
+-- The two cases FR-MYSQL-044 lists apart from its sixteen items, both of which
+-- FR-MYSQL-027 and FR-MYSQL-033 carry: a generated invisible primary key, and
+-- a foreign key declared ON DELETE SET DEFAULT ON UPDATE SET DEFAULT.
+--
+-- Equipment interchange surveys, imported nightly from the container depots'
+-- own systems. The import tool creates its tables without a primary key, and
+-- the operations database requires one on every table, so the table is created
+-- with sql_generate_invisible_primary_key ON: the server adds the invisible
+-- column my_row_id and the key PRIMARY on it. The setting is this session's
+-- and is put back at once, so every other table keeps the server default, OFF.
+--
+-- The equipment type is the foreign key declared SET DEFAULT for both rules:
+-- a survey of a type the register withdraws or re-codes falls back to the
+-- standard dry twenty-foot box, as the depots' systems do. Both series accept
+-- the clause, report it, and refuse the action at run time (FR-MYSQL-033).
+
+SET SESSION sql_generate_invisible_primary_key = ON;
+
+CREATE TABLE equipment_survey (
+  survey_reference  VARCHAR(20) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL
+                    COMMENT 'Equipment interchange receipt number issued by the depot',
+  equipment_no      CHAR(11) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL
+                    COMMENT 'ISO 6346 equipment number of the box surveyed',
+  iso_code          CHAR(4) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL DEFAULT '22G1'
+                    COMMENT 'Equipment type as surveyed; falls back to the standard dry box when its type is withdrawn',
+  depot_locode      CHAR(5) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL
+                    COMMENT 'UN/LOCODE of the depot that made the survey',
+  surveyed_at       DATETIME NOT NULL,
+  damage_codes      SET('Dent','Hole','Bent','Cut','Corrosion','Missing part') DEFAULT NULL
+                    COMMENT 'Damage recorded; NULL for a clean box',
+  repair_estimate_eur DECIMAL(8,2) NOT NULL DEFAULT 0.00,
+  KEY idx_survey_equipment (equipment_no),
+  CONSTRAINT fk_survey_container_type FOREIGN KEY (iso_code) REFERENCES container_type (iso_code)
+    ON DELETE SET DEFAULT ON UPDATE SET DEFAULT
+) ENGINE=InnoDB
+  COMMENT='Vistorias de equipamento importadas dos depósitos, criadas sem chave primária';
+
+SET SESSION sql_generate_invisible_primary_key = OFF;
+
 -- =============================================================================
 -- The table of the second schema that references the main one
 -- =============================================================================

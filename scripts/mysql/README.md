@@ -169,27 +169,27 @@ nothing running:
   image   tpl-mysql:8.4 already built
   server  tpl-mysql-8.4 started on :13320
   listen  tpl-mysql-8.4 answers on :13320 as 8.4.13
-  ready   tpl-mysql-8.4: freight tables=21 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=Yes; no [ERROR] in log
+  ready   tpl-mysql-8.4: freight tables=22 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=Yes; no [ERROR] in log
 9.7
   image   tpl-mysql:9.7 already built
   server  tpl-mysql-9.7 started on :13321
   listen  tpl-mysql-9.7 answers on :13321 as 9.7.4
-  ready   tpl-mysql-9.7: freight tables=21 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=Yes; no [ERROR] in log
+  ready   tpl-mysql-9.7: freight tables=22 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=Yes; no [ERROR] in log
 notls-8.4
   image   tpl-mysql:8.4 already built
   server  tpl-mysql-notls-8.4 started on :13322 (--tls-version=)
   listen  tpl-mysql-notls-8.4 answers on :13322 as 8.4.13
-  ready   tpl-mysql-notls-8.4: freight tables=21 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=No; no [ERROR] in log
+  ready   tpl-mysql-notls-8.4: freight tables=22 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=No; no [ERROR] in log
 notls-9.7
   image   tpl-mysql:9.7 already built
   server  tpl-mysql-notls-9.7 started on :13323 (--tls-version=)
   listen  tpl-mysql-notls-9.7 answers on :13323 as 9.7.4
-  ready   tpl-mysql-notls-9.7: freight tables=21 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=No; no [ERROR] in log
+  ready   tpl-mysql-notls-9.7: freight tables=22 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=No; no [ERROR] in log
 8.0
   image   tpl-mysql:8.0 already built
   server  tpl-mysql-8.0 started on :13324
   listen  tpl-mysql-8.0 answers on :13324 as 8.0.46
-  ready   tpl-mysql-8.0: freight tables=21 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=Yes; no [ERROR] in log
+  ready   tpl-mysql-8.0: freight tables=22 views=5 routines=7 triggers=7 events=1; masterdata tables=2; freight_empty objects=0; TLS enabled=Yes; no [ERROR] in log
 
 SERVER     SERIES  PORT   TLS  STANDING   STATE VERSION
 8.4        8.4     13320  yes  supported  up    8.4.13
@@ -432,8 +432,8 @@ it reproduces is the material's meaning.
 `setup.sql` creates `tpl_reader` without naming an authentication plugin, so the
 account takes the server's default, which is the method `FR-MYSQL-022` requires
 `tpl` to authenticate with. `mysql.user` reports `caching_sha2_password` for all
-three accounts on `8.4`, `9.7` and `8.0`. The reader sees 26 objects in
-`freight` — its 21 tables and 5 views — on every server.
+three accounts on `8.4`, `9.7` and `8.0`. The reader sees 27 objects in
+`freight` — its 22 tables and 5 views — on every server.
 
 ### The cache, and `auth-cache.sh`
 
@@ -660,6 +660,7 @@ item of `FR-MYSQL-044` to the objects that realise it:
 | 14 | Identifiers with a space, a backtick and a double quote | `legacy_edi_field`: `` `space in name` ``, `` `back``tick` ``, `` `double"quote` ``, and the index names `` `uq segment tag` `` and `` `idx``backtick` `` |
 | 15 | A scheduled event and a partitioned table | `ev_purge_edi_staging`, created `DISABLE` so that the data does not move under a test; `vessel_position`, four `RANGE COLUMNS` partitions |
 | 16 | A reduced-grant reader, and a schema declaring no collation of its own | `tpl_reader`; `masterdata`, which inherits `utf8mb4_0900_ai_ci` |
+| — | The two cases `FR-MYSQL-044` lists apart from its sixteen items: a generated invisible primary key, and a foreign key declared `ON DELETE SET DEFAULT ON UPDATE SET DEFAULT` | `equipment_survey`, created with `sql_generate_invisible_primary_key` `ON` for that one statement, so the server adds `my_row_id` and `PRIMARY` on it; its `fk_survey_container_type` is the `SET DEFAULT` key, which both series accept and report and neither performs |
 
 `seed.sql` ends by booking a consignment through `sp_book_consignment`, which
 draws `BKG-000480001` from `reference_counter` and fires both `BEFORE INSERT`
@@ -676,7 +677,6 @@ not ask for.
 | Left out | Why |
 |---|---|
 | `VECTOR` columns | Refused by `8.4` with `ERROR 1064 (42000)`, a syntax error at `VECTOR(3)`; accepted by `9.7`, which reports `vector(3)`. `FR-MYSQL-044` asks for the types *every* series accepts, and requires the refusal to be recorded under `FR-MYSQL-014`, which `specification/` owns |
-| `ON DELETE` / `ON UPDATE SET DEFAULT` | Item 8 names the other four actions alone. The MariaDB fixture's `fk_container_type` writes it; here that key is `SET NULL` / `RESTRICT`. It is not left out because a series refuses it: both accept it, which contradicts `FR-MYSQL-033` — see [Observed while building the fixture](#observed-while-building-the-fixture) |
 | A `SET` member containing a comma | `SET` values are stored comma-separated; the comma requirement is met by `ENUM` |
 | Sequences, system-versioned tables, `UUID`, `INET4`, `INET6` | MariaDB's, and absent from MySQL, per `FR-MYSQL-039`. Booking references come from a counter row instead; identifiers and addresses are `BINARY(16)` and `VARBINARY(16)`, which is how a MySQL schema stores them |
 | A non-transactional table written in one statement with an InnoDB one | `9.7` runs with `enforce_gtid_consistency` `ON` and refused the MariaDB fixture's arrangement — a MyISAM `audit_event` written by triggers on `consignment` — with `ERROR 1785 (HY000): Statement violates GTID consistency`. The MyISAM table is the one written only on its own |

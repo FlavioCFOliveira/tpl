@@ -1,15 +1,19 @@
-# `vendor/sqlx-core-0.9.0` is third-party source, not a workspace member: Cargo
-# would otherwise make every path inside the workspace directory one, and the
-# mandatory validation pipeline would run `-D warnings` over code this project
-# does not own. See `ADR-010`; the one-package decision of `ADR-006` is
-# unchanged by this table.
+# `vendor/sqlx-core-0.9.0` and `vendor/sqlx-mysql-0.9.0` are third-party
+# source, not workspace members: Cargo would otherwise make every path inside
+# the workspace directory one, and the mandatory validation pipeline would run
+# `-D warnings` over code this project does not own. See `ADR-010` and
+# `ADR-014`; the one-package decision of `ADR-006` is unchanged by this table.
 # `examples/rust-data-layer` is the crate the Rust worked example renders. It
 # is excluded for the same reason and for one more: it is generated, it carries
 # a dependency this package does not, and `cargo build` at the root must
 # neither compile it nor fetch what it needs. Its compile gate is its own
 # script, per `FR-EX-009`.
 [workspace]
-exclude = ["vendor/sqlx-core-0.9.0", "examples/rust-data-layer"]
+exclude = [
+    "vendor/sqlx-core-0.9.0",
+    "vendor/sqlx-mysql-0.9.0",
+    "examples/rust-data-layer",
+]
 
 [package]
 name = "tpl"
@@ -89,14 +93,25 @@ toml_edit = "0.25.15"
 [dev-dependencies]
 rusqlite = { version = "0.41.1", default-features = false, features = ["trace"] }
 
-# `sqlx-core` 0.9.0 never calls `set_nodelay`, which costs ~40 ms on every
+# Two vendored copies of the driver of `ADR-003`, each with a provenance and a
+# retirement of its own in `vendor/README.md`; the pin is unchanged by either.
+#
+# `sqlx-core`: 0.9.0 never calls `set_nodelay`, which costs ~40 ms on every
 # connection that negotiates TLS. The vendored copy adds the one statement
-# upstream added in PR #4336; `vendor/README.md` holds its provenance. This
-# table is deleted, with the directory it points at, on the first `sqlx`
-# release that carries the fix. See `ADR-010`; the pin of `ADR-003` is
-# unchanged.
+# upstream added in PR #4336. This entry is deleted, with the directory it
+# points at, on the first `sqlx` release that carries the fix (`ADR-010`).
+#
+# `sqlx-mysql`: 0.9.0 requests the server's RSA public key over a session TLS
+# does not protect, which `FR-MYSQL-045` forbids. The vendored copy refuses the
+# request with a typed error instead. This entry is deleted, with the directory
+# it points at, on the first `sqlx` release whose `sqlx-mysql` lets a caller
+# refuse the request (`ADR-014`).
+#
+# Each entry goes on its own condition: the retirement of one leaves the other
+# in force, and the table goes only with the last of them.
 [patch.crates-io]
 sqlx-core = { path = "vendor/sqlx-core-0.9.0" }
+sqlx-mysql = { path = "vendor/sqlx-mysql-0.9.0" }
 
 [profile.release]
 opt-level = 3

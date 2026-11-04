@@ -607,7 +607,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
             // FR-CONF-051 item 1: the form with a placeholder.
             (parameter, _) if super::cause::is_provider(parameter) && admits_key(parameter) => {
                 Cow::Owned(format!(
-                    "give one of the two: tpl cfg set {parameter} <provider>"
+                    "give one of the three: tpl cfg set {parameter} <provider>"
                 ))
             }
             (_, "cfg set") => {
@@ -1613,6 +1613,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
             entry,
             fault,
             by_dsn,
+            ..
         } => {
             let remedy = match fault {
                 ReadOnlyFault::NotApplied => "accepts a read-only session",
@@ -1672,6 +1673,33 @@ fn bare(error: &Error) -> Cow<'static, str> {
             "repoint the entry at a supported server: {}",
             repoint(entry, *by_dsn)
         )),
+        // FR-MYSQL-008 and FR-MYSQL-009 carry the command of FR-SRV-030, and
+        // FR-ERR-045 its --dsn for a dsn entry; neither changes the provider,
+        // per BR-ERR-005.
+        Error::ServerNotMysql { entry, by_dsn, .. } => Cow::Owned(format!(
+            "repoint the entry at a MySQL server: {}",
+            repoint(entry, *by_dsn)
+        )),
+        Error::MysqlSeriesNotSupported { entry, by_dsn, .. } => Cow::Owned(format!(
+            "repoint the entry at a supported server: {}",
+            repoint(entry, *by_dsn)
+        )),
+        // FR-MYSQL-045: the mode that encrypts the session, with the entry name
+        // filled in, and, where the server offered no TLS, that it must offer it
+        // first. `tls` is not a field FR-ERR-045 reroutes for a dsn entry.
+        Error::PublicKeyRequestRefused {
+            entry,
+            no_tls_offered,
+            ..
+        } => Cow::Owned(format!(
+            "encrypt the session: tpl cfg database update {} --tls verify-identity{}",
+            entry_or_placeholder(entry),
+            if *no_tls_offered {
+                "; the server offered no TLS, and must offer it before that mode can connect"
+            } else {
+                ""
+            }
+        )),
 
         // ---------------------------------------------- the provider ---
         // FR-CFG-055: the invocation with the flags of one provider only, with
@@ -1697,6 +1725,21 @@ fn bare(error: &Error) -> Cow<'static, str> {
             entry_or_placeholder(entry),
             entry_or_placeholder(entry)
         )),
+        // FR-CFG-055 item 2 for `--provider mysql`, which takes the flags of a
+        // `mariadb` entry (FR-CONF-052): the same two ways out, the server one
+        // keeping the provider the invocation named.
+        Error::FlagRefusedByProvider {
+            command,
+            entry,
+            provider: Provider::Mysql,
+            ..
+        } => Cow::Owned(format!(
+            "describe the server: tpl {command} {} --provider mysql --host <host> --user <user> \
+             --schema <database>; or register a database file: tpl {command} {} --provider sqlite \
+             --path <path>",
+            entry_or_placeholder(entry),
+            entry_or_placeholder(entry)
+        )),
         Error::PathRequired { entry } => Cow::Owned(format!(
             "give the database file: tpl cfg database add {} --provider sqlite --path <path>",
             entry_or_placeholder(entry)
@@ -1718,11 +1761,11 @@ fn bare(error: &Error) -> Cow<'static, str> {
                     "register the database file as a new entry: tpl cfg database add <name> \
                      --provider sqlite --path <path>",
                 ),
-                (Provider::Mariadb, "provider") => Cow::Borrowed(
+                (Provider::Mariadb | Provider::Mysql, "provider") => Cow::Owned(format!(
                     "register the server as a new entry: tpl cfg database add <name> --provider \
-                     mariadb --host <host> --user <user> --schema <database>",
-                ),
-                (Provider::Mariadb, _) => Cow::Owned(format!(
+                     {provider} --host <host> --user <user> --schema <database>"
+                )),
+                (Provider::Mariadb | Provider::Mysql, _) => Cow::Owned(format!(
                     "register the server as a new entry: tpl cfg database add <name> {flag} {}",
                     given.unwrap_or(placeholder)
                 )),

@@ -1564,6 +1564,7 @@ mod tests {
                 by_dsn: false,
                 entry: hostile(),
                 fault: ReadOnlyFault::NotApplied,
+                read_back: "@@session.tx_read_only",
             },
             Error::NoDatabaseEntrySelected {
                 file: hostile_path(),
@@ -1581,6 +1582,56 @@ mod tests {
                 supported: &[HOSTILE],
             },
         ]
+    }
+
+    /// The three conditions of the `mysql` provider, with hostile values in
+    /// every field a value reaches the line from.
+    fn mysql_samples() -> Vec<Error> {
+        let hostile = || HOSTILE.to_owned();
+
+        vec![
+            Error::ServerNotMysql {
+                by_dsn: false,
+                entry: hostile(),
+                reported: hostile(),
+            },
+            Error::MysqlSeriesNotSupported {
+                by_dsn: false,
+                entry: hostile(),
+                version: hostile(),
+                series: hostile(),
+                supported: &[HOSTILE],
+            },
+            Error::PublicKeyRequestRefused {
+                entry: hostile(),
+                user: hostile(),
+                host: hostile(),
+                port: 3306,
+                tls: "preferred",
+                no_tls_offered: true,
+                method: HOSTILE,
+            },
+        ]
+    }
+
+    #[test]
+    fn fr_err_024_the_mysql_conditions_render_four_escaped_lines_and_their_code() {
+        // FR-MYSQL-008, FR-MYSQL-009 and FR-MYSQL-045, each `78`, rendered as
+        // the four labelled lines of FR-ERR-008 with every interpolated value
+        // escaped under FR-ERR-024, as every other condition is.
+        for error in mysql_samples() {
+            let rendered = render(&error);
+            let lines: Vec<&str> = rendered.lines().collect();
+
+            assert_eq!(lines.len(), 4, "{rendered:?}");
+            assert_eq!(error.exit_code(), 78, "{rendered:?}");
+            assert!(lines[3].contains("78 (EX_CONFIG)"), "{rendered:?}");
+            assert!(!rendered.contains(HOSTILE), "{rendered:?}");
+            assert!(rendered.contains(HOSTILE_ESCAPED), "{rendered:?}");
+            for line in &lines {
+                assert!(!line.chars().any(char::is_control), "{line:?}");
+            }
+        }
     }
 
     #[test]

@@ -113,8 +113,9 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
                 });
             }
         }
-        // FR-CFG-016: otherwise --dsn or a discrete connection flag.
-        Some(Provider::Mariadb) | None => {
+        // FR-CFG-016: otherwise --dsn or a discrete connection flag, for a
+        // `mysql` entry as for a `mariadb` one (FR-CFG-055 item 2).
+        Some(Provider::Mariadb | Provider::Mysql) | None => {
             if !flags.connects() {
                 return Err(Error::ConnectionDetailsMissing {
                     entry: name.to_owned(),
@@ -551,9 +552,9 @@ impl Flags<'_> {
             match (command, self.provider) {
                 // Item 2: `add` given --path without --provider sqlite.
                 (ADD, None) => return refused("--path", Provider::Mariadb, false),
-                // Item 2: --path beside --provider mariadb.
-                (_, Some(Provider::Mariadb)) => {
-                    return refused("--path", Provider::Mariadb, true);
+                // Item 2: --path beside --provider mariadb or --provider mysql.
+                (_, Some(provider @ (Provider::Mariadb | Provider::Mysql))) => {
+                    return refused("--path", provider, true);
                 }
                 // Item 2: `update` given --path beside a flag of a mariadb
                 // entry, which no provider admits together.

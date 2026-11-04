@@ -122,6 +122,14 @@ const RECOGNISED_DATA_TYPES: [&str; 39] = [
     "year",
 ];
 
+/// The `data_type` values a `mysql` read produces and no series of
+/// `FR-SRV-015` was observed to produce (`FR-MYSQL-028`), sorted.
+///
+/// `json` is a native type there, `geomcollection` is MySQL's spelling of the
+/// type MariaDB reports as `geometrycollection`, and `vector` is a type of
+/// `9.7` alone, whose length is its size in bytes.
+const MYSQL_DATA_TYPES: [&str; 3] = ["geomcollection", "json", "vector"];
+
 /// The catalogue's statement of one column's type.
 ///
 /// This is the input side of the decomposition: the raw type string of
@@ -278,6 +286,30 @@ impl<'a> ColumnType<'a> {
             return Self::unrecognised(catalogue.column_type);
         }
 
+        Self::read(catalogue)
+    }
+
+    /// The type of a column, a parameter or a return value of a `mysql` read
+    /// (`FR-MYSQL-028`).
+    ///
+    /// It is [`ColumnType::decompose`] with three more `data_type` values
+    /// recognised — `geomcollection`, `json` and `vector`, the three a `mysql`
+    /// read produces and no series of `FR-SRV-015` was observed to produce —
+    /// whose parts are read from the fields `FR-CTX-040` names, as every other
+    /// recognised type's are, and which `FR-ENV-049` places in a family. The
+    /// set of a `mariadb` read is unchanged: this constructor is the `mysql`
+    /// reader's alone.
+    #[must_use]
+    pub(crate) fn decompose_mysql(catalogue: &CatalogueType<'a>) -> Self {
+        if MYSQL_DATA_TYPES.binary_search(&catalogue.data_type).is_ok() {
+            return Self::read(catalogue);
+        }
+
+        Self::decompose(catalogue)
+    }
+
+    /// The parts of a recognised type, read as `FR-CTX-040` fixes.
+    fn read(catalogue: &CatalogueType<'a>) -> Self {
         Self {
             column_type: Cow::Borrowed(catalogue.column_type),
             data_type: Some(Cow::Borrowed(catalogue.data_type)),

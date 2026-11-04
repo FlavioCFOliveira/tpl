@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-five editions. All are in force;
+The specification has been written in seventy-six editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6092,6 +6092,94 @@ correction, which said that section owed nothing while `scripts/mysql/` did
 not exist, now names it; the status is unchanged. No entry is raised. The
 reading of `DIV-036` and `DIV-050` named as owed by the seventy-second
 edition is still owed.
+
+### Seventy-sixth edition — four readings the implementation had to choose, and a key MariaDB may ask for
+
+rmp `#329`, of sprint 28, implemented the `mysql` provider against the
+seventy-fifth edition, and found four places where this corpus admitted two
+readings or said nothing: the reason the refusal of an older series gives,
+an empty password, the outer parentheses of an expression default, and the
+value carried for an `ON UPDATE` default. This edition settles each, so that
+the specification states what `tpl` does, and records one decision of the
+user's on MariaDB, made for the same task and held in the project's decision
+records, that the corpus had not described.
+
+**One identifier is assigned**: `FR-MYSQL-047`. None is retired and none is
+renumbered. No open question is raised, so the index of
+[open-questions.md](open-questions.md) stays empty, and
+[glossary.md](glossary.md) is unchanged.
+
+- **The refusal of an older series** — `FR-MYSQL-009`, in
+  [mysql-contract.md](mysql-contract.md). The `cause` now names the version
+  string and states one reason for every series refused: the criterion of
+  `FR-MYSQL-002` it fails, that it is not an LTS series under Oracle Premier
+  or Extended Support and is older than the newest that is. The example gave
+  a reason particular to `8.0`, its support tier since a date, which the
+  binary could state only from a second table of every series it may refuse;
+  that reading is rejected, and the example states the criterion.
+- **An empty password** — `FR-MYSQL-047`, new, in the same file. A `mysql`
+  entry whose `password` is the empty string, whose `dsn` carries an empty
+  password part, or whose `password_command` prints nothing, presents the
+  empty string to the server as its password, through the authentication
+  method's own exchange, and not as an entry that supplies no password. The
+  three sources are read under `FR-CONF-006`, `FR-CONF-009` and
+  `FR-CONF-027`, which already make each an empty password and do not say
+  how it is presented. No requirement states the rule for a `mariadb` entry,
+  and the new one does not reach one.
+- **The outer parentheses** — `FR-MYSQL-029`, the same file. The third row
+  of the classification removes the first and the last character of an
+  expression default that begins with `(` and ends with `)`, once, and does
+  not test whether they match: the rule `FR-CTX-037` applies to a MariaDB
+  default. A reading by matching pair is rejected, and the text it would
+  carry differently, which no server of the fixture wrote, is the accepted
+  cost.
+- **The `ON UPDATE` default** — `FR-MYSQL-030`, the same file. The value
+  carried is the phrase as `EXTRA` writes it, `on update` and the word that
+  follows, which is the shape a `mariadb` read carries under `FR-CAT-041`;
+  carrying the word alone, which the table's cell could be read as saying,
+  is rejected.
+- **MariaDB's `caching_sha2_password`** — a note on `FR-SEC-021`, in
+  [security.md](security.md), beside the note on the same path for a `mysql`
+  entry. MariaDB documents the plugin as optional and available from three
+  releases it names, and nothing in this corpus has observed it. Where a
+  `mariadb` entry's login over a session TLS does not protect needs the
+  server's RSA public key, the system does not request it, and the login
+  ends at exit `69` with the message it carried before, by the user's
+  decision of 2026-11-04 that nothing about MariaDB support changes; exit
+  `78` for such an entry is rejected.
+- **This file** — the edition count of the Scope, and this record.
+
+**No requirement that governs a `mariadb` or a `sqlite` entry changes its
+meaning.** Every requirement amended or added is a requirement of the
+`mysql` provider, and the one change elsewhere is a note that amends no
+requirement. `FR-CTX-012`, `FR-CTX-020`, `FR-CTX-037`, `BR-CTX-002`,
+`FR-CAT-041`, `FR-CONF-006`, `FR-CONF-007`, `FR-CONF-009`, `FR-CONF-015`,
+`FR-CONF-027`, `BR-CONF-004`, `FR-SRV-020`, `FR-SRV-030`, `FR-ERR-001`,
+`FR-ERR-034` and `FR-SEC-021` were read against the changes, and none is
+amended: the parentheses and the `ON UPDATE` value now follow the rules a
+`mariadb` read already applies, the empty password is read from the three
+requirements that already make it one, and the note on MariaDB's plugin
+keeps every outcome a `mariadb` entry has.
+
+The wordings the implementation of rmp `#329` changed for the third
+provider were read against the examples this corpus fixes: "a mariadb or a
+mysql entry", in the `cause` of the examples of `FR-CFG-048` and
+`FR-CFG-055`; "takes mariadb, mysql or sqlite", in the `cause` of the example
+of `FR-CONF-051`; and the help of `--provider`, which states the three
+values, the default and the flags of each provider, as `FR-CFG-033`
+requires. Each matches. The implementation's `hint` for the condition of
+that example of `FR-CONF-051` was not among the wordings changed, and still
+reads "give one of the two", where the example, amended in the
+seventy-third edition, reads "give one of the three"; the example is right,
+and this corpus is not amended for it.
+
+The fifth validation rule is discharged for this edition: neither root
+document has changed since `1b3ff53`, which the seventy-fifth edition read;
+at `90881b1` both were searched for every subject this edition amends — the
+refusal of a MySQL series, a support tier, an empty password, parentheses,
+`ON UPDATE`, `caching_sha2_password` and the server's RSA key — and neither
+paraphrases a requirement this edition amends or the note it adds. No entry
+is raised.
 
 ### Still out of scope
 

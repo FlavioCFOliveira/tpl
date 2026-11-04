@@ -154,9 +154,11 @@ pub(crate) fn test<W: Write>(
     let resolved = settings::resolve(&configuration, Some(name), &clock, &expand::environment)?;
 
     // The four steps, by the entry's provider: FR-CFG-024 for a `mariadb`
-    // entry and FR-CFG-056 for a `sqlite` one.
+    // entry and for a `mysql` one, with the MySQL counterpart of each check
+    // (the note of the seventy-third edition on FR-CFG-042), and FR-CFG-056
+    // for a `sqlite` one.
     let tested = match &resolved {
-        Resolved::Mariadb(settings) => {
+        Resolved::Mariadb(settings) | Resolved::Mysql(settings) => {
             source::connection_keys(settings, &configuration)?;
 
             // FR-CONF-040 has just refused an entry that names no host, so the
@@ -178,7 +180,13 @@ pub(crate) fn test<W: Write>(
             // FR-ERR-006 fix between them, then the probe of step 4, whose
             // answer is a boolean and never a row; the session is closed
             // whichever way the probe went.
-            provider::test(provider::Source::Server { target, database }, &clock)?
+            let source = if matches!(resolved, Resolved::Mysql(_)) {
+                provider::Source::Mysql { target, database }
+            } else {
+                provider::Source::Mariadb { target, database }
+            };
+
+            provider::test(source, &clock)?
         }
         Resolved::Sqlite(file) => provider::test(provider::Source::File(file), &clock)?,
     };

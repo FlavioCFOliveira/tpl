@@ -145,7 +145,8 @@ fn table(
     // from `primary_key`, the one place a rowid alias is written
     // (`FR-LITE-029`).
     let parts = match provider {
-        Provider::Mariadb => parts.with_primary_index(),
+        // FR-MYSQL-032: a `mysql` key is the index named PRIMARY too.
+        Provider::Mariadb | Provider::Mysql => parts.with_primary_index(),
         Provider::Sqlite => TableParts {
             primary_key,
             ..parts

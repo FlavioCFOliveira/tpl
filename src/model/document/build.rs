@@ -110,7 +110,8 @@ fn document<'a>(
         ));
     }
     match provider {
-        Provider::Mariadb => order::sort_by_name(&mut foreign_keys),
+        // FR-MYSQL-033: a `mysql` key carries its name, as a `mariadb` one does.
+        Provider::Mariadb | Provider::Mysql => order::sort_by_name(&mut foreign_keys),
         // FR-LITE-031: no key has a name, so the order is by content.
         Provider::Sqlite => foreign_keys.sort_by(|left, right| {
             order::compare_by_content(
@@ -146,7 +147,7 @@ fn document<'a>(
         // have: the referencing table first, because that is the entry's
         // subject, and the constraint second, because a table may reference
         // this one more than once.
-        Provider::Mariadb => referenced_by.sort_by(|left, right| {
+        Provider::Mariadb | Provider::Mysql => referenced_by.sort_by(|left, right| {
             order::compare(&left.table.name, &right.table.name).then_with(|| {
                 order::compare(
                     left.key.name.as_deref().unwrap_or_default(),

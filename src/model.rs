@@ -526,7 +526,7 @@ mod refusals {
     fn check_constraint() -> CheckConstraint<'static> {
         CheckConstraint {
             name: Cow::Borrowed("ck_consignment_reference"),
-            level: ConstraintLevel::Table,
+            level: Some(ConstraintLevel::Table),
             clause: Cow::Borrowed("char_length(`reference`) > 0"),
         }
     }

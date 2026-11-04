@@ -809,6 +809,19 @@ UPDATE tariff
  WHERE trade_lane = 'North Europe – West Africa'
    AND equipment_iso_code = '42G1';
 
+-- -----------------------------------------------------------------------------
+-- equipment_survey
+-- -----------------------------------------------------------------------------
+-- Three interchange surveys from the Lisbon and Sines depots. my_row_id is the
+-- generated invisible primary key and is never named: the server numbers it.
+
+INSERT INTO equipment_survey
+  (survey_reference, equipment_no, iso_code, depot_locode, surveyed_at, damage_codes, repair_estimate_eur)
+VALUES
+  ('EIR-LIS-2026-08841', 'MSCU4471820', '22G1', 'PTLIS', '2026-09-14 08:42:00', NULL,              0.00),
+  ('EIR-LIS-2026-08857', 'MAEU6612094', '42G1', 'PTLIS', '2026-09-14 11:05:00', 'Dent,Corrosion', 385.00),
+  ('EIR-SIE-2026-03310', 'CMAU2209715', '22R1', 'PTSIE', '2026-09-16 15:20:00', 'Missing part',    120.50);
+
 -- Refresh the catalogue statistics, so that the row counts and lengths a reader
 -- finds in INFORMATION_SCHEMA reflect the data just loaded rather than an empty
 -- table.
@@ -816,5 +829,5 @@ ANALYZE TABLE
   port, port_facility, vessel, voyage, voyage_leg, customer, currency,
   reference_counter, consignment, container_type, container, cargo_item,
   tariff, charge_code, charge, customs_declaration, document, audit_event,
-  edi_message_staging, vessel_position, legacy_edi_field,
+  edi_message_staging, vessel_position, legacy_edi_field, equipment_survey,
   masterdata.country, masterdata.customer_mdm_link;

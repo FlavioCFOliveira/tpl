@@ -62,8 +62,8 @@
 //! marking is the whole of what a shortfall does to them.
 
 pub(crate) mod completeness;
-mod fold;
-mod row;
+pub(crate) mod fold;
+pub(crate) mod row;
 mod statements;
 
 // The harness is asked rather than restated: the gate, the inventory and the
@@ -1058,7 +1058,7 @@ mod tests {
 
                 let column_level = constraints
                     .iter()
-                    .filter(|constraint| constraint.level == ConstraintLevel::Column)
+                    .filter(|constraint| constraint.level == Some(ConstraintLevel::Column))
                     .count();
 
                 assert_eq!(column_level, 2, "{}", server.name());

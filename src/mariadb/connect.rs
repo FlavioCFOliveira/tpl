@@ -183,6 +183,18 @@ impl<'a> Target<'a> {
     pub(crate) const fn deadlines(&self) -> Deadlines {
         self.deadlines
     }
+
+    /// The TLS mode the connection is opened with (`FR-CONF-013`), which the
+    /// `cause` of `FR-MYSQL-045` names.
+    pub(crate) const fn tls(&self) -> TlsMode {
+        self.tls
+    }
+
+    /// The server-side database the connection carries, where the entry names
+    /// one (`FR-CONF-041`).
+    pub(crate) const fn database(&self) -> Option<&'a str> {
+        self.database
+    }
 }
 
 /// The driver variant each mode of `FR-CONF-013` is expressed as.
@@ -476,6 +488,45 @@ pub(super) fn open(
     target: &Target<'_>,
     clock: &Clock,
 ) -> Result<MySqlConnection, Error> {
+    // The database is the one the entry names, per `FR-CONF-041`, and it is
+    // passed because the handshake is where a packet about it arrives: the
+    // connection carries the database, so a server that will not show it
+    // refuses the connection rather than a statement.
+    open_classified(runtime, target, clock, |driver, user| {
+        fault::connecting(
+            target.entry,
+            driver,
+            target.host,
+            target.port,
+            user,
+            target.database,
+        )
+    })
+}
+
+/// Opens the one connection of `NFR-PERF-004`, classifying a driver failure
+/// with `classify`.
+///
+/// It is [`open`] with the classification of the driver's error left to the
+/// caller, which receives the error and the user actually presented. Two
+/// providers open their connection here, and both through the same composition
+/// of the driver's options, the same name resolution, and the same budget:
+/// `FR-MYSQL-020` connects a `mysql` entry exactly as a `mariadb` entry. What
+/// differs is one condition: `crate::mysql` recognises the refusal `ADR-014`
+/// adds to the driver as `FR-MYSQL-045`, where a `mariadb` entry keeps the
+/// classification [`open`] gives it.
+///
+/// # Errors
+///
+/// Returns [`Error::NameNotResolved`] where the host resolves to no address,
+/// [`Error::NetworkDeadlineExceeded`] where either phase outlives the budget,
+/// and what `classify` returns for a driver failure.
+pub(crate) fn open_classified(
+    runtime: &Runtime,
+    target: &Target<'_>,
+    clock: &Clock,
+    classify: impl FnOnce(&sqlx_core::Error, &str) -> Error,
+) -> Result<MySqlConnection, Error> {
     let options = options(target)?;
     let budget = clock.connection_budget(target.deadlines.of(Phase::TcpConnect));
     let host = target.host;
@@ -552,18 +603,7 @@ pub(super) fn open(
                 bound,
             )),
             Ok(Ok(connection)) => Ok(connection),
-            // The database is the one the entry names, per `FR-CONF-041`, and
-            // it is passed because the handshake is where a packet about it
-            // arrives: the connection carries the database, so a server that
-            // will not show it refuses the connection rather than a statement.
-            Ok(Err(driver)) => Err(fault::connecting(
-                target.entry,
-                &driver,
-                host,
-                port,
-                options.username(),
-                target.database,
-            )),
+            Ok(Err(driver)) => Err(classify(&driver, options.username())),
         }
     })
 }
@@ -981,5 +1021,82 @@ mod tests {
             // it cannot be printed, not that it was never supplied.
             assert_eq!(composed.username(), "alice");
         }
+    }
+
+    /// Whether the options the driver is given carry a password, and which.
+    ///
+    /// `MySqlConnectOptions` offers no getter for it, so its derived `Debug`
+    /// is read — in this test alone, which writes it to no stream, and which
+    /// is why [`super::DriverOptions`] keeps that `Debug` from every caller.
+    fn presented(composed: &super::DriverOptions) -> String {
+        let printed = format!("{:?}", composed.0);
+        let start = printed
+            .find("password: ")
+            .expect("the options name the field");
+
+        printed[start..]
+            .split(',')
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    #[test]
+    fn fr_mysql_047_an_empty_password_is_presented_as_the_password_and_never_as_none() {
+        // FR-MYSQL-047: where the configuration supplies the empty string as a
+        // `mysql` entry's password — by `password`, by a dsn whose password
+        // part is present and empty, or by a `password_command` whose trimmed
+        // output is empty — the driver is given the empty string as the
+        // password, exactly as any other value, and the entry is not presented
+        // as one that supplies none. The driver then runs the exchange of the
+        // method the server asks for with it; what the server answers is not
+        // this requirement's, and no fixture account has an empty password.
+        let echo = ["/bin/echo", "/usr/bin/echo"]
+            .into_iter()
+            .find(|path| std::path::Path::new(path).exists())
+            .expect("the system has echo");
+        let scratch = Scratch::new();
+
+        for text in [
+            "[database.shop]\nprovider = \"mysql\"\nhost = \"db\"\nuser = \"alice\"\npassword = \"\"\n"
+                .to_owned(),
+            "[database.shop]\nprovider = \"mysql\"\ndsn = \"mysql://alice:@db.example.com/shop\"\n"
+                .to_owned(),
+            format!(
+                "[database.shop]\nprovider = \"mysql\"\nhost = \"db\"\nuser = \"alice\"\n\
+                 password_command = [\"{echo}\", \"\"]\n"
+            ),
+        ] {
+            let file = scratch.file(".cfg", &text);
+            let configuration = config::load(&file).expect("the document is valid");
+            let resolved = settings::resolve(
+                &configuration,
+                Some("shop"),
+                &settings::clock(None),
+                &nothing,
+            )
+            .expect("the entry resolves")
+            .into_mysql()
+            .expect("the entry is a mysql entry");
+            let target = Target::of(&resolved).expect("the entry names a host");
+
+            assert_eq!(
+                target.password.map(crate::project::secret::Secret::expose),
+                Some(""),
+                "{text}"
+            );
+            let composed = options(&target).expect("no trust material is declared");
+            assert_eq!(presented(&composed), r#"password: Some("")"#, "{text}");
+        }
+
+        // The control: an entry that supplies no password presents none.
+        let resolved = settings(
+            &scratch,
+            "[database.shop]\nhost = \"db\"\nuser = \"alice\"\n",
+        );
+        let target = Target::of(&resolved).expect("the entry names a host");
+        assert!(target.password.is_none());
+        let composed = options(&target).expect("no trust material is declared");
+        assert_eq!(presented(&composed), "password: None");
     }
 }

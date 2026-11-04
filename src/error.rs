@@ -1339,12 +1339,16 @@ pub enum Error {
     /// A `cfg` write would leave an entry carrying a key its provider refuses
     /// (`FR-CFG-048`, as amended in the sixty-fifth edition, `FR-CONF-052`).
     /// `.tpl/.cfg` is left unchanged.
-    #[error("cannot give entry '{entry}' {}", provider_write(*.provider, .written))]
+    #[error("cannot give entry '{entry}' {}", provider_write(*.provider, *.own, .written))]
     ProviderIncoherentWrite {
         /// The entry the write would leave in that state.
         entry: String,
-        /// The provider the entry would carry after the write.
+        /// The provider the write turns on: the provider written, or the
+        /// provider the written key belongs to.
         provider: crate::model::database::Provider,
+        /// The provider the entry would carry after the write, which refuses
+        /// a written key that is not the provider (`FR-CONF-052`).
+        own: crate::model::database::Provider,
         /// The key the invocation writes, fully qualified.
         written: String,
         /// Every key the entry would carry that the other provider takes,
@@ -2359,6 +2363,11 @@ pub enum Error {
         by_dsn: bool,
         /// Which of the two conditions of `FR-SRV-010` arose.
         fault: ReadOnlyFault,
+        /// The session variable the read-back reads, as the provider's
+        /// contract names it: `@@session.tx_read_only` for a `mariadb` entry
+        /// (`FR-SRV-009`) and `@@session.transaction_read_only` for a `mysql`
+        /// entry (`FR-MYSQL-018`, `FR-MYSQL-019`).
+        read_back: &'static str,
     },
 
     /// The selected entry does not carry a key the invocation needs
@@ -2499,6 +2508,71 @@ pub enum Error {
         /// key that overrides the window, so the only admissible source is a
         /// table compiled into the binary, and the type admits no other.
         supported: &'static [&'static str],
+    },
+
+    /// A `mysql` entry reached a server that is reachable and authenticated
+    /// and is not MySQL (`FR-MYSQL-007`, `FR-MYSQL-008`). The catalogue is not
+    /// read.
+    #[error("the server is not MySQL, for database entry '{entry}'")]
+    ServerNotMysql {
+        /// The entry that reached it.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
+        by_dsn: bool,
+        /// The string the version probe returned, from which the `cause` names
+        /// the product: MariaDB where it carries the marker, and the string
+        /// itself otherwise.
+        reported: String,
+    },
+
+    /// A `mysql` entry reached a MySQL server of a series older than the
+    /// newest series of `FR-MYSQL-003` and not among them (`FR-MYSQL-009`).
+    /// The catalogue is not read.
+    #[error("server series '{series}' is not supported, for database entry '{entry}'")]
+    MysqlSeriesNotSupported {
+        /// The entry that reached it.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
+        by_dsn: bool,
+        /// The string the version probe returned (`FR-MYSQL-006`).
+        version: String,
+        /// The series found, derived from it.
+        series: String,
+        /// The series of `FR-MYSQL-003`, as the table compiled into the binary
+        /// holds them; `BR-MYSQL-001` states the set once, so the window
+        /// travels on the value, as it does for [`Error::SeriesNotSupported`].
+        supported: &'static [&'static str],
+    },
+
+    /// A `mysql` entry's authentication, over a session TLS does not protect,
+    /// needs the server's RSA public key, which `tpl` does not request
+    /// (`FR-MYSQL-045`). The connection is ended before the authentication
+    /// completes, and the catalogue is not read.
+    #[error(
+        "cannot authenticate user '{user}' over an unencrypted session, for database entry '{entry}'"
+    )]
+    PublicKeyRequestRefused {
+        /// The entry whose connection it was.
+        entry: String,
+        /// The user the driver presented.
+        user: String,
+        /// The host the connection reached.
+        host: String,
+        /// The port it reached.
+        port: u16,
+        /// The TLS mode in force, as `FR-CONF-013` spells it: `disabled`, or
+        /// `preferred` against a server that offered no TLS.
+        tls: &'static str,
+        /// Whether the server offered no TLS, which the refusal shows under
+        /// `preferred`: it is raised only on a session TLS does not protect,
+        /// and `preferred` leaves one so only where the server offers none.
+        no_tls_offered: bool,
+        /// The authentication method the server asked for, as the driver names
+        /// it — one of the driver's own names, so it is held as the `'static`
+        /// string the driver hands over.
+        method: &'static str,
     },
 }
 
@@ -2768,7 +2842,9 @@ fn flag_refused(flag: &str, provider: crate::model::database::Provider, given: b
     match (provider, given) {
         (_, true) => format!("{flag} cannot be given with --provider {provider}"),
         (Provider::Sqlite, false) => format!("{flag} cannot be given with --path"),
-        (Provider::Mariadb, false) => format!("{flag} cannot be given without --provider sqlite"),
+        (Provider::Mariadb | Provider::Mysql, false) => {
+            format!("{flag} cannot be given without --provider sqlite")
+        }
     }
 }
 
@@ -2776,20 +2852,18 @@ fn flag_refused(flag: &str, provider: crate::model::database::Provider, given: b
 /// `FR-CFG-048` shows: the provider where the write gives one, and the key
 /// otherwise.
 ///
-/// `provider` is the provider the written key belongs to. Where the write is a
-/// key rather than the provider, the entry's own provider is the other one —
-/// there are two, and the entry's refuses the key — and that is the provider
-/// the line names.
-fn provider_write(provider: crate::model::database::Provider, written: &str) -> String {
-    use crate::model::database::Provider;
-
+/// `provider` is the provider the written key belongs to, and `own` the
+/// provider the entry carries after the write. Where the write is a key rather
+/// than the provider, `own` refuses the key, and that is the provider the line
+/// names.
+fn provider_write(
+    provider: crate::model::database::Provider,
+    own: crate::model::database::Provider,
+    written: &str,
+) -> String {
     if written.ends_with(".provider") {
         format!("the provider {provider}")
     } else {
-        let own = match provider {
-            Provider::Mariadb => Provider::Sqlite,
-            Provider::Sqlite => Provider::Mariadb,
-        };
         format!("the key {written}, which its provider {own} does not take")
     }
 }
@@ -2886,7 +2960,9 @@ impl Error {
             | Self::NetworkDeadlineExceeded { by_dsn, .. }
             | Self::ReadOnlySessionNotEnforced { by_dsn, .. }
             | Self::ServerNotMariaDb { by_dsn, .. }
-            | Self::SeriesNotSupported { by_dsn, .. } => *by_dsn = true,
+            | Self::SeriesNotSupported { by_dsn, .. }
+            | Self::ServerNotMysql { by_dsn, .. }
+            | Self::MysqlSeriesNotSupported { by_dsn, .. } => *by_dsn = true,
             _ => {}
         }
         self
@@ -3035,6 +3111,9 @@ impl Error {
             | Self::NoDatabaseEntrySelected { .. }
             | Self::ServerNotMariaDb { .. }
             | Self::SeriesNotSupported { .. }
+            | Self::ServerNotMysql { .. }
+            | Self::MysqlSeriesNotSupported { .. }
+            | Self::PublicKeyRequestRefused { .. }
             | Self::ProviderRefusesKeys { .. }
             | Self::SqliteNotRegularFile { .. }
             | Self::SqliteFileRefused { .. }
@@ -3058,7 +3137,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 104;
+    const VARIANT_COUNT: usize = 107;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -3760,6 +3839,7 @@ mod tests {
                     by_dsn: false,
                     entry: "shop".to_owned(),
                     fault: ReadOnlyFault::ReadBackDisagreed,
+                    read_back: "@@session.tx_read_only",
                 },
                 78,
             ),
@@ -3798,6 +3878,37 @@ mod tests {
                 },
                 78,
             ),
+            // The `mysql` provider (FR-MYSQL-008, FR-MYSQL-009, FR-MYSQL-045).
+            (
+                Error::ServerNotMysql {
+                    by_dsn: false,
+                    entry: "shop".to_owned(),
+                    reported: "11.8.9-MariaDB-ubu2404".to_owned(),
+                },
+                78,
+            ),
+            (
+                Error::MysqlSeriesNotSupported {
+                    by_dsn: false,
+                    entry: "shop".to_owned(),
+                    version: "8.0.46".to_owned(),
+                    series: "8.0".to_owned(),
+                    supported: WINDOW,
+                },
+                78,
+            ),
+            (
+                Error::PublicKeyRequestRefused {
+                    entry: "shop".to_owned(),
+                    user: "reader".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    tls: "disabled",
+                    no_tls_offered: false,
+                    method: "caching_sha2_password",
+                },
+                78,
+            ),
             // The provider, and the SQLite read (FR-CONF-051 … FR-LITE-040).
             (
                 Error::FlagRefusedByProvider {
@@ -3819,6 +3930,7 @@ mod tests {
                 Error::ProviderIncoherentWrite {
                     entry: "shop".to_owned(),
                     provider: crate::model::database::Provider::Sqlite,
+                    own: crate::model::database::Provider::Sqlite,
                     written: "database.shop.provider".to_owned(),
                     carried: vec!["host", "port"],
                     value: Some("sqlite".to_owned()),
@@ -4022,6 +4134,9 @@ mod tests {
             Error::ProjectDirUnusable { .. } => "ProjectDirUnusable",
             Error::ServerNotMariaDb { .. } => "ServerNotMariaDb",
             Error::SeriesNotSupported { .. } => "SeriesNotSupported",
+            Error::ServerNotMysql { .. } => "ServerNotMysql",
+            Error::MysqlSeriesNotSupported { .. } => "MysqlSeriesNotSupported",
+            Error::PublicKeyRequestRefused { .. } => "PublicKeyRequestRefused",
             Error::FlagRefusedByProvider { .. } => "FlagRefusedByProvider",
             Error::PathRequired { .. } => "PathRequired",
             Error::ProviderIncoherentWrite { .. } => "ProviderIncoherentWrite",

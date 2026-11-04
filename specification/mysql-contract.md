@@ -561,13 +561,18 @@ citing a file.
   `FR-MYSQL-003`, and its series is older than the newest series of
   `FR-MYSQL-003`, THEN the system SHALL exit `78` and SHALL NOT read the
   catalogue. The message SHALL name the series found and the entry that
-  reached it; its `cause` SHALL state that the connection and the
-  authentication succeeded, why the series found is not supported, and the
-  series that are; and its `hint` SHALL carry the command of `FR-MYSQL-008`.
+  reached it. Its `cause` SHALL state that the connection and the
+  authentication succeeded; SHALL name the version string the probe returned;
+  SHALL state why the series found is not supported, as the criterion of
+  `FR-MYSQL-002` it fails — that it is not an LTS series under Oracle Premier
+  or Extended Support, and that it is older than the newest series that is —
+  a reason that is the same for every series this requirement refuses; and
+  SHALL list the series of `FR-MYSQL-003`. Its `hint` SHALL carry the command
+  of `FR-MYSQL-008`.
 
   ```
   error: server series '8.0' is not supported, for database entry 'shop'
-  cause: connected and authenticated; the server reports 8.0.46, and 8.0 is in Oracle Sustaining Support since 2026-04-21. A mysql entry supports 9.7 and 8.4
+  cause: connected and authenticated; the server reports 8.0.46, and 8.0 is not a MySQL LTS series under Oracle Premier or Extended Support, and is older than the newest that is. A mysql entry supports 9.7 and 8.4
   hint:  repoint the entry at a supported server: tpl cfg database update shop --host <host>
   exit:  78 (EX_CONFIG)
   ```
@@ -575,6 +580,23 @@ citing a file.
   The wording of each line is the implementation's, under `FR-ERR-008`
   through `FR-ERR-012`. The example fixes the facts named, the command
   carried and the code.
+
+  *Why the reason is the criterion, and not the series' own standing.* The
+  binary knows the series of `FR-MYSQL-003` and the comparison of
+  `FR-MYSQL-002`, and nothing else about a series it refuses. The criterion
+  is therefore the one reason it can state that is true of every series the
+  rule reaches, and it stays true for as long as the table the binary carries
+  is current, per `FR-MYSQL-005`. Where a reader needs a series' support tier
+  and its dates, `FR-MYSQL-003` names the sources.
+
+  *Rejected: a reason particular to the series found*, its support tier and
+  the date it entered it, as the example read before the seventy-sixth
+  edition: "8.0 is in Oracle Sustaining Support since 2026-04-21". The binary
+  could print it only from a second table, of every series it may refuse,
+  with a tier and a date for each, which `FR-MYSQL-003` does not hold and
+  which would go stale without a sign at every change Oracle makes to a
+  series' support. `BR-MYSQL-001` keeps the facts that change so to one
+  table, verified on one date.
 
   *Rationale.* It is `FR-SRV-020` and `FR-SRV-030` for MySQL, on their ground:
   a series below the window is one the project will never observe, because
@@ -594,6 +616,16 @@ citing a file.
   release, as refused here and a series of a family that has left the set as
   the third case. `26.7` is now newer than the newest supported series, and
   no family enters the criterion. The requirement is unchanged.
+
+  *Amended in the seventy-sixth edition,* for rmp `#329`. The requirement
+  asked the `cause` to state why the series found is not supported and left
+  the reason open, and the example, which fixes the facts named, gave a reason
+  particular to `8.0`, its support tier and a date. The implementation of the
+  provider found that the binary holds no such fact for any series it
+  refuses. The requirement now names the version string and fixes the reason
+  as the criterion of `FR-MYSQL-002` that the series fails, the same for
+  every series refused, and the example states it. The condition, the code,
+  the series listed and the `hint` are unchanged.
 
 - **FR-MYSQL-010**: IF the server is MySQL and its series is newer than the
   newest series of `FR-MYSQL-003`, THEN the system SHALL read the catalogue,
@@ -982,6 +1014,50 @@ citing a file.
   *Amended in the seventy-fifth edition,* for rmp `#326`: the rationale said
   that the server side was pending observation in those two requirements. The
   requirement is unchanged.
+
+- **FR-MYSQL-047**: WHERE the password the configuration supplies for a
+  `mysql` entry is the empty string, the system SHALL present the empty
+  string to the server as the entry's password, through the exchange of the
+  authentication method the server asks for, exactly as it presents a
+  password of any other value, and SHALL NOT present the entry as one that
+  supplies no password. The configuration supplies the empty string in three
+  ways, each read under the requirement that governs its source; the first
+  two hold it as written or after the expansion of `FR-CONF-015`:
+
+  | Source | Example | Read under |
+  |---|---|---|
+  | `password`, holding the empty string | `password = ""` | `FR-CONF-006` |
+  | A `dsn` whose password part is present and empty | `mysql://reader:@db.example.com/shop` | `FR-CONF-009` |
+  | A `password_command` whose trimmed standard output is empty | a helper that prints nothing and exits `0` | `FR-CONF-027` |
+
+  An entry that supplies no password — no `password` key, a `dsn` with no
+  password part, and no `password_command` — is not reached by this
+  requirement.
+
+  *Rationale.* In each of the three the configuration states a password, and
+  the value it states is the empty string: `FR-CONF-027` makes the trimmed
+  output the password whatever it holds, and `FR-CONF-007` treats a
+  `password` key, and a `dsn` that carries a password, as a password source
+  beside which a second one is refused. Presenting such an entry as one that
+  supplies none would rewrite what the file says, which is the guess
+  `BR-CONF-004` refuses a reader of `.tpl/.cfg`.
+
+  *What it does not settle.* Whether a server accepts the empty string for an
+  account is the server's answer, and a refusal is an authentication refused,
+  which `FR-ERR-001` places on `77` (`EX_NOPERM`). No requirement of
+  this corpus records what a MySQL or a MariaDB server answers to it, and no
+  observation has made one: every account of the fixture of `FR-MYSQL-044`
+  carries a password.
+
+  *A `mariadb` entry.* `FR-MYSQL-020` connects a `mysql` entry as a `mariadb`
+  entry is connected, and no requirement of this corpus states this rule for
+  a `mariadb` entry. This requirement governs a `mysql` entry alone.
+
+  *Provenance.* The implementation of the provider, for rmp `#329`, found the
+  corpus silent on an empty password, and presents it as this requirement
+  states.
+
+  *Added in the seventy-sixth edition,* for rmp `#329`.
 
 - **FR-MYSQL-021**: The five modes of `FR-CONF-013` SHALL be distinguishable
   by observed behaviour against a MySQL server, and their behaviour SHALL be
@@ -1641,12 +1717,16 @@ citing a file.
   |---|---|
   | `COLUMN_DEFAULT` is SQL `NULL`, and `IS_NULLABLE` is `NO` | `null` |
   | `COLUMN_DEFAULT` is SQL `NULL`, and `IS_NULLABLE` is `YES` | `{"kind":"null"}` |
-  | `EXTRA` carries the phrase `DEFAULT_GENERATED`, and the text begins with `(` and ends with `)` | `expression`, carrying the text between the outer parentheses, unescaped per `FR-MYSQL-046` |
+  | `EXTRA` carries the phrase `DEFAULT_GENERATED`, and the first character of the text is `(` and its last character is `)` | `expression`, carrying the text without that first and that last character, unescaped per `FR-MYSQL-046` |
   | `EXTRA` carries the phrase `DEFAULT_GENERATED` | `expression`, carrying the text unescaped per `FR-MYSQL-046` |
   | Anything else | `literal`, carrying the text unchanged |
 
   The classification of `FR-CTX-037` SHALL NOT be applied to a `mysql` read.
-  The rows SHALL be matched against the text as the catalogue returns it.
+  The rows SHALL be matched against the text as the catalogue returns it. The
+  third row SHALL remove exactly two characters, the first and the last, and
+  SHALL remove them once; it SHALL NOT test whether the `(` it removes is
+  closed by the `)` it removes, and SHALL NOT remove a further pair from what
+  remains.
 
   *Why a separate classification.* MariaDB tells a string literal from
   everything else by quoting it, and writes a default of `NULL` as the four
@@ -1692,8 +1772,9 @@ citing a file.
   `CURRENT_TIMESTAMP` is marked `DEFAULT_GENERATED` in every form. The server
   writes an expression in its own rendering and keeps outer parentheses only
   around an operator expression, and every text observed that begins with `(`
-  and ends with `)` has matching outer parentheses, so the third row of the
-  classification removes a pair that encloses the whole. The manual states
+  and ends with `)` has matching outer parentheses, so on every text observed
+  the two characters the third row of the classification removes are a pair
+  that encloses the whole. The manual states
   that `COLUMN_DEFAULT` "is `NULL` if the column has an explicit default of
   `NULL`, or if the column definition includes no `DEFAULT` clause", and that
   `EXTRA` holds "`DEFAULT_GENERATED` for columns that have an expression
@@ -1721,6 +1802,29 @@ citing a file.
   string literal holds no backslash either, and is carried as the server
   writes it, unchanged or between its outer parentheses, which is the
   principle `FR-CTX-037` applies to a MariaDB expression.
+
+  *Why the first and the last character, and not a pair that matches.* The
+  third row is the sixth row of `FR-CTX-037`, which classifies a MariaDB
+  default that "begins with `(` and ends with `)`" and carries the text
+  between them, so a `mariadb` read and a `mysql` read remove the outer
+  parentheses of an expression default by one rule. The two readings agree on
+  every text observed, because each such text has matching outer
+  parentheses. They differ on a text such as `(a) + (b)`, whose first `(`
+  closes before its last character: this row carries it as `a) + (b`, and a
+  reading by matching pair would carry it unchanged. No server of the fixture
+  wrote such a text, because both series write an operator expression inside
+  one pair that encloses it, as the *Observed* note records.
+
+  *Rejected: removing the outer parentheses only where they are a matching
+  pair.* Telling whether the first `(` is closed by the last `)` needs a
+  reading of the text that skips every parenthesis inside a string literal or
+  a quoted identifier, under the escaping `FR-MYSQL-046` describes: a parser
+  that no observed text calls for, and a rule that a `mariadb` read does not
+  apply. *Accepted cost, stated because it is silent.* A server that writes
+  an expression default in that shape is carried with parentheses that do not
+  balance, at exit `0`. Such a text is a defect to report with the DDL that
+  produced it, as `FR-CTX-037` states of its own rule, and is the case this
+  row is most likely to be amended for.
 
   *Consequence, stated plainly: a binary literal default is hexadecimal
   text.* A string literal default on a binary column is reported in
@@ -1753,6 +1857,16 @@ citing a file.
   matched against, and the note on what the model receives says what is
   carried. The consequence note on a binary literal default is new, and the
   last consequence note names the layer removed.
+
+  *Amended in the seventy-sixth edition,* for rmp `#329`. The third row read
+  "the text begins with `(` and ends with `)`" and carried "the text between
+  the outer parentheses", which left open whether the outer parentheses are
+  the first and the last character or a pair that matches; the two differ on
+  a text whose first `(` closes before its end. The row now names the first
+  and the last character, the sentence after the table says that they are
+  removed once and not tested for a match, the *Observed* note says that on
+  every text observed they are a pair, and the note on why, with the reading
+  rejected, is new. Every text observed is carried as before.
 
 - **FR-MYSQL-046**: For a `mysql` read, the system SHALL remove exactly one
   layer of backslash escaping from three texts, and from no other: the text
@@ -1867,9 +1981,22 @@ citing a file.
   | `INVISIBLE` | the column is invisible | `FR-CAT-035`, `FR-CTX-020` |
   | `VIRTUAL GENERATED` | the column is generated and not stored | `FR-MYSQL-031` |
   | `STORED GENERATED` | the column is generated and stored | `FR-MYSQL-031` |
-  | `on update` followed by one word | the column carries an `ON UPDATE` default, which is that word | `FR-CTX-020` |
+  | `on update` followed by one word | the column carries an `ON UPDATE` default, carried as the sentence after this table states | `FR-CTX-020` |
   | `DEFAULT_GENERATED` | the column's default is an expression | `FR-MYSQL-029` |
   | `MASKING POLICY` | the column carries a masking policy | not carried — the model has no property for it |
+
+  WHERE `EXTRA` carries the phrase `on update`, the value the model carries
+  for the column's `ON UPDATE` default SHALL be the phrase itself: the
+  characters of `EXTRA` from the start of `on update` to the end of the word
+  that follows it, exactly as `EXTRA` writes them, letter case included. A
+  word is the characters after the single space that follows `update`, up to
+  the next space or the end of the field. The value is thus `on update`, one
+  space and the server's spelling of the expression —
+  `on update CURRENT_TIMESTAMP`, `on update CURRENT_TIMESTAMP(3)` — which is
+  the shape of the value a `mariadb` read carries, the whole of the column
+  attribute field, `on update current_timestamp()`, under `FR-CAT-041` and
+  `FR-CTX-020`. A column whose `EXTRA` carries no `on update` phrase carries
+  no `ON UPDATE` default.
 
   IF `EXTRA` holds text that no phrase matches, THEN the system SHALL take
   the facts of the phrases it recognises, SHALL NOT fail the read, and SHALL
@@ -1928,8 +2055,24 @@ citing a file.
   *Consequence, stated plainly.* MariaDB writes the `ON UPDATE` attribute
   `on update current_timestamp()`, per `FR-CAT-041`, and MySQL writes it
   `on update CURRENT_TIMESTAMP`, or `on update CURRENT_TIMESTAMP(3)` for a
-  fractional-second column; the expression carried is each server's own
-  spelling.
+  fractional-second column. A column declared `ON UPDATE CURRENT_TIMESTAMP`
+  therefore carries `on update current_timestamp()` from a `mariadb` read and
+  `on update CURRENT_TIMESTAMP` from a `mysql` read: one shape from both, the
+  phrase and then the expression, and in each the expression as its server
+  spells it, which is the principle the last consequence note of
+  `FR-MYSQL-029` states for a default. The words observed after `on update`
+  are `CURRENT_TIMESTAMP` and `CURRENT_TIMESTAMP(3)`; a word the fixture does
+  not produce, such as another fractional-second precision, is carried as
+  `EXTRA` writes it, and was not observed.
+
+  *Rejected: carrying the word alone*, `CURRENT_TIMESTAMP`, which the table
+  read until the seventy-sixth edition as "an `ON UPDATE` default, which is
+  that word". It would give one property two shapes, the phrase from a
+  `mariadb` read and the expression alone from a `mysql` read, so a template
+  writing the value into DDL would have to tell the providers apart to know
+  whether to write `ON UPDATE` before it, where the overview of this file has
+  a template render from a MySQL read on the principles it renders from a
+  MariaDB read.
 
   *Added in the seventy-third edition,* for rmp `#324`.
 
@@ -1941,6 +2084,16 @@ citing a file.
   observed one, and requiring that order would turn a server's change of order
   into a lost fact. The *Pending observation* note now covers `MASKING POLICY`
   alone. The requirement and its table are unchanged.
+
+  *Amended in the seventy-sixth edition,* for rmp `#329`. The table said that
+  the column carries an `ON UPDATE` default "which is that word", the word
+  after `on update`, and the consequence note said that the expression
+  carried is each server's own spelling, so the value carried could be read
+  as the word or as the phrase. The sentence after the table now fixes it as
+  the phrase, in the shape a `mariadb` read carries, and the table's cell
+  points at it; the consequence note says what each provider yields, and the
+  reading rejected is recorded. No fact the reading takes from `EXTRA`
+  changes.
 
 - **FR-MYSQL-031**: For a `mysql` read, a generated column SHALL carry its
   storage kind from the phrase of `FR-MYSQL-030`, `VIRTUAL GENERATED` or

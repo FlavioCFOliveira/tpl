@@ -82,6 +82,19 @@ const TEXTUAL: [&str; 8] = [
     "varchar",
 ];
 
+/// The `textual` row of `FR-ENV-049`: the one value a `mysql` read produces,
+/// and no series of `FR-SRV-015` was observed to produce, that belongs to a
+/// family.
+///
+/// `json` is placed by analogy with the `longtext` a `mariadb` read reports for
+/// the same declaration. The other two values `FR-ENV-049` places,
+/// `geomcollection` and `vector`, belong to no family, which the fall-through
+/// of `FR-ENV-046` already gives them, so they need no entry. The row is kept
+/// apart from [`TEXTUAL`] because it rests on another requirement and another
+/// observation, and no answer for a `mariadb` or a `sqlite` read moves on
+/// account of it.
+const MYSQL_TEXTUAL: [&str; 1] = ["json"];
+
 /// `nullable` (`FR-ENV-041`).
 ///
 /// # Errors
@@ -121,13 +134,13 @@ pub(super) fn temporal(value: &Value) -> Result<bool, Error> {
     family(value, "temporal", &TEMPORAL)
 }
 
-/// `textual` (`FR-ENV-041`, `FR-ENV-046`).
+/// `textual` (`FR-ENV-041`, `FR-ENV-046`, `FR-ENV-049`).
 ///
 /// # Errors
 ///
 /// Returns the refusal of `FR-ENV-040` for an operand that is not a column.
 pub(super) fn textual(value: &Value) -> Result<bool, Error> {
-    family(value, "textual", &TEXTUAL)
+    Ok(family(value, "textual", &TEXTUAL)? || family(value, "textual", &MYSQL_TEXTUAL)?)
 }
 
 /// `primary_key` (`FR-ENV-041`, `FR-ENV-015`).
@@ -291,6 +304,27 @@ mod tests {
             sorted.sort_unstable();
 
             assert_eq!(sorted, family, "the binary search requires a sorted family");
+        }
+    }
+
+    #[test]
+    fn fr_env_049_the_three_mysql_values_land_in_the_families_the_requirement_fixes() {
+        // FR-ENV-049: json is textual; geomcollection and vector are in none.
+        assert_eq!(super::MYSQL_TEXTUAL, ["json"]);
+
+        for (data_type, expected) in [
+            ("json", [false, false, true]),
+            ("geomcollection", [false, false, false]),
+            ("vector", [false, false, false]),
+        ] {
+            let column = fixture::column_of_mysql_type(data_type);
+            let answered = [
+                numeric(&column).expect("it is a column"),
+                temporal(&column).expect("it is a column"),
+                textual(&column).expect("it is a column"),
+            ];
+
+            assert_eq!(answered, expected, "{data_type}");
         }
     }
 

@@ -65,6 +65,9 @@ const READ_ONLY: &str = "SET SESSION TRANSACTION READ ONLY";
 /// `FR-SRV-015` carries.
 const READ_BACK: &str = "SELECT @@session.tx_read_only";
 
+/// The variable [`READ_BACK`] reads, as the `cause` of `FR-SRV-010` names it.
+const READ_BACK_VARIABLE: &str = "@@session.tx_read_only";
+
 /// The server version probe of `FR-SRV-002`.
 const PROBE: &str = "SELECT VERSION()";
 
@@ -78,7 +81,7 @@ const ENFORCED: i64 = 1;
 /// `FR-SRV-008` and not applied it — the condition `FR-SRV-009` exists to
 /// catch, and the one no supported MariaDB produces.
 #[cfg(test)]
-const NOT_ENFORCED: i64 = 0;
+pub(crate) const NOT_ENFORCED: i64 = 0;
 
 /// The product marker `FR-SRV-041` tests the version string for.
 const MARKER: &str = "MariaDB";
@@ -89,7 +92,10 @@ const MARKER: &str = "MariaDB";
 /// means and the deadline decides itself: a `SET` the server refused is
 /// `FR-SRV-010`'s `78`, and a `SET` that outlived its bound is `FR-ERR-027`'s
 /// `69`, and one statement can end either way.
-enum Attempt {
+///
+/// It is `pub(crate)`, with [`run`], because `crate::mysql` issues its three
+/// connection-start statements under the same bound and the same report.
+pub(crate) enum Attempt {
     /// The bound of `FR-GLOB-012` expired, already classified.
     Expired(Error),
     /// The driver reported a failure, not yet classified.
@@ -113,7 +119,7 @@ enum Attempt {
 /// stream with everything else it bars. The count of these lines is not the
 /// catalogue-query count of `NFR-PERF-008`: that count is the lines
 /// [`emit::catalogue_query`] writes, under a token of its own.
-fn run<T>(
+pub(crate) fn run<T>(
     runtime: &Runtime,
     bound: Bound,
     target: &Target<'_>,
@@ -159,6 +165,7 @@ fn unenforced(attempt: Attempt, entry: &str, fault: ReadOnlyFault) -> Error {
             by_dsn: false,
             entry: entry.to_owned(),
             fault,
+            read_back: READ_BACK_VARIABLE,
         },
     }
 }
@@ -203,6 +210,7 @@ fn enforce(
         by_dsn: false,
         entry: entry.to_owned(),
         fault: ReadOnlyFault::ReadBackDisagreed,
+        read_back: READ_BACK_VARIABLE,
     };
 
     let answer: Option<MySqlRow> = run(
@@ -367,8 +375,12 @@ pub(super) fn start(
 
 /// Whether this thread's read-back is presented with an answer that does not
 /// confirm the setting.
+///
+/// `crate::mysql` consults the same seam for its own read-back, which
+/// `FR-MYSQL-043` verifies in its failing outcome through it, as `FR-SRV-013`
+/// does here.
 #[cfg(test)]
-fn misreporting() -> bool {
+pub(crate) fn misreporting() -> bool {
     MISREPORTED.with(std::cell::Cell::get)
 }
 
@@ -419,7 +431,7 @@ thread_local! {
 /// body that asked for it.
 #[cfg(test)]
 #[must_use]
-fn misreport_read_back() -> Misreport {
+pub(crate) fn misreport_read_back() -> Misreport {
     Misreport {
         restore: MISREPORTED.with(|misreported| misreported.replace(true)),
     }
@@ -429,7 +441,7 @@ fn misreport_read_back() -> Misreport {
 /// this is dropped.
 #[cfg(test)]
 #[derive(Debug)]
-struct Misreport {
+pub(crate) struct Misreport {
     /// What the thread's state was before.
     restore: bool,
 }
