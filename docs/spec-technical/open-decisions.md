@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md]
 ---
 
@@ -343,7 +343,9 @@ and SQLite behaviour `OD-35` … `OD-38` rest on, and for the reading of `src/`
 at `7738619` behind them, and again for the `serde_json` 1.0.151, `rusqlite`
 0.41.1 and SQLite behaviour the amendments of `OD-18`, `OD-36` and `OD-37` for
 the sixty-ninth edition rest on, and for the reading of `src/` at `f2d1753`
-behind them. Anything not verified says so
+behind them; and **2026-11-04** for the reading of `src/` and
+`tests/support/sqlite.rs` at `19abb1f` behind the discharge in `OD-36` and the
+amendment of `OD-37`. Anything not verified says so
 in its own text. No claim rests on recollection.
 
 The engine behaviour `OD-14` records has a source of a different kind, and it is
@@ -2869,8 +2871,10 @@ that deadline and no longer". It is the `SQLITE_BUSY` row of `FR-LITE-007`,
 refusing a `core.query_timeout` past the maximum*: `FR-CONF-002` declares no
 upper bound, and this folder cannot add one. *Rejected — leaving the call as it
 is*: a valid configuration would be reported as a defect of `tpl`
-(`FR-ERR-030`). **Recorded discrepancy:** `sqlite.rs` at `cb99236` hands the
-call the remaining bound unchanged.
+(`FR-ERR-030`). **Discharged at `82eb1d4` — the discrepancy recorded here.**
+`sqlite.rs` at `cb99236` handed the call the remaining bound unchanged; at
+`19abb1f` it hands the smaller of that bound and `i32::MAX` milliseconds, and
+the watchdog keeps the whole bound.
 
 ---
 
@@ -2953,7 +2957,22 @@ connection. The four `writable_schema` databases add one requirement on that
 connection: its defensive mode is off, set and read back by the builder,
 because defensive mode refuses "The PRAGMA writable_schema=ON statement"
 (`https://sqlite.org/c3ref/c_dbconfig_defensive.html`, checked 2026-11-03).
-**At `f2d1753` the builder makes none of the seven.**
+
+**Amended on 2026-11-04, for rmp `#317`, against the seventy-first edition:
+eight more databases, all written under `writable_schema`.** `FR-LITE-038`
+adds a table `pragma_encoding` typed `TABLE`, an ordinary table typed `Table`,
+a trigger typed `trigger` followed by a NUL character, a second row with no
+text for an index — `NULL` typed `table`, and the empty text typed `view` — a
+trigger whose `tbl_name` ends in a NUL character, a view whose `sql` carries
+text after a NUL character, and a trigger whose text begins
+`CREATE TEMP TRIGGER`. The decision is unchanged: each is built from SQL text
+by `tests/support/sqlite.rs` on the plain connection whose defensive mode is
+off. The databases written under `writable_schema` are therefore twelve: the
+four of the sixty-ninth edition — a view's `sql` and a trigger's `type` as
+BLOBs, a `CREATE TABLE` row at root page `0`, a `CREATE VIRTUAL TABLE` row at
+another — and these eight. **At `19abb1f` the builder makes all fifteen
+databases the two amendments add**, and `scripts/sqlite/README.md` lists the
+file each is built from.
 
 ---
 

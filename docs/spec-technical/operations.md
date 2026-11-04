@@ -1,7 +1,7 @@
 ---
 title: Operations
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, technology-stack.md, data-model.md, quality-attributes.md]
 ---
 
@@ -276,8 +276,8 @@ built otherwise carries the mechanism and ends every `sqlite` read in `70`
 before reading the file: it fails safe, because the read-back of `FR-LITE-010`
 is the guarantee and the file is the means (`ADR-013`, *Consequences*). Both
 workflows of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) invoke
-Cargo at the repository root. **At `7738619` neither the feature nor the file
-exists.**
+Cargo at the repository root. At `19abb1f` the manifest enables the feature and
+the file sets the option.
 
 **The table describes the development host, not CI.** In the workflows of
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), `cargo-audit` is the
@@ -570,7 +570,8 @@ There is no container, no harness script and no gate, nothing to start or stop,
 and nothing left behind outside the temporary directory. It answers for a
 database file the obligation `CLAUDE.md` places on `scripts/mariadb/` for a
 server: exhaustive coverage of what the reader reads, in a realistic domain
-(`FR-LITE-038`). **At `7738619` the folder does not exist.**
+(`FR-LITE-038`). At `19abb1f` it holds seventeen SQL files and the
+`README.md` that states what each builds.
 ## Continuous integration and release
 
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes two GitHub

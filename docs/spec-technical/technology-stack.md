@@ -1,7 +1,7 @@
 ---
 title: Technology Stack
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -125,9 +125,9 @@ tables above state the graph it prescribes.** The facade `sqlx` and its macro
 side leave, `sqlx-core` and `sqlx-mysql` become direct dependencies, and
 `rusqlite` joins, so the direct dependencies are fourteen. Which crates leave
 and enter, the six the change adds, its lock-file count, its MSRV consequence
-and its advisory reading are that record's and are not restated. **At
-`7738619` the manifest still declares the facade and no `rusqlite`**: the
-record is decided and not yet implemented.
+and its advisory reading are that record's and are not restated. At
+`19abb1f` the manifest declares `sqlx-core`, `sqlx-mysql` and `rusqlite` and no
+facade, and its `[dependencies]` table holds the fourteen.
 
 ## The template engine
 
@@ -299,14 +299,27 @@ record pins (docs.rs, `rusqlite` 0.41.1, consulted 2026-11-03).
 | Call | Used for | Feature | Requirement |
 |---|---|---|---|
 | `Connection::open_with_flags(path, flags)` | The read-only open, with the flags [architecture.md](architecture.md#the-sqlite-reader) names. `OpenFlags`' default, which the plain open uses, includes `SQLITE_OPEN_CREATE` and `SQLITE_OPEN_URI`, so that open is not used | — | `FR-LITE-006` |
-| `Connection::is_readonly(db_name)`, "Determine if a database is read-only", on `main` | The read-back of the read-only open. **Whether it issues a statement is not confirmed in the official documentation**; the statement record of `FR-LITE-018` would report one | — | `FR-LITE-010` |
+| `Connection::is_readonly(db_name)`, "Determine if a database is read-only", on `main` | The read-back of the read-only open. **Whether it issues a statement is not confirmed in the official documentation**; the statement record of `FR-LITE-018` reports none where it is called, between `PRAGMA compile_options` and the first statement of stage 5 (row 28 of [verification.md](verification.md#mandated-by-the-corpus), at `19abb1f`) | — | `FR-LITE-010` |
 | `Connection::set_db_config` and `db_config`, over `DbConfig::SQLITE_DBCONFIG_DEFENSIVE`, `SQLITE_DBCONFIG_TRUSTED_SCHEMA` and `SQLITE_DBCONFIG_ENABLE_VIEW` ("Enable or disable views") | Three controls, set and read back without a statement. `db_config` passes `-1` to `sqlite3_db_config` (`src/config.rs`, read at docs.rs on 2026-11-03), which SQLite reads as leaving the setting unchanged and reporting it (`https://sqlite.org/c3ref/c_dbconfig_defensive.html`, checked 2026-11-03) | — | `FR-LITE-010` |
-| `Connection::pragma_update` and `pragma_query_value` | `query_only`, `cell_size_check`, `mmap_size` and `temp_store`, set and read back | — | `FR-LITE-010`, `FR-LITE-015` |
 | `Connection::set_limit` and `limit` | The three limits, set and read back | `limits` | `FR-LITE-011` |
 | `Connection::busy_timeout` and `get_interrupt_handle` | The statement bound of [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection), which also records where `busy_timeout` panics and why the bound handed to it saturates | — | `FR-LITE-009` |
-| `Connection::prepare` | Every other statement of the closed list. `prepare_cached` needs the `cache` feature, which `ADR-013` leaves off with the defaults | — | `FR-LITE-015` |
+| `Connection::prepare` | Every statement of the closed list — the four controls `query_only`, `cell_size_check`, `mmap_size` and `temp_store`, each set and read back through its pragma, and `BEGIN DEFERRED` and `COMMIT` among them — each a constant of `sqlite/catalogue/statements.rs`, prepared and stepped by the one function that applies the statement's bound. `prepare_cached` needs the `cache` feature, which `ADR-013` leaves off with the defaults | — | `FR-LITE-010`, `FR-LITE-015`, `FR-LITE-042` |
 | `Connection::trace_v2` with `SQLITE_TRACE_STMT` | The statement record, from the test configuration alone ([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)) | `trace`, on the `[dev-dependencies]` entry alone | `FR-LITE-018` |
 | `Connection::close` | The close, "functionally equivalent to the `Drop` implementation" except that it returns the error | — | `FR-RND-040` |
+
+**`pragma_update` and `pragma_query_value` are not used** for the four
+controls: their eight statements go through `prepare`, as the code at
+`19abb1f` issues them. Each helper composes its statement's text in the driver
+— `PRAGMA`, the name, and for an update `=` and the value — and runs it through
+`execute_batch` or `query_row`, outside the bound
+[`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)
+arms around each statement, so its text would not be the constant of the crate
+[interfaces.md](interfaces.md#the-sqlite-reader) requires. With the driver's
+`extra_check` feature on, it also checks the name with a statement
+`FR-LITE-015` does not list, `SELECT 1 FROM pragma_pragma_list WHERE name = ?`
+(`src/pragma.rs`, read at docs.rs, `rusqlite` 0.41.1, on 2026-11-04). That
+feature is not a default (docs.rs, `rusqlite` 0.41.1, *Feature flags*,
+consulted 2026-11-04), and neither `rusqlite` entry of the manifest enables it.
 
 **`rusqlite::Error` and `TraceEvent` are non-exhaustive** (docs.rs, as above),
 so the match over the driver's error and the one that reads a trace event each

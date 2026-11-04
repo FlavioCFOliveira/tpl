@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -238,12 +238,13 @@ column's type, a member's prefix length, `referenced_key` and a trigger's
 
 | Fact | Rule | Lives in |
 |---|---|---|
-| Which rows are tables and views | A schema-table row's type and root page; a shadow table is covered as a `BASE TABLE`, so a virtual table's data appears as the tables its module keeps it in | `sqlite/catalogue/fold.rs` (`FR-LITE-020`, `FR-LITE-021`) |
+| Which rows are tables and views | A schema-table row's type, compared exactly, and its root page; a shadow table is covered as a `BASE TABLE`, so a virtual table's data appears as the tables its module keeps it in | `sqlite/catalogue/fold.rs` (`FR-LITE-020`, `FR-LITE-021`; the fourth kind of `FR-LITE-041` makes the exact comparison complete) |
 | `data_type` | The five affinity rules, in order, over the declared type, for every column; a `STRICT` column declared `ANY` takes `numeric`, because no statement reports that a table is `STRICT` | `sqlite/catalogue/fold.rs` (`FR-LITE-026`); the families are `FR-ENV-048`'s, applied by `render/` |
 | A column default | The eight ordered rows over `dflt_value` and the column's nullability, into the discriminant `model/column_default.rs` already carries | `sqlite/catalogue/fold.rs` (`FR-LITE-027`); the apostrophe rule is the one `model.rs` holds |
 | The rowid alias | `pragma_index_info` returns no row for the table's name, one `pk` column, and no index of origin `pk`; the keyword is never read | `sqlite/catalogue/fold.rs` (`FR-LITE-028`) |
-| A trigger's timing and event | The tokens between its name and `ON` | `sqlite/catalogue/trigger.rs` (`FR-LITE-032`) |
-| A foreign key's referenced columns where `to` is `NULL` | The referenced table's primary key, in the order of `FR-LITE-029` | `sqlite/catalogue/fold.rs` (`FR-LITE-031`), after every table's key is known |
+| A trigger's timing and event | The tokens between its name and `ON`, each keyword recognised ignoring ASCII letter case and carried in upper case | `sqlite/catalogue/trigger.rs` (`FR-LITE-032`) |
+| The table a trigger is on; a foreign key's referenced table and columns | The `tbl_name` of the trigger's row, and the `table` and `to` fields of the key, each matched under `BR-LITE-003` — equal once the 26 ASCII letters are folded, over the whole name — and the object found carried under its own name, never the spelling that found it. A trigger matching a view is excluded; an incoming key is listed under the table its parent matched. A key's own columns and an index's members are carried as reported, unmatched | `sqlite/catalogue/fold.rs` (`BR-LITE-003`, `FR-LITE-021`, `FR-LITE-030` … `FR-LITE-032`) |
+| A foreign key's referenced columns where `to` is `NULL` | The referenced table's primary key, in the order of `FR-LITE-029`; the foreign key is excluded where that primary key has another number of columns than it has | `sqlite/catalogue/fold.rs` (`FR-LITE-031`, `FR-LITE-021`), after every table's key is known |
 
 **The primary key is held by the table, not derived from an index name.** A
 MariaDB table's key **is** its index named `PRIMARY` (`FR-CAT-043`). A SQLite

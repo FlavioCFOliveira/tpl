@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -30,6 +30,32 @@ As of 2026-11-03 one entry of `open-decisions.md` is open — `OD-33`, whether
 blocks is a statement, not a document. Every other entry is settled. `OD-30`,
 the one entry that was settled and **interim**, was discharged on 2026-09-22,
 when the last leaf of the tree was implemented.
+
+**Changes of 2026-11-04**, for rmp `#317` and `#321` — against the seventieth
+and seventy-first editions of `/specification` (`2991b7e`, `9171337`) and the
+code at `19abb1f`, which implements both: the check and the catalogue read in
+one read transaction (`FR-LITE-042`), the seven kinds of row the check refuses,
+names matched by ASCII case folding (`BR-LITE-003`); and every statement that
+described the SQLite code as not yet built is corrected against it.
+
+- `architecture.md`: the read transaction around the check and the plan; the
+  check's decisions for its four new kinds; a value of the schema table after
+  the check read in the check's snapshot; the fold keyed by the names
+  `BR-LITE-003` matches, its recorded discrepancy discharged at `82eb1d4`.
+- `interfaces.md`: the fault table gains stage `Transaction`, the check's row
+  names seven rows of `FR-LITE-007`, and the row of a value read after the
+  check no longer blames a file changed after it; the `cause` of each new kind.
+- `technology-stack.md`: the four controls go through `prepare`, as the code
+  issues them, and the table no longer names `pragma_update` or
+  `pragma_query_value`; the manifest at `19abb1f`.
+- `open-decisions.md`: `OD-36`'s discrepancy is discharged; `OD-37` builds
+  eight more databases, twelve written under `writable_schema`.
+- `verification.md`: rows 28 to 33 are whole and named; the owed tests of the
+  sixty-ninth edition are discharged and named; `FR-LITE-042`, `BR-LITE-003`,
+  `FR-LITE-015`/`FR-LITE-016` and the escaping gain rows; the writer test's
+  seam.
+- `security.md`, `data-model.md`, `quality-attributes.md` and `operations.md`
+  follow; `traceability.md` harvests both editions.
 
 **Changes of 2026-11-03, fourth pass**, for rmp `#317` and `#321` — against
 the sixty-ninth edition of `/specification` (`f2d1753`): the check of
@@ -353,7 +379,8 @@ render bounds, their composition, and the poll interval of the memory limit.
 Lazy initialisation. The
 synchronous process and the runtime boundary inside `mariadb/`. The provider
 dispatch, and the SQLite reader: its submodules, its six connection stages, its
-fixed plan, the check that opens it, the fold's indexing and its close. The
+fixed plan, the check that opens it, the read transaction that holds both, the
+fold's indexing and its close. The
 module map
 and the layout conventions. The division inside `project/` and the four
 decisions that produce it: reading apart from resolving, reading apart from

@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, open-decisions.md]
 ---
 
@@ -113,6 +113,12 @@ formatting characters moves the note of section 2 and rows in sections 13, 14
 and 15; the two glossary
 terms move section 24; and the fourth verification of `FR-LITE-018` and the
 refusals `FR-LITE-038` requires move the concerns that cross every file.
+**The seventieth and seventy-first are harvested on the same terms on
+2026-11-04**, for rmp `#317`: `FR-LITE-042` and the amendments around it move
+rows in sections 14, 15 and 27, and its glossary term moves section 24;
+`BR-LITE-003`, the four new kinds of `FR-LITE-041` and the amendments around
+them move rows in section 27. Counting both, the mapping is behind by the same
+forty editions.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -440,7 +446,7 @@ formatting characters, and `NFR-DET-004` is unchanged.
 | `EPIPE` is `0` normally and `74` if a JSON document was mid-flight: the writer must know whether it is inside a document | `FR-ERR-025`, `FR-ERR-026` | `architecture`, `interfaces` |
 | Nine codes carry at least one integration test, part of the definition of done; `70` is the single exception and is exercised in process | `BR-ERR-001` | `verification` |
 | A render bound's `cause` names the bound, its resolved value and the key that raises it, so each bound is its own variant; a bound an abandoned render crosses is step 8's `65`, with no return to the cache-or-connection step | `FR-ERR-034` row `65`, `FR-ERR-001`, `FR-ERR-006` (forty-second edition) | `interfaces`, `architecture` |
-| For a `sqlite` entry, step 6 is the kind check, the open, the hardening and the probe, ending `69`, `70`, `74` or `78`; the `cause` names the path and what the library or, for the kind check, the filesystem returned, and no host or port. A `69` names a lock only where the library returned `SQLITE_BUSY`, so the error value records what ended the statement | `FR-ERR-006`, `FR-ERR-045` (sixty-fifth edition notes); `FR-ERR-034` note (sixty-seventh edition) | `interfaces` (`OD-38`) |
+| For a `sqlite` entry, step 6 is the kind check, the open, the hardening, the probe, the `BEGIN DEFERRED` of a read and the check, ending `69`, `70`, `74` or `78`; the transaction statement adds no code, its result codes taking those `FR-LITE-040` gives; the `cause` names the path and what the library or, for the kind check, the filesystem returned, and no host or port. A `69` names a lock only where the library returned `SQLITE_BUSY`, so the error value records what ended the statement | `FR-ERR-006`, `FR-ERR-045` (sixty-fifth edition notes); `FR-ERR-006` notes (sixty-ninth and seventieth editions); `FR-ERR-034` note (sixty-seventh edition) | `interfaces` (`OD-38`), `architecture` |
 | A value read from a SQLite file, or returned by its library, is bounded at 256 characters in every diagnostic line, ends kept around a counted marker, and no other value is: the bound needs to know where a value came from, so it is a property of the value's type and is applied after escaping | `FR-ERR-046` | `interfaces`, `security` |
 
 **Two contradictions recorded, both from the harvest of editions ten to
@@ -469,7 +475,7 @@ what replaced it.
 | The `password_command` deadline and cap end the child's whole process group; a descendant that left the group survives, and the invocation still ends at the deadline | `FR-SEC-012`, `FR-SEC-024` (forty-second edition) | `security` (`OD-12`) |
 | A render is bounded on work, output and memory as well as time; the memory limit's two residuals are stated, not closed | `FR-SEC-025` | `security` ([`ADR-011`](../adr/adr-011-render-memory-accounting.md)) |
 | This file is a cross-reference, not a second source: the technical `security.md` must likewise cite its owning requirement and not restate it | `BR-SEC-001` | `security` |
-| A seventh untrusted input, the SQLite database file: a regular file, opened read-only, read under SQLite's hardening, each control confirmed before the file is parsed, and a schema table that could forge the catalogue refused before it is read | `FR-SEC-028`, *Trust boundaries* (sixty-fifth edition; amended in the sixty-ninth) | `security` |
+| A seventh untrusted input, the SQLite database file: a regular file, opened read-only, read under SQLite's hardening, each control confirmed before the file is parsed, a schema table that could forge the catalogue refused before it is read, and that check and every catalogue statement reading one snapshot, so that nothing another connection adds during the read is read through | `FR-SEC-028`, *Trust boundaries* (sixty-fifth edition; amended in the sixty-ninth and seventieth) | `security` |
 | The escaping rule names its two owners and covers C0, C1 and the bidirectional formatting characters, whatever the source and the provider | `FR-SEC-020` (sixty-ninth edition) | `security`, `interfaces` |
 
 ---
@@ -638,7 +644,7 @@ what replaced it.
 
 | Technical concern | Drawn from | Doc |
 |---|---|---|
-| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series, and — since the forty-second edition — render bound, render fuel, render output limit, render memory limit, and — since the sixty-ninth — bidirectional formatting character and storage class. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
+| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series, and — since the forty-second edition — render bound, render fuel, render output limit, render memory limit, and — since the sixty-ninth — bidirectional formatting character and storage class, and — since the seventieth — read transaction. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
 | `plumbing` / `porcelain` name the two output audiences; the technical spec's naming of modules and types should not invent a third vocabulary | *plumbing*, *porcelain* | `interfaces` |
 | One term already carries two meanings by decision — `schema` (the arm, and the `--schema` flag) — and code naming must disambiguate rather than pick one | *schema (the word, two meanings)*; `FR-CFG-028` | `interfaces` |
 | `target` is defined as one of four build targets: the word is reserved and must not be reused for a render target | *target*; `NFR-PERF-018` | `operations`, `quality-attributes` |
@@ -699,14 +705,16 @@ is named only where a row would otherwise imply a correction is outstanding.
 | Every statement runs under the catalogue-query deadline, with no runtime to time it; a bound past the longest wait the library takes is handed to it saturated, because `FR-CONF-002` gives the key no upper bound | `FR-LITE-009`, `FR-CONF-002` | `architecture` (`OD-36`) |
 | Nine controls and three limits applied and read back on every connection; two depend on the build and are confirmed by a statement that reads nothing from the file, one of them by its read-back as well; the ninth, views disabled, is defence in depth; one not in effect is `70` before the file is parsed | `FR-LITE-010` … `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-017` (sixty-ninth edition) | `architecture`, `security`, `technology-stack` |
 | No integrity check runs | `FR-LITE-013` | `security` |
-| A closed statement list, its order, and its verification through the library's trace from the test seam, nested statements apart; no statement invokes `pragma_table_list`, compiles a view or connects a virtual table, which the record of a database holding an `fts5` table shows; the read-only promise observed from outside the process | `FR-LITE-015` … `FR-LITE-018` (sixty-ninth edition), `BR-LITE-001` | `architecture`, `verification` (`OD-37`) |
-| One statement after the probe and before every statement that reads through a pragma function refuses with `78` a schema table that could forge the catalogue — a table or a view in the pragma functions' namespace, a value of an excluded storage class, a root page contradicting its text — and is also the catalogue probe of the connectivity command. Its third kind reads the word after `CREATE` under SQLite's comment syntax, which the trigger header reader already reads | `FR-LITE-041`, `FR-LITE-017`, `FR-LITE-007`, `FR-LITE-040`, `FR-CFG-056` | `architecture`, `interfaces`, `security` |
-| The read covers `main`: the rows of its schema table, told apart by type and root page, `WITHOUT ROWID` read from `pragma_index_info`, a shadow table covered as a table, six exclusions, and no routines | `FR-LITE-019` … `FR-LITE-022` (sixty-ninth edition) | `architecture`, `data-model` |
+| A closed statement list, its order, and its verification through the library's trace from the test seam, nested statements apart; two transaction statements and no other; no statement invokes `pragma_table_list`, compiles a view or connects a virtual table, which the record of a database holding an `fts5` table shows; the read-only promise observed from outside the process | `FR-LITE-015` … `FR-LITE-018` (sixty-ninth edition; amended or noted in the seventieth), `BR-LITE-001` (seventieth) | `architecture`, `verification` (`OD-37`) |
+| One statement after the probe and before every statement that reads through a pragma function refuses with `78` a schema table that could forge the catalogue — a table or a view in the pragma functions' namespace, a value of an excluded storage class, a root page contradicting its text, and four shapes SQLite never writes and its loader accepts: another spelling of a type, a row with no text that is not an index's, a NUL character in a name or a text, a trigger header SQLite does not write — and is also the catalogue probe of the connectivity command. Every later comparison of `type` is exact, which the fourth kind makes complete. Its third and seventh kinds read the words after `CREATE` under SQLite's comment syntax, which the trigger header reader already reads | `FR-LITE-041` (seventy-first edition), `FR-LITE-017`, `FR-LITE-007`, `FR-LITE-040`, `FR-CFG-056` | `architecture`, `interfaces`, `security` |
+| The check and every catalogue statement of a read run in one deferred read transaction, begun after the probe and committed after the last catalogue statement only; a read that ends early leaves the transaction to the connection's close, and the connectivity command opens none. Neither statement is a catalogue statement: no query line, and not counted | `FR-LITE-042`, `FR-LITE-016`, `FR-LITE-017`, `FR-LITE-037` note (seventieth edition) | `architecture`, `interfaces`, `security`, `quality-attributes` |
+| The read covers `main`: the rows of its schema table, told apart by type, compared exactly, and root page, `WITHOUT ROWID` read from `pragma_index_info`, a shadow table covered as a table, six exclusions, and no routines | `FR-LITE-019` … `FR-LITE-022` (sixty-ninth edition; `FR-LITE-020` and `FR-LITE-021` amended in the seventy-first) | `architecture`, `data-model` |
+| A name another catalogue row or field carries — a trigger's table, a key's parent table and parent columns — matches with the 26 ASCII letters folded over the whole name, and the object found is carried under its own name, so every reference resolves in the document; the trigger header's keywords are read in any letter case; a key naming no parent column of a parent whose primary key differs in number is excluded | `BR-LITE-003`, `FR-LITE-021`, `FR-LITE-030` … `FR-LITE-032` (seventy-first edition) | `data-model`, `architecture` |
 | Every model property has a SQLite source or is `null`; one fact is read from stored text. The model's types make optional every field a SQLite read leaves `null`, and a table holds its primary key rather than deriving it from an index name | `BR-LITE-002`, `FR-LITE-023` … `FR-LITE-034` | `data-model` (`OD-35`) |
 | No view's columns are read and no view is compiled, so a view that does not compile is read whole and unmarked, and a `sqlite` read is complete or fails | `FR-LITE-015`, `FR-LITE-033`, `FR-LITE-036` (sixty-eighth edition); `FR-LITE-035`, withdrawn in that edition | `architecture`, `interfaces`, `verification` |
 | The requirements of form hold, with the count taken in process | `FR-LITE-037` | `quality-attributes`, `verification` |
 | The read takes time linear in the objects apart from the library's schema load, which the deadline ends, so the in-process fold looks up by name through maps built once rather than by scanning | `FR-LITE-009`, `FR-LITE-020` (sixty-ninth edition) | `architecture`, `quality-attributes` |
-| A fixture built from versioned SQL text at test time, never committed as a binary; four of its databases are written under `writable_schema`, on a connection without defensive mode | `FR-LITE-038` (sixty-ninth edition) | `verification`, `operations` (`OD-37`) |
+| A fixture built from versioned SQL text at test time, never committed as a binary; twelve of its databases are written under `writable_schema`, on a connection without defensive mode, and a read of each of those and of the two named like a pragma function ends with `78` | `FR-LITE-038` (sixty-ninth and seventy-first editions) | `verification`, `operations` (`OD-37`) |
 
 ---
 

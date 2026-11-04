@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -44,7 +44,7 @@ raw.
 | 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
 | 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
-| 7 | A SQLite database file | `sqlite/` | Its kind is established without opening it; it is opened read-only and never created, and the library is confirmed hardened before any statement reads it; a schema table that could forge the catalogue is refused before any statement reads through a pragma function; its values are converted and coverage applied at that one boundary, and none reaches a statement | `FR-SEC-028`, `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` … `FR-LITE-017`, `FR-LITE-041`, `FR-OUT-017` |
+| 7 | A SQLite database file | `sqlite/` | Its kind is established without opening it; it is opened read-only and never created, and the library is confirmed hardened before any statement reads it; a schema table that could forge the catalogue is refused before any statement reads through a pragma function, and that check and every catalogue statement read one snapshot; its values are converted and coverage applied at that one boundary, and none reaches a statement | `FR-SEC-028`, `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` … `FR-LITE-017`, `FR-LITE-041`, `FR-LITE-042`, `FR-OUT-017` |
 
 Rows 1, 4 and 5 are the populations `FR-ERR-024` and `FR-OUT-019` name as
 sources of an interpolated value — row 7's values reach output as catalogue
@@ -403,12 +403,23 @@ caller's own, in a file only the caller may write (`FR-PROJ-010`,
 `FR-PROJ-011`).
 
 **A schema table that could forge the catalogue is refused before it is
-read.** The check, the first catalogue statement, refuses with `78` a table or
-a view in the namespace of the pragma functions, a value of a storage class the
-schema table's contract excludes, and a table row whose root page contradicts
-its text, before any statement reads through a pragma function (`FR-SEC-028`,
-`FR-LITE-017`, `FR-LITE-041`). How the verdict is reached is
-[architecture.md](architecture.md#the-sqlite-reader)'s.
+read.** The check, the first catalogue statement, refuses with `78` the seven
+kinds of row `FR-LITE-041` names — a table or a view in the namespace of the
+pragma functions, a value of a storage class the schema table's contract
+excludes, a table row whose root page contradicts its text, and four shapes
+SQLite never writes and its loader accepts: another spelling of a type, a row
+with no text that is not an index's, a NUL character in a name or a text, and
+a trigger header SQLite does not write — before any statement reads
+through a pragma function (`FR-SEC-028`, `FR-LITE-017`, `FR-LITE-041`). How the
+verdict is reached is [architecture.md](architecture.md#the-sqlite-reader)'s.
+
+**The check governs what the read reads.** On a read, the check and every
+catalogue statement run in one read transaction and read one snapshot, so a
+table or a view another connection commits after the check is never read
+through: in rollback-journal mode the writer cannot commit until the read
+ends, and in write-ahead-log mode what it commits stays invisible to the read
+(`FR-SEC-028`, `FR-LITE-042`). How the transaction stands to the read-only
+promise is [below](#for-a-sqlite-entry-three-parts).
 
 **No statement carries a value from the file, and none compiles a view or
 connects a virtual table.** Every statement is a constant, and none is issued
@@ -425,7 +436,7 @@ by a crafted file cannot flood the line a calling agent reads (`FR-SEC-028`,
 `FR-ERR-046`). Which values are bounded, where and how is
 [interfaces.md](interfaces.md#the-diagnostic-renderer)'s.
 
-**Four residuals, each stated by its requirement and none closed here.**
+**Five residuals, each stated by its requirement and none closed here.**
 
 - A file replaced by a FIFO between the lookup and the open blocks the open,
   and no deadline interrupts it; arranging it needs write access to the
@@ -439,6 +450,10 @@ by a crafted file cannot flood the line a calling agent reads (`FR-SEC-028`,
   (`FR-LITE-008`; [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)).
 - Damage confined to pages the catalogue read never touches is not detected,
   because no integrity check runs (`FR-LITE-013`).
+- A process that writes the file's bytes without SQLite's locks changes what a
+  statement reads, inside the read transaction or outside it; what it writes is
+  a damaged file, refused where the library detects it (`FR-LITE-042`, *What
+  the transaction does not reach*; `FR-LITE-007`).
 
 ## Transport
 
@@ -511,7 +526,11 @@ prevent.
 | The closed statement list | Every statement `sqlite/` can send is a constant of the crate | **Prevents**, in `tpl` | `FR-LITE-015`, `FR-LITE-016` |
 | `query_only` | Set and read back at stage 5 | Makes a write fail on a connection that could otherwise make one; defence in depth | `FR-LITE-010` |
 
-None is disableable (`FR-LITE-014`). What the promise does not cover — the two
+None is disableable (`FR-LITE-014`). The read transaction of `FR-LITE-042` is
+part of the read and no breach of the promise: it takes the shared lock every
+statement takes and writes nothing, and a transaction that could write is
+refused by the read-only open and excluded by `FR-LITE-016` (`BR-LITE-001`, as
+amended in the seventieth edition). What the promise does not cover — the two
 files a database in write-ahead-log mode may leave beside it — is
 `FR-LITE-008`'s, and the promise is verified from outside the process
 ([verification.md](verification.md#the-sqlite-provider)).

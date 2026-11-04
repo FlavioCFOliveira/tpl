@@ -1,7 +1,7 @@
 ---
 title: Quality Attributes
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md, overview.md]
 ---
 
@@ -93,7 +93,7 @@ What each forces there:
 
 | Requirement | The design decision for a `sqlite` entry | Described in |
 |---|---|---|
-| `NFR-PERF-001`, `NFR-PERF-002` | A fixed plan of seven catalogue statements after the probe — the check of `FR-LITE-041`, then six, each joining the schema table to the function it reads where that function takes one object — so the count over the fixture equals the count over an empty file. No path is excepted, and no statement invokes `pragma_table_list`, so the time each takes is linear in the objects; the fold looks up by name through maps built once, so its own work does not grow with their square either (`FR-LITE-037`, as amended in the sixty-ninth edition; `FR-LITE-009`) | [architecture.md](architecture.md#the-sqlite-reader) |
+| `NFR-PERF-001`, `NFR-PERF-002` | A fixed plan of seven catalogue statements after the probe — the check of `FR-LITE-041`, then six, each joining the schema table to the function it reads where that function takes one object — so the count over the fixture equals the count over an empty file. The `BEGIN DEFERRED` and `COMMIT` around them are issued once each whatever the objects, and are not catalogue statements, so neither is counted (`FR-LITE-042`; the note on `FR-LITE-037` of the seventieth edition). No path is excepted, and no statement invokes `pragma_table_list`, so the time each takes is linear in the objects; the fold looks up by name through maps built once, so its own work does not grow with their square either (`FR-LITE-037`, as amended in the sixty-ninth edition; `FR-LITE-009`) | [architecture.md](architecture.md#the-sqlite-reader) |
 | `NFR-PERF-003` | The cache sits in front of the dispatch, so a hit opens no file and issues no statement | [architecture.md](architecture.md#the-provider-dispatch) |
 | `NFR-PERF-004` | One connection, opened by `sqlite/` when it is about to read and closed when the read ends, before any render | [architecture.md](architecture.md#the-sqlite-reader) |
 | `NFR-PERF-005`, `NFR-PERF-006` | `sqlite/` is reached only through the dispatch, which a command needing no catalogue never reaches | [architecture.md](architecture.md#the-provider-dispatch) |
@@ -110,8 +110,9 @@ therefore writes the line once for each statement of that row it issues — the
 catalogue plan, whose first statement, the check of `FR-LITE-041`, is also the
 probe of `FR-CFG-056` — once the statement's bound is
 checked and before it is prepared, as `mariadb/` writes it
-before a statement is sent; it writes none for a control, a limit or the version
-probe, and a nested statement is the library's and has none. A statement the
+before a statement is sent; it writes none for a control, a limit, the version
+probe or either statement of the read transaction of `FR-LITE-042`, and a
+nested statement is the library's and has none. A statement the
 library fails to prepare is then counted on the stream and absent from the
 record, the limit `FR-LITE-018` states.
 `NFR-PERF-004` for a `sqlite` entry is observed on the two Linux targets alone,
