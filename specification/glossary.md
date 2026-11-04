@@ -1,7 +1,7 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md, sqlite-contract.md]
 ---
 
@@ -485,6 +485,21 @@ and functions occupy distinct namespaces on the server, so one bare name can
 denote two objects; the qualified form says which is meant. Accepted wherever a
 command names one routine, per `FR-SCH-008`. A bare name matching both is `64`,
 per `FR-SCH-010`.
+
+## read transaction
+
+A transaction of the SQLite library in which a connection reads the database
+file and writes nothing. Begun by `BEGIN DEFERRED`, it starts when its first
+statement reads the file, and from then until it ends every statement on the
+connection reads one snapshot of the database: in rollback-journal mode the
+connection holds the shared lock a writer must wait out before it commits,
+and in write-ahead-log mode a write another connection commits stays
+invisible to it, per `https://sqlite.org/lang_transaction.html`,
+`https://sqlite.org/lockingv3.html` and `https://sqlite.org/isolation.html`,
+checked 2026-11-04. `FR-LITE-042` runs the check of `FR-LITE-041` and the
+catalogue statements of a `sqlite` read in one.
+
+*Added in the seventieth edition.*
 
 ## read-through cache
 

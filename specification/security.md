@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md]
 ---
 
@@ -219,10 +219,12 @@ states the rule that answers it.
   byte of the file is parsed. A file whose schema holds a table or a view
   named like a pragma table-valued function, or a schema-table value of a
   storage class the table's contract excludes, SHALL be refused with `78`
-  before the catalogue is read. A value read from the file SHALL enter a
-  diagnostic line only within the bound of `FR-ERR-046`. See `FR-LITE-005`,
-  `FR-LITE-006`, `FR-LITE-010` through `FR-LITE-014`, `FR-LITE-017`,
-  `FR-LITE-041` and `FR-ERR-046`.
+  before the catalogue is read, and the check that refuses it and every
+  catalogue statement SHALL read one snapshot of the file. A value read from
+  the file SHALL enter a diagnostic line only within the bound of
+  `FR-ERR-046`. See `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` through
+  `FR-LITE-014`, `FR-LITE-017`, `FR-LITE-041`, `FR-LITE-042` and
+  `FR-ERR-046`.
 
   *Threat closed.* A FIFO in the place of the file must not hang the
   invocation, and a crafted file must not reach the library's parser without
@@ -233,8 +235,10 @@ states the rule that answers it.
   may it make the library write its content to a temporary file outside the
   project, or flood with one name the diagnostic line a calling agent reads.
   Nor may a table or a view of the file take the place of a function the read
-  reads through and forge the catalogue `tpl` presents at exit `0`, nor may a
-  read make the library compile a view or run a virtual table's module.
+  reads through and forge the catalogue `tpl` presents at exit `0` — whether
+  the file holds it when the read begins or another connection adds it during
+  the read — nor may a read make the library compile a view or run a virtual
+  table's module.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
@@ -248,6 +252,13 @@ states the rule that answers it.
   `FR-LITE-015` makes since the user's decision recorded under `FR-LITE-020`.
   The views control `FR-LITE-010` adds, as defence in depth, is one of the
   controls SQLite's guidance gives, which the first sentence already names.
+
+  *Amended in the seventieth edition,* for rmp `#317`: the check and the
+  catalogue statements read one snapshot, in the read transaction of
+  `FR-LITE-042`, and the threat names a table or a view another connection
+  adds during the read. Without it, a writer that committed a table between
+  the check and a later statement forged the catalogue at exit `0`, as
+  observed under that requirement.
 
 ## Template containment
 

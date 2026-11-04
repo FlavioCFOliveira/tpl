@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md, sqlite-contract.md]
 ---
 
@@ -673,7 +673,8 @@ Out of scope: the wording of any individual message.
   `FR-CONF-051`, and a `path` holding `${`, per `FR-CONF-054`; step 5 refuses
   a key the provider does not take, per `FR-CONF-052`, and a missing `path`,
   per `FR-CONF-053`; and step 6, the connection, is the kind check, the open,
-  the hardening, the probe and the check of `FR-LITE-017`, which can end with
+  the hardening, the probe, the `BEGIN DEFERRED` of `FR-LITE-042` where a read
+  issues it, and the check, in the order of `FR-LITE-017`, which can end with
   `69`, `70`, `74` or `78`, per `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-009`,
   `FR-LITE-012`, `FR-LITE-040` and `FR-LITE-041`. Step 7 reaches no `77`: a
   `sqlite` read presents no incomplete object, per `FR-LITE-036`. The order of
@@ -691,6 +692,12 @@ Out of scope: the wording of any individual message.
   *Amended in the sixty-ninth edition,* for rmp `#317`: the check of
   `FR-LITE-041`, which `FR-LITE-017` places after the probe, belongs to step 6
   and can end it with `78`. The order of the steps is unchanged.
+
+  *Amended in the seventieth edition,* for rmp `#317`: the `BEGIN DEFERRED`
+  of `FR-LITE-042`, which `FR-LITE-017` places between the probe and the
+  check, belongs to step 6. It reads nothing from the file, and a result code
+  it returns takes the code `FR-LITE-040` gives it, so the codes step 6 can
+  end with are unchanged. The order of the steps is unchanged.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.

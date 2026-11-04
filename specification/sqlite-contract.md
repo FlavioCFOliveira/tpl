@@ -1,7 +1,7 @@
 ---
 title: SQLite Contract
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [configuration-model.md, server-contract.md, catalogue-coverage.md, context-document.md, privileges-and-completeness.md, security.md, cfg-commands.md, performance-requirements.md, errors-and-exit-codes.md, global-flags.md, project-and-discovery.md]
 ---
 
@@ -113,6 +113,19 @@ Where a reading states what the library does inside a statement, it rests on
 the library's source as well: the single-file source of 3.54.1 that the
 published package of the driver selected under `FR-LITE-004` bundles, read at
 that public source on the same date.
+
+*Observed again on 2026-11-04, for the seventieth edition,* for rmp `#317`,
+on `aarch64-apple-darwin`, through the Python library **3.54.1**, on a
+read-only connection under every control of `FR-LITE-010`, views disabled
+included, and every limit of `FR-LITE-011` that a Python connection can set,
+with the statements of `FR-LITE-015` as the sixty-ninth edition writes them.
+The database read was the main fixture database of `FR-LITE-038`, built from
+`scripts/sqlite/freight.sql` outside this repository, once in
+rollback-journal mode and once in write-ahead-log mode, and an empty file of
+zero bytes was read beside it; a second, ordinary read-write connection to
+the same file was the writer. The database of one
+table and 320 000 views that `FR-LITE-009` records served the reading of the
+deadline.
 
 ## The library
 
@@ -580,6 +593,26 @@ that public source on the same date.
   `FR-LITE-020`, no statement invokes `pragma_table_list` any more, and the
   read is linear in the objects apart from the schema load, which the
   deadline ends. Nothing a `mariadb` entry does changes.
+
+  *Note added in the seventieth edition,* for rmp `#317`. The requirement is
+  unchanged. The [read transaction](glossary.md#read-transaction) of
+  `FR-LITE-042` moves where a read meets a writer's lock, and nothing else:
+  `BEGIN DEFERRED` reads nothing and waits for no lock, and the check of
+  `FR-LITE-041`, the first statement of the transaction that reads the file,
+  is where the read waits for a writer within its deadline, as the probe
+  already may. Once the check has read, no later statement of the read waits
+  for a writer. Observed as *Observations* above states: in rollback-journal
+  mode, with a writer holding `BEGIN EXCLUSIVE` after the probe,
+  `BEGIN DEFERRED` returned at once and the check failed with
+  `database is locked` (`SQLITE_BUSY`) when the reader's wait of 0.5 s
+  expired; and while a writer that had changed the file waited to commit,
+  each catalogue statement after the check took under a millisecond. In
+  write-ahead-log mode the check ran at once beside a writer holding
+  `BEGIN EXCLUSIVE`. Over the database of 320 000 views in rollback-journal
+  mode, an interrupt sent 5 ms into a catalogue statement inside the
+  transaction ended it with `SQLITE_INTERRUPT` and left the transaction
+  open, and the connection's close ended it, as `FR-LITE-042` requires. What
+  the read costs a writer of the database is stated there.
 
 - **FR-LITE-040**: For a `sqlite` entry, every
   [result code](glossary.md#result-code) by which the library reports a
@@ -1098,6 +1131,7 @@ that public source on the same date.
   | `PRAGMA query_only`, `PRAGMA trusted_schema`, `PRAGMA cell_size_check`, `PRAGMA mmap_size` and `PRAGMA temp_store`, each in the form that sets the value `FR-LITE-010` fixes and in the form that reads it back | The controls of `FR-LITE-010` that a statement applies | Once each, at connection start |
   | `PRAGMA compile_options`, in the form that reads the options | The confirmation of the extension-loading control of `FR-LITE-010`, and of the build on which its temporary-storage control depends | Once, at connection start |
   | `SELECT sqlite_version()`, reading nothing else | The version probe of `FR-LITE-002` | Once, at connection start |
+  | `BEGIN DEFERRED` and `COMMIT` | The [read transaction](glossary.md#read-transaction) of `FR-LITE-042`, in which the check of `FR-LITE-041` and the catalogue statements read one snapshot of the file | Once each, around the check and the catalogue statements, by a read that issues a catalogue statement after the check |
   | `SELECT` against the schema table `sqlite_schema` and the pragma table-valued functions `pragma_table_xinfo`, `pragma_index_list`, `pragma_index_info`, `pragma_index_xinfo`, `pragma_foreign_key_list` and `pragma_encoding`, restricted to the schema `main` | Reading the catalogue, and the check of `FR-LITE-041`, which is also the catalogue probe of `FR-CFG-056` | As the command requires |
 
   **No statement SHALL invoke `pragma_table_list`.** No statement of the last
@@ -1197,14 +1231,44 @@ that public source on the same date.
   `FR-LITE-041`, a statement against the schema table that the row already
   admitted.
 
+  *Amended in the seventieth edition,* for rmp `#317`: the third row is new,
+  for the read transaction `FR-LITE-042` requires, and the catalogue row stays
+  the last, so every passage that names the last row keeps its meaning.
+  Neither statement of the new row reads a catalogue fact, so neither is a
+  catalogue statement: neither is counted under `FR-LITE-037`, compared under
+  `NFR-PERF-008`, or reported by the line `FR-GLOB-017` gives a catalogue
+  query.
+
 - **FR-LITE-016**: The system SHALL NOT issue any other statement for a
   `sqlite` entry. It SHALL issue no DDL, no DML, no `ATTACH` or `DETACH`, no
   `VACUUM`, `ANALYZE` or `REINDEX`, no `PRAGMA` outside the list of
   `FR-LITE-015`, no statement against a schema other than `main`, and no
-  transaction statement, and SHALL NOT invoke an external process to read the
-  structure.
+  transaction statement other than the `BEGIN DEFERRED` and the `COMMIT` that
+  `FR-LITE-042` requires — no transaction that takes a write lock, no
+  rollback, and no savepoint — and SHALL NOT invoke an external process to
+  read the structure.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventieth edition,* for rmp `#317`. The requirement
+  forbade every transaction statement, and the sixty-fifth edition gave no
+  ground for it. Read beside the statements it is listed with, it keeps out
+  what a transaction statement can do to the file or to the connections that
+  share it: start a write transaction, which `BEGIN IMMEDIATE` and
+  `BEGIN EXCLUSIVE` do at once and a write inside a deferred transaction
+  would do; stop other connections reading, which `BEGIN EXCLUSIVE` does; or
+  end a transaction with a rollback, which may abort the statements in
+  progress with `SQLITE_ABORT` — per
+  `https://sqlite.org/lang_transaction.html`, last updated 2026-02-18 and
+  checked 2026-11-04. A deferred transaction in which only the check and the
+  catalogue statements run does none of these: it takes the shared lock each
+  statement already takes, and holds it for the read instead of for one
+  statement, per `FR-LITE-042`. The prohibition
+  stands for every other transaction statement. Observed as *Observations*
+  above states: `BEGIN IMMEDIATE` and `BEGIN EXCLUSIVE` failed on the
+  read-only connection with `attempt to write a readonly database`
+  (`SQLITE_READONLY`), in both journal modes, and `BEGIN DEFERRED` followed
+  by `COMMIT` succeeded under `query_only`.
 
 - **FR-LITE-017**: WHEN the system opens a connection for a `sqlite` entry, it
   SHALL establish the kind of the file under `FR-LITE-005`, open it under
@@ -1212,8 +1276,10 @@ that public source on the same date.
   extension-loading control by `PRAGMA compile_options`, and the
   temporary-storage control by its read-back and by that statement — and
   every limit of `FR-LITE-011`, and only then issue the version probe of
-  `FR-LITE-002`, followed by the check of `FR-LITE-041`. Every other
-  catalogue statement SHALL follow the check.
+  `FR-LITE-002`, followed, where `FR-LITE-042` requires it, by
+  `BEGIN DEFERRED`, and then by the check of `FR-LITE-041`. Every other
+  catalogue statement SHALL follow the check, and the `COMMIT` of
+  `FR-LITE-042` SHALL follow the last of them.
 
   *Rationale.* The probe is the first statement that reads the file and loads
   its schema, per the observation under `FR-LITE-002`, so every control is in
@@ -1245,6 +1311,16 @@ that public source on the same date.
   and SQLite refuses to create a name beginning with `sqlite_`, per the
   observation under `FR-LITE-021`. The views control of `FR-LITE-010` is
   applied and confirmed with the others, before the probe.
+
+  *Amended in the seventieth edition,* for rmp `#317`: the two statements of
+  the read transaction of `FR-LITE-042` are placed. `BEGIN DEFERRED` reads
+  nothing; it follows the probe, so that the order up to the probe is
+  unchanged and the probe stays the first statement that reads the file, and
+  it precedes the check, so that the snapshot the read takes is the one the
+  check reads. `COMMIT` follows the last catalogue statement. Observed as
+  *Observations* above states: the statement trace reported `BEGIN DEFERRED`,
+  the check, the six catalogue statements and `COMMIT`, in that order, each
+  without the prefix `-- `.
 
 - **FR-LITE-041**: For a `sqlite` entry, after the version probe and before
   every other catalogue statement, the system SHALL issue one statement
@@ -1385,6 +1461,176 @@ that public source on the same date.
 
   *Added in the sixty-ninth edition,* for rmp `#317`.
 
+  *Note added in the seventieth edition,* for rmp `#317`. The check governs
+  the statements after it only if they read the schema it read. Issued as a
+  statement of its own, while every statement ran as its own transaction, it
+  left a writer free to commit between the check and a later statement, and
+  a table so added took the place of a function at exit `0`, as observed under
+  `FR-LITE-042`; a view so added is stopped by the views control of
+  `FR-LITE-010`. `FR-LITE-042` holds the check and the catalogue statements
+  in one read transaction. The requirement is unchanged: a file the check
+  refuses ends the read before any statement after the check, `COMMIT`
+  included.
+
+- **FR-LITE-042**: For a `sqlite` entry, WHEN a read issues a catalogue
+  statement after the check of `FR-LITE-041`, the system SHALL issue
+  `BEGIN DEFERRED` immediately before the check, and `COMMIT` immediately
+  after the last catalogue statement of the read has completed, so that the
+  check and every catalogue statement of the read run in one
+  [read transaction](glossary.md#read-transaction) and read one snapshot of
+  the file. No statement other than the check and the catalogue statements
+  SHALL run between the two. IF the read ends before its last catalogue
+  statement completes — the check refuses the file, a statement fails, or a
+  deadline ends one — THEN the system SHALL NOT issue `COMMIT`, and the
+  transaction SHALL end with the connection, which the library rolls back
+  when it closes. A command whose only catalogue statement is the check —
+  `tpl cfg database test`, under `FR-CFG-056` — SHALL issue neither
+  statement: one statement reads one snapshot of its own. The placement of
+  the two statements SHALL be verified by the statement record of
+  `FR-LITE-018`, under its first assertion.
+
+  *Rationale.* The check exists so that no table or view of the file takes
+  the place of a function the read reads through, and it can answer only for
+  the schema it reads. With each statement its own transaction, the check
+  read the file as last committed when the check ran, and each later
+  statement read it as last committed when that statement began, so a writer
+  that committed between the two changed what the later statement read
+  without the check seeing it. In one read transaction every statement reads
+  the snapshot the check read. SQLite's documentation states that a deferred
+  transaction starts when the database is first accessed, and that a
+  `SELECT` then starts a read transaction
+  (`https://sqlite.org/lang_transaction.html`, last updated 2026-02-18); that
+  in rollback-journal mode isolation is by locking, a writer waiting until
+  every shared lock clears before it can take the exclusive lock it writes
+  under (`https://sqlite.org/isolation.html`, last updated 2022-04-18, and
+  `https://sqlite.org/lockingv3.html`, last updated 2025-05-31); and that in
+  write-ahead-log mode a reader sees a snapshot, a write committed while its
+  read transaction is active staying invisible to it
+  (`https://sqlite.org/isolation.html`), its end mark "unchanged for the
+  duration of the transaction" (`https://sqlite.org/wal.html`, last updated
+  2026-08-25). All four pages were checked 2026-11-04.
+
+  *Observed,* as *Observations* above states, in rollback-journal mode and in
+  write-ahead-log mode alike unless a mode is named:
+
+  - Without the transaction, the check returned no row; the writer then
+    created a table `pragma_encoding` holding one row, `forged`, and
+    committed; and the statement reading the encoding returned `forged`,
+    while the statement listing the objects listed `pragma_encoding`. That is
+    the forgery at exit `0` the check exists to refuse, reached past it.
+  - With the transaction, the statement reading the encoding returned
+    `UTF-8`, and no statement listed `pragma_encoding`. In rollback-journal
+    mode the writer, given no busy timeout, failed with `database is locked`
+    (`SQLITE_BUSY`), and committed when tried again after `COMMIT`; given a
+    busy timeout of 5 s, it waited and committed after `COMMIT`. In
+    write-ahead-log mode the writer committed during the read, and the read
+    did not see it. After `COMMIT`, a new statement on the same connection
+    returned `forged`, in both modes.
+  - A writer that committed the same table after `BEGIN DEFERRED` and before
+    the check was seen by the check, which returned its row: the snapshot is
+    taken by the check, not by `BEGIN DEFERRED`.
+  - In rollback-journal mode, a reader's connection closed inside its
+    transaction without `COMMIT` held off a writer until the close and not
+    after it, and so did one whose statement an interrupt had ended inside the
+    transaction, per the note on `FR-LITE-009`.
+
+  *Why a transaction, and why these two statements.* It closes the race by
+  prevention: no statement of the read reads a schema the check did not
+  read, so nothing a writer adds during the read is ever read, compiled or
+  connected. It adds two statements and no condition: each can fail only with
+  a result code `FR-LITE-040` already classifies, and a read has the outcomes
+  it had. `DEFERRED` is the one form that takes no write lock: `IMMEDIATE`
+  starts a write at once, and `EXCLUSIVE` also stops other connections
+  reading, per `https://sqlite.org/lang_transaction.html`; both failed on the
+  read-only connection, per the observation under `FR-LITE-016`. `COMMIT`,
+  and not `ROLLBACK`, ends it: the transaction wrote nothing, so either ends
+  it alike, but `COMMIT` "runs immediately, even if there are pending SELECT
+  statements", where a `ROLLBACK` may abort them with `SQLITE_ABORT`, per the
+  same page. `SQLITE_ABORT` therefore stays in the row of `FR-LITE-040` that
+  takes the outcomes only an operation `tpl` does not perform produces. Both
+  ended the transaction under `query_only`, as observed.
+
+  *Why no `COMMIT` on a read that ends early.* The read has failed, and the
+  close ends the transaction as `COMMIT` would: "If an sqlite3 object is
+  destroyed while a transaction is open, the transaction is automatically
+  rolled back" (`https://sqlite.org/c3ref/close.html`, checked 2026-11-04).
+  Issuing nothing after the failure keeps the rule of `FR-LITE-041`, that a
+  refused file is read by no further statement, without an exception.
+
+  *Rejected: bracketing the read with the schema cookie* — reading
+  `PRAGMA schema_version` before the check and after the last catalogue
+  statement, and ending with `69`, the code `FR-LITE-040` gives another
+  connection changing the schema, when the two readings differ. The
+  statement form is not resolved among the file's objects: observed, over a
+  file holding a table `pragma_schema_version` whose one row held `999999`,
+  `PRAGMA schema_version` returned the cookie, `42`, where
+  `SELECT schema_version FROM pragma_schema_version` returned `999999`. It is
+  rejected on three grounds. It detects after the fact: every statement
+  between the two readings has already read through what the writer added —
+  observed, the statement reading the encoding returned `forged` before the
+  second reading — and a row of the third kind `FR-LITE-041` refuses, added
+  after the check, would have had its module run before the second reading,
+  per the observation under that requirement. It rests on a value the writer
+  sets: `PRAGMA schema_version` given a value sets the cookie, and defensive
+  mode makes that a no-op only on the connection that has it on — `tpl`'s,
+  not the writer's — per `https://sqlite.org/pragma.html`, last updated
+  2026-10-04 and checked 2026-11-04. Observed, in both modes: a writer that
+  created the table, let the statement reading the encoding return `forged`,
+  and then set the cookie back to `41` left both readings at `41`, and the
+  read would have ended at exit `0` with the forged encoding. And it adds
+  more than the transaction: a pragma the closed list does not hold, read
+  twice, and a new condition of `69`.
+
+  *Rejected: bracketing with `PRAGMA data_version`,* which a writer cannot
+  set — observed, a writer's `PRAGMA data_version = 1` left the reader's
+  value unchanged. It detects after the fact too, and it moves on every
+  commit by another connection, data included — observed, in both modes, a
+  one-row update moved it by one with the schema cookie unchanged — so a
+  read of a database an application writes to would end with `69` on any
+  write during it. *Rejected: repeating the check after the last catalogue
+  statement.* It detects after the fact, and a writer that adds the table
+  and drops it again between the two checks passes both.
+
+  *Why the record, and not a test with a writer.* The record shows whether
+  the check and the catalogue statements run between `BEGIN DEFERRED` and
+  `COMMIT`, which is what `tpl` decides. That one read transaction reads one
+  snapshot is the library's documented isolation, observed above; a test
+  that paused the read between two statements for a writer to commit would
+  test the library, through a pause no invocation has.
+
+  *Accepted cost, stated plainly.* In rollback-journal mode, a writer of the
+  database cannot commit while a read runs: it waits under its own busy
+  handler, or fails with `SQLITE_BUSY` without one, for as long as the check
+  and the catalogue statements take — under a millisecond each over the
+  fixture database, observed, and at most what their deadlines under
+  `FR-LITE-009` allow over a crafted file. Without the transaction it met the
+  same lock for as long as any one statement ran. In write-ahead-log mode no
+  writer is held off, and a checkpoint stops at the reader's snapshot until
+  `COMMIT`, per `https://sqlite.org/wal.html`, so the log may grow while the
+  read runs.
+
+  *What the transaction does not reach.* A process that writes the file's
+  bytes without the library's locks. SQLite's documentation states that "any
+  process can open the file and overwrite it with garbage", and that "there
+  is nothing that the SQLite library can do to defend against this"
+  (`https://sqlite.org/howtocorrupt.html`, last updated 2026-04-13 and checked
+  2026-11-04). Such a process changes what a statement reads inside a
+  transaction or outside one; what it writes is a damaged file, which
+  `FR-LITE-007` refuses where the library detects it, and this requirement
+  claims nothing against it.
+
+  *What it does not promise.* `FR-CTX-024` is unchanged: the document still
+  promises no snapshot, for either provider. The transaction exists so that
+  the check governs what the read reads, and a document served from the
+  cache mixes reads under `FR-CTX-025` whatever a read did.
+
+  *Provenance.* Found by the technical specification at `bc7885a`, against
+  the sixty-ninth edition. Chosen for rmp `#317` on the criterion the user
+  set for the provider, that it be the most secure, recorded under
+  `FR-LITE-020`, and on the observations above.
+
+  *Added in the seventieth edition,* for rmp `#317`.
+
 - **BR-LITE-001**: For a `sqlite` entry the read-only promise of `BR-SEC-002`
   has three parts, and two of them prevent. The read-only open of
   `FR-LITE-006` prevents at the library: a connection opened that way cannot
@@ -1392,9 +1638,21 @@ that public source on the same date.
   what `tpl` is built to send. `query_only` makes a write fail on a connection
   that could otherwise make one, and is defence in depth beside the two. No
   flag disables any of them, per `FR-LITE-014`. What the promise does not
-  cover, in write-ahead-log mode, is stated by `FR-LITE-008`.
+  cover, in write-ahead-log mode, is stated by `FR-LITE-008`. The
+  [read transaction](glossary.md#read-transaction) of `FR-LITE-042` is part of
+  the read and not a breach of the promise: deferred, and running only the
+  check and the catalogue statements, it takes the shared lock every
+  statement takes and writes nothing, and a transaction that could write is
+  refused by the read-only open and excluded by `FR-LITE-016`.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventieth edition,* for rmp `#317`: the last sentence is
+  new. Observed as *Observations* above states: a read of the fixture
+  database in rollback-journal mode, inside the transaction, left the file's
+  bytes, its size and its modification time unchanged, and no file appeared
+  in its directory; in write-ahead-log mode the file was likewise unchanged,
+  and the two files `FR-LITE-008` admits appeared beside it.
 
 - **FR-LITE-018**: The closed list of `FR-LITE-015` and the order of
   `FR-LITE-017` SHALL be verified by an integration test that records, through
@@ -1542,6 +1800,17 @@ that public source on the same date.
   statement compiles a view or connects a virtual table is new, now that no
   statement invokes that function, and the observation records why it names
   a database of its own. The two assertions on the record are unchanged.
+
+  *Note added in the seventieth edition,* for rmp `#317`. The requirement is
+  unchanged. The record of a read now holds `BEGIN DEFERRED` before the check
+  and `COMMIT` after the last catalogue statement, both statements of
+  `FR-LITE-015` reported without the prefix `-- `, and the first assertion
+  places them in the order of `FR-LITE-017`; that is how `FR-LITE-042` is
+  verified. Neither fires a trigger, so the reading of every prefixed text as
+  a nested statement holds. Observed as *Observations* above states, over the
+  main fixture database in both journal modes and over an empty file of zero
+  bytes: the trace reported the two statements, in their places, and no
+  prefixed text but the pragma functions' own.
 
 ## The part of the database a read covers
 
@@ -2347,6 +2616,12 @@ that public source on the same date.
   time each takes is linear in the objects, per the figures under
   `FR-LITE-009`; this requirement fixes how many statements a read issues,
   not how long one takes.
+
+  *Note added in the seventieth edition,* for rmp `#317`. A full read also
+  issues the `BEGIN DEFERRED` and the `COMMIT` of `FR-LITE-042`, once each.
+  Neither is a catalogue statement, per `FR-LITE-015`, so neither enters the
+  count this requirement fixes, and both are issued once whatever the
+  objects.
 
 ## The fixture
 

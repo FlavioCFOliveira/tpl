@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, sqlite-contract.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-nine editions. All are in force;
+The specification has been written in seventy editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -5396,6 +5396,98 @@ with the properties every table carries, under the requirements that give
 them. The fifth validation rule owes nothing for this edition: neither root
 document, read at `cb99236`, states the escaping of a value, the hardening of
 a SQLite read, what it covers, or the statements it issues.
+
+### Seventieth edition — the check and the catalogue in one snapshot
+
+rmp `#317`, of sprint 27, closes one defect the technical specification
+found at `bc7885a` against the sixty-ninth edition. The check of
+`FR-LITE-041` ran as a statement of its own, before the six catalogue
+statements, and `FR-LITE-016` forbade every transaction statement, so each
+statement read the file as last committed when it began. A writer that
+committed a table named like a pragma table-valued function after the check
+and before a later statement replaced that function and forged the catalogue
+at exit `0`; a view so added is stopped by the views control of
+`FR-LITE-010`. The choice between the candidates is made on the criterion
+the user set for the provider, that it be the most secure, recorded under
+`FR-LITE-020`, and on observations of 2026-11-04 through the Python library
+3.54.1, the release the binary carries, under the read-only connection and
+every control of `FR-LITE-010`. No requirement changes its meaning for a
+`mariadb` entry.
+
+**One identifier is assigned: `FR-LITE-042`.** None is withdrawn or
+renumbered. [glossary.md](glossary.md) gains *read transaction*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **One read transaction** — `FR-LITE-042`, new, in
+  [sqlite-contract.md](sqlite-contract.md), issues `BEGIN DEFERRED`
+  immediately before the check and `COMMIT` immediately after the last
+  catalogue statement, so that the check and every catalogue statement read
+  one snapshot: in rollback-journal mode a writer cannot commit until the
+  read ends, and in write-ahead-log mode what it commits stays invisible to
+  the read. A read that ends early issues no `COMMIT`, and the close of the
+  connection rolls the transaction back; `tpl cfg database test`, whose only
+  catalogue statement is the check, issues neither. Observed: without the
+  transaction, in both modes, a writer's table `pragma_encoding` made the
+  read return the encoding `forged` and list the table; with it, the read
+  returned `UTF-8` and no such table, the writer failing with `SQLITE_BUSY`
+  in rollback-journal mode and committing unseen in write-ahead-log mode.
+  The statement record of `FR-LITE-018` verifies the placement. The accepted
+  cost is stated: in rollback-journal mode an application's writer waits, or
+  fails with `SQLITE_BUSY`, for as long as the read's statements take; and a
+  process that writes the file's bytes without the library's locks is
+  outside what any read can withstand, as SQLite's documentation states.
+  `FR-CTX-024` is unchanged: the document still promises no snapshot.
+- **The rejected option, and two others** — bracketing the read with
+  `PRAGMA schema_version` and ending with `69` when it moved. The statement
+  form was observed not to be replaced by a table of that name, but the
+  option detects only after the statements have read through what the writer
+  added, and it rests on a value the writer sets: a writer that set the
+  cookie back after the forged read left both readings equal, and the read
+  would have ended at exit `0`. It also adds a pragma to the closed list and
+  a condition of `69`. Bracketing with `PRAGMA data_version`, which a writer
+  cannot set, moves on every commit, data included, and would fail a read of
+  any database written during it; repeating the check is passed by a table
+  added and dropped between the two checks.
+- **The statements and their order** — `FR-LITE-015` gains a third row,
+  `BEGIN DEFERRED` and `COMMIT`, and the catalogue row stays the last; the
+  two are not catalogue statements, so `FR-LITE-037`, `NFR-PERF-008` and
+  `FR-GLOB-017` count neither, and `FR-LITE-037` says so in a note.
+  `FR-LITE-016` admits those two and no other transaction statement, and
+  records the ground its prohibition had: a transaction that writes, that
+  stops other connections reading, or that ends with a rollback aborting the
+  statements in progress. `BEGIN IMMEDIATE` and `BEGIN EXCLUSIVE` were
+  observed to fail on the read-only connection. `FR-LITE-017` places
+  `BEGIN DEFERRED` between the probe and the check and `COMMIT` after the
+  last catalogue statement, and the note on `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) puts the first in
+  step 6, with no new code.
+- **The read-only promise and the deadline** — `BR-LITE-001` states that the
+  deferred transaction takes the shared lock every statement takes and writes
+  nothing; observed, a read inside it left the file's bytes, size and
+  modification time unchanged in both modes, and no file appeared in
+  rollback-journal mode. A note on `FR-LITE-009` states that a writer's lock
+  is now met at the check and at no later statement, and that an interrupt
+  inside the transaction leaves it to the close; the requirement is
+  unchanged.
+- **The cross-references** — a note on `FR-LITE-041` and on `FR-LITE-018`,
+  and `FR-SEC-028` in [security.md](security.md), which requires the one
+  snapshot and names, among its threats, a table or a view another
+  connection adds during the read.
+
+`FR-LITE-008`, `FR-LITE-019`, `FR-LITE-040`, `FR-CFG-056`, `FR-CONF-005`,
+`FR-RND-040`, `FR-CTX-024`, `FR-CTX-025`, `FR-CDOC-015`, `NFR-PERF-001` and
+`NFR-PERF-008` were read against the changes. None conflicts with them, so
+none is amended: the files of write-ahead-log mode are those the read
+already made; the two statements name no schema; each result code they can
+return is in a row of `FR-LITE-040`, and with `COMMIT` chosen over
+`ROLLBACK`, `tpl` still requests no abort or rollback; the test issues one
+statement and no transaction; every statement keeps its own deadline; the
+transaction ends before the connection closes and so before any render; no
+document promises a snapshot; and the count those two requirements take is
+of the last row of `FR-LITE-015` alone. The fifth validation rule owes
+nothing for this edition: neither root document, read at `bc7885a`, states
+the transactions or the statements of a SQLite read.
 
 ### Still out of scope
 
