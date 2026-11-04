@@ -29,8 +29,9 @@
 //!
 //! **Every statement after the check that reads the schema table selects the
 //! row's `type` first and its `name` second**, so that a value of the schema
-//! table of a class the check refuses — which only a file changed after the
-//! check can hold — is reported with the row it belongs to (`FR-LITE-040`, its
+//! table of a class the check refuses — which, inside the read transaction of
+//! `FR-LITE-042`, only a process that writes the file without SQLite's locks
+//! can put there — is reported with the row it belongs to (`FR-LITE-040`, its
 //! paragraph on values).
 
 /// The confirmation of the extension-loading control, and of the build the

@@ -141,8 +141,9 @@ pub(crate) fn verdict(values: [ValueRef<'_>; 5]) -> Option<RefusedRow> {
 }
 
 /// The refusal of a value of the schema table that a statement after the
-/// check reads in a class the check refuses — which only a file changed after
-/// the check can hold (`FR-LITE-040`, its paragraph on values).
+/// check reads in a class the check refuses — which, inside the read
+/// transaction of `FR-LITE-042`, only a process that writes the file without
+/// SQLite's locks can put there (`FR-LITE-040`, its paragraph on values).
 ///
 /// `kind` and `name` are the row's `type` and `name` where the statement read
 /// them, and `column` and `value` the value refused.

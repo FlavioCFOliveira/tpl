@@ -5,16 +5,19 @@ All configuration lives in `.tpl/.cfg` (TOML) of the project. There is no global
 ## The key space (closed; an unknown key is refused)
 
 - `[core]`: `database` (the default entry), `connect_timeout` (10), `query_timeout` (30), `password_timeout` (5), `render_timeout` (30), `render_fuel` (100000000), `render_output_limit` (67108864), `render_memory_limit` (134217728). Times are whole seconds, 1 or more. No key admits 0.
-- `[database.NAME]`: `dsn`, **or** the discrete fields `host`, `port` (3306), `user`, `password`, `database`. Either shape may add `password_command`, `tls` (default `verify-identity`), `ca_file` and `ca_path`. `password` and `password_command` exclude each other.
+- `[database.NAME]`: `provider`, `mariadb` (the default, also when the key is absent) or `sqlite`. Each provider takes only its own keys:
+  - `mariadb`: `dsn`, **or** the discrete fields `host`, `port` (3306), `user`, `password`, `database`. Either shape may add `password_command`, `tls` (default `verify-identity`), `ca_file` and `ca_path`. `password` and `password_command` exclude each other.
+  - `sqlite`: `path`, the database file, and nothing else.
 - Entry names are 1 to 64 letters, digits or underscores.
 
-A key outside the space, or a value of the wrong type, anywhere in the file, makes every command that reads it exit 78, naming the line. The file is read strictly and never repaired.
+A key outside the space, or a value of the wrong type, anywhere in the file, makes every command that reads it exit 78, naming the line. The file is read strictly and never repaired. An entry carrying a key its provider does not take (for example `path` with no `provider`) exits 78 when a command selects it; `tpl cfg database show NAME` shows what it carries.
 
 ## Which command for which change
 
 | Goal | Command |
 |---|---|
 | Create an entry | `tpl cfg database add NAME --host … --user … --schema …` or `--dsn URL` |
+| Register a SQLite file | `tpl cfg database add NAME --provider sqlite --path FILE` |
 | Change some fields | `tpl cfg database update NAME --host …` (other fields keep their values) |
 | Set one key | `tpl cfg set database.NAME.tls verify-ca`, `tpl cfg set core.query_timeout 60` |
 | Remove a field or an entry | `tpl cfg unset database.NAME.port`, `tpl cfg database remove NAME` |
@@ -22,13 +25,29 @@ A key outside the space, or a value of the wrong type, anywhere in the file, mak
 | Inspect safely | `tpl cfg list --format json`, `tpl cfg database show NAME --format json` (redacted) |
 | Read one raw value | `tpl cfg get KEY` (**not redacted**: never use it on a password key in a transcript) |
 
-`cfg get` on a key the file does not set exits 66, and its message states the default. `add` never overwrites an existing entry (64), and `update` never creates one (66). The `cfg` commands write atomically, keep comments and key order, and never touch the cache.
+`cfg get` on a key the file does not set exits 66, and its message states the default. `add` never overwrites an existing entry (64), and `update` never creates one (66). A write that would leave an entry carrying a key its provider does not take is refused (64): to move to the other provider, add a new entry. The `cfg` commands write atomically, keep comments and key order, and never touch the cache.
 
 Edit the file by hand only for what no command can write: a `${VAR}` for `port` (`port = "${SHOP_PORT}"`). Afterwards, keep the mode at 0600 and run `tpl cfg list` to confirm the file still parses.
 
+## SQLite entries
+
+```sh
+tpl cfg database add ledger --provider sqlite --path data/ledger.sqlite
+tpl cfg database test ledger --format json
+tpl -d ledger schema tables --format json
+```
+
+- `path` is read literally: no `${VAR}` and no `~` is expanded, and a value holding `${` is refused (64 on the command line, 78 in the file). A relative path is resolved against the directory that holds `.tpl/`, never the current directory. Use an absolute path for a file kept elsewhere.
+- The path must name a regular file; a symbolic link to one is followed. The file is opened read-only and never created, so a missing file is exit 74, never an empty database.
+- The file is untrusted input. `tpl` reads it with the SQLite library built into the binary, which cannot load extensions, after setting and reading back safeguards and limits (`trusted_schema` off, defensive mode, views disabled, a length limit, no attached databases, among others). No flag or key relaxes them. A file that is not a SQLite database, is damaged, or holds a schema `tpl` refuses (for example a table or view named `pragma_…`, or a value over the length limit) is exit 78.
+- `core.query_timeout` bounds every statement, including a wait for a writer's lock (69 when it expires). `connect_timeout` and `password_timeout` have no effect.
+- A database in write-ahead-log mode keeps `FILE-wal` and `FILE-shm` beside it, and SQLite may create both on a read and leave them. If they are absent and the directory refuses them, the read is exit 74.
+- No password, no TLS, no privileges: a SQLite read is complete or fails, and is never exit 77.
+- `cfg database test` on a SQLite entry: `connected` is the read-only open, `read_only_session` the safeguards, `server` the SQLite library (`standing` is always `supported`), and `can_read_catalogue` the check of the schema, always `true` at exit 0.
+
 ## Credentials
 
-Order of preference:
+These apply to a `mariadb` entry. Order of preference:
 
 1. **`password_command`**: `--password-command "security find-generic-password -s tpl-shop -w"`. It is given as one string, split like a shell would split it, stored as an array, and run **without** a shell. Its trimmed stdout is the password (at most 4096 bytes). A non-zero exit, a timeout (`core.password_timeout`) or too much output is exit 78. `${VAR}` is not expanded inside it.
 2. **`${VAR}` reference**: `tpl cfg set database.NAME.password '${SHOP_PASSWORD}'`, or inside a DSN: `'mysql://user:${SHOP_PASSWORD}@host:3306/db'`. Use single quotes so your shell passes it literally. It is expanded only in `dsn`, `host`, `port`, `user`, `password` and `database`. `$$` is a literal `$`. Never expanded: `tls`, `ca_file`, `ca_path` (a `${` there is refused), `password_command`, and every `[core]` key.
@@ -62,11 +81,11 @@ Rules for the operator:
 
 ## Read-only guarantee
 
-`tpl` runs only `SELECT` statements, most of them against `INFORMATION_SCHEMA`. It makes each session read-only first, and exits 78 if that cannot be done. No flag or key disables this. The database user needs only read access to the catalogue of the target schema. `tpl cfg database test` reports `read_only_session` and `can_read_catalogue`. A user who can log in but can't read the catalogue gets 77 on schema reads, or objects marked `restricted` in listings.
+For a `mariadb` entry, `tpl` runs only `SELECT` statements, most of them against `INFORMATION_SCHEMA`. It makes each session read-only first, and exits 78 if that cannot be done. For a `sqlite` entry, it opens the file read-only and reads the catalogue only through the schema table `sqlite_schema` and SQLite's pragma functions. No flag or key disables this. The database user needs only read access to the catalogue of the target schema; a SQLite file needs only read access to the file. `tpl cfg database test` reports `read_only_session` and `can_read_catalogue`. A user who can log in but can't read the catalogue gets 77 on schema reads, or objects marked `restricted` in listings.
 
-Supported servers are MariaDB only, in a window of series listed in `specification/server-contract.md` (for v0.0.1: 10.11, 11.4, 11.8 and 12.3). MySQL and servers below the window exit 78. A series newer than the window is read, and reported with `standing: newer_than_supported`.
+Supported servers are MariaDB only, in a window of series listed in `specification/server-contract.md` (for v0.0.1: 10.11, 11.4, 11.8 and 12.3). MySQL and servers below the window exit 78. A series newer than the window is read, and reported with `standing: newer_than_supported`. No window applies to SQLite: the library is the one built into `tpl`, and `standing` is always `supported`.
 
 ## Cache interplay
 
-- Changing `host`, `port`, `user`, `database`, `tls` or `dsn`, or removing or re-adding an entry, keeps its cache under `.tpl/.cache/NAME/`, and that cache keeps being served. The command warns on stderr. Run `tpl -d NAME cache clean` afterwards.
+- Changing `host`, `port`, `user`, `database`, `tls`, `dsn`, `provider` or `path`, or removing or re-adding an entry, keeps its cache under `.tpl/.cache/NAME/`, and that cache keeps being served. The command warns on stderr. Run `tpl -d NAME cache clean` afterwards.
 - `cache clean` also removes the cache of an entry that no longer exists (`tpl -d OLD cache clean`).

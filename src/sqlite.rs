@@ -608,7 +608,9 @@ fn integer(row: &Row<'_>, at: usize) -> Result<i64, Misread> {
 /// (`catalogue::statements`): the value where its class is one `admitted`
 /// takes, and otherwise the `78` of the check — a value of the schema table of
 /// a class the check refuses is a condition of the file, never a defect of
-/// `tpl` (`FR-LITE-040`, its paragraph on values).
+/// `tpl` (`FR-LITE-040`, its paragraph on values). The check read the same
+/// snapshot, inside the read transaction of `FR-LITE-042`, so only a process
+/// that writes the file without SQLite's locks can put such a value there.
 fn schema_value<'r, T>(
     row: &'r Row<'_>,
     at: usize,

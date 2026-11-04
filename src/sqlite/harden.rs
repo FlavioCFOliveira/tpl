@@ -1,5 +1,5 @@
-//! The hardening controls and limits of a connection, each set and read back
-//! (`FR-LITE-010` … `FR-LITE-012`).
+//! The nine hardening controls and the three limits of a connection, each set
+//! and read back (`FR-LITE-010` … `FR-LITE-012`).
 //!
 //! Every comparison of a value set with the value read back is a function of
 //! its own, separable from any connection, so the refusal of `FR-LITE-012` is
@@ -11,6 +11,7 @@
 //! | Read-only open | The open's flags | `sqlite3_db_readonly` on `main` |
 //! | Defensive mode | `SQLITE_DBCONFIG_DEFENSIVE` | Its read-back |
 //! | `trusted_schema` off | `SQLITE_DBCONFIG_TRUSTED_SCHEMA` | Its read-back |
+//! | Views disabled | `SQLITE_DBCONFIG_ENABLE_VIEW` | Its read-back |
 //! | `query_only`, `cell_size_check`, `mmap_size`, `temp_store` | Their pragmas | Their pragmas, and for `temp_store` the `TEMP_STORE` row of `PRAGMA compile_options` |
 //! | The three limits of `FR-LITE-011` | `sqlite3_limit` | `sqlite3_limit` |
 //!

@@ -1,13 +1,13 @@
 # Command map
 
-Every node of the `tpl` command tree, as `tpl help --format json` publishes it for v0.0.1. This map says what exists and what each command needs. For exact flags, value types and exit codes, the binary is the authority:
+Every node of the `tpl` command tree, as `tpl help --format json` publishes it. This map says what exists and what each command needs. For exact flags, value types and exit codes, the binary is the authority:
 
 ```sh
 tpl help <path>                   # text, e.g. tpl help cfg database add
 tpl help <path> --format json     # the same, as a stable document; aliases work in <path>
 ```
 
-Legend for **Needs**: **P** is a project (`.tpl/` found, or `--tpl-dir`). **E** is a selected database entry (`-d NAME` or `core.database`). **S** means it may connect to the server (only on a cache miss, unless marked *always*). **W** means it writes files under `.tpl/`.
+Legend for **Needs**: **P** is a project (`.tpl/` found, or `--tpl-dir`). **E** is a selected database entry (`-d NAME` or `core.database`). **S** means it may connect to the server, or open the SQLite file, of the entry (only on a cache miss, unless marked *always*). **W** means it writes files under `.tpl/`.
 
 A group node (`tpl schema`, `tpl template`, `tpl cache`, `tpl cfg`, `tpl cfg database`) given no subcommand prints its help and exits 0.
 
@@ -32,12 +32,12 @@ All `schema` subcommands read through the cache and declare `--direct` (read the
 | Command | Alias | Purpose | Needs | JSON `data` |
 |---|---|---|---|---|
 | `tpl schema` | | Group: reads the structure of the selected database | | |
-| `tpl schema info` | | Name, charset, collation and server of the database. Text output adds object counts | P E S | `database` (without collections) |
+| `tpl schema info` | | Name, charset, collation, provider and server of the database. Text output adds object counts | P E S | `database` (without collections) |
 | `tpl schema tables` | `tbls` | Lists tables. `--pattern` takes a LIKE pattern (`%`, `_`) | P E S | `tables` (full objects) |
 | `tpl schema table NAME` | `tbl` | Describes one table: columns, primary key, indexes, foreign keys, referenced by, triggers, CHECKs | P E S | `table` |
 | `tpl schema views` | `vws` | Lists views. `--pattern` | P E S | `views` |
 | `tpl schema view NAME` | `vw` | Describes one view, with its SQL definition | P E S | `view` |
-| `tpl schema routines` | `rtns` | Lists procedures and functions, each with its `kind`. `--pattern` | P E S | `routines` |
+| `tpl schema routines` | `rtns` | Lists procedures and functions, each with its `kind`. `--pattern`. Always empty for SQLite, which has none | P E S | `routines` |
 | `tpl schema routine NAME` | `rtn` | Describes one routine. `NAME` may be `procedure:NAME` or `function:NAME` | P E S | `routine` |
 | `tpl schema dump` | | The whole database as one JSON document, the input for `render --context`. Always JSON, so `--format` is exit 64 | P E S | `database` (with `tables`, `views`, `routines`) |
 
@@ -82,12 +82,12 @@ Only `cfg database test` connects. No `cfg` command touches the cache.
 | `tpl cfg unset KEY` | | Removes a key or a whole block (`database.NAME`, `database`) | P W | none |
 | `tpl cfg list` | | The whole file, passwords redacted. Text output keeps comments | P | `core`, `database` |
 | `tpl cfg database` | `db` | Group: manages database entries (`tpl cfg db list` works) | | |
-| `tpl cfg database add NAME` | | Creates an entry from `--dsn`, or from `--host`/`--port`/`--user`/`--schema`, plus optional `--tls`, `--password-command`, `--ca-file`, `--ca-path` | P W | none |
+| `tpl cfg database add NAME` | | Creates a MariaDB entry from `--dsn`, or from `--host`/`--port`/`--user`/`--schema`, plus optional `--tls`, `--password-command`, `--ca-file`, `--ca-path`; or a SQLite entry from `--provider sqlite --path FILE` and no other flag | P W | none |
 | `tpl cfg database list` | | Entry names | P | `entries` (`[{"name":…}]`) |
 | `tpl cfg database show NAME` | | One entry, passwords redacted | P | `entry` |
 | `tpl cfg database update NAME` | | Changes only the fields named by the flags given (same flags as `add`) | P W | none |
 | `tpl cfg database remove NAME` | | Deletes an entry, and clears `core.database` if it named it | P W | none |
-| `tpl cfg database test NAME` | | Connects and reports four answers. Exit 0 means the checks ran, not that all passed | P S (always) | `entry`, `connected`, `read_only_session`, `server`, `can_read_catalogue` |
+| `tpl cfg database test NAME` | | Connects and reports four answers. Exit 0 means the checks ran, not that all passed. For a SQLite entry: the file opened read-only, every safeguard took effect, the SQLite library's version, and the schema was readable (always `true` at exit 0) | P S (always) | `entry`, `connected`, `read_only_session`, `server`, `can_read_catalogue` |
 
 ## Project and self-description
 

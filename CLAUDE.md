@@ -31,11 +31,11 @@ It is **agent coordination**: it states what the project is, where the truth abo
 
 ## Overview
 
-`tpl` is a **command-line application written in Rust** that reads the structure (DDL / schema) of **MariaDB** databases and applies **MiniJinja templates** to produce text or code from that structure.
+`tpl` is a **command-line application written in Rust** that reads the structure (DDL / schema) of **MariaDB** databases and **SQLite** database files — the provider each database entry names — and applies **MiniJinja templates** to produce text or code from that structure.
 
 The interaction model is **inspired by `git`**: a single executable, subcommands, short aliases, and read commands with stable output, designed for composition in pipelines.
 
-**Product scope.** `tpl` explores the database, explores the project's templates, and renders one from the other. It is **read-only** on the database, and the only disk writes it makes are those explicitly requested on the command line, plus the management of its own project folder. A feature that does not fit this does not belong in `tpl`.
+**Product scope.** `tpl` explores the database, explores the project's templates, and renders one from the other. It is **read-only** on the database, and the only disk writes it makes are those explicitly requested on the command line, plus the management of its own project folder, plus the write-ahead-log files a SQLite read may cause beside the database, which `FR-LITE-008` states. A feature that does not fit this does not belong in `tpl`.
 
 **Primary consumer: AI agents.** The expected user is not a person at an interactive shell — it is an agent (Claude Code, Codex and equivalents) invoking the tool programmatically and reading the result. An agent has three channels to understand a CLI, and only three: the **help text**, the **exit code**, and **stdout/stderr**. This is a first-order design requirement, and the reason help, exit codes, output formats and determinism are treated as contract. **The content of that contract belongs to the specification, not to this file.**
 
@@ -77,7 +77,8 @@ The complete, current index is `specification/README.md`, and that is where to s
 | Structure of the document that carries the model — the render context | `specification/context-document.md` |
 | Filters, tests and global functions available to the template | `specification/template-environment.md` |
 | Render semantics | `specification/render-semantics.md` |
-| Supported MariaDB series, differences between series, the read-only promise | `specification/server-contract.md` |
+| Supported MariaDB series, differences between series, the read-only promise of a `mariadb` entry | `specification/server-contract.md` |
+| The SQLite provider: the library, the database file, hardening, the closed statement list, how the catalogue fills the model, the read-only promise of a `sqlite` entry, the fixture | `specification/sqlite-contract.md` |
 | Incomplete reads caused by insufficient privileges | `specification/privileges-and-completeness.md` |
 | Required performance properties, reference workloads, measurement protocol | `specification/performance-requirements.md` |
 | Terms, end-to-end use cases, open questions | `specification/glossary.md`, `specification/use-cases.md`, `specification/open-questions.md` |
@@ -102,7 +103,7 @@ These rules are not weighed case by case. Each has a section that develops it; t
 | **Nothing outside the repository root is read, listed or referenced** — except a reference open-source project at its public source | **STOP**. Ask the user for what is missing |
 | **`unsafe` is forbidden**; `#![forbid(unsafe_code)]` stays at the top of the crate | **STOP** and solve it in safe Rust |
 | **Every change carries the tests that prove it**, and the **validation tier the moment calls for** passes before the work is complete — no wider, no narrower | The work **is not complete**. Fix and repeat |
-| `tpl` **never writes to the database** | **STOP**. The catalogue is read only through `INFORMATION_SCHEMA` |
+| `tpl` **never writes to the database** | **STOP**. The catalogue is read only through `INFORMATION_SCHEMA` for a `mariadb` entry, and through `sqlite_schema` and the pragma functions of `FR-LITE-015` for a `sqlite` entry |
 | Templates load **at runtime**, never embedded at compile time | **STOP**. Compile-time engines are excluded |
 | Validation that needs a database uses the **project fixture**, operated by its harness | **STOP** and start it through the harness. Never by hand, never mocks or external instances |
 | **Nothing is started that was not explicitly requested** | **STOP**. Record the finding and ask the user how to proceed |
@@ -494,9 +495,9 @@ Two permanent constraints on implementation choices. They take priority over any
 
 ### 1. Absolute read-only
 
-`tpl` **never** issues DDL, DML or any write statement against the database it connects to, and no flag turns this behaviour off. The catalogue is read through `INFORMATION_SCHEMA` — never through `mysqldump` or any external process.
+`tpl` **never** issues DDL, DML or any write statement against the database it connects to, and no flag turns this behaviour off. The catalogue is read through `INFORMATION_SCHEMA` for a `mariadb` entry, and through `sqlite_schema` and the pragma functions of `FR-LITE-015` for a `sqlite` entry — never through `mysqldump` or any external process.
 
-The detail of the guarantee — how read-only mode is imposed on the session, what happens when it cannot be imposed, and which statements are admissible — belongs to `specification/server-contract.md` and is read there.
+The detail of the guarantee — how read-only mode is imposed, what happens when it cannot be imposed, and which statements are admissible — belongs to `specification/server-contract.md` for a `mariadb` entry and to `specification/sqlite-contract.md` for a `sqlite` entry, and is read there.
 
 ### 2. Runtime rendering, with MiniJinja
 
@@ -515,7 +516,8 @@ The record of binding technology choices. Any change to this table is an archite
 | Language | Rust (edition 2024) | MSRV fixed in `ADR-007`, in `docs/adr/` |
 | CLI | `clap` v4 (derive) | Command tree, aliases, `--help` per subcommand |
 | Templates | `minijinja` + `minijinja-contrib` | Runtime, always |
-| MariaDB access | `sqlx` + `tokio` | Versions, runtime scope and the rejected candidate: `ADR-003` and `ADR-005`, in `docs/adr/` |
+| MariaDB access | `sqlx-core` + `sqlx-mysql`, with `tokio` | Taken directly, not through the `sqlx` facade; versions, features, runtime scope and the rejected candidate: `ADR-003` and `ADR-005`, in `docs/adr/` |
+| SQLite access | `rusqlite`, with the bundled SQLite library built with extension loading compiled out | Driver, library release, build options and rejected alternatives: `ADR-013`, in `docs/adr/` |
 | Serialisation | `serde` + `serde_json` | The render context is `serde`-serialisable |
 | Configuration | `toml` + `serde` for reading; `toml_edit` for writing | Writing preserves comments and order; `OD-09`, in `docs/spec-technical/open-decisions.md` |
 | Errors | `thiserror` in the library; the binary carries no error type of its own | `main.rs` reads the library's `exit_code` and returns it; `OD-32`, in `docs/spec-technical/open-decisions.md` |
@@ -555,7 +557,9 @@ tpl/
 │   ├── main.rs              # entry point: parse, dispatch, exit-code mapping
 │   ├── cli/                 # clap tree — one module per porcelain command
 │   ├── project/             # project-folder discovery and configuration reading
+│   ├── provider.rs          # dispatch of a read to the selected entry's provider
 │   ├── mariadb/             # INFORMATION_SCHEMA reader (read-only)
+│   ├── sqlite/              # SQLite catalogue reader (read-only, hardened)
 │   ├── model/               # the model read from the catalogue
 │   ├── render/              # MiniJinja Environment, loader, filters, tests, functions
 │   └── error.rs             # error type + exit codes
@@ -563,6 +567,7 @@ tpl/
 ├── tests/                   # integration tests (end-to-end CLI)
 ├── benches/                 # benchmarks
 ├── scripts/mariadb/         # MariaDB fixture: images, SQL, TLS material, harness
+├── scripts/sqlite/          # SQLite fixture: SQL text built into databases at test time
 ├── examples/                # complete pipelines: schema → template → output
 ├── specification/           # functional specification
 └── docs/                    # technical specification and decision records (ADR)
@@ -700,7 +705,7 @@ For optimisation work, use the `rust-perf-engineer` agent; for cause-and-effect 
 
 ## Testing against MariaDB
 
-Tests or validations that need a real database **must** use the fixture defined in `scripts/mariadb/`. **Never** use external instances, mocks or stubs as a substitute.
+Tests or validations that need a real database **must** use the fixture of the provider they read: `scripts/mariadb/` for MariaDB, and `scripts/sqlite/` for SQLite, below. **Never** use external instances, mocks or stubs as a substitute.
 
 `scripts/mariadb/` does not hold only server images and SQL: the servers present the TLS certificate versioned in `scripts/mariadb/tls/`, and beside them runs a server that offers no TLS at all. What is there, how it is launched and how it is verified is in `scripts/mariadb/README.md` — **read it there; it is not copied here**.
 
@@ -723,6 +728,8 @@ Whenever the content, structure or types returned by an `INFORMATION_SCHEMA` que
 The scripts `scripts/mariadb/setup.sql` and `seed.sql` must exhaustively cover the catalogue surface `tpl` reads: every native MariaDB data type, simple and composite primary keys, unique and composite indexes, foreign keys with distinct `ON UPDATE`/`ON DELETE` rules, generated columns, views, procedures and functions, triggers, and comments. The modelled domain must be realistic, never `id=1, name='test'`. The DDL must be accepted by **every** supported series.
 
 The demand for exhaustiveness does not end at the catalogue: it applies equally to the transport surface, and it is `FR-CONF-038`, in `specification/configuration-model.md`, that fixes what the TLS material and the server without TLS must make demonstrable.
+
+**SQLite.** A test that reads a SQLite database uses the fixture of `scripts/sqlite/`: SQL text that the tests build into database files at test time, through the SQLite library the binary carries. No binary database file is committed, and there is no container and no harness to start. What each file builds, and how the tests build it, is in `scripts/sqlite/README.md`; what the fixture must cover is `FR-LITE-038`, in `specification/sqlite-contract.md`. **Neither is copied here.**
 
 ## Documentation
 
