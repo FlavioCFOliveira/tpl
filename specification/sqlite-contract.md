@@ -127,6 +127,40 @@ the same file was the writer. The database of one
 table and 320 000 views that `FR-LITE-009` records served the reading of the
 deadline.
 
+*Observed again on 2026-11-04, for the seventy-first edition,* for rmp
+`#317`, on `aarch64-apple-darwin`, through the Python library **3.54.1**, on
+a read-only connection under every control of `FR-LITE-010`, views disabled
+included, and every limit of `FR-LITE-011` that a Python connection can set,
+with the statements of `FR-LITE-015` as the seventieth edition writes them.
+The databases read were built for single questions, outside this repository:
+each held a table, an index, a view and a trigger in the freight domain, and
+had the `type` of one row of the schema table rewritten under
+`writable_schema` by a connection whose defensive mode was off. Whether the
+object of that row still worked in the library was read on a copy, through an
+ordinary read-write connection with views enabled. The main fixture database
+of `FR-LITE-038`, and the databases `internal.sql` and `fts5_view.sql` build,
+were built from `scripts/sqlite/` outside this repository for the comparisons
+that needed them. Further databases were built for two questions: which rows
+SQLite writes with no text, over a database holding a text primary key,
+single and composite `UNIQUE` constraints, a `WITHOUT ROWID` table with a
+`UNIQUE` column, `AUTOINCREMENT`, a `STRICT` table with a generated column,
+`fts5`, `fts4` and `rtree` tables, and the statistics `ANALYZE` writes; and
+how the catalogue reports a name one object writes for another in a
+different letter case, where how SQLite resolved such a name was read by
+inserting rows with foreign keys enforced, on an ordinary read-write
+connection. A final sweep took each column of the schema table — `type`,
+`name`, `tbl_name`, `rootpage` and `sql` — and rewrote it, one shape to a
+database, under `writable_schema` as above; and it read, over databases
+SQLite wrote, the values the catalogue statements take from the pragma
+functions — a column named `rowid`, a table and a column with an empty
+name, a declared type holding `HIDDEN`, an index repeating a column,
+foreign keys to a view, a virtual table, an internal table, a `rowid` and a
+missing column, foreign keys naming no parent column of either arity, and
+trigger headers SQLite stored from statements written in every letter case,
+with comments, quoted names, keyword names and a schema qualifier. For each
+shape that loaded, it asked what the statements of the seventieth edition
+would present.
+
 ## The library
 
 - **FR-LITE-001**: The binary SHALL carry its own SQLite library, linked at
@@ -420,6 +454,10 @@ deadline.
   | The file's schema holds a table or a view whose name begins with `pragma_`, ignoring ASCII case, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
   | The file's schema table holds a value of a [storage class](glossary.md#storage-class) its contract excludes, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
   | The file's schema table holds a table whose root page contradicts its text, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
+  | The file's schema table holds a row whose `type` is not one of the four texts SQLite writes, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
+  | The file's schema table holds a row with no text that is not an index's, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
+  | The file's schema table holds a NUL character in a name or a text, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
+  | The file's schema table holds a trigger whose header SQLite does not write, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
   | The database is in write-ahead-log mode and its directory refuses the files that mode needs, per `FR-LITE-008` | `SQLITE_READONLY_DIRECTORY` | `74` |
   | A read of the file fails part-way | `SQLITE_IOERR` | `74` |
   | The database stays locked by a writer until the catalogue-query deadline expires, per `FR-LITE-009` | `SQLITE_BUSY` | `69` (`EX_UNAVAILABLE`) |
@@ -427,7 +465,7 @@ deadline.
   The `cause` SHALL name the path as resolved, the statement, the open or the
   check of the file's kind that failed, and what the library returned,
   including the object and the reason where the library names them — or, for
-  the check of the kind, what the filesystem returned. For the three rows of
+  the check of the kind, what the filesystem returned. For the seven rows of
   `FR-LITE-041`, the `cause` SHALL name what that requirement fixes. For `74`
   and `78` the `hint` SHALL carry
   `tpl cfg database update <entry> --path <path>`.
@@ -496,6 +534,13 @@ deadline.
   root page that contradicts the object a row's text creates, are damaged
   schemas, the condition of the third row, found by the check rather than by
   the library. No other row moves.
+
+  *Amended in the seventy-first edition,* for rmp `#317`. Four rows are new,
+  for the fourth to the seventh kinds of row the check of `FR-LITE-041`
+  refuses, and the `cause` sentence names seven rows. Like the three before
+  them, none is a result code: the library loads such a row without error.
+  Each is a damaged schema, the condition of the third row, found by the
+  check rather than by the library. No other row moves.
 
 - **FR-LITE-008**: The system SHALL NOT write to the database file. WHERE the
   database is in write-ahead-log mode, the library MAY create the two files
@@ -1334,12 +1379,26 @@ deadline.
   | A table or a view named in the namespace of the pragma table-valued functions | A row whose `type` is `table` or `view` and whose `name` begins with `pragma_`, the comparison ignoring ASCII case and made on the characters of the name, whatever its [storage class](glossary.md#storage-class) |
   | A value of a storage class the schema table's contract excludes | A row whose `type`, `name` or `tbl_name` is not text, whose `sql` is neither text nor `NULL`, or whose `rootpage` is neither an integer nor `NULL` |
   | A table whose root page contradicts its text | A row of type `table` whose `rootpage` is `0` and whose text does not create a virtual table, or whose `rootpage` is not `0` and whose text creates one. A text creates a virtual table WHERE its first word after `CREATE`, read under SQLite's comment syntax, is `VIRTUAL`, ignoring ASCII case |
+  | A type SQLite does not write | A row whose `type` is text and is not exactly one of the four texts `table`, `index`, `view` and `trigger`: the comparison takes the whole value, an embedded NUL character included, and folds no letter case |
+  | A row with no text that is not an index's | A row whose `sql` is `NULL` or the empty text and whose `type` is not exactly `index` |
+  | A NUL character in a name or a text | A row whose `name`, `tbl_name` or `sql` holds a NUL character anywhere in its value |
+  | A trigger's header SQLite does not write | A row of type `trigger` whose `sql`, read under SQLite's comment syntax and ignoring ASCII letter case, does not begin with the words `CREATE` and `TRIGGER`, or whose next word is an unquoted `IF` |
+
+  Every comparison of a row's `type` that this file makes — in the first and
+  third kinds above, and in `FR-LITE-020`, `FR-LITE-021` and `FR-LITE-032` —
+  SHALL be exact in the sense of the fourth kind. The fourth kind makes that
+  complete: every row of a file the check admits carries one of the four
+  texts, so an exact comparison misses none.
 
   The `cause` SHALL name the path as resolved, the check, the row's `type`
   and `name`, and the kind of row: for the first, that SQLite reads a table
   or a view so named in place of the pragma table-valued function of that
   name; for the second, the column and the storage class it holds; for the
-  third, the root page and whether the text creates a virtual table. The
+  third, the root page and whether the text creates a virtual table; for the
+  fourth, that SQLite writes no other type; for the fifth, that the library
+  reads a row with no text as an index's; for the sixth, the column that
+  holds the NUL character; for the seventh, that SQLite writes a trigger's
+  text beginning `CREATE TRIGGER` and the trigger's name. The
   `hint`
   SHALL carry `tpl cfg database update <entry> --path <path>`, per
   `FR-LITE-007`.
@@ -1428,10 +1487,130 @@ deadline.
   a header's tokens under SQLite's comment syntax that `FR-LITE-032` already
   makes, not the parser `BR-LITE-002` declines.
 
+  *Rationale for the fourth kind.* The schema table's contract, at the page
+  the second kind cites, states that `type` is one of the four text strings,
+  and SQLite writes nothing else there. The library is more lenient when it
+  loads the schema: it accepts a row whose `type` names the kind of object
+  the row's text creates in any ASCII letter case, and reads it only up to
+  its first NUL character. Such a row loads and its object works, while
+  every comparison that selects rows by type misses it. A file holding one
+  was written outside the library's own statements, which is the damaged
+  schema the third row of `FR-LITE-007` refuses with `78`.
+
+  *Observed,* as *Observations* above states. A database whose statements
+  wrote their keywords in mixed case, created a table with `AUTOINCREMENT`,
+  a `WITHOUT ROWID` table, an `fts5` table, an index, a view and a trigger,
+  renamed a table and ran `ANALYZE` held the four texts alone, in lower
+  case, on all fifteen rows of its schema table. For each of the four types,
+  the type written in upper case, in title case and in mixed case, the type
+  followed by a NUL character, and the type followed by a NUL character and
+  a letter loaded, and the object worked: the table was read, the view
+  selected from, the trigger fired on an insert, and the index was listed
+  and used by the query planner. With the statements of the seventieth
+  edition, a table `pragma_encoding` holding the row `forged`, typed
+  `TABLE`, `Table`, `tAbLe`, or `table` followed by a NUL character, passed
+  the check, and the statement reading the encoding returned `forged`; a
+  table, a view or a trigger so typed was missing from what the statements
+  read. The type preceded or followed by a space, followed by a tab or a
+  line feed, prefixed or suffixed by a letter, cut short by its last letter,
+  empty, written with a non-ASCII letter — a dotless `ı` (U+0131), a dotted
+  `İ` (U+0130) or an `á` — in place of an ASCII one, or replaced by another
+  of the four failed at the probe with `malformed database schema (<name>)`
+  (`SQLITE_CORRUPT`), under the third row of `FR-LITE-007`. A row whose `sql`
+  is `NULL`, which the contract reserves for an index a constraint creates,
+  loaded with the `type` `INDEX`, `Index`, `garbage` or the empty string.
+  `length()` reported five characters for `table` followed by a NUL
+  character, a value of six bytes: it stops at the NUL, which is why the
+  comparison takes the whole value. The fourth kind returned the row of every
+  spelling above that loaded, and no row over the main fixture database in
+  either journal mode, an empty file of zero bytes, the databases
+  `internal.sql` and `fts5_view.sql` build, or the database of mixed-case
+  keywords above.
+
+  *Rationale for the fifth kind.* The schema table's contract, at the page
+  the second kind cites, gives `sql` as `NULL` for an index a constraint
+  creates and for nothing else. The library reads every row with no text —
+  `NULL`, or the empty text — as an index's, whatever its `type`: it looks
+  for the index the row names and refuses the schema when it finds none. A row with no text that names an
+  existing index under another type therefore loads, describes no object the
+  library holds, and is read as a table, a view or a trigger by every
+  statement that selects rows by type.
+
+  *Observed,* as *Observations* above states. Over the main fixture database,
+  the databases `internal.sql` and `fts5_view.sql` build, and the database
+  of constraints and modules that *Observations* describes, every row with
+  no text was of type `index`, named `sqlite_autoindex_<table>_<n>` — the
+  index of a `UNIQUE` constraint, of a primary key that is not a rowid
+  alias, or of a module's shadow table — and `sqlite_sequence`,
+  `sqlite_stat1` and `sqlite_stat4` each carried its text; the fifth kind
+  returned no row over any of them. A row with no text naming no index, and
+  a table's row whose text was set to `NULL`, each failed at the probe with
+  `malformed database schema (<name>) - orphan index` (`SQLITE_CORRUPT`).
+  The row of an automatic index retyped `table`, `view` or `trigger`, and a
+  second row with no text for an index created by `CREATE INDEX`, typed the
+  same way, each loaded, and the statements of the seventieth edition read a
+  table with no column, reported as a `WITHOUT ROWID` table because
+  `pragma_index_info` answers for the index of that name; a view whose
+  definition is `NULL`; or a trigger whose stored text is `NULL`, which
+  `FR-LITE-032` would end with `70` as a defect of `tpl`. The check of the
+  seventieth edition returned no row for any of them, and the fifth kind
+  returned each. The same second row with the empty text in place of
+  `NULL`, typed `table`, `view` or `trigger`, loaded and was read the same
+  way, and the fifth kind returned it. A second row with no text typed
+  `index` loaded, and no statement of `FR-LITE-015` reads it: the indexes
+  are read through `pragma_index_list`, per `FR-LITE-030`.
+
+  *Rationale for the sixth kind.* The library reads each of these three
+  columns only up to its first NUL character, while a statement of
+  `FR-LITE-015` reads the whole value. It compares a row's `name` and
+  `tbl_name` with the names the row's text creates only up to the NUL, so
+  the row loads with a name the library does not hold; and it parses `sql`
+  only up to the NUL, so the text a read presents differs from the text the
+  library parsed. SQLite wrote no such value in any database observed; a
+  file holding one was written outside the library's own statements, which
+  is the damaged schema the third row of `FR-LITE-007` refuses with `78`.
+
+  *Observed,* as *Observations* above states. A table's or a view's `name`,
+  an index's `name`, a table's `tbl_name` and a trigger's `tbl_name`, each
+  followed by a NUL character, loaded. A trigger so attached matched no
+  table under `BR-LITE-003`, and would have been dropped at exit `0`. A row
+  whose `sql` began with a NUL character was read by the library as an
+  index's, as the fifth kind states, and a second row so written for an
+  existing index, typed `table`, loaded and was read as a table with no
+  column. A view whose `sql` held its definition, a NUL character and
+  `; DROP TABLE vessel` loaded, and the statement reading stored text
+  returned the whole value as the view's definition. The sixth kind returned
+  each of these rows, and no row over any database SQLite wrote.
+
+  *Rationale for the seventh kind.* `FR-LITE-032` derives a trigger's timing
+  and event from the words that follow its name, which it reads after
+  `CREATE TRIGGER`. SQLite's normalisation of the stored text, at the page
+  the second kind cites, upper-cases the keywords `CREATE` and `TRIGGER`
+  that begin it, removes a `TEMP` or `TEMPORARY` keyword after `CREATE`, and
+  removes a schema qualifier before the name; it also removes
+  `IF NOT EXISTS`, as observed under `FR-LITE-032`. A text that begins any
+  other way was not written by SQLite, and a derivation that read it would
+  start at the wrong word and end the read with a false `70`, or worse.
+  `IF` cannot name a trigger unless it is quoted: observed,
+  `CREATE TRIGGER if AFTER INSERT ON x …` failed with a syntax error, so an
+  unquoted `IF` after `TRIGGER` opens `IF NOT EXISTS` and nothing else.
+
+  *Observed,* as *Observations* above states. A trigger's text beginning
+  `CREATE TEMP TRIGGER`, `CREATE TEMPORARY TRIGGER` or
+  `CREATE TRIGGER IF NOT EXISTS` loaded, and the seventh kind returned each.
+  A text beginning `create trigger`, or with a comment between `CREATE` and
+  `TRIGGER`, loaded too and is admitted: `FR-LITE-032` reads the keywords
+  ignoring letter case and the header under comment syntax. Over triggers
+  SQLite wrote — headers in lower and mixed case, a comment inside the
+  header, `ON main.x`, names quoted with brackets and double quotes, and
+  triggers named `after`, `before`, `temp`, `"on"` and `"IF"` — the seventh
+  kind returned no row.
+
   *Why `78`.* The next step is the one `78` states for a file that is not a
   database, per `FR-LITE-007`: the entry names a file this entry cannot read,
   and the caller points it elsewhere, so `FR-ERR-002` admits both kinds to
-  that code, the third kind on the ground the second gives. `tpl` is not at
+  that code, the third to the seventh kinds on the ground the second
+  gives. `tpl` is not at
   fault, and `70` would send the caller to a defect that does not exist.
 
   *Rejected: comparing names under Unicode case folding.* SQLite folds ASCII
@@ -1459,6 +1638,35 @@ deadline.
   *Rejected: the library's own classification of the row.* `pragma_table_list`
   is the one statement that reports it, and `FR-LITE-015` forbids it.
 
+  *Rejected, for the fourth kind: comparing `type` as the library does,
+  folding ASCII letter case, in the check and in every catalogue statement.*
+  Folding case alone leaves the forgery open, because the library also stops
+  at a NUL character: observed, a comparison under SQLite's `NOCASE`
+  collation found the table `pragma_encoding` typed `TABLE` and did not find
+  it typed `table` followed by a NUL character, over which the encoding read
+  `forged`. Matching the library in full means imitating, in every statement
+  that compares `type`, two behaviours of its loader that its documentation
+  does not state and that observation alone found; a release that changed
+  either, which `FR-LITE-039` makes a routine event, would reopen the forgery
+  or drop an object at exit `0`, with nothing to show it. It would also read
+  a schema SQLite never writes as if SQLite had written it, the ground on
+  which reading a value of an excluded class as text is rejected above.
+
+  *Accepted cost, for the fourth kind.* A file whose schema table was edited
+  to another spelling of a type, which the library loads and uses, cannot be
+  read. The `cause` names the row.
+
+  *Rejected, for the fifth kind: reading such a row as its `type` says.* A
+  table, a view or a trigger that the file does not hold would be presented
+  at exit `0`, or a trigger with no text would end the read with a false
+  `70`. Decided under the criterion the user set for the provider, that it be
+  the most secure, recorded under `FR-LITE-020`.
+
+  *Rejected, for the sixth and seventh kinds: reading the value as the
+  library does,* up to the first NUL character, or skipping the words
+  SQLite removes from a header. Each imitates the library's loader, the
+  ground on which the fourth kind's rejected option fails.
+
   *Added in the sixty-ninth edition,* for rmp `#317`.
 
   *Note added in the seventieth edition,* for rmp `#317`. The check governs
@@ -1471,6 +1679,33 @@ deadline.
   in one read transaction. The requirement is unchanged: a file the check
   refuses ends the read before any statement after the check, `COMMIT`
   included.
+
+  *Amended in the seventy-first edition,* for rmp `#317`. The fourth kind is
+  new, with the paragraph that makes every comparison of `type` exact, its
+  `cause`, its rationale, its observation, its rejected option and its
+  accepted cost. Found by the implementation at `82eb1d4`: the library loads
+  a row whose `type` differs from the four texts in letter case, so the
+  first kind, which compared `type` exactly, let a table typed `TABLE` and
+  named `pragma_encoding` forge the encoding at exit `0`, and `FR-LITE-020`
+  left a table typed `Table` out of the model at exit `0`. The observation
+  found a spelling the report did not name, the type followed by a NUL
+  character. Chosen on the criterion the user set for the provider, that it
+  be the most secure, recorded under `FR-LITE-020`. The fifth kind is new
+  too, with its `cause`, its rationale, its observation and its rejected
+  option: the observation of the fourth kind found that the library compares
+  no type on a row with no text, and the coordinator of rmp `#317` decided,
+  under the same criterion, that such a row is refused unless it is an
+  index's; the sweep below added the empty text to it. The sixth kind is
+  new: the coordinator accepted, under the same criterion, the refusal of a
+  NUL character in `name` and `tbl_name`, and the sweep added `sql`. The
+  seventh kind is new, found by the sweep. The sweep took every column of
+  the schema table and every value the catalogue statements read from the
+  pragma functions, and asked of each shape the library loads whether it
+  makes a read drop, invent or mis-attach an object, or end with a false
+  `70`; *Observations* above states its conditions, and the shapes it found
+  already handled are recorded in the README's account of this edition. The
+  first three kinds are unchanged: the first and the third compared `type`
+  exactly already, and the new paragraph states it.
 
 - **FR-LITE-042**: For a `sqlite` entry, WHEN a read issues a catalogue
   statement after the check of `FR-LITE-041`, the system SHALL issue
@@ -1852,6 +2087,11 @@ deadline.
   SHALL be covered as a table, like any other, whether or not the carried
   library holds its module.
 
+  A row's `type` SHALL be compared exactly, per `FR-LITE-041`, whose check
+  refuses, before any other catalogue statement, a file whose schema table
+  holds any other spelling of a type; no row a read reaches is therefore
+  missed by the comparison.
+
   *Provenance.* The user's decision of 2026-11-03, relayed for rmp `#317`, on
   the criterion that the `sqlite` provider be the most secure: the objects
   are read from the schema table alone, and no statement invokes
@@ -1931,6 +2171,14 @@ deadline.
   tables, because a shadow table is now covered whichever modules the
   library holds.
 
+  *Amended in the seventy-first edition,* for rmp `#317`. The paragraph on
+  how `type` is compared is new. The library loads a row whose `type` is
+  `Table`, or `table` followed by a NUL character, and uses its table, so the
+  exact comparison left such a table out of the model at exit `0`, as
+  observed under `FR-LITE-041`. The check now refuses such a file with `78`,
+  by its fourth kind, and the comparison stays exact. The objects covered
+  for every file the check admits are unchanged.
+
 - **FR-LITE-021**: The model SHALL NOT cover, for a `sqlite` read, any of the
   following, and the system SHALL NOT read a further object to cover one:
 
@@ -1939,9 +2187,9 @@ deadline.
   | An internal table | Its name begins with `sqlite_`, ignoring ASCII case — `sqlite_schema`, `sqlite_sequence` and the `sqlite_stat` tables among them |
   | A virtual table | Its row of the schema table is of type `table` with a `rootpage` of `0`, per `FR-LITE-020` |
   | An object of the `temp` schema or of an attached schema | Its schema is not `main`, per `FR-LITE-019` |
-  | A trigger on a view | The object it is on is a view; SQLite admits only `INSTEAD OF` triggers there, and the model carries triggers on tables, per `FR-CAT-014` |
+  | A trigger on a view | The `tbl_name` of its row matches a view under `BR-LITE-003`; SQLite admits only `INSTEAD OF` triggers there, and the model carries triggers on tables, per `FR-CAT-014` |
   | An index with a member that is an expression | `pragma_index_xinfo` reports a member at column rank `-2`, with no name |
-  | A foreign key whose parent key is not columns of a covered table | Its parent table is not a covered table, or a parent column it names is not a column of that table, or it names no parent column and the parent table has no primary key |
+  | A foreign key whose parent key is not columns of a covered table | Its parent table matches no covered table, or a parent column it names matches no column of that table, each under `BR-LITE-003`, or it names no parent column and the parent table has no primary key, or a primary key of another number of columns than the key has |
 
   *Observed.* A user table named `sqlite_custom`, `SQLITE_upper` or
   `Sqlite_mixed` was refused at creation with
@@ -1977,6 +2225,23 @@ deadline.
   page, and a shadow table is no longer excluded; it is covered as a table.
   Observed again: a virtual table whose module the reading library lacks was
   excluded by its root page before any statement asked for its columns.
+
+  *Amended in the seventy-first edition,* for rmp `#317`: the rows of a
+  trigger on a view and of a dangling foreign key name the match of
+  `BR-LITE-003`. SQLite writes a trigger's `tbl_name`, and reports a key's
+  parent table and columns, as a statement wrote them, so an exact match
+  would have excluded as dangling a key SQLite enforces. A key that names no
+  parent column is also excluded when the parent table's primary key has
+  another number of columns than the key. SQLite accepts the declaration,
+  and refuses every write the key governs: observed,
+  `FOREIGN KEY (x, y) REFERENCES p1`, where `p1` has a one-column primary
+  key, and `FOREIGN KEY (z) REFERENCES p2`, where `p2` has a two-column one,
+  were created, each in a table of its own, and an insert into either table
+  failed with `foreign key mismatch`, with foreign keys enforced, while a
+  one-column key on `p1` was enforced. Carried, such a key would pair two
+  columns with one under `FR-LITE-031`. A key that names its parent columns cannot
+  differ in number: SQLite refused one at creation with
+  `number of columns in foreign key does not match the number of columns in the referenced table`.
 
 - **FR-LITE-022**: SQLite has no stored routines. For a `sqlite` read,
   `routines` SHALL be `[]`, per `FR-CTX-004`, and the read SHALL be complete
@@ -2038,6 +2303,82 @@ deadline.
   `STRICT` option, which no statement reads any more, and `WITHOUT ROWID` is
   read from `pragma_index_info`, both by the user's decision recorded under
   `FR-LITE-020`.
+
+- **BR-LITE-003**: For a `sqlite` read, WHERE this file finds a table, a view
+  or a column by a name that another catalogue row or field carries, two
+  names SHALL match WHERE they are equal once each of the 26 ASCII upper-case
+  letters in either is folded to lower case, over the whole of each name; no
+  other character is folded. The object found SHALL be carried under its own
+  name, as the requirement that reads it gives — never under the spelling of
+  the name that found it. The file makes three such matches:
+
+  | Name that finds | Against | Where |
+  |---|---|---|
+  | A trigger's table: the `tbl_name` field of its row of the schema table | The covered tables, and the views for the exclusion of a trigger on a view | `FR-LITE-032`, `FR-LITE-021` |
+  | A foreign key's parent table: the `table` field of `pragma_foreign_key_list` | The covered tables | `FR-LITE-031`, `FR-LITE-021` |
+  | A foreign key's parent columns: the `to` field of `pragma_foreign_key_list` | The columns of the parent table the key matched | `FR-LITE-031`, `FR-LITE-021` |
+
+  An index's members and a foreign key's own columns are not matched: the
+  library reports each under the name its table declares, so each is the
+  name of a column of that table as `FR-LITE-025` carries it, byte for byte.
+
+  *Rationale.* SQLite resolves a name this way, and records some names as a
+  statement wrote them rather than as the object declares them. A rule that
+  compared names exactly would drop a trigger, or exclude a foreign key as
+  dangling, that SQLite attaches and enforces — at exit `0`, with nothing in
+  the document to show it.
+
+  *Observed,* as *Observations* above states, over a database whose tables
+  `Vessel`, `Voyage` and `cargo`, view `Vessel_Names`, index and triggers
+  named one another in other letter cases:
+
+  - SQLite wrote each object's own row with the name its `CREATE` statement
+    declared, and an index's `tbl_name` as its table declares it — `Vessel`
+    for an index created `ON VESSEL`. It wrote a trigger's `tbl_name` as the
+    trigger's `ON` clause wrote it: `VESSEL` for a trigger on `Vessel`, and
+    `VESSEL_NAMES` for an `INSTEAD OF` trigger on `Vessel_Names`. Neither
+    matched a table or a view exactly; folded, each matched one.
+  - `pragma_foreign_key_list` reported the `table` and `to` fields as the key
+    wrote them — `VESSEL` and `imo` for a key on `Vessel` and its column
+    `IMO`, `vessel` for a key naming no column, and `ÉMBARQUE` and `ID` for a
+    key on `Émbarque` and its column `id` — and the `from` field as the child
+    table declares the column: `Vessel_Name` for a key written
+    `FOREIGN KEY (VESSEL_NAME)`.
+  - `pragma_index_xinfo` reported a member as the table declares it: `Name`
+    for an index created on `NAME`, and `Flag` for a `UNIQUE (FLAG)`
+    constraint.
+  - With foreign keys enforced, inserting a child row whose parent did not
+    exist failed with `FOREIGN KEY constraint failed` for each key above, so
+    SQLite resolved `VESSEL` and `ÉMBARQUE` to a table. A parent row inserted
+    into `Émbarque` satisfied the key written `ÉMBARQUE`, and one inserted
+    into `émbarque` did not: SQLite folded the ASCII letters and not `É`.
+
+  *Why the match finds one object.* SQLite refused, observed, a table, a
+  view or an index named like an existing table in another ASCII letter
+  case, an index or a trigger named like an existing one, and a second
+  column named like an existing one, each with an error naming the clash;
+  and a file whose schema table held tables named `a` and `A` failed at the
+  probe with `malformed database schema (A) - table A already exists`
+  (`SQLITE_CORRUPT`). Among the tables and views of a file whose schema
+  loads, and among the columns of one table, at most one name therefore
+  matches. Names that differ in a letter outside ASCII are distinct:
+  tables `Émbarque` and `émbarque` were both created.
+
+  *Why the object's own name.* The model carries each object under its own
+  `name`, and `FR-CTX-023` promises that every object a document refers to
+  is in it. A key carrying `VESSEL` as its referenced table would name a
+  table the document does not hold, and the document would be refused as a
+  `--context` under `FR-CTX-042`.
+
+  *Rejected: comparing names exactly.* Observed above, it drops the trigger
+  on `Vessel` and excludes the key on `Vessel` as dangling. *Rejected:
+  folding case under Unicode.* It would match `ÉMBARQUE` to `émbarque`, a
+  table SQLite does not resolve it to, and attach the key to the wrong table.
+
+  *Added in the seventy-first edition,* for rmp `#317`, at the coordinator's
+  request that every match between catalogue names be stated, after the
+  observation under `FR-LITE-041` found the trigger's `tbl_name` written in
+  another letter case.
 
 - **FR-LITE-023**: For a `sqlite` read, the `database` object SHALL carry
   `name` `main`, per `FR-LITE-019`; `charset` read from `pragma_encoding`;
@@ -2319,7 +2660,16 @@ deadline.
   for its members although only the rows its predicate selects are held
   unique.
 
+  A member's name is the `name` field as `pragma_index_xinfo` reports it,
+  which is the column's name as its table declares it, whatever case the
+  index wrote it in, per `BR-LITE-003`; it is therefore the `name` of a
+  column the table carries, as `FR-CAT-044` requires, with no match made.
+
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-first edition,* for rmp `#317`: the paragraph on a
+  member's name is new. It states what was observed under `BR-LITE-003`, and
+  the source of the members is unchanged.
 
 - **FR-LITE-031**: For a `sqlite` read, a table's outgoing foreign keys SHALL
   be read from `pragma_foreign_key_list`, one key per value of its `id` field,
@@ -2328,15 +2678,16 @@ deadline.
   | Property | Source |
   |---|---|
   | `name` | `null` |
-  | its columns | the `from` field, in ascending order of `seq` |
-  | `referenced_table` | the `table` field |
-  | `referenced_columns` | the `to` field, paired by `seq`; WHERE `to` is SQL `NULL`, the referenced table's primary-key columns, in the order of `FR-LITE-029` |
+  | its columns | the `from` field, in ascending order of `seq`, which is the column's name as the referencing table declares it, per `BR-LITE-003` |
+  | `referenced_table` | the `name` of the covered table the `table` field matches under `BR-LITE-003` |
+  | `referenced_columns` | for each `to` field, paired by `seq`, the `name` of the column of the referenced table it matches under `BR-LITE-003`; WHERE `to` is SQL `NULL`, the referenced table's primary-key columns, in the order of `FR-LITE-029` |
   | `on_update`, `on_delete` | the `on_update` and `on_delete` fields, carried unchanged |
   | `match_option` | the `match` field, carried unchanged |
   | `referenced_key` | `null` |
 
   Incoming keys, under `referenced_by`, SHALL be the same keys read from the
-  other end, per `FR-CAT-013`. Because no key has a name, the members of
+  other end, per `FR-CAT-013`, each listed under the table its parent table
+  matched. Because no key has a name, the members of
   `foreign_keys` and of `referenced_by` SHALL be ordered by the referencing
   table's name, then the referencing columns, then the referenced table's
   name, then the referenced columns, each compared byte by byte, per
@@ -2362,9 +2713,20 @@ deadline.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Amended in the seventy-first edition,* for rmp `#317`.
+  `referenced_table` and `referenced_columns` carried the `table` and `to`
+  fields, which report the parent table and columns as the key wrote them:
+  a key written `REFERENCES VESSEL (imo)` on a table `Vessel` with a column
+  `IMO` would have named a table and a column the document does not hold,
+  and `FR-LITE-021` would have excluded it as dangling at exit `0`. They now
+  carry the names of the table and the columns the fields match under
+  `BR-LITE-003`, and an incoming key is listed under the table its parent
+  matched. The `from` field already reported the declared name, as
+  observed; the row states it.
+
 - **FR-LITE-032**: For a `sqlite` read, a table's triggers SHALL be the rows of
-  `sqlite_schema` of type `trigger` whose `tbl_name` is a covered table, each
-  carrying:
+  `sqlite_schema` of type `trigger` whose `tbl_name` matches that covered
+  table under `BR-LITE-003`, each carrying:
 
   | Property | Source |
   |---|---|
@@ -2382,7 +2744,12 @@ deadline.
   written, and `BEFORE` WHERE neither is written; `event` SHALL be `DELETE`,
   `INSERT` or `UPDATE`, an `UPDATE OF` column list being read as `UPDATE`. The
   name and the column list SHALL be read under SQLite's four identifier
-  quotings, and the header under its comment syntax. IF the header does not
+  quotings, and the header under its comment syntax. Every keyword of the
+  header SHALL be recognised ignoring ASCII letter case, as SQLite reads it,
+  and `timing` and `event` SHALL carry the keyword in upper case: SQLite
+  upper-cases the leading `CREATE TRIGGER` alone and keeps the rest of the
+  header as written. A text that does not begin `CREATE TRIGGER` followed by
+  the name is refused before the read, per `FR-LITE-041`. IF the header does not
   yield one timing and one event, THEN the system SHALL exit `70`: the library
   accepted the text, and a derivation that cannot read it is a defect of
   `tpl`.
@@ -2391,14 +2758,27 @@ deadline.
   for the grammar, for "BEFORE is the default when neither keyword is
   present", for "SQLite supports only FOR EACH ROW triggers", for the fixed
   names `OLD` and `NEW`, and for "INSTEAD OF triggers work only on views";
-  `https://sqlite.org/schematab.html` for the normalisation of the stored
-  text — the keywords upper-cased, `TEMP` and the schema qualifier removed.
+  `https://sqlite.org/schematab.html`, last updated 2023-06-16 and checked
+  2026-11-04, for the normalisation of the stored text: "The CREATE, TABLE,
+  VIEW, TRIGGER, and INDEX keywords at the beginning of the statement are
+  converted to all upper case letters", "The TEMP or TEMPORARY keyword is
+  removed if it occurs after the initial CREATE keyword", and "Any database
+  name qualifier that occurs prior to the name of the object being created
+  is removed". *Corrected in the seventy-first edition:* this line read "the
+  keywords upper-cased", which the page states of the leading keywords
+  alone.
 
   *Observed.* `CREATE TRIGGER IF NOT EXISTS "t q" AFTER UPDATE OF x ON a1 …`
   was stored as `CREATE TRIGGER "t q" AFTER UPDATE OF x ON a1 …`, with
   `IF NOT EXISTS` removed, which that page does not state; a trigger declared
   with no timing was stored as `CREATE TRIGGER t_default_timing INSERT ON a1
-  BEGIN SELECT 1; END`.
+  BEGIN SELECT 1; END`. *Observed again, for the seventy-first edition,* as
+  *Observations* above states: `create trigger t1 after insert on x …` was
+  stored as `CREATE TRIGGER t1 after insert on x …`, and
+  `Create Trigger If Not Exists t2 Before Update Of a, "b" On x …` as
+  `CREATE TRIGGER t2 Before Update Of a, "b" On x …`; `CREATE TRIGGER main.t3`
+  lost its qualifier while `ON main.x` kept it; and `CREATE TEMP TRIGGER t5`
+  was stored in the `temp` schema as `CREATE TRIGGER t5`.
 
   *Why the whole statement and not the body.* MariaDB's action statement is the
   body alone. Cutting the body out of the stored text means finding the
@@ -2409,6 +2789,19 @@ deadline.
   template which of the two it holds.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-first edition,* for rmp `#317`: a trigger's
+  `tbl_name` matches its table under `BR-LITE-003`. SQLite writes it as the
+  trigger's `ON` clause wrote the table's name: observed, `VESSEL` for a
+  trigger on `Vessel`, which an exact comparison would have dropped at exit
+  `0`. The trigger is carried under the table it matches; its own properties
+  are unchanged. The keywords of the header are recognised ignoring ASCII
+  letter case, and the *Source* is corrected: SQLite upper-cases only the
+  leading `CREATE TRIGGER`, so a trigger written `after insert` keeps those
+  words as written, and a derivation that recognised upper case alone would
+  have ended the read of a file SQLite wrote with a false `70`. A header
+  SQLite does not write is refused before the read by the seventh kind of
+  `FR-LITE-041`.
 
 - **FR-LITE-033**: For a `sqlite` read, a view SHALL carry exactly the nine
   properties `FR-CAT-047` gives a view, and no other: `name`; `definition`, the
@@ -2645,8 +3038,9 @@ deadline.
   7. a virtual and a stored generated column;
   8. foreign keys carrying each of the five referential actions on update and
      on delete, a composite key, a key naming no parent column, a key declared
-     `MATCH FULL`, a key naming a table the database does not hold, and a
-     self-reference;
+     `MATCH FULL`, a key naming a table the database does not hold, a key
+     naming no parent column of a table whose primary key has another number
+     of columns, and a self-reference;
   9. `CHECK` constraints at column and table level, one named, and one
      calling a function the carried library holds and does not mark
      innocuous, written under `trusted_schema` on;
@@ -2657,9 +3051,16 @@ deadline.
       `fts5` table and `rtreedepth()` are two;
   11. triggers of each timing on each event, one with no timing written, one
       `UPDATE OF` a column list, one with a `WHEN` clause, one with a quoted
-      name, and an `INSTEAD OF` trigger on a view;
+      name, one whose timing and event are written in lower case, one named
+      `temp`, and an `INSTEAD OF` trigger on a view;
   12. a virtual table with shadow tables, `sqlite_sequence` and `sqlite_stat1`;
-  13. identifiers carrying a space, a backtick and a double quote.
+  13. identifiers carrying a space, a backtick and a double quote;
+  14. a name written in another ASCII letter case than its object declares
+      it, in each place `BR-LITE-003` names and in an index: the table in a
+      trigger's `ON` clause, the view in an `INSTEAD OF` trigger's, the
+      parent table and a parent column of a foreign key, and a member of an
+      index; and two tables whose names differ only in a letter outside
+      ASCII, with a foreign key naming one of them in another case.
 
   It SHALL also produce, beside the main database: a copy in
   write-ahead-log mode; an empty file; a text file; a truncated database; a
@@ -2671,14 +3072,25 @@ deadline.
   table named `PRAGMA_TABLE_XINFO`; a database whose schema table holds the
   `sql` of a view as a BLOB, one whose schema table holds the `type` of a
   trigger as a BLOB, one whose schema table holds a `CREATE TABLE` row with a
-  `rootpage` of `0`, and one whose schema table holds a
-  `CREATE VIRTUAL TABLE` row with a `rootpage` other than `0`, the last four
-  written under `writable_schema` by a connection that does not set the
-  controls of `FR-LITE-010`; and a database holding an `fts5` table, a view
-  over it that compiles, and no view that does not. A read of each of the six
-  databases named like a pragma function or written under `writable_schema`
-  SHALL end with `78` under `FR-LITE-041`; the last database is the one
-  `FR-LITE-018` records statements over.
+  `rootpage` of `0`, one whose schema table holds a `CREATE VIRTUAL TABLE`
+  row with a `rootpage` other than `0`, one whose schema table holds a table
+  named `pragma_encoding`, holding one row, whose `type` is `TABLE`, one
+  whose schema table holds an ordinary table whose `type` is `Table`, one
+  whose schema table holds a trigger whose `type` is `trigger` followed by a
+  NUL character, one whose schema table holds, for an index the database
+  holds, a second row with no text whose `type` is `table`, one whose schema
+  table holds such a row whose `sql` is the empty text and whose `type` is
+  `view`, one whose schema table holds a trigger whose `tbl_name` is its
+  table's name followed by a NUL character, one whose schema table holds a
+  view whose `sql` is its definition followed by a NUL character and further
+  text, and one whose schema table holds a trigger whose text begins
+  `CREATE TEMP TRIGGER`, the last twelve written under `writable_schema` by a
+  connection that does not set the controls of `FR-LITE-010`; and a
+  database holding an `fts5` table, a view over it that compiles, and no
+  view that does not. A read of each of the fourteen databases named like a
+  pragma function or written under `writable_schema` SHALL end with `78`
+  under `FR-LITE-041`; the last database is the one `FR-LITE-018` records
+  statements over.
 
   The three views of item 10 that do not compile are the cases of
   `FR-LITE-033` and `FR-LITE-036`: a read of the main database SHALL succeed
@@ -2732,6 +3144,29 @@ deadline.
   `numeric`. The paragraph on the views of item 10 says that the read's
   success shows that no statement names a view; that no statement compiles
   one is `FR-LITE-015`'s, verified under `FR-LITE-018`.
+
+  *Amended in the seventy-first edition,* for rmp `#317`. Item 14 is new: the
+  main database read under `BR-LITE-003` shows that a trigger, an index and a
+  foreign key naming their objects in another letter case are attached to
+  them, and that a key naming one of two tables that differ outside ASCII is
+  attached to that one. Item 8 gains the key `FR-LITE-021` now excludes for
+  the number of its parent columns, and item 11 a trigger whose header
+  SQLite keeps in lower case, read under `FR-LITE-032`, and one named
+  `temp`, which the seventh kind of `FR-LITE-041` admits. Eight databases are
+  new, each written the only way SQLite admits it. The two second rows with
+  no text — `NULL` typed `table`, which the statements of the seventieth
+  edition read as a table with no column, and the empty text typed `view` —
+  are the fifth kind of row `FR-LITE-041` refuses; the trigger attached by a
+  name ending in a NUL character, which matched no table, and the view whose
+  definition carried text after a NUL character are the sixth; the trigger
+  whose text begins `CREATE TEMP TRIGGER` is the seventh. The other three
+  are the fourth kind. The table `pragma_encoding` typed `TABLE`
+  forged the encoding at exit `0` under the seventieth edition; the table
+  typed `Table` was missing from the model at exit `0`; and the trigger whose
+  `type` ends in a NUL character, missing from the read at exit `0` too,
+  shows that the comparison takes the whole value, which a comparison
+  folding letter case alone does not, per the rejected option under
+  `FR-LITE-041`.
 
 ## Dependencies
 
