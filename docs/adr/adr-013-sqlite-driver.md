@@ -3,7 +3,7 @@ id: ADR-013
 title: The SQLite driver and the library it carries
 status: accepted
 decided: 2026-11-03
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 requirements: [FR-LITE-001, FR-LITE-004, FR-LITE-010, FR-LITE-011, FR-LITE-018, FR-LITE-039]
 supersedes: []
 superseded-by: null
@@ -30,6 +30,16 @@ that day: `rusqlite`'s feature `trace` is enabled for tests alone, through a
 The driver, its release and the library carried did not move. The same pass
 brought the record's account of the hardening controls to the sixty-seventh
 edition of the specification, which added an eighth control, temporary storage.
+
+**Amended in place on 2026-11-04**, for rmp `#317`, once the reader was built:
+the record's account of the hardening controls is brought to the sixty-ninth
+edition, which added a ninth control, views disabled; the reading of the
+shipped graph in *Consequences* is corrected, because three crates it named as
+leaving the graph did not leave it; and the accounts of `cargo audit`, of the
+fixture run and of the documents that cite this record are brought to commit
+`229edc8`. The driver, its release, the library carried and every decision
+point are unchanged, so `decided` is unchanged; the claims re-read that day are
+those of the *Sources* rows dated 2026-11-04.
 
 ## Context
 
@@ -85,6 +95,12 @@ did not apply can disqualify a candidate and cannot qualify one, so the outcome
 stands if the selected driver passes it. Point 1 records that it does, and
 point 2 what the carried build reports.
 
+**The sixty-ninth edition added a ninth control, also after the evaluation.**
+`FR-LITE-010` now disables views — `SQLITE_DBCONFIG_ENABLE_VIEW` set to `0` and
+read back through the same option — as defence in depth beside the closed
+statement list. The same rule holds: point 1 records that the selected driver
+passes it.
+
 **`FR-LITE-039` then constrains the release, and the MariaDB driver stood in
 the way.** The most recent SQLite release is 3.54.1, of 2026-10-16, and the
 `rusqlite` release that carries it, 0.41.1, requires `libsqlite3-sys`
@@ -139,9 +155,12 @@ requires; the newest `rusqlite` that resolved beside it, 0.39.0, bundles 3.51.3.
    `PRAGMA temp_store`, set and read back, and `PRAGMA compile_options` — which
    `rusqlite` issues through its safe interface, `pragma_update`,
    `pragma_query_value` and `prepare`, as it issues the confirmation of the
-   omission; it leaves `rusqlite` passing step 1. Step 2 is passed by
-   `rusqlite`, the one candidate left. No choice among survivors remains for
-   this register.
+   omission; it leaves `rusqlite` passing step 1. The views control is set and
+   read back through the safe configuration interface that also sets defensive
+   mode and `trusted_schema` — `set_db_config` and `db_config` with
+   `DbConfig::SQLITE_DBCONFIG_ENABLE_VIEW` — and it too leaves `rusqlite`
+   passing step 1. Step 2 is passed by `rusqlite`, the one candidate left. No
+   choice among survivors remains for this register.
 
 2. **The library carried is SQLite 3.54.1**, the source `libsqlite3-sys` 0.39.1
    bundles, built with extension loading omitted. `.cargo/config.toml` carries
@@ -311,26 +330,30 @@ graph, `cargo tree -e normal,build` with features, taken once per target of
 `ADR-008`, point 4 and this record together:
 
 - remove the facade `sqlx` and its compile-time macro side — `sqlx-macros`,
-  `sqlx-macros-core`, and the crates only they used, `hex`, `sha2` 0.10.9,
-  `digest` 0.10.7 and `crypto-common` 0.1.6 — together with the feature sets
-  compiled only for that side;
+  `sqlx-macros-core`, and `hex`, the one crate only they used — together with
+  what was compiled only for that side: `sha2` 0.10.9, `digest` 0.10.7 and
+  `crypto-common` 0.1.6 with `std`, and `sqlx-mysql` and `thiserror` under the
+  feature sets that side enabled. The three hashing crates stay in the graph,
+  compiled without `std`, because `sqlx-core`'s feature `migrate` requires
+  `sha2` 0.10;
 - add `rusqlite`, `libsqlite3-sys`, `fallible-iterator` and
   `fallible-streaming-iterator`, and the build-only `pkg-config` and `vcpkg`;
 - leave every other crate at its version and features. `sqlx-core` and
   `sqlx-mysql` compile with the features they had in the binary.
 
-Those readings were taken with `trace` on the normal entry. `trace` enables no
-other feature of `rusqlite` and no dependency, so moving it to the test build
-removes it from `rusqlite`'s own feature list in the shipped graph and changes
-none of the readings above.
+The commit that implemented the change, `2fd98f8`, also moved `tokio`, `rustls`,
+`rustls-webpki` and `webpki-roots` to later patch releases, for rmp `#320`; that
+move is not this record's. The first readings were taken with `trace` on the
+normal entry; re-derived at `229edc8`, with `trace` on the dev entry alone, they
+show the same crates leaving and entering, and `rusqlite` compiled in the
+shipped graph with `bundled`, `limits` and `modern_sqlite` alone.
 
 The lock file falls from 182 packages to 154: the facade's unused drivers, and
-what only they pulled in, leave it. The package's suite passed, 1392 tests and
-none failed; the 120 tests that need the MariaDB fixture were skipped in that
-run. The equivalence on a running server therefore rests on the identity of the
-compiled crates, not on a run that reached one. The change touches code that
-reaches the server — its import paths — and the root coordination document's
-test policy runs the fixture tests for such a change. The figures in
+what only they pulled in, leave it. In the evaluation the package's suite
+passed, 1392 tests and none failed, with the 120 tests that need the MariaDB
+fixture skipped; the message of commit `2fd98f8` states that 1481 tests pass
+with the MariaDB fixture up, so the equivalence on a running server no longer
+rests on the identity of the compiled crates alone. The figures in
 `BENCHMARKS.md` were taken on a binary without SQLite; a figure taken after the
 change comes from a different artefact.
 
@@ -371,9 +394,10 @@ and `pkg-config` 0.3.34 1.63; `fallible-iterator`,
 nothing. All three declared floors are below the floor `ADR-007` holds, which
 the MariaDB driver sets, so this record does not move it; a `rusqlite` move is
 an MSRV question under `ADR-007`'s rule. `cargo audit` over the resolved lock
-file reports no advisory against any of the six. The advisories it does report
-are against crates of the MariaDB TLS path that this change does not move, and
-are not this record's subject.
+file reports no advisory against any of the six. The advisories it reported on
+2026-11-03 named crates of the MariaDB TLS path that this change does not move;
+rmp `#320` moved those crates in the same commit, and over `Cargo.lock` at
+`229edc8` it reports none.
 
 **A move of the release carried is an edit to this record.** The manifest's
 two `rusqlite` entries admit later `0.41` releases, and `rusqlite` admits later
@@ -385,9 +409,10 @@ history and vulnerability page before every release of `tpl`.
 
 **Under R3, these facts live here alone.** The driver, its features, the
 release carried, the build option and the judgement of `FR-LITE-039` are cited
-as `ADR-013` from `docs/spec-technical/`, the root coordination document and the
-root `README.md`, and are not restated there. The form in which the MariaDB
-driver is consumed is `ADR-003`'s.
+as `ADR-013` from `docs/spec-technical/`. Neither the root coordination document
+nor the root `README.md` names the SQLite driver at `229edc8`, so neither cites
+this record; that citation is owed by the owners of those documents, not by
+this register. The form in which the MariaDB driver is consumed is `ADR-003`'s.
 
 ## Sources
 
@@ -398,6 +423,9 @@ driver is consumed is `ADR-003`'s.
 | The user confirmed points 3 and 4, and chose the return to the facade at the release named in point 4 | The user's answers of 2026-11-03, relayed by the session coordinator for rmp `#315` | 2026-11-03 |
 | The selection rule, the extension-loading control and its read-back, the limits, the trace, the recency rule and its clauses | `specification/sqlite-contract.md`, `FR-LITE-001`, `FR-LITE-004`, `FR-LITE-010`, `FR-LITE-011`, `FR-LITE-012`, `FR-LITE-018`, `FR-LITE-039` | 2026-11-03 |
 | The sixty-fifth edition's seven controls; the sixty-seventh edition's eighth, `temp_store` at `MEMORY`, confirmed by its read-back of `2` and by a row `TEMP_STORE=1`, `TEMP_STORE=2` or `TEMP_STORE=3` of `PRAGMA compile_options` | `specification/sqlite-contract.md`, `FR-LITE-010`, at `349560e` and at `5805b5d` | 2026-11-03 |
+| The sixty-ninth edition's ninth control: views disabled, `SQLITE_DBCONFIG_ENABLE_VIEW` set to `0` and read back through the same option, as defence in depth | `specification/sqlite-contract.md`, `FR-LITE-010`, at `f2d1753` and at `229edc8` | 2026-11-04 |
+| `DbConfig` declares `SQLITE_DBCONFIG_ENABLE_VIEW`, "Enable or disable views", with no feature noted on it | docs.rs, `rusqlite` 0.41.1, `config::DbConfig` | 2026-11-04 |
+| The reader sets views off with `set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_VIEW, false)` and reads the option back with `db_config`, beside defensive mode and `trusted_schema`; a test reads it back on the reader's connection | `src/sqlite.rs`, `Session::harden`; `src/sqlite/tests.rs`, `fr_lite_010_every_control_and_limit_reads_back_as_set_on_the_connection`; at `229edc8` | 2026-11-04 |
 | `trace` is enabled for tests alone, through a `[dev-dependencies]` entry, and not on the normal dependency | The user's decision of 2026-11-03, relayed by the session coordinator for rmp `#315` | 2026-11-03 |
 | Edition 2024 defaults to resolver `"3"`, whose stated change from `"2"` is the default of `resolver.incompatible-rust-versions`; the resolver is a workspace-wide option taken from the top-level package; features enabled on dev-dependencies "will not be unified when those same dependencies are used as a normal dependency, unless those dev-dependencies are currently being built", and `cargo test` or `cargo build --all-targets` unify them | The Cargo Book, *Dependency Resolution*, *Feature resolver version 2* and *Resolver versions*; *Features*, *Feature resolver version 2* (`doc.rust-lang.org/cargo/reference/`) | 2026-11-03 |
 | With the two entries of point 1 under edition 2024, `rusqlite` resolves with `bundled`, `limits` and `modern_sqlite` when no dev-dependency is built and with `trace` besides when one is; `libsqlite3-sys` 0.39.1 has the same features in both; a dev entry without `default-features = false` adds `cache`, `default`, `ffi-sqlite-wasm-rs` and `hashlink` | `cargo tree -e normal` and `-e normal,dev`, `-f '{p} [{f}]'`, cargo 1.99.1 on `aarch64-apple-darwin`, over a throwaway package declaring only those entries | 2026-11-03 |
@@ -417,7 +445,12 @@ driver is consumed is `ADR-003`'s.
 | `Cargo.lock` carries `libsqlite3-sys` 0.37.0, and `cargo tree -e normal,build -i libsqlite3-sys` prints nothing | This repository at `833bc35` | 2026-11-03 |
 | `sqlx-sqlite` 0.9.0 requires `libsqlite3-sys` `>=0.30.1, <0.38.0`; on `main` at `7908fe79`, committed 2026-10-31, it requires `>=0.30.1, <0.39.0`; `sqlx` 0.9.0 is the maximum stable release and requires each of its crates at `=0.9.0` | crates.io API, `sqlx-sqlite` and `sqlx` 0.9.0 dependencies; `transact-rs/sqlx`, `sqlx-sqlite/Cargo.toml` on `main` | 2026-11-03 |
 | `sqlx-core` is "Not intended to be used directly" and `sqlx-mysql` "Not for direct use; see the `sqlx` crate for details"; the facade's manifest lists its `_rt-*` features under "for conditional compilation", as `sqlx-core`'s does its `_rt-*` and `_tls-*` features | crates.io, crate descriptions; `transact-rs/sqlx` at tag `v0.9.0`, `Cargo.toml` and `sqlx-core/Cargo.toml` | 2026-11-03 |
-| The crates leaving and entering the shipped graph, every other crate's version and features unchanged, and the lock file at 182 and 154 packages | `cargo tree -e normal,build -f '{p} [{f}]'`, once per target of `ADR-008`, at `833bc35` and over a copy of its manifest carrying point 4 and `rusqlite`, its lock re-resolved from `833bc35`'s | 2026-11-03 |
-| No advisory against `rusqlite` 0.41.1, `libsqlite3-sys` 0.39.1, `fallible-iterator` 0.3.0, `fallible-streaming-iterator` 0.1.9, `pkg-config` 0.3.34 or `vcpkg` 0.2.15; the advisories reported name `rustls`, `rustls-webpki`, `webpki-roots` and, as a warning, `tokio` | `cargo audit` 0.22.2, advisory database of 2026-11-03 holding 1403 advisories, over the lock file of the row above | 2026-11-03 |
+| The crates entering the shipped graph, `sqlx-core`'s and `sqlx-mysql`'s versions and features unchanged, and the lock file at 182 and 154 packages | `cargo tree -e normal,build -f '{p} [{f}]'`, once per target of `ADR-008`, at `833bc35` and over a copy of its manifest carrying point 4 and `rusqlite`, its lock re-resolved from `833bc35`'s | 2026-11-03 |
+| The crates and compilations leaving the shipped graph: `sqlx`, `sqlx-macros`, `sqlx-macros-core` and `hex` leave; `sha2` 0.10.9, `digest` 0.10.7 and `crypto-common` 0.1.6 stay, compiled without `std`, and only their compilation with `std`, and those of `sqlx-mysql` and `thiserror` for the macro side, leave; `rusqlite` compiles with `bundled`, `limits` and `modern_sqlite`; besides these, only `tokio`, `rustls`, `rustls-webpki` and `webpki-roots` change, by patch release | `cargo tree --locked --offline -e normal,build --target <triple> --prefix none -f '{p} [{f}]'`, once per target of `ADR-008`, over this repository at `229edc8` and over a copy of the manifest and `Cargo.lock` at `833bc35`, the patch pointed at this repository's vendored tree | 2026-11-04 |
+| `sqlx-core`'s feature `migrate` enables `sha2`, which it requires at `0.10.0` | `vendor/sqlx-core-0.9.0/Cargo.toml`, `[features]` and `[dependencies.sha2]` | 2026-11-04 |
+| The version moves of `tokio`, `rustls`, `rustls-webpki` and `webpki-roots` are rmp `#320`'s; 1481 tests pass with the MariaDB fixture up | The message of commit `2fd98f8`. The test run was not repeated here | 2026-11-04 |
+| No advisory against `rusqlite` 0.41.1, `libsqlite3-sys` 0.39.1, `fallible-iterator` 0.3.0, `fallible-streaming-iterator` 0.1.9, `pkg-config` 0.3.34 or `vcpkg` 0.2.15; the advisories reported name `rustls`, `rustls-webpki`, `webpki-roots` and, as a warning, `tokio` | `cargo audit` 0.22.2, advisory database of 2026-11-03 holding 1403 advisories, over the evaluation's lock file, re-resolved from `833bc35`'s | 2026-11-03 |
+| Over `Cargo.lock` at `229edc8`, no vulnerability and no warning is reported | `cargo audit` 0.22.2, `--no-fetch`, over the local advisory database holding 1403 advisories | 2026-11-04 |
 | Declared floors: `pkg-config` 0.3.34 → 1.63; `fallible-iterator` 0.3.0, `fallible-streaming-iterator` 0.1.9 and `vcpkg` 0.2.15 declare none | crates.io API, one request per crate | 2026-11-03 |
 | The workflows invoke Cargo at the repository root and run `cargo test` for each of the four targets | `.github/workflows/ci.yml` and `.github/workflows/release.yml` at `833bc35` | 2026-11-03 |
+| `docs/spec-technical/` cites `ADR-013`; neither `CLAUDE.md` nor `README.md` names SQLite | `rg ADR-013 docs/spec-technical/` and `rg -i sqlite README.md CLAUDE.md`, at `229edc8` | 2026-11-04 |
