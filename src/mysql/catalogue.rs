@@ -45,7 +45,7 @@ use tokio::time::timeout;
 
 use super::Session;
 use crate::deadline::{Clock, Phase};
-use crate::error::{Error, NetworkPhase};
+use crate::error::{Error, NetworkPhase, SessionStatement};
 use crate::mariadb::connect::Target;
 use crate::mariadb::fault;
 use crate::model::database::Database;
@@ -138,7 +138,13 @@ pub(crate) fn read(
 
     for statement in plan {
         let fetched = issue(session, target, clock, statement, schema)?.map_err(|driver| {
-            fault::speaking(target.entry(), &driver, target.host(), target.port())
+            fault::speaking(
+                target.entry(),
+                &driver,
+                target.host(),
+                target.port(),
+                SessionStatement::CatalogueQuery,
+            )
         })?;
 
         issued.push(statement.sql());
@@ -184,6 +190,7 @@ pub(crate) fn probe(
             &driver,
             target.host(),
             target.port(),
+            SessionStatement::CatalogueQuery,
         )),
     }
 }

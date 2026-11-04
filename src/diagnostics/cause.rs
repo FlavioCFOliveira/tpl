@@ -21,9 +21,10 @@
 use std::borrow::Cow;
 
 use crate::error::{
-    ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    KeyAbsence, Missing, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RefusedKind,
-    RenderReason, SqliteEnd, TlsFault, TplDirFault, Unresolved, context_name, password_pair,
+    AccountRefusal, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair,
+    Error, KeyAbsence, LoginFault, LoginRefusal, Missing, PasswordCommandFault, ReadOnlyFault,
+    ReferenceFault, RefusedKind, RenderReason, SqliteEnd, StatementFault, TcpFault, TlsFault,
+    TplDirFault, Unresolved, context_name, password_pair,
 };
 use crate::model::database::Provider;
 
@@ -74,6 +75,16 @@ const DATABASE_IS_NOT_A_FIELD_OF_ANY_FORM: &str = "; -d/--database was given, an
                                                    with --schema, or is the path part of --dsn \
                                                    for an entry defined by dsn; the database \
                                                    file of a sqlite entry is set with --path";
+
+/// The product whose server an entry of `provider` reads, as a `cause` or a
+/// `hint` names it (`FR-ERR-047`).
+pub(super) const fn server_name(provider: Provider) -> &'static str {
+    match provider {
+        Provider::Mariadb => "MariaDB",
+        Provider::Mysql => "MySQL",
+        Provider::Sqlite => "SQLite",
+    }
+}
 
 /// The entries that take a key of one provider family (`FR-CONF-052`): the
 /// keys of a server, which a `mariadb` and a `mysql` entry take alike, or
@@ -788,6 +799,107 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "the TCP connect to {host}:{port} did not open a session: the host refused it, or \
              nothing is listening on that port"
         )),
+        // FR-ERR-049, outcomes 2 to 4: what the operating system reported, by
+        // its POSIX name, or its number where tpl names none.
+        Error::TcpConnectFailed {
+            host, port, fault, ..
+        } => match fault {
+            TcpFault::HostUnreachable => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the network reports the host unreachable"
+            )),
+            TcpFault::NetworkUnreachable => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the network reports the host's network \
+                 unreachable"
+            )),
+            TcpFault::NoAnswer => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: nothing answered, and the operating \
+                 system abandoned the attempt"
+            )),
+            TcpFault::Other(Some(number)) => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the operating system reported error \
+                 {number}"
+            )),
+            TcpFault::Other(None) => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed, and the operating system reported no \
+                 error number"
+            )),
+        },
+        // FR-ERR-047, outcomes 1 and 2: the login, the host and port, and
+        // what it returned; never the TCP connect as the phase that failed.
+        Error::LoginNotCompleted {
+            host,
+            port,
+            provider,
+            fault,
+            ..
+        } => match fault {
+            LoginFault::ConnectionClosed => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} succeeded, and the connection failed before the \
+                 login completed: the server closed it, it was reset, or the operating system \
+                 abandoned it"
+            )),
+            LoginFault::NotAccepted => {
+                let server = server_name(*provider);
+                Cow::Owned(format!(
+                    "what answered the login at {host}:{port} did not answer as a {server} server \
+                     does: it does not speak the {server} protocol, or it asked for a step tpl \
+                     does not implement, such as an authentication method"
+                ))
+            }
+        },
+        // FR-ERR-048: a limit, a blocked host or a number tpl classifies no
+        // further, each with the number under FR-GLOB-018.
+        Error::LoginRefused {
+            host,
+            port,
+            number,
+            reason,
+            ..
+        } => Cow::Owned(match reason {
+            LoginRefusal::ServerConnectionLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: it \
+                 has reached its limit on connections"
+            ),
+            LoginRefusal::UserConnectionLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: the \
+                 user has reached its limit on simultaneous connections"
+            ),
+            LoginRefusal::ResourceLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: the \
+                 account has exceeded a resource limit"
+            ),
+            LoginRefusal::HostBlocked => format!(
+                "the server at {host}:{port} refused the login with server error {number}: it \
+                 blocks this client's host after connection errors"
+            ),
+            LoginRefusal::Unclassified => format!(
+                "the server at {host}:{port} ended the login with server error {number}, which \
+                 tpl does not classify further"
+            ),
+        }),
+        // FR-ERR-036: the statement, the host and port, and which of the
+        // three ways it failed.
+        Error::StatementFailed {
+            host,
+            port,
+            statement,
+            fault,
+            ..
+        } => Cow::Owned(match fault {
+            StatementFault::ConnectionFailed => format!(
+                "the session with {host}:{port} was open, and the connection failed while \
+                 {statement} was running: the server closed it, it was reset, or the operating \
+                 system abandoned it"
+            ),
+            StatementFault::OutsideProtocol => format!(
+                "the session with {host}:{port} was open, and the server's answer to {statement} \
+                 did not follow the client-server protocol"
+            ),
+            StatementFault::ServerError(number) => format!(
+                "the session with {host}:{port} was open, and the server answered {statement} \
+                 with server error {number}"
+            ),
+        }),
         Error::TlsHandshakeFailed {
             host, port, fault, ..
         } => match fault {
@@ -808,6 +920,14 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             limit,
             ..
         } => match bound {
+            // FR-ERR-027 with FR-CONF-005: the four connection phases share
+            // one budget, and the cause says so rather than that it bounds the
+            // phase alone.
+            DeadlineBound::Phase if phase.connecting() => Cow::Owned(format!(
+                "{phase} for {host}:{port} had not finished when the connection budget of \
+                 {limit:?} expired; core.connect_timeout sets that budget, which DNS resolution, \
+                 the TCP connect, the TLS handshake and the login share"
+            )),
             DeadlineBound::Phase => Cow::Owned(format!(
                 "{phase} for {host}:{port} had not finished when its own deadline of {limit:?} \
                  expired; that deadline bounds this phase alone"
@@ -885,6 +1005,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         Error::AuthenticationRefused { user, host, .. } => Cow::Owned(format!(
             "the server at '{host}' rejected the user '{user}' or its password; the refusal came \
              from the server"
+        )),
+        // FR-ERR-048: the reason the row states, and no error number.
+        Error::AccountRefused {
+            user, host, reason, ..
+        } => Cow::Owned(format!(
+            "the server at '{host}' refused the user '{user}' because {}; the refusal came from \
+             the server",
+            match reason {
+                AccountRefusal::HostNotPrivileged => "it may not connect from this client's host",
+                AccountRefusal::PasswordExpired => "its password has expired",
+                AccountRefusal::Locked => "its account is locked",
+                AccountRefusal::Blocked => "its account is blocked after failed logins",
+            }
         )),
         Error::PropertyNotReadable {
             kind,
@@ -1319,8 +1452,16 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              newest that is. A mysql entry supports {}",
             listed(supported)
         )),
-        // FR-MYSQL-045: the connection succeeded and the authentication was not
-        // completed; the user, the host and the port, the tls mode in force and,
+        // FR-ERR-048, error 3159: the host and port, the number, and the mode
+        // under which the session was not encrypted.
+        Error::SecureTransportRequired {
+            host, port, tls, ..
+        } => Cow::Owned(format!(
+            "the server at {host}:{port} refused the login with server error 3159: it accepts \
+             only encrypted sessions, and the session was not encrypted under tls '{tls}'"
+        )),
+        // FR-MYSQL-045, and FR-ERR-047 outcome 3 for a mariadb entry: the
+        // connection succeeded and the authentication was not completed; the user, the host and the port, the tls mode in force and,
         // under `preferred`, that the server offered no TLS; the method the
         // server asked for; and that tpl does not request the key over a
         // session TLS does not protect.

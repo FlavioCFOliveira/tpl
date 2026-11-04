@@ -287,17 +287,18 @@ fn fr_mysql_043_a_series_newer_than_the_window_is_read_and_marked_through_the_se
 }
 
 #[test]
-fn adr_014_a_mariadb_entry_keeps_its_outcome_for_the_refusal_the_patch_adds() {
-    // ADR-014, Consequences: a `mariadb` entry runs through the patched driver
-    // and keeps exactly its present outcome — `Error::ConnectionRefused`, exit
-    // 69, with the same message — where a login over a session TLS does not
-    // protect needs the server's public key. A MySQL server with its cache
-    // emptied is the one server of either fixture that asks for that key, and
-    // a `mariadb` entry pointed at it reaches the refusal before its product
-    // check. The `mysql` entry's outcome for the same login is FR-MYSQL-045's,
-    // asserted from outside the process in `tests/mysql_provider.rs`.
+fn fr_err_047_a_mariadb_entry_meets_the_refusal_of_adr_014_as_its_third_outcome_at_69() {
+    // FR-ERR-047, third outcome, with the note on FR-SEC-021 and ADR-014
+    // point 4: a `mariadb` entry whose login, over a session TLS does not
+    // protect, needs the server's public key is refused before the request is
+    // written, and ends at 69 with the facts and the command FR-MYSQL-045
+    // states. A MySQL server with its cache emptied is the one server of either
+    // fixture that asks for that key, and a `mariadb` entry pointed at it
+    // reaches the refusal before its read-back. Amended from the test of rmp
+    // #329, which pinned the refused-TCP-connect message the seventy-seventh
+    // edition replaced.
     let Some(plain) = fixture::servers(
-        "adr_014_a_mariadb_entry_keeps_its_outcome_for_the_refusal_the_patch_adds",
+        "fr_err_047_a_mariadb_entry_meets_the_refusal_of_adr_014_as_its_third_outcome_at_69",
         Role::NoTls,
     ) else {
         return;
@@ -329,11 +330,15 @@ fn adr_014_a_mariadb_entry_keeps_its_outcome_for_the_refusal_the_patch_adds() {
             .map(crate::mariadb::Session::close)
             .expect_err("the login needs the key, which the driver does not request");
 
-        let expected = Error::ConnectionRefused {
-            by_dsn: false,
+        let expected = Error::PublicKeyRequestRefused {
+            provider: crate::model::database::Provider::Mariadb,
             entry: ENTRY.to_owned(),
+            user: names.reader.0.clone(),
             host: server.host().to_owned(),
             port: server.port().parse().expect("the harness exports a port"),
+            tls: "disabled",
+            no_tls_offered: false,
+            method: "caching_sha2_password",
         };
 
         assert_eq!(
@@ -345,8 +350,77 @@ fn adr_014_a_mariadb_entry_keeps_its_outcome_for_the_refusal_the_patch_adds() {
         assert_eq!(
             crate::diagnostics::rendered(&condition),
             crate::diagnostics::rendered(&expected),
-            "{}: a mariadb entry's message moved",
+            "{}",
             server.name()
         );
+    }
+}
+
+#[test]
+fn fr_err_048_a_second_login_beyond_the_account_limit_is_69_on_every_series() {
+    // FR-ERR-048, observed: the fixture's tpl_limited holds
+    // MAX_USER_CONNECTIONS 1, so a second login while the first is open is
+    // refused with a limit on connections: 69, not the 77 of a credential.
+    let Some(series) =
+        fixture::series("fr_err_048_a_second_login_beyond_the_account_limit_is_69_on_every_series")
+    else {
+        return;
+    };
+    let _exclusive = fixture::exclusive();
+    let names = fixture::names();
+
+    for server in &series {
+        let scratch = Scratch::new();
+        let file = scratch.file(
+            ".cfg",
+            &fixture::configuration(
+                server,
+                ENTRY,
+                &names.schema,
+                ("tpl_limited", "tpl-limited-pw"),
+                "verify-identity",
+            ),
+        );
+        let configuration = config::load(&file).expect("the document is valid");
+        let resolved = settings::resolve(
+            &configuration,
+            Some(ENTRY),
+            &settings::clock(None),
+            &nothing,
+        )
+        .expect("the entry resolves")
+        .into_mysql()
+        .expect("the entry is a mysql entry");
+        let target = Target::of(&resolved).expect("the entry names a host");
+        let clock = settings::clock(None);
+
+        let first = crate::mysql::open(&target, &clock).expect("the first login opens");
+        let second = crate::mysql::open(&target, &clock).map(crate::mysql::Session::close);
+        first.close();
+
+        let condition = second.expect_err("the second login is beyond the limit");
+        assert_eq!(
+            condition.exit_code(),
+            69,
+            "{}: {condition:?}",
+            server.name()
+        );
+        match condition {
+            Error::LoginRefused { number, reason, .. } => {
+                fixture::notice(&format!(
+                    "{}: the second login of tpl_limited was refused with server error {number}, \
+                     classified {reason:?}",
+                    server.name()
+                ));
+                assert_eq!(number, 1226, "{}", server.name());
+                assert_eq!(
+                    reason,
+                    crate::error::LoginRefusal::ResourceLimit,
+                    "{}",
+                    server.name()
+                );
+            }
+            other => panic!("{}: {other:?}", server.name()),
+        }
     }
 }

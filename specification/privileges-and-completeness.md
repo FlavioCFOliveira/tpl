@@ -476,6 +476,16 @@ read, which are `FR-ERR-001`; and the fields of the model, which are
   explanations. Neither has been made, and this note is what an amendment
   changes.
 
+  *Note added in the seventy-seventh edition,* for rmp `#338`. A second
+  condition reaches this requirement's code and message: the error packet
+  `1044` or `1049` a server sends at the login, because the connection names
+  the database under `FR-CONF-041`, per `FR-ERR-048`. The two numbers are
+  the two explanations this requirement declines to separate, a database the
+  reader may not see and one that is not there, and its message serves both.
+  That condition is observed,
+  by the tests of `src/mariadb/fault.rs` on 2026-09-18; the limit on the
+  evidence above concerns the schema catalogue's answer alone.
+
 - **FR-PRIV-020**: The system SHALL NOT claim to distinguish a table with no
   triggers from a table whose triggers the reader may not see, and this file
   SHALL state that limit rather than leave it to be discovered.

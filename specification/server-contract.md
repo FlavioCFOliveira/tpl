@@ -465,7 +465,8 @@ record has not been observed, and SHALL NOT be written down.
   `tpl` cannot vouch for, indistinguishable from a model it can. Also rejected:
   a distinct code per case — maintenance ended, rolling release, family out of
   window — which the caller cannot act on differently; the `cause` line of
-  `FR-SRV-030` carries the distinction, per `FR-ERR-034`. Also rejected: a flag
+  `FR-SRV-030` names the series found and the series that are supported,
+  which is what the caller acts on, per `FR-ERR-034`. Also rejected: a flag
   or configuration key
   that overrides the window. The command tree is closed by `FR-CLI-002`, so no
   such flag exists unless this specification declares one, and declaring one
@@ -483,6 +484,15 @@ record has not been observed, and SHALL NOT be written down.
   message of `FR-SRV-030` was already the whole of what a caller receives, and
   it already carries the three cases in its `cause`; the reference now points
   at it.
+
+  *Amended in the seventy-seventh edition,* for rmp `#333`. The rejection of
+  a code per case said that the `cause` of `FR-SRV-030` carries the
+  distinction between the three cases, and the fifth edition's note above
+  says the same. The example of `FR-SRV-030` carried it, through a reason
+  particular to `10.6`, and the implementation never did. `FR-SRV-030` now
+  fixes one reason for all three, and the rejection stands on its own ground:
+  the caller cannot act on the three cases differently. The requirement is
+  unchanged.
 
 - **FR-SRV-034**: The product check of `FR-SRV-003`, the version check of
   `FR-SRV-020`, and the marked read of `FR-SRV-031` SHALL apply to every command
@@ -532,17 +542,62 @@ record has not been observed, and SHALL NOT be written down.
 
 - **FR-SRV-030**: The message of `FR-SRV-020` SHALL name the series found and
   the database entry that reached it. Its `cause` SHALL state that the
-  connection and the authentication succeeded, SHALL state why the series found
-  is not supported, and SHALL list the series that are. Its `hint` SHALL carry
-  the `tpl cfg database update` command that repoints the entry, with the entry
-  name filled in:
+  connection and the authentication succeeded; SHALL name the series found;
+  SHALL state why it is not supported as one reason, the same for every
+  series `FR-SRV-020` refuses: that the series is outside the supported
+  window of `FR-SRV-001`; and SHALL list the series that are. Its `hint` SHALL
+  carry the `tpl cfg database update` command that repoints the entry, with
+  the entry name filled in:
 
   ```
   error: server series '10.6' is not supported, for database entry 'shop'
-  cause: connected and authenticated; the server reports 10.6.21-MariaDB, and 10.6 left community maintenance on 2026-07-06. tpl supports 12.3, 11.8, 11.4 and 10.11
+  cause: database entry 'shop' connected and authenticated, and the server reports series '10.6', which is outside the supported window; tpl supports 12.3, 11.8, 11.4 and 10.11
   hint:  repoint the entry at a supported server: tpl cfg database update shop --host <host>
   exit:  78 (EX_CONFIG)
   ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  *Why one reason for every series.* The binary holds the table of
+  `FR-SRV-015` and the comparison of `FR-SRV-021`, and nothing else about a
+  series it refuses. The window is therefore the one reason it can state that
+  is true of every series `FR-SRV-020` reaches — a series whose maintenance
+  ended, a rolling release, and a series of a family the window has left —
+  and it stays true for as long as the table the binary carries is current,
+  per `FR-SRV-019`. It is the ground `FR-MYSQL-009` gives for the reason a
+  `mysql` entry's refusal states. *The supported window* is this file's name
+  for the criterion of `FR-SRV-001`, and the list that follows it in the
+  `cause` is that criterion's instance on the date `FR-SRV-015` records.
+
+  *Rejected: a reason particular to the series found*, the date its
+  community maintenance ended, as the example read before the
+  seventy-seventh edition: "10.6 left community maintenance on 2026-07-06".
+  The binary could state it only from a second table, of every series it may
+  refuse with a date for each, which `FR-SRV-015` does not hold; a rolling
+  release has no such date at all, per `FR-SRV-016`; and no requirement needs
+  the date in the message. *Rejected: the two conditions of `FR-SRV-001`
+  stated in full*, as `FR-MYSQL-009` states the criterion of `FR-MYSQL-002`.
+  It would change the message a `mariadb` entry prints, and the user's
+  decisions for sprint 28 change one such message, under `FR-ERR-047`, and no
+  other.
+
+  *Not required: the version string.* The example named the string the probe
+  returned, `10.6.21-MariaDB`, where the implementation names the series
+  alone. The requirement never asked for the string, and the `78` row of
+  `FR-ERR-034` asks for the series found; requiring it would change a
+  `mariadb` message, as above. `FR-MYSQL-009` asks for it of a `mysql` entry.
+
+  *Amended in the seventy-seventh edition,* for rmp `#333`. The requirement
+  asked the `cause` to state why the series found is not supported and left
+  the reason open, and the example gave a reason particular to `10.6`, the
+  date its maintenance ended, and the version string. The implementation
+  names the series and states one reason, the window, which no example of
+  this corpus showed. The requirement now names the series and fixes the
+  reason, and the example is the message the implementation prints. The
+  condition, the code, the series listed and the `hint` are unchanged, and
+  so is the implementation: no line of the message changes.
 
   *Rationale for the `cause`.* This is the line that separates `78` here from
   `69` and `77`. All three mean "the read did not happen", and a caller's next

@@ -16,6 +16,19 @@ impl AuthPlugin {
         password: &str,
         nonce: &Chain<Bytes, Bytes>,
     ) -> Result<Vec<u8>, Error> {
+        // tpl (ADR-014, point 5): an empty password is sent as the server's
+        // own clients send it, never as a scramble of the empty string, and
+        // before anything is computed, guarded or requested.
+        if password.is_empty() {
+            match self {
+                AuthPlugin::MySqlNativePassword => return Ok(Vec::new()),
+                AuthPlugin::CachingSha2Password | AuthPlugin::Sha256Password => {
+                    return Ok(vec![0]);
+                }
+                AuthPlugin::MySqlClearPassword => {}
+            }
+        }
+
         match self {
             // https://mariadb.com/kb/en/caching_sha2_password-authentication-plugin/
             AuthPlugin::CachingSha2Password => Ok(scramble_sha256(password, nonce).to_vec()),

@@ -4,7 +4,7 @@ title: The driver of the mysql provider
 status: accepted
 decided: 2026-11-04
 last-reviewed: 2026-11-04
-requirements: [FR-MYSQL-045, FR-MYSQL-022, FR-MYSQL-021, FR-MYSQL-020, FR-CONF-036]
+requirements: [FR-MYSQL-045, FR-MYSQL-022, FR-MYSQL-021, FR-MYSQL-020, FR-CONF-036, FR-CONF-055, FR-MYSQL-047, FR-CONF-005, FR-ERR-027, FR-ERR-047, FR-ERR-049]
 supersedes: []
 superseded-by: null
 ---
@@ -24,9 +24,9 @@ the request patched out; otherwise no patch is needed. The evidence in
 
 **Every decision in this record is the user's, of 2026-11-04, relayed by the
 session coordinator**: the rule and the branch it yields; the form of the
-refusal, Decision point 3; what `tpl` does with it, point 4, including the
-outcome a `mariadb` entry keeps; and the module the reader lives in, for which
-`ADR-005` was amended in place the same day.
+refusal, Decision point 3; what `tpl` does with it, point 4; the two further
+parts of the patch, points 5 and 6; and the module the reader lives in, for
+which `ADR-005` was amended in place the same day.
 
 **Decision point 3 was corrected in place on 2026-11-04**, for rmp `#329`, once
 the tree was vendored. It said the change was confined to `auth.rs` save one
@@ -36,6 +36,20 @@ module of `connection`; the point now names that line, the type, and the private
 function that builds the refusal. The guards, the type's purpose and the error
 it is boxed in did not change, so the decision did not change, and `decided` is
 unchanged.
+
+**Amended in place on 2026-11-04**, for the joined effort of rmp `#332` to
+`#338`, against the seventy-seventh edition of the specification, by the user's
+decisions of that day. Point 4 named, for a `mariadb` entry, the classification
+the same login had before the `mysql` provider existed, with its message; that
+outcome is now the specification's, the third outcome of `FR-ERR-047`, and the
+point cites it. Points 5 and 6 are new: the patch now also presents an empty or
+absent password as `FR-CONF-055` requires, and reports the phase a connection
+reached, as `FR-CONF-005` requires and no solution without a patch delivers.
+Point 7, the condition that retires the patch, was point 5 and now holds one
+condition per part. The driver, the vendored form and the refusal of point 3
+did not change; the record's subject — the driver and the patch it carries —
+is the same, and the new parts were decided the same day, so this is an edit in
+place, as `ADR-013` was for its test-only feature, and `decided` is unchanged.
 
 ## Context
 
@@ -95,6 +109,51 @@ are identical to the tag's (Sources).
   `encrypt_rsa` still writes the request on that path and the options gain no
   switch; `sqlx` 0.9.0 is still the maximum stable release.
 
+**The seventy-seventh edition reaches the login twice more.** `FR-CONF-055`,
+which `FR-MYSQL-047` holds for a `mysql` entry, requires an empty password, and
+an entry that supplies none, to be presented as the server's own clients present
+an empty password, at the first response of the login and at every switch of
+the authentication method, and never as a scramble of the empty string.
+`FR-CONF-005` requires the phase a connection had reached to decide where an
+expired budget or a failure is reported, and not the call that was running;
+`FR-ERR-027` and `FR-ERR-049` report against it. The pinned driver meets
+neither, at the same tag:
+
+- *The empty password.* `AuthPlugin::scramble` computes a scramble from
+  whatever password it is given, the empty string included (`auth.rs:21`,
+  `23`); for `sha256_password` it reaches `encrypt_rsa` (`26`), which on a TLS
+  stream sends the empty string NUL-terminated and otherwise meets the refusal
+  of point 3. The first response of the login is computed only where the entry
+  has a password (`establish.rs:102–106`); without one it is empty, whatever the
+  method (`src/protocol/connect/handshake_response.rs:50–62`). The response to a
+  switch presents an absent password as the empty string
+  (`establish.rs:139`, `unwrap_or_default()`), and so scrambles it.
+- *The phase reached.* One call, `MySqlConnectOptions::connect`
+  (`src/options/connect.rs:21–25`), covers the TCP connect, the greeting, the
+  TLS handshake and the authentication. Where the budget expires, `tpl`'s
+  timeout drops that call's future, and nothing survives to say how far it got.
+  Where the call fails, an error of the TCP connect and an I/O error of the
+  login arrive on one variant: sqlx-core converts the connect's error with `?`
+  (`sqlx-core/src/net/socket/mod.rs:190–193`) into `Error::Io`, which carries
+  the `io::Error` unchanged (`sqlx-core/src/error.rs:49`), so a kind such as
+  `TimedOut` does not say which phase it arose in. The driver offers no way to
+  learn it. Its options hold no hook (`src/options/mod.rs:63–83`); its log
+  settings reach only the statements of an open session
+  (`src/connection/executor.rs:110`); the only events on the path are two
+  `tracing::debug!` calls, made where no TLS is attempted (`tls.rs:35`, `41`);
+  and the login cannot be run on a socket `tpl` opens itself, although sqlx-core
+  exports `connect_tcp` and `WithSocket` (`sqlx-core/src/net/mod.rs:4–6`),
+  because `MySqlConnection::establish` is crate-private (`establish.rs:15`),
+  `DoHandshake` is private (`37`), and the options take a Unix socket path and
+  no connected stream (`src/options/mod.rs:138`). **No solution without a patch
+  exists.**
+- *What the published API already gives.* The `io::Error` inside `Error::Io`
+  carries `kind()` and `raw_os_error()`, and an error packet arrives as a
+  `MySqlDatabaseError` (`src/connection/stream.rs:141–170`) whose `number()` is
+  public (`src/error.rs:24`). Classifying by them, as rmp `#337` and `#338` do,
+  needs no patch. Attributing an `Error::Io` to the TCP connect rather than to
+  the login needs the phase of the bullet above.
+
 **Nothing else in the crate stands in the way of `8.4` or `9.7`.** The
 handshake's version string is parsed leniently, stored, and consulted by nothing
 (`establish.rs:68–95`), so the window of `FR-MYSQL-006` to `FR-MYSQL-010` is
@@ -110,7 +169,7 @@ uses. The statement the driver issues after
 the handshake (`src/options/connect.rs:52–89`) is issued only if one of four
 options is set; the MariaDB path sets all four off
 (`src/mariadb/connect.rs:425–431`), which a `mysql` entry needs as well under
-`FR-MYSQL-016`. Three facts are bounded rather than obstacles:
+`FR-MYSQL-016`. Two facts are bounded rather than obstacles:
 
 - the decoder refuses a result column whose wire type it does not list
   (`src/protocol/text/column.rs:261–263`). The closed list of `FR-MYSQL-015`
@@ -121,11 +180,7 @@ options is set; the MariaDB path sets all four off
 - after an authentication switch, the follow-up exchange uses the handshake's
   nonce rather than the switch's (`establish.rs:133` shadows it), which `main`
   corrects. Only the RSA exchange reads the nonce at that point, and the patch
-  removes it;
-- an empty password is scrambled rather than sent empty (`auth.rs:21`, `23`),
-  which `main` also corrects. It is reached only when a password is set to the
-  empty string; the MariaDB path sets none where the entry carries none
-  (`src/mariadb/connect.rs:437–439`).
+  removes it.
 
 ## Decision
 
@@ -139,11 +194,11 @@ options is set; the MariaDB path sets all four off
    the evidence of its source, which the provider's tests observe; and it
    requests no key on a session TLS does not protect.
 
-2. **The package patches the driver rather than living with the request.** The
+2. **The package patches the driver rather than living with what it does.** The
    root manifest's `[patch.crates-io]` table redirects `sqlx-mysql` to
    `vendor/sqlx-mysql-0.9.0/`, which holds the published 0.9.0 source with the
-   change of point 3 and nothing else. Everything else about the form is
-   `ADR-010`'s, applied to a second tree and not restated: a tracked copy
+   changes of points 3, 5 and 6 and nothing else. Everything else about the
+   form is `ADR-010`'s, applied to a second tree and not restated: a tracked copy
    redirected by path, the version in the directory name, maintained by hand,
    excluded from the workspace, its provenance in `vendor/README.md`. The
    licence texts already at `vendor/` serve this tree as they serve that one:
@@ -151,9 +206,9 @@ options is set; the MariaDB path sets all four off
    `../LICENSE-MIT`, and was packaged from the same upstream revision as
    `sqlx-core` 0.9.0.
 
-3. **The change, in full.** Two guards and one type in
+3. **The refusal of the key request, in full.** Two guards and one type in
    `src/connection/auth.rs`, and the two lines that export the type. Line
-   numbers are those of the published files:
+   numbers in points 3, 5 and 6 are those of the published files:
 
    - in `AuthPlugin::handle`, the arm for `perform_full_authentication`
      (`0x04`, lines 52–59): before `encrypt_rsa` is called, the arm returns the
@@ -178,28 +233,91 @@ options is set; the MariaDB path sets all four off
    the change nothing writes a public-key request on a stream that is not TLS,
    and on a TLS stream every path runs as published. The refusal is returned
    before the request is written, so the connection ends without completing the
-   authentication, as `FR-MYSQL-045` requires. Nothing else differs from the
-   published crate — no other function, file, feature or manifest entry; any
-   other difference is a defect in the tree.
+   authentication, as `FR-MYSQL-045` requires.
 
 4. **What `tpl` does with the refusal.** It recognises the refusal by its type,
    never by its text, as the boundary of `src/mariadb/fault.rs` reads the
-   driver's discriminants alone. For a `mysql` entry the refusal is the
-   condition of `FR-MYSQL-045`, exit `78`: it carries the method's name, which
-   the `cause` names, and since it is raised only on a stream that is not TLS,
-   under `preferred` it shows that the server offered no TLS
-   (`tls.rs:39–43`). For a `mariadb` entry it keeps exactly the outcome the
-   same login has today (*Consequences*).
+   driver's discriminants alone. The refusal carries the method's name, and
+   since it is raised only on a stream that is not TLS, under `preferred` it
+   shows that the server offered no TLS (`tls.rs:39–43`); both are facts the
+   `cause` names. For a `mysql` entry the refusal is the condition of
+   `FR-MYSQL-045`, exit `78`. For a `mariadb` entry it is the third outcome of
+   `FR-ERR-047`, exit `69`, whose `cause` and `hint` state the facts and the
+   command `FR-MYSQL-045` states; the note on `FR-SEC-021` records why the code
+   differs.
 
-5. **The condition that retires the patch: the first `sqlx` release whose
-   `sqlx-mysql` lets a caller refuse the request.** At that release the patch
-   entry for `sqlx-mysql` and its tree are deleted, `tpl` sets the refusal on
-   every connection it opens, and points 2 to 4 are amended in place. It was not met on
-   2026-11-04. Until it is, the patch is carried across every move of
-   `ADR-003`'s pin: the tree is vendored again at the release moved to, and the
-   change is re-applied and checked against that release's published source.
-   `main` already edits both functions the change touches, so the re-application
-   will not be mechanical.
+5. **The empty password, in full.** Two changes, which `FR-CONF-055` requires
+   for both providers:
+
+   - in `src/connection/auth.rs`, `AuthPlugin::scramble` (lines 13–34): where
+     the password is the empty string, the function returns, before it
+     computes, guards or requests anything, the response for an empty password
+     that the user fixed from the prior art `FR-CONF-055` records — an empty
+     response for `mysql_native_password` (the arm of line 23), and a single
+     `0x00` byte, as MySQL's client library sends, for `caching_sha2_password`
+     (line 21) and for `sha256_password` (line 26), ahead of that arm's guard of
+     point 3, because a login with no password needs no key. The arm for
+     `mysql_clear_password` (lines 28–32) already sends a single `0x00` for the
+     empty string and is unchanged;
+   - in `src/connection/establish.rs`, `DoHandshake::do_handshake`, the first
+     response of the login (lines 102–106): where the server names a method, the
+     response is computed from the entry's password or, where the entry
+     supplies none, from the empty string —
+     `options.password.as_deref().unwrap_or_default()`, the form the switch
+     already uses — so an entry without a password sends what an entry with an
+     empty one sends. Where the server names no method, the response stays
+     absent, as published.
+
+   The response to a switch (lines 128–146) is not edited: it already presents
+   an absent password as the empty string (line 139), so the change to
+   `scramble` is the change to it. `AuthPlugin::handle` is not edited: the
+   steps `FR-CONF-055` names are the first response and the response to a
+   switch.
+
+6. **The phase the connection reached, in full.** Three changes, in
+   `sqlx-mysql` alone:
+
+   - in `src/options/mod.rs`: a public handle declared for this alone, `Clone`
+     and `Debug`, holding a shared atomic cell, whose one reader returns the
+     phase reached as a public enumeration of three values — the TCP connect,
+     which a new handle holds, the TLS handshake, and the login; one field of
+     `MySqlConnectOptions` (lines 63–83) holding an optional handle, absent in
+     `new()` (lines 93–115); and one setter that sets it;
+   - in `src/connection/establish.rs`, `DoHandshake::do_handshake` (from line
+     55), where a handle is set, three recordings: the login, on entry, because
+     sqlx-core calls into `with_socket` only once the TCP connect has completed
+     (`sqlx-core/src/net/socket/mod.rs:190–193`); the TLS handshake, immediately
+     before the call to `tls::maybe_upgrade` (line 100); and the login again,
+     immediately after that call returns. `maybe_upgrade` awaits nothing where
+     it negotiates no TLS (`tls.rs:23–53`), so the second recording is observed
+     outside a handshake only on the refusal of `tls.rs:46–53`, which is a
+     failure of the TLS handshake;
+   - in `src/lib.rs`, the existing export of the options (line 45) also names
+     the handle and the enumeration.
+
+   `tpl` makes the handle, passes a clone to the options through the setter,
+   and reads its own clone once the call to `connect` has ended in an expired
+   budget or an error. The read is an atomic load: it needs no `unsafe` and
+   reads no driver text. sqlx-core is not touched, so the tree of `ADR-010`
+   keeps its one statement.
+
+   Nothing differs from the published crate but what points 3, 5 and 6 name —
+   no other function, file, feature or manifest entry; any other difference is
+   a defect in the tree.
+
+7. **The conditions that retire the patch, one per part.** The refusal of point
+   3 goes at the first `sqlx` release whose `sqlx-mysql` lets a caller refuse
+   the request; the presentation of point 5, at the first whose `sqlx-mysql`
+   sends, for an empty or an absent password, at the first response and at
+   every switch, the responses point 5 sends; and the handle of point 6, at the
+   first whose `sqlx-mysql` lets a caller learn the phase a connection reached.
+   At each, that part leaves the tree, `tpl` uses what the release offers, and
+   its point is amended in place; the tree and its patch entry go with the last
+   part. None was met on 2026-11-04. Until then the patch is carried across
+   every move of `ADR-003`'s pin: the tree is vendored again at the release
+   moved to, and every remaining part is re-applied and checked against that
+   release's published source. `main` already edits both functions points 3
+   and 5 touch, so the re-application will not be mechanical.
 
 ## Alternatives rejected
 
@@ -248,42 +366,97 @@ options is set; the MariaDB path sets all four off
   expressed. It would not spare the patch: on a connection neither encrypted
   nor made through a socket it writes the same `0x02` request
   (`src/conn/mod.rs:812–818`), and no option prevents it — `secure_auth`
-  disables `mysql_old_password` alone (`src/opts/mod.rs:1095–1100`). It would also be a second driver stack for a
-  protocol the first already speaks. These facts were read at the published
-  crate and not tested against servers: enough to disqualify, which is all they
-  are used for here, and not enough to qualify, per `ADR-003`.
+  disables `mysql_old_password` alone (`src/opts/mod.rs:1095–1100`). It would
+  also be a second driver stack for a protocol the first already speaks. These
+  facts were read at the published crate and not tested against servers:
+  enough to disqualify, which is all they are used for here, and not enough to
+  qualify, per `ADR-003`.
 
 - **A fork of `sqlx` pinned by revision.** Refused on the grounds `ADR-010`
   records for the same choice. They weigh more here: this divergence has no
   upstream end, so the second repository would be kept for as long as upstream
   offers no switch.
 
-- **Exit `78` for a `mariadb` entry, as for a `mysql` entry.** Refused by the
-  user on 2026-11-04: it would change what a `mariadb` entry does, and the
-  user's goal for the `mysql` provider is that nothing about MariaDB support
-  changes (`FR-MYSQL-001`, *Provenance*).
+- **For a `mariadb` entry, exit `78` as for a `mysql` entry, or the
+  classification the same login had before, with its message.** Both refused by
+  the user on 2026-11-04; the second was this record's prescription until the
+  seventy-seventh edition. `FR-ERR-047` and the note on `FR-SEC-021` record the
+  grounds, and they are not restated here.
+
+- **For an empty password, upstream's change on `main`** (`7908fe79`): an empty
+  response wherever the password is empty, for `caching_sha2_password` and
+  `mysql_native_password` alike (`auth.rs:20–25` there). Refused: it sends an
+  empty response where point 5 sends `0x00` for `caching_sha2_password`, and it
+  leaves `sha256_password` and the first response of an entry without a
+  password as published. Taking it would have given point 5 an upstream end.
+
+- **For an empty password, an edit of the response to a switch as well.**
+  Unneeded: that response already presents an absent password as the empty
+  string (`establish.rs:139`), and the change to `scramble` reaches it.
+
+- **For the phase reached, any solution without a patch.** The driver offers no
+  option, hook or event that marks a phase, and its login cannot be run on a
+  socket `tpl` opens (*Context*). A TCP connection `tpl` opens first, to learn
+  whether the TCP connect succeeds, is a second connection, which `NFR-PERF-004`
+  forbids and `FR-MYSQL-042` holds a `mysql` entry to. Inferring the phase from
+  the error refers it to the call, which `FR-CONF-005` forbids: on an expired
+  budget there is no error, and on a failure the kind does not name the phase.
+  Inferring it from the time elapsed is not what the connection had completed.
+  Reading the socket's state from the operating system depends on the target
+  and reads state the driver owns.
+
+- **For the phase reached, the deadline moved into the driver**, which would
+  apply the budget at each step and return an error naming the step. Refused:
+  it reaches every wait of the login and moves the runtime's timers into the
+  vendored crate, a wider divergence than three recordings, for a fact the
+  recordings already give.
+
+- **For the phase reached, a patch of `sqlx-core`**, marking the end of the TCP
+  connect inside `connect_tcp`. Unneeded: the call into `sqlx-mysql`'s
+  `with_socket` is that mark, and the tree of `sqlx-core` is `ADR-010`'s, whose
+  divergence is one statement by its own rule.
+
+- **For the phase reached, a thread-local or static cell** in place of a handle
+  on the options. Refused: a global the connection does not own, correct only
+  while the runtime runs the connection on the thread that reads it.
 
 ## Consequences
 
-**A `mariadb` entry runs through the patched code, and keeps exactly its present
-outcome.** MariaDB offers `caching_sha2_password` too: it documents a
-server-side plugin, "available from these versions: MariaDB Community Server
-11.4.9 / 11.8.4 / 12.1", in the library `auth_mysql_sha2`, not installed by
-default, with its RSA key pair generated by default; MariaDB Server does not
-support `sha256_password`. Three of the four series of `FR-SRV-015` therefore
-have releases that offer it. Assuming the plugin asks for full authentication as
-MySQL's does — its documentation calls it MySQL-compatible, and nothing here
-observed it — a login on such a server, by an account using it, with no cached
-login and on a session TLS does not protect, ends today with the published crate
-requesting the key and then failing; `src/mariadb/fault.rs` classifies the
-failure on its row for anything else, `Error::ConnectionRefused`, exit `69`.
-**That outcome stays exactly as it is — exit `69`, with the same message — and
-the `mariadb` path SHALL map the typed refusal to it and to no other.** The one
-difference is that the request is never sent. The refusal is neither an error
-packet nor a TLS failure, so the classification as it stands already reaches
-that row; what the obligation forbids is any change that gives the refusal an
-outcome of its own for a `mariadb` entry. No login that succeeds today fails,
-and none that fails succeeds.
+**A `mariadb` entry runs through every part of the patch.** MariaDB offers a
+server-side `caching_sha2_password` on releases of three of the four series of
+`FR-SRV-015`, not installed by default, as the note on `FR-SEC-021` records from
+MariaDB's documentation; MariaDB Server does not support `sha256_password`.
+Where the login of a `mariadb` entry needs the server's RSA public key on a
+session TLS does not protect, the published crate as built requested the key
+and then failed; the patched crate fails it without the request, and the
+`mariadb` path recognises the refusal by its type and reports it as the third
+outcome of `FR-ERR-047`, at the code the same login had before. No login that
+succeeded before the patch fails, and none that failed succeeds. Points 5 and 6
+reach a `mariadb` entry as they reach a `mysql` entry, because `FR-CONF-055` and
+`FR-CONF-005` hold for both.
+
+**For `caching_sha2_password`, point 5 sends what MySQL's client library
+sends.** `FR-CONF-055` records the two reference clients: MySQL's sends a single
+`0x00` for that method and MariaDB Connector/C an empty packet. On a MariaDB
+server that offers the method, a `mariadb` entry with an empty or absent
+password therefore sends `0x00` where MariaDB's own client sends nothing. No
+observation records what either server answers to the other form.
+
+**The handle answers both questions `FR-CONF-005` asks.** After an expired
+budget it names the phase that was in progress, which `FR-ERR-027` reports.
+After a failure it says whether the TCP connect had completed, which separates a
+failure of the TCP connect, `FR-ERR-049`, from a failure of the login,
+`FR-ERR-047`, where the kind of an I/O error cannot: `TimedOut` and an error the
+operating system reports without a name of its own can arise on either side.
+One bound remains. The driver hands the host name, not an address, to
+`TcpStream::connect` (`sqlx-core/src/net/socket/mod.rs:192` at the tag), which
+resolves it again after `tpl`'s own resolution has completed, so a budget that
+expires during that second resolution is reported against the TCP connect.
+
+**No part of the patch has an upstream end in sight.** On `main` at `7908fe79`
+the options still offer no refusal of the key request and no record of the
+phase, and the change to the empty password sends what point 5 does not
+(*Alternatives rejected*).
 
 **The reader needs the runtime, and `ADR-005` covers it.** A reader of a
 `mysql` entry built on this driver is asynchronous. It lives in `mysql/`, a
@@ -317,8 +490,9 @@ those documents. No crate is adopted, so the *Stack* table's own rule calls for
 no change to it.
 
 **Under R3, these facts live here alone:** that the `mysql` provider reads
-through this driver, the patch and its scope, and the condition that retires
-it.
+through this driver, each part of the patch and its scope, and the condition
+that retires each. What either provider reports is the specification's, and is
+cited here, not restated.
 
 ## Sources
 
@@ -326,9 +500,18 @@ it.
 |---|---|---|
 | The constraints on the driver, and the corpus's statement that the choice is an architecture decision | `specification/mysql-contract.md`, seventy-fifth edition at `d4eaf76`: *Scope*, `FR-MYSQL-020`, `FR-MYSQL-021`, `FR-MYSQL-022`, `FR-MYSQL-045`, row 25 of `FR-MYSQL-040`; `specification/configuration-model.md`, `FR-CONF-036` | 2026-11-04 |
 | The rule applied | The session coordinator's brief for rmp `#327` | 2026-11-04 |
-| The user's decisions: the rule and its branch; the two guards, the typed refusal and its export; exit `78` for a `mysql` entry; exit `69` with the present message for a `mariadb` entry, and `78` refused there; the reader in `mysql/`, not inside `mariadb/` | The user's decision of 2026-11-04, relayed by the session coordinator for rmp `#327` | 2026-11-04 |
+| The user's decisions for rmp `#327`: the rule and its branch; the two guards, the typed refusal and its export; exit `78` for a `mysql` entry; for a `mariadb` entry, exit `69` with the message the same login had before, which the next row replaces, and `78` refused; the reader in `mysql/`, not inside `mariadb/` | The user's decision of 2026-11-04, relayed by the session coordinator for rmp `#327` | 2026-11-04 |
+| The user's decisions for rmp `#332` to `#338`: for a `mariadb` entry, the refusal is the third outcome of `FR-ERR-047`, exit `69`, with the facts of `FR-MYSQL-045`; the patch presents an empty or absent password as `FR-CONF-055` requires, with an empty response for `mysql_native_password` and a single `0x00` for `caching_sha2_password` and `sha256_password`, at the first response and at every switch; the patch reports the phase reached only if no solution without a patch exists; rmp `#337` and `#338` classify by what the published API exposes | The user's decisions of 2026-11-04, relayed by the session coordinator for the joined effort | 2026-11-04 |
+| The empty password, the phase reached and the outcomes the record cites | `specification/configuration-model.md`, `FR-CONF-005` and `FR-CONF-055`; `specification/mysql-contract.md`, `FR-MYSQL-047`; `specification/errors-and-exit-codes.md`, `FR-ERR-027`, `FR-ERR-047`, `FR-ERR-048`, `FR-ERR-049`; `specification/security.md`, the note on `FR-SEC-021`; the seventy-seventh edition, uncommitted in the working tree over `2d652bd` | 2026-11-04 |
+| `scramble` computes a scramble from any password, the empty string included, and sends `sha256_password` to `encrypt_rsa`; the first response is computed only where the entry has a password; the response to a switch presents an absent password as the empty string | `sqlx-mysql/src/connection/auth.rs` lines 13–34, and `src/connection/establish.rs` lines 102–106 and 128–146, at `v0.9.0` | 2026-11-04 |
+| An absent first response is encoded as empty data; the response to a switch is a packet of exactly the bytes given | `sqlx-mysql/src/protocol/connect/handshake_response.rs` lines 50–62, and `src/protocol/connect/auth_switch.rs` lines 58–66, at `v0.9.0` | 2026-11-04 |
+| One call covers the connection: `connect` calls `establish`, which calls sqlx-core's `connect_tcp`; `connect_tcp` calls `with_socket` on the stream only once `TcpStream::connect` has returned, and converts its error with `?`; `Error::Io` carries the `io::Error` unchanged; sqlx-core exports `connect_tcp` and `WithSocket` | `sqlx-mysql/src/options/connect.rs` lines 21–25 and `src/connection/establish.rs` lines 15–21; `sqlx-core/src/net/socket/mod.rs` lines 184–194, `src/error.rs` line 49 and `src/net/mod.rs` lines 4–6; at `v0.9.0` | 2026-11-04 |
+| The driver offers no hook on the path: the options hold no such field and derive `Debug` and `Clone` alone; the log settings reach the executor only; the path's only events are two `tracing::debug!` calls where no TLS is attempted; `establish` is crate-private, `DoHandshake` private, and the options take a Unix socket path and no stream | `sqlx-mysql/src/options/mod.rs` lines 62–83 and 138, `src/connection/executor.rs` line 110, `src/connection/tls.rs` lines 35 and 41, `src/connection/establish.rs` lines 15 and 37, at `v0.9.0` | 2026-11-04 |
+| `maybe_upgrade` awaits nothing where it negotiates no TLS, and refuses with `Error::Tls` under the three modes that require TLS where the server offers none | `sqlx-mysql/src/connection/tls.rs` lines 17–54, at `v0.9.0` | 2026-11-04 |
+| An error packet arrives as a `MySqlDatabaseError`, whose `number()` is public | `sqlx-mysql/src/connection/stream.rs` lines 141–170 and `src/error.rs` line 24, at `v0.9.0` | 2026-11-04 |
+| On `main` at `7908fe79`: an empty response for `caching_sha2_password` and `mysql_native_password` where the password is empty (`auth.rs` lines 20–25 there); the first response of an entry without a password unchanged (`establish.rs` lines 104–108 there); no option for the phase | `git show 7908fe79:sqlx-mysql/src/connection/auth.rs` and `…/establish.rs`, and `git diff` from `v0.9.0` over `src/options/mod.rs` | 2026-11-04 |
+| `TcpStream::connect` tries each address `addr` yields and returns the last attempt's error; `ToSocketAddrs` for string types requires a DNS lookup | docs.rs, `tokio` 1.53.1, `tokio::net::TcpStream::connect` and `tokio::net::ToSocketAddrs` | 2026-11-04 |
 | The vendored tree differs from the published crate in exactly the lines of Decision point 3: in `src/connection/auth.rs`, the two guards, `PublicKeyRequestRefused` with `plugin()`, `Display` and `std::error::Error`, and the private function that builds the refusal; `pub use auth::PublicKeyRequestRefused;` in `src/connection/mod.rs`; `pub use connection::PublicKeyRequestRefused;` in `src/lib.rs`. Every other file, the manifests, `.cargo_vcs_info.json` and the licence stubs included, is identical. `auth` is declared private in `connection`, and `connection` private in the crate | `diff -r` between `vendor/sqlx-mysql-0.9.0/` in the working tree over `90881b1`, before commit, and the published `.crate`, sha256 `90b8020f…acebea27`; `src/connection/mod.rs:18` and `src/lib.rs:19` of the published crate | 2026-11-04 |
-| The user's goal that nothing about MariaDB support changes | `specification/mysql-contract.md`, `FR-MYSQL-001`, *Provenance*, at `d4eaf76` | 2026-11-04 |
 | The tag `v0.9.0` of `transact-rs/sqlx` is a lightweight tag on commit `75bc0487eb661da811bb7a3c5d158f1bd463fef4`, "Release 0.9.0 (#4256)"; from `003b698e99e024f3621b8043a2426fde5b741171` to it, only `README.md` changes | `git ls-remote` of the repository; a clone at the tag; `git diff --stat` between the two commits | 2026-11-04 |
 | The published `sqlx-mysql` 0.9.0 has sha256 `90b8020f…acebea27`, the checksum `Cargo.lock` records; its `.cargo_vcs_info.json` names `003b698e…`; its `src/` and `Cargo.toml.orig` are identical to `sqlx-mysql/` at the tag | `static.crates.io`, `sqlx-mysql-0.9.0.crate`; `diff -r` against the clone; `Cargo.lock` at `d4eaf76` | 2026-11-04 |
 | The full-authentication path, `encrypt_rsa`, the `rsa` backends, the scramble functions, and the two calls of `encrypt_rsa`, at lines 26 and 53 and nowhere else | `sqlx-mysql/src/connection/auth.rs` at `v0.9.0` | 2026-11-04 |

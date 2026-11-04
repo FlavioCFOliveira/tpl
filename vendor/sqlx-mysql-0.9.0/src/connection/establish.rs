@@ -55,6 +55,11 @@ impl<'a> DoHandshake<'a> {
     async fn do_handshake<S: Socket>(self, socket: S) -> Result<MySqlStream, Error> {
         let DoHandshake { options } = self;
 
+        // tpl (ADR-014, point 6): the TCP connect has completed.
+        if let Some(handle) = &options.connect_phase {
+            handle.record(crate::options::ConnectPhase::Login);
+        }
+
         let mut stream = MySqlStream::with_socket(options, socket);
 
         // https://dev.mysql.com/doc/internals/en/connection-phase.html
@@ -97,10 +102,30 @@ impl<'a> DoHandshake<'a> {
         stream.capabilities &= handshake.server_capabilities;
         stream.capabilities |= Capabilities::PROTOCOL_41;
 
+        // tpl (ADR-014, point 6): the TLS handshake, where the mode negotiates
+        // one, and the login again once it returns.
+        if let Some(handle) = &options.connect_phase {
+            handle.record(crate::options::ConnectPhase::TlsHandshake);
+        }
+
         let mut stream = tls::maybe_upgrade(stream, self.options).await?;
 
-        let auth_response = if let (Some(plugin), Some(password)) = (plugin, &options.password) {
-            Some(plugin.scramble(&mut stream, password, &nonce).await?)
+        if let Some(handle) = &options.connect_phase {
+            handle.record(crate::options::ConnectPhase::Login);
+        }
+
+        // tpl (ADR-014, point 5): an entry with no password is presented as
+        // one whose password is the empty string, the form the switch uses.
+        let auth_response = if let Some(plugin) = plugin {
+            Some(
+                plugin
+                    .scramble(
+                        &mut stream,
+                        options.password.as_deref().unwrap_or_default(),
+                        &nonce,
+                    )
+                    .await?,
+            )
         } else {
             None
         };

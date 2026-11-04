@@ -81,6 +81,13 @@ states the rule that answers it.
   error, and a `cause` line a requirement obliges to state them carries them
   escaped; `FR-GLOB-018` states it.
 
+  *Note added in the seventy-seventh edition,* for rmp `#335`, `#337` and
+  `#338`. For a `mariadb` or a `mysql` entry, the error number of a server's
+  error packet and the error number the operating system reports for the
+  connection are not the raw driver error, and a `cause` line a requirement
+  obliges to name one carries it; the packet's message stays barred.
+  `FR-GLOB-018` states it.
+
   *The threat this leaves open is stated where it is created*, in
   `FR-CONF-033`: `${VAR}` cannot put a secret into the array, per
   `FR-CONF-017`, but a caller who writes one there literally sees it in the
@@ -438,17 +445,27 @@ states the rule that answers it.
   server's RSA public key as MySQL's does. WHERE the login of a `mariadb`
   entry, over a session TLS does not protect, needs that key, the system does
   not request it, as it does not for a `mysql` entry, and the login ends at
-  exit `69` (`EX_UNAVAILABLE`), with the message the project's decision
-  records give the same login before the `mysql` provider existed: the
-  system gives the condition no code and no message of its own, and the one
-  difference is that the request is never sent.
-  `FR-MYSQL-045`, its `78` and its message govern a `mysql` entry alone.
-  *Rejected, by the user on 2026-11-04:* exit `78` with the message of
-  `FR-MYSQL-045` for a `mariadb` entry too. It would change what a `mariadb`
-  entry does, and the user's requirement for the `mysql` provider is that
-  nothing about MariaDB support changes, per the provenance of
-  `FR-MYSQL-001`. This note records the decision as the project's decision
-  records hold it; it amends no requirement of a `mariadb` entry.
+  exit `69` (`EX_UNAVAILABLE`), under the third outcome of `FR-ERR-047`: its
+  `cause` names the facts `FR-MYSQL-045` names for a `mysql` entry, and its
+  `hint` names `verify-identity`. `FR-MYSQL-045` and its `78` govern a
+  `mysql` entry alone. *Rejected, by the user on 2026-11-04:* exit `78` for a
+  `mariadb` entry too. It would change the code a `mariadb` entry exits with,
+  and the user's requirement for the `mysql` provider is that nothing about
+  MariaDB support changes, per the provenance of `FR-MYSQL-001`.
+
+  *Amended in the seventy-seventh edition,* for rmp `#332`. The note read
+  that the login ended at `69` "with the message the project's decision
+  records give the same login before the `mysql` provider existed", that the
+  system gave the condition no message of its own, and that it amended no
+  requirement of a `mariadb` entry. That message was the one of a refused TCP
+  connect, whose `cause` says that the host refused the connection or that
+  nothing listens on the port: false of this login, which `FR-ERR-034` bans.
+  By the user's decision of 2026-11-04 to fix it in sprint 28, the message
+  changes and the code does not, and `FR-ERR-047` now states both. The
+  rejection of `78` stands. The project's decision records were amended the
+  same day and state this outcome, which `FR-ERR-047` records as observed
+  with a MySQL server standing in for a MariaDB server offering
+  `caching_sha2_password`; no fixture stages the latter.
 
 ## Availability
 

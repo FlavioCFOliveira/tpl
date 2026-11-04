@@ -55,7 +55,7 @@ use super::fault;
 use super::window::{self, Series};
 use crate::deadline::{Bound, Clock, Phase};
 use crate::diagnostics::emit;
-use crate::error::{Error, NetworkPhase, ReadOnlyFault};
+use crate::error::{Error, NetworkPhase, ReadOnlyFault, SessionStatement};
 use crate::model::server::{Server, series_of};
 
 /// The read-only session statement of `FR-SRV-008`.
@@ -174,9 +174,13 @@ fn unenforced(attempt: Attempt, entry: &str, fault: ReadOnlyFault) -> Error {
 fn unprobed(attempt: Attempt, target: &Target<'_>) -> Error {
     match attempt {
         Attempt::Expired(expired) => expired,
-        Attempt::Driver(driver) => {
-            fault::speaking(target.entry(), &driver, target.host(), target.port())
-        }
+        Attempt::Driver(driver) => fault::speaking(
+            target.entry(),
+            &driver,
+            target.host(),
+            target.port(),
+            SessionStatement::VersionProbe,
+        ),
     }
 }
 

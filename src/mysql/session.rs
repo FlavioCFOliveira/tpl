@@ -33,7 +33,7 @@ use tokio::runtime::Runtime;
 
 use super::window;
 use crate::deadline::{Clock, Phase};
-use crate::error::{Error, ReadOnlyFault};
+use crate::error::{Error, ReadOnlyFault, SessionStatement};
 use crate::mariadb::connect::Target;
 use crate::mariadb::fault;
 use crate::mariadb::session::{Attempt, run};
@@ -166,9 +166,13 @@ fn probe(
     )
     .map_err(|attempt| match attempt {
         Attempt::Expired(expired) => expired,
-        Attempt::Driver(driver) => {
-            fault::speaking(target.entry(), &driver, target.host(), target.port())
-        }
+        Attempt::Driver(driver) => fault::speaking(
+            target.entry(),
+            &driver,
+            target.host(),
+            target.port(),
+            SessionStatement::VersionProbe,
+        ),
     })?;
 
     let reported = answer

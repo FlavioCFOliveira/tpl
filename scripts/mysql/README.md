@@ -428,6 +428,8 @@ it reproduces is the material's meaning.
 | `root` | `%` | `tpl-root` | Everything. Created by the entrypoint from `MYSQL_ROOT_PASSWORD`; the privileged reader a test reaches over TCP |
 | `root` | `localhost` | `tpl-root` | The same account name for the Unix socket, which is how the harness reaches a server |
 | `tpl_reader` | `%` | `tpl-reader-pw` | `SELECT, EXECUTE ON freight.*` and nothing more: the reduced-grant reader of `FR-MYSQL-044` item 16 |
+| `tpl_nopass` | `%` | none | `SELECT, EXECUTE ON freight.*`: an account with an empty credential, for `FR-CONF-055` and `FR-MYSQL-047` |
+| `tpl_limited` | `%` | `tpl-limited-pw` | `SELECT ON freight.*`, `MAX_USER_CONNECTIONS 1`: the second simultaneous login is refused with a limit on connections, for `FR-ERR-048` |
 
 `setup.sql` creates `tpl_reader` without naming an authentication plugin, so the
 account takes the server's default, which is the method `FR-MYSQL-022` requires

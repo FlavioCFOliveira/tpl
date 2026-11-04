@@ -57,7 +57,7 @@ tables to be re-verified before every release, `NFR-PERF-020` requires a
 measurement point's figure to be recorded when somebody measures it, any
 requirement resting on the fourth provenance of the
 [README](README.md#provenance) is falsifiable by a later observation, and
-each of the six statements of [mysql-contract.md](mysql-contract.md) still
+each of the three statements of [mysql-contract.md](mysql-contract.md) still
 marked [pending observation](glossary.md#pending-observation) is owed an
 observation the project's fixture cannot make, and names what would make it.
 Each is work with an owner and a trigger, which is what distinguishes it from
@@ -81,6 +81,13 @@ was made and discharged all but six, each of which names what would observe
 it. It also raised `OQ-078`, which the user's decision closed in the same
 edition, so the specification is complete by the definition this paragraph
 gives.
+
+*Amended in the seventy-seventh edition,* for two follow-ups of rmp `#329`.
+The paragraph counted six statements still marked pending observation. The
+tests of the `mysql` provider observed two of them, and the observation of
+`FR-CONF-039` discharges a third, on trust material, which was owed to the
+driver rather than to the fixture. No question is raised, and the
+specification is complete by the same definition.
 
 If a point of this specification appears unsettled, it is a defect to be
 reported and corrected, or a new question to be raised with the next unused

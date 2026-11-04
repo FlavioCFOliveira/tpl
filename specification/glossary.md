@@ -395,6 +395,20 @@ A node of the command tree that performs an action. `tpl schema tables`,
 A flag declared by one or more specific commands rather than by the whole tree.
 A command rejects any flag it does not declare. Contrast global flag.
 
+## login
+
+The phase of a connection to a MariaDB or a MySQL server, for a `mariadb` or
+a `mysql` entry, from the end of the TCP connect until the session opens: the
+server's greeting, which precedes the TLS handshake where the mode of
+`FR-CONF-013` negotiates one, and the authentication of the user the entry
+names, which follows it. The `69` row of `FR-ERR-034` names it as a phase,
+and `FR-CONF-005` bounds it with the other connection phases. `FR-ERR-048`
+states what the system reports when the server answers it with an error
+packet, and `FR-ERR-047` when it fails for any other reason that is not a
+failure of the TLS handshake or a deadline.
+
+*Added in the seventy-seventh edition.*
+
 ## global flag
 
 One of the seven flags accepted by every node of the tree, in any position, per
@@ -517,14 +531,18 @@ checked, and names the observation that would confirm it; the
 [README](README.md#writing-conventions) fixes the note's shape. The marker
 qualifies the ground of a fact, never the force of the requirement that
 states it, and it is discharged by an *Observed* note or by the amendment an
-observation makes necessary. Six statements of MySQL behaviour in
+observation makes necessary. Three statements of MySQL behaviour in
 [mysql-contract.md](mysql-contract.md) carry it, each naming why the
 project's fixture cannot observe it and what would.
 
 *Added in the seventy-third edition.* *Amended in the seventy-fifth
 edition*: the last sentence read that every statement of MySQL behaviour in
 [mysql-contract.md](mysql-contract.md) carried the marker, owed to rmp
-`#326`. That observation discharged it from all but six.
+`#326`. That observation discharged it from all but six. *Amended in the
+seventy-seventh edition*: the last sentence counted six. The tests of the
+`mysql` provider observed two, and the observation of `FR-CONF-039`
+discharges a third, which was owed to the driver rather than to the
+fixture.
 
 ## project
 
@@ -722,6 +740,16 @@ and what the user's *LTS line* means.
    database on the server.
 
 Help text disambiguates the two wherever both could be meant. See `FR-CFG-028`.
+
+## scramble
+
+The value a client of a MariaDB or a MySQL server computes from a password
+and the random data the server sends during the login, and sends in place of
+the password at a step of the authentication; the server compares it with
+what it holds for the account. `FR-CONF-055` forbids computing one from an
+empty password.
+
+*Added in the seventy-seventh edition.*
 
 ## source
 

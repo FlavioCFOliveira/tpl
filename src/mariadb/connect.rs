@@ -47,7 +47,9 @@ use std::path::Path;
 use std::time::Instant;
 
 use sqlx_core::connection::Connection as _;
-use sqlx_mysql::{MySqlConnectOptions, MySqlConnection, MySqlSslMode};
+use sqlx_mysql::{
+    ConnectPhase, ConnectPhaseHandle, MySqlConnectOptions, MySqlConnection, MySqlSslMode,
+};
 use tokio::net::lookup_host;
 use tokio::runtime::Runtime;
 use tokio::time::timeout;
@@ -56,6 +58,7 @@ use super::fault;
 use crate::deadline::{Clock, Deadlines, Phase};
 use crate::diagnostics::emit;
 use crate::error::{Error, NetworkPhase};
+use crate::model::database::Provider;
 use crate::project::config::entry::TlsMode;
 use crate::project::secret::Secret;
 use crate::project::settings::Settings;
@@ -403,6 +406,12 @@ impl DriverOptions {
         self.0.get_username()
     }
 
+    /// The same options, recording the phase the connection reaches in
+    /// `handle` (`ADR-014`, point 6).
+    fn recording(self, handle: ConnectPhaseHandle) -> Self {
+        Self(self.0.connect_phase(handle))
+    }
+
     /// Opens the connection these options describe.
     async fn connect(&self) -> Result<MySqlConnection, sqlx_core::Error> {
         MySqlConnection::connect_with(&self.0).await
@@ -492,14 +501,11 @@ pub(super) fn open(
     // passed because the handshake is where a packet about it arrives: the
     // connection carries the database, so a server that will not show it
     // refuses the connection rather than a statement.
-    open_classified(runtime, target, clock, |driver, user| {
+    open_classified(runtime, target, clock, |driver, user, phase| {
         fault::connecting(
-            target.entry,
+            &fault::Reached::of(target, user, Provider::Mariadb),
             driver,
-            target.host,
-            target.port,
-            user,
-            target.database,
+            phase,
         )
     })
 }
@@ -508,13 +514,18 @@ pub(super) fn open(
 /// with `classify`.
 ///
 /// It is [`open`] with the classification of the driver's error left to the
-/// caller, which receives the error and the user actually presented. Two
-/// providers open their connection here, and both through the same composition
-/// of the driver's options, the same name resolution, and the same budget:
-/// `FR-MYSQL-020` connects a `mysql` entry exactly as a `mariadb` entry. What
-/// differs is one condition: `crate::mysql` recognises the refusal `ADR-014`
-/// adds to the driver as `FR-MYSQL-045`, where a `mariadb` entry keeps the
-/// classification [`open`] gives it.
+/// caller, which receives the error, the user actually presented, and the
+/// phase the connection had reached. Two providers open their connection here,
+/// and both through the same composition of the driver's options, the same
+/// name resolution, and the same budget: `FR-MYSQL-020` connects a `mysql`
+/// entry exactly as a `mariadb` entry, and each classifies with its provider.
+///
+/// **The phase is the driver's record, not the call** (`FR-CONF-005`). One
+/// call to the driver opens the socket, negotiates TLS and logs in, so the
+/// options carry the handle of `ADR-014` point 6, the driver records in it the
+/// phase it reaches, and this function reads its own clone once the call has
+/// ended in an expired budget or an error: the deadline of `FR-ERR-027` and
+/// the classification of the failure both name that phase.
 ///
 /// # Errors
 ///
@@ -525,9 +536,10 @@ pub(crate) fn open_classified(
     runtime: &Runtime,
     target: &Target<'_>,
     clock: &Clock,
-    classify: impl FnOnce(&sqlx_core::Error, &str) -> Error,
+    classify: impl FnOnce(&sqlx_core::Error, &str, ConnectPhase) -> Error,
 ) -> Result<MySqlConnection, Error> {
-    let options = options(target)?;
+    let reached = ConnectPhaseHandle::new();
+    let options = options(target)?.recording(reached.clone());
     let budget = clock.connection_budget(target.deadlines.of(Phase::TcpConnect));
     let host = target.host;
     let port = target.port;
@@ -594,16 +606,19 @@ pub(crate) fn open_classified(
         // of its own.
         emit::phase_ran(Phase::TcpConnect, started.elapsed());
 
+        // FR-CONF-005: the phase the connection had reached, read from the
+        // driver's record once the call has ended. The load needs no unsafe
+        // and reads no driver text.
         match opened {
             Err(_) => Err(fault::expired(
                 target.entry,
-                NetworkPhase::TcpConnect,
+                fault::phase_of(reached.phase()),
                 host,
                 port,
                 bound,
             )),
             Ok(Ok(connection)) => Ok(connection),
-            Ok(Err(driver)) => Err(classify(&driver, options.username())),
+            Ok(Err(driver)) => Err(classify(&driver, options.username(), reached.phase())),
         }
     })
 }
@@ -1042,15 +1057,15 @@ mod tests {
     }
 
     #[test]
-    fn fr_mysql_047_an_empty_password_is_presented_as_the_password_and_never_as_none() {
-        // FR-MYSQL-047: where the configuration supplies the empty string as a
-        // `mysql` entry's password — by `password`, by a dsn whose password
+    fn fr_mysql_047_each_source_of_the_empty_password_reaches_the_driver_as_the_empty_string() {
+        // FR-MYSQL-047, amended in the seventy-seventh edition, and the table
+        // of FR-CONF-055: where the configuration supplies the empty string as
+        // a `mysql` entry's password — by `password`, by a dsn whose password
         // part is present and empty, or by a `password_command` whose trimmed
-        // output is empty — the driver is given the empty string as the
-        // password, exactly as any other value, and the entry is not presented
-        // as one that supplies none. The driver then runs the exchange of the
-        // method the server asks for with it; what the server answers is not
-        // this requirement's, and no fixture account has an empty password.
+        // output is empty — the driver is given the empty string. What the
+        // driver sends for it, and for an entry that supplies none, is the
+        // response of ADR-014 point 5, the same for both; the logins of
+        // `tests/login_faults.rs` observe it against both fixtures.
         let echo = ["/bin/echo", "/usr/bin/echo"]
             .into_iter()
             .find(|path| std::path::Path::new(path).exists())
@@ -1089,7 +1104,8 @@ mod tests {
             assert_eq!(presented(&composed), r#"password: Some("")"#, "{text}");
         }
 
-        // The control: an entry that supplies no password presents none.
+        // The control: an entry that supplies no password gives the driver
+        // none, which the driver presents as it presents the empty string.
         let resolved = settings(
             &scratch,
             "[database.shop]\nhost = \"db\"\nuser = \"alice\"\n",

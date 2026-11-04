@@ -80,6 +80,7 @@ pub struct MySqlConnectOptions {
     pub(crate) no_engine_substitution: bool,
     pub(crate) timezone: Option<String>,
     pub(crate) set_names: bool,
+    pub(crate) connect_phase: Option<ConnectPhaseHandle>,
 }
 
 impl Default for MySqlConnectOptions {
@@ -111,6 +112,7 @@ impl MySqlConnectOptions {
             no_engine_substitution: true,
             timezone: Some(String::from("+00:00")),
             set_names: true,
+            connect_phase: None,
         }
     }
 
@@ -413,6 +415,53 @@ impl MySqlConnectOptions {
     pub fn set_names(mut self, flag_val: bool) -> Self {
         self.set_names = flag_val;
         self
+    }
+
+    /// Records in `handle` the phase the connection reaches (tpl, ADR-014).
+    pub fn connect_phase(mut self, handle: ConnectPhaseHandle) -> Self {
+        self.connect_phase = Some(handle);
+        self
+    }
+}
+
+/// The phase of opening a connection that a [`ConnectPhaseHandle`] holds
+/// (tpl, ADR-014).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectPhase {
+    /// The TCP connect, which a new handle holds.
+    TcpConnect,
+    /// The TLS handshake.
+    TlsHandshake,
+    /// The login: the server's greeting and the authentication.
+    Login,
+}
+
+/// A shared cell recording the phase a connection reached (tpl, ADR-014).
+#[derive(Debug, Clone)]
+pub struct ConnectPhaseHandle(std::sync::Arc<std::sync::atomic::AtomicU8>);
+
+impl ConnectPhaseHandle {
+    /// A handle holding the TCP connect.
+    pub fn new() -> Self {
+        Self(std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)))
+    }
+
+    /// The phase the connection reached.
+    pub fn phase(&self) -> ConnectPhase {
+        match self.0.load(std::sync::atomic::Ordering::Acquire) {
+            1 => ConnectPhase::TlsHandshake,
+            2 => ConnectPhase::Login,
+            _ => ConnectPhase::TcpConnect,
+        }
+    }
+
+    pub(crate) fn record(&self, phase: ConnectPhase) {
+        let value = match phase {
+            ConnectPhase::TcpConnect => 0,
+            ConnectPhase::TlsHandshake => 1,
+            ConnectPhase::Login => 2,
+        };
+        self.0.store(value, std::sync::atomic::Ordering::Release);
     }
 }
 

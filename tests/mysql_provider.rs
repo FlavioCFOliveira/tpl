@@ -972,6 +972,18 @@ fn fr_mysql_021_the_five_modes_against_a_server_offering_tls_and_one_offering_no
                 "{name} {mode}: {}",
                 outcome.err
             );
+            // The hint of a `mysql` entry states that the server must offer
+            // TLS, and carries no command setting `preferred` or `disabled`.
+            let hint = line(&outcome.err, "hint:");
+            assert_eq!(
+                hint,
+                "hint:  check that the server offers TLS, and enable TLS on the server where it does not",
+                "{name} {mode}: {}",
+                outcome.err
+            );
+            for word in ["preferred", "disabled", "tpl "] {
+                assert!(!hint.contains(word), "{name} {mode}: {}", outcome.err);
+            }
         }
     }
 }

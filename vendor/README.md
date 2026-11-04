@@ -94,11 +94,16 @@ tree goes on its own condition.
 | Upstream revision | `003b698e99e024f3621b8043a2426fde5b741171`, per the crate's own `.cargo_vcs_info.json` — the revision `sqlx-core-0.9.0/` was packaged from |
 | Upstream repository | `https://github.com/transact-rs/sqlx` |
 | Licence | `MIT OR Apache-2.0`, per the published manifest |
-| Why it is here | `ADR-014` — the published crate requests the server's RSA public key over a session TLS does not protect, which `FR-MYSQL-045` forbids |
+| Why it is here | `ADR-014` — three changes the published crate does not offer: it requests the server's RSA public key over a session TLS does not protect, which `FR-MYSQL-045` forbids (point 3); it sends a scramble of an empty password, and for an entry with no password an empty first response whatever the method, where `FR-CONF-055` requires the response the servers' own clients send (point 5); and it does not let a caller learn the phase a connection reached, which `FR-CONF-005` decides by (point 6) |
 
 ### The divergence, in full
 
-Two guards and one typed error, in `src/connection/auth.rs`:
+Five files differ from the published crate, and nothing else:
+`src/connection/auth.rs`, `src/connection/establish.rs`,
+`src/connection/mod.rs`, `src/options/mod.rs` and `src/lib.rs`.
+
+**Point 3 — the refusal of the key request.** Two guards and one typed error,
+in `src/connection/auth.rs`:
 
 - in `AuthPlugin::scramble`, the arm for `sha256_password` returns the refusal
   when the stream is not TLS, before it calls `encrypt_rsa`;
@@ -112,13 +117,51 @@ The type is exported from the crate root, `src/lib.rs`, beside the crate's
 other exports. Rust's privacy rules require one more line for that export to
 compile: `auth` is a private module of `connection`, so `src/connection/mod.rs`
 re-exports the type with `pub use auth::PublicKeyRequestRefused;`, which the
-root then names. That line, and the root's own export line, are the whole of
-the change outside `auth.rs`.
+root then names.
 
 `encrypt_rsa` is not edited. The two arms are its only callers, so nothing
 writes a public-key request on a stream that is not TLS, and on a TLS stream
-every path runs as published. Nothing else in this tree differs from the
-published crate; any other difference is a defect in it.
+every path runs as published.
+
+**Point 5 — the empty password.** Two changes:
+
+- in `src/connection/auth.rs`, `AuthPlugin::scramble` returns first, where the
+  password is the empty string, before it computes, guards or requests
+  anything: an empty response for `mysql_native_password`, and a single `0x00`
+  byte, as MySQL's client library sends, for `caching_sha2_password` and
+  `sha256_password` — ahead of point 3's guard, because a login with no
+  password needs no key. The arm for `mysql_clear_password` already sends a
+  single `0x00` for the empty string and is unchanged;
+- in `src/connection/establish.rs`, `DoHandshake::do_handshake`, the first
+  response of the login is computed, where the server names a method, from the
+  entry's password or, where the entry supplies none, from the empty string —
+  `options.password.as_deref().unwrap_or_default()`, the form the response to
+  a switch already uses. Where the server names no method the response stays
+  absent, as published.
+
+The response to a switch and `AuthPlugin::handle` are not edited: the first
+already presents an absent password as the empty string, so the change to
+`scramble` reaches it.
+
+**Point 6 — the phase the connection reached.** Three changes:
+
+- in `src/options/mod.rs`: `ConnectPhaseHandle`, a public `Clone` and `Debug`
+  handle on a shared atomic cell, whose one reader, `phase`, returns
+  `ConnectPhase` — `TcpConnect`, which a new handle holds, `TlsHandshake` or
+  `Login`; one field of `MySqlConnectOptions` holding an optional handle,
+  absent in `new()`; and one setter, `connect_phase`, that sets it;
+- in `src/connection/establish.rs`, `DoHandshake::do_handshake`, where a
+  handle is set: the login is recorded on entry, because `sqlx-core` calls into
+  `with_socket` only once the TCP connect has completed; the TLS handshake
+  immediately before `tls::maybe_upgrade`; and the login again immediately
+  after it returns;
+- in `src/lib.rs`, the existing export of the options also names
+  `ConnectPhase` and `ConnectPhaseHandle`.
+
+Nothing else in this tree differs from the published crate; any other
+difference is a defect in it. The check is a recursive `diff` of this
+directory against the published artefact, unpacked after its sha256 is
+verified, which names exactly the five files above.
 
 ### Licence files
 
@@ -129,8 +172,18 @@ from the same upstream revision, so those texts carry its notices too.
 
 ### When this directory goes
 
-`ADR-014` retires the patch on the first `sqlx` release whose `sqlx-mysql`
-lets a caller refuse the request. On that release this directory is deleted,
-along with the `sqlx-mysql` entry of the `[patch.crates-io]` table and its
-`[workspace]` exclusion. Until then, every move of `ADR-003`'s pin vendors this
-crate again at the release moved to and re-applies the change above.
+`ADR-014` point 7 retires each part on its own condition:
+
+- point 3, at the first `sqlx` release whose `sqlx-mysql` lets a caller refuse
+  the request;
+- point 5, at the first whose `sqlx-mysql` sends, for an empty or an absent
+  password, at the first response and at every switch, the responses point 5
+  sends;
+- point 6, at the first whose `sqlx-mysql` lets a caller learn the phase a
+  connection reached.
+
+At each, that part leaves this tree and `tpl` uses what the release offers.
+The directory is deleted with the last part, along with the `sqlx-mysql` entry
+of the `[patch.crates-io]` table and its `[workspace]` exclusion. Until then,
+every move of `ADR-003`'s pin vendors this crate again at the release moved to
+and re-applies every remaining part.

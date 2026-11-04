@@ -11,7 +11,7 @@
 //! |---|---|---|
 //! | [`session`] | The three connection-start statements and the verdicts they settle | `FR-MYSQL-006` … `FR-MYSQL-012`, `FR-MYSQL-015` … `FR-MYSQL-019` |
 //! | [`window`] | The supported series, as one ordered table | `FR-MYSQL-002`, `FR-MYSQL-003`, `FR-MYSQL-009`, `FR-MYSQL-010` |
-//! | [`fault`] | The refusal of `ADR-014`, recognised by its type | `FR-MYSQL-045` |
+//! | [`fault`] | The classification of a failed connection, read for a `mysql` entry | `FR-MYSQL-045`, `FR-ERR-047`, `FR-ERR-048`, `FR-ERR-049` |
 //! | [`catalogue`] | The twelve statements, and the model their rows fold into | `FR-MYSQL-015`, `FR-MYSQL-023` … `FR-MYSQL-042`, `FR-MYSQL-046` |
 //!
 //! **What it shares with `crate::mariadb`, and why only that.**
@@ -180,8 +180,8 @@ pub(crate) fn open(target: &Target<'_>, clock: &Clock) -> Result<Session, Error>
 
     let runtime = runtime()?;
     let mut connection = Counted::new(
-        connect::open_classified(&runtime, target, clock, |driver, user| {
-            fault::connecting(target, driver, user)
+        connect::open_classified(&runtime, target, clock, |driver, user, phase| {
+            fault::connecting(target, driver, user, phase)
         })
         .map_err(marked)?,
         &CONNECTIONS,

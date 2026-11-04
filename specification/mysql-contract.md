@@ -140,7 +140,7 @@ an exit code or a message of `tpl` is not, and is verified by the tests
 rests on the driver meeting a server as the stock client met it, its note
 says so.
 
-**Six statements remain marked pending observation**, each with a note
+**Three statements remain marked pending observation**, each with a note
 headed ***Pending observation.***, the marker the
 [README](README.md#writing-conventions) defines and
 [glossary.md](glossary.md#pending-observation) names. Each note says what the
@@ -150,12 +150,9 @@ every requirement here is in force.
 
 | Note on | The statement | Why this fixture cannot observe it |
 |---|---|---|
-| `FR-MYSQL-021` | The `69` of three cells of the mode table | It is a code of `tpl`, and the stock client stood in for `tpl` |
 | `FR-MYSQL-021` | That a server generates TLS material at startup, and whether the certificate names a host | Every server of the fixture is given its TLS material, so none generated a certificate |
-| `FR-MYSQL-021` | Whether trust material stays additional to the public roots | It is a property of the driver, which the stock client does not share |
 | `FR-MYSQL-030` | The `MASKING POLICY` phrase of the attribute field | It needs a component the Community images do not carry |
-| `FR-MYSQL-040` | The MySQL cell of row 24 | It restates the second statement above |
-| `FR-MYSQL-045` | The `78` and the message of a login that needs the server's key | It is a code of `tpl`, and the stock client stood in for `tpl` |
+| `FR-MYSQL-040` | The MySQL cell of row 24 | It restates the first statement above |
 
 What this file states about MariaDB is cited from the requirement of this
 corpus that records it, every one of them an observation of the fixture of
@@ -185,6 +182,18 @@ second; it records the conditions of the observation once, and lists the six
 statements that remain pending. The observation's evidence is kept in a directory the repository
 does not version, so every *Observed* note carries what was seen rather than
 citing a file.
+
+*Amended in the seventy-seventh edition,* for two follow-ups of rmp `#329`.
+The section counted six statements pending. Two were codes of `tpl` — the
+`69` of three cells of `FR-MYSQL-021` and the `78` and the message of
+`FR-MYSQL-045` — that the stock client could not show; the provider exists,
+at `2d652bd`, its tests observed both, and each note is now an *Observed*
+note, through `tpl`. A third, whether trust material stays additional to the
+public roots, waited for the driver that reads MySQL to be chosen; the one
+chosen is the driver `FR-CONF-039` observed, and its note now says so. The
+table lists the three that remain, each a server the fixture does not
+stage, and its last row restates the first statement, where it restated the
+second.
 
 ## The provider
 
@@ -220,6 +229,15 @@ citing a file.
   would change provider, and the root `README.md` shows one.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Note added in the seventy-seventh edition,* for rmp `#332`, `#333` and
+  `#334`. The requirement that nothing about MariaDB support changes is the
+  user's for the `mysql` provider. On 2026-11-04 the user decided, apart
+  from it, to fix in sprint 28 three defects of a `mariadb` entry found while
+  the provider was built, accepting that one of them changes a message a
+  `mariadb` entry prints while its exit code stays the same. They are
+  `FR-ERR-047`, `FR-SRV-030` and `FR-CONF-055`, and each records the
+  decision.
 
 ## The supported version window
 
@@ -1007,7 +1025,7 @@ citing a file.
   be the same, and the configuration is where a caller meets them first. That
   a MySQL server honours each of them as a MariaDB server does is what the
   cells of `FR-MYSQL-021` and the logins of `FR-MYSQL-022` hold it to, and is
-  observed there, save the three statements `FR-MYSQL-021` keeps pending.
+  observed there, save the one statement `FR-MYSQL-021` keeps pending.
 
   *Added in the seventy-third edition,* for rmp `#324`.
 
@@ -1015,49 +1033,43 @@ citing a file.
   that the server side was pending observation in those two requirements. The
   requirement is unchanged.
 
-- **FR-MYSQL-047**: WHERE the password the configuration supplies for a
-  `mysql` entry is the empty string, the system SHALL present the empty
-  string to the server as the entry's password, through the exchange of the
-  authentication method the server asks for, exactly as it presents a
-  password of any other value, and SHALL NOT present the entry as one that
-  supplies no password. The configuration supplies the empty string in three
-  ways, each read under the requirement that governs its source; the first
-  two hold it as written or after the expansion of `FR-CONF-015`:
+  *Amended in the seventy-seventh edition,* for a follow-up of rmp `#329`:
+  the rationale counted three statements pending in `FR-MYSQL-021`. The
+  provider's tests observed one of them, and the observation of
+  `FR-CONF-039` discharges another. The requirement is unchanged.
 
-  | Source | Example | Read under |
-  |---|---|---|
-  | `password`, holding the empty string | `password = ""` | `FR-CONF-006` |
-  | A `dsn` whose password part is present and empty | `mysql://reader:@db.example.com/shop` | `FR-CONF-009` |
-  | A `password_command` whose trimmed standard output is empty | a helper that prints nothing and exits `0` | `FR-CONF-027` |
-
-  An entry that supplies no password — no `password` key, a `dsn` with no
-  password part, and no `password_command` — is not reached by this
-  requirement.
-
-  *Rationale.* In each of the three the configuration states a password, and
-  the value it states is the empty string: `FR-CONF-027` makes the trimmed
-  output the password whatever it holds, and `FR-CONF-007` treats a
-  `password` key, and a `dsn` that carries a password, as a password source
-  beside which a second one is refused. Presenting such an entry as one that
-  supplies none would rewrite what the file says, which is the guess
-  `BR-CONF-004` refuses a reader of `.tpl/.cfg`.
-
-  *What it does not settle.* Whether a server accepts the empty string for an
-  account is the server's answer, and a refusal is an authentication refused,
-  which `FR-ERR-001` places on `77` (`EX_NOPERM`). No requirement of
-  this corpus records what a MySQL or a MariaDB server answers to it, and no
-  observation has made one: every account of the fixture of `FR-MYSQL-044`
-  carries a password.
-
-  *A `mariadb` entry.* `FR-MYSQL-020` connects a `mysql` entry as a `mariadb`
-  entry is connected, and no requirement of this corpus states this rule for
-  a `mariadb` entry. This requirement governs a `mysql` entry alone.
+- **FR-MYSQL-047**: `FR-CONF-055` SHALL hold for a `mysql` entry: WHERE the
+  password the configuration supplies for it is the empty string, or the
+  configuration supplies none, the system SHALL present the entry to the
+  server as the server's own clients present an empty password, and SHALL
+  NOT send a scramble computed from the empty string. `FR-CONF-055` names the
+  three sources of the empty string and the prior art that fixes what is
+  sent.
 
   *Provenance.* The implementation of the provider, for rmp `#329`, found the
-  corpus silent on an empty password, and presents it as this requirement
-  states.
+  corpus silent on an empty password; rmp `#334` found that the presentation
+  the seventy-sixth edition then fixed is not the one the server's own
+  clients use. The login it fixes is observed on `8.4` and `9.7` under
+  `FR-CONF-055`.
 
   *Added in the seventy-sixth edition,* for rmp `#329`.
+
+  *Amended in the seventy-seventh edition,* for rmp `#334`. The requirement
+  read: the system "SHALL present the empty string to the server as the
+  entry's password, through the exchange of the authentication method the
+  server asks for, exactly as it presents a password of any other value, and
+  SHALL NOT present the entry as one that supplies no password". That
+  exchange computes a scramble from the empty string, which no client of the
+  servers' own sends, and a MySQL server met it, for an account with no
+  password over a session TLS does not protect, by asking for the full
+  exchange, which ended at `78` under `FR-MYSQL-045`, as `FR-CONF-055`
+  records. The rule is now `FR-CONF-055`, which states it
+  for a `mariadb` and a `mysql` entry alike, and this requirement holds it for
+  a `mysql` entry; the table of the three sources, the rationale and what the
+  rule does not settle move there, beside the requirements that read each
+  source, and both readings this requirement held are recorded there as
+  rejected. The note that no requirement stated the rule for a `mariadb`
+  entry is removed, because `FR-CONF-055` states it.
 
 - **FR-MYSQL-021**: The five modes of `FR-CONF-013` SHALL be distinguishable
   by observed behaviour against a MySQL server, and their behaviour SHALL be
@@ -1076,6 +1088,45 @@ citing a file.
   `FR-MYSQL-022` and `FR-MYSQL-045`. *Amended in the seventy-fourth edition,*
   for rmp `#331`: the sentence named `OQ-077` as its one unsettled case, which
   `FR-MYSQL-045` closes.
+
+  WHERE the TLS handshake of a `mysql` entry is refused before any
+  certificate is judged — the server offers no TLS, or the negotiation
+  failed — the `hint` of the `69` SHALL state that the server must offer TLS
+  for the entry's mode to connect, and SHALL NOT carry a command that sets
+  `tls` to `preferred` or to `disabled`.
+
+  ```
+  error: the TLS handshake with db.example.com:3306 failed, for database entry 'shop'
+  cause: the TLS handshake with db.example.com:3306 was refused before any certificate was checked: the server offers no TLS, or the negotiation failed
+  hint:  check that the server offers TLS, and enable TLS on the server where it does not
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, that the `hint`
+  carries no command, and the code.
+
+  *Why no mode that does not encrypt.* Under such a mode the login of an
+  account on the default method of every supported series needs the
+  server's RSA public key whenever the server holds no cached login for it,
+  per the observations of `FR-MYSQL-045`, and that requirement then ends the
+  read with `78`, whose `hint` sends the caller back to a mode that encrypts.
+  A `hint` naming `preferred` would send the caller round the two. Whether
+  the server holds a cached login is not a state the invocation found, and
+  `BR-ERR-004` asks for a command that can succeed in the state it found.
+  *Why no command.* `FR-ERR-009` asks for a runnable command wherever one
+  exists. What makes the read succeed here is TLS on the server, which no
+  command of `tpl` gives it.
+
+  *Rejected: keeping `preferred` in the `hint`, with a statement of when it
+  succeeds.* The condition it would state, a cached login on the server, is
+  one the caller cannot see before running the command, and a weak reader
+  acts on the command and not on the sentence around it, which is the ground
+  `BR-ERR-005` gives.
+
+  *A `mariadb` entry.* This paragraph does not reach one. `FR-ERR-050` fixes
+  the `hint` of this condition for a `mariadb` entry, and keeps `preferred`
+  in it, because a `mariadb` entry meets no `78` of `FR-MYSQL-045`.
 
   *Where MySQL differs.* Two facts of the server side differ from what
   `FR-CONF-038` records of MariaDB, and both reach a test rather than a cell:
@@ -1122,14 +1173,32 @@ citing a file.
   failed", and `VERIFY_IDENTITY` to a host name the certificate does not
   carry failed the same way while `VERIFY_CA` to that name connected.
 
-  *Pending observation.* The code of three cells. The observation above is
-  of the stock client, which stood in for the driver `tpl` will read MySQL
-  with: it shows that the server offers no TLS, and that a client requiring
-  TLS ends the connection there. How the server meets that driver, and so
-  the `69` of the three cells of the right-hand column, which is a code of
-  `tpl`, cannot be observed until the `mysql` provider exists. The tests
-  `FR-MYSQL-043` requires observe it, against the servers of the fixture
-  that offer no TLS.
+  *Observed, through `tpl`, on 2026-11-04, at `2d652bd`.* The test
+  `fr_mysql_021_the_five_modes_against_a_server_offering_tls_and_one_offering_none`,
+  in `tests/mysql_provider.rs`, ran `tpl schema info --direct --no-cache` as
+  `root` under each mode against the four servers of the fixture that are
+  supported — one offering TLS and one offering none, at `8.4.13` and at
+  `9.7.4` — and read each session's encryption from the server's own record
+  of the connection. Against the servers offering TLS, `verify-identity`,
+  `verify-ca`, `required` and `preferred` exited `0` encrypted, and then
+  `disabled`, with the server's authentication cache filled by the logins
+  before it, exited `0` in plaintext. Against the servers offering none,
+  `disabled` and `preferred` exited `0` in plaintext, with the cache filled by
+  the fixture's harness first, as `FR-MYSQL-045` requires of a plaintext
+  login; and `required`, `verify-ca` and `verify-identity` exited `69`, with a
+  `cause` naming the TLS handshake. The message, which names no mode, as rmp
+  `#329` recorded it against the server of `8.4` offering none:
+
+  ```
+  error: the TLS handshake with 127.0.0.1:13322 failed, for database entry 'shop'
+  cause: the TLS handshake with 127.0.0.1:13322 was refused before any certificate was checked: the server offers no TLS, or the negotiation failed
+  hint:  check that the server offers TLS; for a server without it, on a network you trust, allow a plain connection with: tpl cfg set database.shop.tls preferred
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  The `hint` is the one the implementation printed at `2d652bd`, before the
+  paragraph above on the `hint` was written, and is not what that paragraph
+  requires.
 
   *Pending observation.* A server's own TLS material. The manual states that
   a MySQL server built with OpenSSL "can generate missing certificate and key
@@ -1142,13 +1211,23 @@ citing a file.
   certificate. A server started with TLS enabled and no material configured
   would observe both, and the fixture of `FR-MYSQL-044` stages none.
 
-  *Pending observation.* Trust material beside the public roots. Whether
-  trust material supplied under `FR-CONF-014` stays additional to the public
-  root bundle, as `FR-CONF-039` records of the driver that reads MariaDB, is
-  a property of the driver and not of the server, and the stock client does
-  not share it. It is observed once the driver that reads MySQL is chosen,
-  under `FR-CONF-036`, as `FR-CONF-039` observed it of the driver that reads
-  MariaDB.
+  *Observed, under `FR-CONF-039`.* Trust material beside the public roots.
+  Whether trust material supplied under `FR-CONF-014` stays additional to the
+  public root bundle is a property of the driver and not of the server: the
+  driver builds the set of authorities it trusts from its bundled public
+  roots and the material the entry names, and from nothing a server sends,
+  as the source of the driver the repository carries shows. `FR-CONF-039`
+  observed that the driver that reads MariaDB adds the supplied material to
+  the public roots rather than substituting it. The project's decision
+  records name that driver, at the same pin, for a `mysql` entry, and
+  `FR-MYSQL-020` connects a `mysql` entry with the trust material and the
+  rules of a `mariadb` entry. That observation is therefore of the driver a
+  `mysql` entry connects through, and the consequence `FR-CONF-039` states —
+  pinning an authority widens the certificates that pass `verify-ca` rather
+  than narrowing them — holds for a `mysql` entry. *Bounded claim.* No MySQL
+  server presenting a certificate issued by a publicly trusted authority was
+  observed, and the property does not need one, because no server takes part
+  in it.
 
   *Added in the seventy-third edition,* for rmp `#324`.
 
@@ -1159,6 +1238,18 @@ citing a file.
   observed of the servers that offer no TLS. Three notes remain, one for each
   statement this fixture cannot observe. The requirement and its table are
   unchanged.
+
+  *Amended in the seventy-seventh edition,* for three follow-ups of rmp
+  `#329`. The paragraph on the `hint` of a refused TLS handshake is new: the
+  implementation's `hint`, recorded above, named `preferred` for a server
+  offering no TLS, which for a `mysql` entry ends in the `78` of
+  `FR-MYSQL-045` whenever the server holds no cached login. The *Pending
+  observation* note on the code of three cells is replaced by the *Observed*
+  note above, which the provider's tests made. The note on trust material is
+  discharged by the observation of `FR-CONF-039`: it waited for the driver
+  that reads MySQL to be chosen, and the one chosen is the driver that
+  requirement observed. One note remains pending, on a server's own TLS
+  material. The table is unchanged.
 
 - **FR-MYSQL-022**: The system SHALL authenticate a `mysql` entry through the
   default authentication method of every series of `FR-MYSQL-003`, which is
@@ -1225,14 +1316,23 @@ citing a file.
 
   ```
   error: cannot authenticate user 'reader' over an unencrypted session, for database entry 'shop'
-  cause: connected to db.example.com:3306 under tls 'disabled', so the session is not encrypted; the server asks for the full caching_sha2_password exchange, which needs its RSA public key, and tpl does not request that key over a session TLS does not protect
+  cause: connected to db.example.com:3306 as user 'reader' under tls 'disabled', so the session is not encrypted; the authentication was not completed: the server asks for the full caching_sha2_password exchange, which needs its RSA public key, and tpl does not request that key over a session TLS does not protect
   hint:  encrypt the session: tpl cfg database update shop --tls verify-identity
   exit:  78 (EX_CONFIG)
   ```
 
+  ```
+  error: cannot authenticate user 'reader' over an unencrypted session, for database entry 'shop'
+  cause: connected to db.example.com:3306 as user 'reader' under tls 'preferred' and the server offered no TLS, so the session is not encrypted; the authentication was not completed: the server asks for the full caching_sha2_password exchange, which needs its RSA public key, and tpl does not request that key over a session TLS does not protect
+  hint:  encrypt the session: tpl cfg database update shop --tls verify-identity; the server offered no TLS, and must offer it before that mode can connect
+  exit:  78 (EX_CONFIG)
+  ```
+
   The wording of each line is the implementation's, under `FR-ERR-008`
-  through `FR-ERR-012`. The example fixes the facts named, the command
-  carried and the code.
+  through `FR-ERR-012`. The examples fix the facts named, the command
+  carried and the code. They are the messages the implementation prints at
+  `2d652bd`, the first as the *Observed* note below records it with the
+  fixture's values.
 
   The condition is one of the cache-or-connection step of `FR-ERR-006`, and
   it is raised at the authentication, before the read-only session of
@@ -1306,16 +1406,39 @@ citing a file.
   (`refman/9.7/en/caching-sha2-pluggable-authentication.html`, and the same
   on the 8.4 page) — and they are the moments the accepted cost above names.
 
-  *Pending observation.* The code and the message of `tpl`. The failing
-  logins above are the condition this requirement turns into `78`, and the
-  stock client, which stood in for the driver `tpl` will read MySQL with,
-  ended them with an error of its own. How the server meets that driver —
-  that it asks for the full exchange in the same circumstances — and so
-  whether `tpl` ends the connection without requesting the key, exits `78`
-  and writes the `cause` and the `hint` this requirement fixes, cannot be
-  observed until the `mysql` provider exists. The tests `FR-MYSQL-043`
-  requires observe it, against the servers of the fixture with the cache
-  emptied by its harness.
+  *Observed, through `tpl`, on 2026-11-04, at `2d652bd`.* The test
+  `fr_mysql_045_an_uncached_login_over_an_unencrypted_session_ends_with_78`,
+  in `tests/mysql_provider.rs`, emptied the server's authentication cache
+  through the fixture's harness before each run, and ran
+  `tpl schema info --direct --no-cache` as the reduced-grant reader
+  `tpl_reader` under `disabled` against the four servers of the fixture that
+  are supported, at `8.4.13` and at `9.7.4`, and under `preferred` against
+  the two of them that offer no TLS. Every run exited `78`. The `error` line
+  named the user. The `cause` named the host and the port, the user, the
+  mode, `caching_sha2_password`, that the authentication was not completed
+  and that `tpl` does not request the key, and stated that the server offered
+  no TLS under `preferred` and under no other mode. The `hint` carried
+  `tpl cfg database update shop --tls verify-identity`, and stated that the
+  server must offer TLS under `preferred` alone. The server's record of each
+  session held no statement, so the condition was raised at the
+  authentication, and `tpl cfg database test shop`, with the cache emptied
+  again, exited `78`. Against the two servers offering TLS, once a login
+  under `verify-identity` had filled the cache, the same entry under
+  `disabled` exited `0`, which is the accepted cost above. One message, as
+  rmp `#329` recorded it against the server of `8.4` offering TLS, under
+  `disabled`:
+
+  ```
+  error: cannot authenticate user 'tpl_reader' over an unencrypted session, for database entry 'shop'
+  cause: connected to 127.0.0.1:13320 as user 'tpl_reader' under tls 'disabled', so the session is not encrypted; the authentication was not completed: the server asks for the full caching_sha2_password exchange, which needs its RSA public key, and tpl does not request that key over a session TLS does not protect
+  hint:  encrypt the session: tpl cfg database update shop --tls verify-identity
+  exit:  78 (EX_CONFIG)
+  ```
+
+  That the request for the key is never written is not in that record, which
+  holds the statements of a session and not the exchange of its
+  authentication. It rests on where the refusal is raised, before the request
+  is written, which the project's decision records describe.
 
   *Closes* `OQ-077`, now listed under [Closed](open-questions.md#closed).
 
@@ -1327,6 +1450,15 @@ citing a file.
   cache was filled, with the exit code and the message of each. The server's
   side is observed above; the code and the message, which are `tpl`'s, remain
   pending in the note above. The requirement is unchanged.
+
+  *Amended in the seventy-seventh edition,* for a follow-up of rmp `#329`:
+  the *Pending observation* note on the code and the message of `tpl` is
+  replaced by the *Observed* note above, which the provider's tests made. The
+  example's `cause` omitted the user and the statement that the
+  authentication was not completed, both of which the requirement obliges
+  and the implementation prints; it now carries both, and a second example
+  shows the `preferred` case, whose `cause` and `hint` say that the server
+  offered no TLS. The requirement is unchanged.
 
 ## The part of the database a read covers
 
@@ -2626,6 +2758,7 @@ citing a file.
   | 28 | A JSON duality view | none | on `9.7` alone, a row of the table catalogue of type `VIEW` and a row of the view catalogue | a covered view, `FR-MYSQL-023` |
   | 29 | A generated invisible primary key | none | a column `my_row_id`, invisible and auto-incremental, and the key `PRIMARY` on it, or neither, by a session setting | carried as reported, `FR-MYSQL-027` |
   | 30 | What a reduced-grant reader loses of the constraint tables | every row of `TABLE_CONSTRAINTS` and `REFERENTIAL_CONSTRAINTS`, `FR-PRIV-018` | nothing: every row of the database | `FR-MYSQL-041`: the cross-check of `FR-PRIV-019` has nothing to detect over the fixture |
+  | 31 | The spelling of the `ON UPDATE` attribute | `on update current_timestamp()` and `on update current_timestamp(3)`, lower case, the whole of the column attribute field, `FR-CAT-041` | `on update CURRENT_TIMESTAMP` and `on update CURRENT_TIMESTAMP(3)`, the expression upper case, after `DEFAULT_GENERATED` in the attribute field | the phrase carried as each server spells it, in one shape for both, `FR-MYSQL-030` |
 
   **The rows are numbered as they were first written, and a number is not
   reused.** Rows 13, 16 and 20 recorded divergences the documentation
@@ -2634,7 +2767,8 @@ citing a file.
   index reports `SPATIAL`, as on MariaDB, per `FR-MYSQL-032`; and a
   procedure's DTD identifier is SQL `NULL`, as on MariaDB, per `FR-MYSQL-036`.
   Rows 26 to 30 are divergences the observation found and the table did not
-  hold.
+  hold. Row 31 is one `FR-MYSQL-030` recorded and the table did not hold,
+  found when the provider was implemented.
 
   *Observed.* Every cell of the MySQL column is an observation of the fixture,
   recorded in the requirement the last column names, save the cell of row 24.
@@ -2681,6 +2815,14 @@ citing a file.
   covered every MySQL cell, now covers the cell of row 24 alone. The last
   cell of row 23 names `FR-MYSQL-046`, by the user's decision on `OQ-078`,
   which the observation raised and the same edition closed.
+
+  *Amended in the seventy-seventh edition,* for a follow-up of rmp `#329`:
+  row 31 is added. `FR-MYSQL-030` has recorded since the seventy-fifth
+  edition that MySQL spells the `ON UPDATE` attribute in upper case among the
+  other phrases of the attribute field, where MariaDB spells it in lower case
+  as the whole field, and the seventy-sixth fixed the value carried as each
+  server's phrase. A divergence the table does not hold is a missing row, by
+  the requirement's own text. No other row changes.
 
 ## Completeness
 

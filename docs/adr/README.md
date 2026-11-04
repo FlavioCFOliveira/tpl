@@ -221,7 +221,7 @@ specification, which is how a fourth place starts drifting.
 | [ADR-011](adr-011-render-memory-accounting.md) | The heap count behind the render memory limit | Accepted 2026-09-23 | `FR-RND-039`, `FR-RND-036` | — |
 | [ADR-012](adr-012-ci-and-release-distribution.md) | Continuous integration and release distribution | Accepted 2026-09-24 | `NFR-PERF-018`, `FR-SRV-019` | — |
 | [ADR-013](adr-013-sqlite-driver.md) | The SQLite driver and the library it carries | Accepted 2026-11-03 | `FR-LITE-039`, `FR-LITE-001`, `FR-LITE-004` | — |
-| [ADR-014](adr-014-mysql-provider-driver.md) | The driver of the `mysql` provider | Accepted 2026-11-04 | `FR-MYSQL-045`, `FR-MYSQL-022` | — |
+| [ADR-014](adr-014-mysql-provider-driver.md) | The driver of the `mysql` provider | Accepted 2026-11-04 | `FR-MYSQL-045`, `FR-MYSQL-022`, `FR-CONF-055`, `FR-CONF-005` | — |
 
 The `Serves` column names the requirements a reader is most likely to arrive
 from. The complete list per record is its `requirements:` field, which is the

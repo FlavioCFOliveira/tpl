@@ -37,9 +37,9 @@ use std::path::Path;
 use super::restate::{self, Edit, Replacement};
 use super::suggest;
 use crate::error::{
-    CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    LookupKind, Missing, NetworkPhase, ReadOnlyFault, RenderReason, SqliteEnd, TlsFault,
-    TplDirFault, Unresolved,
+    AccountRefusal, CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryNameGiven,
+    EntryRepair, Error, LoginFault, LoginRefusal, LookupKind, Missing, NetworkPhase, ReadOnlyFault,
+    RenderReason, SqliteEnd, TlsFault, TplDirFault, Unresolved,
 };
 use crate::model::database::Provider;
 use crate::project::config::keys::ValueType;
@@ -1098,6 +1098,18 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // a certificate that is not trusted is either vouched for or not
         // checked; `tpl cfg set` reaches the key because the file is valid by
         // the time a connection is attempted.
+        //
+        // FR-MYSQL-021: for a `mysql` entry a handshake refused before any
+        // certificate names no mode that does not encrypt, because under such
+        // a mode the uncached login ends in FR-MYSQL-045's 78; what makes the
+        // read succeed is TLS on the server, which no command gives it.
+        Error::TlsHandshakeFailed {
+            provider: Provider::Mysql,
+            fault: TlsFault::Refused,
+            ..
+        } => Cow::Borrowed(
+            "check that the server offers TLS, and enable TLS on the server where it does not",
+        ),
         Error::TlsHandshakeFailed { entry, fault, .. } => {
             let entry = entry_or_placeholder(entry);
 
@@ -1141,6 +1153,69 @@ fn bare(error: &Error) -> Cow<'static, str> {
                     "run the same command again with a larger --timeout \
                                            <seconds>",
             }
+        )),
+        // FR-ERR-049: outcomes 2 to 4 share the second outcome's hint, which
+        // names the host and the command that repoints the entry.
+        Error::TcpConnectFailed {
+            entry,
+            host,
+            by_dsn,
+            ..
+        } => Cow::Owned(format!(
+            "check that {host} is reachable from here — its address, a route, a VPN or a \
+             firewall — or change the address {}",
+            repoint_address(entry, *by_dsn)
+        )),
+        // FR-ERR-047, outcomes 1 and 2: the address must be that of a
+        // (running) server of the entry's provider.
+        Error::LoginNotCompleted {
+            entry,
+            host,
+            port,
+            provider,
+            fault,
+            by_dsn,
+        } => {
+            let server = super::cause::server_name(*provider);
+            Cow::Owned(match fault {
+                LoginFault::ConnectionClosed => format!(
+                    "check that {host}:{port} is the address of a running {server} server, then \
+                     run the command again, or change the address {}",
+                    repoint_address(entry, *by_dsn)
+                ),
+                LoginFault::NotAccepted => format!(
+                    "check that {host}:{port} is the address of a {server} server, or change it {}",
+                    repoint_address(entry, *by_dsn)
+                ),
+            })
+        }
+        // FR-ERR-048: the step the reason calls for, then the command that
+        // checks the connection.
+        Error::LoginRefused { entry, reason, .. } => {
+            let test = format!("tpl cfg database test {}", entry_or_placeholder(entry));
+            Cow::Owned(match reason {
+                LoginRefusal::ServerConnectionLimit
+                | LoginRefusal::UserConnectionLimit
+                | LoginRefusal::ResourceLimit => format!(
+                    "the operation is read-only and can be run again once the server has a \
+                     connection free; check the connection with: {test}"
+                ),
+                LoginRefusal::HostBlocked => format!(
+                    "ask the server's administrator to unblock this client's host, then check the \
+                     connection with: {test}"
+                ),
+                LoginRefusal::Unclassified => format!(
+                    "the operation is read-only and can be run again; check the connection with: \
+                     {test}"
+                ),
+            })
+        }
+        // FR-ERR-036: read-only, so repeatable, and the command that checks the
+        // connection and reads nothing into the model (FR-CACHE-010).
+        Error::StatementFailed { entry, .. } => Cow::Owned(format!(
+            "the operation is read-only and can be run again; check the connection with: tpl cfg \
+             database test {}",
+            entry_or_placeholder(entry)
         )),
         Error::NetworkDeadlineExceeded { phase, bound, .. } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
@@ -1199,6 +1274,40 @@ fn bare(error: &Error) -> Cow<'static, str> {
              password inside dsn), then test it with: tpl cfg database test {}",
             entry_or_placeholder(entry)
         )),
+        // FR-ERR-048: the step the reason calls for, then the test.
+        Error::AccountRefused {
+            entry,
+            reason,
+            by_dsn,
+            ..
+        } => {
+            let name = entry_or_placeholder(entry);
+            Cow::Owned(match reason {
+                AccountRefusal::HostNotPrivileged => format!(
+                    "ask the server's administrator to let the user connect from this client's \
+                     host, or name another user {}; then test it with: tpl cfg database test \
+                     {name}",
+                    if *by_dsn {
+                        format!("inside the dsn: {}", inside_dsn(entry, "user"))
+                    } else {
+                        format!("with: tpl cfg database update {name} --user <user>")
+                    }
+                ),
+                AccountRefusal::PasswordExpired => format!(
+                    "change the password with a client that supports expired passwords, which tpl \
+                     is not, and update the entry's password source, then test it with: tpl cfg \
+                     database test {name}"
+                ),
+                AccountRefusal::Locked => format!(
+                    "ask the server's administrator to unlock the account, then test it with: tpl \
+                     cfg database test {name}"
+                ),
+                AccountRefusal::Blocked => format!(
+                    "ask the server's administrator to unblock the account, then test it with: \
+                     tpl cfg database test {name}"
+                ),
+            })
+        }
         Error::PropertyNotReadable { kind, property, .. } => match (kind, *property) {
             (CatalogueObjectKind::Database, _) => Cow::Borrowed(
                 "check the database the entry names, or grant the connecting user access to it, \
@@ -1699,6 +1808,11 @@ fn bare(error: &Error) -> Cow<'static, str> {
             } else {
                 ""
             }
+        )),
+        // FR-ERR-048, error 3159: the mode that encrypts the session.
+        Error::SecureTransportRequired { entry, .. } => Cow::Owned(format!(
+            "encrypt the session: tpl cfg database update {} --tls verify-identity",
+            entry_or_placeholder(entry)
         )),
 
         // ---------------------------------------------- the provider ---
@@ -2756,6 +2870,20 @@ fn repoint(entry: &str, by_dsn: bool) -> Cow<'static, str> {
 ///
 /// `field` names the field that changes, as the words say it. The stored dsn
 /// is never reproduced, per `BR-ERR-003`: `<url>` is a placeholder.
+/// How an entry's address is changed, in the form the entry is defined by:
+/// `--host` and `--port` for the discrete fields, `--dsn` for a dsn
+/// (`FR-ERR-045`, `FR-ERR-047`, `FR-ERR-049`).
+fn repoint_address(entry: &str, by_dsn: bool) -> String {
+    if by_dsn {
+        format!("inside the dsn: {}", inside_dsn(entry, "host or port"))
+    } else {
+        format!(
+            "with: tpl cfg database update {} --host <host> --port <port>",
+            entry_or_placeholder(entry)
+        )
+    }
+}
+
 fn inside_dsn(entry: &str, field: &str) -> String {
     format!(
         "tpl cfg database update {} --dsn <url>, where <url> is the whole connection URL with \
@@ -2977,9 +3105,10 @@ const fn listing(kind: CatalogueObjectKind) -> Option<&'static str> {
 /// to check their configuration.
 const fn deadline_key(phase: NetworkPhase) -> &'static str {
     match phase {
-        NetworkPhase::DnsResolution | NetworkPhase::TcpConnect | NetworkPhase::TlsHandshake => {
-            "core.connect_timeout"
-        }
+        NetworkPhase::DnsResolution
+        | NetworkPhase::TcpConnect
+        | NetworkPhase::TlsHandshake
+        | NetworkPhase::Login => "core.connect_timeout",
         NetworkPhase::CatalogueQuery => "core.query_timeout",
     }
 }

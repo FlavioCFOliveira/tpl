@@ -20,10 +20,20 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Sixty entries are recorded. As of 2026-11-04, five are due in full,
-fifty-one are discharged, and four are partly discharged.** Nine entries
-still owe something: six owe it to `CLAUDE.md` and three to `README.md`, and
+**Sixty-one entries are recorded. As of 2026-11-04, six are due in full,
+fifty-one are discharged, and four are partly discharged.** Ten entries
+still owe something: six owe it to `CLAUDE.md` and four to `README.md`, and
 no entry is in both counts.
+
+*The counts moved in the seventy-seventh edition, and one entry moved them.*
+The edition amends `FR-CONF-005`, which the root `README.md` paraphrases,
+making the login a fourth phase under the budget of `core.connect_timeout`.
+Both files were read at `2d652bd` against every requirement the edition
+writes and amends. `DIV-061` is raised against `README.md`; it joins the
+**due** count and that file's count, and was raised by an amendment to this
+corpus rather than by an edit to the target. `CLAUDE.md` paraphrases none
+of them. No other entry was re-read for status. The counts restated in
+`DIV-032` and `DIV-041` move with this paragraph.
 
 *The counts moved in the seventy-third edition, and two entries moved them.*
 The edition gives `tpl` a third provider, MySQL, and amends `FR-CONF-051`,
@@ -475,6 +485,7 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-058](#div-058) | `CLAUDE.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, `INFORMATION_SCHEMA` as the only catalogue, and the MariaDB fixture as the only one |
 | [DIV-059](#div-059) | `README.md` | Contradiction | Due | MySQL as no target, MariaDB and SQLite as the only providers, and no MySQL fixture |
 | [DIV-060](#div-060) | `CLAUDE.md` | Contradiction | Due | MariaDB and SQLite as the only providers, and no contract or catalogue rule for a `mysql` entry |
+| [DIV-061](#div-061) | `README.md` | Contradiction | Due | `connect_timeout` shared by three connection phases, where the login is a fourth |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1163,9 +1174,9 @@ is the one stated above and nothing more.
 in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
 most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
-this passage. It is one of the nine entries this register still owes
+this passage. It is one of the ten entries this register still owes
 something on, and one of the six owed to that file, as counted in the
-seventy-third edition. Re-read on 2026-09-25 at
+seventy-seventh edition. Re-read on 2026-09-25 at
 `c360c80`: `6bc8513`, `390c6c6` and `70661da` touched `CLAUDE.md` since and
 none reaches this passage.
 
@@ -1580,8 +1591,8 @@ sentence.
 **Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The deferral stands
 verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
 `9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
-`NFR-PERF-012` carry. It is one of the nine entries this register still owes
-something on, as counted in the seventy-third edition. Re-read on 2026-09-25
+`NFR-PERF-012` carry. It is one of the ten entries this register still owes
+something on, as counted in the seventy-seventh edition. Re-read on 2026-09-25
 at `c360c80`: the deferral stands, unmoved by `6bc8513`, `390c6c6` and
 `70661da`.
 
@@ -3012,6 +3023,29 @@ The *Stack* table and the project tree are not reached: which driver reads
 MySQL is an architecture decision, not a requirement of this corpus.
 
 *Raised by an amendment to this corpus, and not by an edit to the target.*
+
+## DIV-061
+
+**Target**: `README.md`, the section *Deadlines*. **Kind**: contradiction.
+
+**Status**: **due**, raised on 2026-11-04 at `2d652bd`. The target has not
+changed since `60bf9df`, and no commit has discharged any part of it.
+
+*Says*: "Four `[core]` keys supply them: `connect_timeout`, shared by DNS
+resolution, TCP connect and the TLS handshake; `query_timeout`, per
+catalogue query; `password_timeout`, for `password_command`; and
+`render_timeout`, for one render."
+*Specification*: `FR-CONF-005` as amended in the seventy-seventh edition,
+under which the [login](glossary.md#login) is a fourth connection phase and
+shares the one budget of `core.connect_timeout` with DNS resolution, the TCP
+connect and the TLS handshake.
+*Correction*: name the login among the phases `connect_timeout` bounds —
+"shared by DNS resolution, the TCP connect, the TLS handshake and the login"
+— or point at `FR-CONF-005` for the phases. The rest of the paragraph stands.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The sentence was an exact summary of `FR-CONF-005` when it was written; the
+login ran under the same budget then, unnamed.
 
 ## A candidate read, and not recorded
 

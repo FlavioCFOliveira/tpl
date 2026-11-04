@@ -310,10 +310,16 @@ fn runtime() -> Result<Counted<Runtime>, Error> {
 ///
 /// # Errors
 ///
-/// Returns [`Error::NameNotResolved`], [`Error::ConnectionRefused`],
-/// [`Error::TlsHandshakeFailed`] or [`Error::NetworkDeadlineExceeded`] where
-/// the connection is not opened; [`Error::AuthenticationRefused`] where the
-/// server refuses the credentials; and
+/// Returns [`Error::NameNotResolved`], [`Error::ConnectionRefused`] or
+/// [`Error::TcpConnectFailed`] where the TCP connect fails (`FR-ERR-049`);
+/// [`Error::TlsHandshakeFailed`] where the TLS handshake does;
+/// [`Error::LoginNotCompleted`] or [`Error::PublicKeyRequestRefused`] where
+/// the login does not complete (`FR-ERR-047`);
+/// [`Error::AuthenticationRefused`], [`Error::AccountRefused`],
+/// [`Error::LoginRefused`] or [`Error::SecureTransportRequired`] where the
+/// server refuses the login with an error packet (`FR-ERR-048`);
+/// [`Error::NetworkDeadlineExceeded`] where a budget expires first
+/// (`FR-ERR-027`); and
 /// [`Error::ReadOnlySessionNotEnforced`], [`Error::ServerNotMariaDb`] or
 /// [`Error::SeriesNotSupported`] where a gate of `FR-SRV-002` refuses the
 /// server that answered. On every one of those paths no catalogue statement is

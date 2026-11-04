@@ -95,7 +95,7 @@ use super::Session;
 use super::connect::Target;
 use super::fault;
 use crate::deadline::{Clock, Phase};
-use crate::error::{Error, NetworkPhase};
+use crate::error::{Error, NetworkPhase, SessionStatement};
 use crate::model::database::Database;
 use crate::model::server::Server;
 use statements::{Read, Statement};
@@ -301,6 +301,7 @@ pub(crate) fn probe(
             &driver,
             target.host(),
             target.port(),
+            SessionStatement::CatalogueQuery,
         )),
     }
 }
@@ -320,8 +321,15 @@ fn fetch(
     clock: &Clock,
     statement: &Statement<'_>,
 ) -> Result<Vec<MySqlRow>, Error> {
-    issue(session, target, clock, statement)?
-        .map_err(|driver| fault::speaking(target.entry(), &driver, target.host(), target.port()))
+    issue(session, target, clock, statement)?.map_err(|driver| {
+        fault::speaking(
+            target.entry(),
+            &driver,
+            target.host(),
+            target.port(),
+            SessionStatement::CatalogueQuery,
+        )
+    })
 }
 
 /// Sends one statement and hands back what the driver answered.

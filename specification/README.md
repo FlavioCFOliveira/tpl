@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-six editions. All are in force;
+The specification has been written in seventy-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6124,8 +6124,8 @@ renumbered. No open question is raised, so the index of
   method's own exchange, and not as an entry that supplies no password. The
   three sources are read under `FR-CONF-006`, `FR-CONF-009` and
   `FR-CONF-027`, which already make each an empty password and do not say
-  how it is presented. No requirement states the rule for a `mariadb` entry,
-  and the new one does not reach one.
+  how it is presented. No requirement stated the rule for a `mariadb` entry,
+  and the new one did not reach one.
 - **The outer parentheses** — `FR-MYSQL-029`, the same file. The third row
   of the classification removes the first and the last character of an
   expression default that begins with `(` and ends with `)`, once, and does
@@ -6144,7 +6144,7 @@ renumbered. No open question is raised, so the index of
   releases it names, and nothing in this corpus has observed it. Where a
   `mariadb` entry's login over a session TLS does not protect needs the
   server's RSA public key, the system does not request it, and the login
-  ends at exit `69` with the message it carried before, by the user's
+  ended at exit `69` with the message it carried before, by the user's
   decision of 2026-11-04 that nothing about MariaDB support changes; exit
   `78` for such an entry is rejected.
 - **This file** — the edition count of the Scope, and this record.
@@ -6180,6 +6180,186 @@ refusal of a MySQL series, a support tier, an empty password, parentheses,
 `ON UPDATE`, `caching_sha2_password` and the server's RSA key — and neither
 paraphrases a requirement this edition amends or the note it adds. No entry
 is raised.
+
+### Seventy-seventh edition — five ways a server connection fails, a reason the binary prints, and an empty password sent as the servers' own clients send it
+
+rmp `#332`, `#333` and `#334`, of sprint 28, are three defects of a
+`mariadb` entry, older than the sprint, that the pass of the seventy-sixth
+edition found; rmp `#335`, `#336`, `#337` and `#338` are four more that this
+edition's own audit found in the code that classifies a failure of a server
+connection. On 2026-11-04 the user decided to fix all seven in sprint 28 as
+one effort with rmp `#332`, accepting, as an exception to the requirement
+that nothing about MariaDB support changes, that they change what a
+`mariadb` entry prints and, for rmp `#338`, the code of some error packets.
+This edition specifies them, with four follow-ups rmp `#329` recorded and
+three items the coordinator added; once they were implemented, and before
+the edition was committed, it was read back against the code, as the last
+paragraph but one of this record states.
+
+**Five identifiers are assigned**: `FR-ERR-047`, `FR-ERR-048`,
+`FR-ERR-049`, `FR-ERR-050` and `FR-CONF-055`, and one divergence entry,
+`DIV-061`. None is retired and none is renumbered. No open question is
+raised, so the index of [open-questions.md](open-questions.md) stays empty.
+[glossary.md](glossary.md) gains *login* and *scramble*.
+
+- **A login that does not complete** — rmp `#332`. `FR-ERR-047`, new, in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), with the term *login*
+  in [glossary.md](glossary.md): the phase from the end of the TCP connect
+  until the session opens. A failure in it that is neither an error packet
+  the server sends, nor the TLS handshake, nor a deadline, nor the `78` of
+  `FR-MYSQL-045`, exits `69` with a `cause` that names the login and one of
+  three outcomes — the connection failed, an answer the system does not
+  accept, or, for a `mariadb` entry, a login that needs the server's RSA
+  public key — and with a `hint` for each. The implementation reported every
+  such failure as a refused TCP connect, which `FR-ERR-034` bans. The `69`
+  row of `FR-ERR-034` names the login as its sixth phase. The note on
+  `FR-SEC-021` is revised: the login of a `mariadb` entry that needs the key
+  keeps `69` and takes the third outcome's message. `FR-ERR-002` gains a note
+  recording that this one condition's next step differs from its code's, by
+  the user's decision, and `FR-MYSQL-001` a note recording the decisions.
+- **A statement that fails on an open session** — rmp `#335`, `FR-ERR-036`.
+  The requirement was in force since the twenty-fifth edition and never
+  implemented. It keeps its condition, its code and its phase, and gains the
+  three ways a statement fails, what the `error` line and the `hint` carry,
+  the answer of the privilege probe of `FR-CFG-044` that is no failure, and
+  two examples.
+- **The connection budget** — rmp `#336`, `FR-CONF-005` and `FR-ERR-027`.
+  The login is a fourth connection phase under the one budget of
+  `core.connect_timeout`; the order of the phases is stated, the login
+  before and after a TLS handshake; and the phase in progress is decided by
+  what the connection had completed, not by the call that was running.
+  `FR-ERR-027` names the login and states the message of a budget's expiry,
+  whose `cause` no longer says that a shared budget bounds one phase alone.
+- **A TCP connect that fails** — rmp `#337`. `FR-ERR-049`, new: four
+  outcomes named by the operating system's POSIX error name — refused,
+  unreachable, no answer, and any other, whose `cause` names the error
+  number, or that it reported none. Only a refusal is reported as one.
+- **A TLS handshake that fails** — found by the implementation of rmp
+  `#336`. `FR-ERR-050`, new: the TLS handshake's two outcomes, a certificate
+  not accepted and a refusal before a certificate was accepted, each with the
+  message a `mariadb` entry has printed since the phase was first separated,
+  and the `hint` of the second for a `mysql` entry fixed by `FR-MYSQL-021`.
+- **An error packet during the login** — rmp `#338`. `FR-ERR-048`, new: a
+  table, read for the entry's provider, of the error numbers that are an
+  authentication refused (`77`), of the database `FR-PRIV-021` reports
+  (`77`), of the one that requires an encrypted session (`78`), and of
+  those that are limits on connections, a blocked host, or any other error
+  (`69`), grounded in MariaDB's and MySQL's error references; each class has
+  its message. The `77` row of `FR-ERR-034` names the reason the table
+  states, and `FR-PRIV-021` gains a note on the second condition that
+  reaches its message. `FR-GLOB-018`, in [global-flags.md](global-flags.md),
+  gains a paragraph that keeps the error number of a server's error packet,
+  and of the operating system's report, out of the raw driver error, so that
+  a `cause` may name it; the packet's message stays barred, and
+  `FR-SEC-005` gains a note saying so. `FR-ERR-045`'s list of the `hint`s it
+  governs names the TCP connect, the login and the `hint` of `FR-ERR-048`
+  that names another user.
+- **The reason a refused MariaDB series gives** — rmp `#333`, `FR-SRV-030`, in
+  [server-contract.md](server-contract.md). The `cause` now names the series
+  and states one reason for every series refused, that it is outside the
+  supported window, and the example is the message the implementation prints;
+  the dated reason particular to `10.6` and the version string the example
+  gave are rejected. The rejection of a code per case in `FR-SRV-020` no
+  longer says that the `cause` carries the distinction between the cases. No
+  line the implementation prints changes.
+- **An empty password, and none** — rmp `#334`. `FR-CONF-055`, new, in
+  [configuration-model.md](configuration-model.md), in a section of its own:
+  for a `mariadb` and a `mysql` entry, the empty string, and an entry that
+  supplies no password, are presented as the servers' own clients present an
+  empty password, at the first response of the login and at every switch of
+  the authentication method, and never as a
+  [scramble](glossary.md#scramble) computed from the empty string, on the
+  prior art of MySQL's client library and of MariaDB Connector/C, read at
+  their public source. `FR-MYSQL-047`, in
+  [mysql-contract.md](mysql-contract.md), now holds `FR-CONF-055` for a
+  `mysql` entry; the presentation it required, and its distinction between an
+  empty password and none, are rejected there and in `FR-CONF-055`.
+- **The `hint` of a refused TLS handshake, for a `mysql` entry** — a
+  follow-up of rmp `#329`, `FR-MYSQL-021`. The `hint` states that the server
+  must offer TLS and carries no command that lowers `tls` to a mode that does
+  not encrypt, which for a `mysql` entry ends in the `78` of `FR-MYSQL-045`
+  whenever the server holds no cached login. The `hint` of a `mariadb` entry
+  is unchanged, and `FR-ERR-050` now fixes it.
+- **The `ON UPDATE` attribute** — a follow-up of rmp `#329`. `FR-MYSQL-040`
+  gains row 31, the divergence `FR-MYSQL-030` records.
+- **The pending observations** — a follow-up of rmp `#329`. The *Pending
+  observation* notes on the `69` of three cells of `FR-MYSQL-021` and on the
+  `78` and the message of `FR-MYSQL-045` are replaced by *Observed* notes,
+  through `tpl`, from the provider's tests at `2d652bd` on `8.4.13` and
+  `9.7.4`. The note on trust material, on `FR-MYSQL-021`, is discharged by
+  the observation of `FR-CONF-039`, because the driver chosen for the `mysql`
+  provider is the one that requirement observed and the property involves no
+  server. Three notes remain. The count is restated in the sources of
+  [mysql-contract.md](mysql-contract.md), the rationale of `FR-MYSQL-020`,
+  [glossary.md](glossary.md#pending-observation),
+  [open-questions.md](open-questions.md), the writing conventions below and
+  the maintenance debt, whose paragraph that owed three notes to the
+  `mysql` provider "once it exists" now records all three discharged.
+- **The example of `FR-MYSQL-045`** — the `cause` now names the user and
+  states that the authentication was not completed, as the requirement and
+  the implementation do, and a second example shows the `preferred` case.
+- **This file** — the edition count of the Scope; this record; the count
+  of the writing conventions, whose sentence of the seventy-fifth edition is
+  put in the past tense beside the new count; and two editorial corrections
+  to the record of the seventy-sixth edition above, each a present tense
+  this edition made false: "No requirement states the rule for a `mariadb`
+  entry" is now "stated", because `FR-CONF-055` states it; and "the login
+  ends at exit `69` with the message it carried before" is now "ended",
+  because `FR-ERR-047` changes the message.
+
+**What changes for a `mariadb` entry, and what does not.** `FR-ERR-027`,
+`FR-ERR-034`, `FR-ERR-036`, `FR-ERR-047`, `FR-ERR-048`, `FR-ERR-049`,
+`FR-CONF-005`, `FR-CONF-055`, `FR-GLOB-018` and `FR-SRV-030` change what a
+`mariadb` entry prints, sends or exits with, each as one of the seven tasks
+requires and by the user's decision; `FR-SRV-030` changes no line the
+implementation prints, nor does `FR-ERR-050`, which states the messages of a
+failed TLS handshake as they were, and the messages of a refused TCP connect
+and of `1045` are kept word for word. The codes that move are those of
+`FR-ERR-048`: an error packet other than `1045`, and than `1044` and `1049`
+where the connection named a database, was `77`, and is now `77`, `78` or `69`
+by its class. The notes on `FR-ERR-002`, `FR-ERR-045`, `FR-SRV-020`,
+`FR-SEC-005`, `FR-SEC-021` and `FR-PRIV-021` record what those changes make
+true. No requirement of a `sqlite` entry changes meaning, and `FR-GLOB-018`'s
+paragraph on a `sqlite` entry is untouched. `FR-ERR-001`, `FR-ERR-006`,
+`FR-CONF-006`, `FR-CONF-007`, `FR-CONF-009`, `FR-CONF-027`, `FR-CONF-038`,
+`FR-CONF-039`, `FR-CFG-043`, `FR-CFG-044`, `FR-CAT-041`, `FR-MYSQL-009`,
+`FR-MYSQL-022` and the text of `FR-MYSQL-045` were read against the changes,
+and none is amended: the `69`, `77` and `78` cells of `FR-ERR-001`
+characterise their classes and do not enumerate them; every condition added is
+reached at the cache-or-connection step; and the three sources of an empty
+password are read as before.
+
+**The implementation read back.** The code of the seven tasks, validated
+with both fixtures up, found ten points where this edition was silent or
+imprecise, and the edition was amended before it was committed to state what
+the code does, each consistent with what the requirement intended; no code
+change is owed. `FR-ERR-049` reads the kind of error where the report
+carries no operating-system number, and names no number where neither
+gives one, and takes any other failure of the TCP connect phase as its
+fourth outcome. `FR-ERR-050` states the outcomes of the TLS handshake.
+`FR-ERR-036` and `FR-ERR-047` place a failure the TLS layer reports, and an
+error packet the system cannot read as the server's. `FR-ERR-048` takes
+`1044` and `1049` as unclassified where the connection named no database,
+and records `1226` as observed. `FR-CONF-055` states the response for each
+method, a single zero byte for `caching_sha2_password` by the user's choice
+between two clients that differ, and records the logins of a passwordless
+account on both fixtures. The note on `FR-SEC-021` says that the project's
+decision records now state its outcome. `FR-ERR-047` and the first outcome
+of `FR-ERR-049` are recorded as observed through `tpl`.
+
+The fifth validation rule is applied for this edition: neither root
+document has changed since `60bf9df`, before `1b3ff53`, which the
+seventy-fifth edition read; at `2d652bd` both were searched for every subject
+this edition amends — a login, a refused connection, a session that fails, a
+deadline of the connection, an error packet, the reason a MariaDB series is
+refused, an empty password, the `hint` of a TLS handshake, the `ON UPDATE`
+attribute and the pending-observation notes. One passage paraphrases a
+requirement this edition amends: the root `README.md` names
+`connect_timeout` as "shared by DNS resolution, TCP connect and the TLS
+handshake", which `FR-CONF-005` now extends to the login, so
+[upstream-divergences.md](upstream-divergences.md) raises `DIV-061` against
+it and its counts move. `CLAUDE.md` paraphrases no requirement this edition
+amends.
 
 ### Still out of scope
 
@@ -6351,8 +6531,12 @@ because they constrain the whole module rather than one interaction.
   observed be visibly marked; no convention for it existed, and every
   statement of MySQL behaviour in [mysql-contract.md](mysql-contract.md)
   carried the note until rmp `#326` observed them. *Amended in the
-  seventy-fifth edition*: six carry it now, each because the project's
-  fixture cannot observe it, and each note says so. **Where a server
+  seventy-fifth edition*: six carried it, each because the project's
+  fixture could not observe it, and each note said so. *Amended in the
+  seventy-seventh edition*: three carry it now, each because the project's
+  fixture cannot observe it, and each note says so. The tests of the `mysql`
+  provider observed the two that were codes of `tpl`, and the observation of
+  `FR-CONF-039` discharged the one owed to the driver. **Where a server
   contradicts its own documentation**, the observation governs, and the
   requirement that states the fact writes both down — the documentation's
   words, cited by page, and what the servers did — in a note headed
@@ -6516,20 +6700,27 @@ them; moving it to a paragraph below would leave the list looking open.
 ## Maintenance debt
 
 **One item is outstanding**, recorded by the seventy-third edition and
-narrowed by the seventy-fifth: six statements of MySQL behaviour in
-[mysql-contract.md](mysql-contract.md) carry a *Pending observation* note,
-each because the fixture of `FR-MYSQL-044` cannot observe it. Three are owed
-to the `mysql` provider once it exists — the `69` of three cells of
-`FR-MYSQL-021`, the `78` and the message of `FR-MYSQL-045`, both observed by
-the tests `FR-MYSQL-043` requires, and whether trust material stays
-additional to the public roots, observed once the driver is chosen. The
-other three need a server the fixture does not stage: one that generates its
-own TLS material, for the notes on `FR-MYSQL-021` and on row 24 of
-`FR-MYSQL-040`, and one with the masking-policy component installed, for the
-note on `FR-MYSQL-030`. Every such note opens a paragraph with the heading
-`*Pending observation.*`, so a search for that heading at the start of a line
-finds every one, and the item is discharged when the search finds none. No requirement of a `mariadb` or a
-`sqlite` entry waits on it.
+narrowed by the seventy-fifth and the seventy-seventh: three statements of
+MySQL behaviour in [mysql-contract.md](mysql-contract.md) carry a *Pending
+observation* note, each because the fixture of `FR-MYSQL-044` does not stage
+the server it needs: one that generates its own TLS material, for the notes
+on `FR-MYSQL-021` and on row 24 of `FR-MYSQL-040`, and one with the
+masking-policy component installed, for the note on `FR-MYSQL-030`. Every
+such note opens a paragraph with the heading
+`*Pending observation.*`, so a search for that heading at the start of a
+line finds every one, and the item is discharged when the search finds
+none. No requirement of a `mariadb` or a `sqlite` entry waits on it.
+
+*Amended in the seventy-seventh edition,* for a follow-up of rmp `#329`. The
+paragraph counted six notes, each because the fixture cannot observe it, and
+said that three were owed to the `mysql` provider once it existed: the `69`
+of three cells of `FR-MYSQL-021`, the `78` and the message of
+`FR-MYSQL-045`, both to be observed by the tests `FR-MYSQL-043` requires,
+and trust material, to be observed once the driver was chosen. The provider
+exists, at `2d652bd`. Its tests observed the first two on both series, and
+each note is now an *Observed* note. The driver chosen is the one
+`FR-CONF-039` observed, so the third is discharged by that observation, and
+its note now says so.
 
 *Amended in the seventy-third edition.* This paragraph opened "No item is
 outstanding", which was true until this edition. The nine items this section

@@ -1277,3 +1277,16 @@ DELIMITER ;
 
 CREATE USER 'tpl_reader'@'%' IDENTIFIED BY 'tpl-reader-pw';
 GRANT SELECT, EXECUTE ON freight.* TO 'tpl_reader'@'%';
+
+-- The same grant on an account with no password, which an entry with
+-- `password = ""` or with no password source reaches: FR-CONF-055 and
+-- FR-MYSQL-047 (rmp #334). The default method, caching_sha2_password, with an
+-- empty credential.
+CREATE USER 'tpl_nopass'@'%' IDENTIFIED BY '';
+GRANT SELECT, EXECUTE ON freight.* TO 'tpl_nopass'@'%';
+
+-- SELECT on freight.*, and at most one connection at a time: the account
+-- whose second simultaneous login the server refuses with a limit on
+-- connections, which FR-ERR-048 classifies (rmp #338).
+CREATE USER 'tpl_limited'@'%' IDENTIFIED BY 'tpl-limited-pw' WITH MAX_USER_CONNECTIONS 1;
+GRANT SELECT ON freight.* TO 'tpl_limited'@'%';
