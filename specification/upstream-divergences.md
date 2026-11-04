@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
 ---
 
@@ -20,10 +20,19 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Fifty-eight entries are recorded. As of 2026-11-03, five are due in full,
-forty-nine are discharged, and four are partly discharged.** Nine entries
-still owe something: six owe it to `CLAUDE.md` and three to `README.md`, and no
+**Fifty-eight entries are recorded. As of 2026-11-04, three are due in full,
+fifty-one are discharged, and four are partly discharged.** Seven entries
+still owe something: five owe it to `CLAUDE.md` and two to `README.md`, and no
 entry is in both counts.
+
+*The counts moved in the seventy-second edition, and two entries moved them.*
+`DIV-057` and `DIV-058`, the two entries the sixty-fifth edition raised, were
+read on 2026-11-04 against both root documents at `a9d8fed`. `60bf9df` made
+every part of each correction, so both are discharged: both leave the **due**
+count, one leaves each file's count, and both join the discharged one. No
+other entry was re-read for status, so every other status these counts count
+stands as of the date it names. The counts restated in `DIV-032` and `DIV-041`
+move with this paragraph.
 
 *The counts moved in the sixty-fifth edition, and two entries moved them.*
 The edition gives `tpl` a second provider, SQLite, and amends `FR-SRV-001`,
@@ -451,8 +460,8 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-054](#div-054) | `README.md` | Overstatement | Discharged, `455e48d` and `015a77e` | Two passages saying no command reaches a server |
 | [DIV-055](#div-055) | `CLAUDE.md` | Contradiction | Discharged, `9562fb2` | A regression against a recorded baseline said to fail the change |
 | [DIV-056](#div-056) | `README.md` | Contradiction | Discharged, `6bc8513` | The `.cfg` key space counted short of the eighteen keys of `FR-CONF-002` |
-| [DIV-057](#div-057) | `README.md` | Contradiction | Due | MariaDB as the only database, no write outside `.tpl`, and eighteen keys |
-| [DIV-058](#div-058) | `CLAUDE.md` | Contradiction | Due | MariaDB as the only database, `INFORMATION_SCHEMA` as the only catalogue, and the MariaDB fixture as the only one |
+| [DIV-057](#div-057) | `README.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, no write outside `.tpl`, and eighteen keys |
+| [DIV-058](#div-058) | `CLAUDE.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, `INFORMATION_SCHEMA` as the only catalogue, and the MariaDB fixture as the only one |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1141,9 +1150,9 @@ is the one stated above and nothing more.
 in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
 most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
-this passage. It is one of the nine entries this register still owes
-something on, and one of the six owed to that file, as counted in the
-sixty-fifth edition. Re-read on 2026-09-25 at
+this passage. It is one of the seven entries this register still owes
+something on, and one of the five owed to that file, as counted in the
+seventy-second edition. Re-read on 2026-09-25 at
 `c360c80`: `6bc8513`, `390c6c6` and `70661da` touched `CLAUDE.md` since and
 none reaches this passage.
 
@@ -1558,9 +1567,10 @@ sentence.
 **Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The deferral stands
 verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
 `9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
-`NFR-PERF-012` carry. It is one of the nine entries this register still owes
-something on, as counted in the sixty-fifth edition. Re-read on 2026-09-25 at
-`c360c80`: the deferral stands, unmoved by `6bc8513`, `390c6c6` and `70661da`.
+`NFR-PERF-012` carry. It is one of the seven entries this register still owes
+something on, as counted in the seventy-second edition. Re-read on 2026-09-25
+at `c360c80`: the deferral stands, unmoved by `6bc8513`, `390c6c6` and
+`70661da`.
 
 *Corrected in the thirty-sixth edition, with `DIV-032`*, and for the reason
 given there.
@@ -2775,7 +2785,21 @@ new keys set bounds that are not deadlines.
 arms, *Two properties bound the tool*, *Requirements*, and *Configuration*.
 **Kind**: contradiction.
 
-**Status**: **due**, raised on 2026-11-03 at `6203216`. No commit has
+**Status**: **discharged** by `60bf9df`, re-read on 2026-11-04 against
+`README.md` at `a9d8fed`. Every part of the correction is made. The opening
+paragraph says that `tpl` reads a MariaDB database or a SQLite database file,
+and that which of the two an entry reads is its provider. The note on the
+joined arms opens one connection to the MariaDB server or the SQLite database
+file the selected entry names. *Two properties bound the tool* names
+`<file>-wal` and `<file>-shm` as the second exception to writing only inside
+`.tpl`, and points at `FR-PROJ-024` and `FR-LITE-008`. The *Requirements* table carries
+a `SQLite` row requiring read access to the database file and no privilege.
+*The key space is closed* drops its counts and keeps the pointer to
+`FR-CONF-002`, the form `DIV-056` named as the one that stops the count
+falling behind. The paragraph on MySQL stands, as this entry asked. Nothing
+is owed.
+
+*Status when raised*: **due**, on 2026-11-03 at `6203216`. No commit had
 discharged any part of it.
 
 *Says*: "`tpl` is a command-line tool that reads the structure — the DDL, or
@@ -2819,7 +2843,23 @@ re-opening a discharged entry.
 each subject* table, the *Non-Negotiable Rules* table, *Implementation
 Invariants* item 1, and *Testing against MariaDB*. **Kind**: contradiction.
 
-**Status**: **due**, raised on 2026-11-03 at `6203216`. No commit has
+**Status**: **discharged** by `60bf9df`, re-read on 2026-11-04 against
+`CLAUDE.md` at `a9d8fed`. Every part of the correction is made. *Overview*
+names SQLite database files beside MariaDB databases, chosen by the provider
+each entry names. *Product scope* adds the write-ahead-log files a
+SQLite read may cause beside the database to the disk writes `tpl` makes, and
+points at `FR-LITE-008`. The subject table narrows the row of
+`specification/server-contract.md` to the read-only promise of a `mariadb`
+entry and adds a row for `specification/sqlite-contract.md`. The
+*Non-Negotiable Rules* table and item 1 of *Implementation Invariants* both
+read the catalogue through `INFORMATION_SCHEMA` for a `mariadb` entry and
+through `sqlite_schema` and the pragma functions of `FR-LITE-015` for a
+`sqlite` entry. *Testing against MariaDB* requires the fixture of the
+provider a test reads, names `scripts/sqlite/` for SQLite, and gives that
+fixture a paragraph of its own. The rule that `tpl` never writes to the
+database stands for both providers, as this entry asked. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-03 at `6203216`. No commit had
 discharged any part of it.
 
 *Says*: "`tpl` is a **command-line application written in Rust** that reads

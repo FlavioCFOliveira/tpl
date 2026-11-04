@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-one editions. All are in force;
+The specification has been written in seventy-two editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -5639,6 +5639,41 @@ at `82eb1d4`, states how a SQLite read compares the schema table's values,
 which rows it refuses, how it matches names, or how it reads a trigger's
 header.
 
+### Seventy-second edition — two root documents that caught up, and an example that had not
+
+rmp `#317` and `#318`, of sprint 27, close the record of the second provider
+outside this corpus and one example inside it. `60bf9df`, for rmp `#318`,
+documented SQLite in both root documents, and `60b0fb3`, for rmp `#317`, gave
+the `purpose` of the `database` variable every field the object carries.
+Both were read on 2026-11-04 at `a9d8fed`. No requirement changes its
+meaning.
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md), and the index of
+[open-questions.md](open-questions.md) stays empty.
+
+- **The register, read for the two entries the second provider raised** —
+  [upstream-divergences.md](upstream-divergences.md). `DIV-057` and `DIV-058`
+  are discharged by `60bf9df`, which made every part of each correction. The
+  counts, and their two restatements in `DIV-032` and `DIV-041`, move to three
+  due, fifty-one discharged and four partly discharged, with seven entries
+  owing, five to `CLAUDE.md` and two to `README.md`.
+  [Maintenance debt](#maintenance-debt) records that two of the three
+  obligations the sixty-fifth edition placed outside this corpus are paid.
+- **An example that no longer matched its rule** —
+  [help-and-version.md](help-and-version.md). The `database` line of the
+  example of `FR-HELP-033` named neither `charset` and `collation` nor
+  `provider`, which `FR-CTX-036` and `FR-CTX-043` give the object. It now
+  carries the `purpose` of `FR-HELP-032` that the binary prints, wrapped at
+  the 80 columns of `FR-HELP-009`.
+
+The fifth validation rule is met for the two entries and no further. No other
+entry was re-read for status, although `60bf9df` also edited the project tree
+and the testing section of `CLAUDE.md` that `DIV-036` and `DIV-050` target,
+and `6203216` translated that file whole. That reading is owed under the
+rule; this edition names it and does not make it. Neither root document
+paraphrases the example this edition corrects.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -6388,6 +6423,12 @@ eighth edition, it is work with an owner and a trigger, and every observation
 [sqlite-contract.md](sqlite-contract.md) records is re-taken against it when it
 exists. No requirement of this corpus waits on any of the three, and the item
 below was untouched by the edition.
+
+**Two of those three obligations are discharged, by the seventy-second
+edition's reading.** `DIV-057` and `DIV-058` are discharged by `60bf9df`,
+which made every part of both corrections; the register records each and the
+commit. The third, the fixture of `scripts/sqlite/`, was not read for this
+and stays as the paragraphs here leave it.
 
 The sixty-ninth edition adds no obligation inside this corpus and one outside
 it: the fixture of `scripts/sqlite/` gains the seven databases `FR-LITE-038`

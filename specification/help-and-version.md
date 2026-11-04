@@ -1,7 +1,7 @@
 ---
 title: Help and Version
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md, context-document.md, render-command.md, project-and-discovery.md]
 ---
 
@@ -297,7 +297,8 @@ alongside the command it documents.
 
   ```
   A template sees these variables:
-    database  The whole database: name, server, tables, views, routines.
+    database  The whole database: name, charset, collation, provider, server,
+              tables, views and routines.
     table     The table named by --table. Absent without --table.
     ...
   Filters (contract):
@@ -327,6 +328,12 @@ alongside the command it documents.
 
   *Added in the forty-third edition,* for rmp `#260`, from findings H-02 and
   H-03 of the audit of rmp `#259`.
+
+  *Corrected in the seventy-second edition,* for rmp `#317`. The `database`
+  line of the example named neither `charset` and `collation`, which
+  `FR-CTX-036` gives the object, nor `provider`, which `FR-CTX-043` added in
+  the sixty-fifth edition. It now carries the `purpose` of `FR-HELP-032` that
+  `60b0fb3` gave the binary, wrapped at the 80 columns of `FR-HELP-009`.
 
 - **FR-HELP-034**: The `DESCRIPTION` section of `tpl init` SHALL state, in one
   sentence placed before the four statements of `FR-HELP-031`, that
